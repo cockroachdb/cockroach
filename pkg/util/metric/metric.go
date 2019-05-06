@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/VividCortex/ewma"
+	"github.com/ajwerner/tdigest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/codahale/hdrhistogram"
@@ -126,6 +127,7 @@ var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &Histogram{}
 var _ Iterable = &Rate{}
+var _ Iterable = &Summary{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
@@ -138,6 +140,7 @@ var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
 var _ PrometheusExportable = &Histogram{}
 var _ PrometheusExportable = &Rate{}
+var _ PrometheusExportable = &Summary{}
 
 type periodic interface {
 	nextTick() time.Time
@@ -557,4 +560,139 @@ func (e *Rate) Add(v float64) {
 	maybeTick(e)
 	e.curSum += v
 	e.mu.Unlock()
+}
+
+// Summary tracks a distribution of values.
+// The values decay according to a provided timescale.
+type Summary struct {
+	Metadata
+	mu       syncutil.RWMutex
+	interval time.Duration
+	nextT    time.Time
+	alpha    float64
+
+	sketch *tdigest.Concurrent
+}
+
+// PrometheusSummaryQuantiles are the quantiles of a summary which are exported
+// to prometheus. They reflect the values stored for histograms in the internal
+// tsdb. See pkg/server/status/recorder.go
+var PrometheusSummaryQuantiles = []float64{
+	.5, .75, .9, .99, .999, .9999, .99999, 1,
+}
+
+// NewSummary creates a metric which tracks a distribution of values using an
+// using a TDigest which has its internal weights decay using an exponential
+// weighted moving average on the specified timescale.
+// Timescale must be at least 2 seconds, otherwise a panic will occur.
+func NewSummary(metadata Metadata, timescale time.Duration) *Summary {
+	const tickInterval = time.Second
+	if timescale <= 2*time.Second {
+		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
+	}
+	// NB: this somewhat magical formula comes from the idea that when using an
+	// alpha of 2/(N+1) where N is a number of periods after which we'd like the
+	// prior data to have negligible weight (<14% according to Wikipedia). We set
+	// timescale/2 to be the number of periods for this decay to take place
+	// ensuring that the vast, vast majority of weight in the sketch is due to the
+	// data added in the last timescale. This logic is derived from the logic the
+	// logic in github.com/VividCortex/ewma.
+	avgAge := float64(timescale) / float64(2*tickInterval)
+	alpha := 2 / (avgAge + 1)
+	return &Summary{
+		Metadata: metadata,
+		interval: tickInterval,
+		nextT:    now(),
+		alpha:    alpha,
+		sketch:   tdigest.NewConcurrent(tdigest.Compression(128)),
+	}
+}
+
+// GetType returns the prometheus type enum for this metric.
+func (e *Summary) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_SUMMARY.Enum()
+}
+
+// Inspect calls the given closure with itself.
+func (e *Summary) Inspect(f func(interface{})) { f(e) }
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (e *Summary) ToPrometheusMetric() *prometheusgo.Metric {
+	// Allocate the prometheus Summary before interacting with any synchronized
+	// data structures.
+	summary := &prometheusgo.Summary{}
+	summary.Quantile = make([]*prometheusgo.Quantile, len(PrometheusSummaryQuantiles))
+	for i := range PrometheusSummaryQuantiles {
+		summary.Quantile[i] = &prometheusgo.Quantile{
+			Quantile: &PrometheusSummaryQuantiles[i],
+			Value:    new(float64),
+		}
+	}
+	summary.SampleCount = new(uint64)
+	summary.SampleSum = new(float64)
+	e.maybeTick()
+	e.sketch.Read(func(s tdigest.Reader) {
+		// The below code round-trips through an int64 to defeat the linter which
+		// warns about converting from a float64 to a uint64.
+		*summary.SampleCount = uint64(int64(math.Round(s.TotalCount())))
+		*summary.SampleSum = s.TotalSum()
+		for i, q := range PrometheusSummaryQuantiles {
+			*summary.Quantile[i].Value = s.ValueAt(q)
+		}
+	})
+	return &prometheusgo.Metric{
+		Summary: summary,
+	}
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (e *Summary) GetMetadata() Metadata {
+	baseMetadata := e.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_SUMMARY
+	return baseMetadata
+}
+
+// Add adds the given measurement to the Summary.
+func (e *Summary) Add(v float64) {
+	e.maybeTick()
+	e.sketch.Add(v, e.alpha)
+}
+
+// Read provides read access to the underlying tdigest.
+func (e *Summary) Read(f func(r tdigest.Reader)) {
+	e.maybeTick()
+	e.sketch.Read(f)
+}
+
+func (e *Summary) maybeTick() {
+	e.mu.RLock()
+	maybeTick((*periodicSummary)(e))
+	e.mu.RUnlock()
+}
+
+// periodicSummary implements periodic.
+// It is assumed that the Summary's mutex is RLocked when its methods are
+// called. This struct enables a fast path in maybeTick whereby an exlusive
+// lock only needs to be acquired if a tick is required.
+type periodicSummary Summary
+
+// nextTick assumes that pd.mu.RLock() is held.
+func (pd *periodicSummary) nextTick() time.Time {
+	return pd.nextT
+}
+
+// tick assumes that pd.mu.RLock() is held.
+func (pd *periodicSummary) tick() {
+	was := pd.nextT
+	pd.mu.RUnlock()
+	pd.mu.Lock()
+	// Ensure that nobody else concurrently performed the tick while we upgraded
+	// the lock from shared to exclusive.
+	if pd.nextT.Equal(was) {
+		pd.nextT = pd.nextT.Add(pd.interval)
+		pd.sketch.Decay(1 - pd.alpha)
+	}
+	pd.mu.Unlock()
+	pd.mu.RLock()
 }

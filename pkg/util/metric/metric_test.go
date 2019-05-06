@@ -25,6 +25,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/kr/pretty"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
 )
 
 func testMarshal(t *testing.T, m json.Marshaler, exp string) {
@@ -166,6 +167,32 @@ func TestHistogramRotate(t *testing.T) {
 		if max, expMax := cur.Max(), v; max != expMax {
 			t.Fatalf("%d: unexpected maximum %d, expected %d", i, max, expMax)
 		}
+	}
+}
+
+func TestSummaryRotate(t *testing.T) {
+	defer TestingSetNow(nil)()
+	setNow(0)
+	const interval = 10 * time.Second
+	r := NewSummary(emptyMetadata, interval)
+
+	r.Add(1 << 10)
+	m := r.ToPrometheusMetric()
+	require.Equal(t, r.alpha*float64(1<<10), *m.Summary.SampleSum)
+	for cur := time.Duration(0); cur < 5*interval; cur += time.Second / 2 {
+		prevCount := *r.ToPrometheusMetric().Summary.SampleSum
+		setNow(cur)
+		curCount := *r.ToPrometheusMetric().Summary.SampleSum
+		expChange := (cur % time.Second) != 0
+		hasChange := prevCount != curCount
+		if expChange != hasChange {
+			t.Fatalf("%s: expChange %t, hasChange %t (from %v to %v)",
+				cur, expChange, hasChange, prevCount, curCount)
+		}
+	}
+	count := *r.ToPrometheusMetric().Summary.SampleSum
+	if count > .001 {
+		t.Fatalf("final value implausible: %v", count)
 	}
 }
 

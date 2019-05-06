@@ -143,6 +143,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:96670a7a5ed372862c668ffa47c859d0384d9696ece6dc845e177ef4c248fb5e"
+  name = "github.com/ajwerner/tdigest"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "e530829c34c8d168133b77a220d2eba419f76a50"
+
+[[projects]]
+  branch = "master"
   digest = "1:caed868e37c6cda382a217d8ad4f55da579e1a1d046836de57f11a569e383443"
   name = "github.com/andy-kimball/arenaskl"
   packages = ["."]
@@ -1793,6 +1801,7 @@
     "github.com/Shopify/toxiproxy/client",
     "github.com/VividCortex/ewma",
     "github.com/abourget/teamcity",
+    "github.com/ajwerner/tdigest",
     "github.com/andy-kimball/arenaskl",
     "github.com/apache/arrow/go/arrow",
     "github.com/apache/arrow/go/arrow/array",
