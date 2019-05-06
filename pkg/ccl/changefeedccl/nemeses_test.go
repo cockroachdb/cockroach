@@ -33,7 +33,7 @@ func TestChangefeedNemeses(t *testing.T) {
 		}
 	}
 	t.Run(`sinkless`, sinklessTest(testFn))
-	// TODO(dan): This deadlocks t.Run(`enterprise`, enterpriseTest(testFn))
-	// TODO(dan): This deadlocks t.Run(`poller`, pollerTest(sinklessTest, testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 }
