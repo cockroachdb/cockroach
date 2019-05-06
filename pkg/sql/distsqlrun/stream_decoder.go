@@ -48,7 +48,7 @@ type StreamDecoder struct {
 	typing       []distsqlpb.DatumInfo
 	data         []byte
 	numEmptyRows int
-	metadata     []ProducerMetadata
+	metadata     []distsqlpb.ProducerMetadata
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
 	headerReceived bool
@@ -102,31 +102,11 @@ func (sd *StreamDecoder) AddMessage(msg *distsqlpb.ProducerMessage) error {
 	}
 	if len(msg.Data.Metadata) > 0 {
 		for _, md := range msg.Data.Metadata {
-			var meta ProducerMetadata
-			switch v := md.Value.(type) {
-			case *distsqlpb.RemoteProducerMetadata_RangeInfo:
-				meta.Ranges = v.RangeInfo.RangeInfo
-
-			case *distsqlpb.RemoteProducerMetadata_TraceData_:
-				meta.TraceData = v.TraceData.CollectedSpans
-
-			case *distsqlpb.RemoteProducerMetadata_TxnCoordMeta:
-				meta.TxnCoordMeta = v.TxnCoordMeta
-
-			case *distsqlpb.RemoteProducerMetadata_RowNum_:
-				meta.RowNum = v.RowNum
-
-			case *distsqlpb.RemoteProducerMetadata_SamplerProgress_:
-				meta.SamplerProgress = v.SamplerProgress
-
-			case *distsqlpb.RemoteProducerMetadata_Error:
-				meta.Err = v.Error.ErrorDetail()
-
-			default:
+			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(md)
+			if !ok {
 				// Unknown metadata, ignore.
 				continue
 			}
-
 			sd.metadata = append(sd.metadata, meta)
 		}
 	}
@@ -142,7 +122,7 @@ func (sd *StreamDecoder) AddMessage(msg *distsqlpb.ProducerMessage) error {
 // coming from the upstream (through ProducerMetadata.Err).
 func (sd *StreamDecoder) GetRow(
 	rowBuf sqlbase.EncDatumRow,
-) (sqlbase.EncDatumRow, *ProducerMetadata, error) {
+) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata, error) {
 	if len(sd.metadata) != 0 {
 		r := &sd.metadata[0]
 		sd.metadata = sd.metadata[1:]

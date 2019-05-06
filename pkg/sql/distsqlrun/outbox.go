@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
 
@@ -118,7 +118,7 @@ func (m *outbox) init(typs []types.T) {
 // too, or it might be an encoding error, in which case we've forwarded it on
 // the stream.
 func (m *outbox) addRow(
-	ctx context.Context, row sqlbase.EncDatumRow, meta *ProducerMetadata,
+	ctx context.Context, row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
 ) error {
 	mustFlush := false
 	var encodingErr error
@@ -130,7 +130,7 @@ func (m *outbox) addRow(
 	} else {
 		encodingErr = m.encoder.AddRow(row)
 		if encodingErr != nil {
-			m.encoder.AddMetadata(ProducerMetadata{Err: encodingErr})
+			m.encoder.AddMetadata(distsqlpb.ProducerMetadata{Err: encodingErr})
 			mustFlush = true
 		}
 	}
@@ -281,7 +281,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 					tracing.FinishSpan(span)
 					spanFinished = true
 					if trace := getTraceData(ctx); trace != nil {
-						err := m.addRow(ctx, nil, &ProducerMetadata{TraceData: trace})
+						err := m.addRow(ctx, nil, &distsqlpb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err
 						}

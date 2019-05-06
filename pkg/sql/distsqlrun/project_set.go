@@ -125,7 +125,11 @@ func (ps *projectSetProcessor) Start(ctx context.Context) context.Context {
 
 // nextInputRow returns the next row or metadata from ps.input. It also
 // initializes the value generators for that row.
-func (ps *projectSetProcessor) nextInputRow() (sqlbase.EncDatumRow, *ProducerMetadata, error) {
+func (ps *projectSetProcessor) nextInputRow() (
+	sqlbase.EncDatumRow,
+	*distsqlpb.ProducerMetadata,
+	error,
+) {
 	row, meta := ps.input.Next()
 	if row == nil {
 		return nil, meta, nil
@@ -216,7 +220,7 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 }
 
 // Next is part of the RowSource interface.
-func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	const cancelCheckCount = 10000
 
 	for ps.State == StateRunning {

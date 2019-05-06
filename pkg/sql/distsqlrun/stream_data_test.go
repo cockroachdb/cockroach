@@ -30,8 +30,11 @@ import (
 // The encoder/decoder don't maintain the ordering between rows and metadata
 // records.
 func testGetDecodedRows(
-	tb testing.TB, sd *StreamDecoder, decodedRows sqlbase.EncDatumRows, metas []ProducerMetadata,
-) (sqlbase.EncDatumRows, []ProducerMetadata) {
+	tb testing.TB,
+	sd *StreamDecoder,
+	decodedRows sqlbase.EncDatumRows,
+	metas []distsqlpb.ProducerMetadata,
+) (sqlbase.EncDatumRows, []distsqlpb.ProducerMetadata) {
 	for {
 		row, meta, err := sd.GetRow(nil /* rowBuf */)
 		if err != nil {
@@ -54,7 +57,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 	var sd StreamDecoder
 
 	var decodedRows sqlbase.EncDatumRows
-	var metas []ProducerMetadata
+	var metas []distsqlpb.ProducerMetadata
 	numRows := 0
 	numMeta := 0
 
@@ -95,7 +98,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 
 type rowOrMeta struct {
 	row  sqlbase.EncDatumRow
-	meta ProducerMetadata
+	meta distsqlpb.ProducerMetadata
 }
 
 // TestStreamEncodeDecode generates random streams of EncDatums and passes them

@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -230,7 +230,7 @@ func newWindower(
 		output,
 		memMonitor,
 		ProcStateOpts{InputsToDrain: []RowSource{w.input},
-			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				w.close()
 				return nil
 			}},
@@ -251,10 +251,10 @@ func (w *windower) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (w *windower) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (w *windower) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for w.State == StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *ProducerMetadata
+		var meta *distsqlpb.ProducerMetadata
 		switch w.runningState {
 		case windowerAccumulating:
 			w.runningState, row, meta = w.accumulateRows()
@@ -296,7 +296,11 @@ func (w *windower) close() {
 // accumulateRows continually reads rows from the input and accumulates them
 // in allRowsPartitioned. If it encounters metadata, the metadata is returned
 // immediately. Subsequent calls of this function will resume row accumulation.
-func (w *windower) accumulateRows() (windowerState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (w *windower) accumulateRows() (
+	windowerState,
+	sqlbase.EncDatumRow,
+	*distsqlpb.ProducerMetadata,
+) {
 	for {
 		row, meta := w.input.Next()
 		if meta != nil {
@@ -334,7 +338,7 @@ func (w *windower) accumulateRows() (windowerState, sqlbase.EncDatumRow, *Produc
 //
 // emitRow() might move to stateDraining. It might also not return a row if the
 // ProcOutputHelper filtered the current row out.
-func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (w *windower) emitRow() (windowerState, sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	if w.inputDone {
 		for !w.populated {
 			if err := w.cancelChecker.Check(); err != nil {
