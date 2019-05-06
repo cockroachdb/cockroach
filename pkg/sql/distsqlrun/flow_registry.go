@@ -233,7 +233,7 @@ func (fr *flowRegistry) RegisterFlow(
 				go func(r RowReceiver) {
 					r.Push(
 						nil, /* row */
-						&ProducerMetadata{Err: errNoInboundStreamConnection})
+						&distsqlpb.ProducerMetadata{Err: errNoInboundStreamConnection})
 					r.ProducerDone()
 				}(r)
 			}

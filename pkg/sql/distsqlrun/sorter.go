@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -117,7 +117,7 @@ func (s *sorterBase) init(
 // Next is part of the RowSource interface. It is extracted into sorterBase
 // because this implementation of next is shared between the sortAllProcessor
 // and the sortTopKProcessor.
-func (s *sorterBase) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *sorterBase) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for s.State == StateRunning {
 		if ok, err := s.i.Valid(); err != nil || !ok {
 			s.MoveToDraining(err)
@@ -270,7 +270,7 @@ func newSortAllProcessor(
 		spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -388,7 +388,7 @@ func newSortTopKProcessor(
 		ordering, spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -491,7 +491,7 @@ func newSortChunksProcessor(
 		proc, flowCtx, processorID, input, post, out, ordering, spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -528,7 +528,7 @@ func (s *sortChunksProcessor) chunkCompleted(
 func (s *sortChunksProcessor) fill() (bool, error) {
 	ctx := s.Ctx
 
-	var meta *ProducerMetadata
+	var meta *distsqlpb.ProducerMetadata
 
 	nextChunkRow := s.nextChunkRow
 	s.nextChunkRow = nil
@@ -595,7 +595,7 @@ func (s *sortChunksProcessor) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	ctx := s.Ctx
 	for s.State == StateRunning {
 		ok, err := s.i.Valid()

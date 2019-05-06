@@ -69,7 +69,7 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var meta *ProducerMetadata
+	var meta *distsqlpb.ProducerMetadata
 	panicEmitted := false
 	func() {
 		defer func() {

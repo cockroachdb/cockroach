@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -717,7 +717,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 	}
 
 	inputs := make([]exec.Operator, 0, 2)
-	metadataSourcesQueue := make([]MetadataSource, 0, 1)
+	metadataSourcesQueue := make([]distsqlpb.MetadataSource, 0, 1)
 
 	recordingStats := false
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
@@ -756,7 +756,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if metaSource, ok := op.(MetadataSource); ok {
+		if metaSource, ok := op.(distsqlpb.MetadataSource); ok {
 			metadataSourcesQueue = append(metadataSourcesQueue, metaSource)
 		}
 		if recordingStats {

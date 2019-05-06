@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -38,7 +39,7 @@ func NewInputStatCollector(input RowSource) *InputStatCollector {
 
 // Next implements the RowSource interface. It calls Next on the embedded
 // RowSource and collects stats.
-func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	start := timeutil.Now()
 	row, meta := isc.RowSource.Next()
 	if row != nil {
