@@ -294,13 +294,3 @@ func (c *ZoneConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	*c = zoneConfigFromMarshalable(aux, *c)
 	return nil
 }
-
-var _ yaml.Marshaler = GCPolicy{}
-
-// MarshalYAML implements yaml.Marshaler.
-func (p GCPolicy) MarshalYAML() (interface{}, error) {
-	type marshalableGCPolicy struct {
-		TTLSeconds int32 `yaml:"ttlseconds"`
-	}
-	return marshalableGCPolicy{TTLSeconds: p.TTLSeconds}, nil
-}

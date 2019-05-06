@@ -76,9 +76,13 @@ func main() {
 		// Something something extensions; we don't use 'em currently.
 		// vanity.TurnOffGoExtensionsMapAll,
 
-		// Disable XXX_unrecognized and XXX_sizecache generation. These fields
-		// aren't worth their associated runtime cost.
+		// Disable generation of the following fields, which aren't worth
+		// their associated runtime cost:
+		// - XXX_unrecognized
+		// - XXX_NoUnkeyedLiteral
+		// - XXX_sizecache
 		vanity.TurnOffGoUnrecognizedAll,
+		vanity.TurnOffGoUnkeyedAll,
 		vanity.TurnOffGoSizecacheAll,
 
 		// Adds unnecessary dependency on golang/protobuf.
