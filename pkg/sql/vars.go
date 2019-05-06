@@ -257,6 +257,21 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(defaultIntSize.Get(sv), 10)
 		},
 	},
+	// See https://www.postgresql.org/docs/10/runtime-config-client.html.
+	// Supported only for pg compatibility - CockroachDB has no notion of
+	// tablespaces.
+	`default_tablespace`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			if s != "" {
+				return newVarValueError(`default_tablespace`, s, "")
+			}
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return ""
+		},
+		GlobalDefault: func(sv *settings.Values) string { return "" },
+	},
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

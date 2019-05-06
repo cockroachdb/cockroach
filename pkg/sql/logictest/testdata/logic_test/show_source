@@ -33,6 +33,7 @@ client_min_messages                  notice
 database                             test
 datestyle                            ISO, MDY
 default_int_size                     8
+default_tablespace                   ·
 default_transaction_isolation        serializable
 default_transaction_read_only        off
 distsql                              off
