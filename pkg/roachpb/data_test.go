@@ -878,14 +878,11 @@ func TestLeaseEqual(t *testing.T) {
 		ProposedTS            *hlc.Timestamp
 		Epoch                 int64
 		Sequence              LeaseSequence
-		XXX_NoUnkeyedLiteral  struct{}
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
 	// structure AND update Lease.Equal.
 	var _ = expectedLease(Lease{})
-	// Appease the linter.
-	var _ = expectedLease{}.XXX_NoUnkeyedLiteral
 
 	// Verify that nil == &hlc.Timestamp{} for the Expiration and
 	// DeprecatedStartStasis fields. See #19843.
