@@ -795,7 +795,6 @@ func MakeTxnCoordMeta(txn Transaction) TxnCoordMeta {
 // StripRootToLeaf strips out all information that is unnecessary to communicate
 // to leaf transactions.
 func (meta *TxnCoordMeta) StripRootToLeaf() *TxnCoordMeta {
-	meta.Intents = nil
 	meta.CommandCount = 0
 	meta.RefreshReads = nil
 	meta.RefreshWrites = nil
@@ -805,7 +804,7 @@ func (meta *TxnCoordMeta) StripRootToLeaf() *TxnCoordMeta {
 // StripLeafToRoot strips out all information that is unnecessary to communicate
 // back to the root transaction.
 func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
-	meta.OutstandingWrites = nil
+	meta.InFlightWrites = nil
 	return meta
 }
 
@@ -1021,8 +1020,8 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence
 	}
-	if len(o.Intents) > 0 {
-		t.Intents = o.Intents
+	if len(o.IntentSpans) > 0 {
+		t.IntentSpans = o.IntentSpans
 	}
 	if len(o.InFlightWrites) > 0 {
 		t.InFlightWrites = o.InFlightWrites
@@ -1065,7 +1064,7 @@ func (t Transaction) String() string {
 		"ts=%s orig=%s max=%s wto=%t seq=%d",
 		t.Short(), Key(t.Key), t.IsWriting(), floatPri, t.Status, t.Epoch, t.Timestamp,
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
-	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
+	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
 	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
@@ -1089,7 +1088,7 @@ func (t Transaction) SafeMessage() string {
 		"ts=%s orig=%s max=%s wto=%t seq=%d",
 		t.Short(), t.IsWriting(), floatPri, t.Status, t.Epoch, t.Timestamp,
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
-	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
+	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
 	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
@@ -1140,7 +1139,7 @@ func (t *Transaction) AsRecord() TransactionRecord {
 	tr.Status = t.Status
 	tr.LastHeartbeat = t.LastHeartbeat
 	tr.OrigTimestamp = t.OrigTimestamp
-	tr.Intents = t.Intents
+	tr.IntentSpans = t.IntentSpans
 	tr.InFlightWrites = t.InFlightWrites
 	return tr
 }
@@ -1154,7 +1153,7 @@ func (tr *TransactionRecord) AsTransaction() Transaction {
 	t.Status = tr.Status
 	t.LastHeartbeat = tr.LastHeartbeat
 	t.OrigTimestamp = tr.OrigTimestamp
-	t.Intents = tr.Intents
+	t.IntentSpans = tr.IntentSpans
 	t.InFlightWrites = tr.InFlightWrites
 	return t
 }

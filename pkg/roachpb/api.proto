@@ -572,11 +572,10 @@ message EndTransactionRequest {
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
   InternalCommitTrigger internal_commit_trigger = 4;
-  // List of intents written by the transaction. These are spans where
-  // write intents have been written which must be resolved on txn
-  // completion. Note that these spans may be condensed to cover
-  // aggregate spans if the keys written by the transaction exceeded
-  // a size threshold.
+  // List of spans that the transaction has written intents into. These
+  // are spans which must be resolved on txn completion. Note that these
+  // spans may be condensed to cover aggregate spans if the keys written
+  // by the transaction exceeded a size threshold.
   repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
   // Requires that the transaction completes as a 1 phase commit. This
   // guarantees that all writes are to the same range and that no

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/google/btree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,8 +59,9 @@ func makeTxnProto() roachpb.Transaction {
 	return roachpb.MakeTransaction("test", []byte("key"), 0, hlc.Timestamp{}, 0)
 }
 
-// TestTxnPipeliner1PCTransaction tests that 1PC transactions pass through the
-// txnPipeliner untouched.
+// TestTxnPipeliner1PCTransaction tests that the writes performed by 1PC
+// transactions are not pipelined by the txnPipeliner and that the interceptor
+// attaches the writes as intent spans to the EndTransaction request.
 func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -81,6 +81,9 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
 
+		etReq := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.COMMITTED
@@ -90,14 +93,14 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	require.Equal(t, 0, tp.ifWrites.len())
 }
 
-// TestTxnPipelinerTrackOutstandingWrites tests that txnPipeliner tracks writes
+// TestTxnPipelinerTrackInFlightWrites tests that txnPipeliner tracks writes
 // that were performed with async consensus. It also tests that these writes are
 // proved as requests are chained onto them. Finally, it tests that EndTxn
 // requests chain on to all existing requests.
-func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
+func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
@@ -124,9 +127,9 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 1, tp.outstandingWritesLen())
+	require.Equal(t, 1, tp.ifWrites.len())
 
-	w := tp.outstandingWrites.Min().(*outstandingWrite)
+	w := tp.ifWrites.t.Min().(*inFlightWrite)
 	require.Equal(t, putArgs.Key, w.Key)
 	require.Equal(t, putArgs.Sequence, w.Sequence)
 
@@ -143,7 +146,7 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 	incArgs.Sequence = 4
 	ba.Add(&incArgs)
 	// Write at the same key as another write in the same batch. Will only
-	// result in a single outstanding write, at the larger sequence number.
+	// result in a single in-flight write, at the larger sequence number.
 	delArgs := roachpb.DeleteRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
 	delArgs.Sequence = 5
 	ba.Add(&delArgs)
@@ -164,8 +167,8 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(1), qiReq.Txn.Sequence)
 		require.Equal(t, roachpb.QueryIntentRequest_RETURN_ERROR, qiReq.IfMissing)
 
-		// No outstanding writes have been proved yet.
-		require.Equal(t, 1, tp.outstandingWritesLen())
+		// No in-flight writes have been proved yet.
+		require.Equal(t, 1, tp.ifWrites.len())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -181,17 +184,17 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 	require.IsType(t, &roachpb.IncrementResponse{}, br.Responses[2].GetInner())
 	require.IsType(t, &roachpb.DeleteResponse{}, br.Responses[3].GetInner())
 	require.Nil(t, pErr)
-	require.Equal(t, 3, tp.outstandingWritesLen())
+	require.Equal(t, 3, tp.ifWrites.len())
 
-	wMin := tp.outstandingWrites.Min().(*outstandingWrite)
+	wMin := tp.ifWrites.t.Min().(*inFlightWrite)
 	require.Equal(t, cputArgs.Key, wMin.Key)
 	require.Equal(t, cputArgs.Sequence, wMin.Sequence)
-	wMax := tp.outstandingWrites.Max().(*outstandingWrite)
+	wMax := tp.ifWrites.t.Max().(*inFlightWrite)
 	require.Equal(t, delArgs.Key, wMax.Key)
 	require.Equal(t, delArgs.Sequence, wMax.Sequence)
 
 	// Send a final write, along with an EndTransaction request. Should attempt
-	// to prove all outstanding writes. Should NOT use async consensus.
+	// to prove all in-flight writes. Should NOT use async consensus.
 	keyD := roachpb.Key("d")
 	ba.Requests = nil
 	putArgs2 := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}}
@@ -220,6 +223,10 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(3), qiReq2.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(5), qiReq3.Txn.Sequence)
 
+		etReq := ba.Requests[4].GetInner().(*roachpb.EndTransactionRequest)
+		exp := []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}, {Key: keyD}}
+		require.Equal(t, exp, etReq.IntentSpans)
+
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.COMMITTED
@@ -233,12 +240,12 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, 2, len(br.Responses)) // QueryIntent response stripped
 	require.Nil(t, pErr)
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	require.Equal(t, 0, tp.ifWrites.len())
 }
 
 // TestTxnPipelinerReads tests that txnPipeliner will never instruct batches
 // with reads in them to use async consensus. It also tests that these reading
-// batches will still chain on to outstanding writers, if necessary.
+// batches will still chain on to in-flight writes, if necessary.
 func TestTxnPipelinerReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -306,11 +313,11 @@ func TestTxnPipelinerReads(t *testing.T) {
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
 
-	// Add a key into the outstanding writes set.
-	tp.maybeInsertOutstandingWriteLocked(keyA, 10)
-	require.Equal(t, 1, tp.outstandingWritesLen())
+	// Add a key into the in-flight writes set.
+	tp.ifWrites.insert(keyA, 10)
+	require.Equal(t, 1, tp.ifWrites.len())
 
-	// Read-only with conflicting outstanding write.
+	// Read-only with conflicting in-flight write.
 	ba.Requests = nil
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
@@ -324,8 +331,8 @@ func TestTxnPipelinerReads(t *testing.T) {
 		require.Equal(t, keyA, qiReq.Key)
 		require.Equal(t, enginepb.TxnSeq(10), qiReq.Txn.Sequence)
 
-		// No outstanding writes have been proved yet.
-		require.Equal(t, 1, tp.outstandingWritesLen())
+		// No in-flight writes have been proved yet.
+		require.Equal(t, 1, tp.ifWrites.len())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -336,12 +343,12 @@ func TestTxnPipelinerReads(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	require.Equal(t, 0, tp.ifWrites.len())
 }
 
 // TestTxnPipelinerRangedWrites tests that txnPipeliner will never perform
 // ranged write operations using async consensus. It also tests that ranged
-// writes will correctly chain on to existing outstanding writes.
+// writes will correctly chain on to existing in-flight writes.
 func TestTxnPipelinerRangedWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -369,20 +376,20 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	// The PutRequest was not run asynchronously, so it is not outstanding.
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	// The PutRequest was not run asynchronously, so it is not in-flight.
+	require.Equal(t, 0, tp.ifWrites.len())
 
-	// Add five keys into the outstanding writes set, one of which overlaps with
+	// Add five keys into the in-flight writes set, one of which overlaps with
 	// the Put request and two others which also overlap with the DeleteRange
 	// request. Send the batch again and assert that the Put chains onto the
-	// first outstanding write and the DeleteRange chains onto the second and
-	// third outstanding write.
-	tp.maybeInsertOutstandingWriteLocked(roachpb.Key("a"), 10)
-	tp.maybeInsertOutstandingWriteLocked(roachpb.Key("b"), 11)
-	tp.maybeInsertOutstandingWriteLocked(roachpb.Key("c"), 12)
-	tp.maybeInsertOutstandingWriteLocked(roachpb.Key("d"), 13)
-	tp.maybeInsertOutstandingWriteLocked(roachpb.Key("e"), 13)
-	require.Equal(t, 5, tp.outstandingWritesLen())
+	// first in-flight write and the DeleteRange chains onto the second and
+	// third in-flight write.
+	tp.ifWrites.insert(roachpb.Key("a"), 10)
+	tp.ifWrites.insert(roachpb.Key("b"), 11)
+	tp.ifWrites.insert(roachpb.Key("c"), 12)
+	tp.ifWrites.insert(roachpb.Key("d"), 13)
+	tp.ifWrites.insert(roachpb.Key("e"), 13)
+	require.Equal(t, 5, tp.ifWrites.len())
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 5, len(ba.Requests))
@@ -406,8 +413,8 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(11), qiReq2.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(12), qiReq3.Txn.Sequence)
 
-		// No outstanding writes have been proved yet.
-		require.Equal(t, 5, tp.outstandingWritesLen())
+		// No in-flight writes have been proved yet.
+		require.Equal(t, 5, tp.ifWrites.len())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -420,7 +427,7 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 2, tp.outstandingWritesLen())
+	require.Equal(t, 2, tp.ifWrites.len())
 }
 
 // TestTxnPipelinerNonTransactionalRequests tests that non-transaction requests
@@ -452,10 +459,10 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 2, tp.outstandingWritesLen())
+	require.Equal(t, 2, tp.ifWrites.len())
 
 	// Send a non-transactional request. Should stall pipeline and chain onto
-	// all outstanding writes, even if its header doesn't imply any interaction.
+	// all in-flight writes, even if its header doesn't imply any interaction.
 	keyRangeDesc := roachpb.Key("rangeDesc")
 	ba.Requests = nil
 	ba.Add(&roachpb.SubsumeRequest{
@@ -484,18 +491,18 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	require.Equal(t, 0, tp.ifWrites.len())
 }
 
 // TestTxnPipelinerManyWrites tests that a txnPipeliner behaves correctly even
-// when its outstanding write tree grows to a very large size.
+// when its in-flight write tree grows to a very large size.
 func TestTxnPipelinerManyWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
-	// Disable maxOutstandingSize and maxBatchSize limits/
-	pipelinedWritesMaxOutstandingSize.Override(&tp.st.SV, math.MaxInt64)
+	// Disable maxInFlightSize and maxBatchSize limits/
+	pipelinedWritesMaxInFlightSize.Override(&tp.st.SV, math.MaxInt64)
 	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 0)
 
 	const writes = 2048
@@ -527,7 +534,7 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, writes, tp.outstandingWritesLen())
+	require.Equal(t, writes, tp.ifWrites.len())
 
 	// Query every other write.
 	ba.Requests = nil
@@ -570,22 +577,21 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, writes/2, tp.outstandingWritesLen())
+	require.Equal(t, writes/2, tp.ifWrites.len())
 
-	// Make sure the correct writes are still outstanding.
+	// Make sure the correct writes are still in-flight.
 	expIdx := 1
-	tp.outstandingWrites.Ascend(func(i btree.Item) bool {
-		w := i.(*outstandingWrite)
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
 		require.Equal(t, makeKey(expIdx), w.Key)
 		require.Equal(t, makeSeq(expIdx), w.Sequence)
 		expIdx += 2
-		return true
 	})
 }
 
 // TestTxnPipelinerTransactionAbort tests that a txnPipeliner allows an aborting
-// EndTransactionRequest to proceed without attempting to prove all outstanding
-// writes.
+// EndTransactionRequest to proceed without attempting to prove all in-flight
+// writes. It also tests that the interceptor attaches intent spans to these
+// EndTransactionRequests.
 func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -613,10 +619,10 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 1, tp.outstandingWritesLen())
+	require.Equal(t, 1, tp.ifWrites.len())
 
 	// Send an EndTransaction request with commit=false. Should NOT attempt
-	// to prove all outstanding writes because its attempting to abort the
+	// to prove all in-flight writes because its attempting to abort the
 	// txn anyway. Should NOT use async consensus.
 	//
 	// We'll unrealistically return a PENDING transaction, which won't allow
@@ -631,6 +637,9 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
 
+		etReq := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.PENDING // keep at PENDING
@@ -640,15 +649,23 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 1, tp.outstandingWritesLen()) // nothing proven
+	require.Equal(t, 1, tp.ifWrites.len()) // nothing proven
 
 	// Send EndTransaction request with commit=false again. Same deal. This
 	// time, return ABORTED transaction. This will allow the txnPipeliner to
-	// remove all outstanding writes because they are now uncommittable.
+	// remove all in-flight writes because they are now uncommittable.
+	ba.Requests = nil
+	etArgs = roachpb.EndTransactionRequest{Commit: false}
+	etArgs.Sequence = 2
+	ba.Add(&etArgs)
+
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 1, len(ba.Requests))
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
+
+		etReq := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -659,21 +676,24 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	require.Equal(t, 0, tp.ifWrites.len())
 }
 
-// TestTxnPipelinerEpochIncrement tests that a txnPipeliner's outstanding write
-// set is reset on an epoch increment.
+// TestTxnPipelinerEpochIncrement tests that a txnPipeliner's in-flight write
+// set is reset on an epoch increment and that all writes in this set are moved
+// to the write footprint so they will be removed when the transaction finishes.
 func TestTxnPipelinerEpochIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tp, _ := makeMockTxnPipeliner()
 
-	tp.maybeInsertOutstandingWriteLocked(roachpb.Key("b"), 10)
-	tp.maybeInsertOutstandingWriteLocked(roachpb.Key("d"), 11)
-	require.Equal(t, 2, tp.outstandingWritesLen())
+	tp.ifWrites.insert(roachpb.Key("b"), 10)
+	tp.ifWrites.insert(roachpb.Key("d"), 11)
+	require.Equal(t, 2, tp.ifWrites.len())
+	require.Equal(t, 0, len(tp.footprint.asSlice()))
 
 	tp.epochBumpedLocked()
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	require.Equal(t, 0, tp.ifWrites.len())
+	require.Equal(t, 2, len(tp.footprint.asSlice()))
 }
 
 // TestTxnPipelinerIntentMissingError tests that a txnPipeliner transforms an
@@ -694,12 +714,12 @@ func TestTxnPipelinerIntentMissingError(t *testing.T) {
 	ba.Add(&roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyB, EndKey: keyD}})
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}})
 
-	// Insert outstanding writes into the outstanding write set so that each
-	// request will need to chain on with a QueryIntent.
-	tp.maybeInsertOutstandingWriteLocked(keyA, 1)
-	tp.maybeInsertOutstandingWriteLocked(keyB, 2)
-	tp.maybeInsertOutstandingWriteLocked(keyC, 3)
-	tp.maybeInsertOutstandingWriteLocked(keyD, 4)
+	// Insert in-flight writes into the in-flight write set so that each request
+	// will need to chain on with a QueryIntent.
+	tp.ifWrites.insert(keyA, 1)
+	tp.ifWrites.insert(keyB, 2)
+	tp.ifWrites.insert(keyC, 3)
+	tp.ifWrites.insert(keyD, 4)
 
 	for errIdx, resErrIdx := range map[int32]int32{
 		0: 0, // intent on key "a" missing
@@ -768,7 +788,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	require.Equal(t, 0, tp.ifWrites.len())
 
 	// Enable pipelining. Should use async consensus.
 	pipelinedWritesEnabled.Override(&tp.st.SV, true)
@@ -795,10 +815,10 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 2, tp.outstandingWritesLen())
+	require.Equal(t, 2, tp.ifWrites.len())
 
 	// Disable pipelining again. Should NOT use async consensus but should still
-	// make sure to chain on to any overlapping outstanding writes.
+	// make sure to chain on to any overlapping in-flight writes.
 	pipelinedWritesEnabled.Override(&tp.st.SV, false)
 
 	ba.Requests = nil
@@ -825,9 +845,9 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 1, tp.outstandingWritesLen())
+	require.Equal(t, 1, tp.ifWrites.len())
 
-	// Commit the txn. Again with pipeling disabled. Again, outstanding writes
+	// Commit the txn. Again with pipeling disabled. Again, in-flight writes
 	// should be proven first.
 	ba.Requests = nil
 	etArgs := roachpb.EndTransactionRequest{Commit: true}
@@ -844,6 +864,9 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 		require.Equal(t, keyC, qiReq.Key)
 		require.Equal(t, enginepb.TxnSeq(3), qiReq.Txn.Sequence)
 
+		etReq := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
+		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyC}}, etReq.IntentSpans)
+
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.COMMITTED
@@ -854,20 +877,20 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	require.Equal(t, 0, tp.ifWrites.len())
 }
 
-// TestTxnPipelinerMaxOutstandingSize tests that batches are not pipelined if
-// doing so would push the memory used to track outstanding writes over the
+// TestTxnPipelinerMaxInFlightSize tests that batches are not pipelined if
+// doing so would push the memory used to track in-flight writes over the
 // limit allowed by the kv.transaction.write_pipelining_max_outstanding_size
 // setting.
-func TestTxnPipelinerMaxOutstandingSize(t *testing.T) {
+func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
-	// Set maxOutstandingSize limit to 3 bytes.
-	pipelinedWritesMaxOutstandingSize.Override(&tp.st.SV, 3)
+	// Set maxInFlightSize limit to 3 bytes.
+	pipelinedWritesMaxInFlightSize.Override(&tp.st.SV, 3)
 
 	txn := makeTxnProto()
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
@@ -893,7 +916,7 @@ func TestTxnPipelinerMaxOutstandingSize(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(0), tp.owSizeBytes)
+	require.Equal(t, int64(0), tp.ifWrites.byteSize())
 
 	// Send a batch that is equal to the limit.
 	ba.Requests = nil
@@ -913,7 +936,7 @@ func TestTxnPipelinerMaxOutstandingSize(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(3), tp.owSizeBytes)
+	require.Equal(t, int64(3), tp.ifWrites.byteSize())
 
 	// Send a batch that would be under the limit if we weren't already at it.
 	ba.Requests = nil
@@ -931,9 +954,9 @@ func TestTxnPipelinerMaxOutstandingSize(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(3), tp.owSizeBytes)
+	require.Equal(t, int64(3), tp.ifWrites.byteSize())
 
-	// Send a batch that proves two of the outstanding writes.
+	// Send a batch that proves two of the in-flight writes.
 	ba.Requests = nil
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
@@ -956,7 +979,7 @@ func TestTxnPipelinerMaxOutstandingSize(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(1), tp.owSizeBytes)
+	require.Equal(t, int64(1), tp.ifWrites.byteSize())
 
 	// Now that we're not up against the limit, send a batch that proves one
 	// write and immediately writes it again, along with a second write.
@@ -980,9 +1003,9 @@ func TestTxnPipelinerMaxOutstandingSize(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(2), tp.owSizeBytes)
+	require.Equal(t, int64(2), tp.ifWrites.byteSize())
 
-	// Send the same batch again. Even though it would prove two outstanding
+	// Send the same batch again. Even though it would prove two in-flight
 	// writes while performing two others, we won't allow it to perform async
 	// consensus because the estimation is conservative.
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -1003,10 +1026,10 @@ func TestTxnPipelinerMaxOutstandingSize(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(0), tp.owSizeBytes)
+	require.Equal(t, int64(0), tp.ifWrites.byteSize())
 
-	// Increase maxOutstandingSize limit to 5 bytes.
-	pipelinedWritesMaxOutstandingSize.Override(&tp.st.SV, 5)
+	// Increase maxInFlightSize limit to 5 bytes.
+	pipelinedWritesMaxInFlightSize.Override(&tp.st.SV, 5)
 
 	// The original batch with 4 writes should succeed.
 	ba.Requests = nil
@@ -1027,11 +1050,11 @@ func TestTxnPipelinerMaxOutstandingSize(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(4), tp.owSizeBytes)
+	require.Equal(t, int64(4), tp.ifWrites.byteSize())
 
-	// Bump the txn epoch. The outstanding bytes counter should reset.
+	// Bump the txn epoch. The in-flight bytes counter should reset.
 	tp.epochBumpedLocked()
-	require.Equal(t, int64(0), tp.owSizeBytes)
+	require.Equal(t, int64(0), tp.ifWrites.byteSize())
 }
 
 // TestTxnPipelinerMaxBatchSize tests that batches that contain more requests
@@ -1066,7 +1089,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	br, pErr := tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 1, tp.outstandingWritesLen())
+	require.Equal(t, 1, tp.ifWrites.len())
 
 	// Batch above limit.
 	ba.Requests = nil
@@ -1089,7 +1112,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 0, tp.outstandingWritesLen())
+	require.Equal(t, 0, tp.ifWrites.len())
 
 	// Increase maxBatchSize limit to 2.
 	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 2)
@@ -1109,5 +1132,5 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	require.Equal(t, 2, tp.outstandingWritesLen())
+	require.Equal(t, 2, tp.ifWrites.len())
 }

@@ -364,7 +364,7 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 		if br != nil {
 			resp = br.Responses[i].GetInner()
 		}
-		if span, ok := actualSpan(req, resp); ok {
+		if span, ok := ActualSpan(req, resp); ok {
 			fn(span)
 		}
 	}
@@ -392,7 +392,7 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool
 		if br != nil {
 			resp = br.Responses[i].GetInner()
 		}
-		if span, ok := actualSpan(req, resp); ok {
+		if span, ok := ActualSpan(req, resp); ok {
 			if !fn(span, UpdatesWriteTimestampCache(req)) {
 				return false
 			}
@@ -401,10 +401,10 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool
 	return true
 }
 
-// actualSpan returns the actual request span which was operated on,
+// ActualSpan returns the actual request span which was operated on,
 // according to the existence of a resume span in the response. If
 // nothing was operated on, returns false.
-func actualSpan(req Request, resp Response) (Span, bool) {
+func ActualSpan(req Request, resp Response) (Span, bool) {
 	h := req.Header()
 	if resp != nil {
 		resumeSpan := resp.Header().ResumeSpan

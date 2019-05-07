@@ -3131,7 +3131,7 @@ const int Transaction::kRefreshedTimestampFieldNumber;
 const int Transaction::kObservedTimestampsFieldNumber;
 const int Transaction::kDeprecatedWritingFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
-const int Transaction::kIntentsFieldNumber;
+const int Transaction::kIntentSpansFieldNumber;
 const int Transaction::kInFlightWritesFieldNumber;
 const int Transaction::kEpochZeroTimestampFieldNumber;
 const int Transaction::kOrigTimestampWasObservedFieldNumber;
@@ -3148,7 +3148,7 @@ Transaction::Transaction(const Transaction& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
       observed_timestamps_(from.observed_timestamps_),
-      intents_(from.intents_) {
+      intent_spans_(from.intent_spans_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   name_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
@@ -3229,7 +3229,7 @@ void Transaction::Clear() {
   (void) cached_has_bits;
 
   observed_timestamps_.Clear();
-  intents_.Clear();
+  intent_spans_.Clear();
   in_flight_writes_.Clear();
   name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
@@ -3382,7 +3382,7 @@ bool Transaction::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(90u /* 90 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_intents()));
+                input, add_intent_spans()));
         } else {
           goto handle_unusual;
         }
@@ -3533,10 +3533,10 @@ void Transaction::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->intents_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->intent_spans_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       11,
-      this->intents(static_cast<int>(i)),
+      this->intent_spans(static_cast<int>(i)),
       output);
   }
 
@@ -3620,12 +3620,12 @@ size_t Transaction::ByteSizeLong() const {
   }
 
   {
-    unsigned int count = static_cast<unsigned int>(this->intents_size());
+    unsigned int count = static_cast<unsigned int>(this->intent_spans_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->intents(static_cast<int>(i)));
+          this->intent_spans(static_cast<int>(i)));
     }
   }
 
@@ -3724,7 +3724,7 @@ void Transaction::MergeFrom(const Transaction& from) {
   (void) cached_has_bits;
 
   observed_timestamps_.MergeFrom(from.observed_timestamps_);
-  intents_.MergeFrom(from.intents_);
+  intent_spans_.MergeFrom(from.intent_spans_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.name().size() > 0) {
 
@@ -3780,7 +3780,7 @@ void Transaction::Swap(Transaction* other) {
 void Transaction::InternalSwap(Transaction* other) {
   using std::swap;
   CastToBase(&observed_timestamps_)->InternalSwap(CastToBase(&other->observed_timestamps_));
-  CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
+  CastToBase(&intent_spans_)->InternalSwap(CastToBase(&other->intent_spans_));
   in_flight_writes_.Swap(&other->in_flight_writes_);
   name_.Swap(&other->name_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
@@ -3843,7 +3843,7 @@ const int TransactionRecord::kMetaFieldNumber;
 const int TransactionRecord::kStatusFieldNumber;
 const int TransactionRecord::kLastHeartbeatFieldNumber;
 const int TransactionRecord::kOrigTimestampFieldNumber;
-const int TransactionRecord::kIntentsFieldNumber;
+const int TransactionRecord::kIntentSpansFieldNumber;
 const int TransactionRecord::kInFlightWritesFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -3857,7 +3857,7 @@ TransactionRecord::TransactionRecord()
 TransactionRecord::TransactionRecord(const TransactionRecord& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      intents_(from.intents_) {
+      intent_spans_(from.intent_spans_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_meta()) {
@@ -3911,7 +3911,7 @@ void TransactionRecord::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  intents_.Clear();
+  intent_spans_.Clear();
   in_flight_writes_.Clear();
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
     delete meta_;
@@ -3997,7 +3997,7 @@ bool TransactionRecord::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(90u /* 90 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_intents()));
+                input, add_intent_spans()));
         } else {
           goto handle_unusual;
         }
@@ -4070,10 +4070,10 @@ void TransactionRecord::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->intents_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->intent_spans_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       11,
-      this->intents(static_cast<int>(i)),
+      this->intent_spans(static_cast<int>(i)),
       output);
   }
 
@@ -4127,12 +4127,12 @@ size_t TransactionRecord::ByteSizeLong() const {
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
   {
-    unsigned int count = static_cast<unsigned int>(this->intents_size());
+    unsigned int count = static_cast<unsigned int>(this->intent_spans_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->intents(static_cast<int>(i)));
+          this->intent_spans(static_cast<int>(i)));
     }
   }
 
@@ -4190,7 +4190,7 @@ void TransactionRecord::MergeFrom(const TransactionRecord& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  intents_.MergeFrom(from.intents_);
+  intent_spans_.MergeFrom(from.intent_spans_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_meta()) {
     mutable_meta()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.meta());
@@ -4223,7 +4223,7 @@ void TransactionRecord::Swap(TransactionRecord* other) {
 }
 void TransactionRecord::InternalSwap(TransactionRecord* other) {
   using std::swap;
-  CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
+  CastToBase(&intent_spans_)->InternalSwap(CastToBase(&other->intent_spans_));
   in_flight_writes_.Swap(&other->in_flight_writes_);
   swap(meta_, other->meta_);
   swap(last_heartbeat_, other->last_heartbeat_);
@@ -5428,12 +5428,11 @@ void TxnCoordMeta::InitAsDefaultInstance() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TxnCoordMeta::kTxnFieldNumber;
-const int TxnCoordMeta::kIntentsFieldNumber;
 const int TxnCoordMeta::kCommandCountFieldNumber;
 const int TxnCoordMeta::kRefreshReadsFieldNumber;
 const int TxnCoordMeta::kRefreshWritesFieldNumber;
 const int TxnCoordMeta::kRefreshInvalidFieldNumber;
-const int TxnCoordMeta::kOutstandingWritesFieldNumber;
+const int TxnCoordMeta::kInFlightWritesFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TxnCoordMeta::TxnCoordMeta()
@@ -5446,10 +5445,9 @@ TxnCoordMeta::TxnCoordMeta()
 TxnCoordMeta::TxnCoordMeta(const TxnCoordMeta& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      intents_(from.intents_),
       refresh_reads_(from.refresh_reads_),
       refresh_writes_(from.refresh_writes_),
-      outstanding_writes_(from.outstanding_writes_) {
+      in_flight_writes_(from.in_flight_writes_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_txn()) {
     txn_ = new ::cockroach::roachpb::Transaction(*from.txn_);
@@ -5492,10 +5490,9 @@ void TxnCoordMeta::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  intents_.Clear();
   refresh_reads_.Clear();
   refresh_writes_.Clear();
-  outstanding_writes_.Clear();
+  in_flight_writes_.Clear();
   if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
     delete txn_;
   }
@@ -5527,17 +5524,6 @@ bool TxnCoordMeta::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_txn()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_intents()));
         } else {
           goto handle_unusual;
         }
@@ -5598,7 +5584,7 @@ bool TxnCoordMeta::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_outstanding_writes()));
+                input, add_in_flight_writes()));
         } else {
           goto handle_unusual;
         }
@@ -5636,14 +5622,6 @@ void TxnCoordMeta::SerializeWithCachedSizes(
       1, this->_internal_txn(), output);
   }
 
-  for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->intents_size()); i < n; i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      2,
-      this->intents(static_cast<int>(i)),
-      output);
-  }
-
   // int32 command_count = 3;
   if (this->command_count() != 0) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->command_count(), output);
@@ -5671,10 +5649,10 @@ void TxnCoordMeta::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->outstanding_writes_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->in_flight_writes_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       8,
-      this->outstanding_writes(static_cast<int>(i)),
+      this->in_flight_writes(static_cast<int>(i)),
       output);
   }
 
@@ -5688,16 +5666,6 @@ size_t TxnCoordMeta::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
-
-  {
-    unsigned int count = static_cast<unsigned int>(this->intents_size());
-    total_size += 1UL * count;
-    for (unsigned int i = 0; i < count; i++) {
-      total_size +=
-        ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->intents(static_cast<int>(i)));
-    }
-  }
 
   {
     unsigned int count = static_cast<unsigned int>(this->refresh_reads_size());
@@ -5720,12 +5688,12 @@ size_t TxnCoordMeta::ByteSizeLong() const {
   }
 
   {
-    unsigned int count = static_cast<unsigned int>(this->outstanding_writes_size());
+    unsigned int count = static_cast<unsigned int>(this->in_flight_writes_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->outstanding_writes(static_cast<int>(i)));
+          this->in_flight_writes(static_cast<int>(i)));
     }
   }
 
@@ -5764,10 +5732,9 @@ void TxnCoordMeta::MergeFrom(const TxnCoordMeta& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  intents_.MergeFrom(from.intents_);
   refresh_reads_.MergeFrom(from.refresh_reads_);
   refresh_writes_.MergeFrom(from.refresh_writes_);
-  outstanding_writes_.MergeFrom(from.outstanding_writes_);
+  in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_txn()) {
     mutable_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.txn());
   }
@@ -5796,10 +5763,9 @@ void TxnCoordMeta::Swap(TxnCoordMeta* other) {
 }
 void TxnCoordMeta::InternalSwap(TxnCoordMeta* other) {
   using std::swap;
-  CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
   CastToBase(&refresh_reads_)->InternalSwap(CastToBase(&other->refresh_reads_));
   CastToBase(&refresh_writes_)->InternalSwap(CastToBase(&other->refresh_writes_));
-  CastToBase(&outstanding_writes_)->InternalSwap(CastToBase(&other->outstanding_writes_));
+  CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
   swap(txn_, other->txn_);
   swap(command_count_, other->command_count_);
   swap(refresh_invalid_, other->refresh_invalid_);

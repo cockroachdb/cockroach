@@ -150,10 +150,9 @@ type TxnCoordSender struct {
 	// additional heap allocations necessary.
 	interceptorStack []txnInterceptor
 	interceptorAlloc struct {
-		arr [7]txnInterceptor
+		arr [6]txnInterceptor
 		txnHeartbeater
 		txnSeqNumAllocator
-		txnIntentCollector
 		txnPipeliner
 		txnSpanRefresher
 		txnCommitter
@@ -494,10 +493,6 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			tcs.stopper,
 			tcs.cleanupTxnLocked,
 		)
-		tcs.interceptorAlloc.txnIntentCollector = txnIntentCollector{
-			st: tcf.st,
-			ri: ri,
-		}
 		tcs.interceptorAlloc.txnMetricRecorder = txnMetricRecorder{
 			metrics: &tcs.metrics,
 			clock:   tcs.clock,
@@ -506,6 +501,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	}
 	tcs.interceptorAlloc.txnPipeliner = txnPipeliner{
 		st: tcf.st,
+		ri: ri,
 	}
 	tcs.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:    tcf.st,
@@ -531,7 +527,6 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			// Various interceptors below rely on sequence number allocation,
 			// so the sequence number allocator is near the top of the stack.
 			&tcs.interceptorAlloc.txnSeqNumAllocator,
-			&tcs.interceptorAlloc.txnIntentCollector,
 			// The pipelinger sits above the span refresher because it will
 			// never generate transaction retry errors that could be avoided
 			// with a refresh.
@@ -740,7 +735,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnIntentCollector.haveIntents() {
+	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnPipeliner.haveWrites() {
 		return nil, tc.commitReadOnlyTxnLocked(ctx, ba)
 	}
 

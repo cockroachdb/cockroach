@@ -4269,9 +4269,9 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	}
 	hbResp := reply.(*roachpb.HeartbeatTxnResponse)
 	expIntents := []roachpb.Span{{Key: splitKey.AsRawKey()}}
-	if !reflect.DeepEqual(hbResp.Txn.Intents, expIntents) {
+	if !reflect.DeepEqual(hbResp.Txn.IntentSpans, expIntents) {
 		t.Fatalf("expected persisted intents %v, got %v",
-			expIntents, hbResp.Txn.Intents)
+			expIntents, hbResp.Txn.IntentSpans)
 	}
 }
 
