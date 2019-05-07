@@ -953,6 +953,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT $1::INT[]", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{10})).Results(pq.Array([]int64{10})),
 		}},
+		{"INSERT INTO d.arr VALUES($1, $2)", []preparedQueryTest{
+			baseTest.SetArgs(pq.Array([]int64{}), pq.Array([]string{})),
+		}},
 		{"EXPERIMENTAL SCRUB TABLE system.locations", []preparedQueryTest{
 			baseTest.SetArgs(),
 		}},
@@ -1081,6 +1084,7 @@ CREATE TABLE d.ts (a TIMESTAMP, b DATE);
 CREATE TABLE d.two (a INT, b INT);
 CREATE TABLE d.intStr (a INT, s STRING);
 CREATE TABLE d.str (s STRING, b BYTES);
+CREATE TABLE d.arr (a INT[], b TEXT[]);
 CREATE TABLE d.emptynorows (); -- zero columns, zero rows
 CREATE TABLE d.emptyrows (x INT);
 INSERT INTO d.emptyrows VALUES (1),(2),(3);
