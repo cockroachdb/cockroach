@@ -21,11 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -316,118 +311,6 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
 						`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
 					})
-				},
-				Duration: length,
-			})
-		},
-		MinVersion: "v2.2.0",
-	}
-}
-
-func registerSchemaChangeCancelIndexTPCC1000(r *registry) {
-	r.Add(makeIndexAddRollbackTpccTest(5, 1000, time.Minute*60))
-}
-
-// Creates an index and job, returning the job ID and a notify channel for
-// when the schema change completes or rolls back.
-func createIndexAddJob(
-	ctx context.Context, c *cluster, prefix string,
-) (int64, <-chan error, error) {
-	conn := c.Conn(ctx, 1)
-	defer conn.Close()
-	oldJobID, err := jobutils.QueryRecentJobID(conn, 0)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	// CREATE INDEX in a separate goroutine because it takes a lot of time.
-	notifyCommit := make(chan error)
-	go func() {
-		newConn := c.Conn(ctx, 1)
-		defer newConn.Close()
-		_, err := newConn.Exec(`CREATE INDEX foo ON tpcc.order (o_carrier_id);`)
-		notifyCommit <- err
-	}()
-
-	// Find the job id for the CREATE INDEX.
-	var jobID int64
-	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-		jobID, err = jobutils.QueryRecentJobID(conn, 0)
-		if err != nil {
-			return 0, nil, err
-		}
-		if jobID != oldJobID {
-			break
-		}
-	}
-
-	c.l.Printf("%s: created index add job %d\n", prefix, jobID)
-
-	return jobID, notifyCommit, nil
-}
-
-func makeIndexAddRollbackTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
-	return testSpec{
-		Name:    fmt.Sprintf("schemachange/indexrollback/tpcc/w=%d", warehouses),
-		Cluster: makeClusterSpec(numNodes, cpu(16)),
-		Timeout: length * 3,
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: warehouses,
-				Extra:      "--wait=false --tolerate-errors",
-				During: func(ctx context.Context) error {
-					gcTTL := 10 * time.Minute
-					prefix := "indexrollback"
-
-					createID, notifyCommit, err := createIndexAddJob(ctx, c, prefix)
-					if err != nil {
-						return err
-					}
-
-					conn := c.Conn(ctx, 1)
-					defer conn.Close()
-
-					if _, err := conn.Exec("ALTER INDEX tpcc.order@foo CONFIGURE ZONE USING gc.ttlseconds = $1", int64(gcTTL.Seconds())); err != nil {
-						return err
-					}
-
-					retryOpts := retry.Options{InitialBackoff: 10 * time.Second, MaxBackoff: time.Minute}
-					if err := jobutils.WaitForFractionalProgress(
-						ctx,
-						conn,
-						createID,
-						0.12,
-						retryOpts,
-					); err != nil {
-						return err
-					}
-
-					if _, err := conn.Exec(`CANCEL JOB $1`, createID); err != nil {
-						return err
-					}
-					c.l.Printf("%s: canceled job %d\n", prefix, createID)
-
-					if err := <-notifyCommit; !testutils.IsError(err, "job canceled") {
-						c.l.Printf("%s: canceled job %d, got: %+v\n", prefix, createID, err)
-						return errors.Errorf("expected 'job canceled' error, but got %+v", err)
-					}
-
-					rollbackID, err := jobutils.QueryRecentJobID(conn, 0)
-					if err != nil {
-						return err
-					} else if rollbackID == createID {
-						return errors.Errorf("no rollback job created")
-					}
-
-					c.l.Printf("%s: rollback for %d began: %d\n", prefix, createID, rollbackID)
-
-					backoff := 30 * time.Second
-					retryOpts = retry.Options{InitialBackoff: backoff, MaxBackoff: backoff, Multiplier: 1, MaxRetries: int(length / backoff)}
-					if err := jobutils.WaitForStatus(ctx, conn, rollbackID, jobs.StatusSucceeded, retryOpts); err != nil {
-						return err
-					}
-					c.l.Printf("%s: rollback %d complete\n", prefix, rollbackID)
-					return nil
 				},
 				Duration: length,
 			})
