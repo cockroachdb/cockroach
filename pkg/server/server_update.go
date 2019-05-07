@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,6 +32,7 @@ type TestingKnobs struct {
 	// DisableAutomaticVersionUpgrade, if set, temporarily disables the server's
 	// automatic version upgrade mechanism.
 	DisableAutomaticVersionUpgrade int32 // accessed atomically
+	DefaultZoneConfigOverride      *config.ZoneConfig
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

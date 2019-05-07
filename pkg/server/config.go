@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -120,6 +121,7 @@ func (mo *MaxOffsetType) String() string {
 type Config struct {
 	// Embed the base context.
 	*base.Config
+	DefaultZoneConfig *config.ZoneConfig
 
 	Settings *cluster.Settings
 
@@ -331,6 +333,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 
 	cfg := Config{
 		Config:                         new(base.Config),
+		DefaultZoneConfig:              config.DefaultZoneConfigRef(),
 		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
 		Settings:                       st,
 		CacheSize:                      DefaultCacheSize,

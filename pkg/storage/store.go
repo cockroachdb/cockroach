@@ -167,6 +167,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
+		DefaultZoneConfig:           config.DefaultZoneConfigRef(),
 		Settings:                    st,
 		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
 		Clock:                       clock,
@@ -619,6 +620,7 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
+	DefaultZoneConfig    *config.ZoneConfig
 	Settings             *cluster.Settings
 	Clock                *hlc.Clock
 	DB                   *client.DB

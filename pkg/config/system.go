@@ -71,7 +71,8 @@ type zoneEntry struct {
 // that should not be considered for splits.
 type SystemConfig struct {
 	SystemConfigEntries
-	mu struct {
+	DefaultZoneConfig *ZoneConfig
+	mu                struct {
 		syncutil.RWMutex
 		zoneCache        map[uint32]zoneEntry
 		shouldSplitCache map[uint32]bool
@@ -81,6 +82,7 @@ type SystemConfig struct {
 // NewSystemConfig returns an initialized instance of SystemConfig.
 func NewSystemConfig() *SystemConfig {
 	sc := &SystemConfig{}
+	sc.DefaultZoneConfig = DefaultZoneConfigRef()
 	sc.mu.zoneCache = map[uint32]zoneEntry{}
 	sc.mu.shouldSplitCache = map[uint32]bool{}
 	return sc
