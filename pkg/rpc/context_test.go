@@ -196,7 +196,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	const serverNodeID = 1
 	const clientNodeID = 2
 
-	serverCtx := newTestContext(clusterID, clock, stopper)
+	serverCtx := newTestContext(clusterID, clock, stop.NewStopper())
 	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
 	s := newTestServer(t, serverCtx)
 
@@ -209,12 +209,6 @@ func TestHeartbeatHealth(t *testing.T) {
 		nodeID:             &serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
-
-	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	remoteAddr := ln.Addr().String()
 
 	errFailedHeartbeat := errors.New("failed heartbeat")
 
@@ -257,6 +251,12 @@ func TestHeartbeatHealth(t *testing.T) {
 	clientCtx.AdvertiseAddr = lisLocalServer.Addr().String()
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
 	if _, err := clientCtx.GRPCDialNode(
 		remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
 		t.Fatal(err)
@@ -270,6 +270,8 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 		return err
 	})
+	assertGauges(t, clientCtx.Metrics(),
+		0 /* initializing */, 1 /* nominal */, 0 /* failed */)
 
 	// Should be unhealthy in the presence of failing heartbeats.
 	hbSuccess.Store(false)
@@ -279,12 +281,16 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 		return nil
 	})
+	assertGauges(t, clientCtx.Metrics(),
+		0 /* initializing */, 0 /* nominal */, 1 /* failed */)
 
 	// Should become healthy in the presence of successful heartbeats.
 	hbSuccess.Store(true)
 	testutils.SucceedsSoon(t, func() error {
 		return clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
 	})
+	assertGauges(t, clientCtx.Metrics(),
+		0 /* initializing */, 1 /* nominal */, 0 /* failed */)
 
 	// Should become unhealthy again in the presence of failing heartbeats.
 	hbSuccess.Store(false)
@@ -294,12 +300,18 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 		return nil
 	})
+	assertGauges(t, clientCtx.Metrics(),
+		0 /* initializing */, 0 /* nominal */, 1 /* failed */)
 
 	// Should become healthy in the presence of successful heartbeats.
 	hbSuccess.Store(true)
 	testutils.SucceedsSoon(t, func() error {
 		return clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
 	})
+	assertGauges(t, clientCtx.Metrics(),
+		0 /* initializing */, 1 /* nominal */, 0 /* failed */)
+
+	// Ensure that non-existing connections return ErrNotHeartbeated.
 
 	lisNonExistentConnection, err := net.Listen("tcp", "127.0.0.1:0")
 	defer func() {
@@ -311,17 +323,67 @@ func TestHeartbeatHealth(t *testing.T) {
 	if err := clientCtx.TestingConnHealth(lisNonExistentConnection.Addr().String(), 3); err != ErrNotHeartbeated {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
+	// The connection to Node 3 on the lisNonExistentConnection should be
+	// initializing and the server connection should be nominal.
+	testutils.SucceedsSoon(t, func() error {
+		return checkGauges(clientCtx.Metrics(),
+			1 /* initializing */, 1 /* nominal */, 0 /* failed */)
+	})
 
 	if err := clientCtx.TestingConnHealth(clientCtx.Addr, clientNodeID); err != ErrNotHeartbeated {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 
+	// Ensure that the local Addr returns ErrNotHeartbeated without having dialed
+	// a connection but the local AdvertiseAddr successfully returns no error when
+	// an internal server has been registered.
 	clientCtx.SetLocalInternalServer(&internalServer{})
 
 	if err := clientCtx.TestingConnHealth(clientCtx.Addr, clientNodeID); err != ErrNotHeartbeated {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 	if err := clientCtx.TestingConnHealth(clientCtx.AdvertiseAddr, clientNodeID); err != nil {
+		t.Error(err)
+	}
+
+	// Ensure that when the server closes its connection the context attempts to
+	// reconnect. Both the server connection on Node 1 and the non-existent
+	// connection should be initializing.
+	serverCtx.Stopper.Stop(context.Background())
+	testutils.SucceedsSoon(t, func() error {
+		return checkGauges(clientCtx.Metrics(),
+			2 /* initializing */, 0 /* nominal */, 0 /* failed */)
+	})
+	const expNumStarted = 3 // 2 for the server and 1 for the non-existent conn
+	numStarted := clientCtx.Metrics().HeartbeatLoopsStarted.Count()
+	if numStarted != expNumStarted {
+		t.Fatalf("expected %d heartbeat loops to have been started, got %d",
+			expNumStarted, numStarted)
+	}
+	const expNumExited = 1 // 1 for the server upon shutdown
+	numExited := clientCtx.Metrics().HeartbeatLoopsExited.Count()
+	if numExited != expNumExited {
+		t.Fatalf("expected %d heartbeat loops to have exited, got %d",
+			expNumExited, numExited)
+	}
+}
+
+func checkGauges(m *Metrics, initializing, nominal, failed int64) error {
+	if got := m.HeartbeatsInitializing.Value(); got != initializing {
+		return errors.Errorf("expected %d initializing heartbeats, got %d", initializing, got)
+	}
+	if got := m.HeartbeatsNominal.Value(); got != nominal {
+		return errors.Errorf("expected %d nominal heartbeats, got %d", nominal, got)
+	}
+	if got := m.HeartbeatsFailed.Value(); got != failed {
+		return errors.Errorf("expected %d failed heartbeats, got %d", failed, got)
+	}
+	return nil
+}
+
+func assertGauges(t *testing.T, m *Metrics, initializing, nominal, failed int64) {
+	t.Helper()
+	if err := checkGauges(m, initializing, nominal, failed); err != nil {
 		t.Error(err)
 	}
 }
