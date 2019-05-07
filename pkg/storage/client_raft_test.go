@@ -32,7 +32,6 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -2856,87 +2855,6 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 			if r.NodeID == decommingNodeID {
 				return errors.Errorf("expected replica to be moved off node %d, but got replicas %v",
 					decommingNodeID, curReplicas)
-			}
-		}
-		return nil
-	})
-}
-
-// TestStoreRangeRemoveDead verifies that if a store becomes dead, the
-// ReplicateQueue will notice and remove any replicas on it.
-func TestStoreRangeRemoveDead(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableReplicaRebalancing = true
-	mtc := &multiTestContext{storeConfig: &sc}
-	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
-	defer mtc.Stop()
-
-	zone := config.DefaultSystemZoneConfig()
-	mtc.Start(t, int(zone.NumReplicas+1))
-
-	var nonDeadStores []*storage.Store
-	for i, s := range mtc.stores {
-		if i == 1 {
-			// Skip the dead store.
-			continue
-		}
-		nonDeadStores = append(nonDeadStores, s)
-	}
-
-	// Create a goroutine to gossip store capacity info periodically.
-	go func() {
-		tickerDur := storage.TestTimeUntilStoreDead / 2
-		ticker := time.NewTicker(tickerDur)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				mtc.manualClock.Increment(int64(tickerDur))
-
-				// Keep gossiping the stores, excepting the dead store.
-				for _, s := range nonDeadStores {
-					if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
-						panic(err)
-					}
-				}
-				// Force the repair queues on all alive stores to run.
-				for _, s := range nonDeadStores {
-					s.ForceReplicationScanAndProcess()
-				}
-
-			case <-mtc.stoppers[0].ShouldStop():
-				return
-			}
-		}
-	}()
-
-	// Wait for up-replication.
-	testutils.SucceedsSoon(t, func() error {
-		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(replicas) == int(zone.NumReplicas) {
-			return nil
-		}
-		return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
-	})
-
-	// Stop a store which will be rebalanced away from. We can't use the very first
-	// one since getRangeMetadata is hard-coded to query that one, so we'll use the
-	// one after that.
-	deadStoreID := mtc.stores[1].StoreID() // 2
-	mtc.stopStore(1)
-	// The mtc asks us to restart this store before stopping the mtc.
-	defer mtc.restartStoreWithoutHeartbeat(1)
-
-	testutils.SucceedsSoon(t, func() error {
-		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(replicas) != int(zone.NumReplicas) {
-			return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
-		}
-		for _, r := range replicas {
-			if r.StoreID == deadStoreID {
-				return errors.Errorf("expected store %d to be replaced; have %+v", r.StoreID, replicas)
 			}
 		}
 		return nil
