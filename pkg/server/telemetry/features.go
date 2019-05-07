@@ -162,27 +162,43 @@ var counters struct {
 	m map[string]Counter
 }
 
-// GetFeatureCounts returns the current feature usage counts. Used for
-// inspection via SQL. They are not quantized! Thus not suitable for
-// reporting.
-func GetFeatureCounts() map[string]int32 {
-	counters.RLock()
-	defer counters.RUnlock()
-	m := make(map[string]int32, len(counters.m))
-	for k, cnt := range counters.m {
-		m[k] = atomic.LoadInt32(cnt)
-	}
-	return m
+// QuantizeCounts controls if counts are quantized when fetched.
+type QuantizeCounts bool
+
+// ResetCounters controls if counts are reset when fetched.
+type ResetCounters bool
+
+const (
+	// Quantized returns counts quantized to order of magnitude.
+	Quantized QuantizeCounts = true
+	// Raw returns the raw, unquanitzed counter values.
+	Raw QuantizeCounts = false
+	// ResetCounts resets the counter to zero after fetching its value.
+	ResetCounts ResetCounters = true
+	// ReadOnly leaves the counter value unchanged when reading it.
+	ReadOnly ResetCounters = false
+)
+
+// GetRawFeatureCounts returns current raw, un-quanitzed feature counter values.
+func GetRawFeatureCounts() map[string]int32 {
+	return GetFeatureCounts(Raw, ReadOnly)
 }
 
-// GetAndResetFeatureCounts returns the current feature usage counts and resets
-// the counts for all features back to 0. If `quantize` is true, the returned
-// counts are quantized to just order of magnitude using the `Bucket10` helper.
-func GetAndResetFeatureCounts(quantize bool) map[string]int32 {
+// GetFeatureCounts returns the current feature usage counts.
+//
+// It optionally quantizes quantizes the returned counts to just order of
+// magnitude using the `Bucket10` helper, and optionally resets the counters to
+// zero i.e. if flushing accumulated counts during a report.
+func GetFeatureCounts(quantize QuantizeCounts, reset ResetCounters) map[string]int32 {
 	counters.RLock()
 	m := make(map[string]int32, len(counters.m))
 	for k, cnt := range counters.m {
-		val := atomic.SwapInt32(cnt, 0)
+		var val int32
+		if reset {
+			val = atomic.SwapInt32(cnt, 0)
+		} else {
+			val = atomic.LoadInt32(cnt)
+		}
 		if val != 0 {
 			m[k] = val
 		}
