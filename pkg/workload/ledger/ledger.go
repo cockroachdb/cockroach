@@ -130,8 +130,9 @@ func (w *ledger) Tables() []workload.Table {
 	customer := workload.Table{
 		Name:   `customer`,
 		Schema: ledgerCustomerSchema,
-		InitialRows: workload.Tuples(
+		InitialRows: workload.TypedTuples(
 			w.customers,
+			ledgerCustomerColTypes,
 			w.ledgerCustomerInitialRow,
 		),
 		Splits: workload.Tuples(
@@ -142,8 +143,9 @@ func (w *ledger) Tables() []workload.Table {
 	transaction := workload.Table{
 		Name:   `transaction`,
 		Schema: ledgerTransactionSchema,
-		InitialRows: workload.Tuples(
+		InitialRows: workload.TypedTuples(
 			numTxnsPerCustomer*w.customers,
+			ledgerTransactionColTypes,
 			w.ledgerTransactionInitialRow,
 		),
 		Splits: workload.Tuples(

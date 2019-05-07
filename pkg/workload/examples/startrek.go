@@ -14,7 +14,10 @@
 
 package examples
 
-import "github.com/cockroachdb/cockroach/pkg/workload"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+)
 
 const (
 	episodesSchema = `(id INT PRIMARY KEY, season INT, num INT, title TEXT, stardate DECIMAL)`
@@ -47,20 +50,30 @@ func (startrek) Tables() []workload.Table {
 		{
 			Name:   `episodes`,
 			Schema: episodesSchema,
-			InitialRows: workload.Tuples(
+			InitialRows: workload.TypedTuples(
 				len(startrekEpisodes),
+				episodesColTypes,
 				func(rowIdx int) []interface{} { return startrekEpisodes[rowIdx] },
 			),
 		},
 		{
 			Name:   `quotes`,
 			Schema: quotesSchema,
-			InitialRows: workload.Tuples(
+			InitialRows: workload.TypedTuples(
 				len(startrekQuotes),
+				quotesColTypes,
 				func(rowIdx int) []interface{} { return startrekQuotes[rowIdx] },
 			),
 		},
 	}
+}
+
+var episodesColTypes = []types.T{
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+	types.Float64,
 }
 
 // The data that follows was derived from the 'startrek' fortune cookie file.
@@ -145,6 +158,14 @@ var startrekEpisodes = [...][]interface{}{
 	{78, 3, 23, `All Our Yesterdays`, 5943.7},
 	{79, 3, 24, `Turnabout Intruder`, 5928.5},
 }
+
+var quotesColTypes = []types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Float64,
+	types.Int64,
+}
+
 var startrekQuotes = [...][]interface{}{
 	{`"... freedom ... is a worship word..." "It is our worship word too."`, `Cloud William and Kirk`, nil, 52},
 	{`"Beauty is transitory." "Beauty survives."`, `Spock and Kirk`, nil, 72},

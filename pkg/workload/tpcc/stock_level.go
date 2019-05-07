@@ -100,7 +100,7 @@ func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 	// 2.8.1.2: The threshold of minimum quantity in stock is selected at random
 	// within [10..20].
 	d := stockLevelData{
-		threshold: randInt(rng, 10, 20),
+		threshold: int(randInt(rng, 10, 20)),
 		dID:       rng.Intn(10) + 1,
 	}
 

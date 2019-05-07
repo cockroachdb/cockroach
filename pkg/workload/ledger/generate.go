@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -35,6 +36,19 @@ const (
 	txnTypeReference = 400
 	cashMoneyType    = "C"
 )
+
+var ledgerCustomerColTypes = []types.T{
+	types.Int64,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bool,
+	types.Bool,
+	types.Bytes,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+}
 
 func (w *ledger) ledgerCustomerInitialRow(rowIdx int) []interface{} {
 	rng := w.rngPool.Get().(*rand.Rand)
@@ -59,6 +73,18 @@ func (w *ledger) ledgerCustomerSplitRow(splitIdx int) []interface{} {
 	return []interface{}{
 		(splitIdx + 1) * (w.customers / w.splits),
 	}
+}
+
+var ledgerTransactionColTypes = []types.T{
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Int64,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
 }
 
 func (w *ledger) ledgerTransactionInitialRow(rowIdx int) []interface{} {

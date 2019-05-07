@@ -185,7 +185,7 @@ func (m *roachmart) Tables() []workload.Table {
 		InitialRows: workload.Tuples(
 			m.orders,
 			func(rowIdx int) []interface{} {
-				user := users.InitialRows.Batch(rowIdx % m.users)[0]
+				user := users.InitialRows.BatchRows(rowIdx % m.users)[0]
 				zone, email := user[0], user[1]
 				return []interface{}{
 					zone,                         // user_zone
@@ -227,7 +227,7 @@ func (m *roachmart) Ops(urls []string, reg *histogram.Registry) (workload.QueryL
 			// our locality requirements.
 			var zone, email interface{}
 			for i := rng.Int(); ; i++ {
-				user := usersTable.InitialRows.Batch(i % m.users)[0]
+				user := usersTable.InitialRows.BatchRows(i % m.users)[0]
 				zone, email = user[0], user[1]
 				userLocal := zone == m.localZone
 				if userLocal == wantLocal {

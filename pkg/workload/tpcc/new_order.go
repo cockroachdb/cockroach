@@ -141,9 +141,9 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 
 	d := newOrderData{
 		wID:    wID,
-		dID:    randInt(rng, 1, 10),
+		dID:    int(randInt(rng, 1, 10)),
 		cID:    randCustomerID(rng),
-		oOlCnt: randInt(rng, 5, 15),
+		oOlCnt: int(randInt(rng, 5, 15)),
 	}
 	d.items = make([]orderItem, d.oOlCnt)
 

@@ -19,6 +19,8 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -33,6 +35,7 @@ const (
 	numStockPerWarehouse     = 100000
 	numCustomersPerDistrict  = 3000
 	numCustomersPerWarehouse = numCustomersPerDistrict * numDistrictsPerWarehouse
+	numHistoryPerWarehouse   = numCustomersPerWarehouse
 	numOrdersPerDistrict     = numCustomersPerDistrict
 	numOrdersPerWarehouse    = numOrdersPerDistrict * numDistrictsPerWarehouse
 	numNewOrdersPerDistrict  = 900
@@ -65,22 +68,28 @@ const (
 
 type generateLocals struct {
 	rng *rand.Rand
-	a   bufalloc.ByteAllocator
 }
 
-func (w *tpcc) tpccItemInitialRow(rowIdx int) []interface{} {
+var itemColTypes = []types.T{
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+	types.Float64,
+	types.Bytes,
+}
+
+func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
 	iID := rowIdx + 1
 
-	return []interface{}{
-		iID,
-		randInt(l.rng, 1, 10000),         // im_id: "Image ID associated to Item"
-		randAString(l.rng, &l.a, 14, 24), // name
-		float64(randInt(l.rng, 100, 10000)) / float64(100), // price
-		randOriginalString(l.rng, &l.a),
-	}
+	cb.Reset(itemColTypes, 1)
+	cb.ColVec(0).Int64()[0] = int64(iID)
+	cb.ColVec(1).Int64()[0] = randInt(l.rng, 1, 10000)                             // im_id: "Image ID associated to Item"
+	cb.ColVec(2).Bytes()[0] = randAString(l.rng, a, 14, 24)                        // name
+	cb.ColVec(3).Float64()[0] = float64(randInt(l.rng, 100, 10000)) / float64(100) // price
+	cb.ColVec(4).Bytes()[0] = randOriginalString(l.rng, a)
 }
 
 func (w *tpcc) tpccItemStats() []workload.JSONStatistic {
@@ -96,23 +105,36 @@ func (w *tpcc) tpccItemStats() []workload.JSONStatistic {
 	}
 }
 
-func (w *tpcc) tpccWarehouseInitialRow(rowIdx int) []interface{} {
+var warehouseColTypes = []types.T{
+	types.Int64,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Float64,
+	types.Float64,
+}
+
+func (w *tpcc) tpccWarehouseInitialRowBatch(
+	rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
+) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
 	wID := rowIdx // warehouse ids are 0-indexed. every other table is 1-indexed
 
-	return []interface{}{
-		wID,
-		strconv.Itoa(randInt(l.rng, 6, 10)),  // name
-		strconv.Itoa(randInt(l.rng, 10, 20)), // street_1
-		strconv.Itoa(randInt(l.rng, 10, 20)), // street_2
-		strconv.Itoa(randInt(l.rng, 10, 20)), // city
-		randState(l.rng, &l.a),
-		randZip(l.rng, &l.a),
-		randTax(l.rng),
-		wYtd,
-	}
+	cb.Reset(warehouseColTypes, 1)
+	cb.ColVec(0).Int64()[0] = int64(wID)
+	cb.ColVec(1).Bytes()[0] = []byte(strconv.FormatInt(randInt(l.rng, 6, 10), 10))  // name
+	cb.ColVec(2).Bytes()[0] = []byte(strconv.FormatInt(randInt(l.rng, 10, 20), 10)) // street_1
+	cb.ColVec(3).Bytes()[0] = []byte(strconv.FormatInt(randInt(l.rng, 10, 20), 10)) // street_2
+	cb.ColVec(4).Bytes()[0] = []byte(strconv.FormatInt(randInt(l.rng, 10, 20), 10)) // city
+	cb.ColVec(5).Bytes()[0] = randState(l.rng, a)
+	cb.ColVec(6).Bytes()[0] = randZip(l.rng, a)
+	cb.ColVec(7).Float64()[0] = randTax(l.rng)
+	cb.ColVec(8).Float64()[0] = wYtd
 }
 
 func (w *tpcc) tpccWarehouseStats() []workload.JSONStatistic {
@@ -132,31 +154,51 @@ func (w *tpcc) tpccWarehouseStats() []workload.JSONStatistic {
 	}
 }
 
-func (w *tpcc) tpccStockInitialRow(rowIdx int) []interface{} {
+var stockColTypes = []types.T{
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+}
+
+func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
 	sID := (rowIdx % numStockPerWarehouse) + 1
 	wID := (rowIdx / numStockPerWarehouse)
 
-	return []interface{}{
-		sID, wID,
-		randInt(l.rng, 10, 100),          // quantity
-		randAString(l.rng, &l.a, 24, 24), // dist_01
-		randAString(l.rng, &l.a, 24, 24), // dist_02
-		randAString(l.rng, &l.a, 24, 24), // dist_03
-		randAString(l.rng, &l.a, 24, 24), // dist_04
-		randAString(l.rng, &l.a, 24, 24), // dist_05
-		randAString(l.rng, &l.a, 24, 24), // dist_06
-		randAString(l.rng, &l.a, 24, 24), // dist_07
-		randAString(l.rng, &l.a, 24, 24), // dist_08
-		randAString(l.rng, &l.a, 24, 24), // dist_09
-		randAString(l.rng, &l.a, 24, 24), // dist_10
-		0,                                // ytd
-		0,                                // order_cnt
-		0,                                // remote_cnt
-		randOriginalString(l.rng, &l.a),  // data
-	}
+	cb.Reset(stockColTypes, 1)
+	cb.ColVec(0).Int64()[0] = int64(sID)
+	cb.ColVec(1).Int64()[0] = int64(wID)
+	cb.ColVec(2).Int64()[0] = randInt(l.rng, 10, 100)        // quantity
+	cb.ColVec(3).Bytes()[0] = randAString(l.rng, a, 24, 24)  // dist_01
+	cb.ColVec(4).Bytes()[0] = randAString(l.rng, a, 24, 24)  // dist_02
+	cb.ColVec(5).Bytes()[0] = randAString(l.rng, a, 24, 24)  // dist_03
+	cb.ColVec(6).Bytes()[0] = randAString(l.rng, a, 24, 24)  // dist_04
+	cb.ColVec(7).Bytes()[0] = randAString(l.rng, a, 24, 24)  // dist_05
+	cb.ColVec(8).Bytes()[0] = randAString(l.rng, a, 24, 24)  // dist_06
+	cb.ColVec(9).Bytes()[0] = randAString(l.rng, a, 24, 24)  // dist_07
+	cb.ColVec(10).Bytes()[0] = randAString(l.rng, a, 24, 24) // dist_08
+	cb.ColVec(11).Bytes()[0] = randAString(l.rng, a, 24, 24) // dist_09
+	cb.ColVec(12).Bytes()[0] = randAString(l.rng, a, 24, 24) // dist_10
+	cb.ColVec(13).Int64()[0] = 0                             // ytd
+	cb.ColVec(14).Int64()[0] = 0                             // order_cnt
+	cb.ColVec(15).Int64()[0] = 0                             // remote_cnt
+	cb.ColVec(16).Bytes()[0] = randOriginalString(l.rng, a)  // data
 }
 
 func (w *tpcc) tpccStockStats() []workload.JSONStatistic {
@@ -186,26 +228,41 @@ func (w *tpcc) tpccStockStats() []workload.JSONStatistic {
 	}
 }
 
-func (w *tpcc) tpccDistrictInitialRow(rowIdx int) []interface{} {
+var districtColTypes = []types.T{
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Float64,
+	types.Float64,
+	types.Int64,
+}
+
+func (w *tpcc) tpccDistrictInitialRowBatch(
+	rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
+) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
 	dID := (rowIdx % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numDistrictsPerWarehouse)
 
-	return []interface{}{
-		dID,
-		wID,
-		randAString(l.rng, &l.a, 6, 10),  // name
-		randAString(l.rng, &l.a, 10, 20), // street 1
-		randAString(l.rng, &l.a, 10, 20), // street 2
-		randAString(l.rng, &l.a, 10, 20), // city
-		randState(l.rng, &l.a),
-		randZip(l.rng, &l.a),
-		randTax(l.rng),
-		ytd,
-		nextOrderID,
-	}
+	cb.Reset(districtColTypes, 1)
+	cb.ColVec(0).Int64()[0] = int64(dID)
+	cb.ColVec(1).Int64()[0] = int64(wID)
+	cb.ColVec(2).Bytes()[0] = randAString(l.rng, a, 6, 10)  // name
+	cb.ColVec(3).Bytes()[0] = randAString(l.rng, a, 10, 20) // street 1
+	cb.ColVec(4).Bytes()[0] = randAString(l.rng, a, 10, 20) // street 2
+	cb.ColVec(5).Bytes()[0] = randAString(l.rng, a, 10, 20) // city
+	cb.ColVec(6).Bytes()[0] = randState(l.rng, a)
+	cb.ColVec(7).Bytes()[0] = randZip(l.rng, a)
+	cb.ColVec(8).Float64()[0] = randTax(l.rng)
+	cb.ColVec(9).Float64()[0] = ytd
+	cb.ColVec(10).Int64()[0] = nextOrderID
 }
 
 func (w *tpcc) tpccDistrictStats() []workload.JSONStatistic {
@@ -230,7 +287,33 @@ func (w *tpcc) tpccDistrictStats() []workload.JSONStatistic {
 	}
 }
 
-func (w *tpcc) tpccCustomerInitialRow(rowIdx int) []interface{} {
+var customerColTypes = []types.T{
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Bytes,
+	types.Float64,
+	types.Float64,
+	types.Float64,
+	types.Float64,
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+}
+
+func (w *tpcc) tpccCustomerInitialRowBatch(
+	rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
+) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
@@ -245,7 +328,7 @@ func (w *tpcc) tpccCustomerInitialRow(rowIdx int) []interface{} {
 		// Poor 10% :(
 		credit = badCredit
 	}
-	var lastName string
+	var lastName []byte
 	// The first 1000 customers get a last name generated according to their id;
 	// the rest get an NURand generated last name.
 	if cID <= 1000 {
@@ -254,27 +337,28 @@ func (w *tpcc) tpccCustomerInitialRow(rowIdx int) []interface{} {
 		lastName = randCLast(l.rng)
 	}
 
-	return []interface{}{
-		cID, dID, wID,
-		randAString(l.rng, &l.a, 8, 16), // first name
-		middleName,
-		lastName,
-		randAString(l.rng, &l.a, 10, 20), // street 1
-		randAString(l.rng, &l.a, 10, 20), // street 2
-		randAString(l.rng, &l.a, 10, 20), // city name
-		randState(l.rng, &l.a),
-		randZip(l.rng, &l.a),
-		randNString(l.rng, &l.a, 16, 16), // phone number
-		w.nowString,
-		credit,
-		creditLimit,
-		float64(randInt(l.rng, 0, 5000)) / float64(10000.0), // discount
-		balance,
-		ytdPayment,
-		paymentCount,
-		deliveryCount,
-		randAString(l.rng, &l.a, 300, 500), // data
-	}
+	cb.Reset(customerColTypes, 1)
+	cb.ColVec(0).Int64()[0] = int64(cID)
+	cb.ColVec(1).Int64()[0] = int64(dID)
+	cb.ColVec(2).Int64()[0] = int64(wID)
+	cb.ColVec(3).Bytes()[0] = randAString(l.rng, a, 8, 16) // first name
+	cb.ColVec(4).Bytes()[0] = []byte(middleName)
+	cb.ColVec(5).Bytes()[0] = lastName
+	cb.ColVec(6).Bytes()[0] = randAString(l.rng, a, 10, 20) // street 1
+	cb.ColVec(7).Bytes()[0] = randAString(l.rng, a, 10, 20) // street 2
+	cb.ColVec(8).Bytes()[0] = randAString(l.rng, a, 10, 20) // city name
+	cb.ColVec(9).Bytes()[0] = randState(l.rng, a)
+	cb.ColVec(10).Bytes()[0] = randZip(l.rng, a)
+	cb.ColVec(11).Bytes()[0] = randNString(l.rng, a, 16, 16) // phone number
+	cb.ColVec(12).Bytes()[0] = w.nowString
+	cb.ColVec(13).Bytes()[0] = []byte(credit)
+	cb.ColVec(14).Float64()[0] = creditLimit
+	cb.ColVec(15).Float64()[0] = float64(randInt(l.rng, 0, 5000)) / float64(10000.0) // discount
+	cb.ColVec(16).Float64()[0] = balance
+	cb.ColVec(17).Float64()[0] = ytdPayment
+	cb.ColVec(18).Int64()[0] = paymentCount
+	cb.ColVec(19).Int64()[0] = deliveryCount
+	cb.ColVec(20).Bytes()[0] = randAString(l.rng, a, 300, 500) // data
 }
 
 func (w *tpcc) tpccCustomerStats() []workload.JSONStatistic {
@@ -311,7 +395,19 @@ func (w *tpcc) tpccCustomerStats() []workload.JSONStatistic {
 	}
 }
 
-func (w *tpcc) tpccHistoryInitialRow(rowIdx int) []interface{} {
+var historyColTypes = []types.T{
+	types.Bytes,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+	types.Float64,
+	types.Bytes,
+}
+
+func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
@@ -320,9 +416,16 @@ func (w *tpcc) tpccHistoryInitialRow(rowIdx int) []interface{} {
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numCustomersPerWarehouse)
 
-	return []interface{}{
-		rowID, cID, dID, wID, dID, wID, w.nowString, 10.00, randAString(l.rng, &l.a, 12, 24),
-	}
+	cb.Reset(historyColTypes, 1)
+	cb.ColVec(0).Bytes()[0] = []byte(rowID)
+	cb.ColVec(1).Int64()[0] = int64(cID)
+	cb.ColVec(2).Int64()[0] = int64(dID)
+	cb.ColVec(3).Int64()[0] = int64(wID)
+	cb.ColVec(4).Int64()[0] = int64(dID)
+	cb.ColVec(5).Int64()[0] = int64(wID)
+	cb.ColVec(6).Bytes()[0] = w.nowString
+	cb.ColVec(7).Float64()[0] = 10.00
+	cb.ColVec(8).Bytes()[0] = randAString(l.rng, a, 12, 24)
 }
 
 func (w *tpcc) tpccHistoryStats() []workload.JSONStatistic {
@@ -342,7 +445,18 @@ func (w *tpcc) tpccHistoryStats() []workload.JSONStatistic {
 	}
 }
 
-func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
+var orderColTypes = []types.T{
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+}
+
+func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
@@ -374,14 +488,28 @@ func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
 		w.randomCIDsCache.Unlock()
 	}
 
-	var carrierID interface{}
+	var carrierSet bool
+	var carrierID int64
 	if oID < 2101 {
-		carrierID = strconv.Itoa(randInt(l.rng, 1, 10))
+		carrierSet = true
+		carrierID = randInt(l.rng, 1, 10)
 	}
 
-	return []interface{}{
-		oID, dID, wID, cID, w.nowString, carrierID, numOrderLines, 1,
+	cb.Reset(orderColTypes, 1)
+	cb.ColVec(0).Int64()[0] = int64(oID)
+	cb.ColVec(1).Int64()[0] = int64(dID)
+	cb.ColVec(2).Int64()[0] = int64(wID)
+	cb.ColVec(3).Int64()[0] = int64(cID)
+	cb.ColVec(4).Bytes()[0] = w.nowString
+	cb.ColVec(5).Nulls().UnsetNulls()
+	if carrierSet {
+		cb.ColVec(5).Int64()[0] = carrierID
+	} else {
+		cb.ColVec(5).Nulls().SetNull64(0)
+		cb.ColVec(5).Int64()[0] = 0
 	}
+	cb.ColVec(6).Int64()[0] = numOrderLines
+	cb.ColVec(7).Int64()[0] = 1
 }
 
 func (w *tpcc) tpccOrderStats() []workload.JSONStatistic {
@@ -402,16 +530,25 @@ func (w *tpcc) tpccOrderStats() []workload.JSONStatistic {
 	}
 }
 
-func (w *tpcc) tpccNewOrderInitialRow(rowIdx int) []interface{} {
+var newOrderColTypes = []types.T{
+	types.Int64,
+	types.Int64,
+	types.Int64,
+}
+
+func (w *tpcc) tpccNewOrderInitialRowBatch(
+	rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
+) {
 	// The last numNewOrdersPerDistrict orders have entries in new orders.
 	const firstNewOrderOffset = numOrdersPerDistrict - numNewOrdersPerDistrict
 	oID := (rowIdx % numNewOrdersPerDistrict) + firstNewOrderOffset + 1
 	dID := ((rowIdx / numNewOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numNewOrdersPerWarehouse)
 
-	return []interface{}{
-		oID, dID, wID,
-	}
+	cb.Reset(newOrderColTypes, 1)
+	cb.ColVec(0).Int64()[0] = int64(oID)
+	cb.ColVec(1).Int64()[0] = int64(dID)
+	cb.ColVec(2).Int64()[0] = int64(wID)
 }
 
 func (w *tpcc) tpccNewOrderStats() []workload.JSONStatistic {
@@ -423,42 +560,77 @@ func (w *tpcc) tpccNewOrderStats() []workload.JSONStatistic {
 	}
 }
 
-func (w *tpcc) tpccOrderLineInitialRowBatch(orderRowIdx int) [][]interface{} {
+var orderLineColTypes = []types.T{
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+	types.Int64,
+	types.Float64,
+	types.Bytes,
+}
+
+func (w *tpcc) tpccOrderLineInitialRowBatch(
+	orderRowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator,
+) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
 	l.rng.Seed(w.seed + uint64(orderRowIdx))
-	numOrderLines := randInt(l.rng, minOrderLinesPerOrder, maxOrderLinesPerOrder)
+	numOrderLines := int(randInt(l.rng, minOrderLinesPerOrder, maxOrderLinesPerOrder))
 
 	// NB: There is one batch of order_line rows per order
 	oID := (orderRowIdx % numOrdersPerDistrict) + 1
 	dID := ((orderRowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (orderRowIdx / numOrdersPerWarehouse)
 
-	var rows [][]interface{}
-	for i := 0; i < numOrderLines; i++ {
-		olNumber := i + 1
+	cb.Reset(orderLineColTypes, numOrderLines)
+	olOIDCol := cb.ColVec(0).Int64()
+	olDIDCol := cb.ColVec(1).Int64()
+	olWIDCol := cb.ColVec(2).Int64()
+	olNumberCol := cb.ColVec(3).Int64()
+	olIIDCol := cb.ColVec(4).Int64()
+	olSupplyWIDCol := cb.ColVec(5).Int64()
+	olDeliveryD := cb.ColVec(6)
+	olDeliveryD.Nulls().UnsetNulls()
+	olDeliveryDCol := olDeliveryD.Bytes()
+	olQuantityCol := cb.ColVec(7).Int64()
+	olAmountCol := cb.ColVec(8).Float64()
+	olDistInfoCol := cb.ColVec(9).Bytes()
+
+	for rowIdx := 0; rowIdx < numOrderLines; rowIdx++ {
+		olNumber := rowIdx + 1
 
 		var amount float64
-		var deliveryD interface{}
+		var deliveryDSet bool
+		var deliveryD []byte
 		if oID < 2101 {
 			amount = 0
+			deliveryDSet = true
 			deliveryD = w.nowString
 		} else {
 			amount = float64(randInt(l.rng, 1, 999999)) / 100.0
 		}
 
-		rows = append(rows, []interface{}{
-			oID, dID, wID, olNumber,
-			randInt(l.rng, 1, 100000), // ol_i_id
-			wID,                       // supply_w_id
-			deliveryD,
-			5, // quantity
-			amount,
-			randAString(l.rng, &l.a, 24, 24),
-		})
+		olOIDCol[rowIdx] = int64(oID)
+		olDIDCol[rowIdx] = int64(dID)
+		olWIDCol[rowIdx] = int64(wID)
+		olNumberCol[rowIdx] = int64(olNumber)
+		olIIDCol[rowIdx] = randInt(l.rng, 1, 100000)
+		olSupplyWIDCol[rowIdx] = int64(wID)
+		if deliveryDSet {
+			olDeliveryDCol[rowIdx] = deliveryD
+		} else {
+			olDeliveryD.Nulls().SetNull64(uint64(rowIdx))
+			olDeliveryDCol[rowIdx] = nil
+		}
+		olQuantityCol[rowIdx] = 5
+		olAmountCol[rowIdx] = amount
+		olDistInfoCol[rowIdx] = randAString(l.rng, a, 24, 24)
 	}
-	return rows
 }
 
 func (w *tpcc) tpccOrderLineStats() []workload.JSONStatistic {

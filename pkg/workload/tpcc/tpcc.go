@@ -46,7 +46,7 @@ type tpcc struct {
 	warehouses       int
 	activeWarehouses int
 	interleaved      bool
-	nowString        string
+	nowString        []byte
 	numConns         int
 
 	mix        string
@@ -127,7 +127,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
 		// Hardcode this since it doesn't seem like anyone will want to change
 		// it and it's really noisy in the generated fixture paths.
-		g.nowString = `2006-01-02 15:04:05`
+		g.nowString = []byte(`2006-01-02 15:04:05`)
 
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
@@ -362,103 +362,94 @@ func (w *tpcc) Tables() []workload.Table {
 	warehouse := workload.Table{
 		Name:   `warehouse`,
 		Schema: tpccWarehouseSchema,
-		InitialRows: workload.Tuples(
-			w.warehouses,
-			w.tpccWarehouseInitialRow,
-		),
-		Splits: splits(workload.BatchedTuples{
-			NumBatches: numBatches(w.warehouses, numWarehousesPerRange),
-			NumTotal:   w.warehouses,
-			Batch: func(i int) [][]interface{} {
-				return [][]interface{}{{(i + 1) * numWarehousesPerRange}}
+		InitialRows: workload.BatchedTuples{
+			NumBatches: w.warehouses,
+			FillBatch:  w.tpccWarehouseInitialRowBatch,
+		},
+		Splits: splits(workload.Tuples(
+			numBatches(w.warehouses, numWarehousesPerRange),
+			func(i int) []interface{} {
+				return []interface{}{(i + 1) * numWarehousesPerRange}
 			},
-		}),
-		Stats: w.tpccWarehouseStats(),
+		)),
 	}
 	district := workload.Table{
 		Name:   `district`,
 		Schema: tpccDistrictSchema,
-		InitialRows: workload.Tuples(
-			numDistrictsPerWarehouse*w.warehouses,
-			w.tpccDistrictInitialRow,
-		),
-		Splits: splits(workload.BatchedTuples{
-			NumBatches: numBatches(w.warehouses, numWarehousesPerRange),
-			NumTotal:   w.warehouses,
-			Batch: func(i int) [][]interface{} {
-				return [][]interface{}{{(i + 1) * numWarehousesPerRange, 0}}
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numDistrictsPerWarehouse * w.warehouses,
+			FillBatch:  w.tpccDistrictInitialRowBatch,
+		},
+		Splits: splits(workload.Tuples(
+			numBatches(w.warehouses, numWarehousesPerRange),
+			func(i int) []interface{} {
+				return []interface{}{(i + 1) * numWarehousesPerRange, 0}
 			},
-		}),
-		Stats: w.tpccDistrictStats(),
+		)),
 	}
 	customer := workload.Table{
 		Name:   `customer`,
 		Schema: tpccCustomerSchema,
-		InitialRows: workload.Tuples(
-			numCustomersPerWarehouse*w.warehouses,
-			w.tpccCustomerInitialRow,
-		),
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numCustomersPerWarehouse * w.warehouses,
+			FillBatch:  w.tpccCustomerInitialRowBatch,
+		},
 		Stats: w.tpccCustomerStats(),
 	}
 	history := workload.Table{
 		Name:   `history`,
 		Schema: tpccHistorySchema,
-		InitialRows: workload.Tuples(
-			numCustomersPerWarehouse*w.warehouses,
-			w.tpccHistoryInitialRow,
-		),
-		Splits: splits(workload.BatchedTuples{
-			NumBatches: historyRanges - 1,
-			Batch: func(i int) [][]interface{} {
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numHistoryPerWarehouse * w.warehouses,
+			FillBatch:  w.tpccHistoryInitialRowBatch,
+		},
+		Splits: splits(workload.Tuples(
+			historyRanges-1,
+			func(i int) []interface{} {
 				at := uint128.FromInts(uint64(i+1)*numHistoryValsPerRange, 0)
-				return [][]interface{}{
-					{uuid.FromUint128(at).String()},
-				}
+				return []interface{}{uuid.FromUint128(at).String()}
 			},
-		}),
-		Stats: w.tpccHistoryStats(),
+		)),
 	}
 	order := workload.Table{
 		Name:   `order`,
 		Schema: tpccOrderSchema,
-		InitialRows: workload.Tuples(
-			numOrdersPerWarehouse*w.warehouses,
-			w.tpccOrderInitialRow,
-		),
-		Stats: w.tpccOrderStats(),
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numOrdersPerWarehouse * w.warehouses,
+			FillBatch:  w.tpccOrderInitialRowBatch,
+		},
 	}
 	newOrder := workload.Table{
 		Name:   `new_order`,
 		Schema: tpccNewOrderSchema,
-		InitialRows: workload.Tuples(
-			numNewOrdersPerWarehouse*w.warehouses,
-			w.tpccNewOrderInitialRow,
-		),
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numNewOrdersPerWarehouse * w.warehouses,
+			FillBatch:  w.tpccNewOrderInitialRowBatch,
+		},
 		Stats: w.tpccNewOrderStats(),
 	}
 	item := workload.Table{
 		Name:   `item`,
 		Schema: tpccItemSchema,
-		InitialRows: workload.Tuples(
-			numItems,
-			w.tpccItemInitialRow,
-		),
-		Splits: splits(workload.BatchedTuples{
-			NumBatches: numBatches(numItems, numItemsPerRange),
-			NumTotal:   numItems,
-			Batch: func(i int) [][]interface{} {
-				return [][]interface{}{{numItemsPerRange * (i + 1)}}
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numItems,
+			FillBatch:  w.tpccItemInitialRowBatch,
+		},
+		Splits: splits(workload.Tuples(
+			numBatches(numItems, numItemsPerRange),
+			func(i int) []interface{} {
+				return []interface{}{numItemsPerRange * (i + 1)}
 			},
-		}),
+		)),
 		Stats: w.tpccItemStats(),
 	}
 	stock := workload.Table{
 		Name:   `stock`,
 		Schema: tpccStockSchema,
-		InitialRows: workload.Tuples(
-			numStockPerWarehouse*w.warehouses,
-			w.tpccStockInitialRow,
-		),
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numStockPerWarehouse * w.warehouses,
+			FillBatch:  w.tpccStockInitialRowBatch,
+		},
 		Stats: w.tpccStockStats(),
 	}
 	orderLine := workload.Table{
@@ -466,7 +457,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Schema: tpccOrderLineSchema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: numOrdersPerWarehouse * w.warehouses,
-			Batch:      w.tpccOrderLineInitialRowBatch,
+			FillBatch:  w.tpccOrderLineInitialRowBatch,
 		},
 		Stats: w.tpccOrderLineStats(),
 	}

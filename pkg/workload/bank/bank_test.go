@@ -69,22 +69,3 @@ func TestBank(t *testing.T) {
 		})
 	}
 }
-
-func BenchmarkInitBank(b *testing.B) {
-	gen := FromRows(1000)
-	var bytes int64
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		for _, table := range gen.Tables() {
-			for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; rowIdx++ {
-				for _, row := range table.InitialRows.Batch(rowIdx) {
-					for _, datum := range row {
-						bytes += workload.ApproxDatumSize(datum)
-					}
-				}
-			}
-		}
-	}
-	b.StopTimer()
-	b.SetBytes(bytes / int64(b.N))
-}

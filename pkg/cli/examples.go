@@ -62,7 +62,7 @@ func runGenExamplesCmd(gen workload.Generator) {
 		fmt.Fprintf(w, "DROP TABLE IF EXISTS \"%s\";\n", table.Name)
 		fmt.Fprintf(w, "CREATE TABLE \"%s\" %s;\n", table.Name, table.Schema)
 		for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; rowIdx++ {
-			for _, row := range table.InitialRows.Batch(rowIdx) {
+			for _, row := range table.InitialRows.BatchRows(rowIdx) {
 				rowTuple := strings.Join(workload.StringTuple(row), `,`)
 				fmt.Fprintf(w, "INSERT INTO \"%s\" VALUES (%s);\n", table.Name, rowTuple)
 			}

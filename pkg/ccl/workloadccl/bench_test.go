@@ -27,7 +27,7 @@ func benchmarkImportFixture(b *testing.B, gen workload.Generator) {
 	var bytes int64
 	b.StopTimer()
 	for i := 0; i < b.N; i++ {
-		s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+		s, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: `d`})
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(b, `CREATE DATABASE d`)
 

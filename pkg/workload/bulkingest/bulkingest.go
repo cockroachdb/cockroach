@@ -56,7 +56,9 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -131,13 +133,20 @@ func (w *bulkingest) Tables() []workload.Table {
 	}
 	schema += ")"
 
+	var bulkingestColTypes = []types.T{
+		types.Int64,
+		types.Int64,
+		types.Int64,
+		types.Bytes,
+	}
+
 	table := workload.Table{
 		Name:   `bulkingest`,
 		Schema: schema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.aCount * w.bCount,
 			NumTotal:   w.aCount * w.bCount * w.cCount,
-			Batch: func(ab int) [][]interface{} {
+			FillBatch: func(ab int, cb coldata.Batch, alloc *bufalloc.ByteAllocator) {
 				a := ab / w.bCount
 				b := ab % w.bCount
 				if w.generateBsFirst {
@@ -145,15 +154,24 @@ func (w *bulkingest) Tables() []workload.Table {
 					a = ab % w.aCount
 				}
 
+				cb.Reset(bulkingestColTypes, w.cCount)
+				aCol := cb.ColVec(0).Int64()
+				bCol := cb.ColVec(1).Int64()
+				cCol := cb.ColVec(2).Int64()
+				payloadCol := cb.ColVec(3).Bytes()
+
 				rng := rand.New(rand.NewSource(w.seed + int64(ab)))
-				batch := make([][]interface{}, w.cCount)
-				payload := make([]byte, w.cCount*w.payloadBytes)
+				var payload []byte
+				payload, *alloc = alloc.Alloc(w.cCount*w.payloadBytes, 0 /* extraCap */)
 				randutil.ReadTestdataBytes(rng, payload)
-				for c := 0; c < w.cCount; c++ {
+				for rowIdx := 0; rowIdx < w.cCount; rowIdx++ {
+					c := rowIdx
 					off := c * w.payloadBytes
-					batch[c] = []interface{}{a, b, c, tree.DString(payload[off : off+w.payloadBytes])}
+					aCol[rowIdx] = int64(a)
+					bCol[rowIdx] = int64(b)
+					cCol[rowIdx] = int64(c)
+					payloadCol[rowIdx] = payload[off : off+w.payloadBytes]
 				}
-				return batch
 			},
 		},
 	}
