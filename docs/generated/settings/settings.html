@@ -64,7 +64,6 @@
 <tr><td><code>schemachanger.backfiller.buffer_size</code></td><td>byte size</td><td><code>196 MiB</code></td><td>amount to buffer in memory during backfills</td></tr>
 <tr><td><code>schemachanger.backfiller.max_sst_size</code></td><td>byte size</td><td><code>16 MiB</code></td><td>target size for ingested files during backfills</td></tr>
 <tr><td><code>schemachanger.bulk_index_backfill.batch_size</code></td><td>integer</td><td><code>50000</code></td><td>number of rows to process at a time during bulk index backfill</td></tr>
-<tr><td><code>schemachanger.bulk_index_backfill.enabled</code></td><td>boolean</td><td><code>true</code></td><td>backfill indexes in bulk via addsstable</td></tr>
 <tr><td><code>schemachanger.lease.duration</code></td><td>duration</td><td><code>5m0s</code></td><td>the duration of a schema change lease</td></tr>
 <tr><td><code>schemachanger.lease.renew_fraction</code></td><td>float</td><td><code>0.5</code></td><td>the fraction of schemachanger.lease_duration remaining to trigger a renew of the lease</td></tr>
 <tr><td><code>server.clock.forward_jump_check_enabled</code></td><td>boolean</td><td><code>false</code></td><td>if enabled, forward clock jumps > max_offset/2 will cause a panic</td></tr>
