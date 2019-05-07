@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -96,8 +95,10 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		txnRecord := txn.AsRecord()
 		txnRecord.Status = roachpb.STAGING
-		txnRecord.IntentSpans = []roachpb.Span{{Key: keyA}, {Key: keyB}}
-		txnRecord.InFlightWrites = map[enginepb.TxnSeq]int32{1: 0, 2: 1}
+		txnRecord.InFlightWrites = []roachpb.SequencedWrite{
+			{Key: keyA, Sequence: 0},
+			{Key: keyB, Sequence: 1},
+		}
 		if err := engine.MVCCPutProto(ctx, store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 			t.Fatal(err)
 		}

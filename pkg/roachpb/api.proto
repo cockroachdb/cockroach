@@ -572,7 +572,7 @@ message EndTransactionRequest {
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
   InternalCommitTrigger internal_commit_trigger = 4;
-  // List of spans that the transaction has written intents into. These
+  // Set of spans that the transaction has written intents into. These
   // are spans which must be resolved on txn completion. Note that these
   // spans may be condensed to cover aggregate spans if the keys written
   // by the transaction exceeded a size threshold.
