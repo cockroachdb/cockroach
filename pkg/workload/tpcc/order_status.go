@@ -136,7 +136,7 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 	// 2.6.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
 	if rng.Intn(100) < 60 {
-		d.cLast = randCLast(rng)
+		d.cLast = string(randCLast(rng))
 		atomic.AddUint64(&o.config.auditor.orderStatusByLastName, 1)
 	} else {
 		d.cID = randCustomerID(rng)
