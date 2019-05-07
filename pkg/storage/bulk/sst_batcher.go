@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,7 +41,7 @@ func (b sz) String() string {
 // it to attempt to flush SSTs before they cross range boundaries to minimize
 // expensive on-split retries.
 type SSTBatcher struct {
-	db *client.DB
+	db sender
 
 	flushKeyChecked bool
 	flushKey        roachpb.Key
@@ -68,7 +67,7 @@ type SSTBatcher struct {
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
-func MakeSSTBatcher(ctx context.Context, db *client.DB, flushBytes int64) (*SSTBatcher, error) {
+func MakeSSTBatcher(ctx context.Context, db sender, flushBytes int64) (*SSTBatcher, error) {
 	b := &SSTBatcher{db: db, maxSize: flushBytes}
 	err := b.Reset()
 	return b, err
