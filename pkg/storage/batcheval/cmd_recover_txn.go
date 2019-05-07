@@ -184,6 +184,16 @@ func RecoverTxn(
 		}
 	}
 
+	// Merge all of the transaction's in-flight writes into its intent
+	// spans set and clear the in-flight write set. Make sure to re-sort
+	// and merge the intent spans to eliminate duplicates.
+	for _, w := range reply.RecoveredTxn.InFlightWrites {
+		sp := roachpb.Span{Key: w.Key}
+		reply.RecoveredTxn.IntentSpans = append(reply.RecoveredTxn.IntentSpans, sp)
+	}
+	reply.RecoveredTxn.IntentSpans, _ = roachpb.MergeSpans(reply.RecoveredTxn.IntentSpans)
+	reply.RecoveredTxn.InFlightWrites = nil
+
 	// Recover the transaction based on whether or not all of its writes
 	// succeeded. If all of the writes succeeded then the transaction was
 	// implicitly committed and an acknowledgement of success may have already
@@ -195,7 +205,6 @@ func RecoverTxn(
 	} else {
 		reply.RecoveredTxn.Status = roachpb.ABORTED
 	}
-	reply.RecoveredTxn.InFlightWrites = nil
 	txnRecord := reply.RecoveredTxn.AsRecord()
 	if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 		return result.Result{}, err
