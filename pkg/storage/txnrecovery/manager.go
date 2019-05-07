@@ -203,12 +203,12 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 	//    ABORTED state.
 	queryIntentReqs := make([]roachpb.QueryIntentRequest, 0, len(txn.InFlightWrites))
 	for seq, idx := range txn.InFlightWrites {
-		if len(txn.Intents) <= int(idx) {
+		if len(txn.IntentSpans) <= int(idx) {
 			return false, nil, errors.Errorf(
 				"programming error: malformed in-flight write ref %d->%d: %v", seq, idx, txn,
 			)
 		}
-		span := txn.Intents[idx]
+		span := txn.IntentSpans[idx]
 		if len(span.EndKey) != 0 {
 			return false, nil, errors.Errorf(
 				"programming error: in-flight write references ranged intent span %s: %v", span, txn,

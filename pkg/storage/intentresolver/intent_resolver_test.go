@@ -683,7 +683,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 				TxnMeta: enginepb.TxnMeta{
 					ID: uuid.MakeV4(),
 				},
-				Intents: []roachpb.Span{
+				IntentSpans: []roachpb.Span{
 					{Key: roachpb.Key("a")},
 				},
 			},
