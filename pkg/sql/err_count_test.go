@@ -30,20 +30,20 @@ import (
 func TestErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	telemetry.GetAndResetFeatureCounts(false)
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	count1 := telemetry.GetFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
+	count1 := telemetry.GetRawFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
 
 	_, err := db.Query("SELECT 1+")
 	if err == nil {
 		t.Fatal("expected error, got no error")
 	}
 
-	count2 := telemetry.GetFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
+	count2 := telemetry.GetRawFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
 
 	if count2-count1 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count2-count1)
@@ -59,7 +59,7 @@ func TestErrorCounts(t *testing.T) {
 	}
 	rows.Close()
 
-	count3 := telemetry.GetFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
+	count3 := telemetry.GetRawFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
 
 	if count3-count2 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count3-count2)
@@ -69,7 +69,7 @@ func TestErrorCounts(t *testing.T) {
 func TestUnimplementedCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	telemetry.GetAndResetFeatureCounts(false)
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
@@ -83,7 +83,7 @@ func TestUnimplementedCounts(t *testing.T) {
 		t.Fatal("expected error, got no error")
 	}
 
-	if telemetry.GetFeatureCounts()["unimplemented.#9851.INT8->STRING"] == 0 {
+	if telemetry.GetRawFeatureCounts()["unimplemented.#9851.INT8->STRING"] == 0 {
 		t.Fatal("expected unimplemented telemetry, got nothing")
 	}
 }
@@ -91,7 +91,7 @@ func TestUnimplementedCounts(t *testing.T) {
 func TestTransactionRetryErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	telemetry.GetAndResetFeatureCounts(false)
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
 	// Transaction retry errors aren't given a pg error code until deep
 	// in pgwire (pgwire.convertToErrWithPGCode). Make sure we're
@@ -137,7 +137,7 @@ func TestTransactionRetryErrorCounts(t *testing.T) {
 		}
 	}
 
-	if telemetry.GetFeatureCounts()["errorcodes.40001"] == 0 {
+	if telemetry.GetRawFeatureCounts()["errorcodes.40001"] == 0 {
 		t.Fatal("expected error code telemetry, got nothing")
 	}
 }
