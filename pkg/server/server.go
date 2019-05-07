@@ -253,6 +253,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			log.Fatal(ctx, err)
 		}
 	}
+	s.registry.AddMetricStruct(s.rpcContext.Metrics())
 
 	s.grpc = newGRPCServer(s.rpcContext)
 
