@@ -164,6 +164,9 @@ func (e *Error) ErrorDetail() error {
 	case *Error_RetryableTxnError:
 		return t.RetryableTxnError
 	default:
-		panic(fmt.Sprintf("bad error detail: %+v", t))
+		// We're receiving an error we don't know about. It's all right,
+		// it's still an error, just one we didn't expect. Let it go
+		// through. We'll pick it up in reporting.
+		return pgerror.NewAssertionErrorf("unknown error detail type: %+v", t)
 	}
 }
