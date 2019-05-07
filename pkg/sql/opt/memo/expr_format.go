@@ -112,17 +112,27 @@ type ExprFmtCtx struct {
 
 	// Memo must contain any expression that is formatted.
 	Memo *Memo
+
+	// nameGen is used to generate a unique name for each relational
+	// subexpression when Memo.saveTablesPrefix is non-empty. These names
+	// correspond to the tables that would be saved if the query were run
+	// with the session variable `save_tables_prefix` set to the same value.
+	nameGen *ExprNameGenerator
 }
 
 // MakeExprFmtCtx creates an expression formatting context from a new buffer.
 func MakeExprFmtCtx(flags ExprFmtFlags, mem *Memo) ExprFmtCtx {
-	return ExprFmtCtx{Buffer: &bytes.Buffer{}, Flags: flags, Memo: mem}
+	return MakeExprFmtCtxBuffer(&bytes.Buffer{}, flags, mem)
 }
 
 // MakeExprFmtCtxBuffer creates an expression formatting context from an
 // existing buffer.
 func MakeExprFmtCtxBuffer(buf *bytes.Buffer, flags ExprFmtFlags, mem *Memo) ExprFmtCtx {
-	return ExprFmtCtx{Buffer: buf, Flags: flags, Memo: mem}
+	var nameGen *ExprNameGenerator
+	if mem != nil && mem.saveTablesPrefix != "" {
+		nameGen = NewExprNameGenerator(mem.saveTablesPrefix)
+	}
+	return ExprFmtCtx{Buffer: buf, Flags: flags, Memo: mem, nameGen: nameGen}
 }
 
 // HasFlags tests whether the given flags are all set.
@@ -189,6 +199,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	}
 
 	tp = tp.Child(f.Buffer.String())
+
+	if f.nameGen != nil {
+		name := f.nameGen.GenerateName(e.Op())
+		tp.Childf("save-table-name: %s", name)
+	}
 
 	var colList opt.ColList
 	// Special handling to improve the columns display for certain ops.
