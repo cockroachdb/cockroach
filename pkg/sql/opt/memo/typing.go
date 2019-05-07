@@ -296,7 +296,7 @@ func typeAsAggregate(e opt.ScalarExpr) *types.T {
 	// types (i.e. pass nil to the ReturnTyper). Aggregates with return types
 	// that depend on argument types are handled separately.
 	_, overload := FindAggregateOverload(e)
-	t := overload.ReturnType(nil)
+	t := overload.ReturnType(nil /* ctx */, nil /* args */)
 	if t == tree.UnknownReturnType {
 		panic(pgerror.AssertionFailedf("unknown aggregate return type. e:\n%s", e))
 	}
@@ -307,7 +307,7 @@ func typeAsAggregate(e opt.ScalarExpr) *types.T {
 // typeAsAggregate.
 func typeAsWindow(e opt.ScalarExpr) *types.T {
 	_, overload := FindWindowOverload(e)
-	t := overload.ReturnType(nil)
+	t := overload.ReturnType(nil /* ctx */, nil /* args */)
 	if t == tree.UnknownReturnType {
 		panic(pgerror.AssertionFailedf("unknown window return type. e:\n%s", e))
 	}

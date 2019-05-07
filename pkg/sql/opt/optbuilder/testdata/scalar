@@ -1175,3 +1175,29 @@ if-err [type=decimal]
  │    └── variable: @1 [type=decimal]
  └── err-code
       └── const: '10000' [type=string]
+
+build-scalar
+locality()
+----
+function: locality [type=tuple]
+
+build locality=(region=east,dc=east1-b)
+SELECT (locality()).dc
+----
+project
+ ├── columns: dc:1(string)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── column-access: 1 [type=string]
+           └── function: locality [type=tuple{string AS region, string AS dc}]
+
+build
+SELECT (locality()).unk
+----
+error (42804): could not identify column "unk" in tuple
+
+build locality=(region=east,dc=east1-b)
+SELECT (locality()).unk
+----
+error (42804): could not identify column "unk" in tuple{string AS region, string AS dc}

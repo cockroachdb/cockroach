@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -57,6 +58,14 @@ type SemaContext struct {
 	// timestamp. In that case, the timestamp would not be set
 	// globally for the entire txn and this field would not be needed.
 	AsOfTimestamp *hlc.Timestamp
+
+	// Locality contains the location of the current node as a set of user-defined
+	// key/value pairs, ordered from most inclusive to least inclusive. If there
+	// are no tiers, then the node's location is not known. Example:
+	//
+	//   [region=us,dc=east]
+	//
+	Locality roachpb.Locality
 
 	Properties SemaProperties
 }
@@ -357,7 +366,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = binOp
-	expr.typ = binOp.returnType()(typedSubExprs)
+	expr.typ = binOp.returnType()(ctx, typedSubExprs)
 	return expr, nil
 }
 
@@ -559,7 +568,7 @@ func (expr *TupleStar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 
 	// Alghough we're going to elide the tuple star, we need to ensure
 	// the expression is indeed a labeled tuple first.
-	if resolvedType.Family() != types.TupleFamily || len(resolvedType.TupleLabels()) == 0 {
+	if resolvedType.Family() != types.TupleFamily || resolvedType.TupleLabels() == nil {
 		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
@@ -585,7 +594,7 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 	expr.Expr = subExpr
 	resolvedType := subExpr.ResolvedType()
 
-	if resolvedType.Family() != types.TupleFamily || len(resolvedType.TupleLabels()) == 0 {
+	if resolvedType.Family() != types.TupleFamily || resolvedType.TupleLabels() == nil {
 		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
@@ -922,7 +931,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 	}
 	expr.fn = overloadImpl
 	expr.fnProps = &def.FunctionProperties
-	expr.typ = overloadImpl.returnType()(typedSubExprs)
+	expr.typ = overloadImpl.returnType()(ctx, typedSubExprs)
 	if expr.typ == UnknownReturnType {
 		typeNames := make([]string, 0, len(expr.Exprs))
 		for _, expr := range typedSubExprs {
@@ -1213,7 +1222,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 
 	expr.Expr = exprTyped
 	expr.fn = unaryOp
-	expr.typ = unaryOp.returnType()(typedSubExprs)
+	expr.typ = unaryOp.returnType()(ctx, typedSubExprs)
 	return expr, nil
 }
 

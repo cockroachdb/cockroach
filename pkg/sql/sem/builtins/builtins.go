@@ -2756,6 +2756,31 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"locality": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{},
+			ReturnType: func(ctx *tree.SemaContext, _ []tree.TypedExpr) *types.T {
+				if ctx == nil {
+					// Use simplified tuple type for signature (e.g. for docs).
+					return types.AnyTuple
+				}
+				return localityReturnType(&ctx.Locality)
+			},
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				datums := make(tree.Datums, len(ctx.Locality.Tiers))
+				for i := range ctx.Locality.Tiers {
+					datums[i] = tree.NewDString(ctx.Locality.Tiers[i].Value)
+				}
+				typ := localityReturnType(&ctx.Locality)
+				return tree.NewDTuple(typ, datums...), nil
+			},
+			Info: "Returns the hierarchical location of the current node as a tuple " +
+				"of labeled values, ordered from most inclusive to least inclusive. \n\n" +
+				"For example: `region=east,datacenter=us-east-1`.",
+		},
+	),
+
 	"crdb_internal.node_executable_version": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
@@ -4627,4 +4652,28 @@ func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return ctx.StmtTimestamp.Add(offset), nil
+}
+
+// localityReturnType returns the type that the locality() function will return.
+// This is a tuple type with labeled string fields, one for each locality tier:
+//
+//   tuple{string AS <label1>, string AS <label2>, ...}
+//
+// For example, consider this locality:
+//
+//   region=east,datacenter=us-east-1
+//
+// The tuple type will be:
+//
+//   tuple{string AS region, string AS datacenter}
+//
+func localityReturnType(locality *roachpb.Locality) *types.T {
+	contents := make([]types.T, len(locality.Tiers))
+	labels := make([]string, len(locality.Tiers))
+	for i := range locality.Tiers {
+		tier := &locality.Tiers[i]
+		contents[i] = *types.String
+		labels[i] = tier.Key
+	}
+	return types.MakeLabeledTuple(contents, labels)
 }

@@ -1,0 +1,19 @@
+# LogicTest: 5node-dist 5node-dist-opt
+
+query T
+SELECT locality()
+----
+(test,dc1)
+
+query T
+SELECT (locality()).region
+----
+test
+
+query T
+SELECT (locality()).dc
+----
+dc1
+
+statement error could not identify column "unk" in tuple{string AS region, string AS dc}
+SELECT (locality()).unk

@@ -205,7 +205,7 @@ func TestTypingAggregateAssumptions(t *testing.T) {
 			}
 
 			// Check for fixed return types.
-			retType := overload.ReturnType(nil)
+			retType := overload.ReturnType(nil /* ctx */, nil /* args */)
 			if retType == tree.UnknownReturnType {
 				t.Errorf("return type is not fixed for %s: %+v", name, overload.Types.Types())
 			}

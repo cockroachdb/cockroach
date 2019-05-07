@@ -252,6 +252,7 @@ func newInternalPlanner(
 	p.semaCtx = tree.MakeSemaContext()
 	p.semaCtx.Location = &sd.DataConversion.Location
 	p.semaCtx.SearchPath = sd.SearchPath
+	p.semaCtx.Locality = execCfg.Locality
 
 	plannerMon := mon.MakeUnlimitedMonitor(ctx,
 		fmt.Sprintf("internal-planner.%s.%s", user, opName),

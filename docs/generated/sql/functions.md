@@ -991,6 +991,9 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><code>current_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td></tr>
+<tr><td><code>locality() &rarr; tuple</code></td><td><span class="funcdesc"><p>Returns the hierarchical location of the current node as a tuple of labeled values, ordered from most inclusive to least inclusive.</p>
+<p>For example: <code>region=east,datacenter=us-east-1</code>.</p>
+</span></td></tr>
 <tr><td><code>version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the node’s version of CockroachDB.</p>
 </span></td></tr></tbody>
 </table>

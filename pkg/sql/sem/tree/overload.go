@@ -327,17 +327,17 @@ var UnknownReturnType *types.T
 
 // ReturnTyper defines the type-level function in which a builtin function's return type
 // is determined. ReturnTypers should make sure to return unknownReturnType when necessary.
-type ReturnTyper func(args []TypedExpr) *types.T
+type ReturnTyper func(ctx *SemaContext, args []TypedExpr) *types.T
 
 // FixedReturnType functions simply return a fixed type, independent of argument types.
 func FixedReturnType(typ *types.T) ReturnTyper {
-	return func(args []TypedExpr) *types.T { return typ }
+	return func(_ *SemaContext, args []TypedExpr) *types.T { return typ }
 }
 
 // IdentityReturnType creates a returnType that is a projection of the idx'th
 // argument type.
 func IdentityReturnType(idx int) ReturnTyper {
-	return func(args []TypedExpr) *types.T {
+	return func(_ *SemaContext, args []TypedExpr) *types.T {
 		if len(args) == 0 {
 			return UnknownReturnType
 		}
@@ -351,7 +351,7 @@ func IdentityReturnType(idx int) ReturnTyper {
 // with HomogeneousType functions, in which all arguments have been checked to
 // have the same type (or be null).
 func FirstNonNullReturnType() ReturnTyper {
-	return func(args []TypedExpr) *types.T {
+	return func(_ *SemaContext, args []TypedExpr) *types.T {
 		if len(args) == 0 {
 			return UnknownReturnType
 		}
@@ -365,7 +365,7 @@ func FirstNonNullReturnType() ReturnTyper {
 }
 
 func returnTypeToFixedType(s ReturnTyper) *types.T {
-	if t := s(nil); t != UnknownReturnType {
+	if t := s(nil, nil); t != UnknownReturnType {
 		return t
 	}
 	return types.Any
@@ -498,7 +498,7 @@ func typeCheckOverloadedExprs(
 				// fixed return types. This could be improved, but is not currently
 				// critical because we have no cases of functions with multiple
 				// overloads that do not all expose FixedReturnTypes.
-				if t := o.returnType()(nil); t != UnknownReturnType {
+				if t := o.returnType()(ctx, nil); t != UnknownReturnType {
 					return t.Equivalent(desired)
 				}
 				return true

@@ -109,7 +109,7 @@ var generators = map[string]builtinDefinition{
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
-			func(args []tree.TypedExpr) *types.T {
+			func(ctx *tree.SemaContext, args []tree.TypedExpr) *types.T {
 				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
 					return tree.UnknownReturnType
 				}
@@ -123,7 +123,7 @@ var generators = map[string]builtinDefinition{
 	"information_schema._pg_expandarray": makeBuiltin(genProps(expandArrayValueGeneratorLabels),
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
-			func(args []tree.TypedExpr) *types.T {
+			func(ctx *tree.SemaContext, args []tree.TypedExpr) *types.T {
 				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
 					return tree.UnknownReturnType
 				}

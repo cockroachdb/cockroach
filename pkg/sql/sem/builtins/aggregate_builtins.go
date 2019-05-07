@@ -107,7 +107,7 @@ var aggregates = map[string]builtinDefinition{
 		arrayBuiltin(func(t *types.T) tree.Overload {
 			return makeAggOverloadWithReturnType(
 				[]*types.T{t},
-				func(args []tree.TypedExpr) *types.T {
+				func(ctx *tree.SemaContext, args []tree.TypedExpr) *types.T {
 					if len(args) == 0 {
 						return types.MakeArray(t)
 					}

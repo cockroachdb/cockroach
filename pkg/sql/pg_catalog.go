@@ -1510,7 +1510,7 @@ CREATE TABLE pg_catalog.pg_operator (
 				panic(fmt.Sprintf("Unexpected operator %s with %d params",
 					opName, params.Length()))
 			}
-			returnType := tree.NewDOid(tree.DInt(returnTyper(nil).Oid()))
+			returnType := tree.NewDOid(tree.DInt(returnTyper(nil /* ctx */, nil /* args */).Oid()))
 			err := addRow(
 				h.OperatorOid(opName, leftType, rightType, returnType), // oid
 

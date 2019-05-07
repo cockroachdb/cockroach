@@ -1877,6 +1877,7 @@ func (ex *connExecutor) resetPlanner(
 	p.semaCtx.Location = &ex.sessionData.DataConversion.Location
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 	p.semaCtx.AsOfTimestamp = nil
+	p.semaCtx.Locality = ex.server.cfg.Locality
 
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 
