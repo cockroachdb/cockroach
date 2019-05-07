@@ -27,6 +27,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -176,29 +178,46 @@ func (w *kv) Tables() []workload.Table {
 	return []workload.Table{table}
 }
 
-// Ops implements the Opser interface.
-func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (w *kv) getWriteSeq() (int, error) {
 	writeSeq := 0
 	if w.writeSeq != "" {
 		first := w.writeSeq[0]
 		if len(w.writeSeq) < 2 || (first != 'R' && first != 'S') {
-			return workload.QueryLoad{}, fmt.Errorf("--write-seq has to be of the form '(R|S)<num>'")
+			return writeSeq, fmt.Errorf("--write-seq has to be of the form '(R|S)<num>'")
 		}
 		rest := w.writeSeq[1:]
 		var err error
 		writeSeq, err = strconv.Atoi(rest)
 		if err != nil {
-			return workload.QueryLoad{}, fmt.Errorf("--write-seq has to be of the form '(R|S)<num>'")
+			return writeSeq, fmt.Errorf("--write-seq has to be of the form '(R|S)<num>'")
 		}
 		if first == 'R' && w.sequential {
-			return workload.QueryLoad{}, fmt.Errorf("--sequential incompatible with a Random --write-seq")
+			return writeSeq, fmt.Errorf("--sequential incompatible with a Random --write-seq")
 		}
 		if first == 'S' && !w.sequential {
-			return workload.QueryLoad{}, fmt.Errorf(
+			return writeSeq, fmt.Errorf(
 				"--sequential=false incompatible with a Sequential --write-seq")
 		}
 	}
+	return writeSeq, nil
+}
 
+func (w *kv) getGenerator(seq *sequence) keyGenerator {
+	if w.sequential {
+		return newSequentialGenerator(seq)
+	} else if w.zipfian {
+		return newZipfianGenerator(seq)
+	} else {
+		return newHashGenerator(seq)
+	}
+}
+
+// Ops implements the Opser interface.
+func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+	writeSeq, err := w.getWriteSeq()
+	if err != nil {
+		return workload.QueryLoad{}, nil
+	}
 	ctx := context.Background()
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
@@ -261,13 +280,29 @@ func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, er
 		if err := op.sr.Init(ctx, "kv", mcp, w.connFlags); err != nil {
 			return workload.QueryLoad{}, err
 		}
-		if w.sequential {
-			op.g = newSequentialGenerator(seq)
-		} else if w.zipfian {
-			op.g = newZipfianGenerator(seq)
-		} else {
-			op.g = newHashGenerator(seq)
+		op.g = w.getGenerator(seq)
+		ql.WorkerFns = append(ql.WorkerFns, op.run)
+		ql.Close = op.close
+	}
+	return ql, nil
+}
+
+func (w *kv) KvOps(eng engine.Engine, reg *histogram.Registry) (workload.QueryLoad, error) {
+	writeSeq, err := w.getWriteSeq()
+	if err != nil {
+		return workload.QueryLoad{}, nil
+	}
+	seq := &sequence{config: w, val: int64(writeSeq)}
+	numEmptyResults := new(int64)
+	ql := workload.QueryLoad{}
+	for i := 0; i < w.connFlags.Concurrency; i++ {
+		op := &kvOp{
+			config:          w,
+			hists:           reg.GetHandle(),
+			numEmptyResults: numEmptyResults,
+			engine:          eng,
 		}
+		op.g = w.getGenerator(seq)
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 		ql.Close = op.close
 	}
@@ -282,6 +317,7 @@ type kvOp struct {
 	writeStmt       workload.StmtHandle
 	spanStmt        workload.StmtHandle
 	g               keyGenerator
+	engine          engine.Engine
 	numEmptyResults *int64 // accessed atomically
 }
 
@@ -293,27 +329,52 @@ func (o *kvOp) run(ctx context.Context) error {
 			args[i] = o.g.readKey()
 		}
 		start := timeutil.Now()
-		rows, err := o.readStmt.Query(ctx, args...)
-		if err != nil {
-			return err
-		}
-		empty := true
-		for rows.Next() {
-			empty = false
-		}
-		if empty {
-			atomic.AddInt64(o.numEmptyResults, 1)
+		var err error
+		if o.engine == nil {
+			rows, err := o.readStmt.Query(ctx, args...)
+			if err != nil {
+				return err
+			}
+			empty := true
+			for rows.Next() {
+				empty = false
+			}
+			if empty {
+				atomic.AddInt64(o.numEmptyResults, 1)
+			}
+			err = rows.Err()
+		} else {
+			for i := range args {
+				key := args[i].(int64)
+				_, err = o.engine.Get(engine.MVCCKey{
+					Key: encoding.EncodeVarintAscending(nil, key),
+				})
+				if err != nil {
+					break
+				}
+			}
 		}
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`read`).Record(elapsed)
-		return rows.Err()
+		return err
 	}
 	// Since we know the statement is not a read, we recalibrate
 	// statementProbability to only consider the other statements.
 	statementProbability -= o.config.readPercent
 	if statementProbability < o.config.spanPercent {
+		var err error
 		start := timeutil.Now()
-		_, err := o.spanStmt.Exec(ctx)
+		if o.engine == nil {
+			_, err = o.spanStmt.Exec(ctx)
+		} else {
+			err = o.engine.Iterate(
+				engine.MVCCKey{Key: encoding.EncodeVarintAscending(nil, math.MinInt64)},
+				engine.MVCCKey{Key: encoding.EncodeVarintAscending(nil, math.MaxInt64)},
+				func(engine.MVCCKeyValue) (stop bool, err error) {
+					return true, nil
+				},
+			)
+		}
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`span`).Record(elapsed)
 		return err
@@ -326,7 +387,19 @@ func (o *kvOp) run(ctx context.Context) error {
 		args[j+1] = randomBlock(o.config, o.g.rand())
 	}
 	start := timeutil.Now()
-	_, err := o.writeStmt.Exec(ctx, args...)
+	var err error
+	if o.engine == nil {
+		_, err = o.writeStmt.Exec(ctx, args...)
+	} else {
+		b := o.engine.NewBatch()
+		for i := 0; i < o.config.batchSize; i++ {
+			key := args[2*i].(int64)
+			val := args[2*i+1].([]byte)
+			b.Put(engine.MVCCKey{Key: encoding.EncodeVarintAscending(nil, key)},
+				val)
+		}
+		err = b.Commit(true)
+	}
 	elapsed := timeutil.Since(start)
 	o.hists.Get(`write`).Record(elapsed)
 	return err

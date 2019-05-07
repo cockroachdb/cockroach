@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -82,6 +83,13 @@ type Flagser interface {
 type Opser interface {
 	Generator
 	Ops(urls []string, reg *histogram.Registry) (QueryLoad, error)
+}
+
+// KvOpser returns work functions that synthesize a workload targeting
+// a key-value storage engine directly.
+type KvOpser interface {
+	Generator
+	KvOps(eng engine.Engine, reg *histogram.Registry) (QueryLoad, error)
 }
 
 // Hookser returns any hooks associated with the generator.
