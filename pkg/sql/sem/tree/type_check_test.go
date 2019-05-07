@@ -90,6 +90,8 @@ func TestTypeCheck(t *testing.T) {
 		{`ARRAY[NULL]`, `ARRAY[NULL]`},
 		{`ARRAY[NULL]:::int[]`, `ARRAY[NULL]`},
 		{`ARRAY[NULL, NULL]:::int[]`, `ARRAY[NULL, NULL]`},
+		{`ARRAY[]::INT8[]`, `ARRAY[]::INT8[]`},
+		{`ARRAY[]:::INT8[]`, `ARRAY[]`},
 		{`1 = ANY ARRAY[1.5, 2.5, 3.5]`, `1:::DECIMAL = ANY ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]`},
 		{`true = SOME (ARRAY[true, false])`, `true = SOME ARRAY[true, false]`},
 		{`1.3 = ALL ARRAY[1, 2, 3]`, `1.3:::DECIMAL = ALL ARRAY[1:::DECIMAL, 2:::DECIMAL, 3:::DECIMAL]`},

@@ -429,6 +429,11 @@ func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter) {
 	return false, nil
 }
 
+func isEmptyArray(expr Expr) bool {
+	a, ok := expr.(*Array)
+	return ok && len(a.Exprs) == 0
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error) {
 	// The desired type provided to a CastExpr is ignored. Instead,
@@ -457,6 +462,14 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 		// the child of a cast, or was the child of a cast to a different type.
 		// In this case, we default to inferring a STRING for the placeholder.
 		desired = types.String
+	case isEmptyArray(expr.Expr):
+		// An empty array can't be type-checked with a desired parameter of
+		// types.Any. If we're going to cast to another array type, which is a
+		// common pattern in SQL (select array[]::int[]), use the cast type as the
+		// the desired type.
+		if expr.Type.Family() == types.ArrayFamily {
+			desired = expr.Type
+		}
 	}
 
 	typedSubExpr, err := expr.Expr.TypeCheck(ctx, desired)
