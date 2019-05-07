@@ -17,7 +17,11 @@ package opttester
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
+	"encoding/json"
+	"flag"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,10 +42,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"github.com/pmezard/go-difflib/difflib"
+)
+
+const rewriteActualFlag = "rewrite-actual-stats"
+
+var (
+	rewriteActualStats = flag.Bool(
+		rewriteActualFlag, false,
+		"used to update the actual statistics for statistics quality tests. If true, the opttester "+
+			"will actually run the test queries to calculate actual statistics for comparison with the "+
+			"estimated stats.",
+	)
+	pgurl = flag.String(
+		"pgurl", "postgresql://localhost:26257/?sslmode=disable&user=root",
+		"the database url to connect to",
+	)
 )
 
 // RuleSet efficiently stores an unordered set of RuleNames.
@@ -132,6 +153,18 @@ type Flags struct {
 	//   [region=us,dc=east]
 	//
 	Locality roachpb.Locality
+
+	// Database specifies the current database to use for the query. This field
+	// is only used by the save-tables command when rewriteActualFlag=true.
+	Database string
+
+	// Table specifies the current table to use for the command. This field
+	// is only used by the stats command.
+	Table string
+
+	// SaveTablesPrefix specifies the prefix of the table to create or print
+	// for each subexpression in the query.
+	SaveTablesPrefix string
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -203,6 +236,21 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    Builds an expression directly from an opt-gen-like string; see
 //    exprgen.Build.
 //
+//  - save-tables [flags]
+//
+//    Fully optimizes the given query and saves the subexpressions as tables
+//    in the test catalog with their estimated statistics injected.
+//    If rewriteActualFlag=true, also executes the given query against a
+//    running database and saves the intermediate results as tables.
+//
+//  - stats [flags]
+//
+//    Compares estimated statistics for a relational expression with the actual
+//    statistics calculated by calling CREATE STATISTICS on the output of the
+//    expression. save-tables must have been called previously to save the
+//    target expression as a table. The name of this table must be provided
+//    with the table flag.
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
@@ -239,6 +287,18 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    can affect costing when there are multiple possible indexes to choose
 //    from, each in different localities.
 //
+//  - database: used to set the current database used by the query. This is
+//    used by the save-tables command when rewriteActualFlag=true.
+//
+//  - table: used to set the current table used by the command. This is used by
+//    the stats command.
+//
+//  - save-tables-prefix: must be used with the save-tables command. If
+//    rewriteActualFlag=true, indicates that a table should be created with the
+//    given prefix for the output of each subexpression in the query.
+//    Otherwise, outputs the name of the table that would be created for each
+//    subexpression.
+//
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -257,6 +317,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.Flags.Verbose = testing.Verbose()
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
+	ot.evalCtx.SessionData.SaveTablesPrefix = ot.Flags.SaveTablesPrefix
 
 	switch d.Cmd {
 	case "exec-ddl":
@@ -347,6 +408,21 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+
+	case "save-tables":
+		e, err := ot.SaveTables()
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		ot.postProcess(tb, d, e)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+
+	case "stats":
+		result, err := ot.Stats(d)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
 
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
@@ -533,6 +609,24 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		if err != nil {
 			return err
 		}
+
+	case "database":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("database requires one argument")
+		}
+		f.Database = arg.Vals[0]
+
+	case "table":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("table requires one argument")
+		}
+		f.Table = arg.Vals[0]
+
+	case "save-tables-prefix":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("save-tables-prefix requires one argument")
+		}
+		f.SaveTablesPrefix = arg.Vals[0]
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -899,6 +993,210 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 		}
 	}
 	return ot.builder.String(), nil
+}
+
+// Stats compares the estimated statistics of a relational expression with
+// actual statistics collected from running CREATE STATISTICS on the output
+// of the relational expression. If the -rewrite-actual-stats flag is
+// used, the actual stats are recalculated.
+func (ot *OptTester) Stats(d *datadriven.TestData) (string, error) {
+	catalog, ok := ot.catalog.(*testcat.Catalog)
+	if !ok {
+		return "", fmt.Errorf("stats can only be used with TestCatalog")
+	}
+
+	st := statsTester{}
+	return st.testStats(catalog, d, ot.Flags.Table)
+}
+
+// SaveTables optimizes the given query and saves the subexpressions as tables
+// in the test catalog with their estimated statistics injected.
+// If rewriteActualStats=true, it also executes the given query against a
+// running database and saves the intermediate results as tables.
+func (ot *OptTester) SaveTables() (opt.Expr, error) {
+	if *rewriteActualStats {
+		if err := ot.saveActualTables(); err != nil {
+			return nil, err
+		}
+	}
+
+	expr, err := ot.Optimize()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a table in the test catalog for each relational expression in the
+	// tree.
+	nameGen := memo.NewExprNameGenerator(ot.Flags.SaveTablesPrefix)
+	var traverse func(e opt.Expr) error
+	traverse = func(e opt.Expr) error {
+		if r, ok := e.(memo.RelExpr); ok {
+			// GenerateName is called in a pre-order traversal of the query tree.
+			tabName := nameGen.GenerateName(e.Op())
+			_, err := ot.createTableAs(tree.MakeUnqualifiedTableName(tree.Name(tabName)), r)
+			if err != nil {
+				return err
+			}
+
+			for i, n := 0, r.ChildCount(); i < n; i++ {
+				if err := traverse(r.Child(i)); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if err := traverse(expr); err != nil {
+		return nil, err
+	}
+
+	return expr, nil
+}
+
+// saveActualTables executes the given query against a running database and
+// saves the intermediate results as tables.
+func (ot *OptTester) saveActualTables() error {
+	db, err := gosql.Open("postgres", *pgurl)
+	if err != nil {
+		return errors.Wrap(err,
+			"can only execute a statement when pointed at a running Cockroach cluster",
+		)
+	}
+
+	ctx := context.Background()
+	c, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+
+	if _, err := c.ExecContext(ctx,
+		fmt.Sprintf("DROP DATABASE IF EXISTS %s CASCADE", opt.SaveTablesDatabase),
+	); err != nil {
+		return err
+	}
+
+	if _, err := c.ExecContext(ctx,
+		fmt.Sprintf("CREATE DATABASE %s", opt.SaveTablesDatabase),
+	); err != nil {
+		return err
+	}
+
+	if _, err := c.ExecContext(ctx, fmt.Sprintf("USE %s", ot.Flags.Database)); err != nil {
+		return err
+	}
+
+	if _, err := c.ExecContext(ctx,
+		fmt.Sprintf("SET save_tables_prefix = '%s'", ot.Flags.SaveTablesPrefix),
+	); err != nil {
+		return err
+	}
+
+	if _, err := c.ExecContext(ctx, ot.sql); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// createTableAs creates a table in the test catalog based on the output
+// of the given relational expression. It also injects the estimated stats
+// for the relational expression into the catalog table. It returns a pointer
+// to the new table.
+func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*testcat.Table, error) {
+	catalog, ok := ot.catalog.(*testcat.Catalog)
+	if !ok {
+		return nil, fmt.Errorf("createTableAs can only be used with TestCatalog")
+	}
+
+	relProps := rel.Relational()
+	pres := rel.RequiredPhysical().Presentation
+	outputCols := relProps.OutputCols
+
+	// Create each of the columns and their estimated stats for the test catalog
+	// table.
+	columns := make([]*testcat.Column, outputCols.Len())
+	jsonStats := make([]stats.JSONStatistic, outputCols.Len())
+	i := 0
+	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
+		colMeta := rel.Memo().Metadata().ColumnMeta(opt.ColumnID(col))
+		colName := colMeta.Alias
+
+		// Check whether the presentation has a different name for this column, and
+		// use it if available.
+		for j := range pres {
+			if pres[j].ID == opt.ColumnID(col) {
+				colName = pres[j].Alias
+				break
+			}
+		}
+
+		columns[i] = &testcat.Column{
+			Ordinal:  i,
+			Name:     colName,
+			Type:     colMeta.Type,
+			ColType:  *colMeta.Type,
+			Nullable: !relProps.NotNullCols.Contains(col),
+		}
+
+		// Make sure we have estimated stats for this column.
+		colSet := util.MakeFastIntSet(col)
+		memo.RequestColStat(&ot.evalCtx, rel, colSet)
+		stat, ok := relProps.Stats.ColStats.Lookup(colSet)
+		if !ok {
+			return nil, fmt.Errorf("could not find statistic for column %s", colName)
+		}
+		jsonStats[i] = ot.makeStat(
+			[]string{colName},
+			uint64(int64(math.Round(relProps.Stats.RowCount))),
+			uint64(int64(math.Round(stat.DistinctCount))),
+			uint64(int64(math.Round(stat.NullCount))),
+		)
+
+		i++
+	}
+
+	tab := catalog.CreateTableAs(name, columns)
+	if err := ot.injectStats(name, jsonStats); err != nil {
+		return nil, err
+	}
+	return tab, nil
+}
+
+// injectStats injects statistics into the given table in the test catalog.
+func (ot *OptTester) injectStats(name tree.TableName, jsonStats []stats.JSONStatistic) error {
+	catalog, ok := ot.catalog.(*testcat.Catalog)
+	if !ok {
+		return fmt.Errorf("injectStats can only be used with TestCatalog")
+	}
+
+	encoded, err := json.Marshal(jsonStats)
+	if err != nil {
+		return err
+	}
+	alterStmt := fmt.Sprintf("ALTER TABLE %s INJECT STATISTICS '%s'", name.String(), encoded)
+	stmt, err := parser.ParseOne(alterStmt)
+	if err != nil {
+		return err
+	}
+	catalog.AlterTable(stmt.AST.(*tree.AlterTable))
+	return nil
+}
+
+// makeStat creates a JSONStatistic for the given columns, rowCount,
+// distinctCount, and nullCount.
+func (ot *OptTester) makeStat(
+	columns []string, rowCount, distinctCount, nullCount uint64,
+) stats.JSONStatistic {
+	return stats.JSONStatistic{
+		Name: stats.AutoStatsName,
+		CreatedAt: tree.AsStringWithFlags(
+			&tree.DTimestamp{Time: timeutil.Now()}, tree.FmtBareStrings,
+		),
+		Columns:       columns,
+		RowCount:      rowCount,
+		DistinctCount: distinctCount,
+		NullCount:     nullCount,
+	}
 }
 
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {

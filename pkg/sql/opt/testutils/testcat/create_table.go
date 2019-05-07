@@ -196,6 +196,33 @@ OuterLoop:
 	return tab
 }
 
+// CreateTableAs creates a table in the catalog with the given name and
+// columns. It should be used for creating a table from the CREATE TABLE <name>
+// AS <query> syntax. In addition to the provided columns, CreateTableAs adds a
+// unique rowid column as the primary key. It returns a pointer to the new
+// table.
+func (tc *Catalog) CreateTableAs(name tree.TableName, columns []*Column) *Table {
+	// Update the table name to include catalog and schema if not provided.
+	tc.qualifyTableName(&name)
+
+	tab := &Table{TabID: tc.nextStableID(), TabName: name, Catalog: tc, Columns: columns}
+
+	rowid := &Column{
+		Ordinal:     tab.ColumnCount(),
+		Name:        "rowid",
+		Type:        types.Int,
+		Hidden:      true,
+		DefaultExpr: &uniqueRowIDString,
+	}
+	tab.Columns = append(tab.Columns, rowid)
+	tab.addPrimaryColumnIndex("rowid")
+
+	// Add the new table to the catalog.
+	tc.AddTable(tab)
+
+	return tab
+}
+
 // resolveFK processes a foreign key constraint
 func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	fromCols := make([]int, len(d.FromCols))
