@@ -207,24 +207,12 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 	//    failure and move the transaction's record from the STAGING state to the
 	//    ABORTED state.
 	queryIntentReqs := make([]roachpb.QueryIntentRequest, 0, len(txn.InFlightWrites))
-	for seq, idx := range txn.InFlightWrites {
-		if len(txn.IntentSpans) <= int(idx) {
-			return false, nil, errors.Errorf(
-				"programming error: malformed in-flight write ref %d->%d: %v", seq, idx, txn,
-			)
-		}
-		span := txn.IntentSpans[idx]
-		if len(span.EndKey) != 0 {
-			return false, nil, errors.Errorf(
-				"programming error: in-flight write references ranged intent span %s: %v", span, txn,
-			)
-		}
-
+	for _, w := range txn.InFlightWrites {
 		meta := txn.TxnMeta
-		meta.Sequence = seq
+		meta.Sequence = w.Sequence
 		queryIntentReqs = append(queryIntentReqs, roachpb.QueryIntentRequest{
 			RequestHeader: roachpb.RequestHeader{
-				Key: span.Key,
+				Key: w.Key,
 			},
 			Txn: meta,
 		})
