@@ -1273,3 +1273,8 @@ a  b
 
 statement ok
 DROP TABLE array_single_family
+
+query TT
+SELECT ARRAY[]::int[], ARRAY[]:::int[]
+----
+{}  {}
