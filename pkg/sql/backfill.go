@@ -1013,22 +1013,17 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
-	chunkSize := int64(indexTxnBackfillChunkSize)
-	bulk := backfill.BulkWriteIndex.Get(&sc.settings.SV)
-	if bulk {
-		chunkSize = indexBulkBackfillChunkSize.Get(&sc.settings.SV)
+	disableCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	sc.execCfg.Gossip.DisableMerges(disableCtx, []uint32{uint32(sc.tableID)})
 
-		disableCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		sc.execCfg.Gossip.DisableMerges(disableCtx, []uint32{uint32(sc.tableID)})
-
-		for _, span := range addingSpans {
-			if err := sc.db.AdminSplit(ctx, span.Key, span.Key); err != nil {
-				return err
-			}
+	for _, span := range addingSpans {
+		if err := sc.db.AdminSplit(ctx, span.Key, span.Key); err != nil {
+			return err
 		}
 	}
 
+	chunkSize := indexBulkBackfillChunkSize.Get(&sc.settings.SV)
 	if err := sc.distBackfill(
 		ctx, evalCtx, lease, version, indexBackfill, chunkSize,
 		backfill.IndexMutationFilter, addingSpans); err != nil {

@@ -43,6 +43,8 @@ var retiredSettings = map[string]struct{}{
 	"kv.allocator.stat_rebalance_threshold":       {},
 	// removed as of 2.2.
 	"kv.raft_log.synchronize": {},
+	// removed as of 19.2.
+	"schemachanger.bulk_index_backfill.enabled": {},
 }
 
 // Register adds a setting to the registry.
