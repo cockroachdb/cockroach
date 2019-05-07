@@ -146,17 +146,19 @@ func NewError(err error) *Error {
 
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	} else if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
-		return &Error{
-			Detail: &Error_RetryableTxnError{
-				RetryableTxnError: retryErr,
-			}}
 	} else {
-		// Anything unrecognized is an "internal error".
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.AssertionFailedf(
-					"uncaught error: %+v", origErr)}}
+		switch e := err.(type) {
+		case *roachpb.UnhandledRetryableError:
+			return &Error{Detail: &Error_RetryableTxnError{RetryableTxnError: e}}
+		case *roachpb.NodeUnavailableError:
+			return &Error{Detail: &Error_NodeUnavailableError{NodeUnavailableError: e}}
+		default:
+			// Anything unrecognized is an "internal error".
+			return &Error{
+				Detail: &Error_PGError{
+					PGError: pgerror.AssertionFailedf(
+						"uncaught error: %+v", origErr)}}
+		}
 	}
 }
 
@@ -170,6 +172,8 @@ func (e *Error) ErrorDetail() error {
 		return t.PGError
 	case *Error_RetryableTxnError:
 		return t.RetryableTxnError
+	case *Error_NodeUnavailableError:
+		return t.NodeUnavailableError
 	default:
 		// We're receiving an error we don't know about. It's all right,
 		// it's still an error, just one we didn't expect. Let it go

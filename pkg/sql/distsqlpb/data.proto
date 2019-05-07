@@ -40,6 +40,7 @@ message Error {
   oneof detail {
     pgerror.Error pg_error = 1 [(gogoproto.customname) = "PGError"];
     roachpb.UnhandledRetryableError retryableTxnError = 2;
+    roachpb.NodeUnavailableError nodeUnavailableError = 3;
     // TODO(andrei): Add AmbiguousResultError here once DistSQL starts executing
     // writes.
   }
