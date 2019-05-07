@@ -499,7 +499,22 @@ func (jsonTrue) Format(buf *bytes.Buffer) { buf.WriteString("true") }
 
 func (j jsonNumber) Format(buf *bytes.Buffer) {
 	dec := apd.Decimal(j)
+	// Make sure non-finite values are encoded as valid strings by
+	// quoting them. Unfortunately, since this is JSON, there's no
+	// defined way to express the three special numeric values (+inf,
+	// -inf, nan) except as a string. This means that the decoding
+	// side can't tell whether the field should be a float or a
+	// string. Testing for exact types is thus tricky. As of this
+	// comment, our current tests for this behavior happen it the SQL
+	// package, not here in the JSON package.
+	nonfinite := dec.Form != apd.Finite
+	if nonfinite {
+		buf.WriteByte('"')
+	}
 	buf.WriteString(dec.String())
+	if nonfinite {
+		buf.WriteByte('"')
+	}
 }
 
 func (j jsonString) Format(buf *bytes.Buffer) {

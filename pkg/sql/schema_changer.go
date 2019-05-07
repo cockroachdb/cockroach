@@ -100,6 +100,9 @@ const (
 	// RunningStatusBackfill is for jobs that are currently running a backfill
 	// for a schema element.
 	RunningStatusBackfill jobs.RunningStatus = "populating schema"
+	// RunningStatusValidation is for jobs that are currently validating
+	// a schema element.
+	RunningStatusValidation jobs.RunningStatus = "validating schema"
 )
 
 type droppedIndex struct {
@@ -1551,9 +1554,17 @@ type SchemaChangerTestingKnobs struct {
 	// RunBeforeBackfill is called just before starting the backfill.
 	RunBeforeBackfill func() error
 
-	// RunBeforeBackfill is called just before starting the index backfill, after
+	// RunBeforeIndexBackfill is called just before starting the index backfill, after
 	// fixing the index backfill scan timestamp.
 	RunBeforeIndexBackfill func()
+
+	// RunBeforeIndexValidation is called just before starting the index validation,
+	// after setting the job status to validating.
+	RunBeforeIndexValidation func() error
+
+	// RunBeforeChecksValidation is called just before starting the checks validation,
+	// after setting the job status to validating.
+	RunBeforeChecksValidation func() error
 
 	// OldNamesDrainedNotification is called during a schema change,
 	// after all leases on the version of the descriptor with the old

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type Node time.Duration
@@ -142,6 +143,11 @@ func TestComplexScenarios(t *testing.T) {
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
+
+	// Ensure that tests using this test context and restart/shut down
+	// their servers do not inadvertently start talking to servers from
+	// unrelated concurrent tests.
+	nodeContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
 
 	// We're going to serve multiple node IDs with that one
 	// context. Disable node ID checks.
