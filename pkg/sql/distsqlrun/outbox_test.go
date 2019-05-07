@@ -54,18 +54,23 @@ func TestOutbox(t *testing.T) {
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	mockServer, addr, err := startMockDistSQLServer(stopper)
+	clusterID, mockServer, addr, err := startMockDistSQLServer(stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
+
+	clientRPC := newInsecureRPCContext(stopper)
+	// Ensure the cluster ID in client matches the server's.
+	clientRPC.ClusterID.Reset(clusterID)
+
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
 		EvalCtx:    &evalCtx,
-		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
+		nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 	}
 	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	streamID := distsqlpb.StreamID(42)
@@ -204,7 +209,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	mockServer, addr, err := startMockDistSQLServer(stopper)
+	clusterID, mockServer, addr, err := startMockDistSQLServer(stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,11 +217,16 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
+
+	clientRPC := newInsecureRPCContext(stopper)
+	// Ensure the cluster ID in client matches the server's.
+	clientRPC.ClusterID.Reset(clusterID)
+
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
 		EvalCtx:    &evalCtx,
-		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
+		nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 	}
 	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	streamID := distsqlpb.StreamID(42)
@@ -273,7 +283,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
-			mockServer, addr, err := startMockDistSQLServer(stopper)
+			clusterID, mockServer, addr, err := startMockDistSQLServer(stopper)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -281,11 +291,16 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
+
+			clientRPC := newInsecureRPCContext(stopper)
+			// Ensure the cluster ID in client matches the server's.
+			clientRPC.ClusterID.Reset(clusterID)
+
 			flowCtx := FlowCtx{
 				Settings:   st,
 				stopper:    stopper,
 				EvalCtx:    &evalCtx,
-				nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
+				nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 			}
 			flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 			streamID := distsqlpb.StreamID(42)
@@ -399,7 +414,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	mockServer, addr, err := startMockDistSQLServer(stopper)
+	clusterID, mockServer, addr, err := startMockDistSQLServer(stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -407,11 +422,16 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
+
+	clientRPC := newInsecureRPCContext(stopper)
+	// Ensure the cluster ID in client matches the server's.
+	clientRPC.ClusterID.Reset(clusterID)
+
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
 		EvalCtx:    &evalCtx,
-		nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
+		nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 	}
 	flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}
 	streamID := distsqlpb.StreamID(42)
@@ -509,7 +529,7 @@ func BenchmarkOutbox(b *testing.B) {
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	mockServer, addr, err := startMockDistSQLServer(stopper)
+	clusterID, mockServer, addr, err := startMockDistSQLServer(stopper)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -524,11 +544,16 @@ func BenchmarkOutbox(b *testing.B) {
 			streamID := distsqlpb.StreamID(42)
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
+
+			clientRPC := newInsecureRPCContext(stopper)
+			// Ensure the cluster ID in client matches the server's.
+			clientRPC.ClusterID.Reset(clusterID)
+
 			flowCtx := FlowCtx{
 				Settings:   st,
 				stopper:    stopper,
 				EvalCtx:    &evalCtx,
-				nodeDialer: nodedialer.New(newInsecureRPCContext(stopper), staticAddressResolver(addr)),
+				nodeDialer: nodedialer.New(clientRPC, staticAddressResolver(addr)),
 			}
 			outbox := newOutbox(&flowCtx, staticNodeID, flowID, streamID)
 			outbox.init(sqlbase.MakeIntCols(numCols))
