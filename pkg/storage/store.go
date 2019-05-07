@@ -3648,6 +3648,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	q.Unlock()
 
 	var lastRepl *Replica
+	var hadError bool
 	for i, info := range infos {
 		last := i == len(infos)-1
 		pErr := s.withReplicaForRequest(info.respStream.Context(), info.req,
@@ -3669,21 +3670,32 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 				return pErr
 			})
 		if pErr != nil {
-			// If we're unable to process the request, clear the request queue. This
-			// only happens if we couldn't create the replica because the request was
-			// targeted to a removed range. This is also racy and could cause us to
-			// drop messages to the deleted range occasionally (#18355), but raft
-			// will just retry.
-			q.Lock()
-			if len(q.infos) == 0 {
-				s.replicaQueues.Delete(int64(rangeID))
-			}
-			q.Unlock()
+			hadError = true
 			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
 				// Seems excessive to log this on every occurrence as the other side
 				// might have closed.
 				log.VEventf(ctx, 1, "error sending error: %s", err)
 			}
+		}
+	}
+
+	if hadError {
+		// If we're unable to process a request, consider dropping the request queue
+		// to free up space in the map.
+		// This is relevant if requests failed because the target replica could not
+		// be created (for example due to the Raft tombstone). The particular code
+		// here takes into account that we don't want to drop the queue if there
+		// are other messages waiting on it, or if the target replica exists. Raft
+		// tolerates the occasional dropped message, but our unit tests are less
+		// forgiving.
+		//
+		// See https://github.com/cockroachdb/cockroach/issues/30951#issuecomment-428010411.
+		if _, exists := s.mu.replicas.Load(int64(rangeID)); !exists {
+			q.Lock()
+			if len(q.infos) == 0 {
+				s.replicaQueues.Delete(int64(rangeID))
+			}
+			q.Unlock()
 		}
 	}
 
