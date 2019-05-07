@@ -296,4 +296,9 @@ const (
 	CodeInternalError       = "XX000"
 	CodeDataCorruptedError  = "XX001"
 	CodeIndexCorruptedError = "XX002"
+
+	// RangeUnavailable signals that some data from the cluster cannot be
+	// accessed (e.g. because all replicas awol).
+	// We're using the postgres "Internal Error" error class "XX".
+	CodeRangeUnavailable = "XXC00"
 )
