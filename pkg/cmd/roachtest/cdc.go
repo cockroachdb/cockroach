@@ -291,29 +291,21 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		}
 		defer tc.Close()
 
-		// TODO(dan): Force multiple partitions and re-enable this check. It
-		// used to be the only thing that verified our correctness with multiple
-		// partitions but TestValidations/enterprise also does that now, so this
-		// isn't a big deal.
-		//
-		// if len(tc.partitions) <= 1 {
-		//  return errors.New("test requires at least 2 partitions to be interesting")
-		// }
-
-		var requestedResolved = 100
-		if local {
-			requestedResolved = 10
-		}
-		var numResolved, rowsSinceResolved int
-		v := cdctest.Validators{
-			cdctest.NewOrderValidator(`bank`),
-			cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions),
-		}
 		if _, err := db.Exec(
 			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
 		); err != nil {
 			return err
 		}
+
+		const requestedResolved = 100
+		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions)
+		if err != nil {
+			return err
+		}
+		v := cdctest.MakeCountValidator(cdctest.Validators{
+			cdctest.NewOrderValidator(`bank`),
+			fprintV,
+		})
 
 		for {
 			m := tc.Next(ctx)
@@ -328,19 +320,16 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 			partitionStr := strconv.Itoa(int(m.Partition))
 			if len(m.Key) > 0 {
 				v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated)
-				rowsSinceResolved++
 			} else {
 				if err := v.NoteResolved(partitionStr, resolved); err != nil {
 					return err
 				}
-				if rowsSinceResolved > 0 {
-					numResolved++
-					if numResolved > requestedResolved {
-						atomic.StoreInt64(&doneAtomic, 1)
-						break
-					}
+				l.Printf("%d of %d resolved timestamps, latest is %s behind realtime",
+					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()))
+				if v.NumResolvedWithRows >= requestedResolved {
+					atomic.StoreInt64(&doneAtomic, 1)
+					break
 				}
-				rowsSinceResolved = 0
 			}
 		}
 		if failures := v.Failures(); len(failures) > 0 {

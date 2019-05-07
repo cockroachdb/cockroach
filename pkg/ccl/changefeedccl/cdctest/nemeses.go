@@ -11,8 +11,6 @@ package cdctest
 import (
 	"context"
 	gosql "database/sql"
-	gojson "encoding/json"
-	"fmt"
 	"math/rand"
 	"strings"
 
@@ -107,9 +105,13 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 	if _, err := db.Exec(`CREATE TABLE fprint (id INT PRIMARY KEY, ts STRING)`); err != nil {
 		return nil, err
 	}
+	fprintV, err := NewFingerprintValidator(db, `foo`, `fprint`, foo.Partitions())
+	if err != nil {
+		return nil, err
+	}
 	ns.v = MakeCountValidator(Validators{
 		NewOrderValidator(`foo`),
-		NewFingerprintValidator(db, `foo`, `fprint`, foo.Partitions()),
+		fprintV,
 	})
 
 	// Initialize the actual row count, overwriting what `transact` did.
@@ -157,6 +159,13 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 	}
 }
 
+type openTxnType string
+
+const (
+	openTxnTypeUpsert openTxnType = `UPSERT`
+	openTxnTypeDelete openTxnType = `DELETE`
+)
+
 type nemeses struct {
 	rowCount int
 	eventMix map[fsm.Event]int
@@ -168,6 +177,7 @@ type nemeses struct {
 
 	availableRows int
 	txn           *gosql.Tx
+	openTxnType   openTxnType
 	openTxnID     int
 	openTxnTs     string
 }
@@ -311,15 +321,42 @@ func transact(a fsm.Args) error {
 
 	// If there are no transactions, create one.
 	if ns.txn == nil {
+		const noDeleteSentinel = int(-1)
+		// 10% of the time attempt a DELETE.
+		deleteID := noDeleteSentinel
+		if rand.Intn(10) == 0 {
+			rows, err := ns.db.Query(`SELECT id FROM foo ORDER BY random() LIMIT 1`)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = rows.Close() }()
+			if rows.Next() {
+				if err := rows.Scan(&deleteID); err != nil {
+					return err
+				}
+			}
+			// If there aren't any rows, skip the DELETE this time.
+		}
+
 		txn, err := ns.db.Begin()
 		if err != nil {
 			return err
 		}
-		if err := txn.QueryRow(
-			`UPSERT INTO foo VALUES ((random() * $1)::int, cluster_logical_timestamp()::string) RETURNING *`,
-			ns.rowCount,
-		).Scan(&ns.openTxnID, &ns.openTxnTs); err != nil {
-			return err
+		if deleteID == noDeleteSentinel {
+			if err := txn.QueryRow(
+				`UPSERT INTO foo VALUES ((random() * $1)::int, cluster_logical_timestamp()::string) RETURNING *`,
+				ns.rowCount,
+			).Scan(&ns.openTxnID, &ns.openTxnTs); err != nil {
+				return err
+			}
+			ns.openTxnType = openTxnTypeUpsert
+		} else {
+			if err := txn.QueryRow(
+				`DELETE FROM foo WHERE id = $1 RETURNING *`, deleteID,
+			).Scan(&ns.openTxnID, &ns.openTxnTs); err != nil {
+				return err
+			}
+			ns.openTxnType = openTxnTypeDelete
 		}
 		ns.txn = txn
 		return nil
@@ -333,10 +370,15 @@ func transact(a fsm.Args) error {
 	if rand.Intn(2) < 1 {
 		return txn.Rollback()
 	}
-	if err := txn.Commit(); err != nil && !strings.Contains(err.Error(), `restart transaction`) {
+	if err := txn.Commit(); err != nil {
+		// Don't error out if we got pushed, but don't increment availableRows no
+		// matter what error was hit.
+		if strings.Contains(err.Error(), `restart transaction`) {
+			return nil
+		}
 		return err
 	}
-	log.Infof(a.Ctx, "UPSERT (%d, %s)", ns.openTxnID, ns.openTxnTs)
+	log.Infof(a.Ctx, "%s (%d, %s)", ns.openTxnType, ns.openTxnID, ns.openTxnTs)
 	ns.availableRows++
 	return nil
 }
@@ -354,18 +396,6 @@ func noteFeedMessage(a fsm.Args) error {
 	ts, _, err := ParseJSONValueTimestamps(m.Value)
 	if err != nil {
 		return err
-	}
-
-	// Some sinks, notably cloud storage sinks don't have a key, so parse it out
-	// of the value.
-	if m.Key == nil {
-		var v struct {
-			After map[string]interface{} `json:"after"`
-		}
-		if err := gojson.Unmarshal(m.Value, &v); err != nil {
-			return err
-		}
-		m.Key = []byte(fmt.Sprintf("[%v]", v.After[`id`]))
 	}
 
 	ns.availableRows--

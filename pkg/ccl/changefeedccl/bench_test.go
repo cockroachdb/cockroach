@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkChangefeedTicks(b *testing.B) {
@@ -63,7 +64,8 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			b.StartTimer()
-			sink, cancelFeed := createBenchmarkChangefeed(ctx, s, feedClock, `d`, `bank`)
+			sink, cancelFeed, err := createBenchmarkChangefeed(ctx, s, feedClock, `d`, `bank`)
+			require.NoError(b, err)
 			for rows := 0; rows < numRows; {
 				r, sb := sink.WaitForEmit()
 				rows += r
@@ -167,7 +169,7 @@ func createBenchmarkChangefeed(
 	s serverutils.TestServerInterface,
 	feedClock *hlc.Clock,
 	database, table string,
-) (*benchSink, func() error) {
+) (*benchSink, func() error, error) {
 	tableDesc := sqlbase.GetTableDescriptor(s.DB(), database, table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan()}
 	details := jobspb.ChangefeedDetails{
@@ -179,7 +181,10 @@ func createBenchmarkChangefeed(
 		},
 	}
 	initialHighWater := hlc.Timestamp{}
-	encoder := makeJSONEncoder(details.Opts)
+	encoder, err := makeJSONEncoder(details.Opts)
+	if err != nil {
+		return nil, nil, err
+	}
 	sink := makeBenchSink()
 
 	settings := s.ClusterSettings()
@@ -248,7 +253,7 @@ func createBenchmarkChangefeed(
 		wg.Wait()
 		return nil
 	}
-	return sink, cancelFn
+	return sink, cancelFn, nil
 }
 
 // loadWorkloadBatches inserts a workload.Table's row batches, each in one
