@@ -1077,8 +1077,6 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/34111")
-
 	ctx := context.Background()
 
 	sc := storage.TestStoreConfig(nil)
@@ -1101,17 +1099,14 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	defer mtc.Stop()
 	mtc.Start(t, 1)
 
+	key := []byte("a")
 	// Send a read, to acquire a lease.
-	getArgs := getArgs([]byte("a"))
+	getArgs := getArgs(key)
 	if _, err := client.SendWrapped(ctx, mtc.stores[0].TestSender(), getArgs); err != nil {
 		t.Fatal(err)
 	}
 
-	preRepl1, err := mtc.stores[0].GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	preRestartLease, _ := preRepl1.GetLease()
+	preRestartLease, _ := mtc.stores[0].LookupReplica(key).GetLease()
 
 	mtc.manualClock.Increment(1E9)
 
@@ -1142,11 +1137,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 		t.Fatalf("read did not acquire a new lease")
 	}
 
-	postRepl1, err := mtc.stores[0].GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	postRestartLease, _ := postRepl1.GetLease()
+	postRestartLease, _ := mtc.stores[0].LookupReplica(key).GetLease()
 
 	// Verify that not only is a new lease requested, it also gets a new sequence
 	// number. This makes sure that previously proposed commands actually fail at
