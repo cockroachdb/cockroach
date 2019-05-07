@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"sync"
@@ -50,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -4526,4 +4528,60 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 			t.Fatalf("expected %q error, but got %v", exp, err)
 		}
 	}
+}
+
+// TestTracingDoesNotRaceWithCancelation ensures that the tracing underneath
+// raft does not race with tracing operations which might occur concurrently
+// due to a request cancelation. When this bug existed this test only
+// uncovered it when run under stress.
+func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.TraceAllRaftEvents = true
+	sc.TestingKnobs.DisableSplitQueue = true
+	sc.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		clock:       hlc.NewClock(hlc.UnixNano, time.Millisecond),
+	}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+
+	db := mtc.Store(0).DB()
+	ctx := context.Background()
+	// Make the transport flaky for the range in question to encourage proposals
+	// to be sent more times and ultimately traced more.
+	ri, err := getRangeInfo(ctx, db, roachpb.Key("foo"))
+	require.Nil(t, err)
+
+	for i := 0; i < 3; i++ {
+		mtc.transport.Listen(mtc.stores[i].Ident.StoreID, &unreliableRaftHandler{
+			rangeID:            ri.Desc.RangeID,
+			RaftMessageHandler: mtc.stores[i],
+			dropReq: func(req *storage.RaftMessageRequest) bool {
+				return rand.Intn(2) == 0
+			},
+		})
+	}
+	val := []byte("asdf")
+	var wg sync.WaitGroup
+	put := func(i int) func() {
+		wg.Add(1)
+		return func() {
+			defer wg.Done()
+			totalDelay := 1 * time.Millisecond
+			delay := time.Duration(rand.Intn(int(totalDelay)))
+			startDelay := totalDelay - delay
+			time.Sleep(startDelay)
+			ctx, cancel := context.WithTimeout(context.Background(), delay)
+			defer cancel()
+			_ = db.Put(ctx, roachpb.Key(fmt.Sprintf("foo%d", i)), val)
+		}
+	}
+	const N = 256
+	for i := 0; i < N; i++ {
+		go put(i)()
+	}
+	wg.Wait()
 }
