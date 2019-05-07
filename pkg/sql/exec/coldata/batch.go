@@ -137,8 +137,12 @@ func (m *MemBatch) AppendCol(t types.T) {
 
 // Reset implements the Batch interface.
 func (m *MemBatch) Reset(types []types.T, length int) {
-	// TODO(dan): Reset could be more aggressive about finding columns to reuse.
-	if m == nil || int(m.Length()) != length || m.Width() != len(types) {
+	// The columns are always sized the same as the selection vector, so use it as
+	// a shortcut for the capacity (like a go slice, the batch's `Length` could be
+	// shorter than the capacity). We could be more defensive and type switch
+	// every column to verify its capacity, but that doesn't seem necessary yet.
+	hasColCapacity := len(m.sel) >= length
+	if m == nil || !hasColCapacity || m.Width() != len(types) {
 		*m = *NewMemBatchWithSize(types, length).(*MemBatch)
 		m.SetLength(uint16(length))
 		return
