@@ -291,6 +291,18 @@ type heartbeatResult struct {
 	err           error // heartbeat error. should not be nil if everSucceeded is false
 }
 
+func (hr heartbeatResult) state() (s heartbeatState) {
+	switch {
+	case !hr.everSucceeded && hr.err != nil:
+		s = heartbeatInitializing
+	case hr.everSucceeded && hr.err == nil:
+		s = heartbeatNominal
+	case hr.everSucceeded && hr.err != nil:
+		s = heartbeatFailed
+	}
+	return s
+}
+
 // Connection is a wrapper around grpc.ClientConn. It prevents the underlying
 // connection from being used until it has been validated via heartbeat.
 type Connection struct {
@@ -383,6 +395,8 @@ type Context struct {
 	NodeID    base.NodeIDContainer
 	version   *cluster.ExposedClusterVersion
 
+	metrics Metrics
+
 	// For unittesting.
 	BreakerFactory  func() *circuit.Breaker
 	testingDialOpts []grpc.DialOption
@@ -427,6 +441,7 @@ func NewContext(
 	ctx.RemoteClocks = newRemoteClockMonitor(
 		ctx.LocalClock, 10*ctx.heartbeatInterval, baseCtx.HistogramWindowInterval)
 	ctx.heartbeatTimeout = 2 * ctx.heartbeatInterval
+	ctx.metrics = makeMetrics()
 
 	stopper.RunWorker(ctx.masterCtx, func(context.Context) {
 		<-stopper.ShouldQuiesce()
@@ -455,6 +470,11 @@ func NewContext(
 // (in string form) to an rpc.Stats object.
 func (ctx *Context) GetStatsMap() *syncmap.Map {
 	return &ctx.stats.stats
+}
+
+// Metrics returns the Context's Metrics struct.
+func (ctx *Context) Metrics() *Metrics {
+	return &ctx.metrics
 }
 
 // GetLocalInternalClientForAddr returns the context's internal batch client
@@ -818,7 +838,15 @@ func (ctx *Context) TestingConnHealth(target string, nodeID roachpb.NodeID) erro
 
 func (ctx *Context) runHeartbeat(
 	conn *Connection, target string, redialChan <-chan struct{},
-) error {
+) (retErr error) {
+	ctx.metrics.HeartbeatLoopsStarted.Inc(1)
+	state := updateHeartbeatState(&ctx.metrics, heartbeatNotRunning, heartbeatInitializing)
+	defer func() {
+		if retErr != nil {
+			ctx.metrics.HeartbeatLoopsExited.Inc(1)
+		}
+		updateHeartbeatState(&ctx.metrics, state, heartbeatNotRunning)
+	}()
 	maxOffset := ctx.LocalClock.MaxOffset()
 	maxOffsetNanos := maxOffset.Nanoseconds()
 
@@ -897,12 +925,14 @@ func (ctx *Context) runHeartbeat(
 					cb()
 				}
 			}
-			conn.heartbeatResult.Store(heartbeatResult{
+
+			hr := heartbeatResult{
 				everSucceeded: everSucceeded,
 				err:           err,
-			})
+			}
+			conn.heartbeatResult.Store(hr)
 			conn.setInitialHeartbeatDone()
-
+			state = updateHeartbeatState(&ctx.metrics, state, hr.state())
 			return nil
 		}); err != nil {
 			return err
