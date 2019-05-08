@@ -11,7 +11,7 @@ package format
 import (
 	"context"
 	"fmt"
-	"sort"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -64,10 +64,10 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 	}
 
 	kvCh := make(chan []roachpb.KeyValue)
-	var kvs []roachpb.KeyValue
 	wc := importccl.NewWorkloadKVConverter(
 		tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
 
+	var ssts addSSTableSender
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(kvCh)
@@ -76,28 +76,35 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 		return wc.Worker(ctx, evalCtx, finishedBatchFn)
 	})
 	g.GoCtx(func(ctx context.Context) error {
-		for kvBatch := range kvCh {
-			kvs = append(kvs, kvBatch...)
+		sstTS := hlc.Timestamp{WallTime: ts.UnixNano()}
+		const sstSize = math.MaxInt64
+		ba, err := bulk.MakeBulkAdder(&ssts, nil /* rangeCache */, sstSize, sstSize, sstTS)
+		if err != nil {
+			return err
 		}
-		return nil
+		defer ba.Close(ctx)
+		for kvBatch := range kvCh {
+			for _, kv := range kvBatch {
+				if err := ba.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+					return err
+				}
+			}
+		}
+		return ba.Flush(ctx)
 	})
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
-	sort.Slice(kvs, func(i, j int) bool { return kvs[i].Key.Compare(kvs[j].Key) < 0 })
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return nil, err
+	if len(ssts) != 1 {
+		return nil, errors.Errorf(`expected exactly 1 sst but got %d`, len(ssts))
 	}
-	defer sst.Close()
-	for _, kv := range kvs {
-		if err := sst.Add(engine.MVCCKeyValue{
-			Key:   engine.MVCCKey{Key: kv.Key, Timestamp: hlc.Timestamp{WallTime: ts.UnixNano()}},
-			Value: kv.Value.RawBytes,
-		}); err != nil {
-			return nil, err
-		}
-	}
-	return sst.Finish()
+	return ssts[0], nil
+}
+
+type addSSTableSender [][]byte
+
+func (s *addSSTableSender) AddSSTable(_ context.Context, _, _ interface{}, data []byte) error {
+	*s = append(*s, data)
+	return nil
 }
