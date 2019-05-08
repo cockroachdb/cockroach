@@ -315,10 +315,8 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 						RequestHeader: roachpb.RequestHeader{
 							Key: w.Key,
 						},
-						Txn: meta,
-						// Set the IfMissing behavior to return an error if the
-						// in-flight write is missing.
-						IfMissing: roachpb.QueryIntentRequest_RETURN_ERROR,
+						Txn:            meta,
+						ErrorIfMissing: true,
 					})
 
 					// Record that the key has been chained onto at least once
@@ -471,8 +469,8 @@ func (tp *txnPipeliner) updateWriteTracking(
 		if qiReq, ok := req.(*roachpb.QueryIntentRequest); ok && resp != nil {
 			// Remove any in-flight writes that were proven to exist.
 			// It shouldn't be possible for a QueryIntentRequest with
-			// an IfMissing behavior of RETURN_ERROR to return without
-			// error and with with FoundIntent=false, but we handle that
+			// the ErrorIfMissing option set to return without error
+			// and with with FoundIntent=false, but we handle that
 			// case here because it happens a lot in tests.
 			if resp.(*roachpb.QueryIntentResponse).FoundIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)

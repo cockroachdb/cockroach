@@ -196,10 +196,15 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 	//    state.
 	// 2. we find that one or more of the transaction's in-flight writes at the
 	//    time that it was staged to commit have not yet succeeded. In this case,
-	//    we first atomically ensure that one of these writes will never succeed in
-	//    the future (see IfMissing below). After doing so, we have all the
-	//    evidence that we need in order to declare the transaction commit a
-	//    failure and moving the transaction's record from the STAGING state to the
+	//    the QueryIntent that found the missing in-flight write atomically ensures
+	//    that the intent write will never succeed in the future (NOTE: this is a
+	//    side-effect of any QueryIntent request that finds a missing intent). This
+	//    guarantees that if we determine that the transaction cannot be committed,
+	//    the write we're searching for can never occur after we observe it to be
+	//    missing (for instance, if it was delayed) and cause others to determine
+	//    that the transaction can be committed. After it has done so, we have all
+	//    the evidence that we need in order to declare the transaction commit a
+	//    failure and move the transaction's record from the STAGING state to the
 	//    ABORTED state.
 	queryIntentReqs := make([]roachpb.QueryIntentRequest, 0, len(txn.InFlightWrites))
 	for seq, idx := range txn.InFlightWrites {
@@ -222,13 +227,6 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 				Key: span.Key,
 			},
 			Txn: meta,
-			// Set the IfMissing behavior to prevent the write from ever
-			// being written successfully in the future. This ensures that
-			// if we determine that the transaction cannot be committed, the
-			// write we're searching for can never occur after we observe it
-			// to be missing (for instance, if it was delayed) and cause
-			// others to determine that the transaction can be committed.
-			IfMissing: roachpb.QueryIntentRequest_PREVENT,
 		})
 	}
 

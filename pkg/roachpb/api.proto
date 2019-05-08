@@ -920,7 +920,8 @@ message QueryTxnResponse {
 
 // A QueryIntentRequest is arguments to the QueryIntent() method. It visits
 // the specified key and checks whether an intent is present for the given
-// transaction.
+// transaction. If the intent found to be is missing then it is prevented
+// from ever being written in the future.
 message QueryIntentRequest {
   option (gogoproto.equal) = true;
 
@@ -946,22 +947,10 @@ message QueryIntentRequest {
   // well.
   storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
 
-  enum IfMissingBehavior {
-    // Don't do anything special, just note that the intent was not found in the
-    // response.
-    DO_NOTHING = 0;
-    // Return an IntentMissingError. Special-cased to return a SERIALIZABLE
-    // retry error if a SERIALIZABLE transaction queries its own intent and
-    // finds it has been pushed.
-    RETURN_ERROR = 1;
-    // Prevent the intent from ever being written in the future. If set as the
-    // behavior, a response with found_intent=false implies that an intent will
-    // never be writtable at the key at the transaction's timestamp or below.
-    PREVENT = 2;
-  }
-  // The behavior of the request if the expected intent is found to be not
-  // present.
-  IfMissingBehavior if_missing = 3;
+  // If true, return an IntentMissingError if a matching intent is not found.
+  // Special-cased to return a SERIALIZABLE retry error if a SERIALIZABLE
+  // transaction queries its own intent and finds it has been pushed.
+  bool error_if_missing = 3;
 }
 
 // A QueryIntentResponse is the return value from the QueryIntent() method.

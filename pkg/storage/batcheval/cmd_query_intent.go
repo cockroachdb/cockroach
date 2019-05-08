@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -30,7 +29,9 @@ func init() {
 
 // QueryIntent checks if an intent exists for the specified
 // transaction at the given key. If the intent is missing,
-// the request reacts according to its IfMissing field.
+// the request prevents the intent from ever being written
+// at the specified timestamp. It also returns an error if
+// its ErrorIfMissing field is set to true.
 func QueryIntent(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -94,26 +95,15 @@ func QueryIntent(
 		}
 	}
 
-	if !reply.FoundIntent {
-		switch args.IfMissing {
-		case roachpb.QueryIntentRequest_DO_NOTHING:
-			// Do nothing.
-		case roachpb.QueryIntentRequest_RETURN_ERROR:
-			if ownTxn && curIntentPushed {
-				// If the transaction's own intent was pushed, go ahead and
-				// return a TransactionRetryError immediately with an updated
-				// transaction proto. This is an optimization that can help
-				// the txn use refresh spans more effectively.
-				return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "" /* extraMsg */)
-			}
-			return result.Result{}, roachpb.NewIntentMissingError(args.Key, intent)
-		case roachpb.QueryIntentRequest_PREVENT:
-			// The intent will be prevented by bumping the timestamp cache for
-			// the key to the txn timestamp in Replica.updateTimestampCache.
-		default:
-			return result.Result{},
-				errors.Errorf("unexpected QueryIntent IfMissing behavior %v", args.IfMissing)
+	if !reply.FoundIntent && args.ErrorIfMissing {
+		if ownTxn && curIntentPushed {
+			// If the transaction's own intent was pushed, go ahead and
+			// return a TransactionRetryError immediately with an updated
+			// transaction proto. This is an optimization that can help
+			// the txn use refresh spans more effectively.
+			return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "" /* extraMsg */)
 		}
+		return result.Result{}, roachpb.NewIntentMissingError(args.Key, intent)
 	}
 	return result.Result{}, nil
 }
