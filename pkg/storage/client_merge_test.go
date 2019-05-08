@@ -57,6 +57,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -3003,6 +3004,14 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 		}
 	} else if req.RangeID == h.rangeID {
 		if h.dropReq == nil || h.dropReq(req) {
+			log.Infof(
+				ctx,
+				"dropping Raft message %s",
+				raft.DescribeMessage(req.Message, func([]byte) string {
+					return "<omitted>"
+				}),
+			)
+
 			return nil
 		}
 	}
@@ -3111,6 +3120,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	beforeRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
 
 	// Restore Raft traffic to the LHS on store2.
+	log.Infof(ctx, "restored traffic to store 2")
 	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
 		rangeID:            aRepl0.RangeID,
 		RaftMessageHandler: store2,
@@ -3125,6 +3135,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 			return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 		},
+		// Don't drop heartbeats or responses.
+		dropHB:   func(*storage.RaftHeartbeat) bool { return false },
+		dropResp: func(*storage.RaftMessageResponse) bool { return false },
 	})
 
 	// Wait for all replicas to catch up to the same point. Because we truncated
