@@ -32,9 +32,9 @@ type Batch interface {
 	SetLength(uint16)
 	// Width returns the number of columns in the batch.
 	Width() int
-	// Vec returns the ith Vec in this batch.
+	// ColVec returns the ith Vec in this batch.
 	ColVec(i int) Vec
-	// ColVecs returns all of the underlying ColVecs in this batch.
+	// ColVecs returns all of the underlying Vecs in this batch.
 	ColVecs() []Vec
 	// Selection, if not nil, returns the selection vector on this batch: a
 	// densely-packed list of the indices in each column that have not been
