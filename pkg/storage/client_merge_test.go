@@ -3135,6 +3135,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 			return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 		},
+		// Don't drop heartbeats or responses.
+		dropHB:   func(*storage.RaftHeartbeat) bool { return false },
+		dropResp: func(*storage.RaftMessageResponse) bool { return false },
 	})
 
 	// Wait for all replicas to catch up to the same point. Because we truncated
