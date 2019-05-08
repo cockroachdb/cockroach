@@ -117,7 +117,7 @@ var (
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
 	}
-	metaRSS = metric.Metadata{
+	metaRSSBytes = metric.Metadata{
 		Name:        "sys.rss",
 		Help:        "Current process RSS",
 		Measurement: "RSS",
@@ -288,7 +288,7 @@ type RuntimeStatSampler struct {
 	CPUSysPercent          *metric.GaugeFloat64
 	CPUCombinedPercentNorm *metric.GaugeFloat64
 	// Memory stats.
-	Rss *metric.Gauge
+	RSSBytes *metric.Gauge
 	// File descriptor stats.
 	FDOpen      *metric.Gauge
 	FDSoftLimit *metric.Gauge
@@ -363,7 +363,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSa
 		CPUSysNS:               metric.NewGauge(metaCPUSysNS),
 		CPUSysPercent:          metric.NewGaugeFloat64(metaCPUSysPercent),
 		CPUCombinedPercentNorm: metric.NewGaugeFloat64(metaCPUCombinedPercentNorm),
-		Rss:                    metric.NewGauge(metaRSS),
+		RSSBytes:               metric.NewGauge(metaRSSBytes),
 		HostDiskReadBytes:      metric.NewGauge(metaHostDiskReadBytes),
 		HostDiskReadCount:      metric.NewGauge(metaHostDiskReadCount),
 		HostDiskReadTime:       metric.NewGauge(metaHostDiskReadTime),
@@ -523,7 +523,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 	rsr.CPUCombinedPercentNorm.Update(combinedNormalizedPerc)
 	rsr.FDOpen.Update(int64(fds.Open))
 	rsr.FDSoftLimit.Update(int64(fds.SoftLimit))
-	rsr.Rss.Update(int64(mem.Resident))
+	rsr.RSSBytes.Update(int64(mem.Resident))
 	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
 }
 

@@ -49,8 +49,8 @@ var (
 )
 
 type stats struct {
-	rss                                  int64
-	systemMemory                         int64
+	rssBytes                             int64
+	systemMemoryBytes                    int64
 	lastProfileTime                      time.Time
 	aboveSysMemThresholdSinceLastProfile bool
 	currentTime                          func() time.Time
@@ -70,8 +70,8 @@ type heuristic struct {
 var fractionSystemMemoryHeuristic = heuristic{
 	name: "fraction_system_memory",
 	isTrue: func(s *stats, st *cluster.Settings) (score int64, isTrue bool) {
-		currentValue := s.rss
-		if float64(currentValue)/float64(s.systemMemory) > systemMemoryThresholdFraction.Get(&st.SV) {
+		currentValue := s.rssBytes
+		if float64(currentValue)/float64(s.systemMemoryBytes) > systemMemoryThresholdFraction.Get(&st.SV) {
 			if s.currentTime().Sub(s.lastProfileTime) < minProfileInterval ||
 				s.aboveSysMemThresholdSinceLastProfile {
 				return 0, false
@@ -99,8 +99,8 @@ const memprof = "memprof."
 // MaybeTakeProfile takes a heap profile if an OOM situation is detected using
 // heuristics enabled in o. At max one profile is taken in a call of this
 // function. This function is also responsible for updating stats in o.
-func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, st *cluster.Settings, rssValue int64) {
-	o.rss = rssValue
+func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, st *cluster.Settings, rssBytes int64) {
+	o.rssBytes = rssBytes
 	profileTaken := false
 	for _, h := range o.heuristics {
 		if score, isTrue := h.isTrue(o.stats, st); isTrue {
@@ -122,7 +122,7 @@ func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, st *cluster.Setting
 // NewHeapProfiler returns a HeapProfiler which has
 // systemMemoryThresholdFraction heuristic enabled. dir is the directory in
 // which profiles are stored.
-func NewHeapProfiler(dir string, systemMemory int64) (*HeapProfiler, error) {
+func NewHeapProfiler(dir string, systemMemoryBytes int64) (*HeapProfiler, error) {
 	if dir == "" {
 		return nil, errors.New("directory to store profiles could not be determined")
 	}
@@ -132,8 +132,8 @@ func NewHeapProfiler(dir string, systemMemory int64) (*HeapProfiler, error) {
 	}
 	hp := &HeapProfiler{
 		stats: &stats{
-			systemMemory: systemMemory,
-			currentTime:  timeutil.Now,
+			systemMemoryBytes: systemMemoryBytes,
+			currentTime:       timeutil.Now,
 		},
 		heuristics:      []heuristic{fractionSystemMemoryHeuristic},
 		takeHeapProfile: takeHeapProfile,
