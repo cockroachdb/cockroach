@@ -18,7 +18,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -50,7 +49,7 @@ type BufferingAdder struct {
 // MakeBulkAdder makes a storagebase.BulkAdder that buffers and sorts K/Vs passed
 // to add into SSTs that are then ingested.
 func MakeBulkAdder(
-	db *client.DB,
+	db sender,
 	rangeCache *kv.RangeDescriptorCache,
 	flushBytes, sstBytes int64,
 	timestamp hlc.Timestamp,
