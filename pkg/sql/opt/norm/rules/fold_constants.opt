@@ -133,6 +133,39 @@ $result
 =>
 $result
 
+# FoldIndirection eliminates a constant array indirection operator applied to an
+# array with a statically known number of elements, like this:
+#
+#   ARRAY[i, i+1][1]
+#   ARRAY[1, 2, 3][2]
+#
+# The rule replaces the indirection operator with the referenced array element.
+[FoldIndirection, Normalize]
+(Indirection
+    $input:*
+    $index:* &
+        (IsConstValueOrTuple $index) &
+        (Succeeded $result:(FoldIndirection $input $index))
+)
+=>
+$result
+
+# FoldColumnAccess eliminates a column access operator applied to a tuple value
+# that is statically constructed, like this:
+#
+#   (((i, i+1) as foo, bar)).foo
+#   (((1, 2) as foo, bar)).bar
+#
+# The rule replaces the column access operator with the referenced tuple
+# element.
+[FoldColumnAccess, Normalize]
+(ColumnAccess
+    $input:*
+    $idx:* & (Succeeded $result:(FoldColumnAccess $input $idx))
+)
+=>
+$result
+
 # FoldFunction is similar to FoldBinary, but it involves a function with
 # constant inputs. As with FoldBinary, FoldFunction applies as long as the
 # evaluation would not cause an error. Additionally, only certain functions

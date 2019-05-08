@@ -237,6 +237,60 @@ func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr
 	return c.f.ConstructConstVal(result, types.Bool)
 }
 
+// FoldIndirection evaluates an array indirection operator with constant inputs.
+// It returns the referenced array element as a constant value, or nil if the
+// evaluation results in an error.
+func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) opt.ScalarExpr {
+	// Index is 1-based, so convert to 0-based.
+	indexD := memo.ExtractConstDatum(index)
+	indexI := int(*indexD.(*tree.DInt)) - 1
+
+	// Case 1: The input is a static array constructor.
+	if arr, ok := input.(*memo.ArrayExpr); ok {
+		if indexI >= 0 && indexI < len(arr.Elems) {
+			return arr.Elems[indexI]
+		}
+		return c.f.ConstructNull(arr.Typ.ArrayContents())
+	}
+
+	// Case 2: The input is a constant DArray.
+	if memo.CanExtractConstDatum(input) {
+		inputD := memo.ExtractConstDatum(input)
+		texpr := tree.NewTypedIndirectionExpr(inputD, indexD)
+		result, err := texpr.Eval(c.f.evalCtx)
+		if err == nil {
+			return c.f.ConstructConstVal(result, texpr.ResolvedType())
+		}
+	}
+
+	return nil
+}
+
+// FoldColumnAccess tries to evaluate a tuple column access operator with a
+// constant tuple input (though tuple field values do not need to be constant).
+// It returns the referenced tuple field value, or nil if folding is not
+// possible or results in an error.
+func (c *CustomFuncs) FoldColumnAccess(input opt.ScalarExpr, idx memo.TupleOrdinal) opt.ScalarExpr {
+	// Case 1: The input is a static tuple constructor.
+	if tup, ok := input.(*memo.TupleExpr); ok {
+		return tup.Elems[idx]
+	}
+
+	// Case 2: The input is a constant DTuple.
+	if memo.CanExtractConstDatum(input) {
+		datum := memo.ExtractConstDatum(input)
+
+		colName := input.DataType().TupleLabels()[idx]
+		texpr := tree.NewTypedColumnAccessExpr(datum, colName, int(idx))
+		result, err := texpr.Eval(c.f.evalCtx)
+		if err == nil {
+			return c.f.ConstructConstVal(result, texpr.ResolvedType())
+		}
+	}
+
+	return nil
+}
+
 // FoldFunction evaluates a function expression with constant inputs. It
 // returns a constant expression as long as the function is contained in the
 // FoldFunctionWhitelist, and the evaluation causes no error.
