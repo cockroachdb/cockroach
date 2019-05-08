@@ -89,7 +89,12 @@ func randOriginalString(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
 	if rng.Intn(9) == 0 {
 		l := int(randInt(rng, 26, 50))
 		off := int(randInt(rng, 0, l-8))
-		return []byte(string(randAString(rng, a, off, off)) + originalString + string(randAString(rng, a, l-off-8, l-off-8)))
+		var buf []byte
+		*a, buf = a.Alloc(l, 0 /* extraCap */)
+		copy(buf[:off], randAString(rng, a, off, off))
+		copy(buf[off:off+8], originalString)
+		copy(buf[off+8:], randAString(rng, a, l-off-8, l-off-8))
+		return buf
 	}
 	return randAString(rng, a, 26, 50)
 }
@@ -108,7 +113,11 @@ func randState(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
 // randZip produces a random "zip code" - a 4-digit number plus the constant
 // "11111". See 4.3.2.7.
 func randZip(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
-	return []byte(string(randNString(rng, a, 4, 4)) + "11111")
+	var buf []byte
+	*a, buf = a.Alloc(9, 0 /* extraCap */)
+	copy(buf[:4], randNString(rng, a, 4, 4))
+	copy(buf[4:], `11111`)
+	return buf
 }
 
 // randTax produces a random tax between [0.0000..0.2000]
@@ -123,19 +132,27 @@ func randInt(rng *rand.Rand, min, max int) int64 {
 	return int64(rng.Intn(max-min+1) + min)
 }
 
-// See 4.3.2.3.
-func randCLastSyllables(n int) []byte {
-	result := ""
-	for i := 0; i < 3; i++ {
-		result = cLastTokens[n%10] + result
-		n /= 10
-	}
-	return []byte(result)
+// randCLastSyllables returns a customer last name string generated according to
+// the table in 4.3.2.3. Given a number between 0 and 999, each of the three
+// syllables is determined by the corresponding digit in the three digit
+// representation of the number. For example, the number 371 generates the name
+// PRICALLYOUGHT, and the number 40 generates the name BARPRESBAR.
+func randCLastSyllables(n int, a *bufalloc.ByteAllocator) []byte {
+	const scratchLen = 3 * 5 // 3 entries from cLastTokens * max len of an entry
+	var buf []byte
+	*a, buf = a.Alloc(scratchLen, 0 /* extraCap */)
+	buf = buf[:0]
+	buf = append(buf, cLastTokens[n/100]...)
+	n = n % 100
+	buf = append(buf, cLastTokens[n/10]...)
+	n = n % 10
+	buf = append(buf, cLastTokens[n]...)
+	return buf
 }
 
 // See 4.3.2.3.
-func randCLast(rng *rand.Rand) []byte {
-	return randCLastSyllables(((rng.Intn(256) | rng.Intn(1000)) + cLoad) % 1000)
+func randCLast(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
+	return randCLastSyllables(((rng.Intn(256)|rng.Intn(1000))+cLoad)%1000, a)
 }
 
 // Return a non-uniform random customer ID. See 2.1.6.
