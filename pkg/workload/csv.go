@@ -150,6 +150,7 @@ func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
 	case types.Float64:
 		return strconv.FormatFloat(col.Float64()[rowIdx], 'f', -1, 64)
 	case types.Bytes:
+		// See the HACK comment in ColBatchToRows.
 		bytes := col.Bytes()[rowIdx]
 		return *(*string)(unsafe.Pointer(&bytes))
 	}

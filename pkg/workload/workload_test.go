@@ -17,6 +17,7 @@ package workload_test
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 )
@@ -86,33 +88,74 @@ func TestSetup(t *testing.T) {
 func TestSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const rows, payloadBytes, concurrency = 10, 0, 10
-	tests := []int{1, 2, 3, 4, 10}
-
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer s.Stopper().Stop(ctx)
 	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
 
-	for _, ranges := range tests {
+	for _, ranges := range []int{1, 2, 3, 4, 10} {
+
+		tables := []workload.Table{
+			{
+				Name:   `ints`,
+				Schema: `(a INT PRIMARY KEY)`,
+				Splits: workload.Tuples(ranges-1, func(i int) []interface{} {
+					return []interface{}{i}
+				}),
+			},
+			{
+				Name:   `floats`,
+				Schema: `(a FLOAT PRIMARY KEY)`,
+				Splits: workload.Tuples(ranges-1, func(i int) []interface{} {
+					return []interface{}{float64(i)}
+				}),
+			},
+			{
+				Name:   `strings`,
+				Schema: `(a STRING PRIMARY KEY)`,
+				Splits: workload.Tuples(ranges-1, func(i int) []interface{} {
+					return []interface{}{strconv.Itoa(i)}
+				}),
+			},
+			{
+				Name:   `bytes`,
+				Schema: `(a BYTES PRIMARY KEY)`,
+				Splits: workload.Tuples(ranges-1, func(i int) []interface{} {
+					return []interface{}{strconv.Itoa(i)}
+				}),
+			},
+			{
+				Name:   `uuids`,
+				Schema: `(a UUID PRIMARY KEY)`,
+				Splits: workload.Tuples(ranges-1, func(i int) []interface{} {
+					u, err := uuid.NewV4()
+					if err != nil {
+						panic(err)
+					}
+					return []interface{}{u.String()}
+				}),
+			},
+		}
+
 		t.Run(fmt.Sprintf("ranges=%d", ranges), func(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
-			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
+			for _, table := range tables {
+				sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, table.Name))
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, table.Name, table.Schema))
 
-			gen := bank.FromConfig(rows, payloadBytes, ranges)
-			table := gen.Tables()[0]
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, table.Name, table.Schema))
+				const concurrency = 10
+				if err := workload.Split(ctx, db, table, concurrency); err != nil {
+					t.Fatalf("%+v", err)
+				}
 
-			if err := workload.Split(ctx, db, table, concurrency); err != nil {
-				t.Fatalf("%+v", err)
-			}
-
-			var actual int
-			sqlDB.QueryRow(
-				t, `SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE test.bank]`,
-			).Scan(&actual)
-			if ranges != actual {
-				t.Errorf(`expected %d got %d`, ranges, actual)
+				countRangesQ := fmt.Sprintf(
+					`SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE test.%s]`, table.Name,
+				)
+				var actual int
+				sqlDB.QueryRow(t, countRangesQ).Scan(&actual)
+				if ranges != actual {
+					t.Errorf(`expected %d got %d`, ranges, actual)
+				}
 			}
 		})
 	}
