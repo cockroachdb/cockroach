@@ -900,6 +900,21 @@ define AggFilter {
     Filter ScalarExpr
 }
 
+# Windows is a set of window functions to be computed in the context of a
+# Window expression.
+[Scalar, List]
+define Windows {
+}
+
+# WindowsItem is a single window function to be computed in the context of a
+# Window expression.
+[Scalar, ListItem]
+define WindowsItem {
+  Function ScalarExpr
+
+  _ ColPrivate
+}
+
 # Rank computes the position of a row relative to an ordering, with same-valued
 # rows receiving the same value.
 [Scalar, Window]

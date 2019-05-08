@@ -817,29 +817,31 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 		windowRender: make([]tree.TypedExpr, len(wi.Cols)),
 	}
 
-	argsIdxs := make([]uint32, len(wi.ArgIdxs))
-	for i := range argsIdxs {
-		argsIdxs[i] = uint32(wi.ArgIdxs[i])
-	}
-
 	partitionIdxs := make([]int, len(wi.Partition))
 	for i, idx := range wi.Partition {
 		partitionIdxs[i] = int(idx)
 	}
 
-	holder := &windowFuncHolder{
-		expr:           wi.Expr,
-		args:           wi.Expr.Exprs,
-		argsIdxs:       argsIdxs,
-		window:         p,
-		filterColIdx:   noFilterIdx,
-		outputColIdx:   wi.Idx,
-		partitionIdxs:  partitionIdxs,
-		columnOrdering: wi.Ordering,
+	p.funcs = make([]*windowFuncHolder, len(wi.Exprs))
+	for i := range wi.Exprs {
+		argsIdxs := make([]uint32, len(wi.ArgIdxs[i]))
+		for j := range argsIdxs {
+			argsIdxs[j] = uint32(wi.ArgIdxs[i][j])
+		}
+
+		p.funcs[i] = &windowFuncHolder{
+			expr:           wi.Exprs[i],
+			args:           wi.Exprs[i].Exprs,
+			argsIdxs:       argsIdxs,
+			window:         p,
+			filterColIdx:   noFilterIdx,
+			outputColIdx:   wi.OutputIdxs[i],
+			partitionIdxs:  partitionIdxs,
+			columnOrdering: wi.Ordering,
+		}
+
+		p.windowRender[wi.OutputIdxs[i]] = p.funcs[i]
 	}
-	p.funcs = []*windowFuncHolder{holder}
-	// All other indices should be nil to indicate passthrough.
-	p.windowRender[wi.Idx] = holder
 
 	return p, nil
 }
