@@ -23,8 +23,8 @@ import (
 )
 
 func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
-	idx := s.schema.stmts.Next()
-	return statements[idx].fn(s)
+	idx := s.schema.stmtSampler.Next()
+	return s.schema.statements[idx].fn(s)
 }
 
 func (s *scope) makeSelectStmt(
@@ -75,42 +75,33 @@ func (s *scope) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr
 }
 
 var (
-	statements                          []statementWeight
-	tableExprs                          []tableExprWeight
-	selectStmts                         []selectStmtWeight
-	statementWeights                    []int
-	tableExprWeights, selectStmtWeights []int
-)
-
-func init() {
-	statements = []statementWeight{
+	mutatingStatements = statementWeights{
 		{10, makeInsert},
-		{10, makeSelect},
 		{10, makeDelete},
 		{10, makeUpdate},
 		{1, makeAlter},
 	}
-	statementWeights = func() []int {
-		m := make([]int, len(statements))
-		for i, s := range statements {
-			m[i] = s.weight
-		}
-		return m
-	}()
-	tableExprs = []tableExprWeight{
-		{2, makeJoinExpr},
+	nonMutatingStatements = statementWeights{
+		{10, makeSelect},
+	}
+	allStatements = append(mutatingStatements, nonMutatingStatements...)
+
+	mutatingTableExprs = tableExprWeights{
 		{1, makeInsertReturning},
 		{1, makeDeleteReturning},
 		{1, makeUpdateReturning},
+	}
+	nonMutatingTableExprs = tableExprWeights{
+		{2, makeJoinExpr},
 		{3, makeSchemaTable},
 	}
-	tableExprWeights = func() []int {
-		m := make([]int, len(tableExprs))
-		for i, s := range tableExprs {
-			m[i] = s.weight
-		}
-		return m
-	}()
+	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
+
+	selectStmts       []selectStmtWeight
+	selectStmtWeights []int
+)
+
+func init() {
 	selectStmts = []selectStmtWeight{
 		{1, makeValues},
 		{1, makeSetOp},
@@ -125,15 +116,33 @@ func init() {
 	}()
 }
 
+func (ws statementWeights) Weights() []int {
+	m := make([]int, len(ws))
+	for i, w := range ws {
+		m[i] = w.weight
+	}
+	return m
+}
+
+func (ws tableExprWeights) Weights() []int {
+	m := make([]int, len(ws))
+	for i, w := range ws {
+		m[i] = w.weight
+	}
+	return m
+}
+
 type (
 	statementWeight struct {
 		weight int
 		fn     func(s *scope) (tree.Statement, bool)
 	}
-	tableExprWeight struct {
+	statementWeights []statementWeight
+	tableExprWeight  struct {
 		weight int
 		fn     func(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
 	}
+	tableExprWeights []tableExprWeight
 	selectStmtWeight struct {
 		weight int
 		fn     selectStmt
@@ -151,8 +160,8 @@ type (
 func makeTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
 	if s.canRecurse() {
 		for i := 0; i < retryCount; i++ {
-			idx := s.schema.tableExprs.Next()
-			expr, exprRefs, ok := tableExprs[idx].fn(s, refs, forJoin)
+			idx := s.schema.tableExprSampler.Next()
+			expr, exprRefs, ok := s.schema.tableExprs[idx].fn(s, refs, forJoin)
 			if ok {
 				return expr, exprRefs, ok
 			}
