@@ -250,25 +250,40 @@ func (rq *replicateQueue) process(
 		MaxRetries:     5,
 	}
 
+	desc, _ := repl.DescAndZone()
+
 	// Use a retry loop in order to backoff in the case of preemptive
 	// snapshot errors, usually signaling that a rebalancing
 	// reservation could not be made with the selected target.
+RETRY:
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */); err != nil {
-			if IsSnapshotError(err) {
-				// If ChangeReplicas failed because the preemptive snapshot failed, we
-				// log the error but then return success indicating we should retry the
-				// operation. The most likely causes of the preemptive snapshot failing are
-				// a declined reservation or the remote node being unavailable. In either
-				// case we don't want to wait another scanner cycle before reconsidering
-				// the range.
-				log.Info(ctx, err)
-				continue
+		processCount := 0
+		for {
+			if requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */); err != nil {
+				if IsSnapshotError(err) {
+					// If ChangeReplicas failed because the preemptive snapshot failed, we
+					// log the error but then return success indicating we should retry the
+					// operation. The most likely causes of the preemptive snapshot failing are
+					// a declined reservation or the remote node being unavailable. In either
+					// case we don't want to wait another scanner cycle before reconsidering
+					// the range.
+					log.Info(ctx, err)
+					continue RETRY
+				}
+				return err
+			} else if requeue {
+				processCount++
+				if processCount > 3 {
+					log.Infof(ctx, "Exhausted re-processing attempts #%v for %+v", processCount, desc)
+					// Enqueue this replica again to see if there are more changes to be made.
+					rq.MaybeAddAsync(ctx, repl, rq.store.Clock().Now())
+				} else {
+					log.Infof(ctx, "Re-processing #%v for %+v", processCount, desc)
+					// Try to pro
+					continue
+				}
 			}
-			return err
-		} else if requeue {
-			// Enqueue this replica again to see if there are more changes to be made.
-			rq.MaybeAddAsync(ctx, repl, rq.store.Clock().Now())
+			break
 		}
 		if testingAggressiveConsistencyChecks {
 			if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
@@ -297,7 +312,9 @@ func (rq *replicateQueue) processOneChange(
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo); action {
+	action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo)
+	log.Infof(ctx, "Computed action %+v for %+v", action, desc)
+	switch action {
 	case AllocatorNoop:
 		break
 	case AllocatorAdd:
