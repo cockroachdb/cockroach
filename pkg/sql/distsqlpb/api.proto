@@ -49,6 +49,19 @@ message SetupFlowRequest {
   optional bool TraceKV = 8 [(gogoproto.nullable) = false];
 }
 
+// FlowSpec describes a "flow" which is a subgraph of a distributed SQL
+// computation consisting of processors and streams.
+message FlowSpec {
+  optional bytes flow_id = 1 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "FlowID",
+                              (gogoproto.customtype) = "FlowID"];
+  // The NodeID of the gateway that planned this Flow. Used for debugging.
+  optional int32 gateway = 3 [(gogoproto.nullable) = false,
+                              (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  repeated ProcessorSpec processors = 2 [(gogoproto.nullable) = false];
+}
+
 // EvalContext is used to marshall some planner.EvalContext members.
 message EvalContext {
   optional int64 stmtTimestampNanos = 1 [(gogoproto.nullable) = false];
