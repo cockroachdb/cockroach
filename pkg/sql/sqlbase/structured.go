@@ -588,11 +588,15 @@ func (desc *TableDescriptor) AllNonDropIndexes() []*IndexDescriptor {
 // "active" ones on the table descriptor which are being enforced for all
 // writes, and "inactive" ones queued in the mutations list.
 func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_CheckConstraint {
-	// For now, a check constraint is either in the mutations list or Validated.
-	// If it shows up twice after combining those two slices, it's a duplicate.
+	// A check constraint could be both on the table descriptor and in the
+	// list of mutations while the constraint is validated for existing rows. In
+	// that case, the constraint is in the Validating state, and we avoid
+	// including it twice. (Note that even though unvalidated check constraints
+	// cannot be added as of 19.1, they can still exist if they were created under
+	// previous versions.)
 	checks := make([]*TableDescriptor_CheckConstraint, 0, len(desc.Checks)+len(desc.Mutations))
 	for _, c := range desc.Checks {
-		if c.Validity == ConstraintValidity_Validated {
+		if c.Validity != ConstraintValidity_Validating {
 			checks = append(checks, c)
 		}
 	}
