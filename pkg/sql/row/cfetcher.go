@@ -1005,10 +1005,16 @@ func (rf *CFetcher) processValueTuple(
 ) (prettyKey string, prettyValue string, err error) {
 	return rf.processValueBytes(ctx, table, tupleBytes, prettyKeyPrefix)
 }
+
 func (rf *CFetcher) fillNulls() error {
 	table := &rf.table
 	if rf.machine.remainingValueColsByIdx.Empty() {
 		return nil
+	}
+	// Composite index columns may have a key but no value. Remove them so we
+	// don't incorrectly mark them as null.
+	for _, idx := range table.indexColOrdinals {
+		rf.machine.remainingValueColsByIdx.Remove(idx)
 	}
 	for i, ok := rf.machine.remainingValueColsByIdx.Next(0); ok; i, ok = rf.machine.remainingValueColsByIdx.Next(i + 1) {
 		if !table.cols[i].Nullable {
