@@ -19,14 +19,14 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/net"
@@ -226,12 +226,6 @@ var (
 	}
 )
 
-type memStats struct {
-	goAllocated uint64
-	goIdle      uint64
-	goTotal     uint64
-}
-
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
 // We will not necessarily have implementations for all builds, so check for nil first.
 // Returns the following:
@@ -260,9 +254,6 @@ type RuntimeStatSampler struct {
 		disk        diskStats
 		net         net.IOCountersStat
 	}
-
-	// Memory stats that are updated atomically by SampleMemStats.
-	memStats unsafe.Pointer
 
 	initialDiskCounters diskStats
 	initialNetCounters  net.IOCountersStat
@@ -394,7 +385,13 @@ func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSa
 //
 // This method should be called periodically by a higher level system in order
 // to keep runtime statistics current.
-func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
+//
+// SampleEnvironment takes GoMemStats as input (so that it can be collected
+// separately, on another schedule), and returns MemStats (which augments and
+// includes the GoMemStats).
+func (rsr *RuntimeStatSampler) SampleEnvironment(
+	ctx context.Context, ms base.GoMemStats,
+) base.MemStats {
 	// Note that debug.ReadGCStats() does not suffer the same problem as
 	// runtime.ReadMemStats(). The only way you can know that is by reading the
 	// source.
@@ -490,18 +487,19 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 		}
 	}
 
-	ms := (*memStats)(atomic.LoadPointer(&rsr.memStats))
-	if ms == nil {
-		ms = &memStats{}
-	}
-
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
-	log.Infof(ctx, "runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total, "+
+	goMemStatsStale := timeutil.Now().Sub(ms.Collected) > time.Second
+	var staleMsg = ""
+	if goMemStatsStale {
+		staleMsg = "(stale)"
+	}
+	log.Infof(ctx, "runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total%s, "+
 		"%s/%s CGO alloc/total, %.1f CGO/sec, %.1f/%.1f %%(u/s)time, %.1f %%gc (%dx), "+
 		"%s/%s (r/w)net",
 		humanize.IBytes(mem.Resident), numGoroutine,
-		humanize.IBytes(ms.goAllocated), humanize.IBytes(ms.goIdle), humanize.IBytes(ms.goTotal),
+		humanize.IBytes(ms.GoAllocated), humanize.IBytes(ms.GoIdle), humanize.IBytes(ms.GoTotal),
+		staleMsg,
 		humanize.IBytes(uint64(cgoAllocated)), humanize.IBytes(uint64(cgoTotal)),
 		cgoRate, 100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount,
 		humanize.IBytes(deltaNet.BytesRecv), humanize.IBytes(deltaNet.BytesSent),
@@ -525,24 +523,22 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 	rsr.FDSoftLimit.Update(int64(fds.SoftLimit))
 	rsr.RSSBytes.Update(int64(mem.Resident))
 	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
+
+	return base.MemStats{
+		Go:       ms,
+		RSSBytes: mem.Resident,
+	}
 }
 
 // SampleMemStats queries the runtime system for memory metrics, updating the
-// memory metric gauges and making these metrics available for logging by
-// SampleEnvironment.
+// memory metric gauges and returning the data.
 //
 // This method should be called periodically by a higher level system in order
-// to keep runtime statistics current. It is distinct from SampleEnvironment
-// due to a limitation in the Go runtime which causes runtime.ReadMemStats() to
-// block waiting for a GC cycle to finish which can take upwards of 10 seconds
-// on a large heap.
-func (rsr *RuntimeStatSampler) SampleMemStats(ctx context.Context) {
-	// Record memory and call stats from the runtime package. It might be useful
-	// to call ReadMemStats() more often, but it stops the world while collecting
-	// stats so shouldn't be called too often. For a similar reason, we want this
-	// call to come first because ReadMemStats() needs to wait for an existing GC
-	// to finish which can take multiple seconds on large heaps.
-	//
+// to keep runtime statistics current. It is distinct from SampleEnvironment()
+// because, as of Go 1.12, runtime.ReadMemStats() "stops the world" and that
+// requires first waiting for any current GC run to finish. With a large heap, a
+// single GC can take many seconds (https://github.com/golang/go/issues/19812).
+func (rsr *RuntimeStatSampler) SampleMemStats(ctx context.Context) base.GoMemStats {
 	// NOTE: the MemStats fields do not get decremented when memory is released,
 	// to get accurate numbers, be sure to subtract. eg: ms.Sys - ms.HeapReleased
 	// for current memory reserved.
@@ -551,17 +547,15 @@ func (rsr *RuntimeStatSampler) SampleMemStats(ctx context.Context) {
 
 	goAllocated := ms.Alloc
 	goTotal := ms.Sys - ms.HeapReleased
-	atomic.StorePointer(&rsr.memStats, unsafe.Pointer(&memStats{
-		goAllocated: goAllocated,
-		goIdle:      ms.HeapIdle - ms.HeapReleased,
-		goTotal:     goTotal,
-	}))
-
 	rsr.GoAllocBytes.Update(int64(goAllocated))
 	rsr.GoTotalBytes.Update(int64(goTotal))
 
-	if log.V(2) {
-		log.Infof(ctx, "memstats: %+v", ms)
+	log.VErrEventf(ctx, 2, "memstats: %+v", ms)
+	return base.GoMemStats{
+		GoAllocated: goAllocated,
+		GoIdle:      ms.HeapIdle - ms.HeapReleased,
+		GoTotal:     goTotal,
+		Collected:   timeutil.Now(),
 	}
 }
 
