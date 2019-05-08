@@ -57,6 +57,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -3003,6 +3004,14 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 		}
 	} else if req.RangeID == h.rangeID {
 		if h.dropReq == nil || h.dropReq(req) {
+			log.Infof(
+				ctx,
+				"dropping Raft message %s",
+				raft.DescribeMessage(req.Message, func([]byte) string {
+					return "<omitted>"
+				}),
+			)
+
 			return nil
 		}
 	}
@@ -3111,6 +3120,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	beforeRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
 
 	// Restore Raft traffic to the LHS on store2.
+	log.Infof(ctx, "restored traffic to store 2")
 	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
 		rangeID:            aRepl0.RangeID,
 		RaftMessageHandler: store2,
