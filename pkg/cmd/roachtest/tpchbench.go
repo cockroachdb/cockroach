@@ -45,6 +45,7 @@ type tpchBenchSpec struct {
 	ScaleFactor       int
 	benchType         tpchBench
 	durationInMinutes int
+	concurrency       int
 }
 
 // runTPCHBench runs sets of queries against CockroachDB clusters in different
@@ -90,7 +91,8 @@ func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 		// know the number of queries in file - probably just add it as the first
 		// non-comment line of the queries' files).
 		cmd := fmt.Sprintf(
-			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s --duration=%dm {pgurl%s} --histograms=logs/stats.json",
+			"./workload run querybench --db=tpch --concurrency=%d --query-file=%s --duration=%dm {pgurl%s} --histograms=logs/stats.json",
+			b.concurrency,
 			filename,
 			b.durationInMinutes,
 			roachNodes,
@@ -165,7 +167,12 @@ func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
 		b.benchType.String(),
 		fmt.Sprintf("nodes=%d", b.Nodes),
 		fmt.Sprintf("cpu=%d", b.CPUs),
-		fmt.Sprintf("sf=%d", b.ScaleFactor),
+	}
+	if b.ScaleFactor != 1 {
+		nameParts = append(nameParts, fmt.Sprintf("sf=%d", b.ScaleFactor))
+	}
+	if b.concurrency != 1 {
+		nameParts = append(nameParts, fmt.Sprintf("conn=%d", b.concurrency))
 	}
 
 	// Add a load generator node.
@@ -189,6 +196,7 @@ func registerTPCHBench(r *registry) {
 			ScaleFactor:       1,
 			benchType:         sql20,
 			durationInMinutes: 5,
+			concurrency:       1,
 		},
 		{
 			Nodes:             3,
@@ -196,6 +204,24 @@ func registerTPCHBench(r *registry) {
 			ScaleFactor:       1,
 			benchType:         tpch,
 			durationInMinutes: 30,
+			concurrency:       1,
+		},
+	}
+
+	for _, b := range specs {
+		registerTPCHBenchSpec(r, b)
+	}
+}
+
+func registerTPCHHighConcurrency(r *registry) {
+	specs := []tpchBenchSpec{
+		{
+			Nodes:             3,
+			CPUs:              4,
+			ScaleFactor:       1,
+			benchType:         sql20,
+			durationInMinutes: 5,
+			concurrency:       1000,
 		},
 	}
 
