@@ -448,7 +448,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	serverCfg.GoroutineDumpDirName = logOutputDirectory()
-	serverCfg.HeapProfileDirName = logOutputDirectory()
+
+	heapProfileDir := filepath.Join(logOutputDirectory(), base.HeapProfileDir)
+	serverCfg.HeapProfileDirName = heapProfileDir
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
 	grpcutil.SetSeverity(log.Severity_WARNING)

@@ -37,4 +37,8 @@ const (
 	// ChunkRaftCommandThresholdBytes is the threshold in bytes at which
 	// to chunk or otherwise limit commands being sent to Raft.
 	ChunkRaftCommandThresholdBytes = 256 * 1000
+
+	// HeapProfileDir is the directory name where the heap profiler stores profiles
+	// when there is a potential OOM situation.
+	HeapProfileDir = "heap_profiler"
 )
