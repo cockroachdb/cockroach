@@ -179,7 +179,6 @@ func LoadCSV(
 	resultRows *RowResultWriter,
 	tables map[string]*sqlbase.TableDescriptor,
 	from []string,
-	to string,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	splitSize int64,
@@ -200,7 +199,6 @@ func LoadCSV(
 	sstSpecs := make([]distsqlpb.SSTWriterSpec, len(nodes))
 	for i := range nodes {
 		sstSpecs[i] = distsqlpb.SSTWriterSpec{
-			Destination:   to,
 			WalltimeNanos: walltime,
 		}
 	}

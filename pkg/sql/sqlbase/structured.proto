@@ -507,6 +507,8 @@ message TableDescriptor {
     ADD = 1;
     // Descriptor is being dropped.
     DROP = 2;
+    // Descriptor is being ingested.
+    IMPORTING = 3;
   }
   optional State state = 19 [(gogoproto.nullable) = false];
 

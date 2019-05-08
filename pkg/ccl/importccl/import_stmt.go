@@ -9,37 +9,28 @@
 package importccl
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"io/ioutil"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -60,7 +51,6 @@ const (
 	mysqlOutfileEnclose  = "fields_enclosed_by"
 	mysqlOutfileEscape   = "fields_escaped_by"
 
-	importOptionTransform  = "transform"
 	importOptionSSTSize    = "sstsize"
 	importOptionDecompress = "decompress"
 	importOptionOversample = "oversample"
@@ -85,7 +75,6 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	mysqlOutfileEnclose:  sql.KVStringOptRequireValue,
 	mysqlOutfileEscape:   sql.KVStringOptRequireValue,
 
-	importOptionTransform:  sql.KVStringOptRequireValue,
 	importOptionSSTSize:    sql.KVStringOptRequireValue,
 	importOptionDecompress: sql.KVStringOptRequireValue,
 	importOptionOversample: sql.KVStringOptRequireValue,
@@ -95,308 +84,6 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	importOptionDirectIngest: sql.KVStringOptRequireNoValue,
 
 	pgMaxRowSize: sql.KVStringOptRequireValue,
-}
-
-const (
-	// We need to choose arbitrary database and table IDs. These aren't important,
-	// but they do match what would happen when creating a new database and
-	// table on an empty cluster.
-	defaultCSVParentID sqlbase.ID = keys.MinNonPredefinedUserDescID
-	defaultCSVTableID  sqlbase.ID = defaultCSVParentID + 1
-)
-
-func readCreateTableFromStore(
-	ctx context.Context, filename string, settings *cluster.Settings,
-) (*tree.CreateTable, error) {
-	store, err := storageccl.ExportStorageFromURI(ctx, filename, settings)
-	if err != nil {
-		return nil, err
-	}
-	defer store.Close()
-	reader, err := store.ReadFile(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-	tableDefStr, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-	stmt, err := parser.ParseOne(string(tableDefStr))
-	if err != nil {
-		return nil, err
-	}
-	create, ok := stmt.AST.(*tree.CreateTable)
-	if !ok {
-		return nil, errors.New("expected CREATE TABLE statement in table file")
-	}
-	return create, nil
-}
-
-type fkHandler struct {
-	allowed  bool
-	skip     bool
-	resolver fkResolver
-}
-
-// NoFKs is used by formats that do not support FKs.
-var NoFKs = fkHandler{resolver: make(fkResolver)}
-
-// MakeSimpleTableDescriptor creates a MutableTableDescriptor from a CreateTable parse
-// node without the full machinery. Many parts of the syntax are unsupported
-// (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
-// but this is enough for our csv IMPORT and for some unit tests.
-//
-// Any occurrence of SERIAL in the column definitions is handled using
-// the CockroachDB legacy behavior, i.e. INT NOT NULL DEFAULT
-// unique_rowid().
-func MakeSimpleTableDescriptor(
-	ctx context.Context,
-	st *cluster.Settings,
-	create *tree.CreateTable,
-	parentID, tableID sqlbase.ID,
-	fks fkHandler,
-	walltime int64,
-) (*sqlbase.MutableTableDescriptor, error) {
-	create.HoistConstraints()
-	if create.IfNotExists {
-		return nil, pgerror.Unimplemented("import.if-no-exists", "unsupported IF NOT EXISTS")
-	}
-	if create.Interleave != nil {
-		return nil, pgerror.Unimplemented("import.interleave", "interleaved not supported")
-	}
-	if create.AsSource != nil {
-		return nil, pgerror.Unimplemented("import.create-as", "CREATE AS not supported")
-	}
-
-	filteredDefs := create.Defs[:0]
-	for i := range create.Defs {
-		switch def := create.Defs[i].(type) {
-		case *tree.CheckConstraintTableDef,
-			*tree.FamilyTableDef,
-			*tree.IndexTableDef,
-			*tree.UniqueConstraintTableDef:
-			// ignore
-		case *tree.ColumnTableDef:
-			if def.Computed.Expr != nil {
-				return nil, pgerror.Unimplementedf("import.computed", "computed columns not supported: %s", tree.AsString(def))
-			}
-
-			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, &create.Table); err != nil {
-				return nil, err
-			}
-
-		case *tree.ForeignKeyConstraintTableDef:
-			if !fks.allowed {
-				return nil, pgerror.Unimplemented("import.fk", "this IMPORT format does not support foreign keys")
-			}
-			if fks.skip {
-				continue
-			}
-			// Strip the schema/db prefix.
-			def.Table = tree.MakeUnqualifiedTableName(def.Table.TableName)
-
-		default:
-			return nil, pgerror.Unimplementedf(fmt.Sprintf("import.%T", def), "unsupported table definition: %s", tree.AsString(def))
-		}
-		// only append this def after we make it past the error checks and continues
-		filteredDefs = append(filteredDefs, create.Defs[i])
-	}
-	create.Defs = filteredDefs
-
-	semaCtx := tree.SemaContext{}
-	evalCtx := tree.EvalContext{
-		Context:  ctx,
-		Sequence: &importSequenceOperators{},
-	}
-	affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
-
-	tableDesc, err := sql.MakeTableDesc(
-		ctx,
-		nil, /* txn */
-		fks.resolver,
-		st,
-		create,
-		parentID,
-		tableID,
-		hlc.Timestamp{WallTime: walltime},
-		sqlbase.NewDefaultPrivilegeDescriptor(),
-		affected,
-		&semaCtx,
-		&evalCtx,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err := fixDescriptorFKState(tableDesc.TableDesc()); err != nil {
-		return nil, err
-	}
-
-	return &tableDesc, nil
-}
-
-// fixDescriptorFKState repairs validity and table states set during descriptor
-// creation. sql.MakeTableDesc and ResolveFK set the table to the ADD state
-// and mark references an validated. This function sets the table to PUBLIC
-// and the FKs to unvalidated.
-func fixDescriptorFKState(tableDesc *sqlbase.TableDescriptor) error {
-	tableDesc.State = sqlbase.TableDescriptor_PUBLIC
-	return tableDesc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
-		if idx.ForeignKey.IsSet() {
-			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
-		}
-		return nil
-	})
-}
-
-var (
-	errSequenceOperators = errors.New("sequence operations unsupported")
-	errSchemaResolver    = errors.New("schema resolver unsupported")
-)
-
-// Implements the tree.SequenceOperators interface.
-type importSequenceOperators struct {
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *importSequenceOperators) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
-	return parser.ParseTableName(sql)
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *importSequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errSequenceOperators
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *importSequenceOperators) LookupSchema(
-	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *importSequenceOperators) IncrementSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *importSequenceOperators) GetLatestValueInSessionForSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *importSequenceOperators) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
-) error {
-	return errSequenceOperators
-}
-
-type fkResolver map[string]*sqlbase.MutableTableDescriptor
-
-var _ sql.SchemaResolver = fkResolver{}
-
-// Implements the sql.SchemaResolver interface.
-func (r fkResolver) Txn() *client.Txn {
-	return nil
-}
-
-// Implements the sql.SchemaResolver interface.
-func (r fkResolver) LogicalSchemaAccessor() sql.SchemaAccessor {
-	return nil
-}
-
-// Implements the sql.SchemaResolver interface.
-func (r fkResolver) CurrentDatabase() string {
-	return ""
-}
-
-// Implements the sql.SchemaResolver interface.
-func (r fkResolver) CurrentSearchPath() sessiondata.SearchPath {
-	return sessiondata.SearchPath{}
-}
-
-// Implements the sql.SchemaResolver interface.
-func (r fkResolver) CommonLookupFlags(required bool) sql.CommonLookupFlags {
-	return sql.CommonLookupFlags{}
-}
-
-// Implements the sql.SchemaResolver interface.
-func (r fkResolver) ObjectLookupFlags(required bool, requireMutable bool) sql.ObjectLookupFlags {
-	return sql.ObjectLookupFlags{}
-}
-
-// Implements the tree.TableNameExistingResolver interface.
-func (r fkResolver) LookupObject(
-	ctx context.Context, requireMutable bool, dbName, scName, obName string,
-) (found bool, objMeta tree.NameResolutionResult, err error) {
-	if scName != "" {
-		obName = strings.TrimPrefix(obName, scName+".")
-	}
-	tbl, ok := r[obName]
-	if ok {
-		return true, tbl, nil
-	}
-	names := make([]string, 0, len(r))
-	for k := range r {
-		names = append(names, k)
-	}
-	suggestions := strings.Join(names, ",")
-	return false, nil, errors.Errorf("referenced table %q not found in tables being imported (%s)", obName, suggestions)
-}
-
-// Implements the tree.TableNameTargetResolver interface.
-func (r fkResolver) LookupSchema(
-	ctx context.Context, dbName, scName string,
-) (found bool, scMeta tree.SchemaMeta, err error) {
-	return false, nil, errSchemaResolver
-}
-
-// Implements the sql.SchemaResolver interface.
-func (r fkResolver) LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableEntry, error) {
-	return row.TableEntry{}, errSchemaResolver
-}
-
-const csvDatabaseName = "csv"
-
-func finalizeCSVBackup(
-	ctx context.Context,
-	backupDesc *backupccl.BackupDescriptor,
-	parentID sqlbase.ID,
-	tables map[string]*sqlbase.TableDescriptor,
-	es storageccl.ExportStorage,
-	execCfg *sql.ExecutorConfig,
-) error {
-	sort.Sort(backupccl.BackupFileDescriptors(backupDesc.Files))
-
-	backupDesc.Spans = make([]roachpb.Span, 0, len(tables))
-	backupDesc.Descriptors = make([]sqlbase.Descriptor, 1, len(tables)+1)
-	backupDesc.Descriptors[0] = *sqlbase.WrapDescriptor(
-		&sqlbase.DatabaseDescriptor{Name: csvDatabaseName, ID: parentID},
-	)
-
-	for _, table := range tables {
-		backupDesc.Spans = append(backupDesc.Spans, table.TableSpan())
-		backupDesc.Descriptors = append(backupDesc.Descriptors, *sqlbase.WrapDescriptor(table))
-	}
-
-	backupDesc.FormatVersion = backupccl.BackupFormatInitialVersion
-	backupDesc.BuildInfo = build.GetInfo()
-	if execCfg != nil {
-		backupDesc.NodeID = execCfg.NodeID.Get()
-		backupDesc.ClusterID = execCfg.ClusterID()
-	}
-	descBuf, err := protoutil.Marshal(backupDesc)
-	if err != nil {
-		return err
-	}
-	return es.WriteFile(ctx, backupccl.BackupDescriptorName, bytes.NewReader(descBuf))
 }
 
 func importJobDescription(
@@ -415,14 +102,6 @@ func importJobDescription(
 	}
 	stmt.Options = nil
 	for k, v := range opts {
-		switch k {
-		case importOptionTransform:
-			clean, err := storageccl.SanitizeExportStorageURI(v)
-			if err != nil {
-				return "", err
-			}
-			v = clean
-		}
 		opt := tree.KVOption{Key: tree.Name(k)}
 		val := importOptionExpectValues[k] == sql.KVStringOptRequireValue
 		val = val || (importOptionExpectValues[k] == sql.KVStringOptAny && len(v) > 0)
@@ -488,13 +167,9 @@ func importPlanHook(
 		}
 
 		table := importStmt.Table
-		transform := opts[importOptionTransform]
 
 		var parentID sqlbase.ID
-		if transform != "" {
-			// If we're not ingesting the data, we don't care what DB we pick.
-			parentID = defaultCSVParentID
-		} else if table != nil {
+		if table != nil {
 			// We have a target table, so it might specify a DB in its name.
 			found, descI, err := table.ResolveTarget(ctx,
 				p, p.SessionData().Database, p.SessionData().SearchPath)
@@ -706,14 +381,10 @@ func importPlanHook(
 				return errors.Errorf("Using %q requires all nodes to be upgraded to %s",
 					importOptionDirectIngest, cluster.VersionByKey(cluster.VersionDirectImport))
 			}
-			if transform != "" {
-				return errors.Errorf("cannot use %q and %q options together", importOptionDirectIngest, importOptionTransform)
-			}
 		}
 
 		var tableDescs []*sqlbase.TableDescriptor
 		var jobDesc string
-		var names []string
 		seqVals := make(map[sqlbase.ID]int64)
 		if importStmt.Bundle {
 			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
@@ -751,7 +422,7 @@ func importPlanHook(
 				return err
 			}
 			if tableDescs == nil && table != nil {
-				names = []string{table.TableName.String()}
+				return errors.Errorf("table definition not found for %q", table.TableName.String())
 			}
 
 			descStr, err := importJobDescription(importStmt, nil, files, opts)
@@ -800,21 +471,9 @@ func importPlanHook(
 			jobDesc = descStr
 		}
 
-		if transform != "" {
-			transformStorage, err := storageccl.ExportStorageFromURI(ctx, transform, p.ExecCfg().Settings)
-			if err != nil {
-				return err
-			}
-			// Delay writing the BACKUP-CHECKPOINT file until as late as possible.
-			err = backupccl.VerifyUsableExportTarget(ctx, transformStorage, transform)
-			transformStorage.Close()
-			if err != nil {
-				return err
-			}
-			telemetry.Count("import.transform")
-		} else {
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			for _, tableDesc := range tableDescs {
-				if err := backupccl.CheckTableExists(ctx, p.Txn(), parentID, tableDesc.Name); err != nil {
+				if err := backupccl.CheckTableExists(ctx, txn, parentID, tableDesc.Name); err != nil {
 					return err
 				}
 			}
@@ -833,20 +492,54 @@ func importPlanHook(
 					TableID:  id,
 					ParentID: parentID,
 				}
-				newSeqVals[id] = seqVals[tableDesc.ID]
+				if v, ok := seqVals[tableDesc.ID]; ok {
+					newSeqVals[id] = v
+				}
 			}
 			seqVals = newSeqVals
 			if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
 				return err
 			}
+
+			for i := range tableDescs {
+				tableDescs[i].State = sqlbase.TableDescriptor_IMPORTING
+			}
+
+			seqValKVs := make([]roachpb.KeyValue, 0, len(seqVals))
+			for i := range tableDescs {
+				if v, ok := seqVals[tableDescs[i].ID]; ok && v != 0 {
+					key, val, err := sql.MakeSequenceKeyVal(tableDescs[i], v, false)
+					if err != nil {
+						return err
+					}
+					kv := roachpb.KeyValue{Key: key}
+					kv.Value.SetInt(val)
+					seqValKVs = append(seqValKVs, kv)
+				}
+			}
+
+			// Write the new TableDescriptors and flip the namespace entries over to
+			// them. After this call, any queries on a table will be served by the newly
+			// imported data.
+			if err := backupccl.WriteTableDescs(ctx, txn, nil, tableDescs, p.User(), p.ExecCfg().Settings, seqValKVs); err != nil {
+				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "creating tables")
+			}
+
+			// TODO(dt): we should be creating the job with this txn too. Once a job
+			// is created, the contract is it does its own, explicit cleanup on
+			// failure (i.e. not just txn rollback) but everything up to and including
+			// the creation of the job *should* be a single atomic txn. As-is, if we
+			// fail to creat the job after committing this txn, we've leaving broken
+			// descs and namespace records.
+
+			return nil
+		}); err != nil {
+			return err
 		}
 
 		tableDetails := make([]jobspb.ImportDetails_Table, 0, len(tableDescs))
 		for _, tbl := range tableDescs {
-			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl, SeqVal: seqVals[tbl.ID]})
-		}
-		for _, name := range names {
-			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Name: name})
+			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl, SeqVal: seqVals[tbl.ID], IsNew: true})
 		}
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
@@ -859,7 +552,6 @@ func importPlanHook(
 				Format:         format,
 				ParentID:       parentID,
 				Tables:         tableDetails,
-				BackupPath:     transform,
 				SSTSize:        sstSize,
 				Oversample:     oversample,
 				Walltime:       walltime,
@@ -883,7 +575,6 @@ func doDistributedCSVTransform(
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
 	tables map[string]*sqlbase.TableDescriptor,
-	transformOnly string,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	sstSize int64,
@@ -918,7 +609,6 @@ func doDistributedCSVTransform(
 		sql.NewRowResultWriter(rows),
 		tables,
 		files,
-		transformOnly,
 		format,
 		walltime,
 		sstSize,
@@ -951,73 +641,18 @@ func doDistributedCSVTransform(
 		return roachpb.BulkOpSummary{}, err
 	}
 
-	backupDesc := backupccl.BackupDescriptor{
-		EndTime: hlc.Timestamp{WallTime: walltime},
-	}
+	var res roachpb.BulkOpSummary
 	n := rows.Len()
 	for i := 0; i < n; i++ {
 		row := rows.At(i)
-		name := row[0].(*tree.DString)
 		var counts roachpb.BulkOpSummary
 		if err := protoutil.Unmarshal([]byte(*row[1].(*tree.DBytes)), &counts); err != nil {
 			return roachpb.BulkOpSummary{}, err
 		}
-		backupDesc.EntryCounts.Add(counts)
-		checksum := row[2].(*tree.DBytes)
-		spanStart := row[3].(*tree.DBytes)
-		spanEnd := row[4].(*tree.DBytes)
-		backupDesc.Files = append(backupDesc.Files, backupccl.BackupDescriptor_File{
-			Path: string(*name),
-			Span: roachpb.Span{
-				Key:    roachpb.Key(*spanStart),
-				EndKey: roachpb.Key(*spanEnd),
-			},
-			Sha512: []byte(*checksum),
-		})
+		res.Add(counts)
 	}
 
-	if transformOnly == "" {
-		return backupDesc.EntryCounts, nil
-	}
-
-	// The returned spans are from the SSTs themselves, and so don't perfectly
-	// overlap. Sort the files so we can fix the spans to be correctly
-	// overlapping. This is needed because RESTORE splits at both the start
-	// and end of each SST, and so there are tiny ranges (like {NULL-/0/0} at
-	// the start) that get created. During non-transform IMPORT this isn't a
-	// problem because it only splits on the end key. Replicate that behavior
-	// here by copying the end key from each span to the start key of the next.
-	sort.Slice(backupDesc.Files, func(i, j int) bool {
-		return backupDesc.Files[i].Span.Key.Compare(backupDesc.Files[j].Span.Key) < 0
-	})
-
-	var minTableSpan, maxTableSpan roachpb.Key
-	for _, tableDesc := range tables {
-		span := tableDesc.TableSpan()
-		if minTableSpan == nil || span.Key.Compare(minTableSpan) < 0 {
-			minTableSpan = span.Key
-		}
-		if maxTableSpan == nil || span.EndKey.Compare(maxTableSpan) > 0 {
-			maxTableSpan = span.EndKey
-		}
-	}
-	backupDesc.Files[0].Span.Key = minTableSpan
-	for i := 1; i < len(backupDesc.Files); i++ {
-		backupDesc.Files[i].Span.Key = backupDesc.Files[i-1].Span.EndKey
-	}
-	backupDesc.Files[len(backupDesc.Files)-1].Span.EndKey = maxTableSpan
-
-	dest, err := storageccl.ExportStorageConfFromURI(transformOnly)
-	if err != nil {
-		return roachpb.BulkOpSummary{}, err
-	}
-	es, err := storageccl.MakeExportStorage(ctx, dest, p.ExecCfg().Settings)
-	if err != nil {
-		return roachpb.BulkOpSummary{}, err
-	}
-	defer es.Close()
-
-	return backupDesc.EntryCounts, finalizeCSVBackup(ctx, &backupDesc, parentID, tables, es, p.ExecCfg())
+	return res, nil
 }
 
 type importResumer struct {
@@ -1034,10 +669,11 @@ func (r *importResumer) Resume(
 	details := r.job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
 
-	// TODO(dt): consider looking at the legacy fields used in 2.0.
+	if details.BackupPath != "" {
+		return errors.Errorf("transform is no longer supported")
+	}
 
 	walltime := details.Walltime
-	transform := details.BackupPath
 	files := details.URIs
 	parentID := details.ParentID
 	sstSize := details.SSTSize
@@ -1083,7 +719,7 @@ func (r *importResumer) Resume(
 	}
 
 	res, err := doDistributedCSVTransform(
-		ctx, r.job, files, p, parentID, tables, transform, format, walltime, sstSize, oversample, ingestDirectly,
+		ctx, r.job, files, p, parentID, tables, format, walltime, sstSize, oversample, ingestDirectly,
 	)
 	if err != nil {
 		return err
@@ -1099,9 +735,6 @@ func (r *importResumer) Resume(
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
 	details := r.job.Details().(jobspb.ImportDetails)
-	if details.BackupPath != "" {
-		return nil
-	}
 
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -1109,18 +742,30 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 	}
 	b := txn.NewBatch()
 	for _, tbl := range details.Tables {
-		tableDesc := tbl.Desc
-		tableDesc.State = sqlbase.TableDescriptor_DROP
-		// If the DropTime if set, a table uses RangeClear for fast data removal. This
-		// operation starts at DropTime + the GC TTL. If we used now() here, it would
-		// not clean up data until the TTL from the time of the error. Instead, use 1
-		// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
-		// possible. This is safe since the table data was never visible to users,
-		// and so we don't need to preserve MVCC semantics.
-		tableDesc.DropTime = 1
-		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
+		tableDesc := *tbl.Desc
+		tableDesc.Version++
+		if tbl.IsNew {
+			tableDesc.State = sqlbase.TableDescriptor_DROP
+			// If the DropTime if set, a table uses RangeClear for fast data removal. This
+			// operation starts at DropTime + the GC TTL. If we used now() here, it would
+			// not clean up data until the TTL from the time of the error. Instead, use 1
+			// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
+			// possible. This is safe since the table data was never visible to users,
+			// and so we don't need to preserve MVCC semantics.
+			tableDesc.DropTime = 1
+			b.CPut(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, tableDesc.ID)
+		} else {
+			// IMPORT did not create this table, so we should not drop it.
+			// TODO(dt): consider trying to delete whatever was ingested before
+			// returning the table to public. Unfortunately the ingestion isn't
+			// transactional, so there is no clean way to just rollback our changes,
+			// but we could iterate by time to delete before returning to public.
+			tableDesc.Version++
+			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+		}
+		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
-	return txn.Run(ctx, b)
+	return errors.Wrap(txn.Run(ctx, b), "rolling back tables")
 }
 
 // OnSuccess is part of the jobs.Resumer interface.
@@ -1128,38 +773,26 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	log.Event(ctx, "making tables live")
 	details := r.job.Details().(jobspb.ImportDetails)
 
-	if details.BackupPath != "" {
-		return nil
+	// Needed to trigger the schema change manager.
+	if err := txn.SetSystemConfigTrigger(); err != nil {
+		return err
 	}
-
-	toWrite := make([]*sqlbase.TableDescriptor, len(details.Tables))
-	var seqs []roachpb.KeyValue
-	for i := range details.Tables {
-		toWrite[i] = details.Tables[i].Desc
-		toWrite[i].ParentID = details.ParentID
-		if d := details.Tables[i]; d.SeqVal != 0 {
-			key, val, err := sql.MakeSequenceKeyVal(d.Desc, d.SeqVal, false)
-			if err != nil {
-				return err
-			}
-			kv := roachpb.KeyValue{Key: key}
-			kv.Value.SetInt(val)
-			seqs = append(seqs, kv)
-		}
+	b := txn.NewBatch()
+	for _, tbl := range details.Tables {
+		tableDesc := *tbl.Desc
+		tableDesc.Version++
+		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
-
-	// Write the new TableDescriptors and flip the namespace entries over to
-	// them. After this call, any queries on a table will be served by the newly
-	// imported data.
-	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, r.job.Payload().Username, r.settings, seqs); err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "creating tables")
+	if err := txn.Run(ctx, b); err != nil {
+		return errors.Wrap(err, "publishing tables")
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
 	// rows affected per table, so we use a large number because we want to make
 	// sure that stats always get created/refreshed here.
-	for i := range toWrite {
-		r.statsRefresher.NotifyMutation(toWrite[i].ID, math.MaxInt32 /* rowsAffected */)
+	for i := range details.Tables {
+		r.statsRefresher.NotifyMutation(details.Tables[i].Desc.ID, math.MaxInt32 /* rowsAffected */)
 	}
 
 	return nil
@@ -1169,21 +802,6 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 func (r *importResumer) OnTerminal(
 	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
-	details := r.job.Details().(jobspb.ImportDetails)
-
-	if transform := details.BackupPath; transform != "" {
-		transformStorage, err := storageccl.ExportStorageFromURI(ctx, transform, r.settings)
-		if err != nil {
-			log.Warningf(ctx, "unable to create storage: %+v", err)
-		} else {
-			// Always attempt to cleanup the checkpoint even if the import failed.
-			if err := transformStorage.Delete(ctx, backupccl.BackupDescriptorCheckpointName); err != nil {
-				log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
-			}
-			transformStorage.Close()
-		}
-	}
-
 	if status == jobs.StatusSucceeded {
 		telemetry.CountBucketed("import.rows", r.res.Rows)
 		const mb = 1 << 20
