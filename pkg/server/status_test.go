@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -288,7 +289,11 @@ func TestStatusGetFiles(t *testing.T) {
 	t.Run("heap", func(t *testing.T) {
 		const testFilesNo = 3
 		for i := 0; i < testFilesNo; i++ {
-			testHeapFile := filepath.Join(storeSpec.Path, "logs", heapDir, fmt.Sprintf("heap%d.pprof", i))
+			testHeapDir := filepath.Join(storeSpec.Path, "logs", base.HeapProfileDir)
+			testHeapFile := filepath.Join(testHeapDir, fmt.Sprintf("heap%d.pprof", i))
+			if err := os.MkdirAll(testHeapDir, os.ModePerm); err != nil {
+				t.Fatal(err)
+			}
 			if err := ioutil.WriteFile(testHeapFile, []byte(fmt.Sprintf("I'm heap file %d", i)), 0644); err != nil {
 				t.Fatal(err)
 			}
