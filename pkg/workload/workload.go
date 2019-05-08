@@ -286,6 +286,19 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 				}
 			}
 		case types.Bytes:
+			// HACK: workload's Table schemas are SQL schemas, but the initial data is
+			// returned as a coldata.Batch, which has a more limited set of types.
+			// (Or, in the case of simple workloads that return a []interface{}, it's
+			// roundtripped through coldata.Batch by the `Tuples` helper.)
+			//
+			// Notably, this means a SQL STRING column is represented the same as a
+			// BYTES column (ditto UUID, etc). We could get the fidelity back by
+			// parsing the SQL schema, which in fact we do in
+			// `importccl.makeDatumFromColOffset`. At the moment, the set of types
+			// used in workloads is limited enough that the users of initial
+			// data/splits are okay with the fidelity loss. So, to avoid the
+			// complexity and the undesirable pkg/sql/parser dep, we simply treat them
+			// all as bytes and let the caller deal with the ambiguity.
 			for rowIdx, datum := range col.Bytes() {
 				if !nulls.NullAt64(uint64(rowIdx)) {
 					datums[rowIdx*numCols+colIdx] = datum
@@ -581,6 +594,9 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 
 					buf.Reset()
 					fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
+					// If you're investigating an error coming out of this Exec, see the
+					// HACK comment in ColBatchToRows for some context that may (or may
+					// not) help you.
 					if _, err := db.Exec(buf.String()); err != nil {
 						return errors.Wrap(err, buf.String())
 					}
@@ -656,7 +672,8 @@ func StringTuple(datums []interface{}) []string {
 		case float64:
 			s[i] = fmt.Sprintf(`%f`, x)
 		case []byte:
-			s[i] = fmt.Sprintf(`X'%x'`, x)
+			// See the HACK comment in ColBatchToRows.
+			s[i] = lex.EscapeSQLString(string(x))
 		default:
 			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
 		}
@@ -690,6 +707,13 @@ func (s sliceSliceInterface) Less(i, j int) bool {
 				return false
 			}
 			continue
+		case float64:
+			if y := s[j][offset].(float64); x < y {
+				return true
+			} else if x > y {
+				return false
+			}
+			continue
 		case uint64:
 			if y := s[j][offset].(uint64); x < y {
 				return true
@@ -699,6 +723,8 @@ func (s sliceSliceInterface) Less(i, j int) bool {
 			continue
 		case string:
 			cmp = strings.Compare(x, s[j][offset].(string))
+		case []byte:
+			cmp = bytes.Compare(x, s[j][offset].([]byte))
 		default:
 			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
 		}
