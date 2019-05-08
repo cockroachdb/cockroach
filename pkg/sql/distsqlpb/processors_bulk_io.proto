@@ -1,0 +1,161 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "distsqlpb";
+
+import "jobs/jobspb/jobs.proto";
+import "roachpb/io-formats.proto";
+import "sql/sqlbase/structured.proto";
+import "sql/distsqlpb/processors_base.proto";
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// BackfillerSpec is the specification for a "schema change backfiller".
+// The created backfill processor runs a backfill for the first mutations in
+// the table descriptor mutation list with the same mutation id and type.
+// A backfiller processor performs KV operations to retrieve rows for a
+// table and backfills the new indexes/columns contained in the table
+// descriptor. It checkpoints its progress by updating the table
+// descriptor in the database, and doesn't emit any rows nor support
+// any post-processing.
+message BackfillerSpec {
+  enum Type {
+    Invalid = 0;
+    Column = 1;
+    Index = 2;
+  }
+  optional Type type = 1 [(gogoproto.nullable) = false];
+  optional sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
+
+  // Sections of the table to be backfilled.
+  repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
+
+  // Run the backfill for approximately this duration.
+  // The backfill will always process at least one backfill chunk.
+  optional int64 duration = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
+
+  // The backfill involves a complete table scan in chunks,
+  // where each chunk is a transactional read of a set of rows
+  // along with a backfill for the rows. This is the maximum number
+  // of entries backfilled per chunk.
+  optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
+
+  // Any other (leased) table descriptors necessary for the
+  // backfiller to do its job, such as the descriptors for tables with fk
+  // relationships to the table being modified.
+  repeated sqlbase.TableDescriptor other_tables = 6 [(gogoproto.nullable) = false];
+
+  // The timestamp to perform index backfill historical scans at.
+  optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+}
+
+
+// JobProgress identifies the job to report progress on. This reporting
+// happens outside this package.
+message JobProgress {
+  optional int64 job_id = 1 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID"];
+  // contribution is the percent of work of the total this processor will
+  // process.
+  optional float contribution = 2 [(gogoproto.nullable) = false];
+  // slot is the index into the job details for this processor's completion.
+  optional int32 slot = 3 [(gogoproto.nullable) = false];
+}
+
+message ReadImportDataSpec {
+  reserved 1;
+  optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
+  // sample_size is the rate at which to output rows, based on an input row's size.
+  optional int32 sample_size = 2 [(gogoproto.nullable) = false];
+  reserved 3;
+
+  // tables is an alternative to table_desc for input formats that can read
+  // multiple tables. If it is non-empty, the keys specify the names of tables
+  // for which the processor should read and emit data (ignoring data for any
+  // other tables that is present in the input).
+  //
+  // TODO(dt): If a key has a nil value, the schema for that table should be
+  // determined from the input on-the-fly (e.g. by parsing a CREATE TABLE in a
+  // dump file) and the processor should emit a key/value for the generated
+  // TableDescriptor with the corresponding descriptor ID key. If tables is
+  // empty (and table_desc above is not specified), the processor should read
+  // all tables in the input, determining their schemas on the fly.
+  map<string, sqlbase.TableDescriptor> tables = 9 [(gogoproto.nullable) = true];
+
+  // uri is a storageccl.ExportStorage URI pointing to the CSV files to be
+  // read. The map key must be unique across the entire IMPORT job.
+  map<int32, string> uri = 7;
+
+  optional JobProgress progress = 6 [(gogoproto.nullable) = false];
+
+  reserved 4;
+  reserved 5;
+
+  optional bool skip_missing_foreign_keys = 10 [(gogoproto.nullable) = false];
+
+  // walltimeNanos is the MVCC time at which the created KVs will be written.
+  optional int64 walltimeNanos = 11 [(gogoproto.nullable) = false];
+
+  // ingestDirectly specifies that this reader should bulk-ingest the kvs it
+  // reads rather than emitting them to its output (and instead should emit a
+  // single row containing an encoded BulkOpSummary).
+  optional bool ingestDirectly = 12 [(gogoproto.nullable) = false];
+}
+
+// SSTWriterSpec is the specification for a processor that consumes rows, uses
+// tempStorage to sort them, then writes them to SST files at uri. walltime is
+// used as the MVCC timestamp. It outputs one row per span containing the file
+// name, size, checksum, observed start and end keys. See ccs/sqlccl/csv.go
+// for implementation.
+message SSTWriterSpec {
+  message SpanName {
+    // name is the file name that will be written by the export store.
+    optional string name = 1 [(gogoproto.nullable) = false];
+    // end is the end key of a span.
+    optional bytes end = 2;
+  }
+
+  // destination as a storageccl.ExportStorage URI pointing to an export store
+  // location (directory).
+  optional string destination = 1 [(gogoproto.nullable) = false];
+  // walltimeNanos is the MVCC time at which the created KVs will be written.
+  optional int64 walltimeNanos = 3 [(gogoproto.nullable) = false];
+  // spans is an array of span boundaries and corresponding filenames.
+  repeated SpanName spans = 4 [(gogoproto.nullable) = false];
+  optional JobProgress progress = 5 [(gogoproto.nullable) = false];
+
+  reserved 2;
+}
+
+// CSVWriterSpec is the specification for a processor that consumes rows and
+// writes them to CSV files at uri. It outputs a row per file written with
+// the file name, row count and byte size.
+message CSVWriterSpec {
+  // destination as a storageccl.ExportStorage URI pointing to an export store
+  // location (directory).
+  optional string destination = 1 [(gogoproto.nullable) = false];
+  optional string name_pattern = 2 [(gogoproto.nullable) = false];
+  optional roachpb.CSVOptions options = 3 [(gogoproto.nullable) = false];
+  // chunk_rows is num rows to write per file. 0 = no limit.
+  optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
+}
