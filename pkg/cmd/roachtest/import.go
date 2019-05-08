@@ -25,10 +25,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	gcsTestBucket = `cockroach-tmp`
-)
-
 func registerImportTPCC(r *registry) {
 	runImportTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int) {
 		c.Put(ctx, cockroach, "./cockroach")
@@ -48,9 +44,8 @@ func registerImportTPCC(r *registry) {
 			defer dul.Done()
 			defer hc.Done()
 			cmd := fmt.Sprintf(
-				`./workload fixtures make tpcc --warehouses=%d --csv-server='http://localhost:8081' `+
-					`--gcs-bucket-override=%s --gcs-prefix-override=%s`,
-				warehouses, gcsTestBucket, c.name)
+				`./workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`,
+				warehouses)
 			c.Run(ctx, c.Node(1), cmd)
 			return nil
 		})
