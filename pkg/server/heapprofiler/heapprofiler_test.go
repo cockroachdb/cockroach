@@ -90,7 +90,7 @@ func TestPercentSystemMemoryHeuristic(t *testing.T) {
 	prefix := "memprof.fraction_system_memory."
 	expectedPrefixes := []string{prefix, prefix, prefix, prefix}
 	hp := &HeapProfiler{
-		stats:      &stats{systemMemory: 100},
+		stats:      &stats{systemMemoryBytes: 100},
 		heuristics: []heuristic{fractionSystemMemoryHeuristic},
 	}
 	st := &cluster.Settings{}
