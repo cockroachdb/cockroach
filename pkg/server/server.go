@@ -1947,7 +1947,9 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 					goroutineDumper.MaybeDump(ctx, s.ClusterSettings(), s.runtime.Goroutines.Value())
 				}
 				if heapProfiler != nil {
-					heapProfiler.MaybeTakeProfile(ctx, s.ClusterSettings(), s.runtime.RSSBytes.Value())
+					ms := s.runtime.GetLastMemStats()
+					heapProfiler.MaybeTakeProfile(
+						ctx, s.ClusterSettings(), uint64(s.runtime.RSSBytes.Value()), ms)
 				}
 				timer.Reset(frequency)
 			case <-s.stopper.ShouldStop():

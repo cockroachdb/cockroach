@@ -23,6 +23,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -226,12 +227,6 @@ var (
 	}
 )
 
-type memStats struct {
-	goAllocated uint64
-	goIdle      uint64
-	goTotal     uint64
-}
-
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
 // We will not necessarily have implementations for all builds, so check for nil first.
 // Returns the following:
@@ -261,7 +256,7 @@ type RuntimeStatSampler struct {
 		net         net.IOCountersStat
 	}
 
-	// Memory stats that are updated atomically by SampleMemStats.
+	// Memory stats that are updated atomically by SampleMemStats. *base.MemStats.
 	memStats unsafe.Pointer
 
 	initialDiskCounters diskStats
@@ -387,6 +382,15 @@ func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSa
 	return rsr
 }
 
+// GetLastMemStats returns the last sample of the mem stats.
+func (rsr *RuntimeStatSampler) GetLastMemStats() base.MemStats {
+	ms := (*base.MemStats)(atomic.LoadPointer(&rsr.memStats))
+	if ms == nil {
+		return base.MemStats{}
+	}
+	return *ms
+}
+
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
 // RuntimeStatSampler. This makes runtime statistics more convenient for
@@ -490,10 +494,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 		}
 	}
 
-	ms := (*memStats)(atomic.LoadPointer(&rsr.memStats))
-	if ms == nil {
-		ms = &memStats{}
-	}
+	ms := rsr.GetLastMemStats()
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
@@ -501,7 +502,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 		"%s/%s CGO alloc/total, %.1f CGO/sec, %.1f/%.1f %%(u/s)time, %.1f %%gc (%dx), "+
 		"%s/%s (r/w)net",
 		humanize.IBytes(mem.Resident), numGoroutine,
-		humanize.IBytes(ms.goAllocated), humanize.IBytes(ms.goIdle), humanize.IBytes(ms.goTotal),
+		humanize.IBytes(ms.GoAllocated), humanize.IBytes(ms.GoIdle), humanize.IBytes(ms.GoTotal),
 		humanize.IBytes(uint64(cgoAllocated)), humanize.IBytes(uint64(cgoTotal)),
 		cgoRate, 100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount,
 		humanize.IBytes(deltaNet.BytesRecv), humanize.IBytes(deltaNet.BytesSent),
@@ -551,10 +552,10 @@ func (rsr *RuntimeStatSampler) SampleMemStats(ctx context.Context) {
 
 	goAllocated := ms.Alloc
 	goTotal := ms.Sys - ms.HeapReleased
-	atomic.StorePointer(&rsr.memStats, unsafe.Pointer(&memStats{
-		goAllocated: goAllocated,
-		goIdle:      ms.HeapIdle - ms.HeapReleased,
-		goTotal:     goTotal,
+	atomic.StorePointer(&rsr.memStats, unsafe.Pointer(&base.MemStats{
+		GoAllocated: goAllocated,
+		GoIdle:      ms.HeapIdle - ms.HeapReleased,
+		GoTotal:     goTotal,
 	}))
 
 	rsr.GoAllocBytes.Update(int64(goAllocated))

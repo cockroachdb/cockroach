@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,7 +50,8 @@ var (
 )
 
 type stats struct {
-	rssBytes                             int64
+	rssBytes                             uint64
+	goStats                              base.MemStats
 	systemMemoryBytes                    int64
 	lastProfileTime                      time.Time
 	aboveSysMemThresholdSinceLastProfile bool
@@ -58,19 +60,19 @@ type stats struct {
 
 type heuristic struct {
 	name   string
-	isTrue func(s *stats, st *cluster.Settings) (score int64, isTrue bool)
+	isTrue func(s *stats, st *cluster.Settings) (score uint64, isTrue bool)
 }
 
-// fractionSystemMemoryHeuristic is true if latest Rss is more than
-// systemMemoryThresholdFraction of system memory. No new profile is
-// taken if Rss has been above threshold since the last time profile was taken,
-// but a new profile will be triggered if Rss has dipped below threshold since
-// the last profile. score is the latest value of Rss.
-// At max one profile will be taken in minProfileInterval.
+// fractionSystemMemoryHeuristic is true if latest (RSS - goIdle) is more than
+// systemMemoryThresholdFraction of system memory. No new profile is taken if
+// Rss has been above threshold since the last time profile was taken, but a new
+// profile will be triggered if (RSS - goIdle) has dipped below threshold since
+// the last profile. score is the latest value of Rss. At max one profile will
+// be taken in minProfileInterval.
 var fractionSystemMemoryHeuristic = heuristic{
 	name: "fraction_system_memory",
-	isTrue: func(s *stats, st *cluster.Settings) (score int64, isTrue bool) {
-		currentValue := s.rssBytes
+	isTrue: func(s *stats, st *cluster.Settings) (score uint64, isTrue bool) {
+		currentValue := s.rssBytes - s.goStats.GoIdle
 		if float64(currentValue)/float64(s.systemMemoryBytes) > systemMemoryThresholdFraction.Get(&st.SV) {
 			if s.currentTime().Sub(s.lastProfileTime) < minProfileInterval ||
 				s.aboveSysMemThresholdSinceLastProfile {
@@ -99,8 +101,11 @@ const memprof = "memprof."
 // MaybeTakeProfile takes a heap profile if an OOM situation is detected using
 // heuristics enabled in o. At max one profile is taken in a call of this
 // function. This function is also responsible for updating stats in o.
-func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, st *cluster.Settings, rssBytes int64) {
+func (o *HeapProfiler) MaybeTakeProfile(
+	ctx context.Context, st *cluster.Settings, rssBytes uint64, goStats base.MemStats,
+) {
 	o.rssBytes = rssBytes
+	o.goStats = goStats
 	profileTaken := false
 	for _, h := range o.heuristics {
 		if score, isTrue := h.isTrue(o.stats, st); isTrue {

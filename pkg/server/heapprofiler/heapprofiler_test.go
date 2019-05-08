@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ import (
 
 type rssVal struct {
 	secs time.Duration // secs is the time at which this rss value was emitted
-	rss  int64
+	rss  uint64
 }
 
 func testHelper(
@@ -67,7 +68,7 @@ func testHelper(
 	ctx := context.TODO()
 	for _, r := range rssValues {
 		currentTime = baseTime.Add(time.Second * r.secs)
-		hp.MaybeTakeProfile(ctx, st, r.rss)
+		hp.MaybeTakeProfile(ctx, st, r.rss, base.MemStats{})
 	}
 	assert.Equal(t, numProfiles, len(expectedScores))
 }
