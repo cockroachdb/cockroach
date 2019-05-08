@@ -165,7 +165,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.Equal(t, txn.ID, qiReq.Txn.ID)
 		require.Equal(t, txn.Timestamp, qiReq.Txn.Timestamp)
 		require.Equal(t, enginepb.TxnSeq(1), qiReq.Txn.Sequence)
-		require.Equal(t, roachpb.QueryIntentRequest_RETURN_ERROR, qiReq.IfMissing)
+		require.True(t, qiReq.ErrorIfMissing)
 
 		// No in-flight writes have been proved yet.
 		require.Equal(t, 1, tp.ifWrites.len())

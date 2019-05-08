@@ -214,12 +214,12 @@ func (tp *txnPipeliner) SendLocked(
 	return tp.stripQueryIntents(br), nil
 }
 
-// chainToInFlightWrites ensures that we "chain" on to any in-flight writes
-// that overlap the keys we're trying to read/write. We do this by prepending
-// QueryIntent requests with the THROW_ERROR behavior before each request that
-// touches any of the in-flight writes. In effect, this allows us to prove
-// that a write succeeded before depending on its existence. We later prune down
-// the list of writes we proved to exist that are no longer "in-flight" in
+// chainToInFlightWrites ensures that we "chain" on to any in-flight writes that
+// overlap the keys we're trying to read/write. We do this by prepending
+// QueryIntent requests with the ErrorIfMissing option before each request that
+// touches any of the in-flight writes. In effect, this allows us to prove that
+// a write succeeded before depending on its existence. We later prune down the
+// list of writes we proved to exist that are no longer "in-flight" in
 // updateWriteTracking.
 func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
 	asyncConsensus := pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
@@ -315,10 +315,8 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 						RequestHeader: roachpb.RequestHeader{
 							Key: w.Key,
 						},
-						Txn: meta,
-						// Set the IfMissing behavior to return an error if the
-						// in-flight write is missing.
-						IfMissing: roachpb.QueryIntentRequest_RETURN_ERROR,
+						Txn:            meta,
+						ErrorIfMissing: true,
 					})
 
 					// Record that the key has been chained onto at least once
@@ -471,8 +469,8 @@ func (tp *txnPipeliner) updateWriteTracking(
 		if qiReq, ok := req.(*roachpb.QueryIntentRequest); ok && resp != nil {
 			// Remove any in-flight writes that were proven to exist.
 			// It shouldn't be possible for a QueryIntentRequest with
-			// an IfMissing behavior of RETURN_ERROR to return without
-			// error and with with FoundIntent=false, but we handle that
+			// the ErrorIfMissing option set to return without error
+			// and with with FoundIntent=false, but we handle that
 			// case here because it happens a lot in tests.
 			if resp.(*roachpb.QueryIntentResponse).FoundIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
