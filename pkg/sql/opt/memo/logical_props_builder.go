@@ -931,7 +931,9 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 	// Output columns are all the passthrough columns with the addition of the
 	// window function column.
 	rel.OutputCols = inputProps.OutputCols.Copy()
-	rel.OutputCols.Add(int(window.ColID))
+	for _, w := range window.Windows {
+		rel.OutputCols.Add(int(w.Col))
+	}
 
 	// Not Null Columns
 	// ----------------
@@ -1159,6 +1161,11 @@ func (b *logicalPropsBuilder) buildAggregationsItemProps(
 ) {
 	item.Typ = item.Agg.DataType()
 	BuildSharedProps(b.mem, item.Agg, &scalar.Shared)
+}
+
+func (b *logicalPropsBuilder) buildWindowsItemProps(item *WindowsItem, scalar *props.Scalar) {
+	item.Typ = item.Function.DataType()
+	BuildSharedProps(b.mem, item.Function, &scalar.Shared)
 }
 
 func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Scalar) {

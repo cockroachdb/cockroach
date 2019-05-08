@@ -463,16 +463,16 @@ type WindowInfo struct {
 	// Cols is the set of columns that are returned from the windowing operator.
 	Cols sqlbase.ResultColumns
 
-	// Expr is the window function expression.
-	Expr *tree.FuncExpr
+	// Exprs is the list of window function expressions.
+	Exprs []*tree.FuncExpr
 
-	// Idx is the index that the window function should put its output in (all
-	// other indices are passed through).
-	Idx int
+	// OutputIdxs are the indexes that the various window functions being computed
+	// should put their output in.
+	OutputIdxs []int
 
-	// ArgIdxs is the list of column ordinals the window function takes as
-	// arguments.
-	ArgIdxs []ColumnOrdinal
+	// ArgIdxs is the list of column ordinals each function takes as arguments,
+	// in the same order as Exprs.
+	ArgIdxs [][]ColumnOrdinal
 
 	// Partition is the set of input columns to partition on.
 	Partition []ColumnOrdinal

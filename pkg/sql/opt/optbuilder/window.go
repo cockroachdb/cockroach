@@ -79,9 +79,6 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	// constant, since we'll be projecting an extra column in every row.  It
 	// would be good if the windower supported being specified with constant
 	// values.
-	// TODO(justin): would it be better to just introduce a projection beneath
-	// every window operator and then let norm rules push them all down and merge
-	// them at the bottom, rather than building up one projection here?
 	for i := range inScope.windows {
 		w := inScope.windows[i].expr.(*windowInfo)
 		argExprs := b.getTypedWindowArgs(w)
@@ -142,20 +139,48 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	b.constructProjectForScope(outScope, argScope)
 	outScope.expr = argScope.expr
 
-	// Maintain the set of columns that the window function must pass through,
-	// since the arguments to the upper window functions must be passed through
-	// the lower window functions.
+	// frames accumulates the set of distinct window frames we're computing over
+	// so that we can group functions over the same partition and ordering.
+	frames := make([]memo.WindowExpr, 0, len(inScope.windows))
 	for i := range inScope.windows {
 		w := inScope.windows[i].expr.(*windowInfo)
-		outScope.expr = b.factory.ConstructWindow(
-			outScope.expr,
-			b.constructWindowFn(w.def.Name, argLists[i]),
-			&memo.WindowPrivate{
-				ColID:     w.col.id,
-				Partition: partitions[i],
-				Ordering:  orderings[i],
+
+		frameIdx := -1
+
+		// The number of window functions is probably fairly small, so do an O(n^2)
+		// loop.
+		// TODO(justin): make this faster.
+		// TODO(justin): consider coalescing frames with compatible orderings.
+		for j := range frames {
+			if partitions[i].Equals(frames[j].Partition) &&
+				orderings[i].Equals(&frames[j].Ordering) {
+				frameIdx = j
+				break
+			}
+		}
+
+		// If we can't reuse an existing frame, make a new one.
+		if frameIdx == -1 {
+			frames = append(frames, memo.WindowExpr{
+				WindowPrivate: memo.WindowPrivate{
+					Partition: partitions[i],
+					Ordering:  orderings[i],
+				},
+				Windows: memo.WindowsExpr{},
+			})
+			frameIdx = len(frames) - 1
+		}
+
+		frames[frameIdx].Windows = append(frames[frameIdx].Windows,
+			memo.WindowsItem{
+				Function:   b.constructWindowFn(w.def.Name, argLists[i]),
+				ColPrivate: memo.ColPrivate{Col: w.col.id},
 			},
 		)
+	}
+
+	for _, f := range frames {
+		outScope.expr = b.factory.ConstructWindow(outScope.expr, f.Windows, &f.WindowPrivate)
 	}
 }
 
