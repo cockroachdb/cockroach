@@ -1046,7 +1046,9 @@ func (*QueryTxnRequest) flags() int   { return isRead | isAlone }
 // QueryIntent only updates the read timestamp cache when attempting
 // to prevent an intent that is found missing from ever being written
 // in the future. See QueryIntentRequest_PREVENT.
-func (*QueryIntentRequest) flags() int        { return isRead | isPrefix | updatesReadTSCache }
+func (*QueryIntentRequest) flags() int {
+	return isRead | isPrefix | updatesReadTSCache | updatesTSCacheOnErr
+}
 func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*TruncateLogRequest) flags() int        { return isWrite }
