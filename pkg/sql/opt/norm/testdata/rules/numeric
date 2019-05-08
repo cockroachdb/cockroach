@@ -37,24 +37,24 @@ project
 
 # Regression test for #35113.
 opt expect=FoldPlusZero
-SELECT 1::int8 + 0::decimal
+SELECT i + 0::decimal FROM a
 ----
-values
- ├── columns: "?column?":1(decimal)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(1)
- └── (1,) [type=tuple{decimal}]
+project
+ ├── columns: "?column?":6(decimal)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections
+      └── i::DECIMAL [type=decimal, outer=(2)]
 
 opt expect=FoldZeroPlus
-SELECT 0::decimal + 1::int8
+SELECT 0::decimal + i FROM a
 ----
-values
- ├── columns: "?column?":1(decimal)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(1)
- └── (1,) [type=tuple{decimal}]
+project
+ ├── columns: "?column?":6(decimal)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections
+      └── i::DECIMAL [type=decimal, outer=(2)]
 
 # --------------------------------------------------
 # FoldMinusZero
@@ -79,14 +79,14 @@ project
 
 # Regression test for #35113.
 opt expect=FoldMinusZero
-SELECT 0::int8 - 0::decimal
+SELECT i - 0::decimal FROM a
 ----
-values
- ├── columns: "?column?":1(decimal)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(1)
- └── (0,) [type=tuple{decimal}]
+project
+ ├── columns: "?column?":6(decimal)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections
+      └── i::DECIMAL [type=decimal, outer=(2)]
 
 # Regression test for #35612.
 opt expect-not=FoldMinusZero
@@ -125,24 +125,24 @@ project
 
 # Regression test for #35113.
 opt expect=FoldMultOne
-SELECT 2::int8 * 1::decimal
+SELECT i * 1::decimal FROM a
 ----
-values
- ├── columns: "?column?":1(decimal)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(1)
- └── (2,) [type=tuple{decimal}]
+project
+ ├── columns: "?column?":6(decimal)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections
+      └── i::DECIMAL [type=decimal, outer=(2)]
 
 opt expect=FoldOneMult
-SELECT 1::decimal * 2::int8
+SELECT 1::decimal * i FROM a
 ----
-values
- ├── columns: "?column?":1(decimal)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(1)
- └── (2,) [type=tuple{decimal}]
+project
+ ├── columns: "?column?":6(decimal)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections
+      └── i::DECIMAL [type=decimal, outer=(2)]
 
 # --------------------------------------------------
 # FoldDivOne
@@ -166,24 +166,24 @@ project
 
 # Regression test for #35113.
 opt expect=FoldDivOne
-SELECT 1::int8 / 1::decimal
+SELECT i / 1::decimal FROM a
 ----
-values
- ├── columns: "?column?":1(decimal)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(1)
- └── (1,) [type=tuple{decimal}]
+project
+ ├── columns: "?column?":6(decimal)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections
+      └── i::DECIMAL [type=decimal, outer=(2)]
 
 opt expect=FoldDivOne
-SELECT 1::int8 / 1::int8
+SELECT i / 1::int8 FROM a
 ----
-values
- ├── columns: "?column?":1(decimal)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(1)
- └── (1,) [type=tuple{decimal}]
+project
+ ├── columns: "?column?":6(decimal)
+ ├── scan a
+ │    └── columns: i:2(int)
+ └── projections
+      └── i::DECIMAL [type=decimal, outer=(2)]
 
 # --------------------------------------------------
 # InvertMinus
