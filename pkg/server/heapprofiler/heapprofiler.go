@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,46 +50,17 @@ var (
 )
 
 type stats struct {
-	rssBytes                             int64
-	systemMemoryBytes                    int64
-	lastProfileTime                      time.Time
-	aboveSysMemThresholdSinceLastProfile bool
-	currentTime                          func() time.Time
-}
+	memStats          base.MemStats
+	systemMemoryBytes uint64
+	lastProfileTime   time.Time
 
-type heuristic struct {
-	name   string
-	isTrue func(s *stats, st *cluster.Settings) (score int64, isTrue bool)
-}
-
-// fractionSystemMemoryHeuristic is true if latest Rss is more than
-// systemMemoryThresholdFraction of system memory. No new profile is
-// taken if Rss has been above threshold since the last time profile was taken,
-// but a new profile will be triggered if Rss has dipped below threshold since
-// the last profile. score is the latest value of Rss.
-// At max one profile will be taken in minProfileInterval.
-var fractionSystemMemoryHeuristic = heuristic{
-	name: "fraction_system_memory",
-	isTrue: func(s *stats, st *cluster.Settings) (score int64, isTrue bool) {
-		currentValue := s.rssBytes
-		if float64(currentValue)/float64(s.systemMemoryBytes) > systemMemoryThresholdFraction.Get(&st.SV) {
-			if s.currentTime().Sub(s.lastProfileTime) < minProfileInterval ||
-				s.aboveSysMemThresholdSinceLastProfile {
-				return 0, false
-			}
-			s.aboveSysMemThresholdSinceLastProfile = true
-			return currentValue, true
-		}
-		s.aboveSysMemThresholdSinceLastProfile = false
-		return 0, false
-	},
+	now func() time.Time
 }
 
 // HeapProfiler is used to take heap profiles if an OOM situation is
 // detected. It stores relevant functions and stats for heuristics to use.
 type HeapProfiler struct {
 	*stats
-	heuristics      []heuristic
 	takeHeapProfile func(ctx context.Context, dir string, prefix string, suffix string)
 	gcProfiles      func(ctx context.Context, dir, prefix string, maxCount int64)
 	dir             string
@@ -99,30 +71,54 @@ const memprof = "memprof."
 // MaybeTakeProfile takes a heap profile if an OOM situation is detected using
 // heuristics enabled in o. At max one profile is taken in a call of this
 // function. This function is also responsible for updating stats in o.
-func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, st *cluster.Settings, rssBytes int64) {
-	o.rssBytes = rssBytes
+func (o *HeapProfiler) MaybeTakeProfile(
+	ctx context.Context, st *cluster.Settings, memStats base.MemStats,
+) {
+	o.memStats = memStats
 	profileTaken := false
-	for _, h := range o.heuristics {
-		if score, isTrue := h.isTrue(o.stats, st); isTrue {
-			if !profileTaken {
-				prefix := memprof + h.name + "."
-				const format = "2006-01-02T15_04_05.999"
-				suffix := fmt.Sprintf("%018d_%s", score, o.currentTime().Format(format))
-				o.takeHeapProfile(ctx, o.dir, prefix, suffix)
-				o.lastProfileTime = o.currentTime()
-				profileTaken = true
-				if o.gcProfiles != nil {
-					o.gcProfiles(ctx, o.dir, memprof, maxProfiles.Get(&st.SV))
-				}
+	if score, isTrue := o.fractionSystemMemoryHeuristic(st); isTrue {
+		if !profileTaken {
+			prefix := memprof
+			const format = "2006-01-02T15_04_05.999"
+			suffix := fmt.Sprintf("%018d_%s", score, o.now().Format(format))
+			o.takeHeapProfile(ctx, o.dir, prefix, suffix)
+			o.lastProfileTime = o.now()
+			profileTaken = true
+			if o.gcProfiles != nil {
+				o.gcProfiles(ctx, o.dir, memprof, maxProfiles.Get(&st.SV))
 			}
 		}
 	}
 }
 
+// fractionSystemMemoryHeuristic is true if latest (RSS - goIdle) is more than
+// systemMemoryThresholdFraction of system memory. No new profile is taken if
+// Rss has been above threshold since the last time profile was taken.
+// At max one profile will be taken per minProfileInterval.
+func (o *HeapProfiler) fractionSystemMemoryHeuristic(
+	st *cluster.Settings,
+) (score uint64, isTrue bool) {
+	threshold := systemMemoryThresholdFraction.Get(&st.SV)
+	curMemUse := o.stats.memStats.RSSBytes - o.stats.memStats.Go.GoIdle
+	if float64(curMemUse)/float64(o.stats.systemMemoryBytes) < threshold {
+		// Plenty of memory left in the system. No profile.
+		return 0, false
+	}
+
+	if o.stats.now().Sub(o.stats.lastProfileTime) > minProfileInterval {
+		// It's been a while since the last profile. Let's take a new one.
+		return curMemUse, true
+	}
+
+	// Looks like we had another recent profile that was good enough. No need to
+	// take a new one.
+	return 0, false
+}
+
 // NewHeapProfiler returns a HeapProfiler which has
 // systemMemoryThresholdFraction heuristic enabled. dir is the directory in
 // which profiles are stored.
-func NewHeapProfiler(dir string, systemMemoryBytes int64) (*HeapProfiler, error) {
+func NewHeapProfiler(dir string, systemMemoryBytes uint64) (*HeapProfiler, error) {
 	if dir == "" {
 		return nil, errors.New("directory to store profiles could not be determined")
 	}
@@ -133,9 +129,8 @@ func NewHeapProfiler(dir string, systemMemoryBytes int64) (*HeapProfiler, error)
 	hp := &HeapProfiler{
 		stats: &stats{
 			systemMemoryBytes: systemMemoryBytes,
-			currentTime:       timeutil.Now,
+			now:               timeutil.Now,
 		},
-		heuristics:      []heuristic{fractionSystemMemoryHeuristic},
 		takeHeapProfile: takeHeapProfile,
 		gcProfiles:      gcProfiles,
 		dir:             dir,
