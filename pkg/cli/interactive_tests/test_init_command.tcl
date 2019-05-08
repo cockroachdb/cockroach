@@ -28,6 +28,7 @@ end_test
 # The following tests expect the client to wait forever.
 set ::env(COCKROACH_CONNECT_TIMEOUT) "0"
 
+start_test "Check that init allows a suspended SQL client to resume"
 
 # Start a shell and send a command. The shell should block at startup,
 # so we don't "expect" anything yet. The point of this test is to
@@ -58,5 +59,35 @@ expect {
     }
     timeout { handle_timeout "pg_class" }
 }
+
+interrupt
+interrupt
+eexpect eof
+
+end_test
+
+spawn /bin/bash
+send "PS1=':''/# '\r"
+eexpect ":/# "
+
+start_test "Check that init on an already started server immediately complains the server is already initialized"
+send "$argv init --insecure --host=localhost\r"
+eexpect "error"
+eexpect "cluster has already been initialized"
+eexpect ":/# "
+end_test
+
+stop_server $argv
+start_server $argv
+
+start_test "Check that init after server restart still properly complains the server has been initialized"
+send "$argv init --insecure --host=localhost\r"
+eexpect "error"
+eexpect "cluster has already been initialized"
+eexpect ":/# "
+end_test
+
+send "exit 0\r"
+eexpect eof
 
 stop_server $argv
