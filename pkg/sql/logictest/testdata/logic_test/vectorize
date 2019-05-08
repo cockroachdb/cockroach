@@ -311,3 +311,27 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kkFr4zAQhe_7K8ycdlm1sZ
 
 statement ok
 RESET optimizer; RESET experimental_vectorize; RESET distsql
+
+# Regression test for composite null handling
+# https://github.com/cockroachdb/cockroach/issues/37358
+statement ok
+CREATE TABLE composite (d DECIMAL, INDEX d_idx (d))
+
+statement ok
+INSERT INTO composite VALUES (NULL), (1), (1.0), (1.00)
+
+query T rowsort
+SELECT d FROM composite@primary
+----
+NULL
+1
+1.0
+1.00
+
+query T rowsort
+SELECT d FROM composite@d_idx
+----
+NULL
+1
+1.0
+1.00
