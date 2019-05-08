@@ -1902,11 +1902,11 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	var heapProfiler *heapprofiler.HeapProfiler
 
 	{
-		systemMemory, err := status.GetTotalMemory(ctx)
+		systemMemoryBytes, err := status.GetTotalMemory(ctx)
 		if err != nil {
 			log.Warningf(ctx, "Could not compute system memory due to: %s", err)
 		} else {
-			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, systemMemory)
+			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, systemMemoryBytes)
 			if err != nil {
 				log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
 			}
@@ -1947,7 +1947,7 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 					goroutineDumper.MaybeDump(ctx, s.ClusterSettings(), s.runtime.Goroutines.Value())
 				}
 				if heapProfiler != nil {
-					heapProfiler.MaybeTakeProfile(ctx, s.ClusterSettings(), s.runtime.Rss.Value())
+					heapProfiler.MaybeTakeProfile(ctx, s.ClusterSettings(), s.runtime.RSSBytes.Value())
 				}
 				timer.Reset(frequency)
 			case <-s.stopper.ShouldStop():
