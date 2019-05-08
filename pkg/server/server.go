@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1904,8 +1905,7 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 	return nil
 }
 
-// startSampleEnvironment begins the heap profiler worker and a worker that
-// periodically instructs the runtime stat sampler to sample the environment.
+// startSampleEnvironment begins the heap profiler worker.
 func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	ctx := s.AnnotateCtx(context.Background())
@@ -1915,57 +1915,67 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	}
 	var heapProfiler *heapprofiler.HeapProfiler
 
-	{
-		systemMemoryBytes, err := status.GetTotalMemory(ctx)
-		if err != nil {
-			log.Warningf(ctx, "Could not compute system memory due to: %s", err)
-		} else {
-			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, systemMemoryBytes)
-			if err != nil {
-				log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
-			}
-		}
+	heapProfiler, err = heapprofiler.NewHeapProfiler(
+		s.cfg.HeapProfileDirName, s.ClusterSettings())
+	if err != nil {
+		log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
 	}
 
-	// We run two separate sampling loops, one for memory stats (via
-	// ReadMemStats) and one for all other runtime stats. This is necessary
-	// because as of go1.11, runtime.ReadMemStats() "stops the world" and
-	// requires waiting for any current GC run to finish. With a large heap, a
-	// single GC run may take longer than the default sampling period (10s).
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		var goMemStats atomic.Value // *status.GoMemStats
+		goMemStats.Store(&status.GoMemStats{})
+		var collectingMemStats int32 // atomic, 1 when stats call is ongoing
+
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
 		timer.Reset(frequency)
+
 		for {
 			select {
-			case <-timer.C:
-				timer.Read = true
-				s.runtime.SampleMemStats(ctx)
-				timer.Reset(frequency)
 			case <-s.stopper.ShouldStop():
 				return
-			}
-		}
-	})
-
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
-		timer := timeutil.NewTimer()
-		defer timer.Stop()
-		timer.Reset(frequency)
-		for {
-			select {
 			case <-timer.C:
 				timer.Read = true
-				s.runtime.SampleEnvironment(ctx)
+				timer.Reset(frequency)
+
+				// We read the heap stats on another goroutine and give up after 1s.
+				// This is necessary because as of Go 1.12, runtime.ReadMemStats()
+				// "stops the world" and that requires first waiting for any current GC
+				// run to finish. With a large heap and under extreme conditions, a
+				// single GC run may take longer than the default sampling period of
+				// 10s. Under normal operations and with more recent versions of Go,
+				// this hasn't been observed to be a problem.
+				statsCollected := make(chan struct{})
+				if atomic.CompareAndSwapInt32(&collectingMemStats, 0, 1) {
+					if err := s.stopper.RunAsyncTask(ctx, "get-mem-stats", func(ctx context.Context) {
+						var ms status.GoMemStats
+						runtime.ReadMemStats(&ms.MemStats)
+						ms.Collected = timeutil.Now()
+						log.VEventf(ctx, 2, "memstats: %+v", ms)
+
+						goMemStats.Store(&ms)
+						atomic.StoreInt32(&collectingMemStats, 0)
+						close(statsCollected)
+					}); err != nil {
+						close(statsCollected)
+					}
+				}
+
+				select {
+				case <-statsCollected:
+					// Good; we managed to read the Go memory stats quickly enough.
+				case <-time.After(time.Second):
+				}
+
+				curStats := goMemStats.Load().(*status.GoMemStats)
+				s.runtime.SampleEnvironment(ctx, *curStats)
 				if goroutineDumper != nil {
 					goroutineDumper.MaybeDump(ctx, s.ClusterSettings(), s.runtime.Goroutines.Value())
 				}
 				if heapProfiler != nil {
-					heapProfiler.MaybeTakeProfile(ctx, s.ClusterSettings(), s.runtime.RSSBytes.Value())
+					heapProfiler.MaybeTakeProfile(ctx, curStats.MemStats)
 				}
-				timer.Reset(frequency)
-			case <-s.stopper.ShouldStop():
-				return
+
 			}
 		}
 	})
