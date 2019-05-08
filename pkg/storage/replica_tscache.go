@@ -170,19 +170,35 @@ func (r *Replica) updateTimestampCache(
 				}
 				addToTSCache(start, end, ts, txnID, true /* readCache */)
 			case *roachpb.QueryIntentRequest:
-				if t.IfMissing == roachpb.QueryIntentRequest_PREVENT {
-					resp := br.Responses[i].GetInner().(*roachpb.QueryIntentResponse)
-					if !resp.FoundIntent {
-						// If the QueryIntent request has an "if missing" behavior
-						// of PREVENT and the intent is missing then we update the
-						// timestamp cache at the intent's key to the intent's
-						// transactional timestamp. This will prevent the intent
-						// from ever being written in the future. We use an empty
-						// transaction ID so that we block the intent regardless
-						// of whether it is part of the current batch's transaction
-						// or not.
-						addToTSCache(start, end, t.Txn.Timestamp, uuid.UUID{}, true /* readCache */)
+				missing := false
+				if pErr != nil {
+					switch t := pErr.GetDetail().(type) {
+					case *roachpb.IntentMissingError:
+						missing = true
+					case *roachpb.TransactionRetryError:
+						// QueryIntent will return a TxnRetry(SERIALIZABLE) error
+						// if a transaction is querying its own intent and finds
+						// it pushed.
+						//
+						// NB: we check the index of the error above, so this
+						// TransactionRetryError should indicate a missing intent
+						// from the QueryIntent request. However, bumping the
+						// timestamp cache wouldn't cause a correctness issue
+						// if we found the intent.
+						missing = t.Reason == roachpb.RETRY_SERIALIZABLE
 					}
+				} else {
+					missing = !br.Responses[i].GetInner().(*roachpb.QueryIntentResponse).FoundIntent
+				}
+				if missing {
+					// If the QueryIntent determined that the intent is missing
+					// then we update the timestamp cache at the intent's key to
+					// the intent's transactional timestamp. This will prevent
+					// the intent from ever being written in the future. We use
+					// an empty transaction ID so that we block the intent
+					// regardless of whether it is part of the current batch's
+					// transaction or not.
+					addToTSCache(start, end, t.Txn.Timestamp, uuid.UUID{}, true /* readCache */)
 				}
 			default:
 				addToTSCache(start, end, ts, txnID, !roachpb.UpdatesWriteTimestampCache(args))

@@ -189,8 +189,7 @@ func RecoverTxn(
 	// implicitly committed and an acknowledgement of success may have already
 	// been returned to clients. If not, then we should have prevented the
 	// transaction from ever becoming implicitly committed at this timestamp
-	// using a QueryIntent(IfMissing=PREVENT), so we're free to abort the
-	// transaction record.
+	// using a QueryIntent, so we're free to abort the transaction record.
 	if args.ImplicitlyCommitted {
 		reply.RecoveredTxn.Status = roachpb.COMMITTED
 	} else {
