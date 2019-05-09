@@ -569,11 +569,13 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	ctx context.Context, table *sqlbase.TableDescriptor,
 ) error {
 	if table.Adding() {
-		for _, idx := range table.AllNonDropIndexes() {
-			if idx.ForeignKey.IsSet() {
-				if err := sc.waitToUpdateLeases(ctx, idx.ForeignKey.Table); err != nil {
-					return err
-				}
+		fks, err := table.AllActiveAndInactiveForeignKeys()
+		if err != nil {
+			return err
+		}
+		for _, fk := range fks {
+			if err := sc.waitToUpdateLeases(ctx, fk.Table); err != nil {
+				return err
 			}
 		}
 
@@ -1223,11 +1225,13 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 	// where the indexes refer columns. Whenever a column schema change
 	// is reversed, any index mutation referencing it is also reversed.
 	var droppedMutations map[sqlbase.MutationID]struct{}
+	var backrefs map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
 	_, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
 		// Keep track of the column mutations being reversed so that indexes
 		// referencing them can be dropped.
 		columns := make(map[string]struct{})
 		droppedMutations = nil
+		backrefs = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 
 		for i, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
@@ -1255,6 +1259,17 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				log.Warningf(ctx, "dropping constraint %+v", constraint)
 				if err := sc.maybeDropValidatingConstraint(ctx, desc, constraint); err != nil {
 					return err
+				}
+				// Get the foreign key backreferences to remove, and remove them immediately if they're on the same table
+				if constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY {
+					fk := &constraint.ForeignKey
+					if fk.Table == desc.ID {
+						if err := removeFKBackReferenceFromTable(desc, fk.Index, desc.ID, constraint.ForeignKeyIndex); err != nil {
+							return err
+						}
+					} else {
+						backrefs[constraint.ForeignKey.Table] = append(backrefs[constraint.ForeignKey.Table], constraint)
+					}
 				}
 			}
 
@@ -1314,6 +1329,23 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 	if err != nil {
 		return err
 	}
+
+	// Drop foreign key backreferences on other tables
+	for tbl, refs := range backrefs {
+		_, err = sc.leaseMgr.Publish(ctx, tbl, func(desc *sqlbase.MutableTableDescriptor) error {
+			for _, ref := range refs {
+				if err := removeFKBackReferenceFromTable(desc, ref.ForeignKey.Index, sc.tableID, ref.ForeignKeyIndex); err != nil {
+					return err
+				}
+			}
+			return nil
+		}, nil,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Only update the job if the transaction has succeeded. The schame change
 	// job will now references the rollback job.
 	if scJob != nil {
@@ -1423,6 +1455,22 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 				"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
 				constraint.Name,
 			)
+		}
+	case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+		idx, err := desc.FindIndexByID(constraint.ForeignKeyIndex)
+		if err != nil {
+			return err
+		}
+		if idx.ForeignKey.IsSet() {
+			idx.ForeignKey = sqlbase.ForeignKeyReference{}
+		} else {
+			if log.V(2) {
+				log.Infof(
+					ctx,
+					"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
+					constraint.Name,
+				)
+			}
 		}
 	default:
 		return pgerror.AssertionFailedf("unsupported constraint type: %d", log.Safe(constraint.ConstraintType))
