@@ -74,12 +74,15 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 
 	n.hasNulls = true
 	sIdx := start >> 6
-	eIdx := end >> 6
+	eIdx := (end - 1) >> 6
 
 	// Case where mask only spans one uint64.
 	if sIdx == eIdx {
 		mask := onesMask << (start % 64)
-		mask = mask & (onesMask >> (64 - (end % 64)))
+		// Mask the end if needed.
+		if end%64 != 0 {
+			mask = mask & (onesMask >> (64 - (end % 64)))
+		}
 		n.nulls[sIdx] |= mask
 		return
 	}
@@ -89,8 +92,12 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 		mask := onesMask << (start % 64)
 		n.nulls[sIdx] |= mask
 
-		mask = onesMask >> (64 - (end % 64))
-		n.nulls[eIdx] |= mask
+		if end%64 == 0 {
+			n.nulls[eIdx] = onesMask
+		} else {
+			mask = onesMask >> (64 - (end % 64))
+			n.nulls[eIdx] |= mask
+		}
 
 		for i := sIdx + 1; i < eIdx; i++ {
 			n.nulls[i] |= onesMask
@@ -187,33 +194,34 @@ func (n *Nulls) Slice(start uint64, end uint64) Nulls {
 	if !n.hasNulls {
 		return NewNulls(int(end - start))
 	}
+	if start >= end {
+		return NewNulls(0)
+	}
+	s := NewNulls(int(end - start))
+	s.hasNulls = true
 	mod := start % 64
-	startIdx := start >> 6
-	// end is exclusive, so translate that to an exclusive index in nulls by
-	// figuring out which index the last accessible null should be in and add
-	// 1.
-	endIdx := (end-1)>>6 + 1
-	nulls := n.nulls[startIdx:endIdx]
-	if mod != 0 {
-		// If start is not a multiple of 64, we need to shift over the bitmap
-		// to have the first index correspond. Allocate new null bitmap as we
-		// want to keep the original bitmap safe for reuse.
-		nulls = make([]uint64, len(nulls))
-		for i, j := startIdx, 0; i < endIdx-1; i, j = i+1, j+1 {
-			// Bring the first null to the beginning.
-			nulls[j] = n.nulls[i] >> mod
-			// And now bitwise or the remaining bits with the bits we want to
-			// bring over from the next index, note that we handle endIdx-1
-			// separately.
-			nulls[j] |= (n.nulls[i+1] << (64 - mod))
+	startIdx := int(start >> 6)
+	if mod == 0 {
+		copy(s.nulls, n.nulls[startIdx:])
+	} else {
+		for i := range s.nulls {
+			// If start is not a multiple of 64, we need to shift over the bitmap
+			// to have the first index correspond.
+			s.nulls[i] = n.nulls[startIdx+i] >> mod
+			if startIdx+i+1 < len(n.nulls) {
+				// And now bitwise or the remaining bits with the bits we want to
+				// bring over from the next index.
+				s.nulls[i] |= (n.nulls[startIdx+i+1] << (64 - mod))
+			}
 		}
-		// Get the first bits to where we want them for endIdx-1.
-		nulls[len(nulls)-1] = n.nulls[endIdx-1] >> mod
 	}
-	return Nulls{
-		nulls:    nulls,
-		hasNulls: true,
+	// Zero out any trailing bits in the final uint64.
+	endBits := (end - start) % 64
+	if endBits != 0 {
+		mask := onesMask >> (64 - endBits)
+		s.nulls[len(s.nulls)-1] &= mask
 	}
+	return s
 }
 
 // NullBitmap returns the null bitmap.
