@@ -2756,6 +2756,25 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.locality_value": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"key", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				key := string(*(args[0].(*tree.DString)))
+				for i := range ctx.Locality.Tiers {
+					tier := &ctx.Locality.Tiers[i]
+					if tier.Key == key {
+						return tree.NewDString(tier.Value), nil
+					}
+				}
+				return tree.DNull, nil
+			},
+			Info: "Returns the value of the specified locality key.",
+		},
+	),
+
 	"crdb_internal.node_executable_version": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
