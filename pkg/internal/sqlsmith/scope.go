@@ -60,7 +60,7 @@ func (s *scope) canRecurse() bool {
 	s.budget--
 	// Disable recursion randomly so that early expressions don't take all
 	// the budget.
-	return s.budget > 0 && coin()
+	return s.budget > 0 && s.coin()
 }
 
 // Context holds information about what kinds of expressions are legal at
