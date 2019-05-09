@@ -368,8 +368,10 @@ while :; do
   exit 0
 {{- end}}
   if [ -n "${lastpid}" ]; then
-    nc localhost {{.Port}} >/dev/null 2>&1
-    echo nc exited
+    while kill -0 "${lastpid}"; do
+      sleep 1
+    done
+    echo "kill exited nonzero"
   else
     sleep 1
   fi
