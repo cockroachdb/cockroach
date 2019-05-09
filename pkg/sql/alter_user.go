@@ -36,7 +36,7 @@ type alterUserSetPasswordNode struct {
 func (p *planner) AlterUserSetPassword(
 	ctx context.Context, n *tree.AlterUserSetPassword,
 ) (planNode, error) {
-	tDesc, err := ResolveExistingObject(ctx, p, userTableName, true /*required*/, requireTableDesc)
+	tDesc, err := ResolveExistingObject(ctx, p, userTableName, true /*required*/, ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
