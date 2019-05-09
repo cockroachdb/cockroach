@@ -30,19 +30,25 @@ type tpchBench int
 //go:generate stringer -type=tpchBench
 
 const (
-	// SQL20 queries: https://github.com/cockroachdb/cockroach/blob/master/pkg/workload/querybench/2.1-sql-20
 	sql20 tpchBench = iota
+	tpch
 )
 
-type tpchBenchSpec struct {
-	Nodes       int
-	CPUs        int
-	ScaleFactor int
-	benchType   tpchBench
+var urlMap = map[tpchBench]string{
+	sql20: `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/2.1-sql-20`,
+	tpch:  `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries`,
 }
 
-// sql20bench runs the group of sql20 queries against CockroachDB clusters in
-// different configurations.
+type tpchBenchSpec struct {
+	Nodes             int
+	CPUs              int
+	ScaleFactor       int
+	benchType         tpchBench
+	durationInMinutes int
+}
+
+// runTPCHBench runs sets of queries against CockroachDB clusters in different
+// configurations.
 //
 // In order to run a benchmark, a TPC-H dataset must first be loaded. To reuse
 // this data across runs, it is recommended to use a combination of
@@ -51,7 +57,7 @@ type tpchBenchSpec struct {
 //
 // This benchmark runs with a single load generator node running a single
 // worker.
-func runSQL20Bench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
+func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 	roachNodes := c.Range(1, c.nodes-1)
 	loadNode := c.Node(c.nodes)
 
@@ -59,9 +65,9 @@ func runSQL20Bench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
 	c.Put(ctx, workload, "./workload", loadNode)
 
-	url := `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/2.1-sql-20`
-	t.Status(fmt.Sprintf("downloading sql20 query file from %s", url))
-	filename := "sql20"
+	url := urlMap[b.benchType]
+	filename := b.benchType.String()
+	t.Status(fmt.Sprintf("downloading %s query file from %s", filename, url))
 	if err := c.RunE(ctx, loadNode, fmt.Sprintf("curl %s > %s", url, filename)); err != nil {
 		t.Fatal(err)
 	}
@@ -77,12 +83,16 @@ func runSQL20Bench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 			return err
 		}
 
-		t.l.Printf("running sql20 benchmark on tpch scale-factor=%d", b.ScaleFactor)
+		t.l.Printf("running %s benchmark on tpch scale-factor=%d", filename, b.ScaleFactor)
 
 		// Run with only one worker to get best-case single-query performance.
+		// TODO(yuzefovich): instead of duration, specify --max-ops (we'll need to
+		// know the number of queries in file - probably just add it as the first
+		// non-comment line of the queries' files).
 		cmd := fmt.Sprintf(
-			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s --duration=5m {pgurl%s} --histograms=logs/stats.json",
+			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s --duration=%dm {pgurl%s} --histograms=logs/stats.json",
 			filename,
+			b.durationInMinutes,
 			roachNodes,
 		)
 		if err := c.RunE(ctx, loadNode, cmd); err != nil {
@@ -166,23 +176,26 @@ func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
 		Cluster:    makeClusterSpec(numNodes),
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			switch b.benchType {
-			case sql20:
-				runSQL20Bench(ctx, t, c, b)
-			default:
-				t.Fatalf("unsupported benchmark type %d", b.benchType)
-			}
+			runTPCHBench(ctx, t, c, b)
 		},
 	})
 }
 
-func registerSQL20Bench(r *registry) {
+func registerTPCHBench(r *registry) {
 	specs := []tpchBenchSpec{
 		{
-			Nodes:       3,
-			CPUs:        4,
-			ScaleFactor: 1,
-			benchType:   sql20,
+			Nodes:             3,
+			CPUs:              4,
+			ScaleFactor:       1,
+			benchType:         sql20,
+			durationInMinutes: 5,
+		},
+		{
+			Nodes:             3,
+			CPUs:              4,
+			ScaleFactor:       1,
+			benchType:         tpch,
+			durationInMinutes: 30,
 		},
 	}
 
