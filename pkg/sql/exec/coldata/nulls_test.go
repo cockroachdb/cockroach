@@ -164,7 +164,7 @@ func TestSlice(t *testing.T) {
 	for _, start := range pos {
 		for _, end := range pos {
 			n := nulls3.Slice(start, end)
-			for i := uint64(0); i < uint64(64*len(n.nulls)); i++ {
+			for i := uint64(0); i < uint64(8*len(n.nulls)); i++ {
 				expected := start+i < end && nulls3.NullAt64(start+i)
 				require.Equal(t, expected, n.NullAt64(i),
 					"expected nulls3.Slice(%d, %d).NullAt(%d) to be %b", start, end, i, expected)
