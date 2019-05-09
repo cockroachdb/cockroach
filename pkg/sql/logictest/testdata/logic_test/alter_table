@@ -128,6 +128,9 @@ t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
+statement error duplicate constraint name
+ALTER TABLE t ADD CONSTRAINT fk_f_ref_other FOREIGN KEY (a) REFERENCES other (b)
+
 # added constraints with generated names avoid name collisions.
 statement ok
 ALTER TABLE t ADD CHECK (a > 0)
