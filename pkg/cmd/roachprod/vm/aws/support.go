@@ -94,6 +94,9 @@ sudo service sshguard stop
 # By default, only 10 unauthenticated connections are permitted before sshd
 # starts randomly dropping connections.
 sudo sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
+# Crank up the logging for issues such as:
+# https://github.com/cockroachdb/cockroach/issues/36929
+sudo sed -i'' 's/LogLevel.*$/LogLevel DEBUG/' /etc/ssh/sshd_config
 sudo service sshd restart
 # increase the default maximum number of open file descriptors for
 # root and non-root users. Load generators running a lot of concurrent
