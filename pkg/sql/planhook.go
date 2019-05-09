@@ -94,6 +94,9 @@ type PlanHookState interface {
 	EvalAsOfTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, error)
 	ResolveUncachedDatabaseByName(
 		ctx context.Context, dbName string, required bool) (*UncachedDatabaseDescriptor, error)
+	ResolveMutableTableDescriptor(
+		ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
+	) (table *MutableTableDescriptor, err error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
