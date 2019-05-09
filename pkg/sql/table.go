@@ -892,7 +892,7 @@ func (p *planner) writeTableDescToBatch(
 		}
 	} else {
 		// Only increment the table descriptor version once in this transaction.
-		if err := maybeIncrementVersion(ctx, tableDesc, p.txn); err != nil {
+		if err := tableDesc.MaybeIncrementVersion(ctx, p.txn); err != nil {
 			return err
 		}
 
