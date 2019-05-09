@@ -143,7 +143,8 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			sign*rng.Int63n(1000),
 		)}
 	case types.UuidFamily:
-		return tree.NewDUuid(tree.DUuid{UUID: uuid.MakeV4()})
+		gen := uuid.NewGenWithReader(rng)
+		return tree.NewDUuid(tree.DUuid{UUID: uuid.Must(gen.NewV4())})
 	case types.INetFamily:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})

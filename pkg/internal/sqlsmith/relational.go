@@ -15,8 +15,6 @@
 package sqlsmith
 
 import (
-	"math/rand"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -230,10 +228,10 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 	}
 
 	// WITHs are pretty rare, so just ignore them a lot.
-	if coin() {
+	if s.coin() {
 		return nil, nil
 	}
-	ctes := make([]*tree.CTE, 0, d6()/2)
+	ctes := make([]*tree.CTE, 0, s.d6()/2)
 	if cap(ctes) == 0 {
 		return nil, nil
 	}
@@ -242,7 +240,7 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 		var ok bool
 		var stmt tree.SelectStatement
 		var stmtRefs colRefs
-		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(s.schema.rnd), nil /* refs */, tables)
+		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(s), nil /* refs */, tables)
 		if !ok {
 			continue
 		}
@@ -275,11 +273,11 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 	}, tables
 }
 
-func makeDesiredTypes(rng *rand.Rand) []*types.T {
+func makeDesiredTypes(s *scope) []*types.T {
 	var typs []*types.T
 	for {
-		typs = append(typs, sqlbase.RandType(rng))
-		if d6() < 2 {
+		typs = append(typs, sqlbase.RandType(s.schema.rnd))
+		if s.d6() < 2 {
 			break
 		}
 	}
@@ -336,7 +334,7 @@ func (s *Smither) randStringComparison() tree.ComparisonOperator {
 // makeSelectTable returns a TableExpr of the form `(SELECT ...)`, which
 // would end up looking like `SELECT ... FROM (SELECT ...)`.
 func makeSelectTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	desiredTypes := makeDesiredTypes(s.schema.rnd)
+	desiredTypes := makeDesiredTypes(s)
 	stmt, _, ok := s.makeSelect(desiredTypes, refs)
 	if !ok {
 		return nil, nil, false
@@ -383,10 +381,10 @@ func (s *scope) makeSelectClause(
 
 	var fromRefs colRefs
 	// Sometimes generate a SELECT with no FROM clause.
-	requireFrom := d6() != 1
-	for (requireFrom && len(clause.From.Tables) < 1) || coin() {
+	requireFrom := s.d6() != 1
+	for (requireFrom && len(clause.From.Tables) < 1) || s.coin() {
 		var from tree.TableExpr
-		if len(withTables) == 0 || coin() {
+		if len(withTables) == 0 || s.coin() {
 			// Add a normal data source.
 			source, sourceRefs, sourceOk := makeTableExpr(s, refs, false)
 			if !sourceOk {
@@ -413,7 +411,7 @@ func (s *scope) makeSelectClause(
 		orderByRefs = fromRefs
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
-		if d6() <= 2 {
+		if s.d6() <= 2 {
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
@@ -429,7 +427,7 @@ func (s *scope) makeSelectClause(
 				groupByRefs[i], groupByRefs[j] = groupByRefs[j], groupByRefs[i]
 			})
 			var groupBy tree.GroupBy
-			for (len(groupBy) < 1 || coin()) && len(groupBy) < len(groupByRefs) {
+			for (len(groupBy) < 1 || s.coin()) && len(groupBy) < len(groupByRefs) {
 				groupBy = append(groupBy, groupByRefs[len(groupBy)].item)
 			}
 			groupByRefs = groupByRefs[:len(groupBy)]
@@ -440,7 +438,7 @@ func (s *scope) makeSelectClause(
 			// TODO(mjibson): also use this context sometimes in
 			// non-aggregate mode (select sum(x) from a).
 			ctx = groupByCtx
-		} else if d6() <= 1 {
+		} else if s.d6() <= 1 {
 			// Enable window functions. This will enable them for all
 			// exprs, but makeFunc will only let a few through.
 			ctx = windowCtx
@@ -453,7 +451,7 @@ func (s *scope) makeSelectClause(
 	}
 	clause.Exprs = selectList
 
-	if d100() == 1 {
+	if s.d100() == 1 {
 		clause.Distinct = true
 		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
 		orderByRefs = selectRefs
@@ -463,7 +461,7 @@ func (s *scope) makeSelectClause(
 }
 
 func makeSelect(s *scope) (tree.Statement, bool) {
-	stmt, _, ok := s.makeSelect(makeDesiredTypes(s.schema.rnd), nil)
+	stmt, _, ok := s.makeSelect(makeDesiredTypes(s), nil)
 	return stmt, ok
 }
 
@@ -485,7 +483,7 @@ func (s *scope) makeSelect(desiredTypes []*types.T, refs colRefs) (*tree.Select,
 		Select:  clause,
 		With:    withStmt,
 		OrderBy: s.makeOrderBy(orderByRefs),
-		Limit:   makeLimit(),
+		Limit:   makeLimit(s),
 	}
 
 	return &stmt, selectRefs, true
@@ -526,7 +524,7 @@ func (s *scope) makeDelete(refs colRefs) (*tree.Delete, *tableRef, bool) {
 		Table:     table,
 		Where:     s.makeWhere(tableRefs),
 		OrderBy:   s.makeOrderBy(tableRefs),
-		Limit:     makeLimit(),
+		Limit:     makeLimit(s),
 		Returning: &tree.NoReturningClause{},
 	}
 	if del.Limit == nil {
@@ -574,13 +572,13 @@ func (s *scope) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
 		Table:     table,
 		Where:     s.makeWhere(tableRefs),
 		OrderBy:   s.makeOrderBy(tableRefs),
-		Limit:     makeLimit(),
+		Limit:     makeLimit(s),
 		Returning: &tree.NoReturningClause{},
 	}
 	// Each row can be set at most once. Copy tableRefs to upRefs and remove
 	// elements from it as we use them.
 	upRefs := tableRefs.extend()
-	for (len(update.Exprs) < 1 || coin()) && len(upRefs) > 0 {
+	for (len(update.Exprs) < 1 || s.coin()) && len(upRefs) > 0 {
 		n := s.schema.rnd.Intn(len(upRefs))
 		ref := upRefs[n]
 		upRefs = append(upRefs[:n], upRefs[n+1:]...)
@@ -653,11 +651,11 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 
 	// Use DEFAULT VALUES only sometimes. A nil insert.Rows.Select indicates
 	// DEFAULT VALUES.
-	if d9() != 1 {
+	if s.d9() != 1 {
 		var desiredTypes []*types.T
 		var names tree.NameList
 
-		unnamed := coin()
+		unnamed := s.coin()
 
 		// Grab some subset of the columns of the table to attempt to insert into.
 		for _, c := range tableRef.Columns {
@@ -666,7 +664,7 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 			if c.Computed.Computed {
 				continue
 			}
-			if unnamed || c.Nullable.Nullability == tree.NotNull || coin() {
+			if unnamed || c.Nullable.Nullability == tree.NotNull || s.coin() {
 				desiredTypes = append(desiredTypes, c.Type)
 				names = append(names, c.Name)
 			}
@@ -707,13 +705,13 @@ func (s *scope) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool
 }
 
 func makeValuesTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	types := makeDesiredTypes(s.schema.rnd)
+	types := makeDesiredTypes(s)
 	values, valuesRefs := makeValues(s, types, refs)
 	return values, valuesRefs, true
 }
 
 func makeValues(s *scope, desiredTypes []*types.T, refs colRefs) (tree.TableExpr, colRefs) {
-	numRowsToInsert := d6()
+	numRowsToInsert := s.d6()
 	values := tree.ValuesClause{
 		Rows: make([]tree.Exprs, numRowsToInsert),
 	}
@@ -796,12 +794,12 @@ func makeSetOp(
 		Type:  setOps[s.schema.rnd.Intn(len(setOps))],
 		Left:  &tree.Select{Select: left},
 		Right: &tree.Select{Select: right},
-		All:   coin(),
+		All:   s.coin(),
 	}, leftRefs, withTables, true
 }
 
 func (s *scope) makeWhere(refs colRefs) *tree.Where {
-	if coin() {
+	if s.coin() {
 		where := makeBoolExpr(s, refs)
 		return tree.NewWhere("WHERE", where)
 	}
@@ -809,7 +807,7 @@ func (s *scope) makeWhere(refs colRefs) *tree.Where {
 }
 
 func (s *scope) makeHaving(refs colRefs) *tree.Where {
-	if coin() {
+	if s.coin() {
 		where := makeBoolExprContext(s, havingCtx, refs)
 		return tree.NewWhere("HAVING", where)
 	}
@@ -821,7 +819,7 @@ func (s *scope) makeOrderBy(refs colRefs) tree.OrderBy {
 		return nil
 	}
 	var ob tree.OrderBy
-	for coin() {
+	for s.coin() {
 		ref := refs[s.schema.rnd.Intn(len(refs))]
 		// We don't support order by jsonb columns.
 		if ref.typ.Family() == types.JsonFamily {
@@ -835,15 +833,18 @@ func (s *scope) makeOrderBy(refs colRefs) tree.OrderBy {
 	return ob
 }
 
-func makeLimit() *tree.Limit {
-	if d6() > 2 {
-		return &tree.Limit{Count: tree.NewDInt(tree.DInt(d100()))}
+func makeLimit(s *scope) *tree.Limit {
+	if s.schema.disableLimits {
+		return nil
+	}
+	if s.d6() > 2 {
+		return &tree.Limit{Count: tree.NewDInt(tree.DInt(s.d100()))}
 	}
 	return nil
 }
 
 func (s *scope) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs) {
-	desiredTypes := makeDesiredTypes(s.schema.rnd)
+	desiredTypes := makeDesiredTypes(s)
 
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
