@@ -461,4 +461,5 @@ var FoldFunctionWhitelist = map[string]struct{}{
 	"jsonb_strip_nulls":             {},
 	"json_array_length":             {},
 	"jsonb_array_length":            {},
+	"crdb_internal.locality_value":  {},
 }
