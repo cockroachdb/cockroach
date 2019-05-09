@@ -128,7 +128,7 @@ func makeScalarSample(
 	}
 	// Sometimes try to find a col ref or a const if there's no columns
 	// with a matching type.
-	if coin() {
+	if s.coin() {
 		if expr, ok := makeColRef(s, typ, refs); ok {
 			return expr
 		}
@@ -299,7 +299,7 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 	// Turn off window functions most of the time because they are
 	// enabled for the entire select exprs instead of on a per-expr
 	// basis.
-	if class == tree.WindowClass && d6() != 1 {
+	if class == tree.WindowClass && s.d6() != 1 {
 		class = tree.NormalClass
 	}
 	fns := functions[class][typ.Oid()]
@@ -332,19 +332,19 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 	// Use a window function if:
 	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
 	// - we explicitly chose a window function
-	if fn.def.Class == tree.WindowClass || (!ctx.noWindow && d6() == 1 && fn.def.Class == tree.AggregateClass) {
+	if fn.def.Class == tree.WindowClass || (!ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
 		// Pick some random subset of cols for the partition.
 		wrefs := refs.extend()
 		s.schema.rnd.Shuffle(len(wrefs), func(i, j int) {
 			wrefs[i], wrefs[j] = wrefs[j], wrefs[i]
 		})
 		var parts tree.Exprs
-		for coin() && len(wrefs) > 0 {
+		for s.coin() && len(wrefs) > 0 {
 			parts = append(parts, wrefs[0].item)
 			wrefs = wrefs[1:]
 		}
 		var order tree.OrderBy
-		for coin() && len(wrefs) > 0 {
+		for s.coin() && len(wrefs) > 0 {
 			order = append(order, &tree.Order{
 				Expr:      wrefs[0].item,
 				Direction: s.schema.randDirection(),
@@ -352,7 +352,7 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 			wrefs = wrefs[1:]
 		}
 		var frame *tree.WindowFrame
-		if coin() {
+		if s.coin() {
 			frame = makeWindowFrame(s, refs)
 		}
 		window = &tree.WindowDef{
@@ -399,14 +399,14 @@ func makeWindowFrame(s *scope, refs colRefs) *tree.WindowFrame {
 		// DInt, DFloat, DDecimal, DInterval; so for now let's avoid this
 		// complication and not choose offset bound types.
 		// TODO(yuzefovich): fix this.
-		if coin() {
+		if s.coin() {
 			startBound.BoundType = tree.UnboundedPreceding
 		} else {
 			startBound.BoundType = tree.CurrentRow
 		}
-		if coin() {
+		if s.coin() {
 			endBound = new(tree.WindowFrameBound)
-			if coin() {
+			if s.coin() {
 				endBound.BoundType = tree.CurrentRow
 			} else {
 				endBound.BoundType = tree.UnboundedFollowing
@@ -419,13 +419,13 @@ func makeWindowFrame(s *scope, refs colRefs) *tree.WindowFrame {
 			// With OffsetFollowing as the start bound, the end bound must be
 			// present and can either be OffsetFollowing or UnboundedFollowing.
 			endBound = new(tree.WindowFrameBound)
-			if coin() {
+			if s.coin() {
 				endBound.BoundType = tree.OffsetFollowing
 			} else {
 				endBound.BoundType = tree.UnboundedFollowing
 			}
 		}
-		if endBound == nil && coin() {
+		if endBound == nil && s.coin() {
 			endBound = new(tree.WindowFrameBound)
 			// endBound cannot be "smaller" than startBound, so we will "prohibit" all
 			// such choices.
@@ -461,7 +461,7 @@ func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 
-	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(s.schema.rnd), refs)
+	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(s), refs)
 	if !ok {
 		return nil, false
 	}
@@ -483,7 +483,7 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 	t := sqlbase.RandScalarType(s.schema.rnd)
 	var rhs tree.TypedExpr
-	if coin() {
+	if s.coin() {
 		rhs = makeTuple(s, t, refs)
 	} else {
 		selectStmt, _, ok := s.makeSelect([]*types.T{t}, refs)
@@ -505,7 +505,7 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		rhs = subq
 	}
 	op := tree.In
-	if coin() {
+	if s.coin() {
 		op = tree.NotIn
 	}
 	return tree.NewTypedComparisonExpr(
