@@ -1404,6 +1404,12 @@ func (s *Server) Start(ctx context.Context) error {
 			hlcUpperBound,
 			timeutil.SleepUntil,
 		)
+
+		// Ensure that any subsequent use of `cockroach init` will receive
+		// an error "the cluster was already initialized."
+		if _, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
+			log.Fatal(ctx, err)
+		}
 	} else {
 		// We have no existing stores. We start an initServer and then wait for
 		// one of the following:
