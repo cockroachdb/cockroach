@@ -17,7 +17,7 @@ package exec
 import (
 	"context"
 	"fmt"
-	"math"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -25,12 +25,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
+const (
+	selectivity     = .5
+	nullProbability = .1
+)
+
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
-	tups := tuples{{0}, {1}, {2}}
+	tups := tuples{{0}, {1}, {2}, {nil}}
 	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
 		op := selLTInt64Int64ConstOp{
 			input:    input[0],
@@ -51,6 +55,9 @@ func TestSelLTInt64Int64(t *testing.T) {
 		{0, 1},
 		{1, 0},
 		{1, 1},
+		{nil, 1},
+		{-1, nil},
+		{nil, nil},
 	}
 	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
 		op := selLTInt64Int64Op{
@@ -98,19 +105,24 @@ func TestGetSelectionOperator(t *testing.T) {
 	}
 }
 
-func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool) {
-	rng, _ := randutil.NewPseudoRand()
+func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	// We need to generate such a batch that selection operator will output at
-	// least one tuple - otherwise, the benchmark will be stuck in an infinite
-	// loop, so we put MinInt64 as the first element and make sure that constArg
-	// is not MinInt64.
 	batch := coldata.NewMemBatch([]types.T{types.Int64})
 	col := batch.ColVec(0).Int64()
-	col[0] = math.MinInt64
-	for i := int64(1); i < coldata.BatchSize; i++ {
-		col[i] = rng.Int63()
+	for i := int64(0); i < coldata.BatchSize; i++ {
+		if float64(i) < coldata.BatchSize*selectivity {
+			col[i] = -1
+		} else {
+			col[i] = 1
+		}
+	}
+	if hasNulls {
+		for i := 0; i < coldata.BatchSize; i++ {
+			if rand.Float64() < nullProbability {
+				batch.ColVec(0).Nulls().SetNull(uint16(i))
+			}
+		}
 	}
 	batch.SetLength(coldata.BatchSize)
 	if useSelectionVector {
@@ -120,18 +132,13 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool) {
 			sel[i] = uint16(i)
 		}
 	}
-	constArg := rng.Int63()
-	for constArg == math.MinInt64 {
-		constArg = rng.Int63()
-	}
-
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
 	plusOp := &selLTInt64Int64ConstOp{
 		input:    source,
 		colIdx:   0,
-		constArg: constArg,
+		constArg: 0,
 	}
 	plusOp.Init()
 
@@ -144,26 +151,36 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool) {
 
 func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 	for _, useSel := range []bool{true, false} {
-		b.Run(fmt.Sprintf("useSel=%t", useSel), func(b *testing.B) {
-			benchmarkSelLTInt64Int64ConstOp(b, useSel)
-		})
+		for _, hasNulls := range []bool{true, false} {
+			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
+				benchmarkSelLTInt64Int64ConstOp(b, useSel, hasNulls)
+			})
+		}
 	}
 }
 
-func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool) {
-	rng, _ := randutil.NewPseudoRand()
+func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64})
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
-	// We need to generate such a batch that selection operator will output at
-	// least one tuple - otherwise, the benchmark will be stuck in an infinite
-	// loop, so we put 0 and 1 as the first tuple of the batch.
-	col1[0], col2[0] = 0, 1
-	for i := int64(1); i < coldata.BatchSize; i++ {
-		col1[i] = rng.Int63()
-		col2[i] = rng.Int63()
+	for i := int64(0); i < coldata.BatchSize; i++ {
+		if float64(i) < coldata.BatchSize*selectivity {
+			col1[i], col2[i] = -1, 1
+		} else {
+			col1[i], col2[i] = 1, -1
+		}
+	}
+	if hasNulls {
+		for i := 0; i < coldata.BatchSize; i++ {
+			if rand.Float64() < nullProbability {
+				batch.ColVec(0).Nulls().SetNull(uint16(i))
+			}
+			if rand.Float64() < nullProbability {
+				batch.ColVec(1).Nulls().SetNull(uint16(i))
+			}
+		}
 	}
 	batch.SetLength(coldata.BatchSize)
 	if useSelectionVector {
@@ -192,8 +209,10 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool) {
 
 func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 	for _, useSel := range []bool{true, false} {
-		b.Run(fmt.Sprintf("useSel=%t", useSel), func(b *testing.B) {
-			benchmarkSelLTInt64Int64Op(b, useSel)
-		})
+		for _, hasNulls := range []bool{true, false} {
+			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
+				benchmarkSelLTInt64Int64Op(b, useSel, hasNulls)
+			})
+		}
 	}
 }
