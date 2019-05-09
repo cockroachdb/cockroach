@@ -169,7 +169,9 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 	// the cockroach package. Clojure doesn't really understand
 	// monorepos so steps like this are necessary for one package to
 	// depend on an unreleased package in the same repo.
-	run(c, ctx, controller, "bash", "-e", "-c", `"cd /mnt/data1/jepsen/jepsen && ~/lein install"`)
+	// Also remove the invoke.log from a previous test, if any.
+	run(c, ctx, controller, "bash", "-e", "-c",
+		`"cd /mnt/data1/jepsen/jepsen && ~/lein install && rm -f /mnt/data1/jepsen/cockroachdb/invoke.log"`)
 
 	errCh := make(chan error, 1)
 	go func() {
