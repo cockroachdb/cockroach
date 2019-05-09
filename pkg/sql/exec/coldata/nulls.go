@@ -74,12 +74,14 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 
 	n.hasNulls = true
 	sIdx := start >> 6
-	eIdx := end >> 6
+	eIdx := (end - 1) >> 6
 
 	// Case where mask only spans one uint64.
 	if sIdx == eIdx {
 		mask := onesMask << (start % 64)
-		mask = mask & (onesMask >> (64 - (end % 64)))
+		if end%64 != 0 {
+			mask = mask & (onesMask >> (64 - (end % 64)))
+		}
 		n.nulls[sIdx] |= mask
 		return
 	}
@@ -89,8 +91,12 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 		mask := onesMask << (start % 64)
 		n.nulls[sIdx] |= mask
 
-		mask = onesMask >> (64 - (end % 64))
-		n.nulls[eIdx] |= mask
+		if end%64 == 0 {
+			n.nulls[eIdx] |= onesMask
+		} else {
+			mask = onesMask >> (64 - (end % 64))
+			n.nulls[eIdx] |= mask
+		}
 
 		for i := sIdx + 1; i < eIdx; i++ {
 			n.nulls[i] |= onesMask
@@ -187,6 +193,9 @@ func (n *Nulls) Slice(start uint64, end uint64) Nulls {
 	if !n.hasNulls {
 		return NewNulls(int(end - start))
 	}
+	if start >= end {
+		return NewNulls(0)
+	}
 	mod := start % 64
 	startIdx := start >> 6
 	// end is exclusive, so translate that to an exclusive index in nulls by
@@ -231,4 +240,14 @@ func (n *Nulls) SetNullBitmap(bm []uint64) {
 			return
 		}
 	}
+}
+
+// Copy returns a copy of n which can be modified independently.
+func (n *Nulls) Copy() Nulls {
+	c := Nulls{
+		hasNulls: n.hasNulls,
+		nulls:    make([]uint64, len(n.nulls)),
+	}
+	copy(c.nulls, n.nulls)
+	return c
 }
