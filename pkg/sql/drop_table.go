@@ -49,7 +49,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]
-		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, requireTableDesc)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func (*dropTableNode) Close(context.Context)        {}
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) prepareDrop(
-	ctx context.Context, name *tree.TableName, required bool, requiredType requiredType,
+	ctx context.Context, name *tree.TableName, required bool, requiredType ResolveRequiredType,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {

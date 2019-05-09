@@ -401,7 +401,7 @@ func (p *planner) ParseQualifiedTableName(
 
 // ResolveTableName implements the tree.EvalDatabase interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	_, err := ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
+	_, err := ResolveExistingObject(ctx, p, tn, true /*required*/, ResolveAnyDescType)
 	return err
 }
 

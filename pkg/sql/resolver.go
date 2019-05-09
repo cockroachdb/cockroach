@@ -94,7 +94,11 @@ func GetObjectNames(
 // resolution, if successful. It is not modified in case of error or
 // if no object is found.
 func ResolveExistingObject(
-	ctx context.Context, sc SchemaResolver, tn *ObjectName, required bool, requiredType requiredType,
+	ctx context.Context,
+	sc SchemaResolver,
+	tn *ObjectName,
+	required bool,
+	requiredType ResolveRequiredType,
 ) (res *ImmutableTableDescriptor, err error) {
 	desc, err := resolveExistingObjectImpl(ctx, sc, tn, required, false /* requiredMutable */, requiredType)
 	if err != nil || desc == nil {
@@ -111,7 +115,11 @@ func ResolveExistingObject(
 // resolution, if successful. It is not modified in case of error or
 // if no object is found.
 func ResolveMutableExistingObject(
-	ctx context.Context, sc SchemaResolver, tn *ObjectName, required bool, requiredType requiredType,
+	ctx context.Context,
+	sc SchemaResolver,
+	tn *ObjectName,
+	required bool,
+	requiredType ResolveRequiredType,
 ) (res *MutableTableDescriptor, err error) {
 	desc, err := resolveExistingObjectImpl(ctx, sc, tn, required, true /* requiredMutable */, requiredType)
 	if err != nil || desc == nil {
@@ -126,7 +134,7 @@ func resolveExistingObjectImpl(
 	tn *ObjectName,
 	required bool,
 	requiredMutable bool,
-	requiredType requiredType,
+	requiredType ResolveRequiredType,
 ) (res tree.NameResolutionResult, err error) {
 	found, descI, err := tn.ResolveExisting(ctx, sc, requiredMutable, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
@@ -142,13 +150,13 @@ func resolveExistingObjectImpl(
 
 	goodType := true
 	switch requiredType {
-	case requireTableDesc:
+	case ResolveRequireTableDesc:
 		goodType = obj.TableDesc().IsTable()
-	case requireViewDesc:
+	case ResolveRequireViewDesc:
 		goodType = obj.TableDesc().IsView()
-	case requireTableOrViewDesc:
+	case ResolveRequireTableOrViewDesc:
 		goodType = obj.TableDesc().IsTable() || obj.TableDesc().IsView()
-	case requireSequenceDesc:
+	case ResolveRequireSequenceDesc:
 		goodType = obj.TableDesc().IsSequence()
 	}
 	if !goodType {
@@ -187,13 +195,13 @@ type resolveFlags struct {
 }
 
 func (p *planner) ResolveMutableTableDescriptor(
-	ctx context.Context, tn *ObjectName, required bool, requiredType requiredType,
+	ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
 ) (table *MutableTableDescriptor, err error) {
 	return ResolveMutableExistingObject(ctx, p, tn, required, requiredType)
 }
 
 func (p *planner) ResolveUncachedTableDescriptor(
-	ctx context.Context, tn *ObjectName, required bool, requiredType requiredType,
+	ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
 ) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		table, err = ResolveExistingObject(ctx, p, tn, required, requiredType)
@@ -238,23 +246,24 @@ func (p *planner) ResolveUncachedDatabase(
 	return res, err
 }
 
-// requiredType can be passed to the ResolveExistingObject function to
+// ResolveRequiredType can be passed to the ResolveExistingObject function to
 // require the returned descriptor to be of a specific type.
-type requiredType int
+type ResolveRequiredType int
 
+// ResolveRequiredType options have descriptive names.
 const (
-	anyDescType requiredType = iota
-	requireTableDesc
-	requireViewDesc
-	requireTableOrViewDesc
-	requireSequenceDesc
+	ResolveAnyDescType ResolveRequiredType = iota
+	ResolveRequireTableDesc
+	ResolveRequireViewDesc
+	ResolveRequireTableOrViewDesc
+	ResolveRequireSequenceDesc
 )
 
 var requiredTypeNames = [...]string{
-	requireTableDesc:       "table",
-	requireViewDesc:        "view",
-	requireTableOrViewDesc: "table or view",
-	requireSequenceDesc:    "sequence",
+	ResolveRequireTableDesc:       "table",
+	ResolveRequireViewDesc:        "view",
+	ResolveRequireTableOrViewDesc: "table or view",
+	ResolveRequireSequenceDesc:    "sequence",
 }
 
 // LookupSchema implements the tree.TableNameTargetResolver interface.
@@ -329,7 +338,7 @@ func getDescriptorsFromTargetList(
 			return nil, err
 		}
 		for i := range tableNames {
-			descriptor, err := ResolveMutableExistingObject(ctx, p, &tableNames[i], true, anyDescType)
+			descriptor, err := ResolveMutableExistingObject(ctx, p, &tableNames[i], true, ResolveAnyDescType)
 			if err != nil {
 				return nil, err
 			}
@@ -387,7 +396,7 @@ func findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := ResolveMutableExistingObject(ctx, sc, tn, true, anyDescType)
+		tableDesc, err := ResolveMutableExistingObject(ctx, sc, tn, true, ResolveAnyDescType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -444,7 +453,7 @@ func expandIndexName(
 	tn = &index.Table
 	if tn.Table() != "" {
 		// The index and its table prefix must exist already. Resolve the table.
-		desc, err = ResolveMutableExistingObject(ctx, sc, tn, requireTable, requireTableDesc)
+		desc, err = ResolveMutableExistingObject(ctx, sc, tn, requireTable, ResolveRequireTableDesc)
 		if err != nil {
 			return nil, nil, err
 		}

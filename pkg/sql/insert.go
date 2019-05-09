@@ -91,7 +91,7 @@ func (p *planner) Insert(
 	}
 
 	// Find which table we're working on, check the permissions.
-	desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
+	desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
