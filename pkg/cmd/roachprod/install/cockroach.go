@@ -346,7 +346,7 @@ tar cvf certs.tar certs
 			args = append(args, fmt.Sprintf("--join=%s:%d", host1, r.NodePort(c, 1)))
 		}
 		if advertisePublicIP {
-			args = append(args, fmt.Sprintf("--advertise-host=%s", c.host(i)))
+			args = append(args, fmt.Sprintf("--advertise-host=%s", c.host(i+1)))
 		}
 
 		var keyCmd string
