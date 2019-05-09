@@ -97,9 +97,11 @@ func (s *initServer) awaitBootstrap() (initServerResult, error) {
 func (s *initServer) Bootstrap(
 	ctx context.Context, request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
-	if err := s.testOrSetRejectErr(fmt.Errorf("cluster has already been initialized")); err != nil {
+	if err := s.testOrSetRejectErr(errClusterInitialized); err != nil {
 		return nil, err
 	}
 	close(s.bootstrapReqCh)
 	return &serverpb.BootstrapResponse{}, nil
 }
+
+var errClusterInitialized = fmt.Errorf("cluster has already been initialized")
