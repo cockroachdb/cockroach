@@ -72,7 +72,7 @@ var roleMembersTableName = tree.MakeTableName("system", "role_members")
 // BumpRoleMembershipTableVersion increases the table version for the
 // role membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, anyDescType)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, ResolveAnyDescType)
 	if err != nil {
 		return err
 	}
