@@ -2311,3 +2311,35 @@ func TestCancelRequest(t *testing.T) {
 		t.Fatalf("expected 1 cancel request, got %d", count)
 	}
 }
+
+func TestFailPrepareFailsTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Prepare("select fail"); err == nil {
+		t.Fatal("Got no error, expected one")
+	}
+
+	// This should also fail, since the txn should be destroyed.
+	if _, err := tx.Query("select 1"); err == nil {
+		t.Fatal("got no error, expected one")
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
