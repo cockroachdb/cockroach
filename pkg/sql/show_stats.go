@@ -45,7 +45,7 @@ var showTableStatsJSONColumns = sqlbase.ResultColumns{
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
 	// We avoid the cache so that we can observe the stats without
 	// taking a lease, like other SHOW commands.
-	desc, err := p.ResolveUncachedTableDescriptor(ctx, &n.Table, true /*required*/, requireTableDesc)
+	desc, err := p.ResolveUncachedTableDescriptor(ctx, &n.Table, true /*required*/, ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}

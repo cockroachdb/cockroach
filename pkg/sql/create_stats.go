@@ -159,7 +159,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		// TODO(anyone): if CREATE STATISTICS is meant to be able to operate
 		// within a transaction, then the following should probably run with
 		// caching disabled, like other DDL statements.
-		tableDesc, err = ResolveExistingObject(ctx, n.p, t, true /*required*/, requireTableDesc)
+		tableDesc, err = ResolveExistingObject(ctx, n.p, t, true /*required*/, ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}

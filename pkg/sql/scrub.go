@@ -104,7 +104,7 @@ func (n *scrubNode) startExec(params runParams) error {
 		// If the tableName provided refers to a view and error will be
 		// returned here.
 		tableDesc, err := ResolveExistingObject(
-			params.ctx, params.p, &n.n.Table, true /*required*/, requireTableDesc)
+			params.ctx, params.p, &n.n.Table, true /*required*/, ResolveRequireTableDesc)
 		if err != nil {
 			return err
 		}

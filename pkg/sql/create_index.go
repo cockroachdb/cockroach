@@ -34,7 +34,7 @@ type createIndexNode struct {
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptor(
-		ctx, &n.Table, true /*required*/, requireTableDesc,
+		ctx, &n.Table, true /*required*/, ResolveRequireTableDesc,
 	)
 	if err != nil {
 		return nil, err
