@@ -329,34 +329,6 @@ func (s LeaseStore) WaitForOneVersion(
 	return tableDesc.Version, nil
 }
 
-func maybeIncrementVersion(
-	ctx context.Context, desc *sqlbase.MutableTableDescriptor, txn *client.Txn,
-) error {
-	// Already incremented, no-op.
-	if desc.Version == desc.ClusterVersion.Version+1 {
-		return nil
-	}
-	desc.Version++
-	// We need to set ModificationTime to the transaction's commit
-	// timestamp. Using CommitTimestamp() guarantees that the
-	// transaction will commit at the CommitTimestamp().
-	//
-	// TODO(vivek): Stop needing to do this by deprecating the
-	// ModificationTime. A Descriptor modification time can be
-	// the mvcc timestamp of the descriptor. This requires moving the
-	// schema change lease out of the descriptor making the
-	// descriptor truly immutable at a version.
-	// Also recognize that the leases are released before the transaction
-	// is committed through a call to TableCollection.releaseLeases(),
-	// so updating this policy will also need to consider not doing
-	// that.
-	modTime := txn.CommitTimestamp()
-	desc.ModificationTime = modTime
-	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
-		desc.ID, desc.Name, desc.Version, modTime.GoTime())
-	return nil
-}
-
 var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 
 // Publish updates a table descriptor. It also maintains the invariant that
@@ -416,7 +388,7 @@ func (s LeaseStore) Publish(
 					tableDesc.Version, version)
 			}
 
-			if err := maybeIncrementVersion(ctx, tableDesc, txn); err != nil {
+			if err := tableDesc.MaybeIncrementVersion(ctx, txn); err != nil {
 				return err
 			}
 			if err := tableDesc.ValidateTable(s.execCfg.Settings); err != nil {
