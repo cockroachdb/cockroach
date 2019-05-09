@@ -76,7 +76,7 @@ func validateCheckExpr(
 //   NOT ((COALESCE(a_id, b_id) IS NULL) OR (a_id IS NOT NULL AND b_id IS NOT NULL))
 // LIMIT 1;
 func matchFullUnacceptableKeyQuery(
-	prefix int, srcName *string, srcIdx *sqlbase.IndexDescriptor,
+	prefix int, srcID sqlbase.ID, srcIdx *sqlbase.IndexDescriptor,
 ) string {
 	srcCols, srcNotNullClause := make([]string, prefix), make([]string, prefix)
 	for i := 0; i < prefix; i++ {
@@ -84,8 +84,8 @@ func matchFullUnacceptableKeyQuery(
 		srcNotNullClause[i] = fmt.Sprintf("%s IS NOT NULL", tree.NameString(srcIdx.ColumnNames[i]))
 	}
 	return fmt.Sprintf(
-		`SELECT * FROM %s@%s WHERE NOT ((COALESCE(%s) IS NULL) OR (%s)) LIMIT 1`,
-		*srcName, tree.NameString(srcIdx.Name),
+		`SELECT * FROM [%d AS tbl]@[%d] WHERE NOT ((COALESCE(%s) IS NULL) OR (%s)) LIMIT 1`,
+		srcID, srcIdx.ID,
 		strings.Join(srcCols, ", "),
 		strings.Join(srcNotNullClause, " AND "),
 	)
@@ -111,9 +111,9 @@ func matchFullUnacceptableKeyQuery(
 // LIMIT 1;
 func nonMatchingRowQuery(
 	prefix int,
-	srcName *string,
+	srcID sqlbase.ID,
 	srcIdx *sqlbase.IndexDescriptor,
-	targetName *string,
+	targetID sqlbase.ID,
 	targetIdx *sqlbase.IndexDescriptor,
 ) string {
 	srcCols, srcWhere, targetCols, on := make([]string, prefix), make([]string, prefix), make([]string, prefix), make([]string, prefix)
@@ -127,35 +127,29 @@ func nonMatchingRowQuery(
 	}
 
 	return fmt.Sprintf(
-		`SELECT %s FROM (SELECT * FROM %s@%s WHERE %s) AS s LEFT OUTER JOIN %s@%s AS t ON %s WHERE %s IS NULL LIMIT 1`,
+		`SELECT %s FROM (SELECT * FROM [%d AS src]@[%d] WHERE %s) AS s LEFT OUTER JOIN [%d AS target]@[%d] AS t ON %s WHERE %s IS NULL LIMIT 1`,
 		strings.Join(srcCols, ", "),
-		*srcName, tree.NameString(srcIdx.Name),
+		srcID, srcIdx.ID,
 		strings.Join(srcWhere, " AND "),
-		*targetName, tree.NameString(targetIdx.Name),
+		targetID, targetIdx.ID,
 		strings.Join(on, " AND "),
 		// Sufficient to check the first column to see whether there was no matching row
 		targetCols[0],
 	)
 }
 
-func (p *planner) validateForeignKey(
-	ctx context.Context, srcTable *sqlbase.TableDescriptor, srcIdx *sqlbase.IndexDescriptor,
+func validateForeignKey(
+	ctx context.Context,
+	srcTable *sqlbase.TableDescriptor,
+	srcIdx *sqlbase.IndexDescriptor,
+	ie tree.SessionBoundInternalExecutor,
+	txn *client.Txn,
 ) error {
-	targetTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, srcIdx.ForeignKey.Table)
+	targetTable, err := sqlbase.GetTableDescFromID(ctx, txn, srcIdx.ForeignKey.Table)
 	if err != nil {
 		return err
 	}
 	targetIdx, err := targetTable.FindIndexByID(srcIdx.ForeignKey.Index)
-	if err != nil {
-		return err
-	}
-
-	srcName, err := p.getQualifiedTableName(ctx, srcTable)
-	if err != nil {
-		return err
-	}
-
-	targetName, err := p.getQualifiedTableName(ctx, targetTable)
 	if err != nil {
 		return err
 	}
@@ -169,7 +163,7 @@ func (p *planner) validateForeignKey(
 	// null and non-null values exist.
 	// (The matching options only matter for FKs with more than one column.)
 	if prefix > 1 && srcIdx.ForeignKey.Match == sqlbase.ForeignKeyReference_FULL {
-		query := matchFullUnacceptableKeyQuery(prefix, &srcName, srcIdx)
+		query := matchFullUnacceptableKeyQuery(prefix, srcTable.ID, srcIdx)
 
 		log.Infof(ctx, "Validating MATCH FULL FK %q (%q [%v] -> %q [%v]) with query %q",
 			srcIdx.ForeignKey.Name,
@@ -177,31 +171,18 @@ func (p *planner) validateForeignKey(
 			query,
 		)
 
-		plan, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
+		rows, err := ie.QueryRow(ctx, "validate foreign key constraint", txn, query)
 		if err != nil {
 			return err
 		}
-
-		plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
-		if err != nil {
-			return err
-		}
-		defer plan.Close(ctx)
-
-		rows, err := p.runWithDistSQL(ctx, plan)
-		if err != nil {
-			return err
-		}
-		defer rows.Close(ctx)
-
 		if rows.Len() > 0 {
 			return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 				"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
-				rows.At(0), srcIdx.ForeignKey.Name,
+				rows, srcIdx.ForeignKey.Name,
 			)
 		}
 	}
-	query := nonMatchingRowQuery(prefix, &srcName, srcIdx, &targetName, targetIdx)
+	query := nonMatchingRowQuery(prefix, srcTable.ID, srcIdx, targetTable.ID, targetIdx)
 
 	log.Infof(ctx, "Validating FK %q (%q [%v] -> %q [%v]) with query %q",
 		srcIdx.ForeignKey.Name,
@@ -209,36 +190,21 @@ func (p *planner) validateForeignKey(
 		query,
 	)
 
-	plan, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
+	values, err := ie.QueryRow(ctx, "validate fk constraint", txn, query)
 	if err != nil {
 		return err
 	}
-
-	plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
-	if err != nil {
-		return err
-	}
-	defer plan.Close(ctx)
-
-	rows, err := p.runWithDistSQL(ctx, plan)
-	if err != nil {
-		return err
-	}
-	defer rows.Close(ctx)
-
-	if rows.Len() == 0 {
-		return nil
-	}
-
-	values := rows.At(0)
-	var pairs bytes.Buffer
-	for i := range values {
-		if i > 0 {
-			pairs.WriteString(", ")
+	if values.Len() > 0 {
+		var pairs bytes.Buffer
+		for i := range values {
+			if i > 0 {
+				pairs.WriteString(", ")
+			}
+			pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[i]))
 		}
-		pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[i]))
+		return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			"foreign key violation: %q row %s has no match in %q",
+			srcTable.Name, pairs.String(), targetTable.Name)
 	}
-	return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
-		"foreign key violation: %q row %s has no match in %q",
-		srcTable.Name, pairs.String(), targetTable.Name)
+	return nil
 }

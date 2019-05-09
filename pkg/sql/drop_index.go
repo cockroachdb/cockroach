@@ -151,6 +151,14 @@ func (p *planner) dropIndexByName(
 		}
 	}
 
+	// Check for foreign key mutations referencing this index.
+	for _, m := range tableDesc.Mutations {
+		if c := m.GetConstraint(); c != nil && c.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY && c.ForeignKeyIndex == idx.ID {
+			return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
+				"referencing constraint %q in the middle of being added, try again later", c.ForeignKey.Name)
+		}
+	}
+
 	// Queue the mutation.
 	var droppedViews []string
 	if idx.ForeignKey.IsSet() {

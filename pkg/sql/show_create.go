@@ -79,7 +79,6 @@ func printForeignKeyConstraint(
 		refNames = []string{"???"}
 		fkTableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as ref]", fk.Table)))
 		fkTableName.ExplicitSchema = false
-		fkTableName.ExplicitSchema = false
 	}
 	buf.WriteString("FOREIGN KEY (")
 	formatQuoteNames(buf, idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...)
@@ -172,6 +171,7 @@ func ShowCreateTable(
 	allIdx := append(desc.Indexes, desc.PrimaryIndex)
 	for i := range allIdx {
 		idx := &allIdx[i]
+		// TODO (lucy): Possibly include FKs being validated here
 		if fk := &idx.ForeignKey; fk.IsSet() && !ignoreFKs {
 			f.WriteString(",\n\tCONSTRAINT ")
 			f.FormatNameP(&fk.Name)
