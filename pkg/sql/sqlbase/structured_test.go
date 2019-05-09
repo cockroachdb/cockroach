@@ -1261,7 +1261,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c, ok := after["fk"]; !ok || !c.Unvalidated {
-		t.Fatalf("expected to find a unvalididated constraint fk before, found %v", c)
+		t.Fatalf("expected to find an unvalidated constraint fk before, found %v", c)
 	}
 }
 

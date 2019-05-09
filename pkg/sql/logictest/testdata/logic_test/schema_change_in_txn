@@ -34,6 +34,24 @@ SELECT * FROM test.child@child_auto_index_fk_child_parent_id
 statement ok
 COMMIT
 
+# Verify that the constraint is unvalidated, which is a limitation of adding the
+# constraint in the same transaction as CREATE TABLE.
+# TODO (lucy): Add a job to validate the table in this situation.
+query TTTTB
+SHOW CONSTRAINTS FROM test.child
+----
+child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent (id)  false
+child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                            true
+
+statement ok
+ALTER TABLE test.child VALIDATE CONSTRAINT fk_child_parent_id
+
+query TTTTB
+SHOW CONSTRAINTS FROM test.child
+----
+child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent (id)  true
+child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                            true
+
 statement ok
 DROP TABLE test.child, test.parent
 
@@ -66,6 +84,13 @@ query II rowsort
 SELECT * FROM test.child@child_auto_index_fk_child_parent_id
 ----
 1 1
+
+# Verify that the constraint is validated.
+query TTTTB
+SHOW CONSTRAINTS FROM test.child
+----
+child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent (id)  true
+child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                            true
 
 statement ok
 DROP TABLE test.child, test.parent
@@ -761,6 +786,12 @@ succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5;ALTER T
 # a schema change in the same txn #32118
 subtest validate_in_schema_change_txn
 
+# To get an unvalidated foreign key for testing, use the loophole that we
+# currently don't support adding a validated FK in the same transaction as
+# CREATE TABLE
+statement ok
+BEGIN
+
 statement ok
 CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
 
@@ -772,13 +803,87 @@ CREATE TABLE orders2 (
 )
 
 statement ok
+ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+# Perform an unrelated schema change
+statement ok
+ALTER TABLE orders2 ADD CHECK (id > 0)
+
+statement ok
+ALTER TABLE orders2 VALIDATE CONSTRAINT fk_product_ref_products
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE products, orders2
+
+subtest fk_constraint_being_added
+
+statement ok
+CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
+
+statement ok
+CREATE TABLE orders2 (
+  id INT8 PRIMARY KEY,
+  product STRING DEFAULT 'sprockets',
+  INDEX (product)
+)
+
+# The constraint can't be validated with VALIDATE CONSTRAINT in the same transaction
+statement ok
 BEGIN
 
 statement ok
 ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
 
-statement ok
+statement error constraint "fk_product_ref_products" in the middle of being added, try again later
 ALTER TABLE orders2 VALIDATE CONSTRAINT fk_product_ref_products
+
+statement ok
+COMMIT
+
+# Dependent columns can't be dropped
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
+
+statement error constraint "fk_product_ref_products" in the middle of being added, try again later
+ALTER TABLE orders2 DROP COLUMN product
+
+statement ok
+COMMIT
+
+# Dependent indexes can't be dropped
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
+
+statement error constraint "fk_product_ref_products" in the middle of being added, try again later
+DROP INDEX orders2@orders2_product_idx
+
+statement ok
+COMMIT
+
+# The constraint can't be renamed
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE orders2 ADD CONSTRAINT c FOREIGN KEY (product) REFERENCES products
+
+statement error constraint "c" in the middle of being added, try again later
+ALTER TABLE orders2 RENAME CONSTRAINT c to d
 
 statement ok
 COMMIT

@@ -1,5 +1,13 @@
 # LogicTest: local-opt
 
+# To get an unvalidated foreign key for testing, use the loophole that we
+# currently don't support adding a validated FK in the same transaction as
+# CREATE TABLE
+# TODO (lucy): Once this is no longer true (and we support adding NOT VALID
+# constraints), update this test
+statement ok
+BEGIN
+
 statement ok
 CREATE TABLE a (
   x STRING NULL,
@@ -18,6 +26,9 @@ CREATE TABLE b (
 
 statement ok
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+
+statement ok
+COMMIT
 
 # Verify that the optimizer doesn't use an unvalidated constraint to simplify plans.
 query TTT colnames
