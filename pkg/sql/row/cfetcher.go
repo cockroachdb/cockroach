@@ -74,6 +74,10 @@ type cTableInfo struct {
 	// index (into cols); -1 if we don't need the value for that column.
 	indexColOrdinals []int
 
+	// The set of column ordinals which are both composite and part of the index
+	// key.
+	compositeIndexColOrdinals util.FastIntSet
+
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
 	extraValColOrdinals []int
@@ -315,9 +319,11 @@ func (rf *CFetcher) Init(
 			table.indexColOrdinals[i] = colIdx
 			if neededCols.Contains(int(id)) {
 				neededIndexCols++
-				if !compositeColumnIDs.Contains(int(id)) {
-					// A composite column lives both in the index and in the value; if
-					// its needed, it must also be decoded from the value.
+				// A composite column might also have a value encoding which must be
+				// decoded. Others can be removed from neededValueColsByIdx.
+				if compositeColumnIDs.Contains(int(id)) {
+					table.compositeIndexColOrdinals.Add(colIdx)
+				} else {
 					table.neededValueColsByIdx.Remove(colIdx)
 				}
 			}
@@ -1005,12 +1011,18 @@ func (rf *CFetcher) processValueTuple(
 ) (prettyKey string, prettyValue string, err error) {
 	return rf.processValueBytes(ctx, table, tupleBytes, prettyKeyPrefix)
 }
+
 func (rf *CFetcher) fillNulls() error {
 	table := &rf.table
 	if rf.machine.remainingValueColsByIdx.Empty() {
 		return nil
 	}
 	for i, ok := rf.machine.remainingValueColsByIdx.Next(0); ok; i, ok = rf.machine.remainingValueColsByIdx.Next(i + 1) {
+		// Composite index columns may have a key but no value. Ignore them so we
+		// don't incorrectly mark them as null.
+		if table.compositeIndexColOrdinals.Contains(i) {
+			continue
+		}
 		if !table.cols[i].Nullable {
 			var indexColValues []string
 			for _, idx := range table.indexColOrdinals {
