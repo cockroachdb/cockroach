@@ -265,6 +265,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		s.registry,
 		s.cfg.Locality,
+		s.cfg.DefaultZoneConfig,
 	)
 	s.nodeDialer = nodedialer.New(s.rpcContext, gossip.AddressResolver(s.gossip))
 
@@ -1765,7 +1766,7 @@ func (s *Server) bootstrapCluster(ctx context.Context) error {
 		}
 	}
 
-	if err := s.node.bootstrapCluster(ctx, s.engines, bootstrapVersion); err != nil {
+	if err := s.node.bootstrapCluster(ctx, s.engines, bootstrapVersion, s.cfg.DefaultZoneConfig); err != nil {
 		return err
 	}
 	// Force all the system ranges through the replication queue so they

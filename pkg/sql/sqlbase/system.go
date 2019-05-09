@@ -912,7 +912,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
 // System database, its tables and zone configurations.
-func addSystemDatabaseToSchema(target *MetadataSchema) {
+func addSystemDatabaseToSchema(target *MetadataSchema, defaultZoneConfig *config.ZoneConfig) {
 	addSystemDescriptorsToSchema(target)
 
 	target.AddSplitIDs(keys.PseudoTableIDs...)
@@ -921,9 +921,7 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// and also created as a migration for older cluster. The includedInBootstrap
 	// field should be set on the migration.
 
-	// Default zone config entry.
-	zoneConf := config.DefaultZoneConfig()
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, &zoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, defaultZoneConfig))
 
 	systemZoneConf := config.DefaultSystemZoneConfig()
 	metaRangeZoneConf := config.DefaultSystemZoneConfig()

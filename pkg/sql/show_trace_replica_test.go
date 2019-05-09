@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -40,12 +41,15 @@ func TestShowTraceReplica(t *testing.T) {
 
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
-	defer config.TestingSetDefaultZoneConfig(cfg)()
-	defer config.TestingSetDefaultSystemZoneConfig(cfg)()
 
 	ctx := context.Background()
 	tsArgs := func(node string) base.TestServerArgs {
 		return base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DefaultZoneConfigOverride: &cfg,
+				},
+			},
 			StoreSpecs: []base.StoreSpec{{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{node}}}},
 		}
 	}

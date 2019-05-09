@@ -104,7 +104,7 @@ func TestGetZoneConfig(t *testing.T) {
 
 	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
 
-	defaultZoneConfig := config.DefaultZoneConfig()
+	defaultZoneConfig := *s.Cfg.DefaultZoneConfig
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
 	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
 	defaultZoneConfig.GC = &config.GCPolicy{TTLSeconds: 60}
@@ -328,6 +328,15 @@ func TestCascadingZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 
+	defaultZoneConfig := config.DefaultZoneConfig()
+	defaultZoneConfig.NumReplicas = proto.Int32(1)
+	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
+	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
+	defaultZoneConfig.GC = &config.GCPolicy{TTLSeconds: 60}
+	params.Knobs.Server = &server.TestingKnobs{
+		DefaultZoneConfigOverride: &defaultZoneConfig,
+	}
+
 	cfg := config.DefaultSystemZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
 	cfg.RangeMinBytes = proto.Int64(1 << 20)
@@ -341,14 +350,6 @@ func TestCascadingZoneConfig(t *testing.T) {
 	s := srv.(*server.TestServer)
 
 	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
-
-	defaultZoneConfig := config.DefaultZoneConfig()
-	defaultZoneConfig.NumReplicas = proto.Int32(1)
-	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
-	defaultZoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
-	defaultZoneConfig.GC = &config.GCPolicy{TTLSeconds: 60}
-
-	defer config.TestingSetDefaultZoneConfig(defaultZoneConfig)()
 
 	type testCase struct {
 		objectID uint32

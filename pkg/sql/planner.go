@@ -220,9 +220,11 @@ func newInternalPlanner(
 			Location: time.UTC,
 		},
 	}
+	systemCfg := config.NewSystemConfig(execCfg.DefaultZoneConfig)
+	systemCfg.DefaultZoneConfig = execCfg.DefaultZoneConfig
 	tables := &TableCollection{
 		leaseMgr:      execCfg.LeaseManager,
-		databaseCache: newDatabaseCache(config.NewSystemConfig()),
+		databaseCache: newDatabaseCache(systemCfg),
 	}
 	dataMutator := &sessionDataMutator{
 		data: sd,

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -68,7 +69,7 @@ func startGossipAtAddr(
 	rpcContext := newInsecureRPCContext(stopper)
 	rpcContext.NodeID.Set(context.TODO(), nodeID)
 	server := rpc.NewServer(rpcContext)
-	g := NewTest(nodeID, rpcContext, server, stopper, registry)
+	g := NewTest(nodeID, rpcContext, server, stopper, registry, config.DefaultZoneConfigRef())
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +129,7 @@ func startFakeServerGossips(
 	lRPCContext := newInsecureRPCContext(stopper)
 
 	lserver := rpc.NewServer(lRPCContext)
-	local := NewTest(localNodeID, lRPCContext, lserver, stopper, metric.NewRegistry())
+	local := NewTest(localNodeID, lRPCContext, lserver, stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
 	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.IsolatedTestAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -448,7 +449,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		server := rpc.NewServer(RPCContext)
 		// node ID must be non-zero
 		gnode := NewTest(
-			roachpb.NodeID(i+1), RPCContext, server, stopper, metric.NewRegistry(),
+			roachpb.NodeID(i+1), RPCContext, server, stopper, metric.NewRegistry(), config.DefaultZoneConfigRef(),
 		)
 		g = append(g, gnode)
 

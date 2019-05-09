@@ -1697,7 +1697,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			if log.V(1) {
 				log.Infof(context.TODO(), "failed to get zone config for key %s", key)
 			}
-			zone = config.DefaultZoneConfigRef()
+			zone = s.cfg.DefaultZoneConfig
 		}
 		repl.SetZoneConfig(zone)
 		s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
