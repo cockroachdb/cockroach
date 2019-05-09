@@ -1016,6 +1016,77 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 	return items
 }
 
+// MapFiltersOnLeft replaces the columns in the filters that are in the OutCols
+// of the set operation to the corresponding ones on the left side of the op.
+// Useful for pushing filters to relations the set operation is composed of.
+func (c *CustomFuncs) MapFiltersOnLeft(
+	filters memo.FiltersExpr, set *memo.SetPrivate,
+) memo.FiltersExpr {
+	return c.setMap(filters, set.OutCols, set.LeftCols)
+}
+
+// MapFiltersOnRight replaces the columns in the filters that are in the OutCols
+// of the set operation to the corresponding ones on the right side of the op.
+// Useful for pushing filters to relations the set operation is composed of.
+func (c *CustomFuncs) MapFiltersOnRight(
+	filters memo.FiltersExpr, set *memo.SetPrivate,
+) memo.FiltersExpr {
+	return c.setMap(filters, set.OutCols, set.RightCols)
+}
+
+// setMap maps filters expressions to use the output columns of the relational
+// expression dst instead of the columns in src.
+//
+// setMap assumes the two relations are union compatible.
+//
+// For each column in src that is not an outer column, SetMap replaces it with
+// the corresponding column in dst.
+//
+// For example, consider this query:
+//
+//   SELECT * FROM (SELECT x FROM a UNION SELECT y FROM b) WHERE x < 5
+//
+// If setMap is called on the left subtree of the Union, the filter x < 5
+// will remain the same. If setMap is called on the right subtree, the filter
+// x < 5 will be mapped to y < 5 instead.
+func (c *CustomFuncs) setMap(
+	filters memo.FiltersExpr, src opt.ColList, dst opt.ColList,
+) memo.FiltersExpr {
+	// Map each column in src to one column in dst to map the
+	// filters appropriately.
+	var colMap util.FastIntMap
+	for colIndex, outColID := range src {
+		colMap.Set(int(outColID), int(dst[colIndex]))
+	}
+
+	// Recursively walk the scalar sub-tree looking for references to columns
+	// that need to be replaced and then replace them appropriately.
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		switch t := nd.(type) {
+		case *memo.VariableExpr:
+			dstCol, inCol := colMap.Get(int(t.Col))
+			if !inCol {
+				// Avoid constructing a new variable if its not part of the out cols.
+				return nd
+			}
+			return c.f.ConstructVariable(opt.ColumnID(dstCol))
+		case *memo.SubqueryExpr, *memo.ExistsExpr, *memo.AnyExpr:
+			// TODO(ridwanmsharif): Confirm this behaviour.
+			return nd
+		}
+
+		return c.f.Replace(nd, replace)
+	}
+	// Replace every FilterItem in the filters expression before creating new FilterExpr
+	var mappedFilter memo.FiltersExpr
+	for _, filterItem := range filters {
+		mappedFilter = append(mappedFilter,
+			memo.FiltersItem{Condition: replace(filterItem.Condition).(opt.ScalarExpr)})
+	}
+	return mappedFilter
+}
+
 // ----------------------------------------------------------------------
 //
 // Boolean Rules
