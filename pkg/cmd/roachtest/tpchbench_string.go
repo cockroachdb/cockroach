@@ -9,11 +9,12 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[sql20-0]
+	_ = x[tpch-1]
 }
 
-const _tpchBench_name = "sql20"
+const _tpchBench_name = "sql20tpch"
 
-var _tpchBench_index = [...]uint8{0, 5}
+var _tpchBench_index = [...]uint8{0, 5, 9}
 
 func (i tpchBench) String() string {
 	if i < 0 || i >= tpchBench(len(_tpchBench_index)-1) {
