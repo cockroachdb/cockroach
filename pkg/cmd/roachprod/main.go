@@ -470,54 +470,56 @@ func cleanupFailedCreate(clusterName string) error {
 }
 
 var destroyCmd = &cobra.Command{
-	Use:   "destroy <cluster>",
-	Short: "destroy a cluster",
-	Long: `Destroy a local or cloud-based cluster.
+	Use:   "destroy <cluster 1> [<cluster 2> ...]",
+	Short: "destroy clusters",
+	Long: `Destroy one or more local or cloud-based clusters.
 
 Destroying a cluster releases the resources for a cluster. For a cloud-based
 cluster the machine and associated disk resources are freed. For a local
 cluster, any processes started by roachprod are stopped, and the ${HOME}/local
 directory is removed.
 `,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterName, err := verifyClusterName(args[0])
-		if err != nil {
-			return err
-		}
-
-		if clusterName != config.Local {
-			cloud, err := cld.ListCloud()
+		for _, arg := range args {
+			clusterName, err := verifyClusterName(arg)
 			if err != nil {
 				return err
 			}
 
-			c, ok := cloud.Clusters[clusterName]
-			if !ok {
-				return fmt.Errorf("cluster %s does not exist", clusterName)
-			}
-
-			fmt.Printf("Destroying cluster %s with %d nodes\n", clusterName, len(c.VMs))
-			if err := cld.DestroyCluster(c); err != nil {
-				return err
-			}
-		} else {
-			if _, ok := install.Clusters[clusterName]; !ok {
-				return fmt.Errorf("cluster %s does not exist", clusterName)
-			}
-			c, err := newCluster(clusterName, false /* reserveLoadGen */)
-			if err != nil {
-				return err
-			}
-			c.Wipe()
-			for _, i := range c.Nodes {
-				err := os.RemoveAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i))
+			if clusterName != config.Local {
+				cloud, err := cld.ListCloud()
 				if err != nil {
 					return err
 				}
-			}
-			if err := os.Remove(filepath.Join(os.ExpandEnv(config.DefaultHostDir), c.Name)); err != nil {
-				return err
+
+				c, ok := cloud.Clusters[clusterName]
+				if !ok {
+					return fmt.Errorf("cluster %s does not exist", clusterName)
+				}
+
+				fmt.Printf("Destroying cluster %s with %d nodes\n", clusterName, len(c.VMs))
+				if err := cld.DestroyCluster(c); err != nil {
+					return err
+				}
+			} else {
+				if _, ok := install.Clusters[clusterName]; !ok {
+					return fmt.Errorf("cluster %s does not exist", clusterName)
+				}
+				c, err := newCluster(clusterName, false /* reserveLoadGen */)
+				if err != nil {
+					return err
+				}
+				c.Wipe()
+				for _, i := range c.Nodes {
+					err := os.RemoveAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i))
+					if err != nil {
+						return err
+					}
+				}
+				if err := os.Remove(filepath.Join(os.ExpandEnv(config.DefaultHostDir), c.Name)); err != nil {
+					return err
+				}
 			}
 		}
 

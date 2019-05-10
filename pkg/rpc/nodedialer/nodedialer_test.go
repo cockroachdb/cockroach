@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -236,13 +237,19 @@ func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
 	cfg.HeartbeatInterval = 10 * time.Millisecond
-	return rpc.NewContext(
+	rctx := rpc.NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		cfg,
 		clock,
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
+	// Ensure that tests using this test context and restart/shut down
+	// their servers do not inadvertently start talking to servers from
+	// unrelated concurrent tests.
+	rctx.ClusterID.Set(context.TODO(), uuid.MakeV4())
+
+	return rctx
 }
 
 // interceptingListener wraps a net.Listener and provides access to the

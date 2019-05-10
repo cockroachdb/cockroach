@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -60,7 +61,7 @@ func registerAcceptance(r *registry) {
 			name: "version-upgrade",
 			fn:   runVersionUpgrade,
 			// NB: this is hacked back in below.
-			// minVersion: "v19.1.0",
+			// minVersion: "v19.2.0",
 		},
 	}
 	tags := []string{"default", "quick"}
@@ -79,8 +80,9 @@ func registerAcceptance(r *registry) {
 
 	for _, tc := range testCases {
 		tc := tc
-		if tc.name == "version-upgrade" && !r.buildVersion.AtLeast(version.MustParse("v19.1.0-0")) {
-			tc.skip = "skipped on < v19.1"
+		minV := "v19.2.0-0"
+		if tc.name == "version-upgrade" && !r.buildVersion.AtLeast(version.MustParse(minV)) {
+			tc.skip = fmt.Sprintf("skipped on %s (want at least %s)", r.buildVersion, minV)
 		}
 		spec.SubTests = append(spec.SubTests, testSpec{
 			Skip:    tc.skip,

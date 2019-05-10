@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,19 +43,27 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
 
+	var usingRangeFeed bool
+	if err := db.QueryRow(
+		`SHOW CLUSTER SETTING changefeed.push.enabled`,
+	).Scan(&usingRangeFeed); err != nil {
+		return nil, err
+	}
+
 	ns := &nemeses{
-		rowCount: 4,
-		db:       db,
+		rowCount:    4,
+		db:          db,
+		usingPoller: !usingRangeFeed,
 		// eventMix does not have to add to 100
 		eventMix: map[fsm.Event]int{
 			// eventTransact opens an UPSERT transaction is there is not one open. If
 			// there is one open, it either commits it or rolls it back.
-			eventTransact{}: 45,
+			eventTransact{}: 50,
 
 			// eventFeedMessage reads a message from the feed, or if the state machine
 			// thinks there will be no message available, it falls back to
 			// eventTransact.
-			eventFeedMessage{}: 45,
+			eventFeedMessage{}: 50,
 
 			// eventPause PAUSEs the changefeed. The state machine will handle
 			// RESUMEing it.
@@ -62,15 +71,15 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 
 			// eventPush pushes every open transaction by running a high priority
 			// SELECT.
-			// TODO(dan): This deadlocks eventPush{}: 30,
+			eventPush{}: 5,
 
 			// eventAbort aborts every open transaction by running a high priority
 			// DELETE.
-			// TODO(dan): This deadlocks eventAbort{}: 30,
+			// TODO(dan): This deadlocks eventAbort{}: 5,
 
 			// eventSplit splits between two random rows (the split is a no-op if it
 			// already exists).
-			// TODO(dan): This deadlocks eventSplit{}: 10,
+			// TODO(dan): This deadlocks eventSplit{}: 5,
 		},
 	}
 
@@ -127,11 +136,7 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 	// during the initial scan. Second, it guarantees that the feed is running
 	// before anything else commits, which could mess up the availableRows count
 	// we just set.
-	first, err := foo.Next()
-	if err != nil {
-		return nil, err
-	}
-	if err := noteFeedMessage(fsm.Args{Ctx: ctx, Extended: ns, Payload: first}); err != nil {
+	if err := noteFeedMessage(fsm.Args{Ctx: ctx, Extended: ns}); err != nil {
 		return nil, err
 	}
 	// Now push everything to make sure the initial scan can complete, otherwise
@@ -149,11 +154,11 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 		if _, ok := state.(stateDone); ok {
 			return ns.v, nil
 		}
-		event, payload, err := ns.nextEvent(rng, state, foo)
+		event, err := ns.nextEvent(rng, state, foo)
 		if err != nil {
 			return nil, err
 		}
-		if err := m.ApplyWithPayload(ctx, event, payload); err != nil {
+		if err := m.Apply(ctx, event); err != nil {
 			return nil, err
 		}
 	}
@@ -167,9 +172,10 @@ const (
 )
 
 type nemeses struct {
-	rowCount int
-	eventMix map[fsm.Event]int
-	mixTotal int
+	rowCount    int
+	eventMix    map[fsm.Event]int
+	mixTotal    int
+	usingPoller bool
 
 	v  *CountValidator
 	db *gosql.DB
@@ -183,11 +189,9 @@ type nemeses struct {
 }
 
 // nextEvent selects the next state transition.
-func (ns *nemeses) nextEvent(
-	rng *rand.Rand, state fsm.State, f TestFeed,
-) (fsm.Event, fsm.EventPayload, error) {
-	if ns.v.NumResolvedWithRows > 5 && ns.v.NumResolvedRows > 20 {
-		return eventFinished{}, nil, nil
+func (ns *nemeses) nextEvent(rng *rand.Rand, state fsm.State, f TestFeed) (fsm.Event, error) {
+	if ns.v.NumResolvedWithRows >= 6 && ns.v.NumResolvedRows >= 10 {
+		return eventFinished{}, nil
 	}
 
 	if ns.mixTotal == 0 {
@@ -198,7 +202,7 @@ func (ns *nemeses) nextEvent(
 
 	switch state {
 	case stateRunning{Paused: fsm.True}:
-		return eventResume{}, nil, nil
+		return eventResume{}, nil
 	case stateRunning{Paused: fsm.False}:
 		r, t := rng.Intn(ns.mixTotal), 0
 		for event, weight := range ns.eventMix {
@@ -209,23 +213,16 @@ func (ns *nemeses) nextEvent(
 			if _, ok := event.(eventFeedMessage); ok {
 				break
 			}
-			return event, nil, nil
+			return event, nil
 		}
 
 		// If there are no available rows, transact instead of reading.
 		if ns.availableRows < 1 {
-			return eventTransact{}, nil, nil
+			return eventTransact{}, nil
 		}
-
-		m, err := f.Next()
-		if err != nil {
-			return nil, nil, err
-		} else if m == nil {
-			return nil, nil, errors.Errorf(`expected another message`)
-		}
-		return eventFeedMessage{}, m, nil
+		return eventFeedMessage{}, nil
 	default:
-		return nil, nil, errors.Errorf(`unknown state: %T %s`, state, state)
+		return nil, errors.Errorf(`unknown state: %T %s`, state, state)
 	}
 }
 
@@ -256,41 +253,41 @@ func (eventSplit) Event()       {}
 func (eventFinished) Event()    {}
 
 var txnStateTransitions = fsm.Compile(fsm.Pattern{
-	stateRunning{fsm.Any}: {
+	stateRunning{Paused: fsm.Any}: {
 		eventFinished{}: {
 			Next:   stateDone{},
 			Action: logEvent(cleanup),
 		},
 	},
-	stateRunning{fsm.False}: {
+	stateRunning{Paused: fsm.False}: {
+		eventPause{}: {
+			Next:   stateRunning{Paused: fsm.True},
+			Action: logEvent(pause),
+		},
 		eventTransact{}: {
-			Next:   stateRunning{fsm.False},
+			Next:   stateRunning{Paused: fsm.False},
 			Action: logEvent(transact),
 		},
 		eventFeedMessage{}: {
-			Next:   stateRunning{fsm.False},
+			Next:   stateRunning{Paused: fsm.False},
 			Action: logEvent(noteFeedMessage),
 		},
-		eventPause{}: {
-			Next:   stateRunning{fsm.True},
-			Action: logEvent(pause),
-		},
 		eventPush{}: {
-			Next:   stateRunning{fsm.True},
+			Next:   stateRunning{Paused: fsm.False},
 			Action: logEvent(push),
 		},
 		eventAbort{}: {
-			Next:   stateRunning{fsm.True},
+			Next:   stateRunning{Paused: fsm.False},
 			Action: logEvent(abort),
 		},
 		eventSplit{}: {
-			Next:   stateRunning{fsm.True},
+			Next:   stateRunning{Paused: fsm.False},
 			Action: logEvent(split),
 		},
 	},
-	stateRunning{fsm.True}: {
+	stateRunning{Paused: fsm.True}: {
 		eventResume{}: {
-			Next:   stateRunning{fsm.False},
+			Next:   stateRunning{Paused: fsm.False},
 			Action: logEvent(resume),
 		},
 	},
@@ -298,13 +295,7 @@ var txnStateTransitions = fsm.Compile(fsm.Pattern{
 
 func logEvent(fn func(fsm.Args) error) func(fsm.Args) error {
 	return func(a fsm.Args) error {
-		if a.Payload == nil {
-			log.Infof(a.Ctx, "%#v\n", a.Event)
-		} else if m := a.Payload.(*TestFeedMessage); len(m.Resolved) > 0 {
-			log.Info(a.Ctx, string(m.Resolved))
-		} else {
-			log.Info(a.Ctx, string(m.Value))
-		}
+		log.Infof(a.Ctx, "%#v\n", a.Event)
 		return fn(a)
 	}
 }
@@ -385,12 +376,42 @@ func transact(a fsm.Args) error {
 
 func noteFeedMessage(a fsm.Args) error {
 	ns := a.Extended.(*nemeses)
-	m := a.Payload.(*TestFeedMessage)
+
+	// The poller works by continually selecting a timestamp to be the next
+	// high-water and polling for changes between the last high-water and the new
+	// one. It doesn't push any unresolved intents (it would enter the txnwaitq,
+	// which would see the txn as live and hence not try to push it), so if we
+	// have an open transaction, it's possible that the poller is stuck waiting on
+	// it to resolve, which would cause the below call to `Next` to deadlock. This
+	// breaks that deadlock.
+	if ns.usingPoller {
+		nextDone := make(chan struct{})
+		defer close(nextDone)
+		go func() {
+			select {
+			case <-time.After(5 * time.Second):
+				log.Info(a.Ctx, "pushed open txn to break deadlock")
+				if err := push(a); err != nil {
+					panic(err)
+				}
+			case <-nextDone:
+			}
+		}()
+	}
+
+	m, err := ns.f.Next()
+	if err != nil {
+		return err
+	} else if m == nil {
+		return errors.Errorf(`expected another message`)
+	}
+
 	if len(m.Resolved) > 0 {
 		_, ts, err := ParseJSONValueTimestamps(m.Resolved)
 		if err != nil {
 			return err
 		}
+		log.Info(a.Ctx, string(m.Resolved))
 		return ns.v.NoteResolved(m.Partition, ts)
 	}
 	ts, _, err := ParseJSONValueTimestamps(m.Value)
@@ -399,6 +420,7 @@ func noteFeedMessage(a fsm.Args) error {
 	}
 
 	ns.availableRows--
+	log.Infof(a.Ctx, "%s->%s", m.Key, m.Value)
 	ns.v.NoteRow(m.Partition, string(m.Key), string(m.Value), ts)
 	return nil
 }

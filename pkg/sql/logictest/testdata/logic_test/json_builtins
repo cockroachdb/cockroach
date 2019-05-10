@@ -589,6 +589,12 @@ SELECT jsonb_build_array(1, '1'::JSON, 1.2, NULL, ARRAY['x', 'y'])
 ----
 [1, 1, 1.2, null, ["x", "y"]]
 
+# Regression for #37318
+query T
+SELECT jsonb_build_array('+Inf'::FLOAT8, 'NaN'::FLOAT8)::STRING::JSONB
+----
+["Infinity", "NaN"]
+
 query error pq: json_object\(\): array must have even number of elements
 SELECT json_object('{a,b,c}'::TEXT[])
 

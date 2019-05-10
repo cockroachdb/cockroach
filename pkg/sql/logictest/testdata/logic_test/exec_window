@@ -28,6 +28,22 @@ SELECT a, b, row_number() OVER (ORDER BY a, b) FROM t ORDER BY b, a
 1 b 4
 
 query ITI
+SELECT a, b, row_number() OVER (PARTITION BY a) FROM t ORDER BY b, a
+----
+0 a 1
+1 a 1
+0 b 2
+1 b 2
+
+query ITI
+SELECT a, b, row_number() OVER (PARTITION BY a, b) FROM t ORDER BY b, a
+----
+0 a 1
+1 a 1
+0 b 1
+1 b 1
+
+query ITI
 SELECT a, b, rank() OVER () FROM t ORDER BY b, a
 ----
 0 a 1
@@ -44,6 +60,14 @@ SELECT a, b, rank() OVER (ORDER BY a) FROM t ORDER BY b, a
 1 b 3
 
 query ITI
+SELECT a, b, rank() OVER (PARTITION BY a ORDER BY b) FROM t ORDER BY b, a
+----
+0 a 1
+1 a 1
+0 b 2
+1 b 2
+
+query ITI
 SELECT a, b, dense_rank() OVER () FROM t ORDER BY b, a
 ----
 0 a 1
@@ -51,10 +75,19 @@ SELECT a, b, dense_rank() OVER () FROM t ORDER BY b, a
 0 b 1
 1 b 1
 
+
 query ITI
 SELECT a, b, dense_rank() OVER (ORDER BY a) FROM t ORDER BY b, a
 ----
 0 a 1
 1 a 2
 0 b 1
+1 b 2
+
+query ITI
+SELECT a, b, dense_rank() OVER (PARTITION BY a ORDER BY b) FROM t ORDER BY b, a
+----
+0 a 1
+1 a 1
+0 b 2
 1 b 2

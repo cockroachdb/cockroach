@@ -485,51 +485,28 @@ func expandIndexName(
 	return tn, desc, nil
 }
 
-// getTableAndIndex returns the table and index descriptors for a table
-// (primary index) or table-with-index. Only one of table and tableWithIndex can
-// be set.  This is useful for statements that have both table and index
-// variants (like `ALTER TABLE/INDEX ... SPLIT AT ...`).
+// getTableAndIndex returns the table and index descriptors for a
+// TableIndexName.
+//
 // It can return indexes that are being rolled out.
 func (p *planner) getTableAndIndex(
-	ctx context.Context,
-	table *tree.TableName,
-	tableWithIndex *tree.TableIndexName,
-	privilege privilege.Kind,
+	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
 ) (*MutableTableDescriptor, *sqlbase.IndexDescriptor, error) {
-	var tableDesc *MutableTableDescriptor
-	var err error
-	if tableWithIndex == nil {
-		// Variant: ALTER TABLE
-		tableDesc, err = p.ResolveMutableTableDescriptor(
-			ctx, table, true /*required*/, requireTableDesc,
-		)
-	} else {
-		// Variant: ALTER INDEX
-		_, tableDesc, err = expandMutableIndexName(ctx, p, tableWithIndex, true /* requireTable */)
-	}
+	var catalog optCatalog
+	catalog.init(p)
+	catalog.reset()
+
+	idx, err := cat.ResolveTableIndex(
+		ctx, &catalog, cat.Flags{AvoidDescriptorCaches: true}, tableWithIndex,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege); err != nil {
+	if err := catalog.CheckPrivilege(ctx, idx.Table(), privilege); err != nil {
 		return nil, nil, err
 	}
-
-	// Determine which index to use.
-	var index *sqlbase.IndexDescriptor
-	if tableWithIndex == nil {
-		index = &tableDesc.PrimaryIndex
-	} else {
-		idx, dropped, err := tableDesc.FindIndexByName(string(tableWithIndex.Index))
-		if err != nil {
-			return nil, nil, err
-		}
-		if dropped {
-			return nil, nil, fmt.Errorf("index %q being dropped", tableWithIndex.Index)
-		}
-		index = idx
-	}
-	return tableDesc, index, nil
+	optIdx := idx.(*optIndex)
+	return sqlbase.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
 }
 
 // expandTableGlob expands pattern into a list of tables represented

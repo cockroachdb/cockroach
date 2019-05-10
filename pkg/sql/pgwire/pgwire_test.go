@@ -953,6 +953,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT $1::INT[]", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{10})).Results(pq.Array([]int64{10})),
 		}},
+		{"INSERT INTO d.arr VALUES($1, $2)", []preparedQueryTest{
+			baseTest.SetArgs(pq.Array([]int64{}), pq.Array([]string{})),
+		}},
 		{"EXPERIMENTAL SCRUB TABLE system.locations", []preparedQueryTest{
 			baseTest.SetArgs(),
 		}},
@@ -1081,6 +1084,7 @@ CREATE TABLE d.ts (a TIMESTAMP, b DATE);
 CREATE TABLE d.two (a INT, b INT);
 CREATE TABLE d.intStr (a INT, s STRING);
 CREATE TABLE d.str (s STRING, b BYTES);
+CREATE TABLE d.arr (a INT[], b TEXT[]);
 CREATE TABLE d.emptynorows (); -- zero columns, zero rows
 CREATE TABLE d.emptyrows (x INT);
 INSERT INTO d.emptyrows VALUES (1),(2),(3);
@@ -2303,7 +2307,39 @@ func TestCancelRequest(t *testing.T) {
 	if _, err := fe.Receive(); err != io.EOF {
 		t.Fatalf("unexpected: %v", err)
 	}
-	if count := telemetry.GetFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
+	if count := telemetry.GetRawFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
 		t.Fatalf("expected 1 cancel request, got %d", count)
+	}
+}
+
+func TestFailPrepareFailsTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Prepare("select fail"); err == nil {
+		t.Fatal("Got no error, expected one")
+	}
+
+	// This should also fail, since the txn should be destroyed.
+	if _, err := tx.Query("select 1"); err == nil {
+		t.Fatal("got no error, expected one")
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 }

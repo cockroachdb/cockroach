@@ -22,7 +22,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -39,6 +43,9 @@ const (
 func WriteCSVRows(
 	ctx context.Context, w io.Writer, table Table, rowStart, rowEnd int, sizeBytesLimit int64,
 ) (rowBatchIdx int, err error) {
+	cb := coldata.NewMemBatchWithSize(nil, 0)
+	var a bufalloc.ByteAllocator
+
 	bytesWrittenW := &bytesWrittenWriter{w: w}
 	csvW := csv.NewWriter(bytesWrittenW)
 	var rowStrings []string
@@ -52,14 +59,16 @@ func WriteCSVRows(
 			return 0, ctx.Err()
 		default:
 		}
-		for _, row := range table.InitialRows.Batch(rowBatchIdx) {
-			if cap(rowStrings) < len(row) {
-				rowStrings = make([]string, len(row))
-			} else {
-				rowStrings = rowStrings[:len(row)]
-			}
-			for i, datum := range row {
-				rowStrings[i] = datumToCSVString(datum)
+		a = a[:0]
+		table.InitialRows.FillBatch(rowBatchIdx, cb, &a)
+		if numCols := cb.Width(); cap(rowStrings) < numCols {
+			rowStrings = make([]string, numCols)
+		} else {
+			rowStrings = rowStrings[:numCols]
+		}
+		for rowIdx, numRows := 0, int(cb.Length()); rowIdx < numRows; rowIdx++ {
+			for colIdx, col := range cb.ColVecs() {
+				rowStrings[colIdx] = colDatumToCSVString(col, rowIdx)
 			}
 			if err := csvW.Write(rowStrings); err != nil {
 				return 0, err
@@ -74,13 +83,21 @@ type csvRowsReader struct {
 	t                    Table
 	batchStart, batchEnd int
 
-	buf        bytes.Buffer
-	csvW       *csv.Writer
-	batchIdx   int
+	buf  bytes.Buffer
+	csvW *csv.Writer
+
+	batchIdx int
+	cb       coldata.Batch
+	a        bufalloc.ByteAllocator
+
 	stringsBuf []string
 }
 
 func (r *csvRowsReader) Read(p []byte) (n int, err error) {
+	if r.cb == nil {
+		r.cb = coldata.NewMemBatchWithSize(nil, 0)
+	}
+
 	for {
 		if r.buf.Len() > 0 {
 			return r.buf.Read(p)
@@ -89,16 +106,17 @@ func (r *csvRowsReader) Read(p []byte) (n int, err error) {
 		if r.batchIdx == r.batchEnd {
 			return 0, io.EOF
 		}
-		batch := r.t.InitialRows.Batch(r.batchIdx)
+		r.a = r.a[:0]
+		r.t.InitialRows.FillBatch(r.batchIdx, r.cb, &r.a)
 		r.batchIdx++
-		for _, row := range batch {
-			if cap(r.stringsBuf) < len(row) {
-				r.stringsBuf = make([]string, len(row))
-			} else {
-				r.stringsBuf = r.stringsBuf[:len(row)]
-			}
-			for i, datum := range row {
-				r.stringsBuf[i] = datumToCSVString(datum)
+		if numCols := r.cb.Width(); cap(r.stringsBuf) < numCols {
+			r.stringsBuf = make([]string, numCols)
+		} else {
+			r.stringsBuf = r.stringsBuf[:numCols]
+		}
+		for rowIdx, numRows := 0, int(r.cb.Length()); rowIdx < numRows; rowIdx++ {
+			for colIdx, col := range r.cb.ColVecs() {
+				r.stringsBuf[colIdx] = colDatumToCSVString(col, rowIdx)
 			}
 			if err := r.csvW.Write(r.stringsBuf); err != nil {
 				return 0, err
@@ -120,22 +138,23 @@ func NewCSVRowsReader(t Table, batchStart, batchEnd int) io.Reader {
 	return r
 }
 
-func datumToCSVString(datum interface{}) string {
-	if datum == nil {
+func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
+	if col.Nulls().NullAt64(uint64(rowIdx)) {
 		return `NULL`
 	}
-	switch t := datum.(type) {
-	case int:
-		return strconv.Itoa(t)
-	case int64:
-		return fmt.Sprint(t)
-	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
-	case string:
-		return t
-	default:
-		panic(fmt.Sprintf("unsupported type %T: %v", datum, datum))
+	switch col.Type() {
+	case types.Bool:
+		return strconv.FormatBool(col.Bool()[rowIdx])
+	case types.Int64:
+		return strconv.FormatInt(col.Int64()[rowIdx], 10)
+	case types.Float64:
+		return strconv.FormatFloat(col.Float64()[rowIdx], 'f', -1, 64)
+	case types.Bytes:
+		// See the HACK comment in ColBatchToRows.
+		bytes := col.Bytes()[rowIdx]
+		return *(*string)(unsafe.Pointer(&bytes))
 	}
+	panic(fmt.Sprintf(`unhandled type %s`, col.Type().GoTypeName()))
 }
 
 // HandleCSV configures a Generator with url params and outputs the data for a
@@ -174,7 +193,7 @@ func HandleCSV(w http.ResponseWriter, req *http.Request, prefix string, meta Met
 	if table == nil {
 		return errors.Errorf(`could not find table %s in generator %s`, tableName, meta.Name)
 	}
-	if table.InitialRows.Batch == nil {
+	if table.InitialRows.FillBatch == nil {
 		return errors.Errorf(`csv-server is not supported for workload %s`, meta.Name)
 	}
 

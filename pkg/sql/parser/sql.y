@@ -1264,24 +1264,27 @@ alter_onetable_stmt:
 alter_oneindex_stmt:
   ALTER INDEX table_index_name alter_index_cmds
   {
-    $$.val = &tree.AlterIndex{Index: $3.newTableIndexName(), IfExists: false, Cmds: $4.alterIndexCmds()}
+    $$.val = &tree.AlterIndex{Index: $3.tableIndexName(), IfExists: false, Cmds: $4.alterIndexCmds()}
   }
 | ALTER INDEX IF EXISTS table_index_name alter_index_cmds
   {
-    $$.val = &tree.AlterIndex{Index: $5.newTableIndexName(), IfExists: true, Cmds: $6.alterIndexCmds()}
+    $$.val = &tree.AlterIndex{Index: $5.tableIndexName(), IfExists: true, Cmds: $6.alterIndexCmds()}
   }
 
 alter_split_stmt:
   ALTER TABLE table_name SPLIT AT select_stmt
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Split{Table: &name, Rows: $6.slct()}
+    $$.val = &tree.Split{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $6.slct(),
+    }
   }
 
 alter_split_index_stmt:
   ALTER INDEX table_index_name SPLIT AT select_stmt
   {
-    $$.val = &tree.Split{Index: $3.newTableIndexName(), Rows: $6.slct()}
+    $$.val = &tree.Split{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
   }
 
 relocate_kw:
@@ -1293,14 +1296,17 @@ alter_relocate_stmt:
   {
     /* SKIP DOC */
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Relocate{Table: &name, Rows: $5.slct()}
+    $$.val = &tree.Relocate{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $5.slct(),
+    }
   }
 
 alter_relocate_index_stmt:
   ALTER INDEX table_index_name relocate_kw select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.Relocate{Index: $3.newTableIndexName(), Rows: $5.slct()}
+    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $5.slct()}
   }
 
 alter_relocate_lease_stmt:
@@ -1308,14 +1314,18 @@ alter_relocate_lease_stmt:
   {
     /* SKIP DOC */
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Relocate{Table: &name, Rows: $6.slct(), RelocateLease: true}
+    $$.val = &tree.Relocate{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $6.slct(),
+      RelocateLease: true,
+    }
   }
 
 alter_relocate_index_lease_stmt:
   ALTER INDEX table_index_name relocate_kw LEASE select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.Relocate{Index: $3.newTableIndexName(), Rows: $6.slct(), RelocateLease: true}
+    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), RelocateLease: true}
   }
 
 alter_zone_range_stmt:
@@ -1416,22 +1426,26 @@ alter_scatter_stmt:
   ALTER TABLE table_name SCATTER
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Scatter{Table: &name}
+    $$.val = &tree.Scatter{TableOrIndex: tree.TableIndexName{Table: name}}
   }
 | ALTER TABLE table_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Scatter{Table: &name, From: $7.exprs(), To: $11.exprs()}
+    $$.val = &tree.Scatter{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      From: $7.exprs(),
+      To: $11.exprs(),
+    }
   }
 
 alter_scatter_index_stmt:
   ALTER INDEX table_index_name SCATTER
   {
-    $$.val = &tree.Scatter{Index: $3.newTableIndexName()}
+    $$.val = &tree.Scatter{TableOrIndex: $3.tableIndexName()}
   }
 | ALTER INDEX table_index_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
   {
-    $$.val = &tree.Scatter{Index: $3.newTableIndexName(), From: $7.exprs(), To: $11.exprs()}
+    $$.val = &tree.Scatter{TableOrIndex: $3.tableIndexName(), From: $7.exprs(), To: $11.exprs()}
   }
 
 alter_table_cmds:
@@ -3636,11 +3650,11 @@ show_ranges_stmt:
   SHOW ranges_kw FROM TABLE table_name
   {
     name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowRanges{Table: &name}
+    $$.val = &tree.ShowRanges{TableOrIndex: tree.TableIndexName{Table: name}}
   }
 | SHOW ranges_kw FROM INDEX table_index_name
   {
-    $$.val = &tree.ShowRanges{Index: $5.newTableIndexName()}
+    $$.val = &tree.ShowRanges{TableOrIndex: $5.tableIndexName()}
   }
 | SHOW ranges_kw error // SHOW HELP: SHOW RANGES
 

@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"sync"
@@ -27,7 +28,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -3031,142 +3032,6 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	})
 }
 
-// TestStoreRangeRemoveDead verifies that if a store becomes dead, the
-// ReplicateQueue will notice and remove any replicas on it.
-func TestStoreRangeRemoveDead(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/34081")
-
-	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableReplicaRebalancing = true
-	mtc := &multiTestContext{
-		storeConfig: &sc,
-		// This test needs to verify full replication, but as written the check
-		// only works if there's only one range initially.
-		startWithSingleRange: true,
-	}
-
-	storage.TimeUntilStoreDead.Override(&sc.Settings.SV, storage.TestTimeUntilStoreDead)
-	// Disable declined and failed reservations. Their default values are on
-	// the order of seconds whereas we'll only advance the manual clock used
-	// in this test very slowly, leading to timeouts otherwise.
-	storage.DeclinedReservationsTimeout.Override(&sc.Settings.SV, time.Nanosecond)
-	storage.FailedReservationsTimeout.Override(&sc.Settings.SV, time.Nanosecond)
-
-	ctx := context.Background()
-	zone := config.DefaultSystemZoneConfig()
-	mtc.Start(t, int(*zone.NumReplicas+1))
-	defer mtc.Stop()
-
-	var nonDeadStores []*storage.Store
-	var deadStore *storage.Store
-	for i, s := range mtc.stores {
-		if i == 1 {
-			deadStore = s
-
-			continue
-		}
-		nonDeadStores = append(nonDeadStores, s)
-	}
-
-	var dead int32 // atomically
-
-	// Create a goroutine to gossip store capacity info periodically.
-	stopper := mtc.stoppers[0]
-	stopper.RunWorker(ctx, func(ctx context.Context) {
-		tickerDur := storage.TestTimeUntilStoreDead / 2
-		ticker := time.NewTicker(tickerDur)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				mtc.manualClock.Increment(int64(tickerDur))
-				storeIsDead := atomic.LoadInt32(&dead) == 1
-				// Keep gossiping the stores, excepting the dead store.
-				n := len(nonDeadStores)
-				if !storeIsDead {
-					// Until the deadStore dies, don't gossip one of the other
-					// stores to force some replicas on deadStore.
-					n--
-					if err := deadStore.GossipStore(ctx, false /* useCached */); err != nil {
-						panic(err)
-					}
-				}
-				for _, s := range nonDeadStores[:n] {
-					if err := s.GossipStore(ctx, false /* useCached */); err != nil {
-						panic(err)
-					}
-				}
-
-			case <-stopper.ShouldQuiesce():
-				return
-			}
-		}
-	})
-	stopper.RunWorker(ctx, func(ctx context.Context) {
-		tickerDur := storage.TestTimeUntilStoreDead / 2
-		ticker := time.NewTicker(tickerDur)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				// Force the repair queues on all alive stores to run.
-				for _, s := range nonDeadStores {
-					if err := s.ForceReplicationScanAndProcess(); err != nil {
-						panic(err)
-					}
-				}
-			case <-stopper.ShouldQuiesce():
-				return
-			}
-		}
-	})
-
-	// Wait for up-replication, including at least one replica on s2 (deadStore).
-	testutils.SucceedsSoon(t, func() error {
-		// NB: this only checks the first range, so it'll give false positives
-		// if there's more than one (see the note at the beginning of the test).
-		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		var found bool
-		for _, replica := range replicas {
-			if replica.StoreID == deadStore.StoreID() {
-				found = true
-			}
-		}
-		if len(replicas) != int(*zone.NumReplicas) {
-			return errors.Errorf("expected %d replicas; have %+v", *zone.NumReplicas, replicas)
-		}
-		if !found {
-			return errors.Errorf("no replica found on s%d", deadStore.StoreID())
-		}
-		return nil
-	})
-
-	// Stop a store which will be rebalanced away from. We can't use the very first
-	// one since getRangeMetadata is hard-coded to query that one, so we'll use the
-	// one after that.
-	atomic.StoreInt32(&dead, 1)
-	mtc.stopStore(1)
-	// The mtc asks us to restart this store before stopping the mtc.
-	defer mtc.restartStoreWithoutHeartbeat(1)
-
-	testutils.SucceedsSoon(t, func() error {
-		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(replicas) != int(*zone.NumReplicas) {
-			return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
-		}
-		for _, r := range replicas {
-			if r.StoreID == deadStore.StoreID() /* 2 */ {
-				return errors.Errorf("expected store %d to be replaced; have %+v", r.StoreID, replicas)
-			}
-		}
-		return nil
-	})
-}
-
 // TestReplicateRogueRemovedNode ensures that a rogue removed node
 // (i.e. a node that has been removed from the range but doesn't know
 // it yet because it was down or partitioned away when it happened)
@@ -4526,4 +4391,60 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 			t.Fatalf("expected %q error, but got %v", exp, err)
 		}
 	}
+}
+
+// TestTracingDoesNotRaceWithCancelation ensures that the tracing underneath
+// raft does not race with tracing operations which might occur concurrently
+// due to a request cancelation. When this bug existed this test only
+// uncovered it when run under stress.
+func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.TraceAllRaftEvents = true
+	sc.TestingKnobs.DisableSplitQueue = true
+	sc.TestingKnobs.DisableMergeQueue = true
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+		clock:       hlc.NewClock(hlc.UnixNano, time.Millisecond),
+	}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+
+	db := mtc.Store(0).DB()
+	ctx := context.Background()
+	// Make the transport flaky for the range in question to encourage proposals
+	// to be sent more times and ultimately traced more.
+	ri, err := getRangeInfo(ctx, db, roachpb.Key("foo"))
+	require.Nil(t, err)
+
+	for i := 0; i < 3; i++ {
+		mtc.transport.Listen(mtc.stores[i].Ident.StoreID, &unreliableRaftHandler{
+			rangeID:            ri.Desc.RangeID,
+			RaftMessageHandler: mtc.stores[i],
+			dropReq: func(req *storage.RaftMessageRequest) bool {
+				return rand.Intn(2) == 0
+			},
+		})
+	}
+	val := []byte("asdf")
+	var wg sync.WaitGroup
+	put := func(i int) func() {
+		wg.Add(1)
+		return func() {
+			defer wg.Done()
+			totalDelay := 1 * time.Millisecond
+			delay := time.Duration(rand.Intn(int(totalDelay)))
+			startDelay := totalDelay - delay
+			time.Sleep(startDelay)
+			ctx, cancel := context.WithTimeout(context.Background(), delay)
+			defer cancel()
+			_ = db.Put(ctx, roachpb.Key(fmt.Sprintf("foo%d", i)), val)
+		}
+	}
+	const N = 256
+	for i := 0; i < N; i++ {
+		go put(i)()
+	}
+	wg.Wait()
 }

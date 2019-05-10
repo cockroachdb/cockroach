@@ -10,20 +10,23 @@ package importccl
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"runtime"
 	"strings"
 	"sync/atomic"
-	"time"
+	"unsafe"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	sqltypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -51,34 +54,56 @@ func (w *workloadReader) inputFinished(ctx context.Context) {
 	close(w.kvCh)
 }
 
-// makeDatumFromRaw tries to fast-path a few workload-generated types into
+// makeDatumFromColOffset tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
-func makeDatumFromRaw(
-	alloc *sqlbase.DatumAlloc, datum interface{}, hint *types.T, evalCtx *tree.EvalContext,
+func makeDatumFromColOffset(
+	alloc *sqlbase.DatumAlloc,
+	hint *sqltypes.T,
+	evalCtx *tree.EvalContext,
+	col coldata.Vec,
+	rowIdx int,
 ) (tree.Datum, error) {
-	if datum == nil {
+	if col.Nulls().NullAt64(uint64(rowIdx)) {
 		return tree.DNull, nil
 	}
-	switch t := datum.(type) {
-	case int:
-		return alloc.NewDInt(tree.DInt(t)), nil
-	case int64:
-		return alloc.NewDInt(tree.DInt(t)), nil
-	case []byte:
-		return alloc.NewDBytes(tree.DBytes(t)), nil
-	case time.Time:
+	switch col.Type() {
+	case types.Bool:
+		return tree.MakeDBool(tree.DBool(col.Bool()[rowIdx])), nil
+	case types.Int64:
 		switch hint.Family() {
-		case types.TimestampTZFamily:
-			return tree.MakeDTimestampTZ(t, time.Microsecond), nil
-		case types.TimestampFamily:
-			return tree.MakeDTimestamp(t, time.Microsecond), nil
+		case sqltypes.IntFamily:
+			return alloc.NewDInt(tree.DInt(col.Int64()[rowIdx])), nil
+		case sqltypes.DecimalFamily:
+			d := *apd.New(col.Int64()[rowIdx], 0)
+			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
 		}
-	case tree.DString:
-		return alloc.NewDString(t), nil
-	case string:
-		return tree.ParseDatumStringAs(hint, t, evalCtx)
+	case types.Float64:
+		switch hint.Family() {
+		case sqltypes.FloatFamily:
+			return alloc.NewDFloat(tree.DFloat(col.Float64()[rowIdx])), nil
+		case sqltypes.DecimalFamily:
+			var d apd.Decimal
+			if _, err := d.SetFloat64(col.Float64()[rowIdx]); err != nil {
+				return nil, err
+			}
+			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
+		}
+	case types.Bytes:
+		switch hint.Family() {
+		case sqltypes.BytesFamily:
+			return alloc.NewDBytes(tree.DBytes(col.Bytes()[rowIdx])), nil
+		case sqltypes.StringFamily:
+			data := col.Bytes()[rowIdx]
+			str := *(*string)(unsafe.Pointer(&data))
+			return alloc.NewDString(tree.DString(str)), nil
+		default:
+			data := col.Bytes()[rowIdx]
+			str := *(*string)(unsafe.Pointer(&data))
+			return tree.ParseDatumStringAs(hint, str, evalCtx)
+		}
 	}
-	return tree.ParseDatumStringAs(hint, fmt.Sprint(datum), evalCtx)
+	return nil, errors.Errorf(
+		`don't know how to interpret %s column as %s`, col.Type().GoTypeName(), hint)
 }
 
 func (w *workloadReader) readFiles(
@@ -150,8 +175,7 @@ func (w *workloadReader) readFiles(
 			w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
 		if err := ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
 			evalCtx := w.newEvalCtx()
-			var alloc sqlbase.DatumAlloc
-			return wc.Worker(ctx, evalCtx, &alloc, finishedBatchFn)
+			return wc.Worker(ctx, evalCtx, finishedBatchFn)
 		}); err != nil {
 			return err
 		}
@@ -199,21 +223,30 @@ func NewWorkloadKVConverter(
 //
 // This worker needs its own EvalContext and DatumAlloc.
 func (w *WorkloadKVConverter) Worker(
-	ctx context.Context, evalCtx *tree.EvalContext, alloc *sqlbase.DatumAlloc, finishedBatchFn func(),
+	ctx context.Context, evalCtx *tree.EvalContext, finishedBatchFn func(),
 ) error {
 	conv, err := newRowConverter(w.tableDesc, evalCtx, w.kvCh)
 	if err != nil {
 		return err
 	}
 
+	var alloc sqlbase.DatumAlloc
+	var a bufalloc.ByteAllocator
+	cb := coldata.NewMemBatchWithSize(nil, 0)
+
 	for {
 		batchIdx := int(atomic.AddInt64(&w.batchIdxAtomic, 1))
 		if batchIdx >= w.batchEnd {
 			break
 		}
-		for rowIdx, rows := range w.rows.Batch(batchIdx) {
-			for colIdx, datum := range rows {
-				converted, err := makeDatumFromRaw(alloc, datum, conv.visibleColTypes[colIdx], evalCtx)
+		a = a[:0]
+		w.rows.FillBatch(batchIdx, cb, &a)
+		for rowIdx, numRows := 0, int(cb.Length()); rowIdx < numRows; rowIdx++ {
+			for colIdx, col := range cb.ColVecs() {
+				// TODO(dan): This does a type switch once per-datum. Reduce this to
+				// a one-time switch per column.
+				converted, err := makeDatumFromColOffset(
+					&alloc, conv.visibleColTypes[colIdx], evalCtx, col, rowIdx)
 				if err != nil {
 					return err
 				}

@@ -45,7 +45,7 @@ type relocateNode struct {
 // (`ALTER TABLE/INDEX ... EXPERIMENTAL_RELOCATE [LEASE] ...` statement)
 // Privileges: INSERT on table.
 func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, error) {
-	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
+	tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}

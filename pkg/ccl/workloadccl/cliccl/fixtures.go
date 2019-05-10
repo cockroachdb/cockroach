@@ -67,7 +67,7 @@ var fixturesListCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 })
 var fixturesMakeCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `make`,
-	Short: `regenerate and store a fixture on GCS`,
+	Short: `IMPORT a fixture and then store a BACKUP of it on GCS`,
 })
 var fixturesLoadCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `load`,
@@ -296,12 +296,15 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 		return errors.Wrap(err, `finding fixture`)
 	}
 
+	start := timeutil.Now()
 	log.Infof(ctx, "starting load of %d tables", len(gen.Tables()))
 	bytes, err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName)
 	if err != nil {
 		return errors.Wrap(err, `restoring fixture`)
 	}
-	log.Infof(ctx, "loaded %s bytes in %d tables", humanizeutil.IBytes(bytes), len(gen.Tables()))
+	elapsed := timeutil.Since(start)
+	log.Infof(ctx, "loaded %s in %d tables (took %s, %s)",
+		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
@@ -338,7 +341,7 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 		return errors.Wrap(err, `importing fixture`)
 	}
 	elapsed := timeutil.Since(start)
-	log.Infof(ctx, "imported %s bytes in %d tables (took %s, %s)",
+	log.Infof(ctx, "imported %s in %d tables (took %s, %s)",
 		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {

@@ -16,46 +16,11 @@ package sql
 
 import (
 	"context"
-	"encoding/hex"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
-
-// ShowRanges implements the SHOW EXPERIMENTAL_RANGES statement:
-//   SHOW EXPERIMENTAL_RANGES FROM TABLE t
-//   SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx
-//
-// These statements show the ranges corresponding to the given table or index,
-// along with the list of replicas and the lease holder.
-func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode, error) {
-	desc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.SELECT)
-	if err != nil {
-		return nil, err
-	}
-	span := desc.IndexSpan(index.ID)
-	if desc.ID < keys.MaxSystemConfigDescID {
-		span = keys.SystemConfigSpan
-	}
-	startKey := hex.EncodeToString([]byte(span.Key))
-	endKey := hex.EncodeToString([]byte(span.EndKey))
-	return p.delegateQuery(ctx, "SHOW RANGES",
-		fmt.Sprintf(`
-SELECT 
-  CASE WHEN r.start_key <= x'%s' THEN NULL ELSE crdb_internal.pretty_key(r.start_key, 2) END AS start_key,
-  CASE WHEN r.end_key >= x'%s' THEN NULL ELSE crdb_internal.pretty_key(r.end_key, 2) END AS end_key,
-  range_id,
-  replicas,
-  lease_holder
-FROM crdb_internal.ranges AS r
-WHERE (r.start_key < x'%s')
-  AND (r.end_key   > x'%s')
-`, startKey, endKey, endKey, startKey), nil, nil)
-}
 
 // ScanMetaKVs returns the meta KVs for the ranges that touch the given span.
 func ScanMetaKVs(

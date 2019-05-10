@@ -1332,14 +1332,10 @@ func (b *Builder) resultColumn(id opt.ColumnID) sqlbase.ResultColumn {
 }
 
 func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
-	// TODO(justin): collapse towers of window functions into single windowNodes.
 	input, err := b.buildRelational(w.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
-
-	name, overload := memo.FindWindowOverload(w.Function)
-	props, _ := builtins.GetBuiltinProperties(name)
 
 	// Rearrange the input so that the input has all the passthrough columns
 	// followed by all the argument columns.
@@ -1350,12 +1346,6 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	passthrough.ForEach(func(i int) {
 		desiredCols = append(desiredCols, opt.ColumnID(i))
 	})
-	for i, n := 0, w.Function.ChildCount(); i < n; i++ {
-		col := w.Function.Child(i).(*memo.VariableExpr).Col
-		if !passthrough.Contains(int(col)) {
-			desiredCols = append(desiredCols, col)
-		}
-	}
 
 	// TODO(justin): this call to ensureColumns is kind of unfortunate because it
 	// can result in an extra render beneath each window function. Figure out a
@@ -1366,26 +1356,6 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	}
 
 	ctx := input.makeBuildScalarCtx()
-
-	args := make([]tree.TypedExpr, w.Function.ChildCount())
-	argIdxs := make([]exec.ColumnOrdinal, w.Function.ChildCount())
-	for i, n := 0, w.Function.ChildCount(); i < n; i++ {
-		col := w.Function.Child(i).(*memo.VariableExpr).Col
-		args[i] = b.indexedVar(&ctx, b.mem.Metadata(), col)
-		idx, _ := input.outputCols.Get(int(col))
-		argIdxs[i] = exec.ColumnOrdinal(idx)
-	}
-
-	partitionIdxs := make([]exec.ColumnOrdinal, w.Partition.Len())
-	partitionExprs := make(tree.Exprs, w.Partition.Len())
-
-	i := 0
-	w.Partition.ForEach(func(col int) {
-		ordinal, _ := input.outputCols.Get(col)
-		partitionIdxs[i] = exec.ColumnOrdinal(ordinal)
-		partitionExprs[i] = b.indexedVar(&ctx, b.mem.Metadata(), opt.ColumnID(col))
-		i++
-	})
 
 	ord := w.Ordering.ToOrdering()
 
@@ -1401,21 +1371,51 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		}
 	}
 
-	expr := tree.NewTypedFuncExpr(
-		tree.WrapFunction(name),
-		0,
-		args,
-		// TODO(justin): support filters (only apply to aggregates, not window
-		// functions in general).
-		nil,
-		&tree.WindowDef{
-			Partitions: partitionExprs,
-			OrderBy:    orderingExprs,
-		},
-		overload.FixedReturnType(),
-		props,
-		overload,
-	)
+	partitionIdxs := make([]exec.ColumnOrdinal, w.Partition.Len())
+	partitionExprs := make(tree.Exprs, w.Partition.Len())
+
+	i := 0
+	w.Partition.ForEach(func(col int) {
+		ordinal, _ := input.outputCols.Get(col)
+		partitionIdxs[i] = exec.ColumnOrdinal(ordinal)
+		partitionExprs[i] = b.indexedVar(&ctx, b.mem.Metadata(), opt.ColumnID(col))
+		i++
+	})
+
+	argIdxs := make([][]exec.ColumnOrdinal, len(w.Windows))
+	exprs := make([]*tree.FuncExpr, len(w.Windows))
+
+	for i := range w.Windows {
+		item := &w.Windows[i]
+		fn := item.Function
+		name, overload := memo.FindWindowOverload(fn)
+		props, _ := builtins.GetBuiltinProperties(name)
+
+		args := make([]tree.TypedExpr, fn.ChildCount())
+		argIdxs[i] = make([]exec.ColumnOrdinal, fn.ChildCount())
+		for j, n := 0, fn.ChildCount(); j < n; j++ {
+			col := fn.Child(j).(*memo.VariableExpr).Col
+			args[j] = b.indexedVar(&ctx, b.mem.Metadata(), col)
+			idx, _ := input.outputCols.Get(int(col))
+			argIdxs[i][j] = exec.ColumnOrdinal(idx)
+		}
+
+		exprs[i] = tree.NewTypedFuncExpr(
+			tree.WrapFunction(name),
+			0,
+			args,
+			// TODO(justin): support filters (only apply to aggregates, not window
+			// functions in general).
+			nil,
+			&tree.WindowDef{
+				Partitions: partitionExprs,
+				OrderBy:    orderingExprs,
+			},
+			overload.FixedReturnType(),
+			props,
+			overload,
+		)
+	}
 
 	resultCols := make(sqlbase.ResultColumns, w.Relational().OutputCols.Len())
 
@@ -1425,27 +1425,32 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		resultCols[ordinal] = b.resultColumn(opt.ColumnID(col))
 	})
 
-	// Because of the way we arranged the input columns, we will be outputting
-	// the window column at the end (which is exactly what the execution engine
-	// will do as well).
-	windowIdx := passthrough.Len()
-	resultCols[windowIdx] = b.resultColumn(w.ColID)
-
 	var outputCols opt.ColMap
 	input.outputCols.ForEach(func(key, val int) {
 		if passthrough.Contains(key) {
 			outputCols.Set(key, val)
 		}
 	})
-	outputCols.Set(int(w.ColID), windowIdx)
+
+	outputIdxs := make([]int, len(w.Windows))
+
+	// Because of the way we arranged the input columns, we will be outputting
+	// the window columns at the end (which is exactly what the execution engine
+	// will do as well).
+	windowStart := passthrough.Len()
+	for i := range w.Windows {
+		resultCols[windowStart+i] = b.resultColumn(w.Windows[i].Col)
+		outputCols.Set(int(w.Windows[i].Col), windowStart+i)
+		outputIdxs[i] = windowStart + i
+	}
 
 	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
-		Cols:      resultCols,
-		Expr:      expr,
-		Idx:       windowIdx,
-		ArgIdxs:   argIdxs,
-		Partition: partitionIdxs,
-		Ordering:  input.sqlOrdering(ord),
+		Cols:       resultCols,
+		Exprs:      exprs,
+		OutputIdxs: outputIdxs,
+		ArgIdxs:    argIdxs,
+		Partition:  partitionIdxs,
+		Ordering:   input.sqlOrdering(ord),
 	})
 	if err != nil {
 		return execPlan{}, err

@@ -19,8 +19,10 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
-	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -112,27 +114,34 @@ func (b *bank) Hooks() workload.Hooks {
 	}
 }
 
+var bankColTypes = []types.T{
+	types.Int64,
+	types.Int64,
+	types.Bytes,
+}
+
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
 	table := workload.Table{
 		Name:   `bank`,
 		Schema: bankSchema,
-		InitialRows: workload.Tuples(
-			b.rows,
-			func(rowIdx int) []interface{} {
+		InitialRows: workload.BatchedTuples{
+			NumBatches: b.rows,
+			NumTotal:   b.rows,
+			FillBatch: func(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 				rng := rand.NewSource(b.seed + uint64(rowIdx))
-				buf := make([]byte, b.payloadBytes)
+				var payload []byte
+				*a, payload = a.Alloc(b.payloadBytes, 0 /* extraCap */)
 				const initialPrefix = `initial-`
-				copy(buf[:len(initialPrefix)], []byte(initialPrefix))
-				randStringLetters(rng, buf[len(initialPrefix):])
-				payload := *(*string)(unsafe.Pointer(&buf))
-				return []interface{}{
-					rowIdx,  // id
-					0,       // balance
-					payload, // payload
-				}
+				copy(payload[:len(initialPrefix)], []byte(initialPrefix))
+				randStringLetters(rng, payload[len(initialPrefix):])
+
+				cb.Reset(bankColTypes, 1)
+				cb.ColVec(0).Int64()[0] = int64(rowIdx) // id
+				cb.ColVec(1).Int64()[0] = 0             // balance
+				cb.ColVec(2).Bytes()[0] = payload       // payload
 			},
-		),
+		},
 		Splits: workload.Tuples(
 			b.ranges-1,
 			func(splitIdx int) []interface{} {

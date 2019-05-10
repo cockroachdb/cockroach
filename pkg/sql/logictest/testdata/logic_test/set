@@ -201,6 +201,12 @@ SET bytea_output = hex
 statement error invalid value for parameter "bytea_output": "bogus"
 SET bytea_output = bogus
 
+statement ok
+SET default_tablespace = ''
+
+statement error invalid value for parameter "default_tablespace": "bleepis"
+SET default_tablespace = 'bleepis'
+
 query T colnames
 SHOW server_version
 ----

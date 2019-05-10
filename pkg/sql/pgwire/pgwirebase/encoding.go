@@ -190,6 +190,25 @@ func NewProtocolViolationErrorf(format string, args ...interface{}) error {
 	return pgerror.Newf(pgerror.CodeProtocolViolationError, format, args...)
 }
 
+// validateArrayDimensions takes the number of dimensions and elements and
+// returns an error if we don't support that combination.
+func validateArrayDimensions(nDimensions int, nElements int) error {
+	switch nDimensions {
+	case 1:
+		break
+	case 0:
+		// 0-dimensional array means 0-length array: validate that.
+		if nElements == 0 {
+			break
+		}
+		fallthrough
+	default:
+		return pgerror.UnimplementedWithIssuef(32552,
+			"%d-dimension arrays not supported; only 1-dimension", nDimensions)
+	}
+	return nil
+}
+
 // DecodeOidDatum decodes bytes with specified Oid and format code into
 // a datum. If the ParseTimeContext is nil, reasonable defaults
 // will be applied.
@@ -294,9 +313,8 @@ func DecodeOidDatum(
 			if arr.Status != pgtype.Present {
 				return tree.DNull, nil
 			}
-			if len(arr.Dimensions) != 1 {
-				return nil, pgerror.UnimplementedWithIssue(32552,
-					"only 1-dimension arrays supported")
+			if err := validateArrayDimensions(len(arr.Dimensions), len(arr.Elements)); err != nil {
+				return nil, err
 			}
 			out := tree.NewDArray(types.Int)
 			var d tree.Datum
@@ -320,9 +338,8 @@ func DecodeOidDatum(
 			if arr.Status != pgtype.Present {
 				return tree.DNull, nil
 			}
-			if len(arr.Dimensions) != 1 {
-				return nil, pgerror.UnimplementedWithIssue(32552,
-					"only 1-dimension arrays supported")
+			if err := validateArrayDimensions(len(arr.Dimensions), len(arr.Elements)); err != nil {
+				return nil, err
 			}
 			out := tree.NewDArray(types.String)
 			if id == oid.T__name {
@@ -698,9 +715,8 @@ func decodeBinaryArray(ctx tree.ParseTimeContext, b []byte, code FormatCode) (tr
 	if err := binary.Read(r, binary.BigEndian, &hdr); err != nil {
 		return nil, err
 	}
-	// Only 1-dimensional arrays are supported for now.
-	if hdr.Ndims != 1 {
-		return nil, errors.Errorf("unsupported number of array dimensions: %d", hdr.Ndims)
+	if err := validateArrayDimensions(int(hdr.Ndims), int(hdr.DimSize)); err != nil {
+		return nil, err
 	}
 
 	elemOid := oid.Oid(hdr.ElemOid)

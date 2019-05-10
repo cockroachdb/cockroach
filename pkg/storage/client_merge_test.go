@@ -57,6 +57,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
@@ -3002,6 +3004,14 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 		}
 	} else if req.RangeID == h.rangeID {
 		if h.dropReq == nil || h.dropReq(req) {
+			log.Infof(
+				ctx,
+				"dropping Raft message %s",
+				raft.DescribeMessage(req.Message, func([]byte) string {
+					return "<omitted>"
+				}),
+			)
+
 			return nil
 		}
 	}
@@ -3088,7 +3098,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	}
 
 	// Truncate the logs of the LHS.
-	{
+	index := func() uint64 {
 		repl := store0.LookupReplica(roachpb.RKey("a"))
 		index, err := repl.GetLastIndex()
 		if err != nil {
@@ -3104,12 +3114,31 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		if _, err := client.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
 			t.Fatal(err)
 		}
-	}
+		return index
+	}()
 
 	beforeRaftSnaps := store2.Metrics().RangeSnapshotsNormalApplied.Count()
 
 	// Restore Raft traffic to the LHS on store2.
-	mtc.transport.Listen(store2.Ident.StoreID, store2)
+	log.Infof(ctx, "restored traffic to store 2")
+	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            aRepl0.RangeID,
+		RaftMessageHandler: store2,
+		dropReq: func(req *storage.RaftMessageRequest) bool {
+			// Make sure that even going forward no MsgApp for what we just
+			// truncated can make it through. The Raft transport is asynchronous
+			// so this is necessary to make the test pass reliably - otherwise
+			// the follower on store2 may catch up without needing a snapshot,
+			// tripping up the test.
+			//
+			// NB: the Index on the message is the log index that _precedes_ any of the
+			// entries in the MsgApp, so filter where msg.Index < index, not <= index.
+			return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
+		},
+		// Don't drop heartbeats or responses.
+		dropHB:   func(*storage.RaftHeartbeat) bool { return false },
+		dropResp: func(*storage.RaftMessageResponse) bool { return false },
+	})
 
 	// Wait for all replicas to catch up to the same point. Because we truncated
 	// the log while store2 was unavailable, this will require a Raft snapshot.

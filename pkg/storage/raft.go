@@ -224,7 +224,7 @@ func (h *SnapshotRequest_Header) IsPreemptive() bool {
 // to the entries contained in ents. The vmodule level for raft must be at
 // least 1.
 func (r *Replica) traceEntries(ents []raftpb.Entry, event string) {
-	if log.V(1) {
+	if log.V(1) || r.store.TestingKnobs().TraceAllRaftEvents {
 		ids := extractIDs(nil, ents)
 		traceProposals(r, ids, event)
 	}
@@ -234,7 +234,7 @@ func (r *Replica) traceEntries(ents []raftpb.Entry, event string) {
 // in entries contained in msgs. The vmodule level for raft must be at
 // least 1.
 func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
-	if log.V(1) {
+	if log.V(1) || r.store.TestingKnobs().TraceAllRaftEvents {
 		var ids []storagebase.CmdIDKey
 		for _, m := range msgs {
 			ids = extractIDs(ids, m.Entries)

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"google.golang.org/grpc/stats"
 )
 
@@ -99,7 +100,11 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	serverCtx := newTestContext(clock, stopper)
+	// Shared cluster ID by all RPC peers (this ensures that the peers
+	// don't talk to servers from unrelated tests by accident).
+	clusterID := uuid.MakeV4()
+
+	serverCtx := newTestContext(clusterID, clock, stopper)
 	const serverNodeID = 1
 	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
 	s := newTestServer(t, serverCtx)
@@ -120,7 +125,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	}
 	remoteAddr := ln.Addr().String()
 
-	clientCtx := newTestContext(clock, stopper)
+	clientCtx := newTestContext(clusterID, clock, stopper)
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	go func() { heartbeat.ready <- nil }()

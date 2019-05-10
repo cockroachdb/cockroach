@@ -17,7 +17,9 @@ package kv
 import (
 	"context"
 	"fmt"
+	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,7 +28,7 @@ import (
 	"github.com/google/btree"
 )
 
-// The degree of the outstandingWrites btree.
+// The degree of the inFlightWrites btree.
 const txnPipelinerBtreeDegree = 32
 
 var pipelinedWritesEnabled = settings.RegisterBoolSetting(
@@ -34,7 +36,7 @@ var pipelinedWritesEnabled = settings.RegisterBoolSetting(
 	"if enabled, transactional writes are pipelined through Raft consensus",
 	true,
 )
-var pipelinedWritesMaxOutstandingSize = settings.RegisterByteSizeSetting(
+var pipelinedWritesMaxInFlightSize = settings.RegisterByteSizeSetting(
 	// TODO(nvanbenschoten): The need for this extra setting alongside
 	// kv.transaction.max_intents_bytes indicates that we should explore
 	// the unification of intent tracking and in-flight write tracking.
@@ -58,15 +60,28 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 	128,
 )
 
+// trackedWritesMaxSize is a threshold in bytes for intent spans stored on the
+// coordinator during the lifetime of a transaction. Intents are included with a
+// transaction on commit or abort, to be cleaned up asynchronously. If they
+// exceed this threshold, they're condensed to avoid memory blowup both on the
+// coordinator and (critically) on the EndTransaction command at the Raft group
+// responsible for the transaction record.
+var trackedWritesMaxSize = settings.RegisterIntSetting(
+	"kv.transaction.max_intents_bytes",
+	"maximum number of bytes used to track write intents in transactions",
+	1<<18, /* 256 KB */
+)
+
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
 // asynchronous consensus. The interceptor then tracks all writes that have been
 // asynchronously proposed through Raft and ensures that all interfering
 // requests chain on to them by first proving that the async writes succeeded.
 // The interceptor also ensures that when committing a transaction all writes
 // that have been proposed but not proven to have succeeded are first checked
-// before committing. These async writes are referred to as "outstanding writes"
-// and this process of proving that an outstanding write succeeded is called
-// "proving" the write.
+// before committing. These async writes are referred to as "in-flight writes"
+// and this process of proving that an in-flight write succeeded is called
+// "proving" the write. Once writes are proven to have finished, they are
+// considered "stable".
 //
 // Chaining on to in-flight async writes is important for two main reasons to
 // txnPipeliner:
@@ -96,20 +111,20 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //    txnPipeliner uses chaining to throw an error when these re-orderings would
 //    have affected the order that transactional requests evaluate in.
 //
-// The interceptor proves all outstanding writes before committing a transaction
+// The interceptor proves all in-flight writes before committing a transaction
 // by tacking on a QueryIntent request for each one to the front of an
 // EndTransaction(Commit=true) requests. The result of this is that the
 // EndTransaction needs to wait at the DistSender level for all of QueryIntent
 // requests to succeed at before executing itself [1]. This is a little
 // unfortunate because a transaction could have accumulated a large number of
-// outstanding writes without proving any of them, and the more of these writes
+// in-flight writes without proving any of them, and the more of these writes
 // there are, the more chance querying one of them gets delayed and delays the
 // overall transaction.
 //
 // Three approaches have been considered to address this, all of which revolve
 // around the idea that earlier writes in a transaction may have finished
 // consensus well before the EndTransaction is sent. Following this logic, it
-// would be in the txnPipeliner's best interest to prove outstanding writes as
+// would be in the txnPipeliner's best interest to prove in-flight writes as
 // early as possible, even if no other overlapping requests force them to be
 // proven. The approaches are:
 //
@@ -122,7 +137,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //
 // 2. to address the issue of an unbounded number of background goroutines
 //    proving writes in approach 1, a single background goroutine could be run
-//    that repeatedly loops over all outstanding writes and attempts to prove
+//    that repeatedly loops over all in-flight writes and attempts to prove
 //    them. This approach was used in an early revision of #26599 and has the nice
 //    property that only one batch of QueryIntent requests is ever active at a
 //    given time. It may be revisited, but for now it is not used for the same
@@ -134,7 +149,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //    returning multiple results. This would allow clients to return immediately
 //    after a writes "evaluation" phase completed but hold onto a handle to the
 //    request and be notified immediately after its "replication" phase completes.
-//    This would allow txnPipeliner to prove outstanding writes immediately after
+//    This would allow txnPipeliner to prove in-flight writes immediately after
 //    they finish consensus without any extra RPCs.
 //
 // So far, none of these approaches have been integrated.
@@ -146,76 +161,74 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //     "staging" EndTransaction request.
 //
 type txnPipeliner struct {
-	st       *cluster.Settings
+	st *cluster.Settings
+	// Optional; used to condense intent spans, if provided. If not provided,
+	// a transaction's write footprint may grow without bound.
+	ri       *RangeIterator
 	wrapped  lockedSender
 	disabled bool
 
-	outstandingWrites *btree.BTree
-	owSizeBytes       int64 // byte size of all keys in outstandingWrites
-	owAlloc           outstandingWriteAlloc
-	tmpOW1, tmpOW2    outstandingWrite // avoid allocs
-}
-
-// outstandingWrites represent a commitment to proving (via QueryIntent) that
-// a point write succeeded in replicating an intent with a specific sequence
-// number.
-type outstandingWrite struct {
-	roachpb.SequencedWrite
-}
-
-// Less implements the btree.Item interface.
-func (a *outstandingWrite) Less(b btree.Item) bool {
-	return a.Key.Compare(b.(*outstandingWrite).Key) < 0
+	// In-flight writes are intent point writes that have not yet been proved
+	// to have succeeded. They will need to be proven before the transaction
+	// can commit.
+	ifWrites inFlightWriteSet
+	// The transaction's write footprint contains spans where intent writes have
+	// been performed at some point by the transaction. The span set contains
+	// spans encompassing all writes that have already been proven in this epoch
+	// and all writes, in-flight or not, at the end of prior epochs. All of the
+	// transaction's in-flight writes are morally in this set as well, but they
+	// are not stored here to avoid duplication.
+	//
+	// Unlike the in-flight writes, this set does not need to be tracked with
+	// full precision. Instead, the tracking can be an overestimate (i.e. the
+	// spans may cover keys never written to) and should be thought of as an
+	// upper-bound on the influence that the transaction has had. The set
+	// contains all keys spans that the transaction will need to eventually
+	// clean up upon its completion.
+	footprint condensableSpanSet
 }
 
 // SendLocked implements the lockedSender interface.
 func (tp *txnPipeliner) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Fast-path for 1PC transactions.
-	if ba.IsCompleteTransaction() {
-		return tp.wrapped.SendLocked(ctx, ba)
-	}
+	// Adjust the batch so that it doesn't miss any in-flight writes.
+	ba = tp.chainToInFlightWrites(ba)
 
-	// Adjust the batch so that it doesn't miss any outstanding writes.
-	ba = tp.chainToOutstandingWrites(ba)
+	// If an EndTransaction request is part of this batch, attach the
+	// in-flight writes and the write footprint to it.
+	ba, pErr := tp.attachWritesToEndTxn(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
+	}
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	br, pErr := tp.wrapped.SendLocked(ctx, ba)
+
+	// Update the in-flight write set and the write footprint with the results
+	// of the request.
+	tp.updateWriteTracking(ctx, ba, br, pErr)
 	if pErr != nil {
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
-
-	// TODO(nvanbenschoten): It's currently possible for this response to be
-	// from an earlier epoch when txns are used concurrently. That's ok for now
-	// because we always manually restart transactions once all concurrent
-	// operations synchronize. Once we move away from that model to a txnAttempt
-	// model, we'll need to reconsider how this works. It ~should~ just work.
-
-	// Prove any outstanding writes that we proved to exist.
-	br = tp.updateOutstandingWrites(ctx, ba, br)
-	return br, nil
+	return tp.stripQueryIntents(br), nil
 }
 
-// chainToOutstandingWrites ensures that we "chain" on to any outstanding writes
+// chainToInFlightWrites ensures that we "chain" on to any in-flight writes
 // that overlap the keys we're trying to read/write. We do this by prepending
 // QueryIntent requests with the THROW_ERROR behavior before each request that
-// touches any of the outstanding writes. In effect, this allows us to prove
+// touches any of the in-flight writes. In effect, this allows us to prove
 // that a write succeeded before depending on its existence. We later prune down
-// the list of writes we proved to exist that are no longer "outstanding" in
-// updateOutstandingWrites.
-//
-// TODO(nvanbenschoten): Consider placing an upper bound on the size of the
-// outstandingWrites tree. Once this limit is hit, we'll either need to
-// proactively prove outstanding writes or stop pipelining new writes.
-func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
+// the list of writes we proved to exist that are no longer "in-flight" in
+// updateWriteTracking.
+func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
 	asyncConsensus := pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
 
-	// We provide a setting to bound the size of outstanding writes that the
+	// We provide a setting to bound the size of in-flight writes that the
 	// pipeliner is tracking. If this batch would push us over this setting,
 	// don't allow it to perform async consensus.
-	owSizeBytes := tp.owSizeBytes
-	maxOWSizeBytes := pipelinedWritesMaxOutstandingSize.Get(&tp.st.SV)
+	addedIFBytes := int64(0)
+	maxIFBytes := pipelinedWritesMaxInFlightSize.Get(&tp.st.SV)
 
 	// We provide a setting to bound the number of writes we permit in a batch
 	// that uses async consensus. This is useful because we'll have to prove
@@ -239,8 +252,8 @@ func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachp
 	// chainedKeys map between calls to this function.
 	var chainedKeys map[string]struct{}
 	for i, ru := range oldReqs {
-		if !asyncConsensus && !forked && tp.outstandingWritesLen() == len(chainedKeys) {
-			// If there are no outstanding writes or all outstanding writes
+		if !asyncConsensus && !forked && tp.ifWrites.len() == len(chainedKeys) {
+			// If there are no in-flight writes or all in-flight writes
 			// have been chained onto and async consensus is disallowed,
 			// short-circuit immediately.
 			break
@@ -269,23 +282,21 @@ func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachp
 				asyncConsensus = false
 			} else {
 				// Only allow batches that would not push us over the maximum
-				// outstanding write size limit to perform consensus asynchronously.
+				// in-flight write size limit to perform consensus asynchronously.
 				//
 				// NB: this estimation is conservative because it doesn't factor
 				// in that some writes may be proven by this batch and removed
-				// from the outstanding write set. The real accounting in
-				// maybe{InsertOutstanding/RemoveProven}WriteLocked gets this
-				// right.
-				owSizeBytes += int64(len(req.Header().Key))
-				asyncConsensus = owSizeBytes <= maxOWSizeBytes
+				// from the in-flight write set. The real accounting in
+				// inFlightWriteSet.{insert,remove} gets this right.
+				addedIFBytes += keySize(req.Header().Key)
+				asyncConsensus = (tp.ifWrites.byteSize() + addedIFBytes) <= maxIFBytes
 			}
-
 		}
 
-		if tp.outstandingWritesLen() > len(chainedKeys) {
-			// For each conflicting outstanding write, add a QueryIntent request
+		if tp.ifWrites.len() > len(chainedKeys) {
+			// For each conflicting in-flight write, add a QueryIntent request
 			// to the batch to assert that it has succeeded and "chain" onto it.
-			itemIter := func(item btree.Item) bool {
+			writeIter := func(w *inFlightWrite) {
 				// We don't want to modify the batch's request slice directly,
 				// so fork it before modifying it.
 				if !forked {
@@ -293,12 +304,11 @@ func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachp
 					forked = true
 				}
 
-				w := item.(*outstandingWrite)
 				if _, ok := chainedKeys[string(w.Key)]; !ok {
 					// The write has not already been chained onto by an earlier
 					// request in this batch. Add a QueryIntent request to the
 					// batch (before the conflicting request) to ensure that we
-					// chain on to the success of the outstanding write.
+					// chain on to the success of the in-flight write.
 					meta := ba.Txn.TxnMeta
 					meta.Sequence = w.Sequence
 					ba.Add(&roachpb.QueryIntentRequest{
@@ -307,7 +317,7 @@ func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachp
 						},
 						Txn: meta,
 						// Set the IfMissing behavior to return an error if the
-						// outstanding write is missing.
+						// in-flight write is missing.
 						IfMissing: roachpb.QueryIntentRequest_RETURN_ERROR,
 					})
 
@@ -318,27 +328,25 @@ func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachp
 					}
 					chainedKeys[string(w.Key)] = struct{}{}
 				}
-				return true
 			}
 
 			if !roachpb.IsTransactional(req) {
 				// Non-transactional requests require that we stall the entire
-				// pipeline by chaining on to all outstanding writes. This is
+				// pipeline by chaining on to all in-flight writes. This is
 				// because their request header is often insufficient to
 				// determine all of the keys that they will interact with.
-				tp.outstandingWrites.Ascend(itemIter)
+				tp.ifWrites.ascend(writeIter)
 			} else if et, ok := req.(*roachpb.EndTransactionRequest); ok {
 				if et.Commit {
-					// EndTransactions need to prove all outstanding writes before
+					// EndTransactions need to prove all in-flight writes before
 					// being allowed to succeed themselves.
-					tp.outstandingWrites.Ascend(itemIter)
+					tp.ifWrites.ascend(writeIter)
 				}
 			} else {
 				// Transactional reads and writes needs to chain on to any
-				// overlapping outstanding writes.
-				r := req.Header().Span().AsRange()
-				tp.tmpOW1.Key, tp.tmpOW2.Key = roachpb.Key(r.Start), roachpb.Key(r.End)
-				tp.outstandingWrites.AscendRange(&tp.tmpOW1, &tp.tmpOW2, itemIter)
+				// overlapping in-flight writes.
+				s := req.Header().Span()
+				tp.ifWrites.ascendRange(s.Key, s.EndKey, writeIter)
 			}
 		}
 
@@ -355,54 +363,154 @@ func (tp *txnPipeliner) chainToOutstandingWrites(ba roachpb.BatchRequest) roachp
 	return ba
 }
 
-// updateOutstandingWrites reads the response for the given request and uses
-// it to update the tracked outstanding write set. It does so by performing
-// two actions:
-// 1. it removes all outstanding writes that the request proved to exist from
-//    the outstanding writes set.
-// 2. it adds all async writes that the request performed to the outstanding
-//    write set.
-//
-// While doing so, the method also strips all QueryIntent responses from the
-// BatchResponse, hiding the fact that they were added in the first place.
-func (tp *txnPipeliner) updateOutstandingWrites(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
-) *roachpb.BatchResponse {
-	// If the transaction is no longer pending, clear the outstanding writes
-	// tree. This will turn maybeRemoveProvenWriteLocked into a quick no-op.
-	if br.Txn != nil && br.Txn.Status != roachpb.PENDING && tp.outstandingWrites != nil {
-		tp.outstandingWrites.Clear(false /* addNodesToFreelist */)
-		tp.owSizeBytes = 0
+// attachWritesToEndTxn attaches the in-flight writes and the write footprint
+// that the interceptor has been tracking to any EndTransaction requests present
+// in the provided batch.
+func (tp *txnPipeliner) attachWritesToEndTxn(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (roachpb.BatchRequest, *roachpb.Error) {
+	args, hasET := ba.GetArg(roachpb.EndTransaction)
+	if !hasET {
+		return ba, nil
+	}
+	et := args.(*roachpb.EndTransactionRequest)
+	if len(et.IntentSpans) > 0 {
+		return ba, roachpb.NewErrorf("client must not pass intents to EndTransaction")
 	}
 
-	j := 0
+	// Defensively set distinctSpans to false if we had any previous writes in
+	// this transaction. This effectively limits the distinct spans optimization
+	// to 1pc transactions.
+	ba.Header.DistinctSpans = !tp.haveWrites()
+
+	// Insert into the in-flight write set and the write footprint assuming that
+	// the request will succeed. We need to eagerly populate these sets before
+	// we send the batch because we can't wait until the batch returns to attach
+	// the new writes to the EndTransaction request.
+	//
+	// We can't pass in a batch response here to better limit the key spans as
+	// we don't know what is going to be affected. This will affect queries such
+	// as `DELETE FROM my.table LIMIT 10` when executed as a 1PC transaction.
+	// e.g.: a (BeginTransaction, DeleteRange, EndTransaction) batch.
+	tp.updateWriteTracking(ctx, ba, nil, nil)
+
+	// For now we include all in-flight writes in the IntentSpans slice on
+	// EndTransaction requests. In the future, EndTransaction request will have
+	// a separate InFlightWrites field and in-flight writes will be merged into
+	// the IntentSpans slice as they succeed.
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		tp.footprint.insert(roachpb.Span{Key: w.Key})
+	})
+
+	// Populate et.IntentSpans, taking into account both any existing and new
+	// writes, and taking care to perform proper deduplication.
+	// TODO(peter): Populate DistinctSpans on all batches, not just batches
+	// which contain an EndTransactionRequest.
+	ba.Header.DistinctSpans = tp.footprint.mergeAndSort() && ba.Header.DistinctSpans
+	et.IntentSpans = append([]roachpb.Span(nil), tp.footprint.asSlice()...)
+
+	if log.V(3) {
+		for _, intent := range et.IntentSpans {
+			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+		}
+	}
+	return ba, nil
+}
+
+// updateWriteTracking reads the response for the given request and uses it
+// to update the tracked in-flight write set and write footprint. It does so
+// by performing three actions:
+// 1. it adds all async writes that the request performed to the in-flight
+//    write set.
+// 2. it adds all non-async writes that the request performed to the write
+//    footprint.
+// 3. it moves all in-flight writes that the request proved to exist from
+//    the in-flight writes set to the write footprint.
+//
+// After updating the write sets, the write footprint is condensed to ensure
+// that it remains under its memory limit.
+//
+// If an error is provided, all writes from the batch are added directly
+// to the write footprint to avoid leaking any intents when the transaction
+// cleans up.
+//
+// If no response or error are provided, the method adds to the write sets
+// assuming that the request will succeed but does not remove anything from
+// the in-flight writes set.
+func (tp *txnPipeliner) updateWriteTracking(
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+) {
+	// After adding new writes to the write footprint, check whether we need to
+	// condense the set to stay below memory limits.
+	defer tp.footprint.maybeCondense(ctx, tp.ri, trackedWritesMaxSize.Get(&tp.st.SV))
+
+	// If the request failed, add all intent writes directly to the write
+	// footprint. This reduces the likelihood of dangling intents blocking
+	// concurrent writers for extended periods of time. See #3346.
+	if pErr != nil {
+		// The transaction cannot continue in this epoch whether this is
+		// a retryable error or not.
+		ba.IntentSpanIterate(nil, tp.footprint.insert)
+		return
+	}
+
+	// If the transaction is no longer pending, clear the in-flight writes set
+	// and immediately return.
+	if br != nil && br.Txn != nil && br.Txn.Status != roachpb.PENDING {
+		tp.ifWrites.clear(false /* reuse */)
+		return
+	}
+
 	for i, ru := range ba.Requests {
 		req := ru.GetInner()
-		resp := br.Responses[i].GetInner()
+		var resp roachpb.Response
+		if br != nil {
+			resp = br.Responses[i].GetInner()
+		}
 
-		if qiReq, ok := req.(*roachpb.QueryIntentRequest); ok {
-			// Remove any outstanding writes that were proven to exist.
+		if qiReq, ok := req.(*roachpb.QueryIntentRequest); ok && resp != nil {
+			// Remove any in-flight writes that were proven to exist.
 			// It shouldn't be possible for a QueryIntentRequest with
 			// an IfMissing behavior of RETURN_ERROR to return without
 			// error and with with FoundIntent=false, but we handle that
 			// case here because it happens a lot in tests.
 			if resp.(*roachpb.QueryIntentResponse).FoundIntent {
-				tp.maybeRemoveProvenWriteLocked(qiReq.Key, qiReq.Txn.Sequence)
+				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
+				// Move to write footprint.
+				tp.footprint.insert(roachpb.Span{Key: qiReq.Key})
 			}
-		} else {
-			// Hide the fact that this interceptor added new requests to the batch.
-			br.Responses[j] = br.Responses[i]
-			j++
-
-			// Record any writes that were performed asynchronously. We'll
-			// need to prove that these succeeded sometime before we commit.
-			if ba.AsyncConsensus && req.Method() != roachpb.BeginTransaction {
+		} else if roachpb.IsTransactionWrite(req) {
+			// If the request was a transactional write, track its intents.
+			if ba.AsyncConsensus {
+				// Record any writes that were performed asynchronously. We'll
+				// need to prove that these succeeded sometime before we commit.
 				header := req.Header()
-				tp.maybeInsertOutstandingWriteLocked(header.Key, header.Sequence)
+				tp.ifWrites.insert(header.Key, header.Sequence)
+			} else {
+				// If the writes weren't performed asynchronously then add them
+				// directly to our write footprint.
+				if sp, ok := roachpb.ActualSpan(req, resp); ok {
+					tp.footprint.insert(sp)
+				}
 			}
 		}
 	}
-	// Hide the fact that this interceptor added new requests to the batch.
+}
+
+// stripQueryIntents adjusts the BatchResponse to hide the fact that this
+// interceptor added new requests to the batch. It returns an adjusted batch
+// response without the responses that correspond to these added requests.
+func (tp *txnPipeliner) stripQueryIntents(br *roachpb.BatchResponse) *roachpb.BatchResponse {
+	j := 0
+	for i, ru := range br.Responses {
+		if ru.GetQueryIntent() != nil {
+			continue
+		}
+		if i != j {
+			br.Responses[j] = br.Responses[i]
+		}
+		j++
+	}
 	br.Responses = br.Responses[:j]
 	return br
 }
@@ -438,88 +546,119 @@ func (tp *txnPipeliner) adjustError(
 }
 
 // setWrapped implements the txnInterceptor interface.
-func (tp *txnPipeliner) setWrapped(wrapped lockedSender) { tp.wrapped = wrapped }
+func (tp *txnPipeliner) setWrapped(wrapped lockedSender) {
+	tp.wrapped = wrapped
+}
 
 // populateMetaLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
-	if l := tp.outstandingWritesLen(); l > 0 {
-		meta.OutstandingWrites = make([]roachpb.SequencedWrite, 0, l)
-		tp.outstandingWrites.Ascend(func(item btree.Item) bool {
-			w := item.(*outstandingWrite)
-			meta.OutstandingWrites = append(meta.OutstandingWrites, w.SequencedWrite)
-			return true
+	if l := tp.ifWrites.len(); l > 0 {
+		meta.InFlightWrites = make([]roachpb.SequencedWrite, 0, l)
+		tp.ifWrites.ascend(func(w *inFlightWrite) {
+			meta.InFlightWrites = append(meta.InFlightWrites, w.SequencedWrite)
 		})
 	}
 }
 
 // augmentMetaLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
-	// Copy all outstanding writes into the outstandingWrite tree.
-	for _, w := range meta.OutstandingWrites {
-		tp.maybeInsertOutstandingWriteLocked(w.Key, w.Sequence)
+	// Copy all in-flight writes into the inFlightWrite tree.
+	for _, w := range meta.InFlightWrites {
+		tp.ifWrites.insert(w.Key, w.Sequence)
 	}
 }
 
 // epochBumpedLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) epochBumpedLocked() {
-	// Clear out the outstandingWrites set and free associated memory.
-	if tp.outstandingWrites != nil {
-		// Add nodes to freelist so that next epoch can reuse btree memory.
-		tp.outstandingWrites.Clear(true /* addNodesToFreelist */)
-		tp.owSizeBytes = 0
-		tp.owAlloc.Clear()
+	// Move all in-flight writes into the write footprint. These writes no
+	// longer need to be tracked precisely, but we don't want to forget about
+	// them and fail to clean them up.
+	if tp.ifWrites.len() > 0 {
+		tp.ifWrites.ascend(func(w *inFlightWrite) {
+			tp.footprint.insert(roachpb.Span{Key: w.Key})
+		})
+		tp.footprint.mergeAndSort()
+		tp.ifWrites.clear(true /* reuse */)
 	}
 }
 
 // closeLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) closeLocked() {}
 
-// outstandingWritesLen returns the number of writes that are outstanding.
-func (tp *txnPipeliner) outstandingWritesLen() int {
-	if tp.outstandingWrites == nil {
-		return 0
-	}
-	return tp.outstandingWrites.Len()
+// haveWrites returns whether the interceptor has observed any writes,
+// including currently in-flight ones.
+func (tp *txnPipeliner) haveWrites() bool {
+	return tp.ifWrites.len() > 0 || !tp.footprint.empty()
 }
 
-// maybeInsertOutstandingWriteLocked attempts to insert an outstanding write
-// that has not been proven to have succeeded into the txnPipeliners outstanding
-// write map.
-func (tp *txnPipeliner) maybeInsertOutstandingWriteLocked(key roachpb.Key, seq enginepb.TxnSeq) {
-	if tp.outstandingWrites == nil {
+// inFlightWrites represent a commitment to proving (via QueryIntent) that
+// a point write succeeded in replicating an intent with a specific sequence
+// number.
+type inFlightWrite struct {
+	roachpb.SequencedWrite
+}
+
+// Less implements the btree.Item interface.
+func (a *inFlightWrite) Less(b btree.Item) bool {
+	return a.Key.Compare(b.(*inFlightWrite).Key) < 0
+}
+
+// inFlightWriteSet is an ordered set of in-flight point writes. Given a set
+// of n elements, the structure supports O(log n) insertion of new in-flight
+// writes, O(log n) removal of existing in-flight writes, and O(m + log n)
+// retrieval over m in-flight writes that overlap with a given key.
+type inFlightWriteSet struct {
+	t     *btree.BTree
+	bytes int64
+
+	// Avoids allocs.
+	tmp1, tmp2 inFlightWrite
+	alloc      inFlightWriteAlloc
+}
+
+// insert attempts to insert an in-flight write that has not been proven to have
+// succeeded into the in-flight write set. If the write with an equal or larger
+// sequence number already exists in the set, the method is a no-op.
+func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq) {
+	if s.t == nil {
 		// Lazily initialize btree.
-		tp.outstandingWrites = btree.New(txnPipelinerBtreeDegree)
+		s.t = btree.New(txnPipelinerBtreeDegree)
 	}
 
-	tp.tmpOW1.Key = key
-	item := tp.outstandingWrites.Get(&tp.tmpOW1)
+	s.tmp1.Key = key
+	item := s.t.Get(&s.tmp1)
 	if item != nil {
-		otherW := item.(*outstandingWrite)
+		otherW := item.(*inFlightWrite)
 		if seq > otherW.Sequence {
-			// Existing outstanding write has old information.
+			// Existing in-flight write has old information.
 			otherW.Sequence = seq
 		}
 		return
 	}
 
-	w := tp.owAlloc.Alloc(key, seq)
-	tp.outstandingWrites.ReplaceOrInsert(w)
-	tp.owSizeBytes += int64(len(key))
+	w := s.alloc.alloc(key, seq)
+	s.t.ReplaceOrInsert(w)
+	s.bytes += keySize(key)
 }
 
-// maybeRemoveProvenWriteLocked attempts to remove an outstanding write that
-// was proven to have succeeded. The method will be a no-op if the write was
-// already proved. Care is taken not to accidentally remove a write to the
-// same key but at a later epoch or sequence number.
-func (tp *txnPipeliner) maybeRemoveProvenWriteLocked(key roachpb.Key, seq enginepb.TxnSeq) {
-	tp.tmpOW1.Key = key
-	item := tp.outstandingWrites.Get(&tp.tmpOW1)
+// remove attempts to remove an in-flight write from the in-flight write set.
+// The method will be a no-op if the write was already proved. Care is taken
+// not to accidentally remove a write to the same key but at a later epoch or
+// sequence number.
+func (s *inFlightWriteSet) remove(key roachpb.Key, seq enginepb.TxnSeq) {
+	if s.len() == 0 {
+		// Set is empty.
+		return
+	}
+
+	s.tmp1.Key = key
+	item := s.t.Get(&s.tmp1)
 	if item == nil {
 		// The write was already proven or the txn epoch was incremented.
 		return
 	}
 
-	w := item.(*outstandingWrite)
+	w := item.(*inFlightWrite)
 	if seq < w.Sequence {
 		// The sequence might have changed, which means that a new write was
 		// sent to the same key. This write would have been forced to prove
@@ -527,28 +666,88 @@ func (tp *txnPipeliner) maybeRemoveProvenWriteLocked(key roachpb.Key, seq engine
 		return
 	}
 
-	// Delete the write from the outstanding writes set.
-	delItem := tp.outstandingWrites.Delete(item)
+	// Delete the write from the in-flight writes set.
+	delItem := s.t.Delete(item)
 	if delItem != nil {
-		*delItem.(*outstandingWrite) = outstandingWrite{} // for GC
+		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
 	}
-	tp.owSizeBytes -= int64(len(key))
+	s.bytes -= keySize(key)
 
 	// Assert that the byte accounting is believable.
-	if tp.owSizeBytes < 0 {
-		panic("negative outstanding write size")
-	} else if tp.outstandingWrites.Len() == 0 && tp.owSizeBytes != 0 {
-		panic("non-zero outstanding write size with 0 outstanding writes")
+	if s.bytes < 0 {
+		panic("negative in-flight write size")
+	} else if s.t.Len() == 0 && s.bytes != 0 {
+		panic("non-zero in-flight write size with 0 in-flight writes")
 	}
 }
 
-// outstandingWriteAlloc provides chunk allocation of outstandingWrites,
-// amortizing the overhead of each allocation.
-type outstandingWriteAlloc []outstandingWrite
+// ascend calls the provided function for every write in the set.
+func (s *inFlightWriteSet) ascend(f func(w *inFlightWrite)) {
+	if s.len() == 0 {
+		// Set is empty.
+		return
+	}
+	s.t.Ascend(func(i btree.Item) bool {
+		f(i.(*inFlightWrite))
+		return true
+	})
+}
 
-// Alloc allocates a new outstandingWrite with the specified key and sequence
+// ascendRange calls the provided function for every write in the set
+// with a key in the range [start, end).
+func (s *inFlightWriteSet) ascendRange(start, end roachpb.Key, f func(w *inFlightWrite)) {
+	if s.len() == 0 {
+		// Set is empty.
+		return
+	}
+	if end == nil {
+		// Point lookup.
+		s.tmp1.Key = start
+		if i := s.t.Get(&s.tmp1); i != nil {
+			f(i.(*inFlightWrite))
+		}
+	} else {
+		// Range lookup.
+		s.tmp1.Key, s.tmp2.Key = start, end
+		s.t.AscendRange(&s.tmp1, &s.tmp2, func(i btree.Item) bool {
+			f(i.(*inFlightWrite))
+			return true
+		})
+	}
+}
+
+// len returns the number of the in-flight writes in the set.
+func (s *inFlightWriteSet) len() int {
+	if s.t == nil {
+		return 0
+	}
+	return s.t.Len()
+}
+
+// byteSize returns the size in bytes of the in-flight writes in the set.
+func (s *inFlightWriteSet) byteSize() int64 {
+	return s.bytes
+}
+
+// clear purges all elements from the in-flight write set and frees associated
+// memory. The reuse flag indicates whether the caller is intending to reu-use
+// the set or not.
+func (s *inFlightWriteSet) clear(reuse bool) {
+	if s.t == nil {
+		return
+	}
+	s.t.Clear(reuse /* addNodesToFreelist */)
+	s.bytes = 0
+	s.alloc.clear()
+}
+
+// inFlightWriteAlloc provides chunk allocation of inFlightWrites,
+// amortizing the overhead of each allocation.
+type inFlightWriteAlloc []inFlightWrite
+
+// alloc allocates a new inFlightWrite with the specified key and sequence
 // number.
-func (a *outstandingWriteAlloc) Alloc(key roachpb.Key, seq enginepb.TxnSeq) *outstandingWrite {
+func (a *inFlightWriteAlloc) alloc(key roachpb.Key, seq enginepb.TxnSeq) *inFlightWrite {
 	// If the current alloc slice has no extra capacity, reallocate a new chunk.
 	if cap(*a)-len(*a) == 0 {
 		const chunkAllocMinSize = 4
@@ -560,22 +759,164 @@ func (a *outstandingWriteAlloc) Alloc(key roachpb.Key, seq enginepb.TxnSeq) *out
 		} else if allocSize > chunkAllocMaxSize {
 			allocSize = chunkAllocMaxSize
 		}
-		*a = make([]outstandingWrite, 0, allocSize)
+		*a = make([]inFlightWrite, 0, allocSize)
 	}
 
 	*a = (*a)[:len(*a)+1]
 	w := &(*a)[len(*a)-1]
-	*w = outstandingWrite{
+	*w = inFlightWrite{
 		SequencedWrite: roachpb.SequencedWrite{Key: key, Sequence: seq},
 	}
 	return w
 }
 
-// Clear removes all allocated outstanding writes and attempts to reclaim as
+// clear removes all allocated in-flight writes and attempts to reclaim as
 // much allocated memory as possible.
-func (a *outstandingWriteAlloc) Clear() {
+func (a *inFlightWriteAlloc) clear() {
 	for i := range *a {
-		(*a)[i] = outstandingWrite{} // for GC
+		(*a)[i] = inFlightWrite{} // for GC
 	}
 	*a = (*a)[:0]
+}
+
+// condensableSpanSet is a set of key spans that is condensable in order to
+// stay below some maximum byte limit. Condensing of the set happens in two
+// ways. Initially, overlapping spans are merged together to deduplicate
+// redundant keys. If that alone isn't sufficient to stay below the byte limit,
+// spans within the same Range will be merged together. This can cause the
+// "footprint" of the set to grow, so the set should be thought of as on
+// overestimate.
+type condensableSpanSet struct {
+	s     []roachpb.Span
+	bytes int64
+}
+
+// insert adds a new span to the condensable span set. No attempt to condense
+// the set or deduplicate the new span with existing spans is made.
+func (s *condensableSpanSet) insert(sp roachpb.Span) {
+	s.s = append(s.s, sp)
+	s.bytes += spanSize(sp)
+}
+
+// mergeAndSort merges all overlapping spans. Calling this method will not
+// increase the overall bounds of the span set, but will eliminate duplicated
+// spans and combine overlapping spans.
+//
+// The method has the side effect of sorting the stable write set.
+func (s *condensableSpanSet) mergeAndSort() (distinct bool) {
+	s.s, distinct = roachpb.MergeSpans(s.s)
+	if !distinct {
+		// Recompute the size.
+		s.bytes = 0
+		for _, sp := range s.s {
+			s.bytes += spanSize(sp)
+		}
+	}
+	return distinct
+}
+
+// maybeCondense is similar in spirit to mergeAndSort, but it only adjusts the
+// span set when the maximum byte limit is exceeded. However, when this limit is
+// exceeded, the method is more aggressive in its attempt to reduce the memory
+// footprint of the span set. Not only will it merge overlapping spans, but
+// spans within the same range boundaries are also condensed.
+func (s *condensableSpanSet) maybeCondense(ctx context.Context, ri *RangeIterator, maxBytes int64) {
+	if s.bytes < maxBytes {
+		return
+	}
+
+	// Start by attempting to simply merge the spans within the set. This alone
+	// may bring us under the byte limit. Even if it doesn't, this step has the
+	// nice property that it sorts the spans by start key, which we rely on
+	// lower in this method.
+	s.mergeAndSort()
+	if s.bytes < maxBytes {
+		return
+	}
+
+	if ri == nil {
+		// If we were not given a RangeIterator, we cannot condense the spans.
+		return
+	}
+	defer ri.Reset()
+
+	// Divide spans by range boundaries and condense. Iterate over spans
+	// using a range iterator and add each to a bucket keyed by range
+	// ID. Local keys are kept in a new slice and not added to buckets.
+	type spanBucket struct {
+		rangeID roachpb.RangeID
+		bytes   int64
+		spans   []roachpb.Span
+	}
+	var buckets []spanBucket
+	var localSpans []roachpb.Span
+	for _, sp := range s.s {
+		if keys.IsLocal(sp.Key) {
+			localSpans = append(localSpans, sp)
+			continue
+		}
+		ri.Seek(ctx, roachpb.RKey(sp.Key), Ascending)
+		if !ri.Valid() {
+			// We haven't modified s.s yet, so it is safe to return.
+			log.VEventf(ctx, 2, "failed to condense intent spans: %v", ri.Error())
+			return
+		}
+		rangeID := ri.Desc().RangeID
+		if l := len(buckets); l > 0 && buckets[l-1].rangeID == rangeID {
+			buckets[l-1].spans = append(buckets[l-1].spans, sp)
+		} else {
+			buckets = append(buckets, spanBucket{
+				rangeID: rangeID, spans: []roachpb.Span{sp},
+			})
+		}
+		buckets[len(buckets)-1].bytes += spanSize(sp)
+	}
+
+	// Sort the buckets by size and collapse from largest to smallest
+	// until total size of uncondensed spans no longer exceeds threshold.
+	sort.Slice(buckets, func(i, j int) bool { return buckets[i].bytes > buckets[j].bytes })
+	s.s = localSpans // reset to hold just the local spans; will add newly condensed and remainder
+	for _, bucket := range buckets {
+		// Condense until we get to half the threshold.
+		if s.bytes <= maxBytes/2 {
+			// Collect remaining spans from each bucket into uncondensed slice.
+			s.s = append(s.s, bucket.spans...)
+			continue
+		}
+		s.bytes -= bucket.bytes
+		// TODO(spencer): consider further optimizations here to create
+		// more than one span out of a bucket to avoid overly broad span
+		// combinations.
+		cs := bucket.spans[0]
+		for _, s := range bucket.spans[1:] {
+			cs = cs.Combine(s)
+			if !cs.Valid() {
+				// If we didn't fatal here then we would need to ensure that the
+				// spans were restored or a transaction could lose part of its
+				// write footprint.
+				log.Fatalf(ctx, "failed to condense intent spans: "+
+					"combining span %s yielded invalid result", s)
+			}
+		}
+		s.bytes += spanSize(cs)
+		s.s = append(s.s, cs)
+	}
+}
+
+// asSlice returns the set as a slice of spans.
+func (s *condensableSpanSet) asSlice() []roachpb.Span {
+	return s.s
+}
+
+// empty returns whether the set is empty or whether it contains spans.
+func (s *condensableSpanSet) empty() bool {
+	return len(s.s) == 0
+}
+
+func spanSize(sp roachpb.Span) int64 {
+	return int64(len(sp.Key) + len(sp.EndKey))
+}
+
+func keySize(k roachpb.Key) int64 {
+	return int64(len(k))
 }
