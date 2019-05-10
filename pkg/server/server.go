@@ -430,6 +430,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
+		DefaultZoneConfig:       s.cfg.DefaultZoneConfig,
 		Settings:                st,
 		AmbientCtx:              s.cfg.AmbientCtx,
 		RaftConfig:              s.cfg.RaftConfig,
@@ -603,6 +604,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	execCfg = sql.ExecutorConfig{
 		Settings:                s.st,
 		NodeInfo:                nodeInfo,
+		DefaultZoneConfig:       s.cfg.DefaultZoneConfig,
 		Locality:                s.cfg.Locality,
 		AmbientCtx:              s.cfg.AmbientCtx,
 		DB:                      s.db,
@@ -726,6 +728,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.leaseMgr.PeriodicallyRefreshSomeLeases()
 
 	s.node.InitLogger(&execCfg)
+	s.cfg.DefaultZoneConfig = cfg.DefaultZoneConfig
 
 	return s, nil
 }
