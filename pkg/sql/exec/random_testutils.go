@@ -271,7 +271,9 @@ func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 		// Done.
 		b := coldata.NewMemBatchWithSize(o.typs, 0)
 		b.SetLength(0)
-		o.batchAccumulator(b)
+		if o.batchAccumulator != nil {
+			o.batchAccumulator(b)
+		}
 		return b
 	}
 
@@ -279,18 +281,26 @@ func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 		selProbability  float64
 		nullProbability float64
 	)
-	if o.selection {
-		selProbability = o.rng.Float64()
-	}
-	if o.nulls {
-		nullProbability = o.rng.Float64()
-	}
+	for {
+		if o.selection {
+			selProbability = o.rng.Float64()
+		}
+		if o.nulls {
+			nullProbability = o.rng.Float64()
+		}
 
-	b := randomBatchWithSel(o.rng, o.typs, o.batchSize, nullProbability, selProbability)
-	if !o.selection {
-		b.SetSelection(false)
+		b := randomBatchWithSel(o.rng, o.typs, o.batchSize, nullProbability, selProbability)
+		if !o.selection {
+			b.SetSelection(false)
+		}
+		if b.Length() == 0 {
+			// Don't return a zero-length batch until we return o.numBatches batches.
+			continue
+		}
+		o.numReturned++
+		if o.batchAccumulator != nil {
+			o.batchAccumulator(b)
+		}
+		return b
 	}
-	o.numReturned++
-	o.batchAccumulator(b)
-	return b
 }
