@@ -29,6 +29,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -85,12 +86,15 @@ func interestingGoroutines() map[int64]string {
 // beginning that would include the previously-leaked goroutines, those leaked
 // goroutines can spin up other goroutines at random times and these would be
 // mis-attributed as leaked by the currently-running test.
-var leakDetectorDisabled bool
+var leakDetectorDisabled uint32
 
 // AfterTest snapshots the currently-running goroutines and returns a
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
 func AfterTest(t testing.TB) func() {
+	if atomic.LoadUint32(&leakDetectorDisabled) != 0 {
+		return func() {}
+	}
 	orig := interestingGoroutines()
 	return func() {
 		// If there was a panic, "leaked" goroutines are expected.
@@ -102,7 +106,7 @@ func AfterTest(t testing.TB) func() {
 		// to see if the leak detector should be disabled for future tests.
 		if t.Failed() {
 			if err := diffGoroutines(orig); err != nil {
-				leakDetectorDisabled = true
+				atomic.StoreUint32(&leakDetectorDisabled, 1)
 			}
 			return
 		}
@@ -116,7 +120,7 @@ func AfterTest(t testing.TB) func() {
 					time.Sleep(50 * time.Millisecond)
 					continue
 				}
-				leakDetectorDisabled = true
+				atomic.StoreUint32(&leakDetectorDisabled, 1)
 				t.Error(err)
 			}
 			break
