@@ -12,7 +12,8 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build lint
+// TODO(radu): re-enable the checkers using the new staticcheck interfaces.
+// +build lint_todo
 
 package lint
 
