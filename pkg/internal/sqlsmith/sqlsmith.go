@@ -70,6 +70,8 @@ type Smither struct {
 	stmtSampler, tableExprSampler *WeightedSampler
 	statements                    statementWeights
 	tableExprs                    tableExprWeights
+
+	disableWith bool
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -138,4 +140,15 @@ type disableMutations struct{}
 func (d disableMutations) Apply(s *Smither) {
 	s.statements = nonMutatingStatements
 	s.tableExprs = nonMutatingTableExprs
+}
+
+// DisableWith causes the Smither to not emit WITH clauses.
+func DisableWith() SmitherOption {
+	return disableWith{}
+}
+
+type disableWith struct{}
+
+func (d disableWith) Apply(s *Smither) {
+	s.disableWith = true
 }
