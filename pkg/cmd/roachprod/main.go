@@ -16,6 +16,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -35,11 +36,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
+	roachprodTelemetry "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -1500,6 +1503,22 @@ func main() {
 		dumpCmd,
 		cachedHostsCmd,
 	)
+	// Wrap all commands in telemetry reporting.
+	for _, base := range rootCmd.Commands() {
+		if fn := base.Run; fn != nil {
+			base.Run = func(cmd *cobra.Command, args []string) {
+				telemetry.Count("command." + cmd.Name())
+				fn(cmd, args)
+			}
+		}
+		if fn := base.RunE; fn != nil {
+			base.RunE = func(cmd *cobra.Command, args []string) error {
+				telemetry.Count("command." + cmd.Name())
+				return fn(cmd, args)
+			}
+		}
+	}
+
 	rootCmd.BashCompletionFunction = fmt.Sprintf(`__custom_func()
 	{
 		# only complete the 2nd arg, e.g. adminurl <foo>
@@ -1725,8 +1744,17 @@ Node specification
 		fmt.Printf("problem loading clusters: %s\n", err)
 	}
 
+	exit := 0
 	if err := rootCmd.Execute(); err != nil {
 		// Cobra has already printed the error message.
-		os.Exit(1)
+		exit = 1
 	}
+
+	// Fire off telemetry before exiting.
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	if err := roachprodTelemetry.Send(ctx); err != nil {
+		fmt.Printf("could not send telemetry: %s\n", err)
+	}
+	cancel()
+	os.Exit(exit)
 }

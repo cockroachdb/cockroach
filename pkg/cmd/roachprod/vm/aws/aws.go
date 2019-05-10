@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -203,6 +204,7 @@ func (p *Provider) ConfigSSH() error {
 
 // Create is part of the vm.Provider interface.
 func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
+
 	// We need to make sure that the SSH keys have been distributed to all regions
 	if err := p.ConfigSSH(); err != nil {
 		return err
@@ -659,7 +661,9 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		)
 	}
 
-	return p.runJSONCommand(args, &data)
+	err = p.runJSONCommand(args, &data)
+	telemetry.CreateVM(name, ProviderName, az.region.Name, machineType, err)
+	return err
 }
 
 // Active is part of the vm.Provider interface.

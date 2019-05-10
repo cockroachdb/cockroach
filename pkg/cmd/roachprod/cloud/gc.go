@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/nlopes/slack"
@@ -333,7 +334,11 @@ func GCClusters(cloud *Cloud, dryrun bool) error {
 		if len(badVMs) > 0 {
 			// Destroy bad VMs.
 			err := vm.FanOut(badVMs, func(p vm.Provider, vms vm.List) error {
-				return p.Delete(vms)
+				err := p.Delete(vms)
+				for _, vm := range vms {
+					telemetry.DestroyVM(vm, true /* gc */, err)
+				}
+				return err
 			})
 			if err != nil {
 				postError(client, channel, err)
