@@ -36,5 +36,12 @@ existing diagnostics reporting if enabled. Some notes on using these:
 		and map lookup over around the name resolution on each increment.
 	-	When naming a counter, by convention we use dot-separated, dashed names, eg.
 		`feature-area.specific-feature`.
+
+This packages additionally contains a protocol buffer representation for
+telemetry data and various utilities for command-line tools or other
+programs to maintain a stable identity when reporting.
+
+Reports from the telemetry package are disabled when the
+COCKROACH_NO_TELEMETRY environment variable is present.
 */
 package telemetry

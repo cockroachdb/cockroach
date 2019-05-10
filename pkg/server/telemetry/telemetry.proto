@@ -1,0 +1,47 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.server.telemetry;
+option go_package = "telemetry";
+
+import "gogoproto/gogo.proto";
+
+// TelemetryReport is a simplified, all-in-one message for tools and
+// processes to provide information about their operation. It differs
+// from DiagnosticReport in that it is intended to be product-agnostic;
+// it doesn't contain the various sub-messages that are
+// CockroachDB-specific.
+message TelemetryReport {
+  TelemetrySource source = 1 [(gogoproto.nullable) = false];
+  // FeatureUsage contains counter information.
+  map<string, int32> feature_usage = 2 [(gogoproto.nullable) = false];
+}
+
+// TelemetrySource describes the tool or process that has generated a
+// TelemetroyReport.
+message TelemetrySource {
+  // The name of the tool, e.g. "roachprod".
+  string product = 1;
+  // InstallID contains a UUID that is, ideally, persistent across
+  // invocations of the tool.
+  string install_uuid = 2 [(gogoproto.customname) = "InstallUUID"];
+  // Version, if reported, should be a semver or a git commit id.
+  string version = 3;
+  // Uptime contains the number of nanoseconds for which the
+  // process has been running.
+  int64 uptime = 4 [(gogoproto.casttype) = "time.Duration"];
+  // Internal should be set to true for tools that are internal to CRL.
+  bool internal = 5;
+}
