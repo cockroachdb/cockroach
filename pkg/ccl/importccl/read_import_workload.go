@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 )
@@ -66,6 +67,17 @@ func makeDatumFromColOffset(
 		case types.DecimalFamily:
 			d := *apd.New(col.Int64()[rowIdx], 0)
 			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
+		case types.DateFamily:
+			date, err := pgdate.MakeDateFromUnixEpoch(col.Int64()[rowIdx])
+			if err != nil {
+				return nil, err
+			}
+			return alloc.NewDDate(tree.DDate{Date: date}), nil
+		}
+	case coltypes.Int16:
+		switch hint.Family() {
+		case types.IntFamily:
+			return alloc.NewDInt(tree.DInt(col.Int16()[rowIdx])), nil
 		}
 	case coltypes.Float64:
 		switch hint.Family() {

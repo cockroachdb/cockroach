@@ -17,6 +17,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -24,17 +25,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 )
 
 const (
-	numNation        = 25
-	numRegion        = 5
-	numPartPerSF     = 200000
-	numSupplierPerSF = 10000
-	numPartSuppPerSF = 800000
-	numCustomerPerSF = 150000
-	numOrderPerSF    = 1500000
-	numLineItemPerSF = 6001215
+	numNation           = 25
+	numRegion           = 5
+	numPartPerSF        = 200000
+	numPartSuppPerPart  = 4
+	numSupplierPerSF    = 10000
+	numCustomerPerSF    = 150000
+	numOrderPerCustomer = 10
+	numLineItemPerSF    = 6001215
 )
 
 // wrongOutputError indicates that incorrect results were returned for one of
@@ -55,8 +57,9 @@ type tpch struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed        int64
+	seed        uint64
 	scaleFactor int
+	fks         bool
 
 	disableChecks bool
 	vectorize     string
@@ -64,10 +67,19 @@ type tpch struct {
 
 	queriesRaw      string
 	selectedQueries []string
+
+	textPool   textPool
+	localsPool *sync.Pool
 }
 
 func init() {
 	workload.Register(tpchMeta)
+}
+
+// FromScaleFactor returns a tpch generator pre-configured with the specified
+// scale factor.
+func FromScaleFactor(scaleFactor int) workload.Generator {
+	return workload.FromFlags(tpchMeta, fmt.Sprintf(`--scale-factor=%d`, scaleFactor))
 }
 
 var tpchMeta = workload.Meta{
@@ -83,9 +95,10 @@ var tpchMeta = workload.Meta{
 			`disable-checks`: {RuntimeOnly: true},
 			`vectorize`:      {RuntimeOnly: true},
 		}
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
+		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.scaleFactor, `scale-factor`, 1,
 			`Linear scale of how much data to use (each SF is ~1GB)`)
+		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.StringVar(&g.queriesRaw, `queries`,
 			`1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`,
 			`Queries to run. Use a comma separated list of query numbers`)
@@ -124,51 +137,153 @@ func (w *tpch) Hooks() workload.Hooks {
 			}
 			return nil
 		},
+		PostLoad: func(db *gosql.DB) error {
+			if w.fks {
+				// We avoid validating foreign keys because we just generated the data
+				// set and don't want to scan over the entire thing again.
+				// Unfortunately, this means that we leave the foreign keys unvalidated
+				// for the duration of the test, so the SQL optimizer can't use them.
+				//
+				// TODO(lucy-zhang): expose an internal knob to validate fk relations
+				// without performing full validation. See #38833.
+				fkStmts := []string{
+					`ALTER TABLE nation ADD CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) REFERENCES region (r_regionkey) NOT VALID`,
+					`ALTER TABLE supplier ADD CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) REFERENCES nation (n_nationkey) NOT VALID`,
+					`ALTER TABLE partsupp ADD CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) REFERENCES part (p_partkey) NOT VALID`,
+					`ALTER TABLE partsupp ADD CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) REFERENCES supplier (s_suppkey) NOT VALID`,
+					`ALTER TABLE customer ADD CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) REFERENCES nation (n_nationkey) NOT VALID`,
+					`ALTER TABLE orders ADD CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) REFERENCES customer (c_custkey) NOT VALID`,
+					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) REFERENCES orders (o_orderkey) NOT VALID`,
+					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) REFERENCES part (p_partkey) NOT VALID`,
+					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) REFERENCES supplier (s_suppkey) NOT VALID`,
+					// TODO(andyk): This fails with `pq: column "l_partkey" cannot be used
+					// by multiple foreign key constraints`. This limitation would appear
+					// to violate TPCH rules, as all foreign keys must be defined, or none
+					// at all.
+					// `ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) REFERENCES partsupp (ps_partkey, ps_suppkey) NOT VALID`,
+				}
+
+				for _, fkStmt := range fkStmts {
+					if _, err := db.Exec(fkStmt); err != nil {
+						// If the statement failed because the fk already exists, ignore it.
+						// Return the error for any other reason.
+						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
+						if !strings.Contains(err.Error(), duplFKErr) {
+							return errors.Wrap(err, fkStmt)
+						}
+					}
+				}
+			}
+			return nil
+		},
 	}
+}
+
+type generateLocals struct {
+	rng *rand.Rand
+
+	// namePerm is a slice of ordinals into randPartNames.
+	namePerm []int
+
+	orderData *orderSharedRandomData
 }
 
 // Tables implements the Generator interface.
 func (w *tpch) Tables() []workload.Table {
-	// TODO(dan): Implement the InitialRowFns for these.
+	if w.localsPool == nil {
+		w.localsPool = &sync.Pool{
+			New: func() interface{} {
+				namePerm := make([]int, len(randPartNames))
+				for i := range namePerm {
+					namePerm[i] = i
+				}
+				return &generateLocals{
+					rng:      rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
+					namePerm: namePerm,
+					orderData: &orderSharedRandomData{
+						partKeys:   make([]int, 0, 7),
+						shipDates:  make([]int64, 0, 7),
+						quantities: make([]float32, 0, 7),
+						discount:   make([]float32, 0, 7),
+						tax:        make([]float32, 0, 7),
+					},
+				}
+			},
+		}
+	}
+
+	// TODO(dan): Make this a flag that points at an official pool.txt?
+	w.textPool = &fakeTextPool{seed: w.seed}
+
 	nation := workload.Table{
-		Name:        `nation`,
-		Schema:      tpchNationSchema,
-		InitialRows: workload.Tuples(numNation, nil),
+		Name:   `nation`,
+		Schema: tpchNationSchema,
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numNation,
+			FillBatch:  w.tpchNationInitialRowBatch,
+		},
 	}
 	region := workload.Table{
-		Name:        `region`,
-		Schema:      tpchRegionSchema,
-		InitialRows: workload.Tuples(numRegion, nil),
+		Name:   `region`,
+		Schema: tpchRegionSchema,
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numRegion,
+			FillBatch:  w.tpchRegionInitialRowBatch,
+		},
 	}
-	part := workload.Table{
-		Name:        `part`,
-		Schema:      tpchPartSchema,
-		InitialRows: workload.Tuples(numPartPerSF*w.scaleFactor, nil),
-	}
+	numSupplier := numSupplierPerSF * w.scaleFactor
 	supplier := workload.Table{
-		Name:        `supplier`,
-		Schema:      tpchSupplierSchema,
-		InitialRows: workload.Tuples(numSupplierPerSF*w.scaleFactor, nil),
+		Name:   `supplier`,
+		Schema: tpchSupplierSchema,
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numSupplier,
+			FillBatch:  w.tpchSupplierInitialRowBatch,
+		},
+	}
+	numPart := numPartPerSF * w.scaleFactor
+	part := workload.Table{
+		Name:   `part`,
+		Schema: tpchPartSchema,
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numPart,
+			FillBatch:  w.tpchPartInitialRowBatch,
+		},
 	}
 	partsupp := workload.Table{
-		Name:        `partsupp`,
-		Schema:      tpchPartSuppSchema,
-		InitialRows: workload.Tuples(numPartSuppPerSF*w.scaleFactor, nil),
+		Name:   `partsupp`,
+		Schema: tpchPartSuppSchema,
+		InitialRows: workload.BatchedTuples{
+			// 1 batch per part, hence numPartPerSF and not numPartSuppPerSF.
+			NumBatches: numPart,
+			FillBatch:  w.tpchPartSuppInitialRowBatch,
+		},
 	}
+	numCustomer := numCustomerPerSF * w.scaleFactor
 	customer := workload.Table{
-		Name:        `customer`,
-		Schema:      tpchCustomerSchema,
-		InitialRows: workload.Tuples(numCustomerPerSF*w.scaleFactor, nil),
+		Name:   `customer`,
+		Schema: tpchCustomerSchema,
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numCustomer,
+			FillBatch:  w.tpchCustomerInitialRowBatch,
+		},
 	}
 	orders := workload.Table{
-		Name:        `orders`,
-		Schema:      tpchOrdersSchema,
-		InitialRows: workload.Tuples(numOrderPerSF*w.scaleFactor, nil),
+		Name:   `orders`,
+		Schema: tpchOrdersSchema,
+		InitialRows: workload.BatchedTuples{
+			// 1 batch per customer.
+			NumBatches: numCustomer,
+			FillBatch:  w.tpchOrdersInitialRowBatch,
+		},
 	}
 	lineitem := workload.Table{
-		Name:        `lineitem`,
-		Schema:      tpchLineItemSchema,
-		InitialRows: workload.Tuples(numLineItemPerSF*w.scaleFactor, nil),
+		Name:   `lineitem`,
+		Schema: tpchLineItemSchema,
+		InitialRows: workload.BatchedTuples{
+			// 1 batch per customer.
+			NumBatches: numCustomer,
+			FillBatch:  w.tpchLineItemInitialRowBatch,
+		},
 	}
 
 	return []workload.Table{

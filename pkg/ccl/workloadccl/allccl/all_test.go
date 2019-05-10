@@ -72,7 +72,8 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			// These don't work with IMPORT.
 			continue
 		case `tpch`:
-			// tpch has an incomplete initial data implemention.
+			// TODO(dan): Implement a timmed down version of TPCH to keep the test
+			// runtime down.
 			continue
 		}
 
@@ -207,6 +208,11 @@ func hashTableInitialData(
 					binary.LittleEndian.PutUint64(scratch[:8], uint64(x))
 					_, _ = h.Write(scratch[:8])
 				}
+			case coltypes.Int16:
+				for _, x := range col.Int16()[:b.Length()] {
+					binary.LittleEndian.PutUint16(scratch[:2], uint16(x))
+					_, _ = h.Write(scratch[:2])
+				}
 			case coltypes.Float64:
 				for _, x := range col.Float64()[:b.Length()] {
 					bits := math.Float64bits(x)
@@ -256,6 +262,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
 		`tpcc`:       0xab32e4f5e899eb2f,
+		`tpch`:       0xdd952207e22aa577,
 		`ycsb`:       0x85dd34d8c07fd808,
 	}
 
