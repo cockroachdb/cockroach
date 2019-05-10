@@ -1741,7 +1741,7 @@ import_format:
 // Formats:
 //    CSV
 //    MYSQLOUTFILE
-//    MYSQLDUMP (mysqldump's SQL output)
+//    MYSQLDUMP
 //    PGCOPY
 //    PGDUMP
 //
@@ -1784,6 +1784,11 @@ import_stmt:
   {
     name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Import{Table: &name, CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
+  }
+| IMPORT INTO table_name '(' insert_column_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: $5.nameList(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT error // SHOW HELP: IMPORT
 
@@ -3697,7 +3702,7 @@ opt_on_targets_roles:
 //
 // 2. Now we must disambiguate the first rule "table_pattern_list"
 //    between one that recognizes ROLE and one that recognizes
-//    <some table pattern list>". So first, inline the definition of
+//    "<some table pattern list>". So first, inline the definition of
 //    table_pattern_list.
 //
 //    targets ::=
@@ -3721,7 +3726,7 @@ opt_on_targets_roles:
 //    would match). We just need to focus on the first one "table_pattern".
 //    This needs to tweak "table_pattern".
 //
-//    Here we could inline table_pattern but now we don't have to any
+//    Here we could inline table_pattern but now we do not have to any
 //    more, we just need to create a variant of it which is
 //    unambiguous with a single ROLE keyword. That is, we need a
 //    table_pattern which cannot contain a single name. We do
@@ -3744,7 +3749,7 @@ opt_on_targets_roles:
 //    that starts with ROLE cannot be matched by any of these remaining
 //    rules. This means that the prefix is now free to use, without
 //    ambiguity. We do this as follows, to gain a syntax rule for "ROLE
-//    <namelist>". (We'll handle a ROLE with no name list below.)
+//    <namelist>". (We will handle a ROLE with no name list below.)
 //
 //    targets ::=
 //        ROLE name_list                        # <- here
@@ -3753,7 +3758,7 @@ opt_on_targets_roles:
 //        TABLE table_pattern_list
 //        DATABASE name_list
 //
-// 6. Now on to the finishing touches. First we'd like to regain the
+// 6. Now on to the finishing touches. First we would like to regain the
 //    ability to use "<tablename>" when the table name is a simple
 //    identifier. This is done as follows:
 //
@@ -3766,7 +3771,7 @@ opt_on_targets_roles:
 //        DATABASE name_list
 //
 // 7. Then, we want to recognize "ROLE" without any subsequent name
-//    list. This requires some care: we can't add "ROLE" to the set of
+//    list. This requires some care: we can not add "ROLE" to the set of
 //    rules above, because "name" would then overlap. To disambiguate,
 //    we must first inline "name" as follows:
 //
@@ -4796,7 +4801,7 @@ index_params:
 
 // Index attributes can be either simple column references, or arbitrary
 // expressions in parens. For backwards-compatibility reasons, we allow an
-// expression that's just a function call to be written without parens.
+// expression that is just a function call to be written without parens.
 index_elem:
   a_expr opt_asc_desc
   {
