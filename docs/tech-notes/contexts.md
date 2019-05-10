@@ -312,7 +312,7 @@ For example, a `replica` initializes its `AmbientContext`
     // Add replica log tag - the value is rangeStr.String().
     r.AmbientContext.AddLogTag("r", &r.rangeStr)
     // Add replica pointer value.
-    r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
+    r.AmbientContext.AddLogTag("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 
 And then all entry points into an instance use the `AmbientContext` to
 annotate the operation’s context. For example, `replica.Send()`
