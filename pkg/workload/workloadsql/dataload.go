@@ -37,6 +37,11 @@ type InsertsDataLoader struct {
 func (l InsertsDataLoader) InitialDataLoad(
 	ctx context.Context, db *gosql.DB, gen workload.Generator,
 ) (int64, error) {
+	if gen.Meta().Name == `tpch` {
+		return 0, errors.New(
+			`tpch currently doesn't work with the inserts data loader. try --data-loader=import`)
+	}
+
 	if l.BatchSize <= 0 {
 		l.BatchSize = 1000
 	}

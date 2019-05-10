@@ -139,6 +139,9 @@ func init() {
 				return runDemo(cmd, gen)
 			}),
 		}
+		if !meta.PublicFacing {
+			genDemoCmd.Hidden = true
+		}
 		demoCmd.AddCommand(genDemoCmd)
 		genDemoCmd.Flags().AddFlagSet(genFlags)
 	}
