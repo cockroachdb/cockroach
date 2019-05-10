@@ -28,7 +28,7 @@ var (
 func init() {
 	scalars = []scalarWeight{
 		{10, scalarNoContext(makeAnd)},
-		{5, scalarNoContext(makeCaseExpr)},
+		{1, scalarNoContext(makeCaseExpr)},
 		{1, scalarNoContext(makeCoalesceExpr)},
 		{20, scalarNoContext(makeColRef)},
 		{10, scalarNoContext(makeBinOp)},
