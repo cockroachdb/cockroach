@@ -223,6 +223,10 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 // STATEMENTS
 
 func (s *scope) makeWith() (*tree.With, tableRefs) {
+	if s.schema.disableWith {
+		return nil, nil
+	}
+
 	// WITHs are pretty rare, so just ignore them a lot.
 	if coin() {
 		return nil, nil
