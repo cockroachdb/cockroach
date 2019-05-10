@@ -30,8 +30,10 @@ import (
 )
 
 var (
-	flagExec = flag.Bool("ex", false, "execute (instead of just parse) generated statements")
-	flagNum  = flag.Int("num", 100, "number of statements to generate")
+	flagExec        = flag.Bool("ex", false, "execute (instead of just parse) generated statements")
+	flagNum         = flag.Int("num", 100, "number of statements to generate")
+	flagNoMutations = flag.Bool("no-mutations", false, "disables mutations during testing")
+	flagNoWiths     = flag.Bool("no-withs", false, "disables WITHs during testing")
 )
 
 func init() {
@@ -73,7 +75,15 @@ func TestGenerateParse(t *testing.T) {
 		INSERT INTO t DEFAULT VALUES;
 	`)
 
-	smither, err := NewSmither(sqlDB, rnd)
+	var opts []SmitherOption
+	if *flagNoMutations {
+		opts = append(opts, DisableMutations())
+	}
+	if *flagNoWiths {
+		opts = append(opts, DisableWith())
+	}
+
+	smither, err := NewSmither(nil, rnd, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
