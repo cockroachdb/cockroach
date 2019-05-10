@@ -119,6 +119,7 @@ type txnHeartbeater struct {
 // init initializes the txnHeartbeater. This method exists instead of a
 // constructor because txnHeartbeaters live in a pool in the TxnCoordSender.
 func (h *txnHeartbeater) init(
+	ac log.AmbientContext,
 	mu sync.Locker,
 	txn *roachpb.Transaction,
 	st *cluster.Settings,
@@ -129,6 +130,8 @@ func (h *txnHeartbeater) init(
 	stopper *stop.Stopper,
 	asyncAbortCallbackLocked func(context.Context),
 ) {
+	h.AmbientContext = ac
+	h.AmbientContext.AddLogTag("txn-hb", txn.Short())
 	h.stopper = stopper
 	h.st = st
 	h.clock = clock
