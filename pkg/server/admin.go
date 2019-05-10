@@ -291,7 +291,7 @@ func (s *adminServer) DatabaseDetails(
 		}
 
 		if !zoneExists {
-			zone = config.DefaultZoneConfig()
+			zone = s.server.cfg.DefaultZoneConfig
 		}
 		resp.ZoneConfig = zone
 
@@ -509,7 +509,7 @@ func (s *adminServer) TableDetails(
 		}
 
 		if !zoneExists {
-			zone = config.DefaultZoneConfig()
+			zone = s.server.cfg.DefaultZoneConfig
 		}
 		resp.ZoneConfig = zone
 

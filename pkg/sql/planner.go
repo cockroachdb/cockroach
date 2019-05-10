@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -222,7 +221,7 @@ func newInternalPlanner(
 	}
 	tables := &TableCollection{
 		leaseMgr:      execCfg.LeaseManager,
-		databaseCache: newDatabaseCache(config.NewSystemConfig()),
+		databaseCache: nil,
 	}
 	dataMutator := &sessionDataMutator{
 		data: sd,

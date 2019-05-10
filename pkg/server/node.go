@@ -186,8 +186,10 @@ func allocateStoreIDs(
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
 // server.
-func GetBootstrapSchema() sqlbase.MetadataSchema {
-	return sqlbase.MakeMetadataSchema()
+func GetBootstrapSchema(
+	defaultZoneConfig *config.ZoneConfig, defaultSystemZoneConfig *config.ZoneConfig,
+) sqlbase.MetadataSchema {
+	return sqlbase.MakeMetadataSchema(defaultZoneConfig, defaultSystemZoneConfig)
 }
 
 // bootstrapCluster initializes the passed-in engines for a new cluster.
@@ -199,7 +201,11 @@ func GetBootstrapSchema() sqlbase.MetadataSchema {
 // written, since epoch-based leases cannot be granted until then. All other
 // engines are initialized with their StoreIdent.
 func bootstrapCluster(
-	ctx context.Context, engines []engine.Engine, bootstrapVersion cluster.ClusterVersion,
+	ctx context.Context,
+	engines []engine.Engine,
+	bootstrapVersion cluster.ClusterVersion,
+	defaultZoneConfig *config.ZoneConfig,
+	defaultSystemZoneConfig *config.ZoneConfig,
 ) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
@@ -221,7 +227,7 @@ func bootstrapCluster(
 		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
-			schema := GetBootstrapSchema()
+			schema := GetBootstrapSchema(defaultZoneConfig, defaultSystemZoneConfig)
 			initialValues, tableSplits := schema.GetInitialValues()
 			splits := append(config.StaticSplits(), tableSplits...)
 			sort.Slice(splits, func(i, j int) bool {
@@ -295,13 +301,17 @@ func (n *Node) AnnotateCtxWithSpan(
 }
 
 func (n *Node) bootstrapCluster(
-	ctx context.Context, engines []engine.Engine, bootstrapVersion cluster.ClusterVersion,
+	ctx context.Context,
+	engines []engine.Engine,
+	bootstrapVersion cluster.ClusterVersion,
+	defaultZoneConfig *config.ZoneConfig,
+	defaultSystemZoneConfig *config.ZoneConfig,
 ) error {
 	if n.initialBoot || n.clusterID.Get() != uuid.Nil {
 		return fmt.Errorf("cluster has already been initialized with ID %s", n.clusterID.Get())
 	}
 	n.initialBoot = true
-	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion)
+	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion, defaultZoneConfig, defaultSystemZoneConfig)
 	if err != nil {
 		return err
 	}

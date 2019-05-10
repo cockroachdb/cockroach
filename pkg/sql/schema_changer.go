@@ -1674,7 +1674,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		if s.testingKnobs.AsyncExecQuickly {
 			delay = 20 * time.Millisecond
 		}
-		defTTL := config.DefaultZoneConfig().GC.TTLSeconds
+		defTTL := s.execCfg.DefaultZoneConfig.GC.TTLSeconds
 
 		execOneSchemaChange := func(schemaChangers map[sqlbase.ID]SchemaChanger) {
 			for tableID, sc := range schemaChangers {

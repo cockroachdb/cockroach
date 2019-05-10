@@ -121,7 +121,6 @@ func (mo *MaxOffsetType) String() string {
 type Config struct {
 	// Embed the base context.
 	*base.Config
-
 	Settings *cluster.Settings
 
 	base.RaftConfig
