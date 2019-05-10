@@ -106,12 +106,18 @@ var prettyCfg = func() tree.PrettyCfg {
 
 // Generate returns a random SQL string.
 func (s *Smither) Generate() string {
+	i := 0
 	for {
 		scope := s.makeScope()
 		stmt, ok := scope.makeStmt()
 		if !ok {
+			i++
+			if i > 1000 {
+				panic("exhausted generation attempts")
+			}
 			continue
 		}
+		i = 0
 		return prettyCfg.Pretty(stmt)
 	}
 }
