@@ -864,36 +864,26 @@ SELECT * FROM
 ((VALUES (NULL, true) EXCEPT (VALUES (1, NULL)))) AS t(a, b)
 WHERE a IS NULL and b
 ----
-select
- ├── columns: a:5(int) b:2(bool!null)
- ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=0, null(5)=1, distinct(2,5)=0, null(2,5)=1]
- ├── key: ()
- ├── fd: ()-->(2,5)
- ├── except
- │    ├── columns: column1:5(int) column2:2(bool)
- │    ├── left columns: column1:5(int) column2:2(bool)
- │    ├── right columns: column1:3(int) column2:6(bool)
- │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=0, null(5)=1, distinct(2,5)=0, null(2,5)=1]
- │    ├── key: (2,5)
- │    ├── values
- │    │    ├── columns: column2:2(bool) column1:5(int)
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=0, null(5)=1, distinct(2,5)=0, null(2,5)=1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(2,5)
- │    │    └── (true, NULL) [type=tuple{bool, int}]
- │    └── values
- │         ├── columns: column1:3(int) column2:6(bool)
- │         ├── cardinality: [1 - 1]
- │         ├── stats: [rows=1, distinct(3)=1, null(3)=0, distinct(6)=0, null(6)=1, distinct(3,6)=0, null(3,6)=1]
- │         ├── key: ()
- │         ├── fd: ()-->(3,6)
- │         └── (1, NULL) [type=tuple{int, bool}]
- └── filters
-      ├── column1 IS NULL [type=bool, outer=(5), constraints=(/5: [/NULL - /NULL]; tight), fd=()-->(5)]
-      └── variable: column2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+except
+ ├── columns: a:5(int) b:2(bool)
+ ├── left columns: column1:5(int) column2:2(bool)
+ ├── right columns: column1:3(int) column2:6(bool)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1, distinct(2,5)=0, null(2,5)=1]
+ ├── key: (2,5)
+ ├── values
+ │    ├── columns: column2:2(bool) column1:5(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1, distinct(2,5)=0, null(2,5)=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2,5)
+ │    └── (true, NULL) [type=tuple{bool, int}]
+ └── values
+      ├── columns: column1:3(int) column2:6(bool)
+      ├── cardinality: [0 - 0]
+      ├── stats: [rows=0, distinct(3,6)=0, null(3,6)=0]
+      ├── key: ()
+      └── fd: ()-->(3,6)
 
 # Regression test for #36147.
 opt
@@ -901,19 +891,18 @@ SELECT * FROM
 ((VALUES (NULL, NULL), (NULL, 1), (2, NULL)) EXCEPT (VALUES (1, 2), (2, 3), (3, 4)))
 WHERE column1 IS NULL
 ----
-select
+except
  ├── columns: column1:1(int) column2:2(int)
+ ├── left columns: column1:1(int) column2:2(int)
+ ├── right columns: column1:3(int) column2:4(int)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=3, distinct(1)=1, null(1)=2]
- ├── key: (2)
- ├── fd: ()-->(1)
- ├── except
+ ├── stats: [rows=3, distinct(1,2)=0, null(1,2)=3]
+ ├── key: (1,2)
+ ├── select
  │    ├── columns: column1:1(int) column2:2(int)
- │    ├── left columns: column1:1(int) column2:2(int)
- │    ├── right columns: column1:3(int) column2:4(int)
  │    ├── cardinality: [0 - 3]
  │    ├── stats: [rows=3, distinct(1)=1, null(1)=2, distinct(1,2)=0, null(1,2)=3]
- │    ├── key: (1,2)
+ │    ├── fd: ()-->(1)
  │    ├── values
  │    │    ├── columns: column1:1(int) column2:2(int)
  │    │    ├── cardinality: [3 - 3]
@@ -921,12 +910,19 @@ select
  │    │    ├── (NULL, NULL) [type=tuple{int, int}]
  │    │    ├── (NULL, 1) [type=tuple{int, int}]
  │    │    └── (2, NULL) [type=tuple{int, int}]
- │    └── values
- │         ├── columns: column1:3(int) column2:4(int)
- │         ├── cardinality: [3 - 3]
- │         ├── stats: [rows=3, distinct(3)=3, null(3)=0, distinct(3,4)=3, null(3,4)=0]
- │         ├── (1, 2) [type=tuple{int, int}]
- │         ├── (2, 3) [type=tuple{int, int}]
- │         └── (3, 4) [type=tuple{int, int}]
- └── filters
-      └── column1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ │    └── filters
+ │         └── column1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ └── select
+      ├── columns: column1:3(int) column2:4(int)
+      ├── cardinality: [0 - 3]
+      ├── stats: [rows=1, distinct(3)=1, null(3)=0, distinct(3,4)=1, null(3,4)=0]
+      ├── fd: ()-->(3)
+      ├── values
+      │    ├── columns: column1:3(int) column2:4(int)
+      │    ├── cardinality: [3 - 3]
+      │    ├── stats: [rows=3, distinct(3)=3, null(3)=0, distinct(3,4)=3, null(3,4)=0]
+      │    ├── (1, 2) [type=tuple{int, int}]
+      │    ├── (2, 3) [type=tuple{int, int}]
+      │    └── (3, 4) [type=tuple{int, int}]
+      └── filters
+           └── column1 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
