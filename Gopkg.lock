@@ -45,6 +45,14 @@
   revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
 
 [[projects]]
+  digest = "1:9f3b30d9f8e0d7040f729b82dcbc8f0dead820a133b3147ce355fc451f32d761"
+  name = "github.com/BurntSushi/toml"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005"
+  version = "v0.3.1"
+
+[[projects]]
   digest = "1:ed77032e4241e3b8329c9304d66452ed196e795876e14be677a546f36b94e67a"
   name = "github.com/DataDog/zstd"
   packages = ["."]
@@ -1587,7 +1595,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:e98ff366c777a4ccb71b95544fabeb59660aaf4df1d8d12193b44c1fb5cb1f7b"
+  digest = "1:1466e9d841b30213a2bdb0db95ff122e996983a7ad7a5fea4ef5ba88f13cf070"
   name = "golang.org/x/tools"
   packages = [
     "cmd/goyacc",
@@ -1643,7 +1651,7 @@
     "internal/semver",
   ]
   pruneopts = "UT"
-  revision = "bf090417da8b6150dcfe96795325f5aa78fff718"
+  revision = "63859f3815cb436d25749575cb14aef1153e5634"
 
 [[projects]]
   digest = "1:768c35ec83dd17029060ea581d6ca9fdcaef473ec87e93e4bb750949035f6070"
@@ -1742,25 +1750,37 @@
   source = "https://github.com/cockroachdb/yaml"
 
 [[projects]]
-  digest = "1:ce504fbb2b67961ac269fc0a9fcf16a48f638d622af3d87f5cdff766e2559161"
+  digest = "1:be57199733b1f758f0de225280c40dbc5435a8b60224d8ddb773b1dad84ad934"
   name = "honnef.co/go/tools"
   packages = [
-    "callgraph",
-    "callgraph/static",
+    "arg",
+    "cmd/staticcheck",
+    "config",
     "deprecated",
+    "facts",
     "functions",
+    "go/types/typeutil",
+    "internal/cache",
+    "internal/passes/buildssa",
+    "internal/renameio",
     "internal/sharedcheck",
     "lint",
+    "lint/lintdsl",
+    "lint/lintutil",
+    "lint/lintutil/format",
+    "loader",
+    "printf",
     "simple",
     "ssa",
-    "ssa/ssautil",
+    "ssautil",
     "staticcheck",
     "staticcheck/vrp",
+    "stylecheck",
     "unused",
+    "version",
   ]
   pruneopts = "UT"
-  revision = "d73ab98e7c39fdcf9ba65062e43d34310f198353"
-  version = "2017.2.2"
+  revision = "4187a5ff696fcfe80ef2204f78a3ae8262b2d54d"
 
 [[projects]]
   branch = "no-flag-names-parens"
@@ -1940,7 +1960,6 @@
     "golang.org/x/tools/container/intsets",
     "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow",
     "golang.org/x/tools/go/buildutil",
-    "golang.org/x/tools/go/loader",
     "google.golang.org/api/iterator",
     "google.golang.org/api/option",
     "google.golang.org/grpc",
@@ -1957,10 +1976,8 @@
     "google.golang.org/grpc/status",
     "google.golang.org/grpc/transport",
     "gopkg.in/yaml.v2",
+    "honnef.co/go/tools/cmd/staticcheck",
     "honnef.co/go/tools/lint",
-    "honnef.co/go/tools/simple",
-    "honnef.co/go/tools/staticcheck",
-    "honnef.co/go/tools/unused",
     "vitess.io/vitess/go/sqltypes",
     "vitess.io/vitess/go/vt/sqlparser",
   ]

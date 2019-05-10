@@ -31,9 +31,12 @@ import (
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 )
 
 type localityList []roachpb.LocalityAddress
+
+var _ pflag.Value = &localityList{}
 
 // Type implements the pflag.Value interface.
 func (l *localityList) Type() string { return "localityList" }

@@ -16,6 +16,7 @@ required = [
  "golang.org/x/tools/cmd/goyacc",
  "golang.org/x/tools/cmd/stringer",
  "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow",
+ "honnef.co/go/tools/cmd/staticcheck",
 ]
 
 ignored = [
@@ -98,7 +99,9 @@ ignored = [
 # Pin to 2017.2.2 because of https://github.com/cockroachdb/cockroach/issues/33669.
 [[constraint]]
   name = "honnef.co/go/tools"
-  version = "=2017.2.2"
+  # This revision is not yet on master (as of 05-12-2019); when it is, we can
+  # switch to just using the master branch.
+  revision = "4187a5ff696fcfe80ef2204f78a3ae8262b2d54d"
 
 # Test util - don't need to pin.
 [[constraint]]
