@@ -32,41 +32,38 @@
     (MakeEmptyColSet)
 )
 
-# PushFilterIntoSetOp pushes a filter into both the left and right sides
-# of all set operators after being mapped to use the columns of both sides.
-# For example, consider this query:
+# PushFilterIntoSetOp pushes filters down to both the left and right sides
+# of all set operators. For example, consider this query:
 #
 #   SELECT * FROM (SELECT x FROM a UNION ALL SELECT y FROM b) WHERE x < 5
 #
 # In this case, we can map x < 5 to both sides based on the knowledge that
 # in the union the x out col corresponds to the x column in the (a) table and
 # the y column in the (b) table. Therefore our mapping becomes x < 5 in the
-# left side, and y <  5 in the right side.
-# Given this mapping, we can now safely push the filter down to both sides.
+# left side, and y <  5 in the right side. Given this mapping, we can now
+# safely push the filter down to both sides as follows:
+
+# SELECT * FROM (SELECT x FROM a UNION ALL SELECT y FROM b) WHERE x < 5
+# =>
+# (SELECT x FROM a WHERE x < 5) UNION ALL (SELECT y FROM b WHERE y < 5)
 #
 # Pushing (all) the filters down for each of the set operators (Union, Union
 # All, Except, Except All, Intersect, Intersect All) is logically equivalent
 # to filtering after applying the set operator. Here's some justification for
 # this claim:
 # 
-# Two relations are union compatible when they have the same number of
-# attributes/column and the domain/type of the corresponding/similar attribute
-# in each relation is the same as the other. Notice that each of the set
-# operators this rule applies to, only works on union compatible relations.
-# The resulting column set after applying the set operator, is also necessarily
-# a subset of the column set of the (any) relations it was composed of.
-# And so, any filter applied must have a corresponding column in each of the
-# base relations.
+# Notice that each of the set operators this rule applies to, only works on
+# union compatible relations. The resulting column set after applying the set
+# operator, is also necessarily a subset of the column set of the (any)
+# relations it was composed of. And so, any filter applied must have a
+# corresponding column in each of the base relations.
 #
-# Here's a claim that requires no proof: pushing the filter down for any of
-# the aforementioned set operators is logically incorrect (not equivalent to
-# filtering after applying the operator) iff some row has been filtered that
-# shouldn't have been, or if some row wasn't filtered when it should have been.
-# For some row to be in the result set, it must satisfy the filter condition
-# and the condition logically implied by the set operators (Union, Except,
-# Intersect). These conditions are independent and so the order in which they
-# are satisfied don't matter for correctness. Pushing down the filter
-# accomplishes both these conditions and so is logically correct.
+# This works in the case of Union because a row passing the filter is
+# independent of the other rows in its relation. It works in the case of
+# Intersect because if a row `a` was filtered from the intersection, it will
+# also be filtered from the LHS and RHS. It works in the case of Except because
+# if a row is filtered from the RHS, preventing its removal from the LHS, it
+# will also have been filtered from the LHS.
 #
 # Visualization of the rule:
 # Let A and B be sets. Let the filter be represented by eliminating some set C.
@@ -77,17 +74,20 @@
 [PushFilterIntoSetOp, Normalize]
 (Select
     $input:(Set $left:* $right:* $colmap:*)
-    $filter:*
+    $filter:* & (HasMappableFilters $filter)
 )
 =>
-((OpName $input)
-    (Select
-        $left
-        (MapFiltersOnLeft $filter $colmap)
-    )
-    (Select
-        $right
-        (MapFiltersOnRight $filter $colmap)
-    )
-    $colmap
+(Select
+  ((OpName $input)
+      (Select
+          $left
+          (MapFiltersOnLeft $filter $colmap)
+      )
+      (Select
+          $right
+          (MapFiltersOnRight $filter $colmap)
+      )
+      $colmap
+  )
+  (UnmappableFilters $filter)
 )
