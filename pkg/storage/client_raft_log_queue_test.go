@@ -21,7 +21,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,13 +37,11 @@ func TestRaftLogQueue(t *testing.T) {
 	// Set maxBytes to something small so we can trigger the raft log truncation
 	// without adding 64MB of logs.
 	const maxBytes = 1 << 16
-	cfg := config.DefaultZoneConfig()
-	cfg.RangeMaxBytes = proto.Int64(maxBytes)
-	defer config.TestingSetDefaultZoneConfig(cfg)()
 
 	// Turn off raft elections so the raft leader won't change out from under
 	// us in this test.
 	sc := storage.TestStoreConfig(nil)
+	sc.DefaultZoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	sc.RaftTickInterval = math.MaxInt32
 	sc.RaftElectionTimeoutTicks = 1000000
 	mtc.storeConfig = &sc

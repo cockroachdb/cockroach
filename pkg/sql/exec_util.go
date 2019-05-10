@@ -588,7 +588,10 @@ func shouldDistributeGivenRecAndMode(
 // shouldDistributePlan determines whether we should distribute the
 // given logical plan, based on the session settings.
 func shouldDistributePlan(
-	ctx context.Context, distSQLMode sessiondata.DistSQLExecMode, dp *DistSQLPlanner, plan planNode,
+	ctx context.Context,
+	distSQLMode sessiondata.DistSQLExecMode,
+	dp *DistSQLPlanner,
+	plan planNode,
 ) bool {
 	if distSQLMode == sessiondata.DistSQLOff {
 		return false

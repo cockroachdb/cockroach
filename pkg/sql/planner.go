@@ -186,7 +186,11 @@ var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NO
 // NewInternalPlanner is an exported version of newInternalPlanner. It
 // returns an interface{} so it can be used outside of the sql package.
 func NewInternalPlanner(
-	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
+	opName string,
+	txn *client.Txn,
+	user string,
+	memMetrics *MemoryMetrics,
+	execCfg *ExecutorConfig,
 ) (interface{}, func()) {
 	return newInternalPlanner(opName, txn, user, memMetrics, execCfg)
 }
@@ -200,7 +204,11 @@ func NewInternalPlanner(
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
 func newInternalPlanner(
-	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
+	opName string,
+	txn *client.Txn,
+	user string,
+	memMetrics *MemoryMetrics,
+	execCfg *ExecutorConfig,
 ) (*planner, func()) {
 	// We need a context that outlives all the uses of the planner (since the
 	// planner captures it in the EvalCtx, and so does the cleanup function that
@@ -220,9 +228,10 @@ func newInternalPlanner(
 			Location: time.UTC,
 		},
 	}
+	systemCfg := config.NewSystemConfig(execCfg.DefaultZoneConfig)
 	tables := &TableCollection{
 		leaseMgr:      execCfg.LeaseManager,
-		databaseCache: newDatabaseCache(config.NewSystemConfig()),
+		databaseCache: newDatabaseCache(systemCfg),
 	}
 	dataMutator := &sessionDataMutator{
 		data: sd,

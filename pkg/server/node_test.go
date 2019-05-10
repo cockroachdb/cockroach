@@ -78,6 +78,7 @@ func createTestNode(
 		grpcServer,
 		stopper,
 		metric.NewRegistry(),
+		cfg.DefaultZoneConfig,
 	)
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
@@ -208,7 +209,7 @@ func TestBootstrapCluster(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 	if _, err := bootstrapCluster(
-		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
+		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +237,7 @@ func TestBootstrapCluster(t *testing.T) {
 	}
 
 	// Add the initial keys for sql.
-	kvs, tableSplits := GetBootstrapSchema().GetInitialValues()
+	kvs, tableSplits := GetBootstrapSchema(config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef()).GetInitialValues()
 	for _, kv := range kvs {
 		expectedKeys = append(expectedKeys, kv.Key)
 	}
@@ -263,7 +264,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	ctx := context.Background()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	if _, err := bootstrapCluster(
-		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
+		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +319,7 @@ func TestNodeJoin(t *testing.T) {
 	engineStopper.AddCloser(e)
 
 	if _, err := bootstrapCluster(
-		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
+		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +390,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer e.Close()
 
 	if _, err := bootstrapCluster(
-		ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
+		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -580,7 +581,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	}
 
 	// Wait for full replication of initial ranges.
-	initialRanges, err := ExpectedInitialRangeCount(kvDB)
+	initialRanges, err := ExpectedInitialRangeCount(kvDB, &ts.cfg.DefaultZoneConfig, &ts.cfg.DefaultSystemZoneConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -737,7 +738,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
 		if _, err := bootstrapCluster(
-			ctx, []engine.Engine{e}, cluster.TestingClusterVersion,
+			ctx, []engine.Engine{e}, cluster.TestingClusterVersion, config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef(),
 		); err != nil {
 			t.Fatal(err)
 		}

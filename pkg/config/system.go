@@ -80,8 +80,9 @@ type SystemConfig struct {
 }
 
 // NewSystemConfig returns an initialized instance of SystemConfig.
-func NewSystemConfig() *SystemConfig {
+func NewSystemConfig(defaultZoneConfig ZoneConfig) *SystemConfig {
 	sc := &SystemConfig{}
+	sc.DefaultZoneConfig = defaultZoneConfig
 	sc.mu.zoneCache = map[uint32]zoneEntry{}
 	sc.mu.shouldSplitCache = map[uint32]bool{}
 	return sc
@@ -356,7 +357,7 @@ func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneCo
 		}
 		return entry.zone, nil
 	}
-	return DefaultZoneConfigRef(), nil
+	return &s.DefaultZoneConfig, nil
 }
 
 var staticSplits = []roachpb.RKey{

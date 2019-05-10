@@ -1699,7 +1699,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			if log.V(1) {
 				log.Infof(context.TODO(), "failed to get zone config for key %s", key)
 			}
-			zone = config.DefaultZoneConfigRef()
+			zone = &s.cfg.DefaultZoneConfig
 		}
 		repl.SetZoneConfig(zone)
 		s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
@@ -3302,7 +3302,9 @@ func (s *Store) HandleRaftUncoalescedRequest(
 // initialized) Replica specified in the request. The replica passed to
 // the function will have its Replica.raftMu locked.
 func (s *Store) withReplicaForRequest(
-	ctx context.Context, req *RaftMessageRequest, f func(context.Context, *Replica) *roachpb.Error,
+	ctx context.Context,
+	req *RaftMessageRequest,
+	f func(context.Context, *Replica) *roachpb.Error,
 ) *roachpb.Error {
 	// Lazily create the replica.
 	r, _, err := s.getOrCreateReplica(
