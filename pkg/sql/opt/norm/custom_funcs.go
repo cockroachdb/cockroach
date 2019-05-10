@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -1016,13 +1017,71 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 	return items
 }
 
+// separatePushDownFilters breaks up the filters into two disjoint sets. The
+// first being the set of filters that can be pushed onto either side of any
+// set operator, and the second being the complement.
+// For a FilterItem to be pushed down, none of the columns referenced can
+// have a composite key encoding.
+func (c *CustomFuncs) separatePushDownFilters(
+	filters memo.FiltersExpr,
+) (memo.FiltersExpr, memo.FiltersExpr) {
+	var pushFilters memo.FiltersExpr
+	var noPushFilters memo.FiltersExpr
+	for _, filter := range filters {
+		filterProps := filter.ScalarProps(c.mem)
+		hasCompositeKeyEncoding := false
+		filterProps.OuterCols.ForEach(func(i int) {
+			colType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+			if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
+				hasCompositeKeyEncoding = true
+			}
+		})
+
+		if hasCompositeKeyEncoding || filterProps.HasCorrelatedSubquery {
+			noPushFilters = append(noPushFilters, filter)
+		} else {
+			pushFilters = append(pushFilters, filter)
+		}
+	}
+
+	return pushFilters, noPushFilters
+}
+
+// UnmappableFilters finds and emits a subset of the filters that cannot
+// be mapped to either side of any set operation. See comment above
+// separatePushDownFilter for more details.
+func (c *CustomFuncs) UnmappableFilters(filters memo.FiltersExpr) memo.FiltersExpr {
+	_, unmappableFilters := c.separatePushDownFilters(filters)
+	return unmappableFilters
+}
+
+// HasMappableFilters determines whether at least one filter in the FiltersExpr
+// can be mapped to either side of a set operator.
+func (c *CustomFuncs) HasMappableFilters(filters memo.FiltersExpr) bool {
+	for _, filter := range filters {
+		filterProps := filter.ScalarProps(c.mem)
+		hasCompositeKeyEncoding := false
+		filterProps.OuterCols.ForEach(func(i int) {
+			colType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+			if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
+				hasCompositeKeyEncoding = true
+			}
+		})
+		if !hasCompositeKeyEncoding && !filterProps.HasCorrelatedSubquery {
+			return true
+		}
+	}
+	return false
+}
+
 // MapFiltersOnLeft replaces the columns in the filters that are in the OutCols
 // of the set operation to the corresponding ones on the left side of the op.
 // Useful for pushing filters to relations the set operation is composed of.
 func (c *CustomFuncs) MapFiltersOnLeft(
 	filters memo.FiltersExpr, set *memo.SetPrivate,
 ) memo.FiltersExpr {
-	return c.setMap(filters, set.OutCols, set.LeftCols)
+	pushDownFilters, _ := c.separatePushDownFilters(filters)
+	return c.setMap(pushDownFilters, set.OutCols, set.LeftCols)
 }
 
 // MapFiltersOnRight replaces the columns in the filters that are in the OutCols
@@ -1031,7 +1090,8 @@ func (c *CustomFuncs) MapFiltersOnLeft(
 func (c *CustomFuncs) MapFiltersOnRight(
 	filters memo.FiltersExpr, set *memo.SetPrivate,
 ) memo.FiltersExpr {
-	return c.setMap(filters, set.OutCols, set.RightCols)
+	pushDownFilters, _ := c.separatePushDownFilters(filters)
+	return c.setMap(pushDownFilters, set.OutCols, set.RightCols)
 }
 
 // setMap maps filters expressions to use the output columns of the relational
@@ -1047,8 +1107,9 @@ func (c *CustomFuncs) MapFiltersOnRight(
 //   SELECT * FROM (SELECT x FROM a UNION SELECT y FROM b) WHERE x < 5
 //
 // If setMap is called on the left subtree of the Union, the filter x < 5
-// will remain the same. If setMap is called on the right subtree, the filter
-// x < 5 will be mapped to y < 5 instead.
+// propagate to that side after mapping the column IDs appropriately. WLOG,
+// If setMap is called on the right subtree, the filter x < 5 will be mapped
+// similarly to y < 5 on the right side.
 func (c *CustomFuncs) setMap(
 	filters memo.FiltersExpr, src opt.ColList, dst opt.ColList,
 ) memo.FiltersExpr {
@@ -1067,17 +1128,14 @@ func (c *CustomFuncs) setMap(
 		case *memo.VariableExpr:
 			dstCol, inCol := colMap.Get(int(t.Col))
 			if !inCol {
-				// Avoid constructing a new variable if its not part of the out cols.
+				// Its not part of the out cols so no replacement required.
 				return nd
 			}
 			return c.f.ConstructVariable(opt.ColumnID(dstCol))
-		case *memo.SubqueryExpr, *memo.ExistsExpr, *memo.AnyExpr:
-			// TODO(ridwanmsharif): Confirm this behaviour.
-			return nd
 		}
-
 		return c.f.Replace(nd, replace)
 	}
+
 	// Replace every FilterItem in the filters expression before creating new FilterExpr
 	var mappedFilter memo.FiltersExpr
 	for _, filterItem := range filters {
