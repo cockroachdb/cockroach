@@ -491,7 +491,7 @@ func maybeStripInFlightWrites(ba roachpb.BatchRequest) (roachpb.BatchRequest, er
 
 	et := args.(*roachpb.EndTransactionRequest)
 	otherReqs := ba.Requests[:len(ba.Requests)-1]
-	if len(et.InFlightWrites) == 0 || !et.Commit || len(otherReqs) == 0 {
+	if !et.IsParallelCommit() || len(otherReqs) == 0 {
 		return ba, nil
 	}
 
