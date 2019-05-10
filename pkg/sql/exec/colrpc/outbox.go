@@ -203,7 +203,7 @@ func (o *Outbox) runWithStream(
 			log.Warningf(ctx, "Outbox BatchToArrow data serialization error: %s", err)
 			break
 		}
-		if err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
+		if _, _, err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
 			// TODO(asubiotto): Send this error as metadata.
 			log.Warningf(ctx, "Outbox Serialize data error: %s", err)
 			break

@@ -72,6 +72,7 @@ type Inbox struct {
 
 	scratch struct {
 		data []*array.Data
+		b    coldata.Batch
 	}
 }
 
@@ -94,6 +95,7 @@ func NewInbox(typs []types.T) (*Inbox, error) {
 	}
 	i.zeroBatch.SetLength(0)
 	i.scratch.data = make([]*array.Data, len(typs))
+	i.scratch.b = coldata.NewMemBatch(typs)
 	return i, nil
 }
 
@@ -189,11 +191,10 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	if err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes); err != nil {
 		panic(err)
 	}
-	b, err := i.converter.ArrowToBatch(i.scratch.data)
-	if err != nil {
+	if err := i.converter.ArrowToBatch(i.scratch.data, i.scratch.b); err != nil {
 		panic(err)
 	}
-	return b
+	return i.scratch.b
 }
 
 // DrainMeta is part of the MetadataGenerator interface.

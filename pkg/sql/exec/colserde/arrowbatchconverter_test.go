@@ -27,11 +27,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestArrowBatchConverterRandom(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
+func randomBatch() ([]types.T, coldata.Batch) {
 	const maxTyps = 16
-
 	rng, _ := randutil.NewPseudoRand()
 
 	availableTyps := make([]types.T, 0, len(types.AllTypes))
@@ -48,39 +45,62 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	}
 
 	b := exec.RandomBatch(rng, typs, rng.Intn(coldata.BatchSize)+1, rng.Float64())
-	c := NewArrowBatchConverter(typs)
+	return typs, b
+}
 
-	// Make a copy of the original batch because the converter modifies and casts
-	// data without copying for performance reasons.
-	expectedLength := b.Length()
-	expectedWidth := b.Width()
-	expectedColVecs := make([]coldata.Vec, len(b.ColVecs()))
-	for i := range typs {
-		expectedColVecs[i] = coldata.NewMemColumn(typs[i], int(b.Length()))
-		expectedColVecs[i].Copy(b.ColVec(i), 0, uint64(b.Length()), typs[i])
+func copyBatch(original coldata.Batch) coldata.Batch {
+	typs := make([]types.T, original.Width())
+	for i, vec := range original.ColVecs() {
+		typs[i] = vec.Type()
 	}
+	b := coldata.NewMemBatchWithSize(typs, int(original.Length()))
+	b.SetLength(original.Length())
+	for colIdx, col := range original.ColVecs() {
+		b.ColVec(colIdx).Copy(col, 0, uint64(original.Length()), typs[colIdx])
+	}
+	return b
+}
 
-	arrowData, err := c.BatchToArrow(b)
-	require.NoError(t, err)
-	result, err := c.ArrowToBatch(arrowData)
-	require.NoError(t, err)
-	if result.Selection() != nil {
+func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
+	t.Helper()
+
+	if actual.Selection() != nil {
 		t.Fatal("violated invariant that batches have no selection vectors")
 	}
-	require.Equal(t, expectedLength, result.Length())
-	require.Equal(t, expectedWidth, result.Width())
-	for i, typ := range typs {
+	require.Equal(t, expected.Length(), actual.Length())
+	require.Equal(t, expected.Width(), actual.Width())
+	for colIdx := 0; colIdx < expected.Width(); colIdx++ {
 		// Verify equality of ColVecs (this includes nulls). Since the coldata.Vec
 		// backing array is always of coldata.BatchSize due to the scratch batch
 		// that the converter keeps around, the coldata.Vec needs to be sliced to
 		// the first length elements to match on length, otherwise the check will
 		// fail.
+		expectedVec := expected.ColVec(colIdx)
+		actualVec := actual.ColVec(colIdx)
 		require.Equal(
 			t,
-			expectedColVecs[i].Slice(typ, 0, uint64(b.Length())),
-			result.ColVec(i).Slice(typ, 0, uint64(result.Length())),
+			expectedVec.Slice(expectedVec.Type(), 0, uint64(expected.Length())),
+			actualVec.Slice(actualVec.Type(), 0, uint64(actual.Length())),
 		)
 	}
+}
+
+func TestArrowBatchConverterRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	typs, b := randomBatch()
+	c := NewArrowBatchConverter(typs)
+
+	// Make a copy of the original batch because the converter modifies and casts
+	// data without copying for performance reasons.
+	expected := copyBatch(b)
+
+	arrowData, err := c.BatchToArrow(b)
+	require.NoError(t, err)
+	actual := coldata.NewMemBatchWithSize(nil, 0)
+	require.NoError(t, c.ArrowToBatch(arrowData, actual))
+
+	assertEqualBatches(t, expected, actual)
 }
 
 func BenchmarkArrowBatchConverter(b *testing.B) {
@@ -147,10 +167,15 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			data, err := c.BatchToArrow(batch)
 			require.NoError(b, err)
 			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String(), nullFraction)
+			result := coldata.NewMemBatch(typs)
 			b.Run(testPrefix+"/ArrowToBatch", func(b *testing.B) {
 				b.SetBytes(numBytes[typIdx])
 				for i := 0; i < b.N; i++ {
-					result, _ := c.ArrowToBatch(data)
+					// Using require.NoError here causes large enough allocations to
+					// affect the result.
+					if err := c.ArrowToBatch(data, result); err != nil {
+						b.Fatal(err)
+					}
 					if result.Width() != 1 {
 						b.Fatal("expected one column")
 					}

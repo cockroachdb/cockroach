@@ -44,9 +44,8 @@ type ArrowBatchConverter struct {
 	}
 
 	scratch struct {
-		// batch and arrowData are used as scratch space returned as the corresponding
+		// arrowData is used as scratch space returned as the corresponding
 		// conversion result.
-		batch     coldata.Batch
 		arrowData []*array.Data
 		// buffers is scratch space for exactly two buffers per element in
 		// arrowData.
@@ -61,7 +60,6 @@ func NewArrowBatchConverter(typs []types.T) *ArrowBatchConverter {
 	c := &ArrowBatchConverter{typs: typs}
 	c.builders.boolBuilder = array.NewBooleanBuilder(memory.DefaultAllocator)
 	c.builders.binaryBuilder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
-	c.scratch.batch = coldata.NewMemBatch(typs)
 	c.scratch.arrowData = make([]*array.Data, len(typs))
 	c.scratch.buffers = make([][]*memory.Buffer, len(typs))
 	for i := range c.scratch.buffers {
@@ -186,16 +184,21 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 }
 
 // ArrowToBatch converts []*array.Data to a coldata.Batch. There must not be
-// more than coldata.BatchSize elements in data. The returned batch may only be
-// used until the next call to ArrowToBatch.
-func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data) (coldata.Batch, error) {
+// more than coldata.BatchSize elements in data. It's safe to call ArrowToBatch
+// concurrently.
+func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) error {
 	if len(data) != len(c.typs) {
-		return nil, errors.Errorf("mismatched data and schema length: %d != %d", len(data), len(c.typs))
+		return errors.Errorf("mismatched data and schema length: %d != %d", len(data), len(c.typs))
 	}
 	// Assume > 0 length data.
 	n := data[0].Len()
+	b.Reset(c.typs, n)
+	b.SetLength(uint16(n))
+	// No selection, all values are valid.
+	b.SetSelection(false)
+
 	for i, typ := range c.typs {
-		vec := c.scratch.batch.ColVec(i)
+		vec := b.ColVec(i)
 		d := data[i]
 
 		var arr array.Interface
@@ -265,8 +268,5 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data) (coldata.Batch, e
 			vec.Nulls().SetNullBitmap(arrowBitmap, n)
 		}
 	}
-	c.scratch.batch.SetLength(uint16(n))
-	// No selection, all values are valid.
-	c.scratch.batch.SetSelection(false)
-	return c.scratch.batch, nil
+	return nil
 }
