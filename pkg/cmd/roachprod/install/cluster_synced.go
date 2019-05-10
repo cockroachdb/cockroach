@@ -707,12 +707,19 @@ on_exit() {
     rm -f "${tmp1}" "${tmp2}"
 }
 trap on_exit EXIT
-[[ -f ~/.ssh/authorized_keys ]] && cat ~/.ssh/authorized_keys > "${tmp1}"
+if [[ -f ~/.ssh/authorized_keys ]]; then
+    cat ~/.ssh/authorized_keys > "${tmp1}"
+fi
 echo "${keys_data}" >> "${tmp1}"
 sort -u < "${tmp1}" > "${tmp2}"
-sudo install --mode 0600 --owner ` + sharedUser +
-				` --group ` + sharedUser +
-				` "${tmp2}" ~` + sharedUser + `/.ssh/authorized_keys`
+install --mode 0600 "${tmp2}" ~/.ssh/authorized_keys
+if [[ "$(whoami)" != "` + sharedUser + `" ]]; then
+    sudo install --mode 0600 \
+        --owner ` + sharedUser + `\
+        --group ` + sharedUser + `\
+        "${tmp2}" ~` + sharedUser + `/.ssh/authorized_keys
+fi
+`
 			if out, err := sess.CombinedOutput(cmd); err != nil {
 				return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 			}
