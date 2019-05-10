@@ -89,26 +89,28 @@ func NewRecordBatchSerializer(typs []types.T) (*RecordBatchSerializer, error) {
 
 // calculatePadding calculates how many bytes must be added to numBytes to round
 // it up to the nearest multiple of 8.
-func (s *RecordBatchSerializer) calculatePadding(numBytes int) int {
+func calculatePadding(numBytes int) int {
 	return (8 - (numBytes & 7)) & 7
 }
 
 // Serialize serializes data as an arrow RecordBatch message and writes it to w.
 // Serializing a schema that does not match the schema given in
 // NewRecordBatchSerializer results in undefined behavior.
-func (s *RecordBatchSerializer) Serialize(w io.Writer, data []*array.Data) error {
+func (s *RecordBatchSerializer) Serialize(
+	w io.Writer, data []*array.Data,
+) (metadataLen uint32, dataLen uint64, _ error) {
 	if len(data) != len(s.numBuffers) {
-		return errors.Errorf("mismatched schema length and number of columns: %d != %d", len(s.numBuffers), len(data))
+		return 0, 0, errors.Errorf("mismatched schema length and number of columns: %d != %d", len(s.numBuffers), len(data))
 	}
 	// Ensure equal data length and expected number of buffers. We don't support
 	// zero-length schemas, so data[0] is in bounds at this point.
 	headerLength := data[0].Len()
 	for i := range data {
 		if data[i].Len() != headerLength {
-			return errors.Errorf("mismatched data lengths at column %d: %d != %d", i, headerLength, data[i].Len())
+			return 0, 0, errors.Errorf("mismatched data lengths at column %d: %d != %d", i, headerLength, data[i].Len())
 		}
 		if len(data[i].Buffers()) != s.numBuffers[i] {
-			return errors.Errorf(
+			return 0, 0, errors.Errorf(
 				"mismatched number of buffers at column %d: %d != %d", i, len(data[i].Buffers()), s.numBuffers[i],
 			)
 		}
@@ -182,22 +184,23 @@ func (s *RecordBatchSerializer) Serialize(w io.Writer, data []*array.Data) error
 	metadataBytes := s.builder.FinishedBytes()
 
 	// Use s.scratch.padding to align metadata to 8-byte boundary.
-	s.scratch.padding = s.scratch.padding[:s.calculatePadding(metadataLengthNumBytes+len(metadataBytes))]
+	s.scratch.padding = s.scratch.padding[:calculatePadding(metadataLengthNumBytes+len(metadataBytes))]
 
 	// Write metadata + padding length as the first metadataLengthNumBytes.
-	binary.LittleEndian.PutUint32(s.scratch.metadataLength[:], uint32(len(metadataBytes)+len(s.scratch.padding)))
+	metadataLength := uint32(len(metadataBytes) + len(s.scratch.padding))
+	binary.LittleEndian.PutUint32(s.scratch.metadataLength[:], metadataLength)
 	if _, err := w.Write(s.scratch.metadataLength[:]); err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	// Write metadata.
 	if _, err := w.Write(metadataBytes); err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	// Add metadata padding.
 	if _, err := w.Write(s.scratch.padding); err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	// Add message body. The metadata holds the offsets and lengths of these
@@ -213,15 +216,16 @@ func (s *RecordBatchSerializer) Serialize(w io.Writer, data []*array.Data) error
 			}
 			bodyLength += len(bufferBytes)
 			if _, err := w.Write(bufferBytes); err != nil {
-				return err
+				return 0, 0, err
 			}
 		}
 	}
 
 	// Add body padding. The body also needs to be a multiple of 8 bytes.
-	s.scratch.padding = s.scratch.padding[:s.calculatePadding(bodyLength)]
+	s.scratch.padding = s.scratch.padding[:calculatePadding(bodyLength)]
 	_, err := w.Write(s.scratch.padding)
-	return err
+	bodyLength += len(s.scratch.padding)
+	return metadataLength, uint64(bodyLength), err
 }
 
 // Deserialize deserializes an arrow IPC RecordBatch message contained in bytes
