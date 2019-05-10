@@ -444,10 +444,7 @@ func canForwardSerializableTimestamp(txn *roachpb.Transaction, noRefreshSpans bo
 // that a transaction move to the STAGING state before committing or
 // not.
 func needsStaging(args *roachpb.EndTransactionRequest) bool {
-	if args.Commit {
-		return len(args.InFlightWrites) > 0
-	}
-	return false
+	return args.IsParallelCommit()
 }
 
 const intentResolutionBatchSize = 500

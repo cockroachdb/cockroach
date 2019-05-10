@@ -1102,6 +1102,13 @@ func (r *RefreshRangeRequest) flags() int {
 func (*SubsumeRequest) flags() int    { return isRead | isAlone | updatesReadTSCache }
 func (*RangeStatsRequest) flags() int { return isRead }
 
+// IsParallelCommit returns whether the EndTransaction request is attempting to
+// perform a parallel commit. See txn_interceptor_committer.go for a discussion
+// about parallel commits.
+func (etr *EndTransactionRequest) IsParallelCommit() bool {
+	return etr.Commit && len(etr.InFlightWrites) > 0
+}
+
 // Keys returns credentials in an aws.Config.
 func (b *ExportStorage_S3) Keys() *aws.Config {
 	return &aws.Config{
