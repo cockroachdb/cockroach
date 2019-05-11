@@ -168,7 +168,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
       if (isTesting()) {
         result.traces = genComponentTraces(cell.node_id, cell.components, this.state.testSampleMap);
       }
-      this.setState({componentTraces: new CombinedTraces(cell.name, result.traces)});
+      this.setState({componentTraces: new CombinedTraces(result.traces)});
     }).catch((err) => {
       this.setState({componentTraces: {error: err}});
     });

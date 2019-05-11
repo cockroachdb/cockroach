@@ -107,21 +107,17 @@ export class CombinedTraces {
   error: any;
   traces: protos.cockroach.util.tracing.ComponentTraces;
 
-  constructor(name: string, traceMap: {[component: string]: protos.cockroach.util.tracing.ComponentTraces}) {
-    this.traces = this.collapseMap(name, traceMap);
+  constructor(traceMap: {[component: string]: protos.cockroach.util.tracing.ComponentTraces}) {
+    this.traces = this.collapseMap(traceMap);
   }
 
   // Because the system components may have been collapsed, the
   // traceMap may have multiple components which need to be combined
   // into a single ComponentTraces object so the samples can be sorted
-  // by the sample table. When we combine, we set each sample's
-  // prefix.
-  collapseMap(name, traceMap) {
+  // by the sample table.
+  collapseMap(traceMap) {
     const keys: string[] = Object.keys(traceMap);
     if (keys.length == 1) {
-      _.map(traceMap[keys[0]].samples.samples, (s) => {
-        delete s.prefix;
-      });
       return traceMap[keys[0]];
     }
     var ct: protos.cockroach.util.tracing.IComponentTraces = new protos.cockroach.util.tracing.ComponentTraces({
@@ -130,7 +126,6 @@ export class CombinedTraces {
     _.map(traceMap, (val, key) => {
       ct.timestamp = val.timestamp;
       _.map(val.samples.samples, (s) => {
-        s.prefix = key.substring(name.length + 1);
         ct.samples.samples.push(s);
       });
       _.map(val.events, (val, key) => {
@@ -246,7 +241,7 @@ function MatrixCell(props) {
   const reported: boolean = (node_id in sc.nodeActivities);
   const activity: protos.cockroach.util.tracing.IComponentActivity =
     reported ? sc.getNodeActivity(node_id) : new protos.cockroach.util.tracing.ComponentActivity({
-      span_count: 0, event_count: 0, stuck_count: 0, errors: 0});
+      span_count: Long.fromNumber(0), event_count: Long.fromNumber(0), stuck_count: Long.fromNumber(0), errors: Long.fromNumber(0)});
   const title: string =
     reported ? "Request count: " + activity.span_count + ", errors: " + activity.errors + ", stuck: " + activity.stuck_count : "Unreported";
   const className: string = isExpanded ? "matrix-cell matrix-cell--expanded" : "matrix-cell";
