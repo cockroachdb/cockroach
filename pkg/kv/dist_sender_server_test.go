@@ -2437,8 +2437,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b := txn.NewBatch()
 				b.Put("a", "put")
 				b.Put("c", "put")
-				return txn.CommitInBatch(ctx, b) // both puts will succeed, no retry
+				return txn.CommitInBatch(ctx, b)
 			},
+			// Parallel commits do not support the canForwardSerializableTimestamp
+			// optimization. That's ok because we need to removed that optimization
+			// anyway. See #36431.
+			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range batch with forwarded timestamp and cput",
@@ -2466,7 +2470,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
-				if _, err := txn.Get(ctx, "b"); err != nil { // Get triggers txn coord retry
+				if _, err := txn.Get(ctx, "b"); err != nil { // Get triggers retry
 					return err
 				}
 				b := txn.NewBatch()
@@ -2474,7 +2478,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry from get
 			},
-			txnCoordRetry: true,
+			// Client-side retry required as this will be a mixed success due
+			// to parallel commits.
+			clientRetry: true,
 		},
 		{
 			name: "multi-range batch with forwarded timestamp and cput and delete range",
@@ -2502,8 +2508,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b := txn.NewBatch()
 				b.Put("a", "put")
 				b.Put("c", "put")
-				return txn.CommitInBatch(ctx, b) // both puts will succeed, no retry
+				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
+			// Parallel commits do not support the canForwardSerializableTimestamp
+			// optimization. That's ok because we need to removed that optimization
+			// anyway. See #36431.
+			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range batch with write too old and failed cput",
@@ -2616,8 +2626,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("c", "cput", "value")
 				return txn.CommitInBatch(ctx, b)
 			},
-			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
-			txnCoordRetry: true, // will succeed because no mixed success
+			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			// Client-side retry required as this will be a mixed success due
+			// to parallel commits.
+			clientRetry: true,
 		},
 		{
 			name: "multi-range batch with uncertainty interval error and get conflict",
@@ -2653,7 +2665,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			filter:      newUncertaintyFilter(roachpb.Key([]byte("c"))),
-			clientRetry: true, // client-side retry required as this will be an mixed success
+			clientRetry: true, // client-side retry required as this will be a mixed success
 		},
 		{
 			name: "multi-range scan with uncertainty interval error",
@@ -2671,6 +2683,58 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			filter:      newUncertaintyFilter(roachpb.Key([]byte("c"))),
 			clientRetry: true, // can't restart because of mixed success and write batch
+		},
+		{
+			name: "missing pipelined write caught on chain",
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				// Simulate a failed intent write by resolving the intent
+				// directly. This should be picked up by the transaction's
+				// QueryIntent when chaining on to the pipelined write to
+				// key "a".
+				var ba roachpb.BatchRequest
+				ba.Add(&roachpb.ResolveIntentRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key: roachpb.Key("a"),
+					},
+					IntentTxn: txn.Serialize().TxnMeta,
+					Status:    roachpb.ABORTED,
+				})
+				if _, pErr := txn.DB().NonTransactionalSender().Send(ctx, ba); pErr != nil {
+					return pErr.GoError()
+				}
+				_, err := txn.Get(ctx, "a")
+				return err
+			},
+			// The missing intent write results in a RETRY_ASYNC_WRITE_FAILURE error.
+			clientRetry: true,
+		},
+		{
+			name: "missing pipelined write caught on commit",
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				// Simulate a failed intent write by resolving the intent
+				// directly. This should be picked up by the transaction's
+				// pre-commit QueryIntent for the pipelined write to key "a".
+				var ba roachpb.BatchRequest
+				ba.Add(&roachpb.ResolveIntentRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key: roachpb.Key("a"),
+					},
+					IntentTxn: txn.Serialize().TxnMeta,
+					Status:    roachpb.ABORTED,
+				})
+				if _, pErr := txn.DB().NonTransactionalSender().Send(ctx, ba); pErr != nil {
+					return pErr.GoError()
+				}
+				return nil // commit
+			},
+			// The missing intent write results in a RETRY_ASYNC_WRITE_FAILURE error.
+			clientRetry: true,
 		},
 	}
 

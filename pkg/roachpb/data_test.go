@@ -388,7 +388,7 @@ func TestTransactionBumpEpoch(t *testing.T) {
 	origNow := makeTS(10, 1)
 	txn := MakeTransaction("test", Key("a"), 1, origNow, 0)
 	// Advance the txn timestamp.
-	txn.Timestamp.Add(10, 2)
+	txn.Timestamp = txn.Timestamp.Add(10, 2)
 	txn.BumpEpoch()
 	if a, e := txn.Epoch, enginepb.TxnEpoch(1); a != e {
 		t.Errorf("expected epoch %d; got %d", e, a)
