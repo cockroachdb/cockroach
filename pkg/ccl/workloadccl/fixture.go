@@ -294,6 +294,14 @@ func ImportFixture(
 	injectStats bool,
 	csvServer string,
 ) (int64, error) {
+	for _, t := range gen.Tables() {
+		if t.InitialRows.FillBatch == nil {
+			return 0, errors.Errorf(
+				`import fixture is not supported for workload %s`, gen.Meta().Name,
+			)
+		}
+	}
+
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
 		return 0, err
