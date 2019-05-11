@@ -432,23 +432,29 @@ func (nl *NodeLiveness) StartHeartbeat(
 	stopper.RunWorker(ctx, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("liveness-hb", nil)
-		ctx, cancel := stopper.WithCancelOnStop(context.Background())
+		rootCtx, cancel := stopper.WithCancelOnStop(context.Background())
 		defer cancel()
-		rootCtx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
-		ctx = rootCtx
-		defer sp.Finish()
 
 		incrementEpoch := true
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
 
-		ctx, csp := tracing.StartComponentSpan(rootCtx, nl.ambientCtx.Tracer, "storage.liveness", "heartbeat")
+		var cspIsOpen bool
+		var ctx context.Context
+		var csp tracing.ComponentSpan
 
 		for {
 			select {
 			case <-nl.heartbeatToken:
 			case <-stopper.ShouldStop():
+				if cspIsOpen {
+					csp.Finish()
+				}
 				return
+			}
+			if !cspIsOpen {
+				ctx, csp = tracing.StartComponentSpan(rootCtx, nl.ambientCtx.Tracer, "storage.liveness", "heartbeat liveness loop")
+				ctx = ambient.AnnotateCtx(ctx)
 			}
 			// Give the context a timeout approximately as long as the time we
 			// have left before our liveness entry expires.
@@ -476,14 +482,17 @@ func (nl *NodeLiveness) StartHeartbeat(
 				csp.SetError(err)
 				log.Warningf(ctx, "failed node liveness heartbeat: %+v", err)
 			} else {
-				csp.FinishWithError(nil)
-				ctx, csp = tracing.StartComponentSpan(rootCtx, nl.ambientCtx.Tracer, "storage.liveness", "heartbeat")
+				csp.Finish()
+				cspIsOpen = false
 			}
 
 			nl.heartbeatToken <- struct{}{}
 			select {
 			case <-ticker.C:
 			case <-stopper.ShouldStop():
+				if cspIsOpen {
+					csp.Finish()
+				}
 				return
 			}
 		}

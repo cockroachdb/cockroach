@@ -27,6 +27,10 @@ function getColor(node_id: number) {
   return colors[(node_id - 1) % colors.length];
 }
 
+function isSpanPending(sp: protos.cockroach.util.tracing.IRecordedSpan) {
+  return !sp.duration || !sp.duration.seconds || !sp.duration.nanos;
+}
+
 export class TraceLine {
   node_id: number;
   depth: number;
@@ -55,9 +59,9 @@ export class TraceLine {
 
   formatMessage = () => {
     if (this.sample) {
-      return this.span.operation;
+      return this.span.operation + (isSpanPending(this.span) ? " [pending]" : "");
     } else if (this.span) {
-      return this.span.operation;
+      return this.span.operation + (isSpanPending(this.span) ? " [pending]" : "");
     } else if (this.log.fields.length == 1) {
       return this.log.fields[0].value;
     }
@@ -75,13 +79,13 @@ export class TraceLine {
       var attrs: string[] = _.map(this.sample.attributes, (value, key) => { return "\n" + key + ": " + value; });
       return "Node: " + this.node_id +
         "\nTimestamp: " + formatDateTime(span_d) +
-        "\nDuration: " + formatDuration(this.span.duration) +
+        "\nDuration: " + formatDuration(this.span.duration, false) +
         "\nPending: " + (this.sample.pending ? "Yes" : "No") +
         "\nStuck: " + (this.sample.stuck ? "Yes" : "No") +
         (this.sample.error ? ("\nError: " + this.sample.error) : "") +
         attrs.join(", ");
     } else if (this.span) {
-      return this.span.operation + " " + formatDuration(this.span.duration) +
+      return this.span.operation + " " + formatDuration(this.span.duration, false) +
         " @" + formatDateTime(timestampToDate(this.span.start_time));
     }
     const log_d: any = timestampToDate(this.log.time);
@@ -161,6 +165,10 @@ export class ExpandedSpan {
   // Returns whether the supplied span's trace lines overlap any of
   // this expanded span's trace lines.
   overlaps = (span: protos.cockroach.util.tracing.IRecordedSpan) => {
+    // If the span is still pending, assume overlap.
+    if (isSpanPending(span) && this.lines.length > 1) {
+      return true;
+    }
     if (span.logs.length == 0) {
       return false;
     }
@@ -475,7 +483,7 @@ export class ExpandedSample {
     // such that they won't overlap when rendered.
     spans[root].organizeChildren(0, 0);
 
-    this.root = spans[root]);
+    this.root = spans[root];
   }
 
   // Render the component trace.
@@ -496,4 +504,3 @@ export class ExpandedSample {
     );
   }
 }
-
