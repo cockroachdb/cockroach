@@ -55,7 +55,7 @@ export class TraceLine {
 
   formatMessage = () => {
     if (this.sample) {
-      return this.sample.component_name + ": " + this.span.operation;
+      return this.span.operation;
     } else if (this.span) {
       return this.span.operation;
     } else if (this.log.fields.length == 1) {
@@ -410,10 +410,8 @@ export class ExpandedSample {
     nodes.forEach((n) => {
       _.map(n.samples, (ca, name) => {
         ca.samples.forEach((s) => {
-          var clonedSample = Object.assign({}, s);
-          clonedSample.component_name = name;
           s.spans.forEach((sp) => {
-            spans[sp.span_id] = new ExpandedSpan(n.node_id, sp, sp == s.spans[0] ? clonedSample : null);
+            spans[sp.span_id] = new ExpandedSpan(n.node_id, sp, sp == s.spans[0] ? s : null);
             if (sp.parent_span_id) {
               if (!(sp.parent_span_id.toString() in children)) {
                 children[sp.parent_span_id] = [];

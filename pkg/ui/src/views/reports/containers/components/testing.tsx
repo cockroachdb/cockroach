@@ -138,7 +138,7 @@ function genChildSpans(depth: number, addSample: function, root_span: protos.coc
 
     // Create a new sample or a child span.
     if (Math.random() < 0.5) {
-      spans.push(...genSpans(addSample, depth + 1, root_span.trace_id, root_span.span_id, cur_time, duration));
+      spans.push(...genSpans(addSample, null, depth + 1, root_span.trace_id, root_span.span_id, cur_time, duration));
     } else {
       genSample(Math.floor(Math.random() * static_num_nodes + 1),
                 static_components[Math.floor(Math.random() * static_components.length)].name,
@@ -149,6 +149,7 @@ function genChildSpans(depth: number, addSample: function, root_span: protos.coc
 }
 
 function genSpans(addSample: function,
+                  component: string,
                   depth: number,
                   trace_id: Long, parent_span_id: Long,
                   start_time: protos.google.protobuf.Timestamp,
@@ -166,7 +167,7 @@ function genSpans(addSample: function,
     parent_span_id: parent_span_id,
     start_time: start_time,
     duration: duration,
-    operation: "op";
+    operation: component ? component + ": op" : "op";
     logs: createRandomLogLines(start_time, duration),
   });
   var spans: protos.cockroach.util.tracing.RecordedSpan[] = [root_span];
@@ -189,7 +190,7 @@ function genSample(node_id: number, component: string, addSample: function,
       input: "Random input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value",
       output: "Random output value"
     },
-    spans: genSpans(addSample, depth, trace_id, parent_span_id, start_time, duration),
+    spans: genSpans(addSample, component, depth, trace_id, parent_span_id, start_time, duration),
   }));
 }
 
@@ -267,9 +268,9 @@ function genActivityResponse(node_id: number) {
     }
     compActivities[c.name] = new protos.cockroach.util.tracing.ComponentActivity(
       {
-        span_count: Math.max(2, Math.floor(Math.random() * c.freq - c.freq/2) + c.freq),
-        stuck_count: Math.random() < 0.0001 ? Math.floor(Math.random() * 3) : 0,
-        errors: Math.random() < 0.02 * (c.freq / 100) ? Math.floor(Math.random() * 5) : 0,
+        span_count: Long.fromNumber(Math.max(2, Math.floor(Math.random() * c.freq - c.freq/2) + c.freq)),
+        stuck_count: Long.fromNumber(Math.random() < 0.0001 ? Math.floor(Math.random() * 3) : 0),
+        errors: Long.fromNumber(Math.random() < 0.02 * (c.freq / 100) ? Math.floor(Math.random() * 5) : 0),
         timestamp: getCurrentTime(),
       });
   });
