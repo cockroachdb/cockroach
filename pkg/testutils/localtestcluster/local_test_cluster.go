@@ -103,7 +103,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ltc.Manual = hlc.NewManualClock(123)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
 	cfg := storage.TestStoreConfig(ltc.Clock)
-	ltc.Cfg = cfg
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
@@ -116,11 +115,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	ltc.tester = t
 	ltc.Stopper = stop.NewStopper()
-	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper, &cfg.Settings.Version)
-	rpcContext.NodeID.Set(ambient.AnnotateCtx(context.Background()), nodeID)
-	c := &rpcContext.ClusterID
-	server := rpc.NewServer(rpcContext) // never started
-	ltc.Gossip = gossip.New(ambient, c, nc, rpcContext, server, ltc.Stopper, metric.NewRegistry(), roachpb.Locality{}, config.DefaultZoneConfigRef())
+	cfg.RPCContext = rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper, &cfg.Settings.Version)
+	cfg.RPCContext.NodeID.Set(ambient.AnnotateCtx(context.Background()), nodeID)
+	c := &cfg.RPCContext.ClusterID
+	server := rpc.NewServer(cfg.RPCContext) // never started
+	ltc.Gossip = gossip.New(ambient, c, nc, cfg.RPCContext, server, ltc.Stopper, metric.NewRegistry(), roachpb.Locality{}, config.DefaultZoneConfigRef())
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
 
@@ -215,6 +214,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	if err := ltc.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatalf("unable to set node descriptor: %s", err)
 	}
+	ltc.Cfg = cfg
 }
 
 // Stop stops the cluster.
