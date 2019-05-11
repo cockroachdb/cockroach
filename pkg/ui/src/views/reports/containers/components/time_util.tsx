@@ -30,12 +30,12 @@ export function subtractTimestamps(tsa: protos.google.protobuf.ITimestamp,
                                    tsb: protos.google.protobuf.ITimestamp) {
   if (tsb.nanos > tsa.nanos) {
     return new protos.google.protobuf.Duration({
-      seconds: tsa.seconds - tsb.seconds - 1,
+      seconds: tsa.seconds.sub(tsb.seconds).sub(1),
       nanos:   tsa.nanos + 1E9 - tsb.nanos,
     });
   }
   return new protos.google.protobuf.Duration({
-    seconds: tsa.seconds - tsb.seconds,
+    seconds: tsa.seconds.sub(tsb.seconds),
     nanos:   tsa.nanos - tsb.nanos,
   });
 }
@@ -44,7 +44,7 @@ export function addDuration(ts: protos.google.protobuf.ITimestamp,
                             duration: protos.google.protobuf.IDuration) {
   if (ts.nanos + duration.nanos > 1E9) {
     return new protos.google.protobuf.Timestamp({
-      seconds: ts.seconds.add(duration.seconds + 1), nanos: (ts.nanos + duration.nanos) % 1E9});
+      seconds: ts.seconds.add(duration.seconds).add(1), nanos: (ts.nanos + duration.nanos) % 1E9});
   } else {
     return new protos.google.protobuf.Timestamp({
       seconds: ts.seconds.add(duration.seconds), nanos: ts.nanos + duration.nanos});
@@ -71,9 +71,10 @@ export function formatNumber(num: number) {
 
 export function formatDuration(duration: protos.google.protobuf.IDuration, truncate: boolean) {
   const {seconds, nanos} = duration;
-  if (seconds > 0) {
-    const fractionalSeconds: number = nanos / 1000000000;
-    return formatNumber(seconds) + "." + fractionalSeconds.toString().substring(2, truncate ? 3 : 8) + "s";
+  if (seconds.lt(0)) {
+    return "negative";
+  } else if (seconds.gt(0)) {
+    return formatNumber(seconds.toNumber()) + "." + nanos.toString().padStart(9, 0).substring(0, truncate ? 3 : 9) + "s";
   } else if (nanos > 1000000) {
     return (truncate ? formatNumber(Math.floor(nanos / 1000) / 1000) : formatNumber(nanos / 1000000)) + "ms";
   } else if (nanos > 1000) {
@@ -90,6 +91,6 @@ export function formatDateTime(date) {
 }
 
 export function timestampToDate(ts: protos.google.protobuf.ITimestamp) {
-  return new Date(ts.seconds * 1000 + Math.floor(ts.nanos / 1000000));
+  return new Date(ts.seconds.toNumber() * 1000 + Math.floor(ts.nanos / 1000000));
 }
 

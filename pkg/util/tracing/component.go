@@ -365,6 +365,7 @@ func (c *ComponentSpan) Finish() {
 		return
 	}
 
+	c.Span.Finish()
 	// If the parent span was recording using a recording type other than
 	// ComponentRecording, combine recorded spans collected as part of this
 	// componentSpan with the parent span.
@@ -373,7 +374,6 @@ func (c *ComponentSpan) Finish() {
 	}
 	spans := GetRecording(c.Span)
 	StopRecording(c.Span)
-	c.Span.Finish()
 
 	var errStrs []string
 	for _, err := range c.errs {
