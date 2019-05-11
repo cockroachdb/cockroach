@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -125,7 +127,8 @@ func TestOutboxInbox(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := distsqlrun.StartMockDistSQLServer(stopper, staticNodeID)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	_, mockServer, addr, err := distsqlrun.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	require.NoError(t, err)
 
 	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure())
