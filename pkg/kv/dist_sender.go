@@ -407,12 +407,15 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 //
 // The replicas are assumed to be ordered by preference, with closer
 // ones (i.e. expected lowest latency) first.
+//
+// See sendToReplicas for a description of the withCommit parameter.
 func (ds *DistSender) sendRPC(
 	ctx context.Context,
+	ba roachpb.BatchRequest,
 	rangeID roachpb.RangeID,
 	replicas ReplicaSlice,
-	ba roachpb.BatchRequest,
 	cachedLeaseHolder roachpb.ReplicaDescriptor,
+	withCommit bool,
 ) (*roachpb.BatchResponse, error) {
 	if len(replicas) == 0 {
 		return nil, roachpb.NewSendError(
@@ -426,12 +429,13 @@ func (ds *DistSender) sendRPC(
 
 	return ds.sendToReplicas(
 		ctx,
+		ba,
 		SendOptions{metrics: &ds.metrics},
 		rangeID,
 		replicas,
-		ba,
 		ds.nodeDialer,
 		cachedLeaseHolder,
+		withCommit,
 	)
 }
 
@@ -476,7 +480,7 @@ func (ds *DistSender) getDescriptor(
 
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
 func (ds *DistSender) sendSingleRange(
-	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
+	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor, withCommit bool,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Try to send the call.
 	replicas := NewReplicaSlice(ds.gossip, desc)
@@ -500,7 +504,7 @@ func (ds *DistSender) sendSingleRange(
 		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.rpcContext.RemoteClocks.Latency)
 	}
 
-	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba, cachedLeaseHolder)
+	br, err := ds.sendRPC(ctx, ba, desc.RangeID, replicas, cachedLeaseHolder, withCommit)
 	if err != nil {
 		log.VErrEvent(ctx, 2, err.Error())
 		return nil, roachpb.NewError(err)
@@ -626,10 +630,12 @@ func splitBatchAndCheckForRefreshSpans(
 	lastReq := lastPart[len(lastPart)-1].GetInner()
 	if et, ok := lastReq.(*roachpb.EndTransactionRequest); ok && et.NoRefreshSpans {
 		hasRefreshSpans := false
+	Loop:
 		for _, part := range parts[:len(parts)-1] {
 			for _, req := range part {
 				if roachpb.NeedsRefresh(req.GetInner()) {
 					hasRefreshSpans = true
+					break Loop
 				}
 			}
 		}
@@ -708,8 +714,15 @@ func (ds *DistSender) Send(
 			return nil, roachpb.NewError(err)
 		}
 
+		// Determine whether this part of the BatchRequest contains a committing
+		// EndTransaction request.
+		var withCommit bool
+		if etArg, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			withCommit = etArg.(*roachpb.EndTransactionRequest).Commit
+		}
+
 		var rpl *roachpb.BatchResponse
-		rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, 0 /* batchIdx */)
+		rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, 0 /* batchIdx */)
 
 		if pErr == errNo1PCTxn {
 			// If we tried to send a single round-trip EndTransaction but
@@ -767,12 +780,18 @@ type response struct {
 // divideAndSendBatchToRanges sends the supplied batch to all of the
 // ranges which comprise the span specified by rs. The batch request
 // is trimmed against each range which is part of the span and sent
-// either serially or in parallel, if possible. batchIdx indicates
-// which partial fragment of the larger batch is being processed by
-// this method. It's specified as non-zero when this method is invoked
-// recursively.
+// either serially or in parallel, if possible.
+//
+// batchIdx indicates which partial fragment of the larger batch is
+// being processed by this method. It's specified as non-zero when
+// this method is invoked recursively.
+//
+// withCommit indicates that the batch contains a transaction commit
+// or that a transaction commit is being run concurrently with this
+// batch. Either way, if this is true then sendToReplicas will need
+// to handle errors differently.
 func (ds *DistSender) divideAndSendBatchToRanges(
-	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
+	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, withCommit bool, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Clone the BatchRequest's transaction so that future mutations to the
 	// proto don't affect the proto in this batch.
@@ -797,7 +816,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	}
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
-		resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, false /* needsTruncate */)
+		resp := ds.sendPartialBatch(
+			ctx, ba, rs, ri.Desc(), ri.Token(), withCommit, batchIdx, false, /* needsTruncate */
+		)
 		return resp.reply, resp.pErr
 	}
 
@@ -952,10 +973,12 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
 		if canParallelize && !lastRange && !ds.disableParallelBatches &&
-			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, responseCh) {
+			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), withCommit, batchIdx, responseCh) {
 			// Sent the batch asynchronously.
 		} else {
-			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, true /* needsTruncate */)
+			resp := ds.sendPartialBatch(
+				ctx, ba, rs, ri.Desc(), ri.Token(), withCommit, batchIdx, true, /* needsTruncate */
+			)
 			responseCh <- resp
 			if resp.pErr != nil {
 				return
@@ -1048,6 +1071,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 	rs roachpb.RSpan,
 	desc *roachpb.RangeDescriptor,
 	evictToken *EvictionToken,
+	withCommit bool,
 	batchIdx int,
 	responseCh chan response,
 ) bool {
@@ -1056,7 +1080,9 @@ func (ds *DistSender) sendPartialBatchAsync(
 		ds.asyncSenderSem, false, /* wait */
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
-			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, batchIdx, true /* needsTruncate */)
+			responseCh <- ds.sendPartialBatch(
+				ctx, ba, rs, desc, evictToken, withCommit, batchIdx, true, /* needsTruncate */
+			)
 		},
 	); err != nil {
 		ds.metrics.AsyncThrottledCount.Inc(1)
@@ -1082,6 +1108,7 @@ func (ds *DistSender) sendPartialBatch(
 	rs roachpb.RSpan,
 	desc *roachpb.RangeDescriptor,
 	evictToken *EvictionToken,
+	withCommit bool,
 	batchIdx int,
 	needsTruncate bool,
 ) response {
@@ -1134,7 +1161,7 @@ func (ds *DistSender) sendPartialBatch(
 			}
 		}
 
-		reply, pErr = ds.sendSingleRange(ctx, ba, desc)
+		reply, pErr = ds.sendSingleRange(ctx, ba, desc, withCommit)
 
 		// If sending succeeded, return immediately.
 		if pErr == nil {
@@ -1200,7 +1227,7 @@ func (ds *DistSender) sendPartialBatch(
 			// batch here would give a potentially larger response slice
 			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
-			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, batchIdx)
+			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
 			return response{reply: reply, positions: positions, pErr: pErr}
 		}
 		break
@@ -1328,23 +1355,23 @@ func fillSkippedResponses(
 // reply. If an error occurs which is not specific to a single
 // replica, it's returned immediately. Otherwise, when all replicas
 // have been tried and failed, returns a send error.
+//
+// The method accepts a boolean declaring whether a transaction commit
+// is either in this batch or in-flight concurrently with this batch.
+// If set to true, any errors that do not definitively rule out the
+// possibility that the batch could have succeeded are transformed
+// into AmbiguousResultErrors. Transaction aborts are not considered
+// here because aborts may be retried without any risk of inconsistencies.
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context,
+	ba roachpb.BatchRequest,
 	opts SendOptions,
 	rangeID roachpb.RangeID,
 	replicas ReplicaSlice,
-	ba roachpb.BatchRequest,
 	nodeDialer *nodedialer.Dialer,
 	cachedLeaseHolder roachpb.ReplicaDescriptor,
+	withCommit bool,
 ) (*roachpb.BatchResponse, error) {
-	var ambiguousError error
-	var haveCommit bool
-	// We only check for committed txns, not aborts because aborts may
-	// be retried without any risk of inconsistencies.
-	if etArg, ok := ba.GetArg(roachpb.EndTransaction); ok {
-		haveCommit = etArg.(*roachpb.EndTransactionRequest).Commit
-	}
-
 	transport, err := ds.transportFactory(opts, nodeDialer, replicas)
 	if err != nil {
 		return nil, err
@@ -1370,6 +1397,7 @@ func (ds *DistSender) sendToReplicas(
 
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
+	var ambiguousError error
 	for {
 		if err != nil {
 			// For most connection errors, we cannot tell whether or not
@@ -1383,7 +1411,7 @@ func (ds *DistSender) sendToReplicas(
 			// guaranteed to return an error. If the original attempt merely timed out
 			// or was lost, then the batch will succeed and we can be assured the
 			// commit was applied just once.
-			if haveCommit && !grpcutil.RequestDidNotStart(err) {
+			if withCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
 			}
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
