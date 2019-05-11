@@ -1,0 +1,6 @@
+--
+-- The TPC-DS database can be restored from backup (only scale factors of 1 and
+-- 10 - about 1GB and 10GB respectively - are available at the moment):
+--
+--   RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup';
+--

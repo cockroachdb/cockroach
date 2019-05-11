@@ -62,7 +62,7 @@ var tpchMeta = workload.Meta{
 	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &tpch{}
-		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
+		g.flags.FlagSet = pflag.NewFlagSet(`tpch`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`queries`:  {RuntimeOnly: true},
 			`dist-sql`: {RuntimeOnly: true},
