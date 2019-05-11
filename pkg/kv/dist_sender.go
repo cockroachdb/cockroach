@@ -652,11 +652,6 @@ func splitBatchAndCheckForRefreshSpans(
 // When the request spans ranges, it is split by range and a partial
 // subset of the batch request is sent to affected ranges in parallel.
 //
-// The first write in a transaction may not arrive before writes to
-// other ranges. This is relevant in the case of a BeginTransaction
-// request. Intents written to other ranges before the transaction
-// record is created will cause the transaction to abort early.
-//
 // Note that on error, this method will return any batch responses for
 // successfully processed batch requests. This allows the caller to
 // deal with potential retry situations where a batch is split so that
