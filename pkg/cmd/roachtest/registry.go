@@ -51,6 +51,7 @@ func registerTests(r *registry) {
 	registerKVScalability(r)
 	registerKVSplits(r)
 	registerLargeRange(r)
+	registerLedger(r)
 	registerNetwork(r)
 	registerPsycopg(r)
 	registerQueue(r)
