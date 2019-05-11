@@ -56,7 +56,6 @@
 <tr><td><code>kv.transaction.write_pipelining_enabled</code></td><td>boolean</td><td><code>true</code></td><td>if enabled, transactional writes are pipelined through Raft consensus</td></tr>
 <tr><td><code>kv.transaction.write_pipelining_max_batch_size</code></td><td>integer</td><td><code>128</code></td><td>if non-zero, defines that maximum size batch that will be pipelined through Raft consensus</td></tr>
 <tr><td><code>kv.transaction.write_pipelining_max_outstanding_size</code></td><td>byte size</td><td><code>256 KiB</code></td><td>maximum number of bytes used to track in-flight pipelined writes before disabling pipelining</td></tr>
-<tr><td><code>rocksdb.ingest_backpressure.delay_l0_file</code></td><td>duration</td><td><code>200ms</code></td><td>delay to add to SST ingestions per file in L0 over the configured limit</td></tr>
 <tr><td><code>rocksdb.ingest_backpressure.l0_file_count_threshold</code></td><td>integer</td><td><code>20</code></td><td>number of L0 files after which to backpressure SST ingestions</td></tr>
 <tr><td><code>rocksdb.ingest_backpressure.max_delay</code></td><td>duration</td><td><code>5s</code></td><td>maximum amount of time to backpressure a single SST ingestion</td></tr>
 <tr><td><code>rocksdb.ingest_backpressure.pending_compaction_threshold</code></td><td>byte size</td><td><code>64 GiB</code></td><td>pending compaction estimate above which to backpressure SST ingestions</td></tr>
