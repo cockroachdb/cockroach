@@ -777,6 +777,26 @@ type response struct {
 	pErr      *roachpb.Error
 }
 
+// swapPositions swaps position a and position b in the response.
+func (r *response) swapPositions(a, b int) {
+	for i, idx := range r.positions {
+		if idx == a {
+			r.positions[i] = b
+		} else if idx == b {
+			r.positions[i] = a
+		}
+	}
+	if r.pErr != nil {
+		if errIdx := r.pErr.Index; errIdx != nil {
+			if errIdx.Index == int32(a) {
+				errIdx.Index = int32(b)
+			} else if errIdx.Index == int32(b) {
+				errIdx.Index = int32(a)
+			}
+		}
+	}
+}
+
 // divideAndSendBatchToRanges sends the supplied batch to all of the
 // ranges which comprise the span specified by rs. The batch request
 // is trimmed against each range which is part of the span and sent
@@ -833,17 +853,19 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	if ba.Txn == nil && ba.IsTransactional() && ba.ReadConsistency == roachpb.CONSISTENT {
 		return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
 	}
-	// If the request is more than but ends with EndTransaction, we want the
-	// caller to come again with the EndTransaction in an extra call.
-	if withCommit {
-		return nil, errNo1PCTxn
-	}
 
+	// We may replace ba.Requests below, so grab a hold of it before so that we
+	// can piece it back together before returning.
+	origRequests := ba.Requests
 	// Make an empty slice of responses which will be populated with responses
 	// as they come in via Combine().
 	br = &roachpb.BatchResponse{
-		Responses: make([]roachpb.ResponseUnion, len(ba.Requests)),
+		Responses: make([]roachpb.ResponseUnion, len(origRequests)),
 	}
+	// We may move the EndTransaction request up in the batch if it allows us
+	// to push all pre-commit QueryIntents into a concurrent batch. If we do
+	// that, make sure to map the positions back correctly.
+	swappedEndTxnIdx := -1
 	// This function builds a channel of responses for each range
 	// implicated in the span (rs) and combines them into a single
 	// BatchResponse when finished.
@@ -866,6 +888,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// any part of a request after DistSender.Send() returns.
 		for _, responseCh := range responseChs {
 			resp := <-responseCh
+			if swappedEndTxnIdx != -1 {
+				// If we swapped the EndTransaction's position with the position
+				// of a QueryIntent, swap them back in the response.
+				resp.swapPositions(swappedEndTxnIdx, len(origRequests)-1)
+			}
 			if resp.pErr != nil {
 				if pErr == nil {
 					pErr = resp.pErr
@@ -874,7 +901,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			}
 			if !hadSuccessWriting {
 				for _, i := range resp.positions {
-					req := ba.Requests[i].GetInner()
+					req := origRequests[i].GetInner()
 					if !roachpb.IsReadOnly(req) {
 						hadSuccessWriting = true
 						break
@@ -890,6 +917,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				}
 			}
 		}
+
+		// Replace the original requests.
+		ba.Requests = origRequests
 
 		// If we experienced an error, don't neglect to update the error's
 		// attached transaction with any responses which were received.
@@ -926,10 +956,104 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	stopAtRangeBoundary := ba.Header.ScanOptions != nil && ba.Header.ScanOptions.StopAtRangeBoundary
+	// If the batch is performing a parallel commit and the transaction has
+	// previously pipelined writes that have yet to be proven successful then
+	// the EndTransaction request will be preceded by a series of QueryIntent
+	// requests (see txn_pipeliner.go). Before evaluating, each of these
+	// QueryIntent requests will grab latches and wait for their corresponding
+	// write to finish. This is how the QueryIntent requests synchronize with
+	// the write they are trying to verify.
+	//
+	// If these QueryIntents remained in the same batch as the EndTransaction
+	// request then they would force the EndTransaction request to wait for the
+	// previous write before evaluating itself. This "pipeline stall" would
+	// effectively negate the benefit of the parallel commit. To avoid this, we
+	// make sure that these "pre-commit" QueryIntent requests are split from and
+	// issued concurrently with the rest of the parallel commit batch.
+	//
+	// NB: withCommit allows us to short-circuit the check in the common case,
+	// but even when that's true, we still need to search for the EndTransaction
+	// in the batch.
+	if withCommit {
+		if etArg, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			if !etArg.(*roachpb.EndTransactionRequest).IsParallelCommit() {
+				// If the batch contains a non-parallel commit EndTransaction
+				// and spans ranges then we want the caller to come again with
+				// the EndTransaction in a separate (non-concurrent) batch.
+				return br, errNo1PCTxn
+			}
+
+			// Search backwards, looking for the first pre-commit QueryIntent.
+			for i := len(ba.Requests) - 2; i >= 0; i-- {
+				req := ba.Requests[i].GetInner()
+				if req.Method() == roachpb.QueryIntent {
+					swappedEndTxnIdx = i
+				} else {
+					break
+				}
+			}
+			if swappedEndTxnIdx != -1 {
+				swappedReqs := append([]roachpb.RequestUnion(nil), ba.Requests...)
+				swappedReqs[swappedEndTxnIdx], swappedReqs[len(swappedReqs)-1] =
+					swappedReqs[len(swappedReqs)-1], swappedReqs[swappedEndTxnIdx]
+
+				// Create a new pre-commit QueryIntent-only batch and issue it
+				// in a non-limited async task. This batch may need to be split
+				// over multiple ranges, so call into divideAndSendBatchToRanges.
+				qiBa := ba
+				qiBa.Requests = swappedReqs[swappedEndTxnIdx+1:]
+				qiRS, err := keys.Range(qiBa)
+				if err != nil {
+					return br, roachpb.NewError(err)
+				}
+				qiBatchIdx := batchIdx
+				batchIdx++
+
+				responseCh := make(chan response, 1)
+				responseChs = append(responseChs, responseCh)
+				if err := ds.rpcContext.Stopper.RunAsyncTask(
+					ctx, "kv.DistSender: sending precommit query intents",
+					func(ctx context.Context) {
+						reply, pErr := ds.divideAndSendBatchToRanges(
+							ctx, qiBa, qiRS, withCommit, qiBatchIdx,
+						)
+						qiPositions := make([]int, len(qiBa.Requests))
+						for i := range qiPositions {
+							qiPositions[i] = i + swappedEndTxnIdx + 1
+						}
+						responseCh <- response{reply: reply, positions: qiPositions, pErr: pErr}
+					},
+				); err != nil {
+					responseCh <- response{pErr: roachpb.NewError(err)}
+					return
+				}
+
+				// Adjust the original batch request to ignore the pre-commit
+				// QueryIntent requests. Make sure to determine the request's
+				// new key span and seek the range iterator to the beginning
+				// of this span.
+				ba.Requests = swappedReqs[:swappedEndTxnIdx+1]
+				rs, err = keys.Range(ba)
+				if err != nil {
+					return br, roachpb.NewError(err)
+				}
+				if scanDir == Ascending {
+					seekKey = rs.Key
+				} else {
+					seekKey = rs.EndKey
+				}
+				ri.Seek(ctx, seekKey, scanDir)
+				if !ri.Valid() {
+					return br, ri.Error()
+				}
+			}
+		}
+	}
+
 	// If min_results is set, num_results will count how many results scans have
 	// accumulated so far.
 	var numResults int64
+	stopAtRangeBoundary := ba.Header.ScanOptions != nil && ba.Header.ScanOptions.StopAtRangeBoundary
 	canParallelize := (ba.Header.MaxSpanRequestKeys == 0) && !stopAtRangeBoundary
 
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
