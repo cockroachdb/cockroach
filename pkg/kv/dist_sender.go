@@ -806,9 +806,21 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		return resp.reply, resp.pErr
 	}
 
+	// The batch spans ranges. Verify that this is ok.
 	if ba.IsUnsplittable() {
 		mismatch := roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc())
 		return nil, roachpb.NewError(mismatch)
+	}
+	// If there's no transaction and ba spans ranges, possibly re-run as part of
+	// a transaction for consistency. The case where we don't need to re-run is
+	// if the read consistency is not required.
+	if ba.Txn == nil && ba.IsTransactional() && ba.ReadConsistency == roachpb.CONSISTENT {
+		return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
+	}
+	// If the request is more than but ends with EndTransaction, we want the
+	// caller to come again with the EndTransaction in an extra call.
+	if withCommit {
+		return nil, errNo1PCTxn
 	}
 
 	// Make an empty slice of responses which will be populated with responses
@@ -908,28 +920,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		responseCh := make(chan response, 1)
 		responseChs = append(responseChs, responseCh)
 
-		if batchIdx == 0 && ri.NeedAnother(rs) {
-			// TODO(tschottdorf): we should have a mechanism for discovering
-			// range merges (descriptor staleness will mostly go unnoticed),
-			// or we'll be turning single-range queries into multi-range
-			// queries for no good reason.
-			//
-			// If there's no transaction and op spans ranges, possibly
-			// re-run as part of a transaction for consistency. The
-			// case where we don't need to re-run is if the read
-			// consistency is not required.
-			if ba.Txn == nil && ba.IsTransactional() && ba.ReadConsistency == roachpb.CONSISTENT {
-				responseCh <- response{pErr: roachpb.NewError(&roachpb.OpRequiresTxnError{})}
-				return
-			}
-			// If the request is more than but ends with EndTransaction, we
-			// want the caller to come again with the EndTransaction in an
-			// extra call.
-			if l := len(ba.Requests) - 1; l > 0 && ba.Requests[l].GetInner().Method() == roachpb.EndTransaction {
-				responseCh <- response{pErr: errNo1PCTxn}
-				return
-			}
-		}
+		// TODO(tschottdorf): we should have a mechanism for discovering range
+		// merges (descriptor staleness will mostly go unnoticed), or we'll be
+		// turning single-range queries into multi-range queries for no good
+		// reason.
 
 		// Determine next seek key, taking a potentially sparse batch into
 		// consideration.
