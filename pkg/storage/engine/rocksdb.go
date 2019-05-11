@@ -86,12 +86,6 @@ var ingestDelayL0Threshold = settings.RegisterIntSetting(
 	20,
 )
 
-var ingestDelayPerFile = settings.RegisterDurationSetting(
-	"rocksdb.ingest_backpressure.delay_l0_file",
-	"delay to add to SST ingestions per file in L0 over the configured limit",
-	time.Millisecond*200,
-)
-
 var ingestDelayPendingLimit = settings.RegisterByteSizeSetting(
 	"rocksdb.ingest_backpressure.pending_compaction_threshold",
 	"pending compaction estimate above which to backpressure SST ingestions",
