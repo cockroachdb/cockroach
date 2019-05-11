@@ -196,6 +196,10 @@ type DistSender struct {
 	// gossip. Used by tests which want finer control of the contents of the
 	// range cache.
 	disableFirstRangeUpdates int32
+
+	// disableParallelBatches instructs DistSender to never parallelize
+	// the transmission of partial batch requests across ranges.
+	disableParallelBatches bool
 }
 
 var _ client.Sender = &DistSender{}
@@ -262,13 +266,14 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if cfg.RPCRetryOptions != nil {
 		ds.rpcRetryOptions = *cfg.RPCRetryOptions
 	}
-	if cfg.RPCContext != nil {
-		ds.rpcContext = cfg.RPCContext
-		if ds.rpcRetryOptions.Closer == nil {
-			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
-		}
-		ds.clusterID = &cfg.RPCContext.ClusterID
+	if cfg.RPCContext == nil {
+		panic("no RPCContext set in DistSenderConfig")
 	}
+	ds.rpcContext = cfg.RPCContext
+	if ds.rpcRetryOptions.Closer == nil {
+		ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
+	}
+	ds.clusterID = &cfg.RPCContext.ClusterID
 	ds.nodeDialer = cfg.NodeDialer
 	ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
 
@@ -301,6 +306,12 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 // cache.
 func (ds *DistSender) DisableFirstRangeUpdates() {
 	atomic.StoreInt32(&ds.disableFirstRangeUpdates, 1)
+}
+
+// DisableParallelBatches instructs DistSender to never parallelize the
+// transmission of partial batch requests across ranges.
+func (ds *DistSender) DisableParallelBatches() {
+	ds.disableParallelBatches = true
 }
 
 // Metrics returns a struct which contains metrics related to the distributed
@@ -486,11 +497,7 @@ func (ds *DistSender) sendSingleRange(
 	if (cachedLeaseHolder == roachpb.ReplicaDescriptor{}) {
 		// Rearrange the replicas so that they're ordered in expectation of
 		// request latency.
-		var latencyFn LatencyFunc
-		if ds.rpcContext != nil {
-			latencyFn = ds.rpcContext.RemoteClocks.Latency
-		}
-		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
+		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.rpcContext.RemoteClocks.Latency)
 	}
 
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba, cachedLeaseHolder)
@@ -955,7 +962,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// Send the next partial batch to the first range in the "rs" span.
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
-		if canParallelize && !lastRange && ds.rpcContext != nil &&
+		if canParallelize && !lastRange && !ds.disableParallelBatches &&
 			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, responseCh) {
 			// Sent the batch asynchronously.
 		} else {

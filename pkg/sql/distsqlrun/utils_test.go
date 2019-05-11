@@ -18,14 +18,17 @@ import (
 	"context"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -140,15 +143,14 @@ func createDummyStream() (
 	err error,
 ) {
 	stopper := stop.NewStopper()
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rpcCtx := newInsecureRPCContext(stopper)
-	// Ensure the client cluster ID matches the server's.
-	rpcCtx.ClusterID.Reset(clusterID)
 
-	conn, err := rpcCtx.GRPCDialNode(addr.String(), staticNodeID).Connect(context.Background())
+	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+	conn, err := rpcContext.GRPCDialNode(addr.String(), staticNodeID).Connect(context.Background())
 	if err != nil {
 		return nil, nil, nil, err
 	}

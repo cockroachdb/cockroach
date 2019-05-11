@@ -153,6 +153,7 @@ func createTestStoreWithOpts(
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
 		AmbientCtx: ac,
 		Clock:      storeCfg.Clock,
+		RPCContext: rpcContext,
 		TestingKnobs: kv.ClientTestingKnobs{
 			TransportFactory: kv.SenderTransportFactory(tracer, stores),
 		},
@@ -734,6 +735,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	m.distSenders[idx] = kv.NewDistSender(kv.DistSenderConfig{
 		AmbientCtx: ambient,
 		Clock:      m.clocks[idx],
+		RPCContext: m.rpcContext,
 		RangeDescriptorDB: mtcRangeDescriptorDB{
 			multiTestContext: m,
 			ds:               &m.distSenders[idx],
