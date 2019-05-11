@@ -62,7 +62,7 @@ var tpchMeta = workload.Meta{
 	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &tpch{}
-		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
+		g.flags.FlagSet = pflag.NewFlagSet(`tpch`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`queries`:  {RuntimeOnly: true},
 			`dist-sql`: {RuntimeOnly: true},
@@ -208,7 +208,7 @@ func (w *worker) run(ctx context.Context) error {
 	w.hists.Get(queryName).Record(elapsed)
 	log.Infof(ctx, "[%s] return %d rows after %4.2f seconds:\n  %s",
 		queryName, numRows, elapsed.Seconds(), query)
-	return nil
+	return rows.Close()
 }
 
 const (

@@ -466,9 +466,7 @@ func Setup(
 
 	var size int64
 	for _, table := range tables {
-		if table.InitialRows.NumBatches == 0 {
-			continue
-		} else if table.InitialRows.FillBatch == nil {
+		if table.InitialRows.FillBatch == nil {
 			return 0, errors.Errorf(
 				`initial data is not supported for workload %s`, gen.Meta().Name)
 		}
