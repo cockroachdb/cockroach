@@ -1001,7 +1001,8 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				ds := kv.NewDistSender(
 					kv.DistSenderConfig{
 						AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
-						Clock:      clock, RPCContext: s.RPCContext(),
+						Clock:      clock,
+						RPCContext: s.RPCContext(),
 						NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
 					},
 					s.(*server.TestServer).Gossip(),
@@ -1546,7 +1547,8 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	ds := kv.NewDistSender(
 		kv.DistSenderConfig{
 			AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
-			Clock:      s.Clock(), RPCContext: s.RPCContext(),
+			Clock:      s.Clock(),
+			RPCContext: s.RPCContext(),
 			NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
 		}, s.(*server.TestServer).Gossip(),
 	)
