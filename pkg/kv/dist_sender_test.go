@@ -2176,7 +2176,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		ba.Add(roachpb.NewPut(test.put1, val))
 		val = roachpb.MakeValueFromString("val")
 		ba.Add(roachpb.NewPut(test.put2, val))
-		ba.Add(&roachpb.EndTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: test.et}})
+		ba.Add(&roachpb.EndTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: test.et}, Commit: true})
 
 		if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 			t.Fatal(pErr)
