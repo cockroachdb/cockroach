@@ -420,7 +420,7 @@ export class ExpandedSample {
         ca.samples.forEach((s) => {
           s.spans.forEach((sp) => {
             spans[sp.span_id] = new ExpandedSpan(n.node_id, sp, sp == s.spans[0] ? s : null);
-            if (sp.parent_span_id) {
+            if (sp.parent_span_id && sp.parent_span_id.toNumber() != 0) {
               if (!(sp.parent_span_id.toString() in children)) {
                 children[sp.parent_span_id] = [];
               }
