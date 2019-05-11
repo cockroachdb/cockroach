@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,11 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -137,9 +134,9 @@ func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
 // startMockDistSQLServer starts a MockDistSQLServer and returns the address on
 // which it's listening.
 func startMockDistSQLServer(
-	stopper *stop.Stopper,
+	clock *hlc.Clock, stopper *stop.Stopper,
 ) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
-	rpcContext := newInsecureRPCContext(stopper)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	rpcContext.NodeID.Set(context.TODO(), staticNodeID)
 	server := rpc.NewServer(rpcContext)
 	mock := newMockDistSQLServer()
@@ -149,22 +146,6 @@ func startMockDistSQLServer(
 		return uuid.Nil, nil, nil, err
 	}
 	return rpcContext.ClusterID.Get(), mock, ln.Addr(), nil
-}
-
-func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	rctx := rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-		&cluster.MakeTestingClusterSettings().Version,
-	)
-	// Ensure that tests using this test context and restart/shut down
-	// their servers do not inadvertently start talking to servers from
-	// unrelated concurrent tests.
-	rctx.ClusterID.Set(context.TODO(), uuid.MakeV4())
-
-	return rctx
 }
 
 // MockDistSQLServer implements the DistSQLServer (gRPC) interface and allows
@@ -234,15 +215,14 @@ func createDummyStream() (
 	err error,
 ) {
 	stopper := stop.NewStopper()
-	clusterID, mockServer, addr, err := startMockDistSQLServer(stopper)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clusterID, mockServer, addr, err := startMockDistSQLServer(clock, stopper)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rpcCtx := newInsecureRPCContext(stopper)
-	// Ensure the client cluster ID matches the server's.
-	rpcCtx.ClusterID.Reset(clusterID)
 
-	conn, err := rpcCtx.GRPCDialNode(addr.String(), staticNodeID).Connect(context.Background())
+	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
+	conn, err := rpcContext.GRPCDialNode(addr.String(), staticNodeID).Connect(context.Background())
 	if err != nil {
 		return nil, nil, nil, err
 	}

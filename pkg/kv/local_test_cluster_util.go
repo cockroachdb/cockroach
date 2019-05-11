@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -83,14 +84,16 @@ func NewDistSenderForLocalTestCluster(
 ) *DistSender {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
 	return NewDistSender(DistSenderConfig{
 		AmbientCtx:      log.AmbientContext{Tracer: st.Tracer},
 		Settings:        st,
 		Clock:           clock,
+		RPCContext:      rpcContext,
 		RPCRetryOptions: &retryOpts,
 		nodeDescriptor:  nodeDesc,
-		NodeDialer:      nodedialer.New(nil, gossip.AddressResolver(g)),
+		NodeDialer:      nodedialer.New(rpcContext, gossip.AddressResolver(g)),
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: func(
 				opts SendOptions,

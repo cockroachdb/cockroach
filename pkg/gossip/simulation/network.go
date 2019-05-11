@@ -58,8 +58,8 @@ func (n *Node) Addr() net.Addr {
 type Network struct {
 	Nodes           []*Node
 	Stopper         *stop.Stopper
+	RPCContext      *rpc.Context
 	nodeIDAllocator roachpb.NodeID // provides unique node IDs
-	rpcContext      *rpc.Context
 	tlsConfig       *tls.Config
 	started         bool
 }
@@ -72,7 +72,7 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Net
 		Nodes:   []*Node{},
 		Stopper: stopper,
 	}
-	n.rpcContext = rpc.NewContext(
+	n.RPCContext = rpc.NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		&base.Config{Insecure: true},
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
@@ -80,7 +80,7 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Net
 		&cluster.MakeTestingClusterSettings().Version,
 	)
 	var err error
-	n.tlsConfig, err = n.rpcContext.GetServerTLSConfig()
+	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
 	if err != nil {
 		log.Fatal(context.TODO(), err)
 	}
@@ -88,7 +88,7 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Net
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	n.rpcContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+	n.RPCContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
 
 	for i := 0; i < nodeCount; i++ {
 		node, err := n.CreateNode()
@@ -109,13 +109,13 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Net
 
 // CreateNode creates a simulation node and starts an RPC server for it.
 func (n *Network) CreateNode() (*Node, error) {
-	server := rpc.NewServer(n.rpcContext)
+	server := rpc.NewServer(n.RPCContext)
 	ln, err := net.Listen(util.IsolatedTestAddr.Network(), util.IsolatedTestAddr.String())
 	if err != nil {
 		return nil, err
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.NewTest(0, n.rpcContext, server, n.Stopper, node.Registry)
+	node.Gossip = gossip.NewTest(0, n.RPCContext, server, n.Stopper, node.Registry)
 	n.Stopper.RunWorker(context.TODO(), func(context.Context) {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
