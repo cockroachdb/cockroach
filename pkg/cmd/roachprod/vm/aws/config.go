@@ -136,6 +136,16 @@ func (c *awsConfig) getAvailabilityZone(azName string) *availabilityZone {
 	return c.azByName[azName]
 }
 
+func (c *awsConfig) availabilityZoneNames() (zoneNames []string) {
+	for _, r := range c.regions {
+		for _, az := range r.AvailabilityZones {
+			zoneNames = append(zoneNames, az.name)
+		}
+	}
+	sort.Strings(zoneNames)
+	return zoneNames
+}
+
 // availabilityZones is a slice of availabilityZone which implements
 // json.Marshaler and json.Unmarshaler.
 type availabilityZones []availabilityZone

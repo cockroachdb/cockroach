@@ -72,7 +72,6 @@ func init() {
 type providerOpts struct {
 	Profile string
 	Config  *awsConfig
-	Zones   []string
 
 	MachineType        string
 	SSDMachineType     string
@@ -80,6 +79,11 @@ type providerOpts struct {
 	EBSVolumeType      string
 	EBSVolumeSize      int
 	EBSProvisionedIOPs int
+
+	// CreateZones stores the list of zones for used cluster creation.
+	// When specifying the geo flag, nodes will be placed over these zones.
+	// See defaultGeoZones.
+	CreateZones []string
 }
 
 const (
@@ -95,7 +99,10 @@ var defaultConfig = func() (cfg *awsConfig) {
 	return cfg
 }()
 
-var defaultZones = []string{
+// defaultCreateZones is the list of availability zones used by default for
+// cluster creation. If the geo flag is specified, one zone from each region
+// is randomly chosen.
+var defaultCreateZones = []string{
 	"us-east-2a",
 	"us-east-2b",
 	"us-east-2c",
@@ -135,6 +142,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		1000, "Number of IOPs to provision, only used if "+ProviderName+
 			"-ebs-volume-type=io1")
 
+	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", defaultCreateZones,
+		"aws availability zones to use for cluster creation, at most one zone per region will be used")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -144,9 +153,7 @@ func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.Multiple
 	configFlagVal := awsConfigValue{awsConfig: *defaultConfig}
 	o.Config = &configFlagVal.awsConfig
 	flags.Var(&configFlagVal, ProviderName+"-config",
-		"Path to json for aws configuration, defaults to predefined confiruation")
-	flags.StringSliceVar(&o.Zones, ProviderName+"-zones", defaultZones,
-		"aws availability zones")
+		"Path to json for aws configuration, defaults to predefined configuration")
 }
 
 // Provider implements the vm.Provider interface for AWS.
@@ -172,7 +179,7 @@ func (p *Provider) ConfigSSH() error {
 		return err
 	}
 
-	regions, err := p.allRegions()
+	regions, err := p.allRegions(p.opts.Config.availabilityZoneNames())
 	if err != nil {
 		return err
 	}
@@ -208,7 +215,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		return err
 	}
 
-	regions, err := p.allRegions()
+	regions, err := p.allRegions(p.opts.CreateZones)
 	if err != nil {
 		return err
 	}
@@ -230,7 +237,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	const rateLimit = 2 // per second
 	limiter := rate.NewLimiter(rateLimit, 2 /* buckets */)
 	for i, region := range regions {
-		zones, err := p.allZones(region)
+		zones, err := p.regionZones(region, p.opts.CreateZones)
 		if err != nil {
 			return err
 		}
@@ -382,7 +389,7 @@ func (p *Provider) Flags() vm.ProviderFlags {
 
 // List is part of the vm.Provider interface.
 func (p *Provider) List() (vm.List, error) {
-	regions, err := p.allRegions()
+	regions, err := p.allRegions(p.opts.Config.availabilityZoneNames())
 	if err != nil {
 		return nil, err
 	}
@@ -420,9 +427,9 @@ func (p *Provider) Name() string {
 
 // allRegions returns the regions that have been configured with
 // AMI and SecurityGroup instances.
-func (p *Provider) allRegions() (regions []string, err error) {
+func (p *Provider) allRegions(zones []string) (regions []string, err error) {
 	byName := make(map[string]struct{})
-	for _, z := range p.opts.Zones {
+	for _, z := range zones {
 		az := p.opts.Config.getAvailabilityZone(z)
 		if az == nil {
 			return nil, fmt.Errorf("unknown availability zone %v, please provide a "+
@@ -436,14 +443,14 @@ func (p *Provider) allRegions() (regions []string, err error) {
 	return regions, nil
 }
 
-// allZones returns all AWS availability zones which have been correctly
+// regionZones returns all AWS availability zones which have been correctly
 // configured within the given region.
-func (p *Provider) allZones(region string) (zones []string, _ error) {
+func (p *Provider) regionZones(region string, allZones []string) (zones []string, _ error) {
 	r := p.opts.Config.getRegion(region)
 	if r == nil {
 		return nil, fmt.Errorf("region %s not found", region)
 	}
-	for _, z := range p.opts.Zones {
+	for _, z := range allZones {
 		for _, az := range r.AvailabilityZones {
 			if az.name == z {
 				zones = append(zones, z)
