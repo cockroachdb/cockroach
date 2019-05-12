@@ -325,7 +325,7 @@ func readPostgresCreateTable(
 			}
 			create.Defs = append(create.Defs, idx)
 		case *tree.AlterTable:
-			name, err := getTableName(&stmt.Table)
+			name, err := getTableName2(stmt.Table)
 			if err != nil {
 				return nil, err
 			}
@@ -379,6 +379,17 @@ func getTableName(tn *tree.TableName) (string, error) {
 		)
 	}
 	return tn.Table(), nil
+}
+
+// getTableName variant for UnresolvedObjectName.
+func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
+	if u.NumParts >= 2 && u.Parts[1] != "public" {
+		return "", pgerror.Unimplementedf(
+			"import non-public schema",
+			"non-public schemas unsupported: %s", u.Parts[1],
+		)
+	}
+	return u.Parts[0], nil
 }
 
 type pgDumpReader struct {

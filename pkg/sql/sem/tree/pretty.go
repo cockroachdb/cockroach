@@ -1904,7 +1904,7 @@ func (node *AlterTable) doc(p *PrettyCfg) pretty.Doc {
 	if node.IfExists {
 		title = pretty.ConcatSpace(title, pretty.Keyword("IF EXISTS"))
 	}
-	title = pretty.ConcatSpace(title, p.Doc(&node.Table))
+	title = pretty.ConcatSpace(title, p.Doc(node.Table))
 	return p.nestUnder(
 		title,
 		p.Doc(&node.Cmds),

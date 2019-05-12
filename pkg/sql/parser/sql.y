@@ -1252,13 +1252,11 @@ alter_index_stmt:
 alter_onetable_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.AlterTable{Table: name, IfExists: false, Cmds: $4.alterTableCmds()}
+    $$.val = &tree.AlterTable{Table: $3.unresolvedObjectName(), IfExists: false, Cmds: $4.alterTableCmds()}
   }
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.AlterTable{Table: name, IfExists: true, Cmds: $6.alterTableCmds()}
+    $$.val = &tree.AlterTable{Table: $5.unresolvedObjectName(), IfExists: true, Cmds: $6.alterTableCmds()}
   }
 
 alter_oneindex_stmt:
