@@ -27,19 +27,9 @@ func registerLedger(r *registry) {
 		Name:    fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
 		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(azs)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			lastNodeInFirstAZ := nodes / 3
-			var roachNodes, gatewayNodes, loadNode nodeListOption
-			for i := 0; i < c.nodes; i++ {
-				n := c.Node(i + 1)
-				if i == lastNodeInFirstAZ {
-					loadNode = n
-				} else {
-					roachNodes = roachNodes.merge(n)
-					if i < lastNodeInFirstAZ {
-						gatewayNodes = gatewayNodes.merge(n)
-					}
-				}
-			}
+			roachNodes := c.Range(1, nodes)
+			gatewayNodes := c.Range(1, nodes/3)
+			loadNode := c.Node(nodes + 1)
 
 			c.Put(ctx, cockroach, "./cockroach", roachNodes)
 			c.Put(ctx, workload, "./workload", loadNode)
