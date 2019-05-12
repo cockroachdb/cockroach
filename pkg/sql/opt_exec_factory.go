@@ -486,7 +486,7 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 
 		n.funcs = append(n.funcs, f)
 		n.columns = append(n.columns, sqlbase.ResultColumn{
-			Name: fmt.Sprintf("agg%d", i),
+			Name: agg.FuncName,
 			Typ:  agg.ResultType,
 		})
 	}
@@ -552,6 +552,12 @@ func (ef *execFactory) ConstructIndexJoin(
 	tabDesc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, cols)
 	colDescs := makeColDescList(table, cols)
+
+	// TODO(rytaft): saveTableNode is not yet supported as input to an index
+	// join, so discard the saveTableNode.
+	if saveTable, ok := input.(*saveTableNode); ok {
+		input = saveTable.source
+	}
 
 	// TODO(justin): this would be something besides a scanNode in the general
 	// case of a lookup join.
@@ -1551,6 +1557,13 @@ func (ef *execFactory) ConstructCreateTable(
 // ConstructSequenceSelect is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSequenceSelect(sequence cat.Sequence) (exec.Node, error) {
 	return ef.planner.SequenceSelectNode(sequence.(*optSequence).desc)
+}
+
+// ConstructSaveTable is part of the exec.Factory interface.
+func (ef *execFactory) ConstructSaveTable(
+	input exec.Node, table *cat.DataSourceName,
+) (exec.Node, error) {
+	return ef.planner.makeSaveTable(input.(planNode), table), nil
 }
 
 // renderBuilder encapsulates the code to build a renderNode.

@@ -577,6 +577,12 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		}
 		n.source = v.visit(n.source)
 
+	case *saveTableNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "target", n.target.String())
+		}
+		n.source = v.visit(n.source)
+
 	case *showTraceReplicaNode:
 		n.plan = v.visit(n.plan)
 
@@ -766,6 +772,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&renderNode{}):               "render",
 	reflect.TypeOf(&rowCountNode{}):             "count",
 	reflect.TypeOf(&rowSourceToPlanNode{}):      "row source to plan node",
+	reflect.TypeOf(&saveTableNode{}):            "save table",
 	reflect.TypeOf(&scanNode{}):                 "scan",
 	reflect.TypeOf(&scatterNode{}):              "scatter",
 	reflect.TypeOf(&scrubNode{}):                "scrub",
