@@ -196,6 +196,25 @@ var charts = []chartDescription{
 		AxisLabel: "Batches",
 	},
 	{
+		Organization: [][]string{{DistributionLayer, "RPC", "Heartbeats"}},
+		Title:        "Overview",
+		Metrics: []string{
+			"rpc.heartbeats.initializing",
+			"rpc.heartbeats.nominal",
+			"rpc.heartbeats.failed",
+		},
+		AxisLabel: "Heartbeats",
+	},
+	{
+		Organization: [][]string{{DistributionLayer, "RPC", "Heartbeats"}},
+		Title:        "Loops",
+		Metrics: []string{
+			"rpc.heartbeats.loops.exited",
+			"rpc.heartbeats.loops.started",
+		},
+		AxisLabel: "Heartbeat Loops",
+	},
+	{
 		Organization: [][]string{{DistributionLayer, "DistSender"}},
 		Title:        "Errors",
 		Metrics: []string{

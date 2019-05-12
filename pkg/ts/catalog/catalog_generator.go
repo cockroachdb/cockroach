@@ -11,6 +11,17 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
+type sectionDescription struct {
+	// Organization identifies the sections in which to place the chart.
+	// (Sections are created ad hoc as ChartSections whenever they're identified in
+	// a chartDescription.)
+	// Inner array is Level 0 (req), Level 1 (req), Level 2 (opt).
+	// Outer array lets you use the same chart in multiple places.
+	Organization [][]string
+
+	charts []chartDescription
+}
+
 // chartDescription describes an individual chart.
 // Only Title, Organization, and Metrics must be set; other values have useful
 // defaults if the included metrics are similar.

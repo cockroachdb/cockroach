@@ -18,11 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-<<<<<<< HEAD
 	"io/ioutil"
-	"math"
-=======
->>>>>>> admin: Add Chart Catalog infrastructure
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -737,7 +733,7 @@ func deleteSeenMetrics(c *catalog.ChartSection, metadata map[string]metric.Metad
 // TestChartCatalogMetric ensures that all metrics are included in at least one
 // chart, and that every metric included in a chart is still part of the metrics
 // registry.
-func TestChartCatalogMetric(t *testing.T) {
+func TestChartCatalogMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
 	defer s.Stopper().Stop(context.TODO())
