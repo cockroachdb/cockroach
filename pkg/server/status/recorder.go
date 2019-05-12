@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ajwerner/tdigest"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -575,6 +576,13 @@ func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 			for _, pt := range recordHistogramQuantiles {
 				fn(name+pt.suffix, float64(curr.ValueAtQuantile(pt.quantile)))
 			}
+		} else if summary, ok := mtr.(*metric.Summary); ok {
+			// Follow the example of histograms for summaries.
+			summary.Read(func(r tdigest.Reader) {
+				for _, pt := range recordHistogramQuantiles {
+					fn(name+pt.suffix, r.ValueAt(pt.quantile/100))
+				}
+			})
 		} else {
 			val, err := extractValue(mtr)
 			if err != nil {
