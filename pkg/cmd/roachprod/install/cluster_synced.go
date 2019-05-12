@@ -144,7 +144,8 @@ func (c *SyncedCluster) newSession(i int) (session, error) {
 	if c.IsLocal() {
 		return newLocalSession(), nil
 	}
-	return newRemoteSession(c.user(i), c.host(i))
+	host := c.host(i)
+	return newRemoteSession(c.user(i), host)
 }
 
 // Stop TODO(peter): document
