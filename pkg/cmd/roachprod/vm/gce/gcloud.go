@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"os/exec"
 	"regexp"
@@ -332,13 +331,6 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		p.opts.Zones = []string{p.opts.Zones[0]}
 	}
 
-	totalNodes := float64(len(names))
-	totalZones := float64(len(p.opts.Zones))
-	nodesPerZone := int(math.Ceil(totalNodes / totalZones))
-
-	ct := int(0)
-	i := 0
-
 	// Fixed args.
 	args := []string{
 		"compute", "instances", "create",
@@ -384,20 +376,26 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 
 	var g errgroup.Group
 
-	// This is calculating the number of machines to allocate per zone by taking the ceiling of the the total number
-	// of machines left divided by the number of zones left. If the the number of machines isn't
-	// divisible by the number of zones, then the extra machines will be allocated one per zone until there are
-	// no more extra machines left.
-	for i < len(names) {
-		argsWithZone := append(args[:len(args):len(args)], "--zone", p.opts.Zones[ct])
-		ct++
-		argsWithZone = append(argsWithZone, names[i:i+nodesPerZone]...)
-		i += nodesPerZone
+	// Create instances by placed in equal size groups over the zones with
+	// the extra instances allocated in a round-robin fashion.
+	// For example, if there are 7 nodes and 3 zones [a, b, c], then the nodes
+	// will be allocated as follows:
+	//
+	//   {a: [1, 2, 7], b: [3, 4], c: [5, 6]}
+	zoneHostNames := make([][]string, len(p.opts.Zones))
+	numPerZone := len(names) / len(p.opts.Zones)
+	extraStartIndex := numPerZone * len(p.opts.Zones)
+	for i := 0; i < len(names); i++ {
+		zone := i / numPerZone
+		if i >= extraStartIndex {
+			zone = i % len(p.opts.Zones)
+		}
+		zoneHostNames[zone] = append(zoneHostNames[zone], names[i])
+	}
 
-		totalNodes -= float64(nodesPerZone)
-		totalZones--
-		nodesPerZone = int(math.Ceil(totalNodes / totalZones))
-
+	for i, zoneHosts := range zoneHostNames {
+		argsWithZone := append(args[:len(args):len(args)], "--zone", p.opts.Zones[i])
+		argsWithZone = append(argsWithZone, zoneHosts...)
 		g.Go(func() error {
 			cmd := exec.Command("gcloud", argsWithZone...)
 
