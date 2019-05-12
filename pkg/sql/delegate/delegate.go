@@ -73,6 +73,9 @@ func TryDelegate(
 	case *tree.ShowRoleGrants:
 		return d.delegateShowRoleGrants(t)
 
+	case *tree.ShowRoles:
+		return d.delegateShowRoles(t)
+
 	case *tree.ShowSchemas:
 		return d.delegateShowSchemas(t)
 
