@@ -4,6 +4,26 @@ package pgwirebase
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[ServerMsgAuth-82]
+	_ = x[ServerMsgBindComplete-50]
+	_ = x[ServerMsgCommandComplete-67]
+	_ = x[ServerMsgCloseComplete-51]
+	_ = x[ServerMsgCopyInResponse-71]
+	_ = x[ServerMsgDataRow-68]
+	_ = x[ServerMsgEmptyQuery-73]
+	_ = x[ServerMsgErrorResponse-69]
+	_ = x[ServerMsgNoData-110]
+	_ = x[ServerMsgParameterDescription-116]
+	_ = x[ServerMsgParameterStatus-83]
+	_ = x[ServerMsgParseComplete-49]
+	_ = x[ServerMsgReady-90]
+	_ = x[ServerMsgRowDescription-84]
+}
+
 const (
 	_ServerMessageType_name_0 = "ServerMsgParseCompleteServerMsgBindCompleteServerMsgCloseComplete"
 	_ServerMessageType_name_1 = "ServerMsgCommandCompleteServerMsgDataRowServerMsgErrorResponse"

@@ -4,6 +4,15 @@ package kv
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[txnPending-0]
+	_ = x[txnError-1]
+	_ = x[txnFinalized-2]
+}
+
 const _txnState_name = "txnPendingtxnErrortxnFinalized"
 
 var _txnState_index = [...]uint8{0, 10, 18, 30}

@@ -4,6 +4,14 @@ package base
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[ReplicationAuto-0]
+	_ = x[ReplicationManual-1]
+}
+
 const _TestClusterReplicationMode_name = "ReplicationAutoReplicationManual"
 
 var _TestClusterReplicationMode_index = [...]uint8{0, 15, 32}

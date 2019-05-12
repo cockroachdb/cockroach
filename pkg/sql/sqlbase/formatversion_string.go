@@ -4,6 +4,15 @@ package sqlbase
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[BaseFormatVersion-1]
+	_ = x[FamilyFormatVersion-2]
+	_ = x[InterleavedFormatVersion-3]
+}
+
 const _FormatVersion_name = "BaseFormatVersionFamilyFormatVersionInterleavedFormatVersion"
 
 var _FormatVersion_index = [...]uint8{0, 17, 36, 60}

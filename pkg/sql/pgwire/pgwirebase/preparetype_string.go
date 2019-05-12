@@ -4,6 +4,14 @@ package pgwirebase
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[PrepareStatement-83]
+	_ = x[PreparePortal-80]
+}
+
 const (
 	_PrepareType_name_0 = "PreparePortal"
 	_PrepareType_name_1 = "PrepareStatement"
