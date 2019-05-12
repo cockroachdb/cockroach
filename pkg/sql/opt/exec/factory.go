@@ -384,6 +384,10 @@ type Factory interface {
 	// ConstructSequenceSelect creates a node that implements a scan of a sequence
 	// as a data source.
 	ConstructSequenceSelect(sequence cat.Sequence) (Node, error)
+
+	// ConstructSaveTable wraps the input into a node that passes through all the
+	// rows, but also creates a table and inserts all the rows into it.
+	ConstructSaveTable(input Node, table *cat.DataSourceName) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

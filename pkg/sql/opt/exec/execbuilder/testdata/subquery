@@ -67,7 +67,7 @@ root                 ·             ·                                          
       │              id            @S2                                                                          ·          ·
       │              original sql  (SELECT max(a) FROM abc WHERE EXISTS (SELECT * FROM abc WHERE c = (a + 3)))  ·          ·
       │              exec mode     one row                                                                      ·          ·
-      └── group      ·             ·                                                                            (agg0)     ·
+      └── group      ·             ·                                                                            (max)      ·
            │         aggregate 0   max(a)                                                                       ·          ·
            │         scalar        ·                                                                            ·          ·
            └── scan  ·             ·                                                                            (a)        ·

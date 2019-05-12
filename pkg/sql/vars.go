@@ -744,6 +744,19 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`save_tables_prefix`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.SaveTablesPrefix
+		},
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			m.SetSaveTablesPrefix(s)
+			return nil
+		},
+		GlobalDefault: func(_ *settings.Values) string { return "" },
+	},
 }
 
 func init() {

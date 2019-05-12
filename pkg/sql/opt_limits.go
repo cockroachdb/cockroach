@@ -238,14 +238,8 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *showTraceNode:
 	case *scatterNode:
 
-	case *applyJoinNode:
-		// The apply join node is only planned by the optimizer.
-
-	case *lookupJoinNode:
-		// The lookup join node is only planned by the optimizer.
-
-	case *zigzagJoinNode:
-		// The zigzag join node is only planned by the optimizer.
+	case *applyJoinNode, *lookupJoinNode, *zigzagJoinNode, *saveTableNode:
+		// These nodes are only planned by the optimizer.
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))

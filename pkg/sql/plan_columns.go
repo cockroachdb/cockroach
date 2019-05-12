@@ -130,6 +130,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.source, mut)
 	case *serializeNode:
 		return getPlanColumns(n.source, mut)
+	case *saveTableNode:
+		return getPlanColumns(n.source, mut)
 
 	case *rowSourceToPlanNode:
 		return n.planCols

@@ -17,3 +17,7 @@ package opt
 // DefaultJoinOrderLimit denotes the default limit on the number of joins to
 // reorder.
 const DefaultJoinOrderLimit = 4
+
+// SaveTablesDatabase is the name of the database where tables created by
+// the saveTableNode are stored.
+const SaveTablesDatabase = "savetables"
