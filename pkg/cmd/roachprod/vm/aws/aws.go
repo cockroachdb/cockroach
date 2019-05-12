@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -228,38 +227,29 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		regions = []string{regions[0]}
 	}
 
-	nodeCount := len(names)
-
-	var g errgroup.Group
-	// We're looping over regions to create all of the nodes in one region
-	// in the same iteration so they're contiguous.
-	node := 0
-	const rateLimit = 2 // per second
-	limiter := rate.NewLimiter(rateLimit, 2 /* buckets */)
+	// Choose a random availability zone for each region.
+	zones := make([]string, len(regions))
 	for i, region := range regions {
-		zones, err := p.regionZones(region, p.opts.CreateZones)
+		regionZones, err := p.regionZones(region, p.opts.CreateZones)
 		if err != nil {
 			return err
 		}
-		nodesPerRegion := int(math.Ceil(float64(nodeCount-node) / float64(len(regions)-i)))
-		// We're choosing a random availability zone now which will be consistent
-		// per region.
-		availabilityZone := rand.Int31n(int32(len(zones)))
-		for j := 0; j < nodesPerRegion; j++ {
-			if node >= nodeCount {
-				break
-			}
-			capName := names[node]
-			placement := zones[availabilityZone]
-			res := limiter.Reserve()
-			g.Go(func() error {
-				time.Sleep(res.Delay())
-				return p.runInstance(capName, placement, opts)
-			})
-			node++
-		}
+		zones[i] = regionZones[rand.Int31n(int32(len(regionZones)))]
 	}
+	nodeZones := vm.ZonePlacement(len(zones), len(names))
 
+	var g errgroup.Group
+	const rateLimit = 2 // per second
+	limiter := rate.NewLimiter(rateLimit, 2 /* buckets */)
+	for i := range names {
+		capName := names[i]
+		placement := zones[nodeZones[i]]
+		res := limiter.Reserve()
+		g.Go(func() error {
+			time.Sleep(res.Delay())
+			return p.runInstance(capName, placement, opts)
+		})
+	}
 	return g.Wait()
 }
 

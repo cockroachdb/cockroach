@@ -39,15 +39,16 @@ func registerInterleaved(r *registry) {
 		c *cluster,
 		config config,
 	) {
-		cockroachWest := c.Range(1, 3)
-		workloadWest := c.Node(4)
-		cockroachEast := c.Range(5, 7)
-		workloadEast := c.Node(8)
-		cockroachCentral := c.Range(9, 11)
-		workloadCentral := c.Node(12)
-
-		cockroachNodes := cockroachWest.merge(cockroachEast.merge(cockroachCentral))
-		workloadNodes := workloadWest.merge(workloadEast.merge(workloadCentral))
+		numZones, numRoachNodes, numLoadNodes := 3, 9, 3
+		loadGroups := makeLoadGroups(c, numZones, numRoachNodes, numLoadNodes)
+		cockroachWest := loadGroups[0].roachNodes
+		workloadWest := loadGroups[0].loadNodes
+		cockroachEast := loadGroups[1].roachNodes
+		workloadEast := loadGroups[1].loadNodes
+		cockroachCentral := loadGroups[2].roachNodes
+		workloadCentral := loadGroups[2].loadNodes
+		cockroachNodes := loadGroups.roachNodes()
+		workloadNodes := loadGroups.loadNodes()
 
 		c.l.Printf("cockroach nodes: %s", cockroachNodes.String()[1:])
 		c.l.Printf("workload nodes: %s", workloadNodes.String()[1:])
