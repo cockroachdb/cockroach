@@ -19,7 +19,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/types"
 // AlterTable represents an ALTER TABLE statement.
 type AlterTable struct {
 	IfExists bool
-	Table    TableName
+	Table    *UnresolvedObjectName
 	Cmds     AlterTableCmds
 }
 
@@ -29,7 +29,7 @@ func (node *AlterTable) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(node.Table)
 	ctx.FormatNode(&node.Cmds)
 }
 

@@ -640,3 +640,27 @@ func (l *internalLookupCtx) getParentName(table *TableDescriptor) string {
 	}
 	return parentName
 }
+
+// The versions below are part of the work for #34240.
+// TODO(radu): clean these up when everything is switched over.
+
+// See ResolveMutableTableDescriptor.
+func (p *planner) ResolveMutableTableDescriptorEx(
+	ctx context.Context,
+	name *tree.UnresolvedObjectName,
+	required bool,
+	requiredType ResolveRequiredType,
+) (*MutableTableDescriptor, error) {
+	tn := name.ToTableName()
+	table, err := ResolveMutableExistingObject(ctx, p, &tn, required, requiredType)
+	if err != nil {
+		return nil, err
+	}
+	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
+	return table, nil
+}
+
+// ResolvedName is a convenience wrapper for UnresolvedObjectName.Resolved.
+func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) *tree.TableName {
+	return u.Resolved(&p.semaCtx.Annotations)
+}
