@@ -4,6 +4,20 @@ package pgwirebase
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[ServerErrFieldSeverity-83]
+	_ = x[ServerErrFieldSQLState-67]
+	_ = x[ServerErrFieldMsgPrimary-77]
+	_ = x[ServerErrFileldDetail-68]
+	_ = x[ServerErrFileldHint-72]
+	_ = x[ServerErrFieldSrcFile-70]
+	_ = x[ServerErrFieldSrcLine-76]
+	_ = x[ServerErrFieldSrcFunction-82]
+}
+
 const (
 	_ServerErrFieldType_name_0 = "ServerErrFieldSQLStateServerErrFileldDetail"
 	_ServerErrFieldType_name_1 = "ServerErrFieldSrcFile"

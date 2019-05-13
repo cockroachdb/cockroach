@@ -27,9 +27,12 @@ type atomicBool struct {
 	b *bool
 }
 
+// IsBoolFlag is recognized by pflags.
 func (ab *atomicBool) IsBoolFlag() bool {
 	return true
 }
+
+var _ = (*atomicBool).IsBoolFlag
 
 func (ab *atomicBool) String() string {
 	if ab.Locker == nil {

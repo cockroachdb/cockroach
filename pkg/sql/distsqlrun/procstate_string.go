@@ -4,6 +4,16 @@ package distsqlrun
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[StateRunning-0]
+	_ = x[stateDraining-1]
+	_ = x[stateTrailingMeta-2]
+	_ = x[stateExhausted-3]
+}
+
 const _procState_name = "StateRunningstateDrainingstateTrailingMetastateExhausted"
 
 var _procState_index = [...]uint8{0, 12, 25, 42, 56}

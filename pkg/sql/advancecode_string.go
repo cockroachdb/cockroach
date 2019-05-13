@@ -4,6 +4,17 @@ package sql
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[advanceUnknown-0]
+	_ = x[stayInPlace-1]
+	_ = x[advanceOne-2]
+	_ = x[skipBatch-3]
+	_ = x[rewind-4]
+}
+
 const _advanceCode_name = "advanceUnknownstayInPlaceadvanceOneskipBatchrewind"
 
 var _advanceCode_index = [...]uint8{0, 14, 25, 35, 44, 50}

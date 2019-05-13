@@ -68,6 +68,8 @@ func (g *SpanGroup) Len() int {
 	return g.rg.Len()
 }
 
+var _ = (*SpanGroup).Len
+
 // Slice will return the contents of the SpanGroup as a slice of Spans.
 func (g *SpanGroup) Slice() []Span {
 	rg := g.rg

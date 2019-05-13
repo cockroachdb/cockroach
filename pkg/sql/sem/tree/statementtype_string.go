@@ -4,6 +4,18 @@ package tree
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[Ack-0]
+	_ = x[DDL-1]
+	_ = x[RowsAffected-2]
+	_ = x[Rows-3]
+	_ = x[CopyIn-4]
+	_ = x[Unknown-5]
+}
+
 const _StatementType_name = "AckDDLRowsAffectedRowsCopyInUnknown"
 
 var _StatementType_index = [...]uint8{0, 3, 6, 18, 22, 28, 35}
