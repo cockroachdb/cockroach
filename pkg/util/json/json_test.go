@@ -1302,6 +1302,7 @@ func TestNumInvertedIndexEntries(t *testing.T) {
 		{`[[[]]]`, 1},
 		{`[[{}]]`, 1},
 		{`[{}, []]`, 2},
+		{`[1]`, 1},
 		{`[1, 2]`, 2},
 		{`[1, [1]]`, 2},
 		{`[1, 2, 1, 2]`, 2},
@@ -1920,6 +1921,14 @@ func BenchmarkFetchKey(b *testing.B) {
 				}
 			})
 		})
+	}
+}
+
+func BenchmarkJSONNumInvertedIndexEntries(b *testing.B) {
+	j := jsonTestShorthand(sampleJSON)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = NumInvertedIndexEntries(j)
 	}
 }
 
