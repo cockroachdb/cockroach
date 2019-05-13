@@ -14,7 +14,6 @@ import (
 	"crypto/sha512"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -37,6 +36,17 @@ func declareKeysExport(
 ) {
 	batcheval.DefaultDeclareKeys(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+}
+
+// getDBEngine recursively searches for the underlying RocksDB or
+// rocksDBReadOnly engine.
+func getDBEngine(e engine.Reader, span roachpb.Span) engine.Reader {
+	switch v := e.(type) {
+	case spanset.ReadWriter:
+		return getDBEngine(spanset.GetSpanReader(v, span), span)
+	default:
+		return e
+	}
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
@@ -91,85 +101,73 @@ func evalExport(
 		defer exportStore.Close()
 	}
 
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return result.Result{}, err
-	}
-	defer sst.Close()
-
-	var skipTombstones bool
-	var iterFn func(*engineccl.MVCCIncrementalIterator)
+	var exportAllRevisions bool
 	switch args.MVCCFilter {
 	case roachpb.MVCCFilter_Latest:
-		skipTombstones = true
-		iterFn = (*engineccl.MVCCIncrementalIterator).NextKey
+		exportAllRevisions = false
 	case roachpb.MVCCFilter_All:
-		skipTombstones = false
-		iterFn = (*engineccl.MVCCIncrementalIterator).Next
+		exportAllRevisions = true
 	default:
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	debugLog := log.V(3)
+	start := engine.MVCCKey{Key: args.Key, Timestamp: args.StartTime}
+	end := engine.MVCCKey{Key: args.EndKey, Timestamp: h.Timestamp}
 
-	var rows bulk.RowCounter
-	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
-	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
-	iter := engineccl.NewMVCCIncrementalIterator(batch, engineccl.IterOptions{
-		StartTime:                           args.StartTime,
-		EndTime:                             h.Timestamp,
-		UpperBound:                          args.EndKey,
-		EnableTimeBoundIteratorOptimization: args.EnableTimeBoundIteratorOptimization,
-	})
-	defer iter.Close()
-	for iter.Seek(engine.MakeMVCCMetadataKey(args.Key)); ; iterFn(iter) {
-		ok, err := iter.Valid()
-		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
-			// cause this command to be retried.
-			return result.Result{}, err
-		}
-		if !ok || iter.UnsafeKey().Key.Compare(args.EndKey) >= 0 {
-			break
-		}
-
-		// Skip tombstone (len=0) records when startTime is zero
-		// (non-incremental) and we're not exporting all versions.
-		if skipTombstones && args.StartTime.IsEmpty() && len(iter.UnsafeValue()) == 0 {
-			continue
-		}
-
-		if debugLog {
-			// Calling log.V is more expensive than you'd think. Keep it out of
-			// the hot path.
-			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
-			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
-		}
-
-		if err := rows.Count(iter.UnsafeKey().Key); err != nil {
-			return result.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
-		}
-		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
-			return result.Result{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
-		}
+	io := engine.IterOptions{
+		UpperBound: args.EndKey,
 	}
 
-	if sst.DataSize == 0 {
-		// Let the defer Close the sstable.
+	// Time-bound iterators only make sense to use if the start time is set.
+	if args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty() {
+		// The call to startTime.Next() converts our exclusive start bound into the
+		// inclusive start bound that MinTimestampHint expects. This is strictly a
+		// performance optimization; omitting the call would still return correct
+		// results.
+		io.MinTimestampHint = args.StartTime.Next()
+		io.MaxTimestampHint = h.Timestamp
+	}
+
+	e := getDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
+
+	data, dataSize, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
+
+	if err != nil {
+		return result.Result{}, err
+	}
+
+	if dataSize == 0 {
 		reply.Files = []roachpb.ExportResponse_File{}
 		return result.Result{}, nil
 	}
-	rows.BulkOpSummary.DataSize = sst.DataSize
 
-	sstContents, err := sst.Finish()
+	// TODO(adityamaru): Not the most efficient solution, move RowCounter to C++.
+	// Iterate over the returned SSTable to update the RowCounter.
+	var rows bulk.RowCounter
+	it, err := engine.NewMemSSTIterator(data, false /* verify */)
 	if err != nil {
 		return result.Result{}, err
+	}
+	defer it.Close()
+
+	for it.Seek(start); ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return result.Result{}, err
+		} else if !ok || it.UnsafeKey().Key.Compare(args.EndKey) >= 0 {
+			break
+		}
+
+		if err := rows.Count(it.UnsafeKey().Key); err != nil {
+			return result.Result{}, errors.Wrapf(err, "decoding %s", it.UnsafeKey())
+		}
+
+		rows.BulkOpSummary.DataSize += int64(len(it.UnsafeKey().Key)) + int64(len(it.UnsafeValue()))
 	}
 
 	var checksum []byte
 	if !args.OmitChecksum {
 		// Compute the checksum before we upload and remove the local file.
-		checksum, err = SHA512ChecksumData(sstContents)
+		checksum, err = SHA512ChecksumData(data)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -183,13 +181,13 @@ func evalExport(
 
 	if exportStore != nil {
 		exported.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
-		if err := exportStore.WriteFile(ctx, exported.Path, bytes.NewReader(sstContents)); err != nil {
+		if err := exportStore.WriteFile(ctx, exported.Path, bytes.NewReader(data)); err != nil {
 			return result.Result{}, err
 		}
 	}
 
 	if args.ReturnSST {
-		exported.SST = sstContents
+		exported.SST = data
 	}
 
 	reply.Files = []roachpb.ExportResponse_File{exported}
