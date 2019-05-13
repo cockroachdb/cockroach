@@ -32,10 +32,12 @@ type session interface {
 	SetStdin(r io.Reader)
 	SetStdout(w io.Writer)
 	SetStderr(w io.Writer)
+	Start(cmd string) error
 	StdinPipe() (io.WriteCloser, error)
 	StdoutPipe() (io.Reader, error)
 	StderrPipe() (io.Reader, error)
 	RequestPty() error
+	Wait() error
 	Close()
 }
 
@@ -73,6 +75,11 @@ func (s *remoteSession) Run(cmd string) error {
 	return s.Cmd.Run()
 }
 
+func (s *remoteSession) Start(cmd string) error {
+	s.Cmd.Args = append(s.Cmd.Args, cmd)
+	return s.Cmd.Start()
+}
+
 func (s *remoteSession) SetStdin(r io.Reader) {
 	s.Stdin = r
 }
@@ -104,6 +111,10 @@ func (s *remoteSession) RequestPty() error {
 	return nil
 }
 
+func (s *remoteSession) Wait() error {
+	return s.Cmd.Wait()
+}
+
 func (s *remoteSession) Close() {
 	s.cancel()
 }
@@ -127,6 +138,11 @@ func (s *localSession) CombinedOutput(cmd string) ([]byte, error) {
 func (s *localSession) Run(cmd string) error {
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
 	return s.Cmd.Run()
+}
+
+func (s *localSession) Start(cmd string) error {
+	s.Cmd.Args = append(s.Cmd.Args, cmd)
+	return s.Cmd.Start()
 }
 
 func (s *localSession) SetStdin(r io.Reader) {
@@ -157,6 +173,10 @@ func (s *localSession) StderrPipe() (io.Reader, error) {
 
 func (s *localSession) RequestPty() error {
 	return nil
+}
+
+func (s *localSession) Wait() error {
+	return s.Cmd.Wait()
 }
 
 func (s *localSession) Close() {
