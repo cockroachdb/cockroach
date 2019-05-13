@@ -3190,6 +3190,49 @@ func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byt
 	return MVCCKey{k, ts}, value, orepr, err
 }
 
+// ExportToSst exports changes to the keyrange [start.Key, end.Key) over the
+// interval (start.Timestamp, end.Timestamp]. Passing exportAllRevisions exports
+// every revision of a key for the interval, otherwise only the latest value
+// within the interval is exported. Deletions are included if all revisions are
+// requested or if the start.Timestamp is non-zero. Returns the bytes of an
+// SSTable containing the exported keys, the size of exported data, or an error.
+func ExportToSst(
+	ctx context.Context, e Reader, start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+) ([]byte, int64, error) {
+
+	var cdbEngine *C.DBEngine
+	switch v := e.(type) {
+	case *RocksDB:
+		cdbEngine = v.rdb
+	case *rocksDBReadOnly:
+		cdbEngine = v.parent.rdb
+	default:
+		panic(errors.Errorf("Not a rocksdb or rocksdbReadOnly engine but a %T", e))
+	}
+
+	var data C.DBString
+	var entries C.int64_t
+	var dataSize C.int64_t
+	var intentErr C.DBString
+
+	err := statusToError(C.DBExportToSst(goToCKey(start), goToCKey(end), C.bool(exportAllRevisions),
+		goToCIterOptions(io), cdbEngine, &data, &entries, &dataSize, &intentErr))
+
+	if err != nil {
+		if err.Error() == "WriteIntentError" {
+			var e roachpb.WriteIntentError
+			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
+				return nil, 0, errors.Wrap(err, "failed to decode write intent error")
+			}
+
+			return nil, 0, &e
+		}
+		return nil, 0, err
+	}
+
+	return cStringToGoBytes(data), int64(dataSize), nil
+}
+
 func notFoundErrOrDefault(err error) error {
 	errStr := err.Error()
 	if strings.Contains(errStr, "No such file or directory") ||
