@@ -75,6 +75,8 @@ type JSON interface {
 	// one per path through the receiver.
 	encodeInvertedIndexKeys(b []byte) ([][]byte, error)
 
+	numInvertedIndexEntries() (int, error)
+
 	// allPaths returns a slice of new JSON documents, each a path to a leaf
 	// through the receiver. Note that leaves include the empty object and array
 	// in addition to scalars.
@@ -763,23 +765,63 @@ func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 // array are encoded identically in the inverted index, the total number of
 // distinct index entries may be less than the total number of paths.
 func NumInvertedIndexEntries(j JSON) (int, error) {
-	// TODO (lucy): Figure out how to avoid allocating every path
-	keys, err := EncodeInvertedIndexKeys(make([]byte, 0), j)
-	if err != nil {
-		return 0, err
-	}
+	return j.numInvertedIndexEntries()
+}
 
-	// Count distinct keys
-	sort.Slice(keys, func(i int, j int) bool {
-		return bytes.Compare(keys[i], keys[j]) < 0
-	})
-	n := 0
-	for i := 0; i < len(keys); i++ {
-		if i == 0 || bytes.Compare(keys[i-1], keys[i]) < 0 {
-			n++
+func (j jsonNull) numInvertedIndexEntries() (int, error) {
+	return 1, nil
+}
+func (jsonTrue) numInvertedIndexEntries() (int, error) {
+	return 1, nil
+}
+func (jsonFalse) numInvertedIndexEntries() (int, error) {
+	return 1, nil
+}
+func (j jsonString) numInvertedIndexEntries() (int, error) {
+	return 1, nil
+}
+func (j jsonNumber) numInvertedIndexEntries() (int, error) {
+	return 1, nil
+}
+func (j jsonArray) numInvertedIndexEntries() (int, error) {
+	switch len(j) {
+	case 0:
+		return 1, nil
+	case 1:
+		return j[0].numInvertedIndexEntries()
+	default:
+		keys, err := j.encodeInvertedIndexKeys(make([]byte, 0))
+		if err != nil {
+			return 0, err
 		}
+
+		// Count distinct keys
+		sort.Slice(keys, func(i int, j int) bool {
+			return bytes.Compare(keys[i], keys[j]) < 0
+		})
+		n := 0
+		for i := 0; i < len(keys); i++ {
+			if i == 0 || bytes.Compare(keys[i-1], keys[i]) < 0 {
+				n++
+			}
+		}
+		return n, nil
 	}
-	return n, nil
+}
+
+func (j jsonObject) numInvertedIndexEntries() (int, error) {
+	if len(j) == 0 {
+		return 1, nil
+	}
+	count := 0
+	for _, kv := range j {
+		n, err := kv.v.numInvertedIndexEntries()
+		if err != nil {
+			return 0, err
+		}
+		count += n
+	}
+	return count, nil
 }
 
 // AllPaths returns a slice of new JSON documents, each a path to a leaf

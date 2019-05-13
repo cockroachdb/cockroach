@@ -718,6 +718,18 @@ func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	return decoded.encodeInvertedIndexKeys(b)
 }
 
+// numInvertedIndexEntries implements the JSON interface.
+func (j *jsonEncoded) numInvertedIndexEntries() (int, error) {
+	if j.isScalar() || j.containerLen == 0 {
+		return 1, nil
+	}
+	decoded, err := j.decode()
+	if err != nil {
+		return 0, err
+	}
+	return decoded.numInvertedIndexEntries()
+}
+
 func (j *jsonEncoded) allPaths() ([]JSON, error) {
 	decoded, err := j.decode()
 	if err != nil {
