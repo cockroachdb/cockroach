@@ -364,6 +364,42 @@ func (c *CustomFuncs) PruneOrderingOrdinality(
 	return &new
 }
 
+// NeededWindowCols is the set of columns that the window function needs to
+// execute.
+func (c *CustomFuncs) NeededWindowCols(windows memo.WindowsExpr, p *memo.WindowPrivate) opt.ColSet {
+	var needed opt.ColSet
+	needed.UnionWith(p.Partition)
+	needed.UnionWith(p.Ordering.ColSet())
+	for i := range windows {
+		needed.UnionWith(windows[i].ScalarProps(c.mem).OuterCols)
+	}
+	return needed
+}
+
+// CanPruneWindows is true if the list of window functions contains a column
+// which is not included in needed, meaning that it can be pruned.
+func (c *CustomFuncs) CanPruneWindows(needed opt.ColSet, windows memo.WindowsExpr) bool {
+	for _, w := range windows {
+		if !needed.Contains(int(w.Col)) {
+			return true
+		}
+	}
+	return false
+}
+
+// PruneWindows restricts windows to only the columns which appear in needed.
+// If we eliminate all the window functions, EliminateWindow will trigger and
+// remove the expression entirely.
+func (c *CustomFuncs) PruneWindows(needed opt.ColSet, windows memo.WindowsExpr) memo.WindowsExpr {
+	result := make(memo.WindowsExpr, 0, len(windows))
+	for _, w := range windows {
+		if needed.Contains(int(w.Col)) {
+			result = append(result, w)
+		}
+	}
+	return result
+}
+
 // DerivePruneCols returns the subset of the given expression's output columns
 // that are candidates for pruning. Each operator has its own custom rule for
 // what columns it allows to be pruned. Note that if an operator allows columns
@@ -458,6 +494,16 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		relProps.Rule.PruneCols = DerivePruneCols(projectSet.Input).Copy()
 		usedCols := projectSet.Zip.OuterCols(e.Memo())
 		relProps.Rule.PruneCols.DifferenceWith(usedCols)
+
+	case opt.WindowOp:
+		win := e.(*memo.WindowExpr)
+		relProps.Rule.PruneCols = DerivePruneCols(win.Input).Copy()
+		relProps.Rule.PruneCols.DifferenceWith(win.Partition)
+		relProps.Rule.PruneCols.DifferenceWith(win.Ordering.ColSet())
+		for _, w := range win.Windows {
+			relProps.Rule.PruneCols.Add(int(w.Col))
+			relProps.Rule.PruneCols.DifferenceWith(w.ScalarProps(e.Memo()).OuterCols)
+		}
 
 	default:
 		// Don't allow any columns to be pruned, since that would trigger the

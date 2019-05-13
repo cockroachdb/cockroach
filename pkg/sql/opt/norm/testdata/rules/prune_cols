@@ -1662,6 +1662,146 @@ distinct-on
                 └── variable: s [type=string]
 
 # --------------------------------------------------
+# PruneWindowInputCols
+# --------------------------------------------------
+
+norm expect=PruneWindowInputCols
+SELECT rank() OVER () FROM a
+----
+window partition=()
+ ├── columns: rank:5(int)
+ ├── scan a
+ └── windows
+      └── rank [type=undefined]
+
+norm expect=PruneWindowInputCols
+SELECT ntile(1) OVER () FROM a
+----
+project
+ ├── columns: ntile:5(int)
+ └── window partition=()
+      ├── columns: ntile:5(int) ntile_1_arg1:6(int!null)
+      ├── fd: ()-->(6)
+      ├── project
+      │    ├── columns: ntile_1_arg1:6(int!null)
+      │    ├── fd: ()-->(6)
+      │    ├── scan a
+      │    └── projections
+      │         └── const: 1 [type=int]
+      └── windows
+           └── ntile [type=int, outer=(6)]
+                └── variable: ntile_1_arg1 [type=int]
+
+norm expect=PruneWindowInputCols format=show-all
+SELECT ntile(i) OVER () FROM a
+----
+project
+ ├── columns: ntile:5(int)
+ ├── stats: [rows=1000]
+ ├── cost: 1060.04
+ ├── prune: (5)
+ └── window partition=()
+      ├── columns: t.public.a.i:2(int) ntile:5(int)
+      ├── stats: [rows=1000]
+      ├── cost: 1050.03
+      ├── prune: (5)
+      ├── scan t.public.a
+      │    ├── columns: t.public.a.i:2(int)
+      │    ├── stats: [rows=1000]
+      │    ├── cost: 1050.02
+      │    └── prune: (2)
+      └── windows
+           └── ntile [type=int, outer=(2)]
+                └── variable: t.public.a.i [type=int]
+
+# --------------------------------------------------
+# PruneWindowOutputCols
+# --------------------------------------------------
+
+norm expect=PruneWindowOutputCols
+SELECT x FROM (SELECT ntile(1) OVER () AS x, ntile(2) OVER () FROM a)
+----
+project
+ ├── columns: x:5(int)
+ └── window partition=()
+      ├── columns: ntile:5(int) ntile_1_arg1:7(int!null)
+      ├── fd: ()-->(7)
+      ├── project
+      │    ├── columns: ntile_1_arg1:7(int!null)
+      │    ├── fd: ()-->(7)
+      │    ├── scan a
+      │    └── projections
+      │         └── const: 1 [type=int]
+      └── windows
+           └── ntile [type=int, outer=(7)]
+                └── variable: ntile_1_arg1 [type=int]
+
+norm expect=(PruneWindowOutputCols,EliminateWindow)
+SELECT 1 FROM (SELECT ntile(1) OVER () FROM a)
+----
+project
+ ├── columns: "?column?":7(int!null)
+ ├── fd: ()-->(7)
+ ├── scan a
+ └── projections
+      └── const: 1 [type=int]
+
+norm expect=(PruneWindowOutputCols,EliminateWindow)
+SELECT 1 FROM (SELECT x FROM (SELECT ntile(1) OVER () AS x, ntile(2) OVER () FROM a))
+----
+project
+ ├── columns: "?column?":9(int!null)
+ ├── fd: ()-->(9)
+ ├── scan a
+ └── projections
+      └── const: 1 [type=int]
+
+norm expect-not=PruneWindowOutputCols
+SELECT round(avg(k) OVER (PARTITION BY f ORDER BY s)) FROM a ORDER BY 1
+----
+sort
+ ├── columns: round:6(decimal)
+ ├── ordering: +6
+ └── project
+      ├── columns: round:6(decimal)
+      ├── window partition=(3) ordering=+4 opt(3)
+      │    ├── columns: k:1(int!null) f:3(float) s:4(string) avg:5(decimal)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3,4)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) f:3(float) s:4(string)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(3,4)
+      │    └── windows
+      │         └── avg [type=decimal, outer=(1)]
+      │              └── variable: k [type=int]
+      └── projections
+           └── round(avg) [type=decimal, outer=(5)]
+
+norm expect=(PruneWindowInputCols,PruneWindowOutputCols) format=show-all
+SELECT x FROM (SELECT ntile(i) OVER () x, ntile(f::int) OVER () y FROM a)
+----
+project
+ ├── columns: x:5(int)
+ ├── stats: [rows=1000]
+ ├── cost: 1060.04
+ ├── prune: (5)
+ └── window partition=()
+      ├── columns: t.public.a.i:2(int) ntile:5(int)
+      ├── stats: [rows=1000]
+      ├── cost: 1050.03
+      ├── prune: (5)
+      ├── scan t.public.a
+      │    ├── columns: t.public.a.i:2(int)
+      │    ├── stats: [rows=1000]
+      │    ├── cost: 1050.02
+      │    └── prune: (2)
+      └── windows
+           └── ntile [type=int, outer=(2)]
+                └── variable: t.public.a.i [type=int]
+
+
+# --------------------------------------------------
 # PruneMutationFetchCols + PruneMutationInputCols
 # --------------------------------------------------
 

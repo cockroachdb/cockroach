@@ -1,0 +1,46 @@
+# =============================================================================
+# window.opt contains normalization rules for the Window operator.
+# =============================================================================
+
+# TODO(justin): add a rule to best-effort collapse same ordering+partition
+# window functions, like in:
+# SELECT
+#     rank() OVER (PARTITION BY i), rank() OVER (PARTITION BY i, 1), rank() OVER (PARTITION BY i, 2)
+# FROM
+#     a
+
+# EliminateWindow removes a Window operator with no window functions (which can
+# occur via column pruning).
+[EliminateWindow, Normalize]
+(Window $input:* [])
+=>
+$input
+
+# ReduceWindowPartitionCols reduces a set of partition columns to a simpler form
+# using FDs.
+[ReduceWindowPartitionCols, Normalize]
+(Window
+    $input:*
+    $fn:*
+    $private:* & (CanReduceWindowPartitionCols $input $private)
+)
+=>
+(Window
+    $input
+    $fn
+    (ReduceWindowPartitionCols $input $private)
+)
+
+# SimplifyWindowOrdering reduces an ordering to a simpler form using FDs.
+[SimplifyWindowOrdering, Normalize]
+(Window
+    $input:*
+    $fn:*
+    $private:* & (CanSimplifyWindowOrdering $input $private)
+)
+=>
+(Window
+    $input
+    $fn
+    (SimplifyWindowOrdering $input $private)
+)

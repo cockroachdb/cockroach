@@ -368,6 +368,64 @@
     $passthrough
 )
 
+# PruneWindowOutputCols eliminates unused window functions from a Window
+# expression.
+[PruneWindowOutputCols, Normalize]
+(Project
+    (Window
+        $input:*
+        $windows:*
+        $private:*
+    )
+    $projections:*
+    $passthrough:* & (CanPruneWindows
+        $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+        $windows
+    )
+)
+=>
+(Project
+    (Window
+        $input
+        (PruneWindows $needed $windows)
+        $private
+    )
+    $projections
+    $passthrough
+)
+
+# PruneWindowInputCols discards window passthrough columns which are never used.
+# NB: This rule should go after PruneWindowOutputCols, or else this rule can get
+# into a cycle.
+[PruneWindowInputCols, Normalize]
+(Project
+    $input:(Window
+        $innerInput:*
+        $fn:*
+        $private:*
+    )
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols3
+                (NeededWindowCols $fn $private)
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
+)
+=>
+(Project
+    (Window
+      (PruneCols $innerInput $needed)
+      $fn
+      $private
+    )
+    $projections
+    $passthrough
+)
+
 # PruneMutationFetchCols removes columns from the mutation operator's FetchCols
 # set if they are never used. Removing FetchCols can in turn can trigger the
 # PruneMutationInputCols rule, which can prune any input columns which are now
