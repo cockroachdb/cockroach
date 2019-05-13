@@ -139,7 +139,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 	d := newOrderData{
 		wID:    wID,
 		dID:    int(randInt(rng, 1, 10)),
-		cID:    randCustomerID(rng),
+		cID:    n.config.randCustomerID(rng),
 		oOlCnt: int(randInt(rng, 5, 15)),
 	}
 	d.items = make([]orderItem, d.oOlCnt)
@@ -174,7 +174,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 		} else {
 			// Loop until we find a unique item ID.
 			for {
-				item.olIID = randItemID(rng)
+				item.olIID = n.config.randItemID(rng)
 				if _, ok := itemIDs[item.olIID]; !ok {
 					itemIDs[item.olIID] = struct{}{}
 					break

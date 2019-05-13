@@ -12,11 +12,7 @@
 
 package faker
 
-import (
-	"sort"
-
-	"golang.org/x/exp/rand"
-)
+import "golang.org/x/exp/rand"
 
 // This is a rough go port of https://github.com/joke2k/faker.
 
@@ -57,7 +53,6 @@ func makeWeightedEntries(entriesAndWeights ...interface{}) *weightedEntries {
 		we = append(we, weightedEntry{weight: w, entry: e})
 		totalWeight += w
 	}
-	sort.Slice(we, func(i, j int) bool { return we[i].weight < we[j].weight })
 	return &weightedEntries{entries: we, totalWeight: totalWeight}
 }
 
