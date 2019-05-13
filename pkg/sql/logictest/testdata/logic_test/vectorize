@@ -96,6 +96,23 @@ SELECT b + 1 FROM a WHERE b < 3
 2
 3
 
+# Simple projection with nulls.
+query I rowsort
+SELECT b + 1 FROM nulls
+----
+NULL
+NULL
+2
+2
+
+query III rowsort
+SELECT a, b, a + b FROM nulls
+----
+NULL NULL NULL
+NULL 1    NULL
+1    NULL NULL
+1    1    2
+
 # Multiple step projection.
 query III
 SELECT a, b, (a + 1) * (b + 2) FROM a WHERE a < 3

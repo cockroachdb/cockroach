@@ -257,3 +257,13 @@ func (n *Nulls) Or(n2 *Nulls) *Nulls {
 		nulls:    nulls,
 	}
 }
+
+// Copy returns a copy of n which can be modified independently.
+func (n *Nulls) Copy() Nulls {
+	c := Nulls{
+		hasNulls: n.hasNulls,
+		nulls:    make([]uint64, len(n.nulls)),
+	}
+	copy(c.nulls, n.nulls)
+	return c
+}
