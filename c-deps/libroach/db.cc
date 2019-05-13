@@ -14,6 +14,7 @@
 
 #include "db.h"
 #include <algorithm>
+#include <iostream>
 #include <rocksdb/convenience.h>
 #include <rocksdb/perf_context.h>
 #include <rocksdb/sst_file_writer.h>
@@ -31,6 +32,7 @@
 #include "fmt.h"
 #include "getter.h"
 #include "godefs.h"
+#include "incremental_iterator.h"
 #include "iterator.h"
 #include "merge.h"
 #include "options.h"
@@ -131,7 +133,6 @@ DBIterState DBIterGetState(DBIterator* iter) {
 
   return state;
 }
-
 }  // namespace
 
 namespace cockroach {
@@ -269,10 +270,9 @@ DBStatus DBCreateCheckpoint(DBEngine* db, DBSlice dir) {
   // NB: passing 0 for log_size_for_flush forces a WAL sync, i.e. makes sure
   // that the checkpoint is up to date.
   status = cp_ptr->CreateCheckpoint(cp_dir, 0 /* log_size_for_flush */);
-  delete(cp_ptr);
+  delete (cp_ptr);
   return ToDBStatus(status);
 }
-
 
 DBStatus DBDestroy(DBSlice dir) {
   rocksdb::Options options;
@@ -835,12 +835,18 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
   return kSuccess;
 }
 
-DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
-  rocksdb::Status status = fw->rep.Put(EncodeKey(key), ToSlice(val));
+DBStatus DBSstFileWriterAddRaw(DBSstFileWriter* fw, const rocksdb::Slice key,
+                               const rocksdb::Slice val) {
+  rocksdb::Status status = fw->rep.Put(key, val);
   if (!status.ok()) {
     return ToDBStatus(status);
   }
+
   return kSuccess;
+}
+
+DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
+  return DBSstFileWriterAddRaw(fw, EncodeKey(key), ToSlice(val));
 }
 
 DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key) {
@@ -908,4 +914,65 @@ DBStatus DBLockFile(DBSlice filename, DBFileLock* lock) {
 
 DBStatus DBUnlockFile(DBFileLock lock) {
   return ToDBStatus(rocksdb::Env::Default()->UnlockFile((rocksdb::FileLock*)lock));
+}
+
+DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIterOptions iter_opts,
+                       DBEngine* engine, DBString* data, int64_t* entries, int64_t* data_size,
+                       DBString* write_intent) {
+  DBSstFileWriter* writer = DBSstFileWriterNew();
+  DBStatus status = DBSstFileWriterOpen(writer);
+  if (status.data != NULL) {
+    return status;
+  }
+
+  *entries = 0;
+  *data_size = 0;
+
+  DBIncrementalIterator iter(engine, iter_opts, start, end, write_intent);
+
+  bool skip_current_key_versions = !export_all_revisions;
+  DBIterState state;
+  for (state = iter.seek(start);; state = iter.next(skip_current_key_versions)) {
+    if (state.status.data != NULL) {
+      DBSstFileWriterClose(writer);
+      return state.status;
+    } else if (!state.valid || kComparator.Compare(iter.key(), EncodeKey(end)) >= 0) {
+      break;
+    }
+
+    rocksdb::Slice decoded_key;
+    int64_t wall_time = 0;
+    int32_t logical_time = 0;
+
+    if (!DecodeKey(iter.key(), &decoded_key, &wall_time, &logical_time)) {
+      DBSstFileWriterClose(writer);
+      return ToDBString("Unable to decode key");
+    }
+
+    // Skip tombstone (len=0) records when start time is zero (non-incremental)
+    // and we are not exporting all versions.
+    bool is_skipping_deletes = start.wall_time == 0 && start.logical == 0 && !export_all_revisions;
+    if (is_skipping_deletes && iter.value().size() == 0) {
+      continue;
+    }
+
+    // Insert key into sst and update statistics.
+    status = DBSstFileWriterAddRaw(writer, iter.key(), iter.value());
+    if (status.data != NULL) {
+      DBSstFileWriterClose(writer);
+      return status;
+    }
+    (*entries)++;
+    (*data_size) += iter.key().size() + iter.value().size();
+  }
+
+  if (*entries == 0) {
+    DBSstFileWriterClose(writer);
+    return kSuccess;
+  }
+
+  auto res = DBSstFileWriterFinish(writer, data);
+  DBSstFileWriterClose(writer);
+
+  return res;
 }
