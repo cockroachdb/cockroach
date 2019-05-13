@@ -190,10 +190,10 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 	// 2.5.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
 	if rng.Intn(100) < 60 {
-		d.cLast = string(randCLast(rng, &p.a))
+		d.cLast = string(p.config.randCLast(rng, &p.a))
 		atomic.AddUint64(&p.config.auditor.paymentsByLastName, 1)
 	} else {
-		d.cID = randCustomerID(rng)
+		d.cID = p.config.randCustomerID(rng)
 	}
 
 	tx, err := p.mcp.Get().BeginEx(ctx, p.config.txOpts)
