@@ -557,7 +557,9 @@ DBIterator* DBBatch::NewIter(DBIterOptions iter_options) {
 
 DBStatus DBBatch::GetStats(DBStatsResult* stats) { return FmtStatus("unsupported"); }
 
-DBStatus DBBatch::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) {
+  return FmtStatus("unsupported");
+}
 
 DBString DBBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
@@ -656,7 +658,9 @@ DBIterator* DBWriteOnlyBatch::NewIter(DBIterOptions) { return NULL; }
 
 DBStatus DBWriteOnlyBatch::GetStats(DBStatsResult* stats) { return FmtStatus("unsupported"); }
 
-DBStatus DBWriteOnlyBatch::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) {
+  return FmtStatus("unsupported");
+}
 
 DBString DBWriteOnlyBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
