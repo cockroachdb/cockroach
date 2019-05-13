@@ -3293,9 +3293,11 @@ func TestMergeQueue(t *testing.T) {
 	store := mtc.Store(0)
 	store.SetMergeQueueActive(true)
 
-	split := func(t *testing.T, key roachpb.Key) {
+	split := func(t *testing.T, key roachpb.Key, manual bool) {
 		t.Helper()
-		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), adminSplitArgs(key)); pErr != nil {
+		args := adminSplitArgs(key)
+		args.Manual = manual
+		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -3313,7 +3315,7 @@ func TestMergeQueue(t *testing.T) {
 	rhsStartKey := roachpb.RKey("b")
 	rhsEndKey := roachpb.RKey("c")
 	for _, k := range []roachpb.RKey{lhsStartKey, rhsStartKey, rhsEndKey} {
-		split(t, k.AsRawKey())
+		split(t, k.AsRawKey(), false)
 	}
 	lhs := func() *storage.Replica { return store.LookupReplica(lhsStartKey) }
 	rhs := func() *storage.Replica { return store.LookupReplica(rhsStartKey) }
@@ -3338,7 +3340,7 @@ func TestMergeQueue(t *testing.T) {
 		}
 		setZones(config.DefaultZoneConfig())
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
-		split(t, roachpb.Key("b"))
+		split(t, roachpb.Key("b"), false)
 	}
 
 	verifyMerged := func(t *testing.T) {
@@ -3410,6 +3412,25 @@ func TestMergeQueue(t *testing.T) {
 		mtc.transferLease(ctx, rhs().RangeID, 0, 1)
 		mtc.unreplicateRange(rhs().RangeID, 0)
 		clearRange(t, lhsStartKey, rhsEndKey)
+		store.MustForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	t.Run("sticky bit", func(t *testing.T) {
+		reset(t)
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// Perform manual merge and verify that no merge occurred
+		split(t, rhsStartKey.AsRawKey(), true)
+		clearRange(t, lhsStartKey, rhsEndKey)
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// Delete sticky bit and verify that merge occurs
+		if err := store.DB().Del(ctx, keys.SplitStickyBitKey(rhsStartKey)); err != nil {
+			t.Fatal(err)
+		}
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})

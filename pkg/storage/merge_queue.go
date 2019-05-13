@@ -210,6 +210,20 @@ func (mq *mergeQueue) requestRangeStats(
 		res.(*roachpb.RangeStatsResponse).QueriesPerSecond, nil
 }
 
+func (mq *mergeQueue) isManualSplit(ctx context.Context, splitKey roachpb.RKey) (bool, error) {
+	res, pErr := client.SendWrappedWith(ctx, mq.db.NonTransactionalSender(), roachpb.Header{}, &roachpb.GetRequest{
+		RequestHeader: roachpb.RequestHeader{Key: keys.SplitStickyBitKey(splitKey)},
+	})
+	if pErr != nil {
+		return false, pErr.GoError()
+	}
+	value := res.(*roachpb.GetResponse).Value
+	if value == nil {
+		return false, nil
+	}
+	return value.GetBool()
+}
+
 func (mq *mergeQueue) process(
 	ctx context.Context, lhsRepl *Replica, sysCfg *config.SystemConfig,
 ) error {
@@ -289,6 +303,15 @@ func (mq *mergeQueue) process(
 		if err := mq.store.DB().AdminRelocateRange(ctx, rhsDesc.StartKey, targets); err != nil {
 			return err
 		}
+	}
+
+	manualSplit, err := mq.isManualSplit(ctx, lhsDesc.EndKey)
+	if err != nil {
+		return err
+	}
+	if manualSplit {
+		log.VEventf(ctx, 2, "skipping merge: ranges were manually split")
+		return nil
 	}
 
 	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)

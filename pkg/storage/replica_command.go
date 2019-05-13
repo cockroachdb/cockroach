@@ -224,14 +224,13 @@ func (r *Replica) adminSplitWithDescriptor(
 		}
 		log.Event(ctx, "range already split")
 		// Even if the range is already split, we should still set the sticky bit
-		err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			b := txn.NewBatch()
-			if args.Manual {
-				b.Put(keys.SplitStickyBitKey(desc.StartKey), true)
-			}
-			return txn.Run(ctx, b)
-		})
-		return reply, err
+		if args.Manual {
+			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				return txn.Put(ctx, keys.SplitStickyBitKey(desc.StartKey), true)
+			})
+			return reply, err
+		}
+		return reply, nil
 	}
 	log.Event(ctx, "found split key")
 
