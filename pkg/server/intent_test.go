@@ -112,8 +112,6 @@ func TestIntentResolution(t *testing.T) {
 					}
 					return nil
 				}
-			// Prevent the merge queue from immediately discarding our splits.
-			storeKnobs.DisableMergeQueue = true
 
 			// TODO(benesch): starting a test server for every test case is needlessly
 			// inefficient.
