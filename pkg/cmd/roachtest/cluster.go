@@ -1940,11 +1940,15 @@ func (m *monitor) wait(args ...string) error {
 }
 
 func waitForFullReplication(t *test, db *gosql.DB) {
+	tStart := timeutil.Now()
 	for ok := false; !ok; time.Sleep(time.Second) {
 		if err := db.QueryRow(
 			"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
 		).Scan(&ok); err != nil {
 			t.Fatal(err)
+		}
+		if timeutil.Since(tStart) > 30*time.Second {
+			t.l.Printf("still waiting for full replication")
 		}
 	}
 }

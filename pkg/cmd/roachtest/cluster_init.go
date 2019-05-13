@@ -34,6 +34,13 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 
 	addrs := c.InternalAddr(ctx, c.All())
 
+	// TODO(tbg): this should never happen, but I saw it locally. The result
+	// is the test hanging forever, because all nodes will create their own
+	// single node cluster and waitForFullReplication never returns.
+	if addrs[0] == "" {
+		t.Fatal("no address for first node")
+	}
+
 	// Legacy-style init where we start node 1 without a join flag and then point
 	// the other nodes at it.
 	func() {

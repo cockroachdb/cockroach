@@ -17,13 +17,18 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 type session interface {
@@ -43,13 +48,21 @@ type session interface {
 
 type remoteSession struct {
 	*exec.Cmd
-	cancel func()
+	cancel  func()
+	logfile string // captures ssh -vvv
 }
 
 func newRemoteSession(user, host string) (*remoteSession, error) {
+	logfile := filepath.Join(
+		os.TempDir(),
+		fmt.Sprintf("ssh_%s_%s", host, timeutil.Now().Format(time.RFC3339)),
+	)
 	args := []string{
 		user + "@" + host,
-		"-q",
+		"-vvv", "-E", logfile,
+		// NB: -q suppresses -E, at least on OSX. Difficult decisions will have
+		// to be made if omitting -q leads to annoyance on stdout/stderr.
+		// "-q",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
 		// Send keep alives every minute to prevent connections without activity
@@ -62,17 +75,26 @@ func newRemoteSession(user, host string) (*remoteSession, error) {
 	args = append(args, sshAuthArgs()...)
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, "ssh", args...)
-	return &remoteSession{cmd, cancel}, nil
+	return &remoteSession{cmd, cancel, logfile}, nil
+}
+
+func (s *remoteSession) errWithDebug(err error) error {
+	if err != nil {
+		debug, _ := ioutil.ReadFile(s.logfile)
+		err = errors.Wrapf(err, "ssh verbose log:\n%s\n%s", s.Cmd.Args, debug)
+	}
+	return err
 }
 
 func (s *remoteSession) CombinedOutput(cmd string) ([]byte, error) {
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return s.Cmd.CombinedOutput()
+	b, err := s.Cmd.CombinedOutput()
+	return b, s.errWithDebug(err)
 }
 
 func (s *remoteSession) Run(cmd string) error {
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return s.Cmd.Run()
+	return s.errWithDebug(s.Cmd.Run())
 }
 
 func (s *remoteSession) Start(cmd string) error {
@@ -116,6 +138,7 @@ func (s *remoteSession) Wait() error {
 }
 
 func (s *remoteSession) Close() {
+	_ = os.Remove(s.logfile)
 	s.cancel()
 }
 
