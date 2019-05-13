@@ -114,7 +114,14 @@ func (u UUID) bytes() []byte {
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
 func (u UUID) String() string {
 	buf := make([]byte, 36)
+	u.StringBytes(buf)
+	return string(buf)
+}
 
+// StringBytes writes the result of String directly into a buffer, which must
+// have a length of at least 36.
+func (u UUID) StringBytes(buf []byte) {
+	_ = buf[:36]
 	hex.Encode(buf[0:8], u[0:4])
 	buf[8] = '-'
 	hex.Encode(buf[9:13], u[4:6])
@@ -124,8 +131,6 @@ func (u UUID) String() string {
 	hex.Encode(buf[19:23], u[8:10])
 	buf[23] = '-'
 	hex.Encode(buf[24:], u[10:])
-
-	return string(buf)
 }
 
 // SetVersion sets the version bits.
