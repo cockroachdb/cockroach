@@ -1017,87 +1017,42 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 	return items
 }
 
-// separatePushDownFilters breaks up the filters into two disjoint sets. The
-// first being the set of filters that can be pushed onto either side of any
-// set operator, and the second being the complement.
-// For a FilterItem to be pushed down, none of the columns referenced can
-// have a composite key encoding.
-func (c *CustomFuncs) separatePushDownFilters(
-	filters memo.FiltersExpr,
-) (memo.FiltersExpr, memo.FiltersExpr) {
-	var pushFilters memo.FiltersExpr
-	var noPushFilters memo.FiltersExpr
-	for _, filter := range filters {
-		filterProps := filter.ScalarProps(c.mem)
-		hasCompositeKeyEncoding := false
-		filterProps.OuterCols.ForEach(func(i int) {
-			colType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
-			if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
-				hasCompositeKeyEncoding = true
-			}
-		})
-
-		if hasCompositeKeyEncoding || filterProps.HasCorrelatedSubquery {
-			noPushFilters = append(noPushFilters, filter)
-		} else {
-			pushFilters = append(pushFilters, filter)
+// CanMapOnSetOp determines whether the filter can be mapped to either
+// side of a set operator.
+func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
+	filterProps := src.ScalarProps(c.mem)
+	for i, ok := filterProps.OuterCols.Next(0); ok; i, ok = filterProps.OuterCols.Next(i + 1) {
+		colType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+		if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
+			return false
 		}
 	}
-
-	return pushFilters, noPushFilters
+	return !filterProps.HasCorrelatedSubquery
 }
 
-// UnmappableFilters finds and emits a subset of the filters that cannot
-// be mapped to either side of any set operation. See comment above
-// separatePushDownFilter for more details.
-func (c *CustomFuncs) UnmappableFilters(filters memo.FiltersExpr) memo.FiltersExpr {
-	_, unmappableFilters := c.separatePushDownFilters(filters)
-	return unmappableFilters
-}
-
-// HasMappableFilters determines whether at least one filter in the FiltersExpr
-// can be mapped to either side of a set operator.
-func (c *CustomFuncs) HasMappableFilters(filters memo.FiltersExpr) bool {
-	for _, filter := range filters {
-		filterProps := filter.ScalarProps(c.mem)
-		hasCompositeKeyEncoding := false
-		filterProps.OuterCols.ForEach(func(i int) {
-			colType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
-			if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
-				hasCompositeKeyEncoding = true
-			}
-		})
-		if !hasCompositeKeyEncoding && !filterProps.HasCorrelatedSubquery {
-			return true
-		}
-	}
-	return false
-}
-
-// MapFiltersOnLeft replaces the columns in the filters that are in the OutCols
-// of the set operation to the corresponding ones on the left side of the op.
+// MapSetOpFilterLeft maps the filter onto the left expression by replacing
+// the out columns of the filter with the appropriate corresponding columns in
+// the left side of the operator.
 // Useful for pushing filters to relations the set operation is composed of.
-func (c *CustomFuncs) MapFiltersOnLeft(
-	filters memo.FiltersExpr, set *memo.SetPrivate,
-) memo.FiltersExpr {
-	pushDownFilters, _ := c.separatePushDownFilters(filters)
-	return c.setMap(pushDownFilters, set.OutCols, set.LeftCols)
+func (c *CustomFuncs) MapSetOpFilterLeft(
+	filter *memo.FiltersItem, set *memo.SetPrivate,
+) opt.ScalarExpr {
+	return c.mapSetOpFilter(filter, set.OutCols, set.LeftCols)
 }
 
-// MapFiltersOnRight replaces the columns in the filters that are in the OutCols
-// of the set operation to the corresponding ones on the right side of the op.
+// MapSetOpFilterRight maps the filter onto the right expression by replacing
+// the out columns of the filter with the appropriate corresponding columns in
+// the right side of the operator.
 // Useful for pushing filters to relations the set operation is composed of.
-func (c *CustomFuncs) MapFiltersOnRight(
-	filters memo.FiltersExpr, set *memo.SetPrivate,
-) memo.FiltersExpr {
-	pushDownFilters, _ := c.separatePushDownFilters(filters)
-	return c.setMap(pushDownFilters, set.OutCols, set.RightCols)
+func (c *CustomFuncs) MapSetOpFilterRight(
+	filter *memo.FiltersItem, set *memo.SetPrivate,
+) opt.ScalarExpr {
+	return c.mapSetOpFilter(filter, set.OutCols, set.RightCols)
 }
 
-// setMap maps filters expressions to use the output columns of the relational
-// expression dst instead of the columns in src.
-//
-// setMap assumes the two relations are union compatible.
+// mapSetOpFilter maps filter expressions to dst by replacing occurrences of
+// columns in src with corresponding columns in dst (the two lists must be of
+// equal length).
 //
 // For each column in src that is not an outer column, SetMap replaces it with
 // the corresponding column in dst.
@@ -1106,13 +1061,13 @@ func (c *CustomFuncs) MapFiltersOnRight(
 //
 //   SELECT * FROM (SELECT x FROM a UNION SELECT y FROM b) WHERE x < 5
 //
-// If setMap is called on the left subtree of the Union, the filter x < 5
-// propagate to that side after mapping the column IDs appropriately. WLOG,
-// If setMap is called on the right subtree, the filter x < 5 will be mapped
-// similarly to y < 5 on the right side.
-func (c *CustomFuncs) setMap(
-	filters memo.FiltersExpr, src opt.ColList, dst opt.ColList,
-) memo.FiltersExpr {
+// If mapSetOpFilter is called on the left subtree of the Union, the filter
+// x < 5 propagates to that side after mapping the column IDs appropriately.
+// WLOG, If setMap is called on the right subtree, the filter x < 5 will be
+// mapped similarly to y < 5 on the right side.
+func (c *CustomFuncs) mapSetOpFilter(
+	filter *memo.FiltersItem, src opt.ColList, dst opt.ColList,
+) opt.ScalarExpr {
 	// Map each column in src to one column in dst to map the
 	// filters appropriately.
 	var colMap util.FastIntMap
@@ -1136,13 +1091,7 @@ func (c *CustomFuncs) setMap(
 		return c.f.Replace(nd, replace)
 	}
 
-	// Replace every FilterItem in the filters expression before creating new FilterExpr
-	var mappedFilter memo.FiltersExpr
-	for _, filterItem := range filters {
-		mappedFilter = append(mappedFilter,
-			memo.FiltersItem{Condition: replace(filterItem.Condition).(opt.ScalarExpr)})
-	}
-	return mappedFilter
+	return replace(filter.Condition).(opt.ScalarExpr)
 }
 
 // ----------------------------------------------------------------------
