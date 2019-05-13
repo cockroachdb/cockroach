@@ -235,8 +235,7 @@ DBStatus DBImpl::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) {
   const std::shared_ptr<rocksdb::Statistics>& s = opts.statistics;
   stats->tickers_len = rocksdb::TickersNameMap.size();
   // We malloc the result so it can be deallocated by the caller using free().
-  stats->tickers = static_cast<TickerInfo*>(
-      malloc(stats->tickers_len * sizeof(TickerInfo)));
+  stats->tickers = static_cast<TickerInfo*>(malloc(stats->tickers_len * sizeof(TickerInfo)));
   if (stats->tickers == nullptr) {
     return FmtStatus("malloc failed");
   }
@@ -247,8 +246,8 @@ DBStatus DBImpl::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) {
 
   stats->histograms_len = rocksdb::HistogramsNameMap.size();
   // We malloc the result so it can be deallocated by the caller using free().
-  stats->histograms = static_cast<HistogramInfo*>(
-      malloc(stats->histograms_len * sizeof(HistogramInfo)));
+  stats->histograms =
+      static_cast<HistogramInfo*>(malloc(stats->histograms_len * sizeof(HistogramInfo)));
   if (stats->histograms == nullptr) {
     return FmtStatus("malloc failed");
   }

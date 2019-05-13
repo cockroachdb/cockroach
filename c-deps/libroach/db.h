@@ -97,3 +97,8 @@ void BatchSSTablesForCompaction(const std::vector<rocksdb::SstFileMetaData>& sst
                                 uint64_t target_size, std::vector<rocksdb::Range>* ranges);
 
 }  // namespace cockroach
+
+// DBSstFileWriterAddRaw is used internally -- DBSstFileWriterAdd is the
+// preferred function for Go callers.
+DBStatus DBSstFileWriterAddRaw(DBSstFileWriter* fw, const ::rocksdb::Slice key,
+                               const ::rocksdb::Slice val);
