@@ -423,6 +423,13 @@ func QueueLastProcessedKey(key roachpb.RKey, queue string) roachpb.Key {
 	return MakeRangeKey(key, LocalQueueLastProcessedSuffix, roachpb.RKey(queue))
 }
 
+// SplitStickyBitKey returns a range-local key for the sticky bit of the range.
+// The key will be at the boundary of two ranges. If the sticky bit is set, then
+// the two ranges will not be automatically merged.
+func SplitStickyBitKey(key roachpb.RKey) roachpb.Key {
+	return MakeRangeKey(key, LocalSplitStickyBitSuffix, nil)
+}
+
 // IsLocal performs a cheap check that returns true iff a range-local key is
 // passed, that is, a key for which `Addr` would return a non-identical RKey
 // (or a decoding error).

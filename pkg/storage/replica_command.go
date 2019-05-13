@@ -223,7 +223,15 @@ func (r *Replica) adminSplitWithDescriptor(
 			log.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
 		}
 		log.Event(ctx, "range already split")
-		return reply, nil
+		// Even if the range is already split, we should still set the sticky bit
+		err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			b := txn.NewBatch()
+			if args.Manual {
+				b.Put(keys.SplitStickyBitKey(desc.StartKey), true)
+			}
+			return txn.Run(ctx, b)
+		})
+		return reply, err
 	}
 	log.Event(ctx, "found split key")
 
@@ -304,6 +312,11 @@ func (r *Replica) adminSplitWithDescriptor(
 		// Update range descriptor addressing record(s).
 		if err := splitRangeAddressing(b, rightDesc, &leftDesc); err != nil {
 			return err
+		}
+
+		// Add sticky bit
+		if args.Manual {
+			b.Put(keys.SplitStickyBitKey(rightDesc.StartKey), true)
 		}
 
 		// End the transaction manually, instead of letting RunTransaction
@@ -533,7 +546,10 @@ func (r *Replica) AdminMerge(
 }
 
 func waitForApplication(
-	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor, leaseIndex uint64,
+	ctx context.Context,
+	dialer *nodedialer.Dialer,
+	desc roachpb.RangeDescriptor,
+	leaseIndex uint64,
 ) error {
 	return contextutil.RunWithTimeout(ctx, "wait for application", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)

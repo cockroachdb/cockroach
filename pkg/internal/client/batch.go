@@ -602,8 +602,9 @@ func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}) {
 		RequestHeader: roachpb.RequestHeader{
 			Key: spanKey,
 		},
+		SplitKey: splitKey,
+		Manual:   true,
 	}
-	req.SplitKey = splitKey
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
 }
