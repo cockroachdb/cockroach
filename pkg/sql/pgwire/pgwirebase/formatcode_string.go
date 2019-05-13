@@ -4,6 +4,14 @@ package pgwirebase
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[FormatText-0]
+	_ = x[FormatBinary-1]
+}
+
 const _FormatCode_name = "FormatTextFormatBinary"
 
 var _FormatCode_index = [...]uint8{0, 10, 22}

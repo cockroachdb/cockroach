@@ -135,6 +135,8 @@ func (b *RocksDBBatchBuilder) Len() int {
 	return len(b.repr)
 }
 
+var _ = (*RocksDBBatchBuilder).Len
+
 // getRepr constructs the batch representation and returns it.
 func (b *RocksDBBatchBuilder) getRepr() []byte {
 	b.maybeInit()

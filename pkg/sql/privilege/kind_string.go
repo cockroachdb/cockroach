@@ -4,6 +4,20 @@ package privilege
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[ALL-1]
+	_ = x[CREATE-2]
+	_ = x[DROP-3]
+	_ = x[GRANT-4]
+	_ = x[SELECT-5]
+	_ = x[INSERT-6]
+	_ = x[DELETE-7]
+	_ = x[UPDATE-8]
+}
+
 const _Kind_name = "ALLCREATEDROPGRANTSELECTINSERTDELETEUPDATE"
 
 var _Kind_index = [...]uint8{0, 3, 9, 13, 18, 24, 30, 36, 42}

@@ -4,6 +4,14 @@ package sql
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[implicitTxn-0]
+	_ = x[explicitTxn-1]
+}
+
 const _txnType_name = "implicitTxnexplicitTxn"
 
 var _txnType_index = [...]uint8{0, 11, 22}
