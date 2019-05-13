@@ -636,6 +636,7 @@ message AdminSplitRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes split_key = 2 [(gogoproto.casttype) = "Key"];
+  bool manual = 3;
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()

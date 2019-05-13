@@ -167,6 +167,9 @@ var (
 	// LocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	LocalRangeDescriptorSuffix = roachpb.RKey("rdsc")
+	// LocalSplitStickyBitSuffix specifies the key suffix for the sticky bit
+	// used to describe if a split is manually or automatically performed.
+	LocalSplitStickyBitSuffix = roachpb.RKey("stky")
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++

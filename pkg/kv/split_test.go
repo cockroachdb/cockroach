@@ -257,3 +257,76 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestSplitStickyBit checks that the sticky bit is set when performing a manual split
+func TestRangeSplitsStickyBit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
+		DisableScanner:    true,
+		DisableSplitQueue: true,
+		DisableMergeQueue: true,
+	})
+	defer s.Stop()
+
+	ctx := context.TODO()
+	splitKey := roachpb.RKey("aa")
+	stickyBitKey := keys.SplitStickyBitKey(splitKey)
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey()); err != nil {
+		t.Fatal(err)
+	}
+
+	kv, err := s.DB.Get(ctx, stickyBitKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !kv.Exists() {
+		t.Fatal("Sticky bit does not exist after splitting")
+	}
+
+	val, err := kv.Value.GetBool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !val {
+		t.Fatal("Sticky bit not set after splitting")
+	}
+}
+
+func TestRangeSplitsAlreadySplitStickyBit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
+		DisableScanner:    true,
+		DisableSplitQueue: true,
+		DisableMergeQueue: true,
+	})
+	defer s.Stop()
+
+	ctx := context.TODO()
+	splitKey := roachpb.RKey("aa")
+	stickyBitKey := keys.SplitStickyBitKey(splitKey)
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB.Del(ctx, stickyBitKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey()); err != nil {
+		t.Fatal(err)
+	}
+
+	kv, err := s.DB.Get(ctx, stickyBitKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !kv.Exists() {
+		t.Fatal("Sticky bit does not exist after splitting")
+	}
+
+	val, err := kv.Value.GetBool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !val {
+		t.Fatal("Sticky bit not set after splitting")
+	}
+}
