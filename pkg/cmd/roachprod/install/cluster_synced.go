@@ -297,7 +297,7 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 	var wg sync.WaitGroup
 
 	for i := range nodes {
-		wg.Add(2)
+		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			sess, err := c.newSession(nodes[i])
@@ -314,18 +314,6 @@ func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMo
 				wg.Done()
 				return
 			}
-
-			go func(p io.Reader) {
-				defer wg.Done()
-				r := bufio.NewReader(p)
-				for {
-					line, _, err := r.ReadLine()
-					if err == io.EOF {
-						return
-					}
-					ch <- NodeMonitorInfo{Index: nodes[i], Msg: string(line)}
-				}
-			}(p)
 
 			// On each monitored node, we loop looking for a cockroach process. In
 			// order to avoid polling with lsof, if we find a live process we use nc
@@ -401,7 +389,31 @@ done
 				return
 			}
 			defer inPipe.Close()
-			if err := sess.Run(buf.String()); err != nil {
+
+			var readerWg sync.WaitGroup
+			readerWg.Add(1)
+			go func(p io.Reader) {
+				defer readerWg.Done()
+				r := bufio.NewReader(p)
+				for {
+					line, _, err := r.ReadLine()
+					if err == io.EOF {
+						return
+					}
+					ch <- NodeMonitorInfo{Index: nodes[i], Msg: string(line)}
+				}
+			}(p)
+
+			if err := sess.Start(buf.String()); err != nil {
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				return
+			}
+
+			readerWg.Wait()
+			// We must call `sess.Wait()` only after finishing reading from the stdout
+			// pipe. Otherwise it can be closed under us, causing the reader to loop
+			// infinitely receiving a non-`io.EOF` error.
+			if err := sess.Wait(); err != nil {
 				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
