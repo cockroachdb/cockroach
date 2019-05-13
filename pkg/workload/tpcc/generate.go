@@ -50,12 +50,13 @@ const (
 	creditLimit    = 50000.00
 	balance        = -10.00
 	ytdPayment     = 10.00
-	middleName     = "OE"
 	paymentCount   = 1
 	deliveryCount  = 0
 	goodCredit     = "GC"
 	badCredit      = "BC"
 )
+
+var middleName = []byte(`OE`)
 
 // These constants configure how we split the tables when splitting is enabled.
 const (
@@ -332,9 +333,9 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 	// The first 1000 customers get a last name generated according to their id;
 	// the rest get an NURand generated last name.
 	if cID <= 1000 {
-		lastName = randCLastSyllables(cID - 1)
+		lastName = randCLastSyllables(cID-1, a)
 	} else {
-		lastName = randCLast(l.rng)
+		lastName = randCLast(l.rng, a)
 	}
 
 	cb.Reset(customerColTypes, 1)
@@ -342,7 +343,7 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 	cb.ColVec(1).Int64()[0] = int64(dID)
 	cb.ColVec(2).Int64()[0] = int64(wID)
 	cb.ColVec(3).Bytes()[0] = randAString(l.rng, a, 8, 16) // first name
-	cb.ColVec(4).Bytes()[0] = []byte(middleName)
+	cb.ColVec(4).Bytes()[0] = middleName
 	cb.ColVec(5).Bytes()[0] = lastName
 	cb.ColVec(6).Bytes()[0] = randAString(l.rng, a, 10, 20) // street 1
 	cb.ColVec(7).Bytes()[0] = randAString(l.rng, a, 10, 20) // street 2
@@ -411,13 +412,16 @@ func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufal
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
 
-	rowID := uuid.MakeV4().String()
+	var rowID []byte
+	*a, rowID = a.Alloc(36, 0 /* extraCap */)
+	uuid.MakeV4().StringBytes(rowID)
+
 	cID := (rowIdx % numCustomersPerDistrict) + 1
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numCustomersPerWarehouse)
 
 	cb.Reset(historyColTypes, 1)
-	cb.ColVec(0).Bytes()[0] = []byte(rowID)
+	cb.ColVec(0).Bytes()[0] = rowID
 	cb.ColVec(1).Int64()[0] = int64(cID)
 	cb.ColVec(2).Int64()[0] = int64(dID)
 	cb.ColVec(3).Int64()[0] = int64(wID)
