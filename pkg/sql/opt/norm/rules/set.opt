@@ -74,20 +74,24 @@
 [PushFilterIntoSetOp, Normalize]
 (Select
     $input:(Set $left:* $right:* $colmap:*)
-    $filter:* & (HasMappableFilters $filter)
+    $filter:[
+        ...
+        $item:* & (CanMapOnSetOp $item)
+        ...
+    ]
 )
 =>
 (Select
   ((OpName $input)
       (Select
           $left
-          (MapFiltersOnLeft $filter $colmap)
+          [ (FiltersItem (MapSetOpFilterLeft $item $colmap)) ]
       )
       (Select
           $right
-          (MapFiltersOnRight $filter $colmap)
+          [ (FiltersItem (MapSetOpFilterRight $item $colmap)) ]
       )
       $colmap
   )
-  (UnmappableFilters $filter)
+  (RemoveFiltersItem $filter $item)
 )

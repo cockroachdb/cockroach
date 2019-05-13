@@ -170,7 +170,7 @@
         ...
         $item:(FiltersItem $condition:*) &
             (IsBoundBy $item (OutputCols $left)) &
-            (CanMap $on $item $right)
+            (CanMapJoinOpFilter $on $item $right)
         ...
     ]
 )
@@ -183,7 +183,7 @@
         )
         (Select
             $right
-            [ (FiltersItem (Map $on $item $right)) ]
+            [ (FiltersItem (MapJoinOpFilter $on $item $right)) ]
         )
         $on
         $private
@@ -210,7 +210,7 @@
         ...
         $item:(FiltersItem $condition:*) &
             (IsBoundBy $item (OutputCols $right)) &
-            (CanMap $on $item $left)
+            (CanMapJoinOpFilter $on $item $left)
         ...
     ]
 )
@@ -219,7 +219,7 @@
     ((OpName $input)
         (Select
             $left
-            [ (FiltersItem (Map $on $item $left)) ]
+            [ (FiltersItem (MapJoinOpFilter $on $item $left)) ]
         )
         (Select
             $right
