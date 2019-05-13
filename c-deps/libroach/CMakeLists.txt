@@ -33,6 +33,7 @@ add_library(roach
   file_registry.cc
   getter.cc
   godefs.cc
+  incremental_iterator.cc
   iterator.cc
   ldb.cc
   merge.cc
@@ -43,6 +44,7 @@ add_library(roach
   table_props.cc
   utils.cc
   protos/roachpb/data.pb.cc
+  protos/roachpb/errors.pb.cc
   protos/roachpb/internal.pb.cc
   protos/roachpb/metadata.pb.cc
   protos/storage/engine/enginepb/mvcc.pb.cc
