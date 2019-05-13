@@ -9,10 +9,6 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
 
-# Prevent the merge queue from immediately discarding our splits.
-statement ok
-SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
-
 statement ok
 ALTER TABLE t SPLIT AT VALUES (1), (10)
 

@@ -51,12 +51,6 @@ func TestReplicateQueueRebalance(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				ScanMinIdleTime: time.Millisecond,
 				ScanMaxIdleTime: time.Millisecond,
-				Knobs: base.TestingKnobs{
-					Store: &storage.StoreTestingKnobs{
-						// Prevent the merge queue from immediately discarding our splits.
-						DisableMergeQueue: true,
-					},
-				},
 			},
 		},
 	)
@@ -199,12 +193,6 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				ScanMinIdleTime: 10 * time.Millisecond,
 				ScanMaxIdleTime: 10 * time.Millisecond,
-				Knobs: base.TestingKnobs{
-					Store: &storage.StoreTestingKnobs{
-						// Prevent the merge queue from immediately discarding our splits.
-						DisableMergeQueue: true,
-					},
-				},
 			},
 		},
 	)
