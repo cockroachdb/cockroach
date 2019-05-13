@@ -314,14 +314,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
-				// Prevent the merge queue from immediately discarding our splits.
-				DisableMergeQueue: true,
-			},
-		},
-	})
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
 	tds := db.NonTransactionalSender()
@@ -417,14 +410,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			ctx := context.Background()
-			s, _, db := serverutils.StartServer(t, base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Store: &storage.StoreTestingKnobs{
-						// Prevent the merge queue from immediately discarding our splits.
-						DisableMergeQueue: true,
-					},
-				},
-			})
+			s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
 			ts := s.(*TestServer)
 			tds := db.NonTransactionalSender()

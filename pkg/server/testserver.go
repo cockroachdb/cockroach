@@ -639,6 +639,7 @@ func (ts *TestServer) SplitRange(
 			Key: splitKey,
 		},
 		SplitKey: splitKey,
+		Manual:   true,
 	}
 	_, pErr := client.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &splitReq)
 	if pErr != nil {
