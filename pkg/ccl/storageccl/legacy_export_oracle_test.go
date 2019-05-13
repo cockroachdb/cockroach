@@ -1,12 +1,15 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License included
+// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
-
-package engineccl
+// Change Date: 2022-10-01
+//
+// On the date above, in accordance with the Business Source License, use
+// of this software will be governed by the Apache License, Version 2.0,
+// included in the file licenses/APL.txt and at
+// http://www.apache.org/licenses/LICENSE-2.0
+package storageccl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,6 +48,9 @@ import (
 //    if err := iter.Error(); err != nil {
 //      ...
 //    }
+//
+// NOTE: This is not used by CockroachDB and has been preserved to serve as an
+// oracle to prove the correctness of the new export logic.
 type MVCCIncrementalIterator struct {
 	// TODO(dan): Move all this logic into c++ and make this a thin wrapper.
 
@@ -258,16 +264,6 @@ func (i *MVCCIncrementalIterator) sanityCheckMetadataKey() ([]byte, bool, error)
 // return true with a non-nil error.
 func (i *MVCCIncrementalIterator) Valid() (bool, error) {
 	return i.valid, i.err
-}
-
-// Key returns the current key.
-func (i *MVCCIncrementalIterator) Key() engine.MVCCKey {
-	return i.iter.Key()
-}
-
-// Value returns the current value as a byte slice.
-func (i *MVCCIncrementalIterator) Value() []byte {
-	return i.iter.Value()
 }
 
 // UnsafeKey returns the same key as Key, but the memory is invalidated on the
