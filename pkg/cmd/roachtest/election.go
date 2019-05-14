@@ -25,6 +25,7 @@ import (
 func registerElectionAfterRestart(r *registry) {
 	r.Add(testSpec{
 		Name:    "election-after-restart",
+		Skip:    "https://github.com/cockroachdb/cockroach/issues/35047",
 		Cluster: makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Status("starting up")
