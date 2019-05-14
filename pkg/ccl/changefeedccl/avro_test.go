@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -178,8 +179,15 @@ func TestAvroSchema(t *testing.T) {
 			// to be fine and we only use deserialization for testing, so we
 			// should patch the bug but it's not currently affecting changefeed
 			// correctness.
-			t := datum.(*tree.DTimestamp).Time.Truncate(time.Millisecond)
+			// TODO(mjibson): goavro appears to not support
+			// timestamps that don't fit in an int32, so
+			// restrict input to fit.
+			t := time.Unix(rng.Int63n(2e6)-1e6, rng.Int63n(1e9)).Truncate(time.Millisecond)
 			datum = tree.MakeDTimestamp(t, time.Microsecond)
+		case types.TimestampTZFamily:
+			// See comments above for TimestampFamily.
+			t := time.Unix(rng.Int63n(2e6)-1e6, rng.Int63n(1e9)).Truncate(time.Millisecond)
+			datum = tree.MakeDTimestampTZ(t, time.Microsecond)
 		case types.DecimalFamily:
 			// TODO(dan): Make RandDatum respect Precision and Width instead.
 			// TODO(dan): The precision is really meant to be in [1,10], but it
@@ -190,6 +198,11 @@ func TestAvroSchema(t *testing.T) {
 			typ = types.MakeDecimal(precision, scale)
 			coeff := rng.Int63n(int64(math.Pow10(int(precision))))
 			datum = &tree.DDecimal{Decimal: *apd.New(coeff, -scale)}
+		case types.DateFamily:
+			// TODO(mjibson): goavro appears to not support
+			// dates that don't fit in an int32, so restrict
+			// input to fit.
+			datum = tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(rng.Int63n(2e5) - 1e5))
 		}
 		serializedDatum := tree.Serialize(datum)
 		// name can be "char" (with quotes), so needs to be escaped.
