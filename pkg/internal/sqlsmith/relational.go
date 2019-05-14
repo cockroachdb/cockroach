@@ -23,8 +23,8 @@ import (
 )
 
 func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
-	idx := s.schema.stmts.Next()
-	return statements[idx].fn(s)
+	idx := s.schema.stmtSampler.Next()
+	return s.schema.statements[idx].fn(s)
 }
 
 func (s *scope) makeSelectStmt(
@@ -39,7 +39,7 @@ func (s *scope) makeSelectStmt(
 			}
 		}
 	}
-	return makeValues(s, desiredTypes, refs, withTables)
+	return makeValuesSelect(s, desiredTypes, refs, withTables)
 }
 
 func makeSchemaTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -75,44 +75,37 @@ func (s *scope) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr
 }
 
 var (
-	statements                          []statementWeight
-	tableExprs                          []tableExprWeight
-	selectStmts                         []selectStmtWeight
-	statementWeights                    []int
-	tableExprWeights, selectStmtWeights []int
-)
-
-func init() {
-	statements = []statementWeight{
+	mutatingStatements = statementWeights{
 		{10, makeInsert},
-		{10, makeSelect},
 		{10, makeDelete},
 		{10, makeUpdate},
 		{1, makeAlter},
 	}
-	statementWeights = func() []int {
-		m := make([]int, len(statements))
-		for i, s := range statements {
-			m[i] = s.weight
-		}
-		return m
-	}()
-	tableExprs = []tableExprWeight{
-		{2, makeJoinExpr},
+	nonMutatingStatements = statementWeights{
+		{10, makeSelect},
+	}
+	allStatements = append(mutatingStatements, nonMutatingStatements...)
+
+	mutatingTableExprs = tableExprWeights{
 		{1, makeInsertReturning},
 		{1, makeDeleteReturning},
 		{1, makeUpdateReturning},
-		{3, makeSchemaTable},
 	}
-	tableExprWeights = func() []int {
-		m := make([]int, len(tableExprs))
-		for i, s := range tableExprs {
-			m[i] = s.weight
-		}
-		return m
-	}()
+	nonMutatingTableExprs = tableExprWeights{
+		{2, makeJoinExpr},
+		{3, makeSchemaTable},
+		{1, makeValuesTable},
+		{1, makeSelectTable},
+	}
+	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
+
+	selectStmts       []selectStmtWeight
+	selectStmtWeights []int
+)
+
+func init() {
 	selectStmts = []selectStmtWeight{
-		{1, makeValues},
+		{1, makeValuesSelect},
 		{1, makeSetOp},
 		{1, makeSelectClause},
 	}
@@ -125,15 +118,33 @@ func init() {
 	}()
 }
 
+func (ws statementWeights) Weights() []int {
+	m := make([]int, len(ws))
+	for i, w := range ws {
+		m[i] = w.weight
+	}
+	return m
+}
+
+func (ws tableExprWeights) Weights() []int {
+	m := make([]int, len(ws))
+	for i, w := range ws {
+		m[i] = w.weight
+	}
+	return m
+}
+
 type (
 	statementWeight struct {
 		weight int
 		fn     func(s *scope) (tree.Statement, bool)
 	}
-	tableExprWeight struct {
+	statementWeights []statementWeight
+	tableExprWeight  struct {
 		weight int
 		fn     func(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
 	}
+	tableExprWeights []tableExprWeight
 	selectStmtWeight struct {
 		weight int
 		fn     selectStmt
@@ -151,8 +162,8 @@ type (
 func makeTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
 	if s.canRecurse() {
 		for i := 0; i < retryCount; i++ {
-			idx := s.schema.tableExprs.Next()
-			expr, exprRefs, ok := tableExprs[idx].fn(s, refs, forJoin)
+			idx := s.schema.tableExprSampler.Next()
+			expr, exprRefs, ok := s.schema.tableExprs[idx].fn(s, refs, forJoin)
 			if ok {
 				return expr, exprRefs, ok
 			}
@@ -214,6 +225,10 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 // STATEMENTS
 
 func (s *scope) makeWith() (*tree.With, tableRefs) {
+	if s.schema.disableWith {
+		return nil, nil
+	}
+
 	// WITHs are pretty rare, so just ignore them a lot.
 	if coin() {
 		return nil, nil
@@ -318,6 +333,40 @@ func (s *Smither) randStringComparison() tree.ComparisonOperator {
 	return stringComparisons[s.rnd.Intn(len(stringComparisons))]
 }
 
+// makeSelectTable returns a TableExpr of the form `(SELECT ...)`, which
+// would end up looking like `SELECT ... FROM (SELECT ...)`.
+func makeSelectTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	desiredTypes := makeDesiredTypes(s.schema.rnd)
+	stmt, _, ok := s.makeSelect(desiredTypes, refs)
+	if !ok {
+		return nil, nil, false
+	}
+
+	table := s.schema.name("tab")
+	names := make(tree.NameList, len(desiredTypes))
+	clauseRefs := make(colRefs, len(desiredTypes))
+	for i, typ := range desiredTypes {
+		names[i] = s.schema.name("col")
+		clauseRefs[i] = &colRef{
+			typ: typ,
+			item: tree.NewColumnItem(
+				tree.NewUnqualifiedTableName(table),
+				names[i],
+			),
+		}
+	}
+
+	return &tree.AliasedTableExpr{
+		Expr: &tree.Subquery{
+			Select: &tree.ParenSelect{Select: stmt},
+		},
+		As: tree.AliasClause{
+			Alias: table,
+			Cols:  names,
+		},
+	}, clauseRefs, true
+}
+
 func makeSelectClause(
 	s *scope, desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (tree.SelectStatement, colRefs, tableRefs, bool) {
@@ -333,7 +382,9 @@ func (s *scope) makeSelectClause(
 	}
 
 	var fromRefs colRefs
-	for len(clause.From.Tables) < 1 || coin() {
+	// Sometimes generate a SELECT with no FROM clause.
+	requireFrom := d6() != 1
+	for (requireFrom && len(clause.From.Tables) < 1) || coin() {
 		var from tree.TableExpr
 		if len(withTables) == 0 || coin() {
 			// Add a normal data source.
@@ -353,42 +404,47 @@ func (s *scope) makeSelectClause(
 		}
 		clause.From.Tables = append(clause.From.Tables, from)
 	}
-	clause.Where = s.makeWhere(fromRefs)
-	orderByRefs = fromRefs
-	selectListRefs := fromRefs
+
+	selectListRefs := refs
 	ctx := emptyCtx
 
-	if d6() <= 2 {
-		// Enable GROUP BY. Choose some random subset of the
-		// fromRefs.
-		// TODO(mjibson): Refence handling and aggregation functions
-		// aren't quite handled correctly here. This currently
-		// does well enough to at least find some bugs but should
-		// be improved to do the correct thing wrt aggregate
-		// functions. That is, the select and having exprs can
-		// either reference a group by column or a non-group by
-		// column in an aggregate function. It's also possible
-		// the where and order by exprs are not correct.
-		groupByRefs := fromRefs.extend()
-		s.schema.rnd.Shuffle(len(groupByRefs), func(i, j int) {
-			groupByRefs[i], groupByRefs[j] = groupByRefs[j], groupByRefs[i]
-		})
-		var groupBy tree.GroupBy
-		for (len(groupBy) < 1 || coin()) && len(groupBy) < len(groupByRefs) {
-			groupBy = append(groupBy, groupByRefs[len(groupBy)].item)
+	if len(clause.From.Tables) > 0 {
+		clause.Where = s.makeWhere(fromRefs)
+		orderByRefs = fromRefs
+		selectListRefs = selectListRefs.extend(fromRefs...)
+
+		if d6() <= 2 {
+			// Enable GROUP BY. Choose some random subset of the
+			// fromRefs.
+			// TODO(mjibson): Refence handling and aggregation functions
+			// aren't quite handled correctly here. This currently
+			// does well enough to at least find some bugs but should
+			// be improved to do the correct thing wrt aggregate
+			// functions. That is, the select and having exprs can
+			// either reference a group by column or a non-group by
+			// column in an aggregate function. It's also possible
+			// the where and order by exprs are not correct.
+			groupByRefs := fromRefs.extend()
+			s.schema.rnd.Shuffle(len(groupByRefs), func(i, j int) {
+				groupByRefs[i], groupByRefs[j] = groupByRefs[j], groupByRefs[i]
+			})
+			var groupBy tree.GroupBy
+			for (len(groupBy) < 1 || coin()) && len(groupBy) < len(groupByRefs) {
+				groupBy = append(groupBy, groupByRefs[len(groupBy)].item)
+			}
+			groupByRefs = groupByRefs[:len(groupBy)]
+			clause.GroupBy = groupBy
+			clause.Having = s.makeHaving(fromRefs)
+			selectListRefs = groupByRefs
+			orderByRefs = groupByRefs
+			// TODO(mjibson): also use this context sometimes in
+			// non-aggregate mode (select sum(x) from a).
+			ctx = groupByCtx
+		} else if d6() <= 1 {
+			// Enable window functions. This will enable them for all
+			// exprs, but makeFunc will only let a few through.
+			ctx = windowCtx
 		}
-		groupByRefs = groupByRefs[:len(groupBy)]
-		clause.GroupBy = groupBy
-		clause.Having = s.makeHaving(fromRefs)
-		selectListRefs = groupByRefs
-		orderByRefs = groupByRefs
-		// TODO(mjibson): also use this context sometimes in
-		// non-aggregate mode (select sum(x) from a).
-		ctx = groupByCtx
-	} else if d6() <= 1 {
-		// Enable window functions. This will enable them for all
-		// exprs, but makeFunc will only let a few through.
-		ctx = windowCtx
 	}
 
 	selectList, selectRefs, ok := s.makeSelectList(ctx, desiredTypes, selectListRefs)
@@ -650,9 +706,13 @@ func (s *scope) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool
 	}, returningRefs, true
 }
 
-func makeValues(
-	s *scope, desiredTypes []*types.T, refs colRefs, withTables tableRefs,
-) (tree.SelectStatement, colRefs, tableRefs, bool) {
+func makeValuesTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	types := makeDesiredTypes(s.schema.rnd)
+	values, valuesRefs := makeValues(s, types, refs)
+	return values, valuesRefs, true
+}
+
+func makeValues(s *scope, desiredTypes []*types.T, refs colRefs) (tree.TableExpr, colRefs) {
 	numRowsToInsert := d6()
 	values := tree.ValuesClause{
 		Rows: make([]tree.Exprs, numRowsToInsert),
@@ -679,7 +739,27 @@ func makeValues(
 		}
 	}
 
-	// Returing just &values here would result in a query like `VALUES (...)` where
+	return &tree.AliasedTableExpr{
+		Expr: &tree.Subquery{
+			Select: &tree.ParenSelect{
+				Select: &tree.Select{
+					Select: &values,
+				},
+			},
+		},
+		As: tree.AliasClause{
+			Alias: table,
+			Cols:  names,
+		},
+	}, valuesRefs
+}
+
+func makeValuesSelect(
+	s *scope, desiredTypes []*types.T, refs colRefs, withTables tableRefs,
+) (tree.SelectStatement, colRefs, tableRefs, bool) {
+	values, valuesRefs := makeValues(s, desiredTypes, refs)
+
+	// Returning just &values here would result in a query like `VALUES (...)` where
 	// the columns are arbitrarily named by index (column1, column2, etc.). Since
 	// we want to be able to reference the columns in other places we need to
 	// name them deterministically. We can use `SELECT * FROM (VALUES (...)) AS
@@ -688,19 +768,7 @@ func makeValues(
 	return &tree.SelectClause{
 		Exprs: tree.SelectExprs{tree.StarSelectExpr()},
 		From: &tree.From{
-			Tables: tree.TableExprs{&tree.AliasedTableExpr{
-				Expr: &tree.Subquery{
-					Select: &tree.ParenSelect{
-						Select: &tree.Select{
-							Select: &values,
-						},
-					},
-				},
-				As: tree.AliasClause{
-					Alias: table,
-					Cols:  names,
-				},
-			}},
+			Tables: tree.TableExprs{values},
 		},
 	}, valuesRefs, withTables, true
 }
@@ -749,6 +817,9 @@ func (s *scope) makeHaving(refs colRefs) *tree.Where {
 }
 
 func (s *scope) makeOrderBy(refs colRefs) tree.OrderBy {
+	if len(refs) == 0 {
+		return nil
+	}
 	var ob tree.OrderBy
 	for coin() {
 		ref := refs[s.schema.rnd.Intn(len(refs))]
