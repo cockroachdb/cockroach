@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -127,6 +129,12 @@ func avroFieldMetadataToColDesc(metadata string) (*sqlbase.ColumnDescriptor, err
 	return col, err
 }
 
+// randTime generates a random time.Time whose .UnixNano result doesn't
+// overflow an int64.
+func randTime(rng *rand.Rand) time.Time {
+	return timeutil.Unix(0, rng.Int63())
+}
+
 func TestAvroSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
@@ -178,8 +186,15 @@ func TestAvroSchema(t *testing.T) {
 			// to be fine and we only use deserialization for testing, so we
 			// should patch the bug but it's not currently affecting changefeed
 			// correctness.
-			t := datum.(*tree.DTimestamp).Time.Truncate(time.Millisecond)
+			// TODO(mjibson): goavro mishandles timestamps
+			// whose nanosecond representation overflows an
+			// int64, so restrict input to fit.
+			t := randTime(rng).Truncate(time.Millisecond)
 			datum = tree.MakeDTimestamp(t, time.Microsecond)
+		case types.TimestampTZFamily:
+			// See comments above for TimestampFamily.
+			t := randTime(rng).Truncate(time.Millisecond)
+			datum = tree.MakeDTimestampTZ(t, time.Microsecond)
 		case types.DecimalFamily:
 			// TODO(dan): Make RandDatum respect Precision and Width instead.
 			// TODO(dan): The precision is really meant to be in [1,10], but it
@@ -190,6 +205,15 @@ func TestAvroSchema(t *testing.T) {
 			typ = types.MakeDecimal(precision, scale)
 			coeff := rng.Int63n(int64(math.Pow10(int(precision))))
 			datum = &tree.DDecimal{Decimal: *apd.New(coeff, -scale)}
+		case types.DateFamily:
+			// TODO(mjibson): goavro mishandles dates whose
+			// nanosecond representation overflows an int64,
+			// so restrict input to fit.
+			var err error
+			datum, err = tree.NewDDateFromTime(randTime(rng))
+			if err != nil {
+				panic(err)
+			}
 		}
 		serializedDatum := tree.Serialize(datum)
 		// name can be "char" (with quotes), so needs to be escaped.
