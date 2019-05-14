@@ -3033,3 +3033,44 @@ func (desc *MutableTableDescriptor) TableDesc() *TableDescriptor {
 func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
 }
+
+// DatabaseKey implements DescriptorKey.
+type DatabaseKey struct {
+	name string
+}
+
+// NewDatabaseKey returns a new DatabaseKey.
+func NewDatabaseKey(name string) DatabaseKey {
+	return DatabaseKey{name}
+}
+
+// Key implements DescriptorKey interface.
+func (dk DatabaseKey) Key() roachpb.Key {
+	return MakeNameMetadataKey(keys.RootNamespaceID, dk.name)
+}
+
+// Name implements DescriptorKey interface.
+func (dk DatabaseKey) Name() string {
+	return dk.name
+}
+
+// TableKey implements DescriptorKey interface.
+type TableKey struct {
+	parentID ID
+	name     string
+}
+
+// NewTableKey returns a new TableKey.
+func NewTableKey(parentID ID, name string) TableKey {
+	return TableKey{parentID, name}
+}
+
+// Key implements DescriptorKey interface.
+func (tk TableKey) Key() roachpb.Key {
+	return MakeNameMetadataKey(tk.parentID, tk.name)
+}
+
+// Name implements DescriptorKey interface.
+func (tk TableKey) Name() string {
+	return tk.name
+}

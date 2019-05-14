@@ -23,6 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// A unique id for a particular table descriptor version.
+type tableVersionID struct {
+	id      sqlbase.ID
+	version sqlbase.DescriptorVersion
+}
+
 // LeaseRemovalTracker can be used to wait for leases to be removed from the
 // store (leases are removed from the store async w.r.t. LeaseManager
 // operations).
