@@ -3122,3 +3122,43 @@ scalar-group-by
  └── aggregations
       └── array-agg [type=int[]]
            └── variable: generate_series [type=int]
+
+# Regression test for #37317: duplicate column in GROUP BY
+build format=show-all
+SELECT
+*
+FROM
+(
+ SELECT
+ x AS firstCol,
+ y AS secondCol,
+ y AS thirdCol
+ FROM xyz
+)
+GROUP BY
+firstCol, secondCol, thirdCol;
+----
+group-by
+ ├── columns: firstcol:1(int!null) secondcol:2(int) thirdcol:2(int)
+ ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
+ ├── stats: [rows=990, distinct(1,2)=990, null(1,2)=10]
+ ├── cost: 1109.94
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── interesting orderings: (+1,+2)
+ └── project
+      ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
+      ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
+      ├── cost: 1070.03
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── prune: (1,2)
+      ├── interesting orderings: (+1,+2)
+      └── scan t.public.xyz
+           ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int) t.public.xyz.z:3(float)
+           ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
+           ├── cost: 1060.02
+           ├── key: (1)
+           ├── fd: (1)-->(2,3)
+           ├── prune: (1-3)
+           └── interesting orderings: (+1,+2) (+3,+2,+1)
