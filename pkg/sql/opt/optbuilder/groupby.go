@@ -406,12 +406,19 @@ func (b *Builder) buildGrouping(
 
 	// Finally, build each of the GROUP BY columns.
 	for _, e := range exprs {
+		// If a grouping column has already been added, don't add it again.
+		// GROUP BY a, a is semantically equivalent to GROUP BY a.
+		exprStr := symbolicExprStr(e)
+		if _, ok := inScope.groupby.groupStrs[exprStr]; ok {
+			continue
+		}
+
 		// Save a representation of the GROUP BY expression for validation of the
 		// SELECT and HAVING expressions. This enables queries such as:
 		//   SELECT x+y FROM t GROUP BY x+y
 		col := b.addColumn(outScope, alias, e)
 		b.buildScalar(e, inScope, outScope, col, nil)
-		inScope.groupby.groupStrs[symbolicExprStr(e)] = col
+		inScope.groupby.groupStrs[exprStr] = col
 	}
 }
 
