@@ -644,7 +644,7 @@ func (q *Queue) MaybeWaitForQuery(
 	if !req.WaitForUpdate {
 		return nil
 	}
-
+	metrics := q.store.GetTxnWaitMetrics()
 	q.mu.Lock()
 	// If the txn wait queue is not enabled or if the request is not
 	// contained within the replica, do nothing. The request can fall
@@ -684,10 +684,9 @@ func (q *Queue) MaybeWaitForQuery(
 		}
 		q.mu.queries[req.Txn.ID] = query
 	}
+	metrics.QueryWaiting.Inc(1)
 	q.mu.Unlock()
 
-	metrics := q.store.GetTxnWaitMetrics()
-	metrics.QueryWaiting.Inc(1)
 	tBegin := timeutil.Now()
 	defer func() { metrics.QueryWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
 
