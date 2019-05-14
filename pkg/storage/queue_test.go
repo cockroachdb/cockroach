@@ -514,7 +514,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 		tc.store.cfg.AmbientCtx, &base.Config{Insecure: true}, tc.store.cfg.Clock, stopper,
 		&cluster.MakeTestingClusterSettings().Version)
 	emptyGossip := gossip.NewTest(
-		tc.gossip.NodeID.Get(), rpcContext, rpc.NewServer(rpcContext), stopper, tc.store.Registry())
+		tc.gossip.NodeID.Get(), rpcContext, rpc.NewServer(rpcContext), stopper, tc.store.Registry(), config.DefaultZoneConfigRef())
 	bqNeedsSysCfg := makeTestBaseQueue("test", testQueue, tc.store, emptyGossip, queueConfig{
 		needsSystemConfig:    true,
 		acceptsUnsplitRanges: true,

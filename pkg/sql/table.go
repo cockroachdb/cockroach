@@ -161,6 +161,7 @@ type TableCollection struct {
 	uncommittedTables []uncommittedTable
 
 	// databaseCache is used as a cache for database names.
+	// This field is nil when the field is initialized for an internalPlanner.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
 	databaseCache *databaseCache
@@ -212,7 +213,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		return nil, err
 	}
 
-	if dbID == sqlbase.InvalidID {
+	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
@@ -268,7 +269,7 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 
-	if dbID == sqlbase.InvalidID {
+	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,

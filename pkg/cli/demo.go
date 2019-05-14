@@ -100,21 +100,21 @@ func setupTransientServer(
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
 
-	// TODO(benesch): should this use TestingSetDefaultZone config instead?
-	restoreCfg := config.TestingSetDefaultSystemZoneConfig(cfg)
-	prevCleanup := cleanup
-	cleanup = func() { prevCleanup(); restoreCfg() }
-
 	// Create the transient server.
 	args := base.TestServerArgs{
 		Insecure: true,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DefaultZoneConfigOverride: &cfg,
+			},
+		},
 	}
 	server := server.TestServerFactory.New(args).(*server.TestServer)
 	if err := server.Start(args); err != nil {
 		return connURL, adminURL, cleanup, err
 	}
-	prevCleanup2 := cleanup
-	cleanup = func() { prevCleanup2(); server.Stopper().Stop(ctx) }
+	prevCleanup := cleanup
+	cleanup = func() { prevCleanup(); server.Stopper().Stop(ctx) }
 
 	// Prepare the URL for use by the SQL shell.
 	options := url.Values{}

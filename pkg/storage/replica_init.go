@@ -19,7 +19,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
@@ -52,7 +51,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
-	r.mu.zone = config.DefaultZoneConfigRef()
+	r.mu.zone = store.cfg.DefaultZoneConfig
 	split.Init(&r.loadBasedSplitter, rand.Intn, func() float64 {
 		return float64(SplitByLoadQPSThreshold.Get(&store.cfg.Settings.SV))
 	})

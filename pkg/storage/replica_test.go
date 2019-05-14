@@ -190,7 +190,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		rpcContext := rpc.NewContext(
 			cfg.AmbientCtx, &base.Config{Insecure: true}, cfg.Clock, stopper, &cfg.Settings.Version)
 		server := rpc.NewServer(rpcContext) // never started
-		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
+		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
 	}
 	if tc.engine == nil {
 		tc.engine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
@@ -8357,16 +8357,15 @@ func TestReplicaMetrics(t *testing.T) {
 
 	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			zoneConfig := config.DefaultZoneConfig()
+			zoneConfig := cfg.DefaultZoneConfig
 			zoneConfig.NumReplicas = proto.Int32(c.replicas)
-			defer config.TestingSetDefaultZoneConfig(zoneConfig)()
 
 			// Alternate between quiescent and non-quiescent replicas to test the
 			// quiescent metric.
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
-				context.Background(), hlc.Timestamp{}, &cfg.RaftConfig, &zoneConfig,
+				context.Background(), hlc.Timestamp{}, &cfg.RaftConfig, zoneConfig,
 				c.liveness, 0, &c.desc, c.raftStatus, storagepb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
 				storagepb.LatchManagerInfo{}, storagepb.LatchManagerInfo{}, c.raftLogSize)

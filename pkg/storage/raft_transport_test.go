@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -130,7 +131,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
 	rttc.gossip = gossip.NewTest(
-		1, rttc.nodeRPCContext, server, rttc.stopper, metric.NewRegistry(),
+		1, rttc.nodeRPCContext, server, rttc.stopper, metric.NewRegistry(), config.DefaultZoneConfigRef(),
 	)
 
 	return rttc

@@ -311,8 +311,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// the target ID is not a database object, i.e. one of the system
 		// ranges (liveness, meta, etc.), and did not have a zone config
 		// already.
-		defZone := config.DefaultZoneConfig()
-		completeZone = &defZone
+		completeZone = protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*config.ZoneConfig)
 	} else if err != nil {
 		return err
 	}
@@ -359,7 +358,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// ALTER RANGE default USING DEFAULT sets the default to the in
 		// memory default value.
 		if n.setDefault && keys.RootNamespaceID == uint32(targetID) {
-			finalZone = config.DefaultZoneConfig()
+			finalZone = *protoutil.Clone(params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*config.ZoneConfig)
 		} else if n.setDefault {
 			finalZone = *config.NewZoneConfig()
 		}

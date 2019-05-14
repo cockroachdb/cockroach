@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -38,7 +39,7 @@ func TestDisableMerges(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			g := NewTest(1, nil /* rpcContext */, nil, /* grpcServer */
-				stopper, metric.NewRegistry())
+				stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 

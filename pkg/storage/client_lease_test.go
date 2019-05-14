@@ -196,7 +196,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
-		if !reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig()) {
+		if !reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig(sc.DefaultZoneConfig)) {
 			return errors.New("system config not empty")
 		}
 		if getNodeLiveness() != (storagepb.Liveness{}) {
@@ -209,7 +209,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 	// data is gossiped.
 	mtc.restartStore(0)
 	testutils.SucceedsSoon(t, func() error {
-		if reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig()) {
+		if reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig(sc.DefaultZoneConfig)) {
 			return errors.New("system config not gossiped")
 		}
 		if getNodeLiveness() == (storagepb.Liveness{}) {

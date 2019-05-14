@@ -777,7 +777,7 @@ func TestReportUsage(t *testing.T) {
 	hashedZone := sql.HashForReporting(clusterSecret, "zone")
 	for id, zone := range r.last.ZoneConfigs {
 		if id == keys.RootNamespaceID {
-			if defZone := config.DefaultZoneConfig(); !reflect.DeepEqual(zone, defZone) {
+			if defZone := ts.Cfg.DefaultZoneConfig; !reflect.DeepEqual(zone, defZone) {
 				t.Errorf("default zone config does not match: expected\n%+v got\n%+v", defZone, zone)
 			}
 		}
