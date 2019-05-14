@@ -32,7 +32,7 @@ type commentOnTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (planNode, error) {
-	tableDesc, err := p.ResolveUncachedTableDescriptor(ctx, &n.Table, true, requireTableDesc)
+	tableDesc, err := p.ResolveUncachedTableDescriptor(ctx, &n.Table, true, ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}

@@ -123,7 +123,7 @@ func (p *planner) processSerialInColumnDef(
 		if i > 0 {
 			seqName.TableName = tree.Name(fmt.Sprintf("%s%d", nameBase, i))
 		}
-		res, err := p.ResolveUncachedTableDescriptor(ctx, seqName, false /*required*/, anyDescType)
+		res, err := p.ResolveUncachedTableDescriptor(ctx, seqName, false /*required*/, ResolveAnyDescType)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}

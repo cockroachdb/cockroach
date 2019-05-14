@@ -261,7 +261,7 @@ func (p *planner) resolveTableForZone(
 		var immutRes *ImmutableTableDescriptor
 		p.runWithOptions(resolveFlags{skipCache: true}, func() {
 			immutRes, err = ResolveExistingObject(
-				ctx, p, &zs.TableOrIndex.Table, true /*required*/, anyDescType,
+				ctx, p, &zs.TableOrIndex.Table, true /*required*/, ResolveAnyDescType,
 			)
 		})
 		if err != nil {

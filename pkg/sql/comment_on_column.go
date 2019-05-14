@@ -34,7 +34,7 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 	if n.ColumnItem.TableName != nil {
 		tableName = n.ColumnItem.TableName.ToTableName()
 	}
-	tableDesc, err := p.ResolveUncachedTableDescriptor(ctx, &tableName, true, requireTableDesc)
+	tableDesc, err := p.ResolveUncachedTableDescriptor(ctx, &tableName, true, ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}

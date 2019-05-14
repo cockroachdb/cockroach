@@ -40,11 +40,11 @@ type renameTableNode struct {
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
 	oldTn := &n.Name
 	newTn := &n.NewName
-	toRequire := requireTableOrViewDesc
+	toRequire := ResolveRequireTableOrViewDesc
 	if n.IsView {
-		toRequire = requireViewDesc
+		toRequire = ResolveRequireViewDesc
 	} else if n.IsSequence {
-		toRequire = requireSequenceDesc
+		toRequire = ResolveRequireSequenceDesc
 	}
 
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, oldTn, !n.IfExists, toRequire)
