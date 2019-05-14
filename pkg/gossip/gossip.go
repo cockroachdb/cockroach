@@ -276,6 +276,8 @@ type Gossip struct {
 	localityTierMap map[string]struct{}
 
 	lastConnectivity string
+
+	defaultZoneConfig *config.ZoneConfig
 }
 
 // New creates an instance of a gossip node.
