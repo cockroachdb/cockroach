@@ -392,7 +392,6 @@ func TestSetPriority(t *testing.T) {
 				}
 
 				br := &roachpb.BatchResponse{}
-				br.Txn = &roachpb.Transaction{}
 				br.Txn.Update(ba.Txn) // copy
 				return br, nil
 			}), clock)

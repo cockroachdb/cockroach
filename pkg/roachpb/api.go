@@ -383,10 +383,13 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 		)
 	}
 	h.Timestamp.Forward(o.Timestamp)
-	if h.Txn == nil {
-		h.Txn = o.Txn
-	} else {
-		h.Txn.Update(o.Txn)
+	if txn := o.Txn; txn != nil {
+		if h.Txn == nil {
+			txnClone := txn.Clone()
+			h.Txn = &txnClone
+		} else {
+			h.Txn.Update(txn)
+		}
 	}
 	h.Now.Forward(o.Now)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
