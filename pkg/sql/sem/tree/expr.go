@@ -1674,6 +1674,29 @@ func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.ColName)
 }
 
+func NewTypedNullExpr(t *types.T) TypedExpr {
+	return &TypedNullExpr{
+		typeAnnotation: typeAnnotation{
+			typ: t,
+		},
+	}
+}
+
+type TypedNullExpr struct {
+	typeAnnotation
+}
+
+func (node *TypedNullExpr) String() string { return AsString(node) }
+
+func (t *TypedNullExpr) Format(ctx *FmtCtx) {
+	DNull.Format(ctx)
+}
+
+func (expr *TypedNullExpr) Walk(Visitor) Expr {
+	exprCopy := *expr
+	return &exprCopy
+}
+
 func (node *AliasedTableExpr) String() string { return AsString(node) }
 func (node *ParenTableExpr) String() string   { return AsString(node) }
 func (node *JoinTableExpr) String() string    { return AsString(node) }

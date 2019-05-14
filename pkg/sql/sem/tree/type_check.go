@@ -1139,6 +1139,16 @@ func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired *types.T) (TypedExpr, 
 		"column %q does not exist", ErrString(expr))
 }
 
+func (t *TypedNullExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
+	if typ := t.typ; !(typ.Equivalent(desired) || typ.Family() == types.UnknownFamily) {
+		return nil, unexpectedTypeError(t, desired, typ)
+	}
+	if t.typ.Family() != types.UnknownFamily {
+		t.typ = desired
+	}
+	return t, nil
+}
+
 // TypeCheck implements the Expr interface.
 func (expr UnqualifiedStar) TypeCheck(_ *SemaContext, desired *types.T) (TypedExpr, error) {
 	return nil, errStarNotAllowed

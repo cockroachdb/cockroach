@@ -3953,6 +3953,11 @@ func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
+func (TypedNullExpr) Eval(_ *EvalContext) (Datum, error) {
+	return DNull, nil
+}
+
+// Eval implements the TypedExpr interface.
 func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 	tuple := NewDTupleWithLen(t.typ, len(t.Exprs))
 	for i, v := range t.Exprs {

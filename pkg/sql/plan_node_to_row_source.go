@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -51,16 +52,19 @@ func makePlanNodeToRowSource(
 ) (*planNodeToRowSource, error) {
 	nodeColumns := planColumns(source)
 
-	types := make([]types.T, len(nodeColumns))
+	typs := make([]types.T, len(nodeColumns))
 	for i := range nodeColumns {
-		types[i] = *nodeColumns[i].Typ
+		if nodeColumns[i].Typ.Family() == types.UnknownFamily {
+			return nil, pgerror.AssertionFailedf("unknown output type not allowed (types: %+v)", nodeColumns)
+		}
+		typs[i] = *nodeColumns[i].Typ
 	}
 	row := make(sqlbase.EncDatumRow, len(nodeColumns))
 
 	return &planNodeToRowSource{
 		node:        source,
 		params:      params,
-		outputTypes: types,
+		outputTypes: typs,
 		row:         row,
 		fastPath:    fastPath,
 	}, nil
