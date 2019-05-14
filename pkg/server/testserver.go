@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -122,6 +121,14 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if knobs := params.Knobs.Store; knobs != nil {
 		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = MaxOffsetType(mo)
+		}
+	}
+	if params.Knobs.Server != nil {
+		if zoneConfig := params.Knobs.Server.(*TestingKnobs).DefaultZoneConfigOverride; zoneConfig != nil {
+			cfg.DefaultZoneConfig = *zoneConfig
+		}
+		if systemZoneConfig := params.Knobs.Server.(*TestingKnobs).DefaultSystemZoneConfigOverride; systemZoneConfig != nil {
+			cfg.DefaultSystemZoneConfig = *systemZoneConfig
 		}
 	}
 	if params.ScanInterval != 0 {
@@ -301,40 +308,6 @@ func (ts *TestServer) PGServer() *pgwire.Server {
 	return nil
 }
 
-// This object implements a hack to allow multiple tests to use StartServer and
-// not mess up the default zone config. Note that we still have problems if a
-// test runs in parallel with another test that sets up a test cluster.
-//
-// The real problem here is that the default zone config is a global (#37054);
-// this should go away if that's fixed.
-var messWithZoneConfig struct {
-	mutex    syncutil.Mutex
-	refCount int
-	restore  func()
-}
-
-func messWithZoneConfigBegin() {
-	messWithZoneConfig.mutex.Lock()
-	defer messWithZoneConfig.mutex.Unlock()
-
-	if messWithZoneConfig.refCount == 0 {
-		cfg := config.DefaultZoneConfig()
-		cfg.NumReplicas = proto.Int32(1)
-		messWithZoneConfig.restore = config.TestingSetDefaultZoneConfig(cfg)
-	}
-	messWithZoneConfig.refCount++
-}
-
-func messWithZoneConfigEnd() {
-	messWithZoneConfig.mutex.Lock()
-	defer messWithZoneConfig.mutex.Unlock()
-	messWithZoneConfig.refCount--
-	if messWithZoneConfig.refCount == 0 {
-		messWithZoneConfig.restore()
-		messWithZoneConfig.restore = nil
-	}
-}
-
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
@@ -351,10 +324,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	}
 
 	if !params.PartOfCluster {
-		// Change the replication requirements so we don't get log spam about ranges
-		// not being replicated enough.
-		messWithZoneConfigBegin()
-		params.Stopper.AddCloser(stop.CloserFn(messWithZoneConfigEnd))
+		ts.Cfg.DefaultZoneConfig.NumReplicas = proto.Int32(1)
 	}
 
 	// Needs to be called before NewServer to ensure resolvers are initialized.
@@ -387,13 +357,15 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
-	return ExpectedInitialRangeCount(ts.DB())
+	return ExpectedInitialRangeCount(ts.DB(), &ts.cfg.DefaultZoneConfig, &ts.cfg.DefaultSystemZoneConfig)
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
 // be on the server after bootstrap.
-func ExpectedInitialRangeCount(db *client.DB) (int, error) {
-	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(context.Background(), db)
+func ExpectedInitialRangeCount(
+	db *client.DB, defaultZoneConfig *config.ZoneConfig, defaultSystemZoneConfig *config.ZoneConfig,
+) (int, error) {
+	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(context.Background(), db, defaultZoneConfig, defaultSystemZoneConfig)
 	if err != nil {
 		return 0, err
 	}

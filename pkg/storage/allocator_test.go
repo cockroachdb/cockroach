@@ -5506,7 +5506,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 		&st.Version,
 	)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
+	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
 
 	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
 
@@ -5646,7 +5646,7 @@ func Example_rebalancing() {
 		&st.Version,
 	)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
+	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
 
 	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
 

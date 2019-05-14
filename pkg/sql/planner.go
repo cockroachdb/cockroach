@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -220,9 +219,11 @@ func newInternalPlanner(
 			Location: time.UTC,
 		},
 	}
+	// The table collection used by the internal planner does not rely on the
+	// databaseCache and there are no subscribers to the databaseCache, so we can
+	// leave it uninitialized.
 	tables := &TableCollection{
-		leaseMgr:      execCfg.LeaseManager,
-		databaseCache: newDatabaseCache(config.NewSystemConfig()),
+		leaseMgr: execCfg.LeaseManager,
 	}
 	dataMutator := &sessionDataMutator{
 		data: sd,

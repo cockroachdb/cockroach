@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -35,7 +36,7 @@ func TestInitialKeys(t *testing.T) {
 	const keysPerDesc = 2
 	const nonDescKeys = 7
 
-	ms := sqlbase.MakeMetadataSchema()
+	ms := sqlbase.MakeMetadataSchema(config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
 	kv, _ /* splits */ := ms.GetInitialValues()
 	expected := nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 	if actual := len(kv); actual != expected {

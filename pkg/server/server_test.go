@@ -79,10 +79,13 @@ func TestHealthCheck(t *testing.T) {
 
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
-	fnSys := config.TestingSetDefaultSystemZoneConfig(cfg)
-	defer fnSys()
-
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &TestingKnobs{
+				DefaultZoneConfigOverride: &cfg,
+			},
+		},
+	})
 
 	if err != nil {
 		t.Fatal(err)

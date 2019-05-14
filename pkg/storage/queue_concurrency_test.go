@@ -67,8 +67,10 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	// replicaInQueue, but this isn't an ideal world. Deal with it.
 	store := &Store{
 		cfg: StoreConfig{
-			Clock:      hlc.NewClock(hlc.UnixNano, time.Second),
-			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()}},
+			Clock:             hlc.NewClock(hlc.UnixNano, time.Second),
+			AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+			DefaultZoneConfig: config.DefaultZoneConfigRef(),
+		},
 	}
 
 	// Set up a queue impl that will return random results from processing.

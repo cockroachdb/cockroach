@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -90,7 +91,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		return counts
 	}
 
-	initialRanges, err := server.ExpectedInitialRangeCount(tc.Servers[0].DB())
+	initialRanges, err := server.ExpectedInitialRangeCount(tc.Servers[0].DB(), config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
 	if err != nil {
 		t.Fatal(err)
 	}
