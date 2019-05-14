@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -48,60 +47,6 @@ func TestDisableTableLeases() func() {
 	return func() {
 		testDisableTableLeases = false
 	}
-}
-
-type namespaceKey struct {
-	parentID sqlbase.ID
-	name     string
-}
-
-// getAllNames returns a map from ID to namespaceKey for every entry in
-// system.namespace.
-func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey, error) {
-	namespace := map[sqlbase.ID]namespaceKey{}
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-		ctx, "get-all-names", p.txn,
-		`SELECT id, "parentID", name FROM system.namespace`,
-	)
-	if err != nil {
-		return nil, err
-	}
-	for _, r := range rows {
-		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
-		namespace[sqlbase.ID(id)] = namespaceKey{
-			parentID: sqlbase.ID(parentID),
-			name:     string(name),
-		}
-	}
-	return namespace, nil
-}
-
-// tableKey implements sqlbase.DescriptorKey.
-type tableKey namespaceKey
-
-func (tk tableKey) Key() roachpb.Key {
-	return sqlbase.MakeNameMetadataKey(tk.parentID, tk.name)
-}
-
-func (tk tableKey) Name() string {
-	return tk.name
-}
-
-// GetKeysForTableDescriptor retrieves the KV keys corresponding
-// to the zone, name and descriptor of a table.
-func GetKeysForTableDescriptor(
-	tableDesc *sqlbase.TableDescriptor,
-) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = config.MakeZoneKey(uint32(tableDesc.ID))
-	nameKey = sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
-	descKey = sqlbase.MakeDescMetadataKey(tableDesc.ID)
-	return
-}
-
-// A unique id for a particular table descriptor version.
-type tableVersionID struct {
-	id      sqlbase.ID
-	version sqlbase.DescriptorVersion
 }
 
 func (p *planner) getVirtualTabler() VirtualTabler {

@@ -111,7 +111,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	tableDesc.ParentID = targetDbDesc.ID
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
-	newTbKey := tableKey{targetDbDesc.ID, newTn.Table()}.Key()
+	newTbKey := sqlbase.NewTableKey(targetDbDesc.ID, newTn.Table()).Key()
 
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 		return err

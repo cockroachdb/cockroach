@@ -62,7 +62,7 @@ func GenerateUniqueDescID(ctx context.Context, db *client.DB) (sqlbase.ID, error
 func (p *planner) createDatabase(
 	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
 ) (bool, error) {
-	plainKey := databaseKey{desc.Name}
+	plainKey := sqlbase.NewDatabaseKey(desc.Name)
 	idKey := plainKey.Key()
 
 	if exists, err := descExists(ctx, p.txn, idKey); err == nil && exists {

@@ -37,19 +37,6 @@ import (
 // suitable; consider instead schema_accessors.go and resolver.go.
 //
 
-// databaseKey implements sqlbase.DescriptorKey.
-type databaseKey struct {
-	name string
-}
-
-func (dk databaseKey) Key() roachpb.Key {
-	return sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, dk.name)
-}
-
-func (dk databaseKey) Name() string {
-	return dk.name
-}
-
 // databaseCache holds a cache from database name to database ID. It is
 // populated as database IDs are requested and a new cache is created whenever
 // the system config changes. As such, no attempt is made to limit its size
@@ -108,7 +95,7 @@ func getDatabaseID(
 	if name == sqlbase.SystemDB.Name {
 		return sqlbase.SystemDB.ID, nil
 	}
-	dbID, err := getDescriptorID(ctx, txn, databaseKey{name})
+	dbID, err := getDescriptorID(ctx, txn, sqlbase.NewDatabaseKey(name))
 	if err != nil {
 		return sqlbase.InvalidID, err
 	}
@@ -273,7 +260,7 @@ func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
 		return sqlbase.SystemDB.ID, nil
 	}
 
-	nameKey := databaseKey{name}
+	nameKey := sqlbase.NewDatabaseKey(name)
 	nameVal := dc.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
 		return sqlbase.InvalidID, nil
@@ -293,8 +280,8 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	oldKey := databaseKey{oldName}.Key()
-	newKey := databaseKey{newName}.Key()
+	oldKey := sqlbase.NewDatabaseKey(oldName).Key()
+	newKey := sqlbase.NewDatabaseKey(newName).Key()
 	descID := oldDesc.GetID()
 	descKey := sqlbase.MakeDescMetadataKey(descID)
 	descDesc := sqlbase.WrapDescriptor(oldDesc)
