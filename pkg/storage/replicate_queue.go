@@ -254,7 +254,9 @@ func (rq *replicateQueue) process(
 	// snapshot errors, usually signaling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */); err != nil {
+		const maxAttempts = 3
+		for i := 1; i <= maxAttempts; i++ {
+			requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */)
 			if IsSnapshotError(err) {
 				// If ChangeReplicas failed because the preemptive snapshot failed, we
 				// log the error but then return success indicating we should retry the
@@ -263,20 +265,34 @@ func (rq *replicateQueue) process(
 				// case we don't want to wait another scanner cycle before reconsidering
 				// the range.
 				log.Info(ctx, err)
-				continue
+				break
 			}
-			return err
-		} else if requeue {
-			// Enqueue this replica again to see if there are more changes to be made.
-			rq.MaybeAddAsync(ctx, repl, rq.store.Clock().Now())
-		}
-		if testingAggressiveConsistencyChecks {
-			if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
-				log.Warning(ctx, err)
+
+			if err != nil {
+				return err
 			}
+
+			if testingAggressiveConsistencyChecks {
+				if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
+					log.Warning(ctx, err)
+				}
+			}
+
+			if !requeue {
+				return nil
+			}
+
+			if i == maxAttempts {
+				log.VEventf(ctx, 1, "exhausted re-processing attempts #%d", i)
+				// Enqueue this replica again to see if there are more changes to be made.
+				rq.MaybeAddAsync(ctx, repl, rq.store.Clock().Now())
+				return nil
+			}
+
+			log.VEventf(ctx, 1, "re-processing #%d", i)
 		}
-		return nil
 	}
+
 	return errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
 }
 
@@ -297,11 +313,12 @@ func (rq *replicateQueue) processOneChange(
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo); action {
+	action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo)
+	log.VEventf(ctx, 1, "next replica action: %s", action)
+	switch action {
 	case AllocatorNoop:
 		break
 	case AllocatorAdd:
-		log.VEventf(ctx, 1, "adding a new replica")
 		newStore, details, err := rq.allocator.AllocateTarget(
 			ctx,
 			zone,
@@ -366,8 +383,6 @@ func (rq *replicateQueue) processOneChange(
 			return false, err
 		}
 	case AllocatorRemove:
-		log.VEventf(ctx, 1, "removing a replica")
-
 		// This retry loop involves quick operations on local state, so a
 		// small MaxBackoff is good (but those local variables change on
 		// network time scales as raft receives responses).
@@ -472,7 +487,6 @@ func (rq *replicateQueue) processOneChange(
 			}
 		}
 	case AllocatorRemoveDecommissioning:
-		log.VEventf(ctx, 1, "removing a decommissioning replica")
 		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas)
 		if len(decommissioningReplicas) == 0 {
 			log.VEventf(ctx, 1, "range of replica %s was identified as having decommissioning replicas, "+
@@ -516,7 +530,6 @@ func (rq *replicateQueue) processOneChange(
 			}
 		}
 	case AllocatorRemoveDead:
-		log.VEventf(ctx, 1, "removing a dead replica")
 		if len(deadReplicas) == 0 {
 			log.VEventf(ctx, 1, "range of replica %s was identified as having dead replicas, but no dead replicas were found", repl)
 			break
@@ -536,8 +549,6 @@ func (rq *replicateQueue) processOneChange(
 	case AllocatorConsiderRebalance:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
-		log.VEventf(ctx, 1, "allocator noop - considering a rebalance or lease transfer")
-
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 			rebalanceStore, details := rq.allocator.RebalanceTarget(
 				ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled)
