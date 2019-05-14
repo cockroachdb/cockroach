@@ -114,7 +114,7 @@ func (p *planner) getDataSource(
 			return ds, err
 		}
 
-		desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
+		desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, ResolveAnyDescType)
 		if err != nil {
 			return planDataSource{}, err
 		}

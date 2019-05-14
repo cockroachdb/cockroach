@@ -439,7 +439,7 @@ func ResolveFK(
 		}
 	}
 
-	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, requireTableDesc)
+	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -722,7 +722,7 @@ func addInterleave(
 	}
 
 	parentTable, err := ResolveExistingObject(
-		ctx, vt, &interleave.Parent, true /*required*/, requireTableDesc,
+		ctx, vt, &interleave.Parent, true /*required*/, ResolveRequireTableDesc,
 	)
 	if err != nil {
 		return err
