@@ -375,27 +375,28 @@ type nodeStatusGenerator interface {
 type ExecutorConfig struct {
 	Settings *cluster.Settings
 	NodeInfo
-	Locality         roachpb.Locality
-	AmbientCtx       log.AmbientContext
-	DB               *client.DB
-	Gossip           *gossip.Gossip
-	DistSender       *kv.DistSender
-	RPCContext       *rpc.Context
-	LeaseManager     *LeaseManager
-	Clock            *hlc.Clock
-	DistSQLSrv       *distsqlrun.ServerImpl
-	StatusServer     serverpb.StatusServer
-	MetricsRecorder  nodeStatusGenerator
-	SessionRegistry  *SessionRegistry
-	JobRegistry      *jobs.Registry
-	VirtualSchemas   *VirtualSchemaHolder
-	DistSQLPlanner   *DistSQLPlanner
-	TableStatsCache  *stats.TableStatisticsCache
-	StatsRefresher   *stats.Refresher
-	ExecLogger       *log.SecondaryLogger
-	AuditLogger      *log.SecondaryLogger
-	InternalExecutor *InternalExecutor
-	QueryCache       *querycache.C
+	DefaultZoneConfig *config.ZoneConfig
+	Locality          roachpb.Locality
+	AmbientCtx        log.AmbientContext
+	DB                *client.DB
+	Gossip            *gossip.Gossip
+	DistSender        *kv.DistSender
+	RPCContext        *rpc.Context
+	LeaseManager      *LeaseManager
+	Clock             *hlc.Clock
+	DistSQLSrv        *distsqlrun.ServerImpl
+	StatusServer      serverpb.StatusServer
+	MetricsRecorder   nodeStatusGenerator
+	SessionRegistry   *SessionRegistry
+	JobRegistry       *jobs.Registry
+	VirtualSchemas    *VirtualSchemaHolder
+	DistSQLPlanner    *DistSQLPlanner
+	TableStatsCache   *stats.TableStatisticsCache
+	StatsRefresher    *stats.Refresher
+	ExecLogger        *log.SecondaryLogger
+	AuditLogger       *log.SecondaryLogger
+	InternalExecutor  *InternalExecutor
+	QueryCache        *querycache.C
 
 	TestingKnobs              ExecutorTestingKnobs
 	PGWireTestingKnobs        *PGWireTestingKnobs

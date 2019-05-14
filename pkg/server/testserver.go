@@ -124,6 +124,14 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			cfg.MaxOffset = MaxOffsetType(mo)
 		}
 	}
+	if params.Knobs.Server != nil {
+		if zoneConfig := params.Knobs.Server.(*TestingKnobs).DefaultZoneConfigOverride; zoneConfig != nil {
+			cfg.DefaultZoneConfig = *zoneConfig
+		}
+		if systemZoneConfig := params.Knobs.Server.(*TestingKnobs).DefaultSystemZoneConfigOverride; systemZoneConfig != nil {
+			cfg.DefaultSystemZoneConfig = *systemZoneConfig
+		}
+	}
 	if params.ScanInterval != 0 {
 		cfg.ScanInterval = params.ScanInterval
 	}

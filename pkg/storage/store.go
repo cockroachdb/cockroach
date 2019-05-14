@@ -167,6 +167,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
+		DefaultZoneConfig:           config.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig:     config.DefaultSystemZoneConfigRef(),
 		Settings:                    st,
 		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
 		Clock:                       clock,
@@ -619,16 +621,18 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	Settings             *cluster.Settings
-	Clock                *hlc.Clock
-	DB                   *client.DB
-	Gossip               *gossip.Gossip
-	NodeLiveness         *NodeLiveness
-	StorePool            *StorePool
-	Transport            *RaftTransport
-	NodeDialer           *nodedialer.Dialer
-	RPCContext           *rpc.Context
-	RangeDescriptorCache kvbase.RangeDescriptorCache
+	DefaultZoneConfig       *config.ZoneConfig
+	DefaultSystemZoneConfig *config.ZoneConfig
+	Settings                *cluster.Settings
+	Clock                   *hlc.Clock
+	DB                      *client.DB
+	Gossip                  *gossip.Gossip
+	NodeLiveness            *NodeLiveness
+	StorePool               *StorePool
+	Transport               *RaftTransport
+	NodeDialer              *nodedialer.Dialer
+	RPCContext              *rpc.Context
+	RangeDescriptorCache    kvbase.RangeDescriptorCache
 
 	ClosedTimestamp *container.Container
 
