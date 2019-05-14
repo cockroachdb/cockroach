@@ -268,3 +268,13 @@ LIMIT
     89:::INT8;
 ----
 true
+
+# Regression test for #37454: untyped null produced at top level.
+
+statement ok
+CREATE TABLE x (a INT8); CREATE TABLE y (b INT8); INSERT INTO x VALUES (1); INSERT INTO y VALUES (2);
+
+query II
+SELECT a, (SELECT a FROM y) FROM x
+----
+1  1
