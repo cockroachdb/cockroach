@@ -58,7 +58,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return &sysDB, nil
 	}
 
-	descID, err := getDescriptorID(ctx, txn, databaseKey{name})
+	descID, err := getDescriptorID(ctx, txn, sqlbase.NewDatabaseKey(name))
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	// can be modified on a running cluster.
 	descID := sqlbase.LookupSystemTableDescriptorID(dbID, name.Table())
 	if descID == sqlbase.InvalidID {
-		descID, err = getDescriptorID(ctx, txn, tableKey{parentID: dbID, name: name.Table()})
+		descID, err = getDescriptorID(ctx, txn, sqlbase.NewTableKey(dbID, name.Table()))
 		if err != nil {
 			return nil, err
 		}

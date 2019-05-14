@@ -49,7 +49,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 }
 
 func (n *createSequenceNode) startExec(params runParams) error {
-	tKey := getSequenceKey(n.dbDesc, n.n.Name.Table())
+	tKey := sqlbase.NewTableKey(n.dbDesc.ID, n.n.Name.Table())
 	if exists, err := descExists(params.ctx, params.p.txn, tKey.Key()); err == nil && exists {
 		if n.n.IfNotExists {
 			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
@@ -61,10 +61,6 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	}
 
 	return doCreateSequence(params, n.n.String(), n.dbDesc, &n.n.Name, n.n.Options)
-}
-
-func getSequenceKey(dbDesc *DatabaseDescriptor, seqName string) tableKey {
-	return tableKey{parentID: dbDesc.ID, name: seqName}
 }
 
 // doCreateSequence performs the creation of a sequence in KV. The
@@ -93,7 +89,7 @@ func doCreateSequence(
 	// makeSequenceTableDesc already validates the table. No call to
 	// desc.ValidateTable() needed here.
 
-	key := getSequenceKey(dbDesc, name.Table()).Key()
+	key := sqlbase.NewTableKey(dbDesc.ID, name.Table()).Key()
 	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}

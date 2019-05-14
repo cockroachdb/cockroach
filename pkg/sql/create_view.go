@@ -110,7 +110,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 
 func (n *createViewNode) startExec(params runParams) error {
 	viewName := n.n.Name.Table()
-	tKey := tableKey{parentID: n.dbDesc.ID, name: viewName}
+	tKey := sqlbase.NewTableKey(n.dbDesc.ID, viewName)
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.
