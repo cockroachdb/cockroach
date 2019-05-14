@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -119,6 +120,12 @@ func newApplyJoinNode(
 		return nil, pgerror.AssertionFailedf("unsupported right outer apply join: %d", log.Safe(joinType))
 	case sqlbase.JoinType_EXCEPT_ALL, sqlbase.JoinType_INTERSECT_ALL:
 		return nil, pgerror.AssertionFailedf("unsupported apply set op: %d", log.Safe(joinType))
+	}
+
+	for i := range rightCols {
+		if rightCols[i].Typ.Family() == types.UnknownFamily {
+			return nil, pgerror.AssertionFailedf("can't construct apply join with unknown rhs %+v", rightCols)
+		}
 	}
 
 	return &applyJoinNode{
