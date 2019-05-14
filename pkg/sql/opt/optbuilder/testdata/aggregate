@@ -3122,3 +3122,47 @@ scalar-group-by
  └── aggregations
       └── array-agg [type=int[]]
            └── variable: generate_series [type=int]
+
+exec-ddl
+CREATE TABLE test_query_table (col1 INT8, col2 INT8);
+----
+TABLE test_query_table
+ ├── col1 int
+ ├── col2 int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build format=show-all
+SELECT
+*
+FROM
+(
+ SELECT
+ col1,
+ col2 AS secondCol,
+ col2 AS thirdCol
+ FROM test_query_table
+)
+GROUP BY
+col1, secondCol, thirdCol;
+----
+group-by
+ ├── columns: col1:1(int) secondcol:2(int) thirdcol:2(int)
+ ├── grouping columns: t.public.test_query_table.col1:1(int) t.public.test_query_table.col2:2(int)
+ ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
+ ├── cost: 1110.04
+ ├── key: (1,2)
+ └── project
+      ├── columns: t.public.test_query_table.col1:1(int) t.public.test_query_table.col2:2(int)
+      ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
+      ├── cost: 1070.03
+      ├── prune: (1,2)
+      └── scan t.public.test_query_table
+           ├── columns: t.public.test_query_table.col1:1(int) t.public.test_query_table.col2:2(int) t.public.test_query_table.rowid:3(int!null)
+           ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
+           ├── cost: 1060.02
+           ├── key: (3)
+           ├── fd: (3)-->(1,2)
+           ├── prune: (1-3)
+           └── interesting orderings: (+3)

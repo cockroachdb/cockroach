@@ -406,6 +406,12 @@ func (b *Builder) buildGrouping(
 
 	// Finally, build each of the GROUP BY columns.
 	for _, e := range exprs {
+		// If a grouping column has already been added, don't add it again.
+		// GROUP BY a, a is semantically equivalent to GROUP BY a.
+		if _, ok := inScope.groupby.groupStrs[symbolicExprStr(e)]; ok {
+			continue
+		}
+
 		// Save a representation of the GROUP BY expression for validation of the
 		// SELECT and HAVING expressions. This enables queries such as:
 		//   SELECT x+y FROM t GROUP BY x+y
