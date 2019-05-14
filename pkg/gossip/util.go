@@ -39,7 +39,7 @@ type SystemConfigDeltaFilter struct {
 func MakeSystemConfigDeltaFilter(keyPrefix roachpb.Key) SystemConfigDeltaFilter {
 	return SystemConfigDeltaFilter{
 		keyPrefix: keyPrefix,
-		lastCfg:   config.NewSystemConfig(),
+		lastCfg:   config.NewSystemConfig(config.DefaultZoneConfigRef()),
 	}
 }
 
@@ -50,7 +50,7 @@ func (df *SystemConfigDeltaFilter) ForModified(
 ) {
 	// Save newCfg in the filter.
 	lastCfg := df.lastCfg
-	df.lastCfg = config.NewSystemConfig()
+	df.lastCfg = config.NewSystemConfig(newCfg.DefaultZoneConfig)
 	df.lastCfg.Values = newCfg.Values
 
 	// SystemConfig values are always sorted by key, so scan over new and old

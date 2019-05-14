@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -625,8 +626,8 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	// required" error.
 	zoneConfig := config.ZoneConfig{
 		Subzones: []config.Subzone{
-			{IndexID: uint32(tableDesc.PrimaryIndex.ID), Config: config.DefaultZoneConfig()},
-			{IndexID: uint32(indexDesc.ID), Config: config.DefaultZoneConfig()},
+			{IndexID: uint32(tableDesc.PrimaryIndex.ID), Config: s.(*server.TestServer).Cfg.DefaultZoneConfig},
+			{IndexID: uint32(indexDesc.ID), Config: s.(*server.TestServer).Cfg.DefaultZoneConfig},
 		},
 	}
 	zoneConfigBytes, err := protoutil.Marshal(&zoneConfig)

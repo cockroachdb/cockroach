@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
@@ -912,7 +913,11 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
 // System database, its tables and zone configurations.
-func addSystemDatabaseToSchema(target *MetadataSchema) {
+func addSystemDatabaseToSchema(
+	target *MetadataSchema,
+	defaultZoneConfig *config.ZoneConfig,
+	defaultSystemZoneConfig *config.ZoneConfig,
+) {
 	addSystemDescriptorsToSchema(target)
 
 	target.AddSplitIDs(keys.PseudoTableIDs...)
@@ -921,28 +926,26 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// and also created as a migration for older cluster. The includedInBootstrap
 	// field should be set on the migration.
 
-	// Default zone config entry.
-	zoneConf := config.DefaultZoneConfig()
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, &zoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, defaultZoneConfig))
 
-	systemZoneConf := config.DefaultSystemZoneConfig()
-	metaRangeZoneConf := config.DefaultSystemZoneConfig()
-	jobsZoneConf := config.DefaultSystemZoneConfig()
-	livenessZoneConf := config.DefaultSystemZoneConfig()
+	systemZoneConf := defaultSystemZoneConfig
+	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*config.ZoneConfig)
+	jobsZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*config.ZoneConfig)
+	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*config.ZoneConfig)
 
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, &metaRangeZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, metaRangeZoneConf))
 
 	// Jobs zone config entry with a shorter GC time.
 	jobsZoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, &jobsZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, jobsZoneConf))
 
 	// Liveness zone config entry with a shorter GC time.
 	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, &livenessZoneConf))
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, &systemZoneConf))
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemDatabaseID, &systemZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, livenessZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, systemZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemDatabaseID, systemZoneConf))
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.

@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
@@ -100,7 +101,8 @@ func TestGossipStorage(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	network := simulation.NewNetwork(stopper, 3, true)
+	defaultZoneConfig := config.DefaultZoneConfigRef()
+	network := simulation.NewNetwork(stopper, 3, true, defaultZoneConfig)
 
 	// Set storage for each of the nodes.
 	addresses := make(unresolvedAddrSlice, len(network.Nodes))
@@ -157,7 +159,7 @@ func TestGossipStorage(t *testing.T) {
 
 	// Create an unaffiliated gossip node with only itself as a resolver,
 	// leaving it no way to reach the gossip network.
-	node, err := network.CreateNode()
+	node, err := network.CreateNode(defaultZoneConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +220,7 @@ func TestGossipStorageCleanup(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	const numNodes = 3
-	network := simulation.NewNetwork(stopper, numNodes, false)
+	network := simulation.NewNetwork(stopper, numNodes, false, config.DefaultZoneConfigRef())
 
 	const notReachableAddr = "localhost:0"
 	const invalidAddr = "10.0.0.1000:3333333"

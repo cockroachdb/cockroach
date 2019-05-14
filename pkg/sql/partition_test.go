@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -87,12 +88,12 @@ func TestRemovePartitioningOSS(t *testing.T) {
 			{
 				IndexID:       uint32(tableDesc.PrimaryIndex.ID),
 				PartitionName: "p1",
-				Config:        config.DefaultZoneConfig(),
+				Config:        s.(*server.TestServer).Cfg.DefaultZoneConfig,
 			},
 			{
 				IndexID:       uint32(tableDesc.Indexes[0].ID),
 				PartitionName: "p2",
-				Config:        config.DefaultZoneConfig(),
+				Config:        s.(*server.TestServer).Cfg.DefaultZoneConfig,
 			},
 		},
 	}

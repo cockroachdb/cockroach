@@ -139,7 +139,7 @@ func createTestStoreWithOpts(
 	}
 	server := rpc.NewServer(rpcContext) // never started
 	storeCfg.Gossip = gossip.NewTest(
-		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(),
+		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(), storeCfg.DefaultZoneConfig,
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
 	stores := storage.NewStores(ac, storeCfg.Clock, storeCfg.Settings.Version.MinSupportedVersion, storeCfg.Settings.Version.ServerVersion)
@@ -185,7 +185,7 @@ func createTestStoreWithOpts(
 	if !opts.dontBootstrap {
 		var kvs []roachpb.KeyValue
 		var splits []roachpb.RKey
-		kvs, tableSplits := sqlbase.MakeMetadataSchema().GetInitialValues()
+		kvs, tableSplits := sqlbase.MakeMetadataSchema(storeCfg.DefaultZoneConfig, storeCfg.DefaultSystemZoneConfig).GetInitialValues()
 		if !opts.dontCreateSystemRanges {
 			splits = config.StaticSplits()
 			splits = append(splits, tableSplits...)
@@ -824,6 +824,7 @@ func (m *multiTestContext) addStore(idx int) {
 		grpcServer,
 		m.transportStopper,
 		metric.NewRegistry(),
+		config.DefaultZoneConfigRef(),
 	)
 
 	nodeID := roachpb.NodeID(idx + 1)
@@ -852,7 +853,7 @@ func (m *multiTestContext) addStore(idx int) {
 	if needBootstrap && idx == 0 {
 		// Bootstrap the initial range on the first engine.
 		var splits []roachpb.RKey
-		kvs, tableSplits := sqlbase.MakeMetadataSchema().GetInitialValues()
+		kvs, tableSplits := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig).GetInitialValues()
 		if !m.startWithSingleRange {
 			splits = config.StaticSplits()
 			splits = append(splits, tableSplits...)

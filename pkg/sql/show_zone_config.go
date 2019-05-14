@@ -115,8 +115,7 @@ func getShowZoneConfigRow(
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
 		// config applies.
-		defZone := config.DefaultZoneConfig()
-		zone = &defZone
+		zone = p.execCfg.DefaultZoneConfig
 		zoneID = keys.RootNamespaceID
 	} else if err != nil {
 		return nil, err

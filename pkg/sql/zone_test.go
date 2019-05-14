@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,9 +41,9 @@ func TestValidSetShowZones(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE DATABASE d; USE d; CREATE TABLE t ();`)
 
-	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", config.DefaultZoneConfig().GC.TTLSeconds)
+	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", s.(*server.TestServer).Cfg.DefaultZoneConfig.GC.TTLSeconds)
 	yamlOverride := "gc: {ttlseconds: 42}"
-	zoneOverride := config.DefaultZoneConfig()
+	zoneOverride := s.(*server.TestServer).Cfg.DefaultZoneConfig
 	zoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
 	partialZoneOverride := *config.NewZoneConfig()
 	partialZoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
@@ -50,7 +51,7 @@ func TestValidSetShowZones(t *testing.T) {
 	defaultRow := sqlutils.ZoneRow{
 		ID:           keys.RootNamespaceID,
 		CLISpecifier: ".default",
-		Config:       config.DefaultZoneConfig(),
+		Config:       s.(*server.TestServer).Cfg.DefaultZoneConfig,
 	}
 	defaultOverrideRow := sqlutils.ZoneRow{
 		ID:           keys.RootNamespaceID,
@@ -258,12 +259,12 @@ func TestZoneInheritField(t *testing.T) {
 	defaultRow := sqlutils.ZoneRow{
 		ID:           keys.RootNamespaceID,
 		CLISpecifier: ".default",
-		Config:       config.DefaultZoneConfig(),
+		Config:       s.(*server.TestServer).Cfg.DefaultZoneConfig,
 	}
 
 	newReplicationFactor := 10
 	tableID := sqlutils.QueryTableID(t, db, "d", "t")
-	newDefCfg := config.DefaultZoneConfig()
+	newDefCfg := s.(*server.TestServer).Cfg.DefaultZoneConfig
 	newDefCfg.NumReplicas = proto.Int32(int32(newReplicationFactor))
 
 	newDefaultRow := sqlutils.ZoneRow{
@@ -275,7 +276,7 @@ func TestZoneInheritField(t *testing.T) {
 	newTableRow := sqlutils.ZoneRow{
 		ID:           tableID,
 		CLISpecifier: "d.t",
-		Config:       config.DefaultZoneConfig(), // Old value for Num Replicas.
+		Config:       s.(*server.TestServer).Cfg.DefaultZoneConfig,
 	}
 
 	// Doesn't have any values of its own.

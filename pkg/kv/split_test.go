@@ -178,13 +178,15 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Override default zone config.
-	cfg := config.DefaultZoneConfig()
+	cfg := config.DefaultZoneConfigRef()
 	cfg.RangeMaxBytes = proto.Int64(1 << 18)
-	defer config.TestingSetDefaultZoneConfig(cfg)()
 
 	// Manually create the local test cluster so that the split queue
 	// is not disabled (LocalTestCluster disables it by default).
 	s := &localtestcluster.LocalTestCluster{
+		Cfg: storage.StoreConfig{
+			DefaultZoneConfig: cfg,
+		},
 		StoreTestingKnobs: &storage.StoreTestingKnobs{
 			DisableScanner: true,
 		},
