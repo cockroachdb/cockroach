@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -268,44 +267,6 @@ func (c *Constraint) FromString(short string) error {
 // minRangeMaxBytes is the minimum value for range max bytes.
 const minRangeMaxBytes = 64 << 10 // 64 KB
 
-// defaultZoneConfig is the default zone configuration used when no custom
-// config has been specified.
-var defaultZoneConfig = &ZoneConfig{
-	NumReplicas:   proto.Int32(3),
-	RangeMinBytes: proto.Int64(16 << 20), // 16 MB
-	RangeMaxBytes: proto.Int64(64 << 20), // 64 MB
-	GC: &GCPolicy{
-		// Use 25 hours instead of the previous 24 to make users successful by
-		// default. Users desiring to take incremental backups every 24h may
-		// incorrectly assume that the previous default 24h was sufficient to do
-		// that. But the equation for incremental backups is:
-		// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
-		// We think most new users' incremental backups will complete within an
-		// hour, and larger clusters will have more experienced operators and will
-		// understand how to change these settings if needed.
-		TTLSeconds: 25 * 60 * 60,
-	},
-}
-
-// defaultSystemZoneConfig is the default zone configuration used when no custom
-// config has been specified for system ranges.
-var defaultSystemZoneConfig = &ZoneConfig{
-	NumReplicas:   proto.Int32(5),
-	RangeMinBytes: proto.Int64(16 << 20), // 16 MB
-	RangeMaxBytes: proto.Int64(64 << 20), // 64 MB
-	GC: &GCPolicy{
-		// Use 25 hours instead of the previous 24 to make users successful by
-		// default. Users desiring to take incremental backups every 24h may
-		// incorrectly assume that the previous default 24h was sufficient to do
-		// that. But the equation for incremental backups is:
-		// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
-		// We think most new users' incremental backups will complete within an
-		// hour, and larger clusters will have more experienced operators and will
-		// understand how to change these settings if needed.
-		TTLSeconds: 25 * 60 * 60,
-	},
-}
-
 // NewZoneConfig is the zone configuration used when no custom
 // config has been specified.
 func NewZoneConfig() *ZoneConfig {
@@ -331,54 +292,57 @@ func EmptyCompleteZoneConfig() *ZoneConfig {
 // DefaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
 func DefaultZoneConfig() ZoneConfig {
-	testingLock.Lock()
-	defer testingLock.Unlock()
-	return *protoutil.Clone(defaultZoneConfig).(*ZoneConfig)
+	return ZoneConfig{
+		NumReplicas:   proto.Int32(3),
+		RangeMinBytes: proto.Int64(16 << 20), // 16 MB
+		RangeMaxBytes: proto.Int64(64 << 20), // 64 MB
+		GC: &GCPolicy{
+			// Use 25 hours instead of the previous 24 to make users successful by
+			// default. Users desiring to take incremental backups every 24h may
+			// incorrectly assume that the previous default 24h was sufficient to do
+			// that. But the equation for incremental backups is:
+			// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
+			// We think most new users' incremental backups will complete within an
+			// hour, and larger clusters will have more experienced operators and will
+			// understand how to change these settings if needed.
+			TTLSeconds: 25 * 60 * 60,
+		},
+	}
 }
 
-// DefaultZoneConfigRef returns a reference to the default zone config.
+// DefaultZoneConfigRef is the default zone configuration used when no custom
+// config has been specified.
 func DefaultZoneConfigRef() *ZoneConfig {
-	testingLock.Lock()
-	defer testingLock.Unlock()
-	return defaultZoneConfig
+	zoneConfig := DefaultZoneConfig()
+	return &zoneConfig
 }
 
 // DefaultSystemZoneConfig is the default zone configuration used when no custom
 // config has been specified.
 func DefaultSystemZoneConfig() ZoneConfig {
-	testingLock.Lock()
-	defer testingLock.Unlock()
-	return *protoutil.Clone(defaultSystemZoneConfig).(*ZoneConfig)
-}
-
-// TestingSetDefaultZoneConfig is a testing-only function that changes the
-// default zone config and returns a function that reverts the change.
-func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
-	testingLock.Lock()
-	oldConfig := defaultZoneConfig
-	defaultZoneConfig = &cfg
-	testingLock.Unlock()
-
-	return func() {
-		testingLock.Lock()
-		defaultZoneConfig = oldConfig
-		testingLock.Unlock()
+	return ZoneConfig{
+		NumReplicas:   proto.Int32(5),
+		RangeMinBytes: proto.Int64(16 << 20), // 16 MB
+		RangeMaxBytes: proto.Int64(64 << 20), // 64 MB
+		GC: &GCPolicy{
+			// Use 25 hours instead of the previous 24 to make users successful by
+			// default. Users desiring to take incremental backups every 24h may
+			// incorrectly assume that the previous default 24h was sufficient to do
+			// that. But the equation for incremental backups is:
+			// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
+			// We think most new users' incremental backups will complete within an
+			// hour, and larger clusters will have more experienced operators and will
+			// understand how to change these settings if needed.
+			TTLSeconds: 25 * 60 * 60,
+		},
 	}
 }
 
-// TestingSetDefaultSystemZoneConfig is a testing-only function that changes the
-// default zone config and returns a function that reverts the change.
-func TestingSetDefaultSystemZoneConfig(cfg ZoneConfig) func() {
-	testingLock.Lock()
-	oldConfig := defaultSystemZoneConfig
-	defaultSystemZoneConfig = &cfg
-	testingLock.Unlock()
-
-	return func() {
-		testingLock.Lock()
-		defaultSystemZoneConfig = oldConfig
-		testingLock.Unlock()
-	}
+// DefaultSystemZoneConfigRef is the default zone configuration used when no custom
+// config has been specified.
+func DefaultSystemZoneConfigRef() *ZoneConfig {
+	systemZoneConfig := DefaultSystemZoneConfig()
+	return &systemZoneConfig
 }
 
 // IsComplete returns whether all the fields are set.

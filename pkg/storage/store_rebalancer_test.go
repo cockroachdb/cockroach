@@ -20,7 +20,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
@@ -85,7 +84,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 	for _, r := range ranges {
 		repl := &Replica{store: s}
 		repl.mu.state.Desc = &roachpb.RangeDescriptor{}
-		repl.mu.zone = config.DefaultZoneConfigRef()
+		repl.mu.zone = s.cfg.DefaultZoneConfig
 		for _, storeID := range r.storeIDs {
 			repl.mu.state.Desc.Replicas = append(repl.mu.state.Desc.Replicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
@@ -266,9 +265,7 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			zone := config.DefaultZoneConfig()
-			zone.NumReplicas = proto.Int32(int32(len(tc.storeIDs)))
-			defer config.TestingSetDefaultZoneConfig(zone)()
+			s.cfg.DefaultZoneConfig.NumReplicas = proto.Int32(int32(len(tc.storeIDs)))
 			loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
 			hottestRanges := rr.topQPS()
 			_, targets := sr.chooseReplicaToRebalance(

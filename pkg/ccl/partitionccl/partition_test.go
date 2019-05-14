@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1108,7 +1109,6 @@ func setupPartitioningTestCluster(
 ) (*gosql.DB, *sqlutils.SQLRunner, func()) {
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
-	resetZoneConfig := config.TestingSetDefaultZoneConfig(cfg)
 
 	tsArgs := func(attr string) base.TestServerArgs {
 		return base.TestServerArgs{
@@ -1117,6 +1117,9 @@ func setupPartitioningTestCluster(
 					// Disable LBS because when the scan is happening at the rate it's happening
 					// below, it's possible that one of the system ranges trigger a split.
 					DisableLoadBasedSplitting: true,
+				},
+				Server: &server.TestingKnobs{
+					DefaultZoneConfigOverride: &cfg,
 				},
 			},
 			ScanInterval: 100 * time.Millisecond,
@@ -1142,7 +1145,6 @@ func setupPartitioningTestCluster(
 
 	return tc.Conns[0], sqlDB, func() {
 		tc.Stopper().Stop(context.Background())
-		resetZoneConfig()
 	}
 }
 

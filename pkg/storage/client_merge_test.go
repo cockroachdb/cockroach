@@ -3326,7 +3326,7 @@ func TestMergeQueue(t *testing.T) {
 	}
 
 	rng, _ := randutil.NewPseudoRand()
-	randBytes := randutil.RandBytes(rng, int(*config.DefaultZoneConfig().RangeMinBytes))
+	randBytes := randutil.RandBytes(rng, int(*storeCfg.DefaultZoneConfig.RangeMinBytes))
 
 	reset := func(t *testing.T) {
 		t.Helper()
@@ -3336,7 +3336,7 @@ func TestMergeQueue(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		setZones(config.DefaultZoneConfig())
+		setZones(*storeCfg.DefaultZoneConfig)
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
 		split(t, roachpb.Key("b"))
 	}
@@ -3376,9 +3376,9 @@ func TestMergeQueue(t *testing.T) {
 
 	t.Run("lhs-undersize", func(t *testing.T) {
 		reset(t)
-		zone := config.DefaultZoneConfig()
+		zone := protoutil.Clone(storeCfg.DefaultZoneConfig).(*config.ZoneConfig)
 		*zone.RangeMinBytes *= 2
-		lhs().SetZoneConfig(&zone)
+		lhs().SetZoneConfig(zone)
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
@@ -3388,17 +3388,16 @@ func TestMergeQueue(t *testing.T) {
 
 		// The ranges are individually beneath the minimum size threshold, but
 		// together they'll exceed the maximum size threshold.
-		zone := config.DefaultZoneConfig()
+		zone := protoutil.Clone(storeCfg.DefaultZoneConfig).(*config.ZoneConfig)
 		zone.RangeMinBytes = proto.Int64(lhs().GetMVCCStats().Total() + 1)
 		zone.RangeMaxBytes = proto.Int64(lhs().GetMVCCStats().Total()*2 - 1)
-		setZones(zone)
+		setZones(*zone)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
 		// Once the maximum size threshold is increased, the merge can occur.
-		zone = *protoutil.Clone(&zone).(*config.ZoneConfig)
-		*zone.RangeMaxBytes += 1
-		setZones(zone)
+		zone.RangeMaxBytes = proto.Int64(*zone.RangeMaxBytes + 1)
+		setZones(*zone)
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
