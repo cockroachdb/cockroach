@@ -88,7 +88,7 @@ func (t *truncateNode) startExec(params runParams) error {
 		ctx,
 		stmtTableDescs,
 		droppedTableDetails,
-		tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames),
+		tree.AsStringWithFQNames(n, params.Ann()),
 		false, /* drainNames */
 		sqlbase.InvalidID /* droppedDatabaseID */)
 	if err != nil {

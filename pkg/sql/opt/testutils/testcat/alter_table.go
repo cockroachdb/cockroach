@@ -31,9 +31,10 @@ import (
 //  - INJECT STATISTICS: imports table statistics from a JSON object.
 //
 func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
+	tn := stmt.Table.ToTableName()
 	// Update the table name to include catalog and schema if not provided.
-	tc.qualifyTableName(&stmt.Table)
-	tab := tc.Table(&stmt.Table)
+	tc.qualifyTableName(&tn)
+	tab := tc.Table(&tn)
 
 	for _, cmd := range stmt.Cmds {
 		switch t := cmd.(type) {

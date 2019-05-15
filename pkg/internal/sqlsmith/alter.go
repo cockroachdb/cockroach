@@ -122,7 +122,7 @@ func makeAlterColumnType(s *scope) (tree.Statement, bool) {
 	col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
 
 	return &tree.AlterTable{
-		Table: *tableRef.TableName,
+		Table: tableRef.TableName.ToUnresolvedObjectName(),
 		Cmds: tree.AlterTableCmds{
 			&tree.AlterTableAlterColumnType{
 				Column: col.Name,
@@ -157,7 +157,7 @@ func makeAddColumn(s *scope) (tree.Statement, bool) {
 	}
 
 	return &tree.AlterTable{
-		Table: *tableRef.TableName,
+		Table: tableRef.TableName.ToUnresolvedObjectName(),
 		Cmds: tree.AlterTableCmds{
 			&tree.AlterTableAddColumn{
 				ColumnDef: col,
@@ -174,7 +174,7 @@ func makeDropColumn(s *scope) (tree.Statement, bool) {
 	col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
 
 	return &tree.AlterTable{
-		Table: *tableRef.TableName,
+		Table: tableRef.TableName.ToUnresolvedObjectName(),
 		Cmds: tree.AlterTableCmds{
 			&tree.AlterTableDropColumn{
 				Column:       col.Name,

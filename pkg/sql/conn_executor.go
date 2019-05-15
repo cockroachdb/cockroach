@@ -1590,7 +1590,7 @@ func (ex *connExecutor) execCopyIn(
 			// going through the state machine.
 			ex.state.sqlTimestamp = txnTS
 			ex.initPlanner(ctx, p)
-			ex.resetPlanner(ctx, p, txn, stmtTS)
+			ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
 		},
 	)
 	if err != nil {
@@ -1825,6 +1825,7 @@ func (ex *connExecutor) resetEvalCtx(
 	evalCtx.StmtTimestamp = stmtTS
 	evalCtx.TxnTimestamp = ex.state.sqlTimestamp
 	evalCtx.Placeholders = nil
+	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
 	evalCtx.Context = ex.Ctx()
 	evalCtx.Txn = txn
@@ -1866,7 +1867,11 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 }
 
 func (ex *connExecutor) resetPlanner(
-	ctx context.Context, p *planner, txn *client.Txn, stmtTS time.Time,
+	ctx context.Context,
+	p *planner,
+	txn *client.Txn,
+	stmtTS time.Time,
+	numAnnotations tree.AnnotationIdx,
 ) {
 	p.txn = txn
 	p.stmt = nil
@@ -1878,6 +1883,7 @@ func (ex *connExecutor) resetPlanner(
 	p.semaCtx.Location = &ex.sessionData.DataConversion.Location
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 	p.semaCtx.AsOfTimestamp = nil
+	p.semaCtx.Annotations = tree.MakeAnnotations(numAnnotations)
 
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 
