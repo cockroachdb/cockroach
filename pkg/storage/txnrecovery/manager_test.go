@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -51,14 +50,6 @@ func makeStagingTransaction(clock *hlc.Clock) roachpb.Transaction {
 	return txn
 }
 
-func addInFlightWrite(txn *roachpb.Transaction, key roachpb.Key, seq enginepb.TxnSeq) {
-	txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{Key: key})
-	if txn.InFlightWrites == nil {
-		txn.InFlightWrites = make(map[enginepb.TxnSeq]int32)
-	}
-	txn.InFlightWrites[seq] = int32(len(txn.IntentSpans) - 1)
-}
-
 // TestResolveIndeterminateCommit tests successful indeterminate commit
 // resolution attempts. It tests the case where an intent is prevented
 // and the case where an intent is not prevented.
@@ -70,8 +61,10 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 	defer stopper.Stop(context.Background())
 
 	txn := makeStagingTransaction(clock)
-	addInFlightWrite(&txn, roachpb.Key("a"), 1)
-	addInFlightWrite(&txn, roachpb.Key("b"), 2)
+	txn.InFlightWrites = []roachpb.SequencedWrite{
+		{Key: roachpb.Key("a"), Sequence: 1},
+		{Key: roachpb.Key("b"), Sequence: 2},
+	}
 
 	testutils.RunTrueAndFalse(t, "prevent", func(t *testing.T, prevent bool) {
 		mockSender = client.SenderFunc(func(
@@ -142,8 +135,10 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 	defer stopper.Stop(context.Background())
 
 	txn := makeStagingTransaction(clock)
-	addInFlightWrite(&txn, roachpb.Key("a"), 1)
-	addInFlightWrite(&txn, roachpb.Key("b"), 2)
+	txn.InFlightWrites = []roachpb.SequencedWrite{
+		{Key: roachpb.Key("a"), Sequence: 1},
+		{Key: roachpb.Key("b"), Sequence: 2},
+	}
 
 	testCases := []struct {
 		name          string

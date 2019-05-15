@@ -28,32 +28,44 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 func slurpUserDataKVs(t testing.TB, e engine.Engine) []roachpb.KeyValue {
 	t.Helper()
 
+	// Scan meta keys directly from engine. We put this in a retry loop
+	// because the application of all of a transactions committed writes
+	// is not always synchronous with it committing.
 	var kvs []roachpb.KeyValue
-	it := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
-	defer it.Close()
-	for it.Seek(engine.MVCCKey{Key: keys.UserTableDataMin}); ; it.NextKey() {
-		ok, err := it.Valid()
-		if err != nil {
-			t.Fatal(err)
+	testutils.SucceedsSoon(t, func() error {
+		kvs = nil
+		it := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+		defer it.Close()
+		for it.Seek(engine.MVCCKey{Key: keys.UserTableDataMin}); ; it.NextKey() {
+			ok, err := it.Valid()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				break
+			}
+			if !it.UnsafeKey().IsValue() {
+				return errors.Errorf("found intent key %v", it.UnsafeKey())
+			}
+			kvs = append(kvs, roachpb.KeyValue{
+				Key:   it.Key().Key,
+				Value: roachpb.Value{RawBytes: it.Value(), Timestamp: it.UnsafeKey().Timestamp},
+			})
 		}
-		if !ok {
-			break
-		}
-		kvs = append(kvs, roachpb.KeyValue{
-			Key:   it.Key().Key,
-			Value: roachpb.Value{RawBytes: it.Value(), Timestamp: it.UnsafeKey().Timestamp},
-		})
-	}
+		return nil
+	})
 	return kvs
 }
 
@@ -110,6 +122,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		RowLastModified string
 	}
 	kvsToRows := func(kvs []roachpb.KeyValue) []rowWithMVCCMetadata {
+		t.Helper()
 		for _, kv := range kvs {
 			log.Info(ctx, kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 		}

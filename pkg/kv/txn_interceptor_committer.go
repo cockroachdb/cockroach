@@ -16,22 +16,108 @@ package kv
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+)
+
+var parallelCommitsEnabled = settings.RegisterBoolSetting(
+	"kv.transaction.parallel_commits_enabled",
+	"if enabled, transactional commits will be parallelized with transactional writes",
+	false,
 )
 
 // txnCommitter is a txnInterceptor that concerns itself with committing and
 // rolling back transactions. It intercepts EndTransaction requests and
-// coordinates their execution. This is either accomplished by issuing them
-// directly with proper addressing, eliding them when they are not needed, or
-// (eventually) coordinating the execution of committing EndTransaction requests
-// in parallel with the rest of their batch.
+// coordinates their execution. This is accomplished either by issuing them
+// directly with proper addressing if they are alone, eliding them if they are
+// not needed, or coordinating their execution in parallel with the rest of
+// their batch if they are part of a larger set of requests.
 //
-// NOTE: the primary justification for introducing this interceptor is that it
-// will house all of the coordinator-side logic for parallel commits. Once
-// complete, there will be a nice description of parallel commits here.
+// The third operation listed, which we define as a "parallel commit", is the
+// most interesting. Marking a transaction record as committed in parallel with
+// writing the rest of the transaction's intents is a clear win in terms of
+// latency - in theory it removes the cost of an entire consensus round-trip
+// from a transaction. However, doing so safely comes with extra complication.
+// It requires an extension to the transaction model, additional client-side
+// logic, buy-in from concurrency control, and specialized support from a
+// transaction recovery mechanism. txnCommitter is responsible for the parallel
+// commit-specific client-side logic.
+//
+// Parallel commits works by defining a committed transaction as a transaction
+// that meets one of the two following commit conditions:
+// 1. a transaction is *explicitly committed* if it has a transaction record with
+//    a COMMITTED status
+// 2. a transaction is *implicitly committed* if it has a transaction record with
+//    a STAGING status and intents written for all writes declared as "in-flight"
+//    on the transaction record at equal or lower timestamps than the transaction
+//    record's commit timestamp
+//
+// A transaction may move from satisfying the implicit commit condition to
+// satisfying the explicit commit condition. This is desirable because it moves
+// the commit condition from a distributed condition to one local to the
+// transaction record. Regardless, once either commit condition is satisfied, a
+// transaction will remain committed in perpetuity both to itself and to all
+// concurrent observers.
+//
+// The txnCommitter interceptor's role in this is to determine the set of writes
+// that will be in-flight during a parallel commit. It collects this set from
+// both the writes and the query intent requests that it finds present in the
+// same batch as the committing end transaction request. The writes in this
+// batch indicate a new intent write and the query intent requests indicate a
+// previous pipelined intent write that has not yet been proven as successful.
+// Before issuing the batch, the txnCommitter attaches this set to the end
+// transaction request.
+//
+// The txnCommitter then collects the response of the batch when it returns.
+// Based on the outcome of the requests in the batch, the interceptor determines
+// whether the transaction successfully committed by satisfying the implicit
+// commit condition.
+//
+// If all requests in the batch succeeded (including the EndTransaction request)
+// then the implicit commit condition is satisfied. The interceptor returns a
+// successful response up then stack and launches an async task to make the
+// commit explicit by moving the transaction record's status from STAGING to
+// COMMITTED.
+//
+// If all requests did not succeed then the implicit commit condition is not
+// satisfied and the transaction is still in-progress (and could still be
+// committed or aborted at a later time). There are a number of reasons why
+// some of the requests in the final batch may have failed:
+// - intent writes: these requests may fail to write an intent due to a logical
+//     error like a ConditionFailedError. They also could have succeeded at writing
+//     an intent but failed to write it at the desired timestamp because they ran
+//     into the timestamp cache or another committed value. In the first case, the
+//     txnCommitter will receive an error. In the second, it will generate one in
+//     needTxnRetryAfterStaging.
+// - query intents: these requests may fail because they discover that one of the
+//     previously issued writes has failed; either because it never left an intent
+//     or because it left one at too high of a timestamp. In this case, the request
+//     will return an error because the requests all have the ErrorIfMissing option
+//     set. It will also prevent the write from ever succeeding in the future, which
+//     ensures that the transaction will never suddenly become implicitly committed
+//     at a later point due to the write eventually succeeding (e.g. after a replay).
+// - end txn: this request may fail with a TransactionRetryError for any number of
+//     reasons, such as if the transaction's provisional commit timestamp has been
+//     pushed past its read timestamp. In all of these cases, an error will be
+//     returned and the transaction record will not be staged.
+//
+// If it is unknown whether all of the requests in the final batch succeeded
+// (e.g. due to a network error) then an AmbiguousResultError is returned. The
+// logic to enforce this is in DistSender.
+// TODO(nvanbenschoten): merge this logic.
+//
+// In all cases, the interceptor abstracts away the details of this from all
+// interceptors above it in the coordinator interceptor stack.
 type txnCommitter struct {
+	st      *cluster.Settings
+	stopper *stop.Stopper
 	wrapped lockedSender
+	mu      sync.Locker
 }
 
 // SendLocked implements the lockedSender interface.
@@ -47,8 +133,8 @@ func (tc *txnCommitter) SendLocked(
 
 	// Determine whether we can elide the EndTransaction entirely. We can do
 	// so if the transaction is read-only, which we determine based on whether
-	// the EndTransaction request contains any intents.
-	if len(et.IntentSpans) == 0 {
+	// the EndTransaction request contains any writes.
+	if len(et.IntentSpans) == 0 && len(et.InFlightWrites) == 0 {
 		return tc.sendLockedWithElidedEndTransaction(ctx, ba, et)
 	}
 
@@ -60,8 +146,97 @@ func (tc *txnCommitter) SendLocked(
 		et.Key = ba.Txn.Key
 	}
 
-	// Pass the adjusted batch through the wrapped lockedSender.
-	return tc.wrapped.SendLocked(ctx, ba)
+	// Determine whether the commit can be run in parallel with the rest of the
+	// writes in the batch. If not, move the in-flight writes currently attached
+	// to the EndTransaction request to the IntentSpans and clear the in-flight
+	// write set; no writes will be in-flight concurrently with the EndTransaction
+	// request.
+	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallelWithWrites(ba, et) {
+		// NB: when parallel commits is disabled, this is the best place to
+		// detect whether the batch has only distinct spans. We can set this
+		// flag based on whether any of previously declared in-flight writes
+		// in this batch overlap with each other. This will have (rare) false
+		// negatives when the in-flight writes overlap with existing intent
+		// spans, but never false positives.
+		et.IntentSpans, ba.Header.DistinctSpans = mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
+		// Disable parallel commits.
+		et.InFlightWrites = nil
+	}
+
+	// If the EndTransaction request is a rollback, pass it through.
+	if !et.Commit {
+		return tc.wrapped.SendLocked(ctx, ba)
+	}
+
+	// Send the adjusted batch through the wrapped lockedSender. Unlocks while
+	// sending then re-locks.
+	br, pErr := tc.wrapped.SendLocked(ctx, ba)
+	if pErr != nil {
+		// If the batch resulted in an error but the EndTransaction request
+		// succeeded, staging the transaction record in the process, downgrade
+		// the status back to PENDING. Even though the transaction record may
+		// have a status of STAGING, we know that the transaction failed to
+		// implicitly commit, so interceptors above the txnCommitter in the
+		// stack don't need to be made aware that the record is staging.
+		if txn := pErr.GetTxn(); txn != nil && txn.Status == roachpb.STAGING {
+			pErr.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
+		}
+		// Same deal with MixedSuccessErrors.
+		// TODO(nvanbenschoten): We can remove this once MixedSuccessErrors
+		// are removed.
+		if aPSErr, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); ok {
+			if txn := aPSErr.Wrapped.GetTxn(); txn != nil && txn.Status == roachpb.STAGING {
+				aPSErr.Wrapped.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
+			}
+		}
+		return nil, pErr
+	}
+
+	// Determine next steps based on the status of the transaction.
+	switch br.Txn.Status {
+	case roachpb.STAGING:
+		// Continue with STAGING-specific validation and cleanup.
+	case roachpb.COMMITTED:
+		// The transaction is explicitly committed. This is possible if all
+		// in-flight writes were sent to the same range as the EndTransaction
+		// request, in a single batch. In this case, a range can determine that
+		// all in-flight writes will succeed with the EndTransaction and can
+		// decide to skip the STAGING state.
+		//
+		// This is also possible if we never attached any in-flight writes to the
+		// EndTransaction request, either because canCommitInParallelWithWrites
+		// returned false or because there were no unproven in-flight writes
+		// (see txnPipeliner) and there were no writes in the batch request.
+		return br, nil
+	default:
+		return nil, roachpb.NewErrorf("unexpected response status without error: %v", br.Txn)
+	}
+
+	// Determine whether the transaction needs to either retry or refresh. When
+	// the EndTransaction request evaluated while STAGING the transaction
+	// record, it performed this check. However, the transaction proto may have
+	// changed due to writes evaluated concurrently with the EndTransaction even
+	// if none of those writes returned an error. Remember that the transaction
+	// proto we see here could be a combination of protos from responses, all
+	// merged by DistSender.
+	if pErr := needTxnRetryAfterStaging(br); pErr != nil {
+		return nil, pErr
+	}
+
+	// If the transaction doesn't need to retry then it is implicitly committed!
+	// We're the only ones who know that though -- other concurrent transactions
+	// will need to go through the full status resolution process to make a
+	// determination about the status of our STAGING transaction. To avoid this,
+	// we transition to an explicitly committed transaction as soon as possible.
+	// This also has the side-effect of kicking off intent resolution.
+	mergedIntentSpans, _ := mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
+	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedIntentSpans)
+
+	// Switch the status on the batch response's transaction to COMMITTED. No
+	// interceptor above this one in the stack should ever need to deal with
+	// transaction proto in the STAGING state.
+	br.Txn = cloneWithStatus(br.Txn, roachpb.COMMITTED)
+	return br, nil
 }
 
 // sendLockedWithElidedEndTransaction sends the provided batch without its
@@ -112,6 +287,136 @@ func (tc *txnCommitter) sendLockedWithElidedEndTransaction(
 	resp.Txn = br.Txn
 	br.Add(resp)
 	return br, nil
+}
+
+// canCommitInParallelWithWrites determines whether the batch can issue its
+// committing EndTransaction in parallel with other in-flight writes.
+func (tc *txnCommitter) canCommitInParallelWithWrites(
+	ba roachpb.BatchRequest, et *roachpb.EndTransactionRequest,
+) bool {
+	if !parallelCommitsEnabled.Get(&tc.st.SV) {
+		return false
+	}
+
+	// We're trying to parallel commit, not parallel abort.
+	if !et.Commit {
+		return false
+	}
+
+	// If the transaction has a commit trigger, we don't allow it to commit in
+	// parallel with writes. There's no fundamental reason for this restriction,
+	// but for now it's not worth the complication.
+	if et.InternalCommitTrigger != nil {
+		return false
+	}
+
+	// Similar to how we can't pipeline ranged writes, we also can't commit in
+	// parallel with them. The reason for this is that the status resolution
+	// process for STAGING transactions wouldn't know where to look for the
+	// intents.
+	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
+		req := ru.GetInner()
+		if roachpb.IsTransactionWrite(req) && roachpb.IsRange(req) {
+			return false
+		}
+	}
+	return true
+}
+
+// mergeIntoSpans merges all provided sequenced writes into the span slice. It
+// then sorts the spans and merges an that overlap. Returns true iff all of the
+// spans are distinct.
+func mergeIntoSpans(s []roachpb.Span, ws []roachpb.SequencedWrite) ([]roachpb.Span, bool) {
+	if s == nil {
+		s = make([]roachpb.Span, 0, len(ws))
+	}
+	for _, w := range ws {
+		s = append(s, roachpb.Span{Key: w.Key})
+	}
+	return roachpb.MergeSpans(s)
+}
+
+// needTxnRetryAfterStaging determines whether the transaction needs to refresh
+// (see txnSpanRefresher) or retry based on the batch response of a parallel
+// commit attempt.
+func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
+	if len(br.Responses) == 0 {
+		return roachpb.NewErrorf("no responses in BatchResponse: %v", br)
+	}
+	lastResp := br.Responses[len(br.Responses)-1].GetInner()
+	etResp, ok := lastResp.(*roachpb.EndTransactionResponse)
+	if !ok {
+		return roachpb.NewErrorf("unexpected response in BatchResponse: %v", lastResp)
+	}
+	if etResp.StagingTimestamp.IsEmpty() {
+		return roachpb.NewErrorf("empty StagingTimestamp in EndTransactionResponse: %v", etResp)
+	}
+	if etResp.StagingTimestamp.Less(br.Txn.Timestamp) {
+		// If the timestamp that the transaction record was staged at
+		// is less than the timestamp of the transaction in the batch
+		// response then one of the concurrent writes was pushed to
+		// a higher timestamp. This violates the "implicit commit"
+		// condition and neither the transaction coordinator nor any
+		// other concurrent actor will consider this transaction to
+		// be committed as is.
+		err := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "" /* extraMsg */)
+		txn := cloneWithStatus(br.Txn, roachpb.PENDING)
+		return roachpb.NewErrorWithTxn(err, txn)
+	}
+	return nil
+}
+
+// makeTxnCommitExplicitAsync launches an async task that attempts to move the
+// transaction from implicitly committed (STAGING status with all intents
+// written) to explicitly committed (COMMITTED status). It does so by sending a
+// second EndTransactionRequest, this time with no InFlightWrites attached.
+func (tc *txnCommitter) makeTxnCommitExplicitAsync(
+	ctx context.Context, txn *roachpb.Transaction, intentSpans []roachpb.Span,
+) {
+	// TODO(nvanbenschoten): consider adding tracing for this request.
+	// TODO(nvanbenschoten): add a timeout to this request.
+	// TODO(nvanbenschoten): consider making this semi-synchronous to
+	//   backpressure client writes when these start to slow down. This
+	//   would be similar to what we do for intent resolution.
+	log.VEventf(ctx, 2, "making txn commit explicit: %s", txn)
+	if err := tc.stopper.RunAsyncTask(
+		context.Background(), "txnCommitter: making txn commit explicit", func(ctx context.Context) {
+			tc.mu.Lock()
+			defer tc.mu.Unlock()
+			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, intentSpans); err != nil {
+				log.VErrEventf(ctx, 1, "making txn commit explicit failed for %s: %v", txn, err)
+			}
+		},
+	); err != nil {
+		log.VErrEventf(ctx, 1, "failed to make txn commit explicit: %v", err)
+	}
+}
+
+func makeTxnCommitExplicitLocked(
+	ctx context.Context, s lockedSender, txn *roachpb.Transaction, intentSpans []roachpb.Span,
+) error {
+	// Clone the txn to prevent data races.
+	txn = txn.Clone()
+
+	// Construct a new batch with just an EndTransaction request.
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: txn}
+	et := roachpb.EndTransactionRequest{Commit: true}
+	et.Key = txn.Key
+	et.IntentSpans = intentSpans
+	ba.Add(&et)
+
+	_, pErr := s.SendLocked(ctx, ba)
+	if pErr != nil {
+		// Detect whether the error indicates that someone else beat
+		// us to explicitly committing the transaction record.
+		tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError)
+		if ok && tse.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+			return nil
+		}
+		return pErr.GoError()
+	}
+	return nil
 }
 
 // setWrapped implements the txnInterceptor interface.

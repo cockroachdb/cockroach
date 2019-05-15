@@ -63,130 +63,147 @@ func (r *Replica) updateTimestampCache(
 	}
 	for i, union := range ba.Requests {
 		args := union.GetInner()
-		if roachpb.UpdatesTimestampCache(args) {
-			// Skip update if there's an error and it's not for this index
-			// or the request doesn't update the timestamp cache on errors.
-			if pErr != nil {
-				if index := pErr.Index; !roachpb.UpdatesTimestampCacheOnError(args) ||
-					index == nil || int32(i) != index.Index {
-					continue
-				}
+		if !roachpb.UpdatesTimestampCache(args) {
+			continue
+		}
+		// Skip update if there's an error and it's not for this index
+		// or the request doesn't update the timestamp cache on errors.
+		if pErr != nil {
+			if index := pErr.Index; !roachpb.UpdatesTimestampCacheOnError(args) ||
+				index == nil || int32(i) != index.Index {
+				continue
 			}
-			header := args.Header()
-			start, end := header.Key, header.EndKey
-			switch t := args.(type) {
-			case *roachpb.EndTransactionRequest:
-				// EndTransaction requests that finalize their transaction add the
-				// transaction key to the write timestamp cache as a tombstone to
-				// ensure replays and concurrent requests aren't able to recreate
-				// the transaction record.
-				//
-				// It inserts the timestamp of the final batch in the transaction.
-				// This timestamp must necessarily be equal to or greater than the
-				// transaction's OrigTimestamp, which is consulted in
-				// CanCreateTxnRecord.
-				if br.Txn.Status.IsFinalized() {
-					key := keys.TransactionKey(start, txnID)
-					addToTSCache(key, nil, ts, txnID, false /* readCache */)
-				}
-			case *roachpb.RecoverTxnRequest:
-				// A successful RecoverTxn request may or may not have finalized the
-				// transaction that it was trying to recover. If so, then we add the
-				// transaction's key to the write timestamp cache as a tombstone to
-				// ensure that replays and concurrent requests aren't able to
-				// recreate the transaction record. This parallels what we do in the
-				// EndTransaction request case.
-				//
-				// Insert the timestamp of the batch, which we asserted during
-				// command evaluation was equal to or greater than the transaction's
-				// OrigTimestamp.
-				recovered := br.Responses[i].GetInner().(*roachpb.RecoverTxnResponse).RecoveredTxn
-				if recovered.Status.IsFinalized() {
-					key := keys.TransactionKey(start, recovered.ID)
-					addToTSCache(key, nil, ts, recovered.ID, false /* readCache */)
-				}
-			case *roachpb.PushTxnRequest:
-				// A successful PushTxn request bumps the timestamp cache for
-				// the pushee's transaction key. The pushee will consult the
-				// timestamp cache when creating its record. If the push left
-				// the transaction in a PENDING state (PUSH_TIMESTAMP) then we
-				// update the read timestamp cache. This will cause the creator
-				// of the transaction record to forward its provisional commit
-				// timestamp to honor the result of this push. If the push left
-				// the transaction in an ABORTED state (PUSH_ABORT) then we
-				// update the write timestamp cache. This will prevent the
-				// creation of the transaction record entirely.
-				pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+		}
+		header := args.Header()
+		start, end := header.Key, header.EndKey
+		switch t := args.(type) {
+		case *roachpb.EndTransactionRequest:
+			// EndTransaction requests that finalize their transaction add the
+			// transaction key to the write timestamp cache as a tombstone to
+			// ensure replays and concurrent requests aren't able to recreate
+			// the transaction record.
+			//
+			// It inserts the timestamp of the final batch in the transaction.
+			// This timestamp must necessarily be equal to or greater than the
+			// transaction's OrigTimestamp, which is consulted in
+			// CanCreateTxnRecord.
+			if br.Txn.Status.IsFinalized() {
+				key := keys.TransactionKey(start, txnID)
+				addToTSCache(key, nil, ts, txnID, false /* readCache */)
+			}
+		case *roachpb.RecoverTxnRequest:
+			// A successful RecoverTxn request may or may not have finalized the
+			// transaction that it was trying to recover. If so, then we add the
+			// transaction's key to the write timestamp cache as a tombstone to
+			// ensure that replays and concurrent requests aren't able to
+			// recreate the transaction record. This parallels what we do in the
+			// EndTransaction request case.
+			//
+			// Insert the timestamp of the batch, which we asserted during
+			// command evaluation was equal to or greater than the transaction's
+			// OrigTimestamp.
+			recovered := br.Responses[i].GetInner().(*roachpb.RecoverTxnResponse).RecoveredTxn
+			if recovered.Status.IsFinalized() {
+				key := keys.TransactionKey(start, recovered.ID)
+				addToTSCache(key, nil, ts, recovered.ID, false /* readCache */)
+			}
+		case *roachpb.PushTxnRequest:
+			// A successful PushTxn request bumps the timestamp cache for
+			// the pushee's transaction key. The pushee will consult the
+			// timestamp cache when creating its record. If the push left
+			// the transaction in a PENDING state (PUSH_TIMESTAMP) then we
+			// update the read timestamp cache. This will cause the creator
+			// of the transaction record to forward its provisional commit
+			// timestamp to honor the result of this push. If the push left
+			// the transaction in an ABORTED state (PUSH_ABORT) then we
+			// update the write timestamp cache. This will prevent the
+			// creation of the transaction record entirely.
+			pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 
-				var readCache bool
-				switch pushee.Status {
-				case roachpb.PENDING:
-					readCache = true
-				case roachpb.ABORTED:
-					readCache = false
-				case roachpb.STAGING:
-					// No need to update the timestamp cache. If a transaction
-					// is in this state then it must have a transaction record.
-				case roachpb.COMMITTED:
-					// No need to update the timestamp cache. It was already
-					// updated by the corresponding EndTransaction request.
+			var readCache bool
+			switch pushee.Status {
+			case roachpb.PENDING:
+				readCache = true
+			case roachpb.ABORTED:
+				readCache = false
+			case roachpb.STAGING:
+				// No need to update the timestamp cache. If a transaction
+				// is in this state then it must have a transaction record.
+			case roachpb.COMMITTED:
+				// No need to update the timestamp cache. It was already
+				// updated by the corresponding EndTransaction request.
+				continue
+			}
+			key := keys.TransactionKey(start, pushee.ID)
+			addToTSCache(key, nil, pushee.Timestamp, t.PusherTxn.ID, readCache)
+		case *roachpb.ConditionalPutRequest:
+			if pErr != nil {
+				// ConditionalPut still updates on ConditionFailedErrors.
+				if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 					continue
 				}
-				key := keys.TransactionKey(start, pushee.ID)
-				addToTSCache(key, nil, pushee.Timestamp, t.PusherTxn.ID, readCache)
-			case *roachpb.ConditionalPutRequest:
-				if pErr != nil {
-					// ConditionalPut still updates on ConditionFailedErrors.
-					if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
-						continue
-					}
-				}
-				addToTSCache(start, end, ts, txnID, true /* readCache */)
-			case *roachpb.InitPutRequest:
-				if pErr != nil {
-					// InitPut still updates on ConditionFailedErrors.
-					if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
-						continue
-					}
-				}
-				addToTSCache(start, end, ts, txnID, true /* readCache */)
-			case *roachpb.ScanRequest:
-				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
-				if resp.ResumeSpan != nil {
-					// Note that for forward scan, the resume span will start at
-					// the (last key read).Next(), which is actually the correct
-					// end key for the span to update the timestamp cache.
-					end = resp.ResumeSpan.Key
-				}
-				addToTSCache(start, end, ts, txnID, true /* readCache */)
-			case *roachpb.ReverseScanRequest:
-				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
-				if resp.ResumeSpan != nil {
-					// Note that for reverse scans, the resume span's end key is
-					// an open interval. That means it was read as part of this op
-					// and won't be read on resume. It is the correct start key for
-					// the span to update the timestamp cache.
-					start = resp.ResumeSpan.EndKey
-				}
-				addToTSCache(start, end, ts, txnID, true /* readCache */)
-			case *roachpb.QueryIntentRequest:
-				if t.IfMissing == roachpb.QueryIntentRequest_PREVENT {
-					resp := br.Responses[i].GetInner().(*roachpb.QueryIntentResponse)
-					if !resp.FoundIntent {
-						// If the QueryIntent request has an "if missing" behavior
-						// of PREVENT and the intent is missing then we update the
-						// timestamp cache at the intent's key to the intent's
-						// transactional timestamp. This will prevent the intent
-						// from ever being written in the future. We use an empty
-						// transaction ID so that we block the intent regardless
-						// of whether it is part of the current batch's transaction
-						// or not.
-						addToTSCache(start, end, t.Txn.Timestamp, uuid.UUID{}, true /* readCache */)
-					}
-				}
-			default:
-				addToTSCache(start, end, ts, txnID, !roachpb.UpdatesWriteTimestampCache(args))
 			}
+			addToTSCache(start, end, ts, txnID, true /* readCache */)
+		case *roachpb.InitPutRequest:
+			if pErr != nil {
+				// InitPut still updates on ConditionFailedErrors.
+				if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
+					continue
+				}
+			}
+			addToTSCache(start, end, ts, txnID, true /* readCache */)
+		case *roachpb.ScanRequest:
+			resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
+			if resp.ResumeSpan != nil {
+				// Note that for forward scan, the resume span will start at
+				// the (last key read).Next(), which is actually the correct
+				// end key for the span to update the timestamp cache.
+				end = resp.ResumeSpan.Key
+			}
+			addToTSCache(start, end, ts, txnID, true /* readCache */)
+		case *roachpb.ReverseScanRequest:
+			resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
+			if resp.ResumeSpan != nil {
+				// Note that for reverse scans, the resume span's end key is
+				// an open interval. That means it was read as part of this op
+				// and won't be read on resume. It is the correct start key for
+				// the span to update the timestamp cache.
+				start = resp.ResumeSpan.EndKey
+			}
+			addToTSCache(start, end, ts, txnID, true /* readCache */)
+		case *roachpb.QueryIntentRequest:
+			missing := false
+			if pErr != nil {
+				switch t := pErr.GetDetail().(type) {
+				case *roachpb.IntentMissingError:
+					missing = true
+				case *roachpb.TransactionRetryError:
+					// QueryIntent will return a TxnRetry(SERIALIZABLE) error
+					// if a transaction is querying its own intent and finds
+					// it pushed.
+					//
+					// NB: we check the index of the error above, so this
+					// TransactionRetryError should indicate a missing intent
+					// from the QueryIntent request. However, bumping the
+					// timestamp cache wouldn't cause a correctness issue
+					// if we found the intent.
+					missing = t.Reason == roachpb.RETRY_SERIALIZABLE
+				}
+			} else {
+				missing = !br.Responses[i].GetInner().(*roachpb.QueryIntentResponse).FoundIntent
+			}
+			if missing {
+				// If the QueryIntent determined that the intent is missing
+				// then we update the timestamp cache at the intent's key to
+				// the intent's transactional timestamp. This will prevent
+				// the intent from ever being written in the future. We use
+				// an empty transaction ID so that we block the intent
+				// regardless of whether it is part of the current batch's
+				// transaction or not.
+				addToTSCache(start, end, t.Txn.Timestamp, uuid.UUID{}, true /* readCache */)
+			}
+		default:
+			addToTSCache(start, end, ts, txnID, !roachpb.UpdatesWriteTimestampCache(args))
 		}
 	}
 }
