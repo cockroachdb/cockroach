@@ -204,11 +204,11 @@ func TestRouterOutputNext(t *testing.T) {
 			tc.unblockEvent(in, o)
 
 			// Should have data available, pushed by our reader goroutine.
-			batches := newBatchBuffer()
+			batches := NewBatchBuffer()
 			out := newOpTestOutput(batches, []int{0}, tc.expected)
 			for {
 				b := <-batchChan
-				batches.add(b)
+				batches.Add(b)
 				if b.Length() == 0 {
 					break
 				}
@@ -385,14 +385,14 @@ func TestRouterOutputRandom(t *testing.T) {
 				}
 			}()
 
-			actual := newBatchBuffer()
+			actual := NewBatchBuffer()
 
 			// Consumer.
 			wg.Add(1)
 			go func() {
 				for {
 					b := o.Next(ctx)
-					actual.add(b)
+					actual.Add(b)
 					if b.Length() == 0 {
 						wg.Done()
 						return
