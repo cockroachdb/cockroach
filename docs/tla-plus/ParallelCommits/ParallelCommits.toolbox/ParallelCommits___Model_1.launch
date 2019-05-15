@@ -12,27 +12,31 @@
 <stringAttribute key="distributedTLCVMArgs" value=""/>
 <intAttribute key="fpBits" value="1"/>
 <intAttribute key="fpIndex" value="1"/>
-<intAttribute key="maxHeapSize" value="8"/>
+<intAttribute key="maxHeapSize" value="25"/>
 <intAttribute key="maxSetSize" value="1000000"/>
 <booleanAttribute key="mcMode" value="true"/>
 <stringAttribute key="modelBehaviorInit" value=""/>
 <stringAttribute key="modelBehaviorNext" value=""/>
 <stringAttribute key="modelBehaviorSpec" value="Spec"/>
 <intAttribute key="modelBehaviorSpecType" value="1"/>
-<stringAttribute key="modelBehaviorVars" value="have_staged_record, intent_writes, record, checked_writes, tscache, pc, to_write"/>
+<stringAttribute key="modelBehaviorVars" value="intent_writes, to_write, txn_epoch, prevent_epoch, pc, commit_ack, record, have_staged_record, found_writes, tscache"/>
 <stringAttribute key="modelComments" value=""/>
 <booleanAttribute key="modelCorrectnessCheckDeadlock" value="true"/>
 <listAttribute key="modelCorrectnessInvariants">
 <listEntry value="1TypeInvariant"/>
 </listAttribute>
 <listAttribute key="modelCorrectnessProperties">
-<listEntry value="1TemporalProperties"/>
+<listEntry value="1TemporalTxnRecordProperties"/>
+<listEntry value="1TemporalIntentProperties"/>
+<listEntry value="1TemporalTSCacheProperties"/>
+<listEntry value="1AckLeadsToCommit"/>
 </listAttribute>
 <stringAttribute key="modelExpressionEval" value=""/>
 <stringAttribute key="modelParameterActionConstraint" value=""/>
 <listAttribute key="modelParameterConstants">
-<listEntry value="KEYS;;{k1, k2, k3};1;1"/>
+<listEntry value="KEYS;;{k1, k2};1;1"/>
 <listEntry value="PREVENTERS;;{p1, p2};1;1"/>
+<listEntry value="MAX_EPOCH;;3;0;0"/>
 </listAttribute>
 <stringAttribute key="modelParameterContraint" value=""/>
 <listAttribute key="modelParameterDefinitions"/>
