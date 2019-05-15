@@ -113,7 +113,13 @@ func TestRuleFunctionAssumption(t *testing.T) {
 			t.Errorf("%s should not be folded because it is impure", name)
 		}
 		if props.Category == categorySystemInfo || props.Category == categoryDateAndTime {
-			t.Errorf("%s should not be folded because it has category %s", name, props.Category)
+			switch name {
+			case "crdb_internal.locality_value":
+				// OK to fold this function.
+
+			default:
+				t.Errorf("%s should not be folded because it has category %s", name, props.Category)
+			}
 		}
 	}
 }
