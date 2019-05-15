@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -557,9 +558,16 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		propsExpr := scalar
 		switch scalar.Op() {
 		case opt.FiltersItemOp, opt.ProjectionsItemOp, opt.AggregationsItemOp,
-			opt.WindowsItemOp, opt.ZipItemOp:
+			opt.ZipItemOp:
 			// Use properties from the item, but otherwise omit it from output.
 			scalar = scalar.Child(0).(opt.ScalarExpr)
+		case opt.WindowsItemOp:
+			// Only show this if the frame differs from the default.
+			frame := scalar.Private().(*WindowsItemPrivate).Frame
+			if frame.Bounds.StartBound.BoundType == tree.UnboundedPreceding &&
+				frame.Bounds.EndBound.BoundType == tree.CurrentRow {
+				scalar = scalar.Child(0).(opt.ScalarExpr)
+			}
 		}
 
 		fmt.Fprintf(f.Buffer, "%v", scalar.Op())
@@ -794,6 +802,18 @@ func formatCol(
 	}
 }
 
+func frameBoundName(b tree.WindowFrameBoundType) string {
+	switch b {
+	case tree.UnboundedFollowing, tree.UnboundedPreceding:
+		return "unbounded"
+	case tree.CurrentRow:
+		return "current-row"
+	case tree.OffsetFollowing, tree.OffsetPreceding:
+		return "offset"
+	}
+	panic(pgerror.AssertionFailedf("unexpected bound"))
+}
+
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to
 // happen in reverse (the code lives in the ordering package, and depending on
 // that directly would be a dependency loop).
@@ -880,6 +900,15 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *FunctionPrivate:
 		fmt.Fprintf(f.Buffer, " %s", t.Name)
+
+	case *WindowsItemPrivate:
+		if t.Frame.Bounds.StartBound.BoundType != tree.UnboundedPreceding ||
+			t.Frame.Bounds.EndBound.BoundType != tree.CurrentRow {
+			fmt.Fprintf(f.Buffer, " from %s to %s",
+				frameBoundName(t.Frame.Bounds.StartBound.BoundType),
+				frameBoundName(t.Frame.Bounds.EndBound.BoundType),
+			)
+		}
 
 	case *WindowPrivate:
 		fmt.Fprintf(f.Buffer, " partition=%s", t.Partition)

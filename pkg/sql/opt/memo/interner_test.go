@@ -317,6 +317,40 @@ func TestInterner(t *testing.T) {
 			{val1: tree.ShowTraceKV, val2: tree.ShowTraceRaw, equal: false},
 		}},
 
+		{hashFn: in.hasher.HashWindowFrame, eqFn: in.hasher.IsWindowFrameEqual, variations: []testVariation{
+			{
+				val1: &tree.WindowFrame{
+					Bounds: tree.WindowFrameBounds{
+						StartBound: &tree.WindowFrameBound{},
+						EndBound:   &tree.WindowFrameBound{},
+					},
+				},
+				val2: &tree.WindowFrame{
+					Bounds: tree.WindowFrameBounds{
+						StartBound: &tree.WindowFrameBound{},
+						EndBound:   &tree.WindowFrameBound{},
+					},
+				},
+				equal: true,
+			},
+			{
+				val1: &tree.WindowFrame{
+					Bounds: tree.WindowFrameBounds{
+						StartBound: &tree.WindowFrameBound{},
+						EndBound:   &tree.WindowFrameBound{},
+					},
+				},
+				val2: &tree.WindowFrame{
+					Mode: tree.ROWS,
+					Bounds: tree.WindowFrameBounds{
+						StartBound: &tree.WindowFrameBound{},
+						EndBound:   &tree.WindowFrameBound{},
+					},
+				},
+				equal: false,
+			},
+		}},
+
 		{hashFn: in.hasher.HashTupleOrdinal, eqFn: in.hasher.IsTupleOrdinalEqual, variations: []testVariation{
 			{val1: TupleOrdinal(0), val2: TupleOrdinal(0), equal: true},
 			{val1: TupleOrdinal(0), val2: TupleOrdinal(1), equal: false},

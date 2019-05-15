@@ -483,6 +483,18 @@ func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
 	h.HashString(string(val))
 }
 
+func (h *hasher) HashWindowFrame(val *tree.WindowFrame) {
+	// TODO(justin): remove when we support OFFSET.
+	if val.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
+		val.Bounds.EndBound.BoundType == tree.OffsetFollowing {
+		panic(pgerror.AssertionFailedf("expected to have rejected offset"))
+	}
+
+	h.HashInt(int(val.Bounds.StartBound.BoundType))
+	h.HashInt(int(val.Bounds.EndBound.BoundType))
+	h.HashInt(int(val.Mode))
+}
+
 func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
 	h.HashUint64(uint64(val))
 }
@@ -751,6 +763,20 @@ func (h *hasher) IsStatementTypeEqual(l, r tree.StatementType) bool {
 
 func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
 	return l == r
+}
+
+func (h *hasher) IsWindowFrameEqual(l, r *tree.WindowFrame) bool {
+	// TODO(justin): remove when we support OFFSET.
+	if l.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
+		l.Bounds.EndBound.BoundType == tree.OffsetFollowing ||
+		r.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
+		r.Bounds.EndBound.BoundType == tree.OffsetFollowing {
+		panic(pgerror.AssertionFailedf("expected to have rejected offset"))
+	}
+
+	return l.Bounds.StartBound.BoundType == r.Bounds.StartBound.BoundType &&
+		l.Bounds.EndBound.BoundType == r.Bounds.EndBound.BoundType &&
+		l.Mode == r.Mode
 }
 
 func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {

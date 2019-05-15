@@ -39,6 +39,9 @@ type windowInfo struct {
 
 	// col is the output column of the aggregation.
 	col *scopeColumn
+
+	// frame is the window frame this window function is computed relative to.
+	frame *tree.WindowFrame
 }
 
 // Walk is part of the tree.Expr interface.
@@ -62,6 +65,9 @@ func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 var _ tree.Expr = &windowInfo{}
 var _ tree.TypedExpr = &windowInfo{}
 
+var defaultStartBound = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
+var defaultEndBound = &tree.WindowFrameBound{BoundType: tree.CurrentRow}
+
 // buildWindow adds any window functions on top of the expression.
 func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	if len(inScope.windows) == 0 {
@@ -70,6 +76,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	argLists := make([][]opt.ScalarExpr, len(inScope.windows))
 	partitions := make([]opt.ColSet, len(inScope.windows))
 	orderings := make([]physical.OrderingChoice, len(inScope.windows))
+	windowFrames := make([]tree.WindowFrame, len(inScope.windows))
 	argScope := outScope.push()
 	argScope.appendColumnsFromScope(outScope)
 	// The arguments to a given window function need to be columns in the input
@@ -134,6 +141,26 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 			}
 		}
 		orderings[i].FromOrdering(ord)
+
+		if w.frame != nil {
+			windowFrames[i] = *w.frame
+		}
+
+		// Fill this in with the default so that we don't need nil checks
+		// elsewhere.
+		if windowFrames[i].Bounds.StartBound == nil {
+			windowFrames[i].Bounds.StartBound = defaultStartBound
+		}
+		if windowFrames[i].Bounds.EndBound == nil {
+			// Some sources appear to say that the presence of an ORDER BY changes
+			// this between CURRENT ROW and UNBOUNDED FOLLOWING, but in reality, what
+			// CURRENT ROW means is the *last row which is a peer of this row* (a
+			// peer being a row which agrees on the ordering columns), so if there is
+			// no ORDER BY, every row is a peer with every other row in its
+			// partition, which means the CURRENT ROW and UNBOUNDED FOLLOWING are
+			// equivalent.
+			windowFrames[i].Bounds.EndBound = defaultEndBound
+		}
 	}
 
 	b.constructProjectForScope(outScope, argScope)
@@ -173,8 +200,11 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 
 		frames[frameIdx].Windows = append(frames[frameIdx].Windows,
 			memo.WindowsItem{
-				Function:   b.constructWindowFn(w.def.Name, argLists[i]),
-				ColPrivate: memo.ColPrivate{Col: w.col.id},
+				Function: b.constructWindowFn(w.def.Name, argLists[i]),
+				WindowsItemPrivate: memo.WindowsItemPrivate{
+					Frame:      &windowFrames[i],
+					ColPrivate: memo.ColPrivate{Col: w.col.id},
+				},
 			},
 		)
 	}
