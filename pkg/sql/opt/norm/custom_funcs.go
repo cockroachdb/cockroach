@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -1014,6 +1015,83 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 		items[idx].Col = toCol
 	}
 	return items
+}
+
+// CanMapOnSetOp determines whether the filter can be mapped to either
+// side of a set operator.
+func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
+	filterProps := src.ScalarProps(c.mem)
+	for i, ok := filterProps.OuterCols.Next(0); ok; i, ok = filterProps.OuterCols.Next(i + 1) {
+		colType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+		if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
+			return false
+		}
+	}
+	return !filterProps.HasCorrelatedSubquery
+}
+
+// MapSetOpFilterLeft maps the filter onto the left expression by replacing
+// the out columns of the filter with the appropriate corresponding columns in
+// the left side of the operator.
+// Useful for pushing filters to relations the set operation is composed of.
+func (c *CustomFuncs) MapSetOpFilterLeft(
+	filter *memo.FiltersItem, set *memo.SetPrivate,
+) opt.ScalarExpr {
+	return c.mapSetOpFilter(filter, set.OutCols, set.LeftCols)
+}
+
+// MapSetOpFilterRight maps the filter onto the right expression by replacing
+// the out columns of the filter with the appropriate corresponding columns in
+// the right side of the operator.
+// Useful for pushing filters to relations the set operation is composed of.
+func (c *CustomFuncs) MapSetOpFilterRight(
+	filter *memo.FiltersItem, set *memo.SetPrivate,
+) opt.ScalarExpr {
+	return c.mapSetOpFilter(filter, set.OutCols, set.RightCols)
+}
+
+// mapSetOpFilter maps filter expressions to dst by replacing occurrences of
+// columns in src with corresponding columns in dst (the two lists must be of
+// equal length).
+//
+// For each column in src that is not an outer column, SetMap replaces it with
+// the corresponding column in dst.
+//
+// For example, consider this query:
+//
+//   SELECT * FROM (SELECT x FROM a UNION SELECT y FROM b) WHERE x < 5
+//
+// If mapSetOpFilter is called on the left subtree of the Union, the filter
+// x < 5 propagates to that side after mapping the column IDs appropriately.
+// WLOG, If setMap is called on the right subtree, the filter x < 5 will be
+// mapped similarly to y < 5 on the right side.
+func (c *CustomFuncs) mapSetOpFilter(
+	filter *memo.FiltersItem, src opt.ColList, dst opt.ColList,
+) opt.ScalarExpr {
+	// Map each column in src to one column in dst to map the
+	// filters appropriately.
+	var colMap util.FastIntMap
+	for colIndex, outColID := range src {
+		colMap.Set(int(outColID), int(dst[colIndex]))
+	}
+
+	// Recursively walk the scalar sub-tree looking for references to columns
+	// that need to be replaced and then replace them appropriately.
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		switch t := nd.(type) {
+		case *memo.VariableExpr:
+			dstCol, inCol := colMap.Get(int(t.Col))
+			if !inCol {
+				// Its not part of the out cols so no replacement required.
+				return nd
+			}
+			return c.f.ConstructVariable(opt.ColumnID(dstCol))
+		}
+		return c.f.Replace(nd, replace)
+	}
+
+	return replace(filter.Condition).(opt.ScalarExpr)
 }
 
 // ----------------------------------------------------------------------

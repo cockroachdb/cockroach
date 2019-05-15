@@ -109,15 +109,15 @@ func (c *CustomFuncs) SimplifyNotNullEquality(
 	panic(pgerror.AssertionFailedf("invalid ops: %v, %v", testOp, constOp))
 }
 
-// CanMap returns true if it is possible to map a boolean expression src, which
-// is a conjunct in the given filters expression, to use the output columns of
-// the relational expression dst.
+// CanMapJoinOpFilter returns true if it is possible to map a boolean expression
+// src, which is a conjunct in the given filters expression, to use the output
+// columns of the relational expression dst.
 //
 // In order for one column to map to another, the two columns must be
 // equivalent. This happens when there is an equality predicate such as a.x=b.x
 // in the ON or WHERE clause. Additionally, the two columns must be of the same
-// type (see GetEquivColsWithEquivType for details). CanMap checks that for each
-// column in src, there is at least one equivalent column in dst.
+// type (see GetEquivColsWithEquivType for details). CanMapJoinOpFilter checks
+// that for each column in src, there is at least one equivalent column in dst.
 //
 // For example, consider this query:
 //
@@ -125,12 +125,12 @@ func (c *CustomFuncs) SimplifyNotNullEquality(
 //
 // Since there is an equality predicate on a.x=b.x, it is possible to map
 // a.x + b.y = 5 to b.x + b.y = 5, and that allows the filter to be pushed down
-// to the right side of the join. In this case, CanMap returns true when src is
-// a.x + b.y = 5 and dst is (Scan b), but false when src is a.x + b.y = 5 and
-// dst is (Scan a).
+// to the right side of the join. In this case, CanMapJoinOpFilter returns true
+// when src is a.x + b.y = 5 and dst is (Scan b), but false when src is
+// a.x + b.y = 5 and dst is (Scan a).
 //
-// If src has a correlated subquery, CanMap returns false.
-func (c *CustomFuncs) CanMap(
+// If src has a correlated subquery, CanMapJoinOpFilter returns false.
+func (c *CustomFuncs) CanMapJoinOpFilter(
 	filters memo.FiltersExpr, src *memo.FiltersItem, dst memo.RelExpr,
 ) bool {
 	// Fast path if src is already bound by dst.
@@ -143,8 +143,8 @@ func (c *CustomFuncs) CanMap(
 		return false
 	}
 
-	// For CanMap to be true, each column in src must map to at least one column
-	// in dst.
+	// For CanMapJoinOpFilter to be true, each column in src must map to at
+	// least one column in dst.
 	for i, ok := scalarProps.OuterCols.Next(0); ok; i, ok = scalarProps.OuterCols.Next(i + 1) {
 		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(i), filters)
 		if !eqCols.Intersects(c.OutputCols(dst)) {
@@ -155,26 +155,29 @@ func (c *CustomFuncs) CanMap(
 	return true
 }
 
-// Map maps a boolean expression src, which is a conjunct in the given filters
-// expression, to use the output columns of the relational expression dst.
+// MapJoinOpFilter maps a boolean expression src, which is a conjunct in
+// the given filters expression, to use the output columns of the relational
+// expression dst.
 //
-// Map assumes that CanMap has already returned true, and therefore a mapping
-// is possible (see the comment above CanMap for details).
+// MapJoinOpFilter assumes that CanMapJoinOpFilter has already returned true,
+// and therefore a mapping is possible (see comment above CanMapJoinOpFilter
+// for details).
 //
-// For each column in src that is not also in dst, Map replaces it with an
-// equivalent column in dst. If there are multiple equivalent columns in dst,
-// it chooses one arbitrarily. Map does not replace any columns in subqueries,
-// since we know there are no correlated subqueries (otherwise CanMap would
-// have returned false).
+// For each column in src that is not also in dst, MapJoinOpFilter replaces it
+// with an equivalent column in dst. If there are multiple equivalent columns
+// in dst, it chooses one arbitrarily. MapJoinOpFilter does not replace any
+// columns in subqueries, since we know there are no correlated subqueries
+// (otherwise CanMapJoinOpFilter would have returned false).
 //
 // For example, consider this query:
 //
 //   SELECT * FROM a INNER JOIN b ON a.x=b.x AND a.x + b.y = 5
 //
-// If Map is called with src as a.x + b.y = 5 and dst as (Scan b), it returns
-// b.x + b.y = 5. Map should not be called with the equality predicate
-// a.x = b.x, because it would just return the tautology b.x = b.x.
-func (c *CustomFuncs) Map(
+// If MapJoinOpFilter is called with src as a.x + b.y = 5 and dst as (Scan b),
+// it returns b.x + b.y = 5. MapJoinOpFilter should not be called with the
+// equality predicate a.x = b.x, because it would just return the tautology
+// b.x = b.x.
+func (c *CustomFuncs) MapJoinOpFilter(
 	filters memo.FiltersExpr, src *memo.FiltersItem, dst memo.RelExpr,
 ) opt.ScalarExpr {
 	// Fast path if src is already bound by dst.
@@ -182,8 +185,9 @@ func (c *CustomFuncs) Map(
 		return src.Condition
 	}
 
-	// Map each column in src to one column in dst. We choose an arbitrary column
-	// (the one with the smallest ColumnID) if there are multiple choices.
+	// MapJoinOpFilter each column in src to one column in dst. We choose an
+	// arbitrary column (the one with the smallest ColumnID) if there are multiple
+	// choices.
 	var colMap util.FastIntMap
 	outerCols := src.ScalarProps(c.mem).OuterCols
 	for srcCol, ok := outerCols.Next(0); ok; srcCol, ok = outerCols.Next(srcCol + 1) {

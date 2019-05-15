@@ -1,0 +1,7 @@
+# LogicTest: local-opt fakedist-opt
+
+# This test is broken in the heuristic planner. It pushes down the filter when
+# it shouldn't because of the composite type in the filter condition.
+query R
+SELECT * from ((values (1.0::decimal)) EXCEPT (values (1.00::decimal))) WHERE column1::string != '1.00';
+----
