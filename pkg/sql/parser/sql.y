@@ -2003,8 +2003,7 @@ comment_stmt:
   }
 | COMMENT ON TABLE table_name IS comment_text
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CommentOnTable{Table: name, Comment: $6.strPtr()}
+    $$.val = &tree.CommentOnTable{Table: $4.unresolvedObjectName(), Comment: $6.strPtr()}
   }
 | COMMENT ON COLUMN column_path IS comment_text
   {
