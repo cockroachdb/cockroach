@@ -66,13 +66,13 @@ func TestPercentilesFromData(t *testing.T) {
 
 func TestRangeDescriptorFindReplica(t *testing.T) {
 	desc := RangeDescriptor{
-		Replicas: []ReplicaDescriptor{
+		InternalReplicas: []ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
 			{NodeID: 3, StoreID: 3},
 		},
 	}
-	for i, e := range desc.Replicas {
+	for i, e := range desc.InternalReplicas {
 		if a, ok := desc.GetReplicaDescriptor(e.StoreID); !ok {
 			t.Errorf("%d: expected to find %+v in %+v for store %d", i, e, desc, e.StoreID)
 		} else if a != e {

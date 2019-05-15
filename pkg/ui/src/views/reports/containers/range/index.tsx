@@ -172,7 +172,7 @@ class Range extends React.Component<RangeProps, {}> {
 
     // Gather all replica IDs.
     const replicas = _.chain(infos)
-      .flatMap(info => info.state.state.desc.replicas)
+      .flatMap(info => info.state.state.desc.internal_replicas)
       .sortBy(rep => rep.replica_id)
       .sortedUniqBy(rep => rep.replica_id)
       .value();

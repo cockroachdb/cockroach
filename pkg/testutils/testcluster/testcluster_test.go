@@ -70,13 +70,13 @@ func TestManualReplication(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Infof(context.Background(), "After split got ranges: %+v and %+v.", leftRangeDesc, tableRangeDesc)
-	if len(tableRangeDesc.Replicas) == 0 {
+	if len(tableRangeDesc.InternalReplicas) == 0 {
 		t.Fatalf(
-			"expected replica on node 1, got no replicas: %+v", tableRangeDesc.Replicas)
+			"expected replica on node 1, got no replicas: %+v", tableRangeDesc.InternalReplicas)
 	}
-	if tableRangeDesc.Replicas[0].NodeID != 1 {
+	if tableRangeDesc.InternalReplicas[0].NodeID != 1 {
 		t.Fatalf(
-			"expected replica on node 1, got replicas: %+v", tableRangeDesc.Replicas)
+			"expected replica on node 1, got replicas: %+v", tableRangeDesc.InternalReplicas)
 	}
 
 	// Replicate the table's range to all the nodes.
@@ -86,14 +86,14 @@ func TestManualReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tableRangeDesc.Replicas) != 3 {
-		t.Fatalf("expected 3 replicas, got %+v", tableRangeDesc.Replicas)
+	if len(tableRangeDesc.InternalReplicas) != 3 {
+		t.Fatalf("expected 3 replicas, got %+v", tableRangeDesc.InternalReplicas)
 	}
 	for i := 0; i < 3; i++ {
 		if _, ok := tableRangeDesc.GetReplicaDescriptor(
 			tc.Servers[i].GetFirstStoreID()); !ok {
 			t.Fatalf("expected replica on store %d, got %+v",
-				tc.Servers[i].GetFirstStoreID(), tableRangeDesc.Replicas)
+				tc.Servers[i].GetFirstStoreID(), tableRangeDesc.InternalReplicas)
 		}
 	}
 
@@ -149,8 +149,8 @@ func TestBasicManualReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if expected := 3; expected != len(desc.Replicas) {
-		t.Fatalf("expected %d replicas, got %+v", expected, desc.Replicas)
+	if expected := 3; expected != len(desc.InternalReplicas) {
+		t.Fatalf("expected %d replicas, got %+v", expected, desc.InternalReplicas)
 	}
 
 	if err := tc.TransferRangeLease(desc, tc.Target(1)); err != nil {
@@ -166,8 +166,8 @@ func TestBasicManualReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if expected := 2; expected != len(desc.Replicas) {
-		t.Fatalf("expected %d replicas, got %+v", expected, desc.Replicas)
+	if expected := 2; expected != len(desc.InternalReplicas) {
+		t.Fatalf("expected %d replicas, got %+v", expected, desc.InternalReplicas)
 	}
 }
 

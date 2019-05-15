@@ -265,7 +265,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Event(ctx, "found split key")
 
 	// Create right hand side range descriptor.
-	rightDesc, err := r.store.NewRangeDescriptor(ctx, splitKey, desc.EndKey, desc.Replicas)
+	rightDesc, err := r.store.NewRangeDescriptor(ctx, splitKey, desc.EndKey, desc.Replicas().Unwrap())
 	if err != nil {
 		return reply, errors.Errorf("unable to allocate right hand side range descriptor: %s", err)
 	}
@@ -445,8 +445,8 @@ func (r *Replica) AdminMerge(
 			// Should never happen, but just in case.
 			return errors.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
 		}
-		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
-			return errors.Errorf("ranges not collocated; %s != %s", origLeftDesc.Replicas, rightDesc.Replicas)
+		if l, r := origLeftDesc.Replicas(), rightDesc.Replicas(); !replicaSetsEqual(l.Unwrap(), r.Unwrap()) {
+			return errors.Errorf("ranges not collocated; %s != %s", l, r)
 		}
 
 		updatedLeftDesc := *origLeftDesc
@@ -580,7 +580,7 @@ func waitForApplication(
 ) error {
 	return contextutil.RunWithTimeout(ctx, "wait for application", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
-		for _, repl := range desc.Replicas {
+		for _, repl := range desc.Replicas().Unwrap() {
 			repl := repl // copy for goroutine
 			g.GoCtx(func(ctx context.Context) error {
 				conn, err := dialer.Dial(ctx, repl.NodeID)
@@ -608,7 +608,7 @@ func waitForReplicasInit(
 ) error {
 	return contextutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
-		for _, repl := range desc.Replicas {
+		for _, repl := range desc.Replicas().Unwrap() {
 			repl := repl // copy for goroutine
 			g.GoCtx(func(ctx context.Context) error {
 				conn, err := dialer.Dial(ctx, repl.NodeID)
@@ -733,7 +733,6 @@ func (r *Replica) ChangeReplicas(
 	return r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE, reason, details)
 }
 
-// changeReplicas reutrn
 func (r *Replica) changeReplicas(
 	ctx context.Context,
 	changeType roachpb.ReplicaChangeType,
@@ -752,20 +751,20 @@ func (r *Replica) changeReplicas(
 	}
 	repDescIdx := -1  // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
-	for i, existingRep := range desc.Replicas {
+	for i, existingRep := range desc.Replicas().Unwrap() {
 		nodeUsedByExistingRep := existingRep.NodeID == repDesc.NodeID
 		nodeUsed = nodeUsed || nodeUsedByExistingRep
 
 		if nodeUsedByExistingRep && existingRep.StoreID == repDesc.StoreID {
 			repDescIdx = i
-			repDesc.ReplicaID = existingRep.ReplicaID
+			repDesc = existingRep
 			break
 		}
 	}
 
 	rangeID := desc.RangeID
 	updatedDesc := *desc
-	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
+	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
 	switch changeType {
 	case roachpb.ADD_REPLICA:
@@ -806,7 +805,7 @@ func (r *Replica) changeReplicas(
 
 		repDesc.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
-		updatedDesc.Replicas = append(updatedDesc.Replicas, repDesc)
+		updatedDesc.AddReplica(repDesc)
 
 	case roachpb.REMOVE_REPLICA:
 		// If that exact node-store combination does not have the replica,
@@ -814,8 +813,9 @@ func (r *Replica) changeReplicas(
 		if repDescIdx == -1 {
 			return nil, errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
 		}
-		updatedDesc.Replicas[repDescIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
-		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
+		if !updatedDesc.RemoveReplica(repDesc) {
+			return nil, errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
+		}
 	}
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
@@ -875,7 +875,7 @@ func (r *Replica) changeReplicas(
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
 					ChangeType:      changeType,
 					Replica:         repDesc,
-					UpdatedReplicas: updatedDesc.Replicas,
+					UpdatedReplicas: updatedDesc.Replicas().Unwrap(),
 					NextReplicaID:   updatedDesc.NextReplicaID,
 				},
 			},
@@ -1088,7 +1088,7 @@ func (s *Store) AdminRelocateRange(
 
 	// Deep-copy the Replicas slice (in our shallow copy of the RangeDescriptor)
 	// since we'll mutate it in the loop below.
-	rangeDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), rangeDesc.Replicas...)
+	rangeDesc.SetReplicas(rangeDesc.Replicas().DeepCopy())
 	startKey := rangeDesc.StartKey.AsRawKey()
 
 	// Step 1: Compute which replicas are to be added and which are to be removed.
@@ -1101,7 +1101,7 @@ func (s *Store) AdminRelocateRange(
 	var addTargets []roachpb.ReplicaDescriptor
 	for _, t := range targets {
 		found := false
-		for _, replicaDesc := range rangeDesc.Replicas {
+		for _, replicaDesc := range rangeDesc.Replicas().Unwrap() {
 			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
 				found = true
 				break
@@ -1116,7 +1116,7 @@ func (s *Store) AdminRelocateRange(
 	}
 
 	var removeTargets []roachpb.ReplicaDescriptor
-	for _, replicaDesc := range rangeDesc.Replicas {
+	for _, replicaDesc := range rangeDesc.Replicas().Unwrap() {
 		found := false
 		for _, t := range targets {
 			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
@@ -1165,14 +1165,15 @@ func (s *Store) AdminRelocateRange(
 	) {
 		switch changeType {
 		case roachpb.ADD_REPLICA:
-			desc.Replicas = append(desc.Replicas, roachpb.ReplicaDescriptor{
+			desc.AddReplica(roachpb.ReplicaDescriptor{
 				NodeID:    target.NodeID,
 				StoreID:   target.StoreID,
 				ReplicaID: desc.NextReplicaID,
 			})
 			desc.NextReplicaID++
 		case roachpb.REMOVE_REPLICA:
-			desc.Replicas = removeTargetFromSlice(desc.Replicas, target)
+			newReplicas := removeTargetFromSlice(desc.Replicas().Unwrap(), target)
+			desc.SetReplicas(roachpb.MakeReplicaDescriptors(newReplicas))
 		default:
 			panic(errors.Errorf("unknown ReplicaChangeType %v", changeType))
 		}
@@ -1231,12 +1232,12 @@ func (s *Store) AdminRelocateRange(
 				ctx,
 				storeList,
 				zone,
-				rangeInfo.Desc.Replicas,
+				rangeInfo.Desc.Replicas().Unwrap(),
 				rangeInfo,
 				s.allocator.scorerOptions())
 			if targetStore == nil {
 				return fmt.Errorf("none of the remaining targets %v are legal additions to %v",
-					addTargets, rangeInfo.Desc.Replicas)
+					addTargets, rangeInfo.Desc.Replicas())
 			}
 
 			target := roachpb.ReplicationTarget{
@@ -1273,7 +1274,7 @@ func (s *Store) AdminRelocateRange(
 			targetStore, _, err := s.allocator.RemoveTarget(ctx, zone, removeTargets, rangeInfo)
 			if err != nil {
 				return errors.Wrapf(err, "unable to select removal target from %v; current replicas %v",
-					removeTargets, rangeInfo.Desc.Replicas)
+					removeTargets, rangeInfo.Desc.Replicas())
 			}
 			target := roachpb.ReplicationTarget{
 				NodeID:  targetStore.NodeID,
@@ -1369,8 +1370,8 @@ func (r *Replica) adminScatter(
 	// probability 1/N of choosing each.
 	if args.RandomizeLeases && r.OwnsValidLease(r.store.Clock().Now()) {
 		desc := r.Desc()
-		newLeaseholderIdx := rand.Intn(len(desc.Replicas))
-		targetStoreID := desc.Replicas[newLeaseholderIdx].StoreID
+		newLeaseholderIdx := rand.Intn(len(desc.Replicas().Unwrap()))
+		targetStoreID := desc.Replicas().Unwrap()[newLeaseholderIdx].StoreID
 		if targetStoreID != r.store.StoreID() {
 			if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
 				log.Warningf(ctx, "failed to scatter lease to s%d: %s", targetStoreID, err)

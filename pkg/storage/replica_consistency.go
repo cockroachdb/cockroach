@@ -304,7 +304,7 @@ func (r *Replica) RunConsistencyCheck(
 
 		// Move the local replica to the front (which makes it the "master"
 		// we're comparing against).
-		orderedReplicas = append(orderedReplicas, desc.Replicas...)
+		orderedReplicas = append(orderedReplicas, desc.Replicas().Unwrap()...)
 
 		sort.Slice(orderedReplicas, func(i, j int) bool {
 			return orderedReplicas[i] == localReplica

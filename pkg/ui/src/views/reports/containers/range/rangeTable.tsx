@@ -508,13 +508,13 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       });
     });
 
-    const leaderReplicaIDs = new Set(_.map(leader.state.state.desc.replicas, rep => rep.replica_id));
+    const leaderReplicaIDs = new Set(_.map(leader.state.state.desc.internal_replicas, rep => rep.replica_id));
 
     // Go through all the replicas and add them to map for easy printing.
     const replicasByReplicaIDByStoreID: Map<number, Map<number, protos.cockroach.roachpb.IReplicaDescriptor>> = new Map();
     _.forEach(infos, info => {
       const replicasByReplicaID: Map<number, protos.cockroach.roachpb.IReplicaDescriptor> = new Map();
-      _.forEach(info.state.state.desc.replicas, rep => {
+      _.forEach(info.state.state.desc.internal_replicas, rep => {
         replicasByReplicaID.set(rep.replica_id, rep);
       });
       replicasByReplicaIDByStoreID.set(info.source_store_id, replicasByReplicaID);
