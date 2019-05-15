@@ -1424,6 +1424,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 			&tree.WindowDef{
 				Partitions: partitionExprs,
 				OrderBy:    orderingExprs,
+				Frame:      item.Frame,
 			},
 			overload.FixedReturnType(),
 			props,
