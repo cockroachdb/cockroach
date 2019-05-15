@@ -17,27 +17,17 @@ package distsqlrun
 import (
 	"context"
 	"math"
-	"net"
 	"testing"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to
@@ -134,90 +124,6 @@ func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
 	return res
 }
 
-// startMockDistSQLServer starts a MockDistSQLServer and returns the address on
-// which it's listening.
-func startMockDistSQLServer(
-	stopper *stop.Stopper,
-) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
-	rpcContext := newInsecureRPCContext(stopper)
-	rpcContext.NodeID.Set(context.TODO(), staticNodeID)
-	server := rpc.NewServer(rpcContext)
-	mock := newMockDistSQLServer()
-	distsqlpb.RegisterDistSQLServer(server, mock)
-	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
-	if err != nil {
-		return uuid.Nil, nil, nil, err
-	}
-	return rpcContext.ClusterID.Get(), mock, ln.Addr(), nil
-}
-
-func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	rctx := rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-		&cluster.MakeTestingClusterSettings().Version,
-	)
-	// Ensure that tests using this test context and restart/shut down
-	// their servers do not inadvertently start talking to servers from
-	// unrelated concurrent tests.
-	rctx.ClusterID.Set(context.TODO(), uuid.MakeV4())
-
-	return rctx
-}
-
-// MockDistSQLServer implements the DistSQLServer (gRPC) interface and allows
-// clients to control the inbound streams.
-type MockDistSQLServer struct {
-	inboundStreams   chan InboundStreamNotification
-	runSyncFlowCalls chan RunSyncFlowCall
-}
-
-// InboundStreamNotification is the MockDistSQLServer's way to tell its clients
-// that a new gRPC call has arrived and thus a stream has arrived. The rpc
-// handler is blocked until donec is signaled.
-type InboundStreamNotification struct {
-	stream distsqlpb.DistSQL_FlowStreamServer
-	donec  chan<- error
-}
-
-type RunSyncFlowCall struct {
-	stream distsqlpb.DistSQL_RunSyncFlowServer
-	donec  chan<- error
-}
-
-// MockDistSQLServer implements the DistSQLServer interface.
-var _ distsqlpb.DistSQLServer = &MockDistSQLServer{}
-
-func newMockDistSQLServer() *MockDistSQLServer {
-	return &MockDistSQLServer{
-		inboundStreams:   make(chan InboundStreamNotification),
-		runSyncFlowCalls: make(chan RunSyncFlowCall),
-	}
-}
-
-// RunSyncFlow is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) error {
-	donec := make(chan error)
-	ds.runSyncFlowCalls <- RunSyncFlowCall{stream: stream, donec: donec}
-	return <-donec
-}
-
-// SetupFlow is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) SetupFlow(
-	_ context.Context, req *distsqlpb.SetupFlowRequest,
-) (*distsqlpb.SimpleResponse, error) {
-	return nil, nil
-}
-
-// FlowStream is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) FlowStream(stream distsqlpb.DistSQL_FlowStreamServer) error {
-	donec := make(chan error)
-	ds.inboundStreams <- InboundStreamNotification{stream: stream, donec: donec}
-	return <-donec
-}
-
 // createDummyStream creates the server and client side of a FlowStream stream.
 // This can be use by tests to pretend that then have received a FlowStream RPC.
 // The stream can be used to send messages (ConsumerSignal's) on it (within a
@@ -234,7 +140,7 @@ func createDummyStream() (
 	err error,
 ) {
 	stopper := stop.NewStopper()
-	clusterID, mockServer, addr, err := startMockDistSQLServer(stopper)
+	clusterID, mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -251,10 +157,10 @@ func createDummyStream() (
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	streamNotification := <-mockServer.inboundStreams
-	serverStream = streamNotification.stream
+	streamNotification := <-mockServer.InboundStreams
+	serverStream = streamNotification.Stream
 	cleanup = func() {
-		close(streamNotification.donec)
+		close(streamNotification.Donec)
 		stopper.Stop(context.TODO())
 	}
 	return serverStream, clientStream, cleanup, nil
