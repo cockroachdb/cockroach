@@ -1046,7 +1046,9 @@ func (*QueryTxnRequest) flags() int   { return isRead | isAlone }
 // QueryIntent only updates the read timestamp cache when attempting
 // to prevent an intent that is found missing from ever being written
 // in the future. See QueryIntentRequest_PREVENT.
-func (*QueryIntentRequest) flags() int        { return isRead | isPrefix | updatesReadTSCache }
+func (*QueryIntentRequest) flags() int {
+	return isRead | isPrefix | updatesReadTSCache | updatesTSCacheOnErr
+}
 func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*TruncateLogRequest) flags() int        { return isWrite }
@@ -1099,6 +1101,13 @@ func (r *RefreshRangeRequest) flags() int {
 
 func (*SubsumeRequest) flags() int    { return isRead | isAlone | updatesReadTSCache }
 func (*RangeStatsRequest) flags() int { return isRead }
+
+// IsParallelCommit returns whether the EndTransaction request is attempting to
+// perform a parallel commit. See txn_interceptor_committer.go for a discussion
+// about parallel commits.
+func (etr *EndTransactionRequest) IsParallelCommit() bool {
+	return etr.Commit && len(etr.InFlightWrites) > 0
+}
 
 // Keys returns credentials in an aws.Config.
 func (b *ExportStorage_S3) Keys() *aws.Config {

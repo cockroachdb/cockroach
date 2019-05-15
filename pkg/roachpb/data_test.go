@@ -492,7 +492,7 @@ var nonZeroTxn = Transaction{
 	DeprecatedWriting:        true,
 	WriteTooOld:              true,
 	IntentSpans:              []Span{{Key: []byte("a"), EndKey: []byte("b")}},
-	InFlightWrites:           map[enginepb.TxnSeq]int32{1: 0},
+	InFlightWrites:           []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
 	EpochZeroTimestamp:       makeTS(1, 1),
 	OrigTimestampWasObserved: true,
 }
@@ -588,6 +588,8 @@ func TestTransactionClone(t *testing.T) {
 	// listed below. If this test fails, please update the list below and/or
 	// Transaction.Clone().
 	expFields := []string{
+		"InFlightWrites",
+		"InFlightWrites.Key",
 		"IntentSpans",
 		"IntentSpans.EndKey",
 		"IntentSpans.Key",

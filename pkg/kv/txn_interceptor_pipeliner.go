@@ -78,10 +78,10 @@ var trackedWritesMaxSize = settings.RegisterIntSetting(
 // requests chain on to them by first proving that the async writes succeeded.
 // The interceptor also ensures that when committing a transaction all writes
 // that have been proposed but not proven to have succeeded are first checked
-// before committing. These async writes are referred to as "in-flight writes"
-// and this process of proving that an in-flight write succeeded is called
-// "proving" the write. Once writes are proven to have finished, they are
-// considered "stable".
+// before considering the transaction committed. These async writes are referred
+// to as "in-flight writes" and this process of proving that an in-flight write
+// succeeded is called "proving" the write. Once writes are proven to have
+// finished, they are considered "stable".
 //
 // Chaining on to in-flight async writes is important for two main reasons to
 // txnPipeliner:
@@ -111,15 +111,29 @@ var trackedWritesMaxSize = settings.RegisterIntSetting(
 //    txnPipeliner uses chaining to throw an error when these re-orderings would
 //    have affected the order that transactional requests evaluate in.
 //
-// The interceptor proves all in-flight writes before committing a transaction
-// by tacking on a QueryIntent request for each one to the front of an
-// EndTransaction(Commit=true) requests. The result of this is that the
-// EndTransaction needs to wait at the DistSender level for all of QueryIntent
-// requests to succeed at before executing itself [1]. This is a little
-// unfortunate because a transaction could have accumulated a large number of
-// in-flight writes without proving any of them, and the more of these writes
-// there are, the more chance querying one of them gets delayed and delays the
-// overall transaction.
+// The interceptor proves all in-flight writes before explicitly committing a
+// transaction by tacking on a QueryIntent request for each one to the front of
+// an EndTransaction(Commit=true) request. The in-flight writes that are being
+// queried in the batch with the EndTransaction request are treated as in-flight
+// writes for the purposes of parallel commits. The effect of this is that the
+// in-flight writes must all be proven for a transaction to be considered
+// implicitly committed. It also follows that they will need to be queried
+// during transaction recovery.
+//
+// This is fantastic from the standpoint of transaction latency because it means
+// that the consensus latency for every write in a transaction, including the
+// write to the transaction record, is paid in parallel (mod pipeline stalls)
+// and an entire transaction can commit in a single consensus round-trip!
+//
+// On the flip side, this means that every unproven write is considered
+// in-flight at the time of the commit and needs to be proven at the time of the
+// commit. This is a little unfortunate because a transaction could have
+// accumulated a large number of in-flight writes over a long period of time
+// without proving any of them, and the more of these writes there are, the
+// greater the chance that querying one of them gets delayed and delays the
+// overall transaction. Additionally, the more of these writes there are, the
+// more expensive transaction recovery will be if the transaction ends up stuck
+// in an indeterminate commit state.
 //
 // Three approaches have been considered to address this, all of which revolve
 // around the idea that earlier writes in a transaction may have finished
@@ -153,13 +167,6 @@ var trackedWritesMaxSize = settings.RegisterIntSetting(
 //    they finish consensus without any extra RPCs.
 //
 // So far, none of these approaches have been integrated.
-//
-// [1] A proposal called "parallel commits" (#24194) exists that would allow all
-//     QueryIntent requests and the EndTransaction request that they are prepended
-//     to to be sent by the DistSender in parallel. This would help with this
-//     issue by hiding the cost of the QueryIntent requests behind the cost of the
-//     "staging" EndTransaction request.
-//
 type txnPipeliner struct {
 	st *cluster.Settings
 	// Optional; used to condense intent spans, if provided. If not provided,
@@ -192,9 +199,6 @@ type txnPipeliner struct {
 func (tp *txnPipeliner) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Adjust the batch so that it doesn't miss any in-flight writes.
-	ba = tp.chainToInFlightWrites(ba)
-
 	// If an EndTransaction request is part of this batch, attach the
 	// in-flight writes and the write footprint to it.
 	ba, pErr := tp.attachWritesToEndTxn(ctx, ba)
@@ -202,24 +206,95 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, pErr
 	}
 
+	// Adjust the batch so that it doesn't miss any in-flight writes.
+	ba = tp.chainToInFlightWrites(ba)
+
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	br, pErr := tp.wrapped.SendLocked(ctx, ba)
 
 	// Update the in-flight write set and the write footprint with the results
 	// of the request.
-	tp.updateWriteTracking(ctx, ba, br, pErr)
+	tp.updateWriteTracking(ctx, ba, br)
 	if pErr != nil {
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
 	return tp.stripQueryIntents(br), nil
 }
 
-// chainToInFlightWrites ensures that we "chain" on to any in-flight writes
-// that overlap the keys we're trying to read/write. We do this by prepending
-// QueryIntent requests with the THROW_ERROR behavior before each request that
-// touches any of the in-flight writes. In effect, this allows us to prove
-// that a write succeeded before depending on its existence. We later prune down
-// the list of writes we proved to exist that are no longer "in-flight" in
+// attachWritesToEndTxn attaches the in-flight writes and the write footprint
+// that the interceptor has been tracking to any EndTransaction requests present
+// in the provided batch. It augments these sets with writes from the current
+// batch.
+func (tp *txnPipeliner) attachWritesToEndTxn(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (roachpb.BatchRequest, *roachpb.Error) {
+	args, hasET := ba.GetArg(roachpb.EndTransaction)
+	if !hasET {
+		return ba, nil
+	}
+	et := args.(*roachpb.EndTransactionRequest)
+	if len(et.IntentSpans) > 0 {
+		return ba, roachpb.NewErrorf("client must not pass intents to EndTransaction")
+	}
+	if len(et.InFlightWrites) > 0 {
+		return ba, roachpb.NewErrorf("client must not pass in-flight writes to EndTransaction")
+	}
+
+	// Populate et.IntentSpans and et.InFlightWrites.
+	if !tp.footprint.empty() {
+		et.IntentSpans = append([]roachpb.Span(nil), tp.footprint.asSlice()...)
+	}
+	if inFlight := tp.ifWrites.len(); inFlight != 0 {
+		et.InFlightWrites = make([]roachpb.SequencedWrite, 0, inFlight)
+		tp.ifWrites.ascend(func(w *inFlightWrite) {
+			et.InFlightWrites = append(et.InFlightWrites, w.SequencedWrite)
+		})
+	}
+
+	// Augment et.IntentSpans and et.InFlightWrites with writes from
+	// the current batch.
+	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
+		req := ru.GetInner()
+		h := req.Header()
+		if roachpb.IsTransactionWrite(req) {
+			// Ranged writes are added immediately to the intent spans because
+			// it's not clear where they will actually leave intents. Point
+			// writes are added to the in-flight writes set.
+			//
+			// If we see any ranged writes then we know that the txnCommitter
+			// will fold the in-flight writes into the intent spans immediately
+			// and forgo a parallel commit, but let's not break that abstraction
+			// boundary here.
+			if roachpb.IsRange(req) {
+				et.IntentSpans = append(et.IntentSpans, h.Span())
+			} else {
+				w := roachpb.SequencedWrite{Key: h.Key, Sequence: h.Sequence}
+				et.InFlightWrites = append(et.InFlightWrites, w)
+			}
+		}
+	}
+
+	// Sort both sets and condense the intent spans.
+	et.IntentSpans, _ = roachpb.MergeSpans(et.IntentSpans)
+	sort.Sort(roachpb.SequencedWriteBySeq(et.InFlightWrites))
+
+	if log.V(3) {
+		for _, intent := range et.IntentSpans {
+			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+		}
+		for _, write := range et.InFlightWrites {
+			log.Infof(ctx, "in-flight: %d:%s", write.Sequence, write.Key)
+		}
+	}
+	return ba, nil
+}
+
+// chainToInFlightWrites ensures that we "chain" on to any in-flight writes that
+// overlap the keys we're trying to read/write. We do this by prepending
+// QueryIntent requests with the ErrorIfMissing option before each request that
+// touches any of the in-flight writes. In effect, this allows us to prove that
+// a write succeeded before depending on its existence. We later prune down the
+// list of writes we proved to exist that are no longer "in-flight" in
 // updateWriteTracking.
 func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
 	asyncConsensus := pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
@@ -315,10 +390,8 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 						RequestHeader: roachpb.RequestHeader{
 							Key: w.Key,
 						},
-						Txn: meta,
-						// Set the IfMissing behavior to return an error if the
-						// in-flight write is missing.
-						IfMissing: roachpb.QueryIntentRequest_RETURN_ERROR,
+						Txn:            meta,
+						ErrorIfMissing: true,
 					})
 
 					// Record that the key has been chained onto at least once
@@ -363,64 +436,10 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 	return ba
 }
 
-// attachWritesToEndTxn attaches the in-flight writes and the write footprint
-// that the interceptor has been tracking to any EndTransaction requests present
-// in the provided batch.
-func (tp *txnPipeliner) attachWritesToEndTxn(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (roachpb.BatchRequest, *roachpb.Error) {
-	args, hasET := ba.GetArg(roachpb.EndTransaction)
-	if !hasET {
-		return ba, nil
-	}
-	et := args.(*roachpb.EndTransactionRequest)
-	if len(et.IntentSpans) > 0 {
-		return ba, roachpb.NewErrorf("client must not pass intents to EndTransaction")
-	}
-
-	// Defensively set distinctSpans to false if we had any previous writes in
-	// this transaction. This effectively limits the distinct spans optimization
-	// to 1pc transactions.
-	ba.Header.DistinctSpans = !tp.haveWrites()
-
-	// Insert into the in-flight write set and the write footprint assuming that
-	// the request will succeed. We need to eagerly populate these sets before
-	// we send the batch because we can't wait until the batch returns to attach
-	// the new writes to the EndTransaction request.
-	//
-	// We can't pass in a batch response here to better limit the key spans as
-	// we don't know what is going to be affected. This will affect queries such
-	// as `DELETE FROM my.table LIMIT 10` when executed as a 1PC transaction.
-	// e.g.: a (BeginTransaction, DeleteRange, EndTransaction) batch.
-	tp.updateWriteTracking(ctx, ba, nil, nil)
-
-	// For now we include all in-flight writes in the IntentSpans slice on
-	// EndTransaction requests. In the future, EndTransaction request will have
-	// a separate InFlightWrites field and in-flight writes will be merged into
-	// the IntentSpans slice as they succeed.
-	tp.ifWrites.ascend(func(w *inFlightWrite) {
-		tp.footprint.insert(roachpb.Span{Key: w.Key})
-	})
-
-	// Populate et.IntentSpans, taking into account both any existing and new
-	// writes, and taking care to perform proper deduplication.
-	// TODO(peter): Populate DistinctSpans on all batches, not just batches
-	// which contain an EndTransactionRequest.
-	ba.Header.DistinctSpans = tp.footprint.mergeAndSort() && ba.Header.DistinctSpans
-	et.IntentSpans = append([]roachpb.Span(nil), tp.footprint.asSlice()...)
-
-	if log.V(3) {
-		for _, intent := range et.IntentSpans {
-			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
-		}
-	}
-	return ba, nil
-}
-
-// updateWriteTracking reads the response for the given request and uses it
-// to update the tracked in-flight write set and write footprint. It does so
-// by performing three actions:
-// 1. it adds all async writes that the request performed to the in-flight
+// updateWriteTracking reads the response for the given request and uses it to
+// update the tracked in-flight write set and write footprint. It does so by
+// performing three actions: 1. it adds all async writes that the request
+// performed to the in-flight
 //    write set.
 // 2. it adds all non-async writes that the request performed to the write
 //    footprint.
@@ -430,15 +449,11 @@ func (tp *txnPipeliner) attachWritesToEndTxn(
 // After updating the write sets, the write footprint is condensed to ensure
 // that it remains under its memory limit.
 //
-// If an error is provided, all writes from the batch are added directly
-// to the write footprint to avoid leaking any intents when the transaction
-// cleans up.
-//
-// If no response or error are provided, the method adds to the write sets
-// assuming that the request will succeed but does not remove anything from
-// the in-flight writes set.
+// If no response is provided (indicating an error), all writes from the batch
+// are added directly to the write footprint to avoid leaking any intents when
+// the transaction cleans up.
 func (tp *txnPipeliner) updateWriteTracking(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) {
 	// After adding new writes to the write footprint, check whether we need to
 	// condense the set to stay below memory limits.
@@ -447,7 +462,7 @@ func (tp *txnPipeliner) updateWriteTracking(
 	// If the request failed, add all intent writes directly to the write
 	// footprint. This reduces the likelihood of dangling intents blocking
 	// concurrent writers for extended periods of time. See #3346.
-	if pErr != nil {
+	if br == nil {
 		// The transaction cannot continue in this epoch whether this is
 		// a retryable error or not.
 		ba.IntentSpanIterate(nil, tp.footprint.insert)
@@ -456,23 +471,21 @@ func (tp *txnPipeliner) updateWriteTracking(
 
 	// If the transaction is no longer pending, clear the in-flight writes set
 	// and immediately return.
-	if br != nil && br.Txn != nil && br.Txn.Status != roachpb.PENDING {
+	// TODO(nvanbenschoten): Do we have to handle missing Txn's anymore?
+	if br.Txn != nil && br.Txn.Status != roachpb.PENDING {
 		tp.ifWrites.clear(false /* reuse */)
 		return
 	}
 
 	for i, ru := range ba.Requests {
 		req := ru.GetInner()
-		var resp roachpb.Response
-		if br != nil {
-			resp = br.Responses[i].GetInner()
-		}
+		resp := br.Responses[i].GetInner()
 
-		if qiReq, ok := req.(*roachpb.QueryIntentRequest); ok && resp != nil {
+		if qiReq, ok := req.(*roachpb.QueryIntentRequest); ok {
 			// Remove any in-flight writes that were proven to exist.
 			// It shouldn't be possible for a QueryIntentRequest with
-			// an IfMissing behavior of RETURN_ERROR to return without
-			// error and with with FoundIntent=false, but we handle that
+			// the ErrorIfMissing option set to return without error
+			// and with with FoundIntent=false, but we handle that
 			// case here because it happens a lot in tests.
 			if resp.(*roachpb.QueryIntentResponse).FoundIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
@@ -905,7 +918,8 @@ func (s *condensableSpanSet) maybeCondense(ctx context.Context, ri *RangeIterato
 
 // asSlice returns the set as a slice of spans.
 func (s *condensableSpanSet) asSlice() []roachpb.Span {
-	return s.s
+	l := len(s.s)
+	return s.s[:l:l] // immutable on append
 }
 
 // empty returns whether the set is empty or whether it contains spans.

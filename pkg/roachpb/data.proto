@@ -393,37 +393,33 @@ message Transaction {
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
   bool write_too_old = 12;
-  // List of spans that the transaction has written intents into. These
+  // Set of spans that the transaction has written intents into. These
   // are spans which must be resolved on txn completion. Note that these
   // spans may be condensed to cover aggregate spans if the keys written
   // by the transaction exceeded a size threshold.
   //
-  // The list is maintained in sorted order and all spans are maximally
-  // merged such that no two spans here overlap each other.
+  // The set logically extends to include the keys of all writes in the
+  // in-flight write set. However, those keys are not stored in this set
+  // to avoid duplication. This means that elements that are removed from
+  // that set should be merged into this one.
   //
-  // The slice should be treated as immutable and all updates should be
-  // performed on a copy of the slice.
+  // The slice is maintained in sorted order and all spans are maximally
+  // merged such that no two spans here overlap each other. It should be
+  // treated as immutable and all updates should be performed on a copy
+  // of the slice.
   repeated Span intent_spans = 11 [(gogoproto.nullable) = false];
   // Set of in-flight intent writes that have been issued by the transaction but
-  // which may not have succeeded yet. If any promised writes are provided, a
+  // which may not have succeeded yet. If any in-flight writes are provided, a
   // committing EndTransaction request will move a PENDING transaction to the
   // STAGING status instead of the COMMITTED status. These in-flight writes must
   // then all be confirmed as successful before the transaction can be moved
-  // from STAGING to COMMITTED. For more, see txnCommitter.
+  // from STAGING to COMMITTED. Because of this, the set will only ever contain
+  // entries when the transaction is STAGING. For more, see txnCommitter.
   //
-  // The map structure performs a mapping from the sequence number of an
-  // in-flight write to its corresponding index in intent_spans. This allows us
-  // to avoid storing the key twice per write.
-  //
-  // TODO DURING REVIEW: this is kind of unfortunate. Ideally, we would
-  // have a single structure like
-  //   repeated {Span, Seq, bool /* in flight */} intents;
-  // or something instead of this, but the migration would make that very
-  // tricky. I wonder what others suggest.
-  map<int32, int32> in_flight_writes = 17 [
-    (gogoproto.nullable) = false, 
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"
-  ];
+  // The slice is maintained in sorted order by sequence number. It should be
+  // treated as immutable and all updates should be performed on a copy of the
+  // slice.
+  repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
   // Epoch zero timestamp is used to keep track of the earliest timestamp
   // that any epoch of the transaction used. This is set only if the
   // transaction is restarted and the epoch is bumped. It is used during
@@ -463,12 +459,9 @@ message TransactionRecord {
   // intents, so we'd like to avoid ever needing to synthesize it. 2.1 nodes
   // will assert that it is set, so we set it for now, but we should stop doing
   // that in the future. Removing this in 2.3 shouldn't cause any issues.
-  util.hlc.Timestamp orig_timestamp    = 6  [(gogoproto.nullable) = false];
-  repeated Span intent_spans           = 11 [(gogoproto.nullable) = false];
-  map<int32, int32> in_flight_writes   = 17 [
-    (gogoproto.nullable) = false, 
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"
-  ];
+  util.hlc.Timestamp orig_timestamp        = 6  [(gogoproto.nullable) = false];
+  repeated Span intent_spans               = 11 [(gogoproto.nullable) = false];
+  repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
 
   // Fields on Transaction that are not present in a transaction record.
   reserved 2, 3, 7, 8, 9, 10, 12, 13, 14, 15, 16;
@@ -484,9 +477,10 @@ message Intent {
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
-//
-// TODO(nvanbenschoten): Remove this if we don't plan on using it?
 message SequencedWrite {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
   // The key that the write was made at.
   bytes key = 1 [(gogoproto.casttype) = "Key"];
   // The sequence number of the request that created the write.

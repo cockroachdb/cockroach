@@ -33,9 +33,10 @@ type txnMetricRecorder struct {
 	metrics *TxnMetrics
 	clock   *hlc.Clock
 
-	txn           *roachpb.Transaction
-	txnStartNanos int64
-	onePCCommit   bool
+	txn            *roachpb.Transaction
+	txnStartNanos  int64
+	onePCCommit    bool
+	parallelCommit bool
 }
 
 // SendLocked is part of the txnInterceptor interface.
@@ -48,7 +49,11 @@ func (m *txnMetricRecorder) SendLocked(
 		m.txnStartNanos = timeutil.Now().UnixNano()
 	}
 
-	return m.wrapped.SendLocked(ctx, ba)
+	br, pErr := m.wrapped.SendLocked(ctx, ba)
+	if pErr == nil && br.Txn != nil {
+		m.parallelCommit = br.Txn.Status == roachpb.STAGING
+	}
+	return br, pErr
 }
 
 // setWrapped is part of the txnInterceptor interface.
@@ -67,6 +72,9 @@ func (*txnMetricRecorder) epochBumpedLocked() {}
 func (m *txnMetricRecorder) closeLocked() {
 	if m.onePCCommit {
 		m.metrics.Commits1PC.Inc(1)
+	}
+	if m.parallelCommit {
+		m.metrics.ParallelCommits.Inc(1)
 	}
 
 	if m.txnStartNanos != 0 {

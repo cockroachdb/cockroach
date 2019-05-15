@@ -572,11 +572,32 @@ message EndTransactionRequest {
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
   InternalCommitTrigger internal_commit_trigger = 4;
-  // List of spans that the transaction has written intents into. These
+  // Set of spans that the transaction has written intents into. These
   // are spans which must be resolved on txn completion. Note that these
   // spans may be condensed to cover aggregate spans if the keys written
   // by the transaction exceeded a size threshold.
+  //
+  // The set logically extends to include the keys of all writes in the
+  // in-flight write set. However, those keys are not stored in this set
+  // to avoid duplication. This means that elements that are removed from
+  // that set should be merged into this one.
+  //
+  // The slice is maintained in sorted order and all spans are maximally
+  // merged such that no two spans here overlap each other.
   repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
+  // Set of in-flight intent writes that have been issued by the transaction but
+  // which may not have succeeded yet. If any promised writes are provided, a
+  // committing EndTransaction request will move a PENDING transaction to the
+  // STAGING status instead of the COMMITTED status. These in-flight writes must
+  // then all be confirmed as successful before the transaction can be moved
+  // from STAGING to COMMITTED. For more, see txnCommitter.
+  //
+  // The slice is maintained in sorted order by sequence number. This provides
+  // O(log n) access to individual writes in this set based on their sequence
+  // number. See SequencedWriteBySeq.Find and its uses. The set can contain
+  // multiple SequencedWrites with the same key, but all sequence numbers are
+  // unique.
+  repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
   // Requires that the transaction completes as a 1 phase commit. This
   // guarantees that all writes are to the same range and that no
   // intents are left in the event of an error.
@@ -609,6 +630,9 @@ message EndTransactionResponse {
   // This means that all writes which were part of the transaction
   // were written as a single, atomic write batch to just one range.
   bool one_phase_commit = 4;
+  // The commit timestamp of the STAGING transaction record written
+  // by the request. Only set if the transaction record was staged.
+  util.hlc.Timestamp staging_timestamp = 5 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
@@ -920,7 +944,8 @@ message QueryTxnResponse {
 
 // A QueryIntentRequest is arguments to the QueryIntent() method. It visits
 // the specified key and checks whether an intent is present for the given
-// transaction.
+// transaction. If the intent is found to be missing then it is prevented
+// from ever being written in the future.
 message QueryIntentRequest {
   option (gogoproto.equal) = true;
 
@@ -931,12 +956,10 @@ message QueryIntentRequest {
   // be committed by the provided transaction. If an intent is found at the
   // specified key, the intent is only considered a match if it has the same ID,
   // the same epoch, and a provisional commit timestamp that is equal to or less
-  // than that in the provided transaction. For SERIALIZABLE transactions, if
-  // the intent's timestamp is greater than that in the provided transaction, it
-  // would prevent the transaction from committing and is therefore not a match.
-  // However, for SNAPSHOT transactions, if the intent's timestamp is greater
-  // than that in the provided transaction, it would not prevent the transaction
-  // from committing and therefore is a match.
+  // than that in the provided transaction. The TxnMeta's provisional commit
+  // timestamp is forwarded by the provisional commit timestamp of the request
+  // header transaction if the transactions are the same (i.e. a transaction is
+  // querying its own intent after successfully having refreshed).
   //
   // Additionally, the intent is only considered a match if its sequence number
   // is equal to or greater than the expected txn's sequence number. The
@@ -948,22 +971,10 @@ message QueryIntentRequest {
   // well.
   storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
 
-  enum IfMissingBehavior {
-    // Don't do anything special, just note that the intent was not found in the
-    // response.
-    DO_NOTHING = 0;
-    // Return an IntentMissingError. Special-cased to return a SERIALIZABLE
-    // retry error if a SERIALIZABLE transaction queries its own intent and
-    // finds it has been pushed.
-    RETURN_ERROR = 1;
-    // Prevent the intent from ever being written in the future. If set as the
-    // behavior, a response with found_intent=false implies that an intent will
-    // never be writtable at the key at the transaction's timestamp or below.
-    PREVENT = 2;
-  }
-  // The behavior of the request if the expected intent is found to be not
-  // present.
-  IfMissingBehavior if_missing = 3;
+  // If true, return an IntentMissingError if a matching intent is not found.
+  // Special-cased to return a SERIALIZABLE retry error if a SERIALIZABLE
+  // transaction queries its own intent and finds it has been pushed.
+  bool error_if_missing = 3;
 }
 
 // A QueryIntentResponse is the return value from the QueryIntent() method.

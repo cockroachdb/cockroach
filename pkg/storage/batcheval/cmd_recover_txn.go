@@ -184,24 +184,36 @@ func RecoverTxn(
 		}
 	}
 
+	// Merge all of the transaction's in-flight writes into its intent
+	// spans set and clear the in-flight write set. Make sure to re-sort
+	// and merge the intent spans to eliminate duplicates.
+	for _, w := range reply.RecoveredTxn.InFlightWrites {
+		sp := roachpb.Span{Key: w.Key}
+		reply.RecoveredTxn.IntentSpans = append(reply.RecoveredTxn.IntentSpans, sp)
+	}
+	reply.RecoveredTxn.IntentSpans, _ = roachpb.MergeSpans(reply.RecoveredTxn.IntentSpans)
+	reply.RecoveredTxn.InFlightWrites = nil
+
 	// Recover the transaction based on whether or not all of its writes
 	// succeeded. If all of the writes succeeded then the transaction was
 	// implicitly committed and an acknowledgement of success may have already
 	// been returned to clients. If not, then we should have prevented the
 	// transaction from ever becoming implicitly committed at this timestamp
-	// using a QueryIntent(IfMissing=PREVENT), so we're free to abort the
-	// transaction record.
+	// using a QueryIntent, so we're free to abort the transaction record.
 	if args.ImplicitlyCommitted {
 		reply.RecoveredTxn.Status = roachpb.COMMITTED
 	} else {
 		reply.RecoveredTxn.Status = roachpb.ABORTED
 	}
-	reply.RecoveredTxn.InFlightWrites = nil
 	txnRecord := reply.RecoveredTxn.AsRecord()
 	if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 		return result.Result{}, err
 	}
 
+	// TODO(nvanbenschoten): This could use result.FromEndTxn to trigger
+	// intent resolution for the recovered transaction's intents. To do
+	// that, we might need to plumb in a "poison" flag on the RecoverTxn
+	// request.
 	result := result.Result{}
 	result.Local.UpdatedTxns = &[]*roachpb.Transaction{&reply.RecoveredTxn}
 	return result, nil
