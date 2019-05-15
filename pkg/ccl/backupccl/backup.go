@@ -455,7 +455,11 @@ func optsToKVOptions(opts map[string]string) tree.KVOptions {
 }
 
 func backupJobDescription(
-	backup *tree.Backup, to string, incrementalFrom []string, opts map[string]string,
+	p sql.PlanHookState,
+	backup *tree.Backup,
+	to string,
+	incrementalFrom []string,
+	opts map[string]string,
 ) (string, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
@@ -476,7 +480,9 @@ func backupJobDescription(
 		}
 		b.IncrementalFrom = append(b.IncrementalFrom, tree.NewDString(sanitizedFrom))
 	}
-	return tree.AsStringWithFlags(b, tree.FmtAlwaysQualifyTableNames), nil
+
+	ann := p.ExtendedEvalContext().Annotations
+	return tree.AsStringWithFQNames(b, ann), nil
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
@@ -1057,7 +1063,7 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(backupStmt, to, incrementalFrom, opts)
+		description, err := backupJobDescription(p, backupStmt, to, incrementalFrom, opts)
 		if err != nil {
 			return err
 		}

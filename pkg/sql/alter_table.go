@@ -46,10 +46,13 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, !n.IfExists, ResolveRequireTableDesc)
+	tableDesc, err := p.ResolveMutableTableDescriptorEx(
+		ctx, n.Table, !n.IfExists, ResolveRequireTableDesc,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	if tableDesc == nil {
 		return newZeroNode(nil /* columns */), nil
 	}
@@ -80,7 +83,11 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		statsData[i] = typedExpr
 	}
 
-	return &alterTableNode{n: n, tableDesc: tableDesc, statsData: statsData}, nil
+	return &alterTableNode{
+		n:         n,
+		tableDesc: tableDesc,
+		statsData: statsData,
+	}, nil
 }
 
 func (n *alterTableNode) startExec(params runParams) error {
@@ -90,7 +97,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	descriptorChanged := false
 	origNumMutations := len(n.tableDesc.Mutations)
 	var droppedViews []string
-	tn := &n.n.Table
+	tn := params.p.ResolvedName(n.n.Table)
 
 	for i, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
@@ -218,7 +225,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			case *tree.CheckConstraintTableDef:
 				ck, err := MakeCheckConstraint(params.ctx,
-					n.tableDesc, d, inuseNames, &params.p.semaCtx, n.n.Table)
+					n.tableDesc, d, inuseNames, &params.p.semaCtx, *tn)
 				if err != nil {
 					return err
 				}
@@ -397,7 +404,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						if err := params.p.dropIndexByName(
 							params.ctx, tn, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
 							t.DropBehavior, ignoreIdxConstraint,
-							tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
+							tree.AsStringWithFQNames(n.n, params.Ann()),
 						); err != nil {
 							return err
 						}
@@ -539,7 +546,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			default:
 				return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
 					"constraint %q of relation %q is not a foreign key or check constraint",
-					tree.ErrString(&t.Constraint), tree.ErrString(&n.n.Table))
+					tree.ErrString(&t.Constraint), tree.ErrString(n.n.Table))
 			}
 
 		case tree.ColumnMutationCmd:
@@ -662,8 +669,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 	mutationID := sqlbase.InvalidMutationID
 	if addedMutations {
 		var err error
-		mutationID, err = params.p.createOrUpdateSchemaChangeJob(params.ctx, n.tableDesc,
-			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
+		mutationID, err = params.p.createOrUpdateSchemaChangeJob(
+			params.ctx, n.tableDesc,
+			tree.AsStringWithFQNames(n.n, params.Ann()),
+		)
 		if err != nil {
 			return err
 		}
@@ -688,7 +697,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{n.n.Table.FQString(), n.n.String(),
+		}{params.p.ResolvedName(n.n.Table).FQString(), n.n.String(),
 			params.SessionData().User, uint32(mutationID), droppedViews},
 	)
 }

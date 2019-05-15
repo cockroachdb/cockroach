@@ -2583,6 +2583,11 @@ type EvalContext struct {
 	// underlying datum, if available.
 	Placeholders *PlaceholderInfo
 
+	// Annotations augments the AST with extra information. This pointer should
+	// always be set to the location of the Annotations in the corresponding
+	// SemaContext.
+	Annotations *Annotations
+
 	// IVarContainer is used to evaluate IndexedVars.
 	IVarContainer IndexedVarContainer
 	// iVarContainerStack is used when we swap out IVarContainers in order to

@@ -156,7 +156,7 @@ func (ex *connExecutor) prepare(
 	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
 
 	p := &ex.planner
-	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, stmt.NumAnnotations)
 	p.stmt = &stmt
 	flags, err := ex.populatePrepared(ctx, txn, placeholderHints, p)
 	if err != nil {

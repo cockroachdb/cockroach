@@ -93,8 +93,9 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	mutationID := sqlbase.InvalidMutationID
 	var err error
 	if addedMutations {
-		mutationID, err = params.p.createOrUpdateSchemaChangeJob(params.ctx, n.tableDesc,
-			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
+		mutationID, err = params.p.createOrUpdateSchemaChangeJob(
+			params.ctx, n.tableDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
+		)
 	} else if !descriptorChanged {
 		// Nothing to be done
 		return nil

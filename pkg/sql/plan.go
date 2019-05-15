@@ -98,6 +98,11 @@ func (r *runParams) ExecCfg() *ExecutorConfig {
 	return r.extendedEvalCtx.ExecCfg
 }
 
+// Ann is a shortcut for the Annotations from the eval context.
+func (r *runParams) Ann() *tree.Annotations {
+	return r.extendedEvalCtx.EvalContext.Annotations
+}
+
 // planNode defines the interface for executing a query or portion of a query.
 //
 // The following methods apply to planNodes and contain special cases

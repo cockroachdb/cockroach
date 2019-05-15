@@ -35,6 +35,9 @@ import (
 // SemaContext defines the context in which to perform semantic analysis on an
 // expression syntax tree.
 type SemaContext struct {
+	// Annotations augments the AST with extra information.
+	Annotations Annotations
+
 	// Placeholders relates placeholder names to their type and, later, value.
 	Placeholders PlaceholderInfo
 

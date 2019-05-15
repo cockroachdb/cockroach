@@ -949,7 +949,7 @@ func WriteTableDescs(
 }
 
 func restoreJobDescription(
-	restore *tree.Restore, from []string, opts map[string]string,
+	p sql.PlanHookState, restore *tree.Restore, from []string, opts map[string]string,
 ) (string, error) {
 	r := &tree.Restore{
 		AsOf:    restore.AsOf,
@@ -966,7 +966,8 @@ func restoreJobDescription(
 		r.From[i] = tree.NewDString(sf)
 	}
 
-	return tree.AsStringWithFlags(r, tree.FmtAlwaysQualifyTableNames), nil
+	ann := p.ExtendedEvalContext().Annotations
+	return tree.AsStringWithFQNames(r, ann), nil
 }
 
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
@@ -1385,7 +1386,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(restoreStmt, from, opts)
+	description, err := restoreJobDescription(p, restoreStmt, from, opts)
 	if err != nil {
 		return err
 	}

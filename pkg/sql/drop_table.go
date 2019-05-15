@@ -111,7 +111,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 			ctx,
 			[]*sqlbase.MutableTableDescriptor{droppedDesc},
 			[]jobspb.DroppedTableDetails{droppedDetails},
-			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
+			tree.AsStringWithFQNames(n.n, params.Ann()),
 			true, /* drainNames */
 			sqlbase.InvalidID /* droppedDatabaseID */); err != nil {
 			return err

@@ -52,6 +52,10 @@ type Statement struct {
 	// NumPlaceholders is 3. These cases are malformed and will result in a
 	// type-check error.
 	NumPlaceholders int
+
+	// NumAnnotations indicates the number of annotations in the tree. It is equal
+	// to the maximum annotation index.
+	NumAnnotations tree.AnnotationIdx
 }
 
 // Statements is a list of parsed statements.
@@ -191,6 +195,7 @@ func (p *Parser) parse(
 		AST:             p.lexer.stmt,
 		SQL:             sql,
 		NumPlaceholders: p.lexer.numPlaceholders,
+		NumAnnotations:  p.lexer.numAnnotations,
 	}, nil
 }
 

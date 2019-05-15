@@ -1252,13 +1252,11 @@ alter_index_stmt:
 alter_onetable_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.AlterTable{Table: name, IfExists: false, Cmds: $4.alterTableCmds()}
+    $$.val = &tree.AlterTable{Table: $3.unresolvedObjectName(), IfExists: false, Cmds: $4.alterTableCmds()}
   }
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.AlterTable{Table: name, IfExists: true, Cmds: $6.alterTableCmds()}
+    $$.val = &tree.AlterTable{Table: $5.unresolvedObjectName(), IfExists: true, Cmds: $6.alterTableCmds()}
   }
 
 alter_oneindex_stmt:
@@ -8741,7 +8739,8 @@ db_object_name:
 simple_db_object_name:
   db_object_name_component
   {
-    res, err := tree.NewUnresolvedObjectName(1, [3]string{$1})
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(1, [3]string{$1}, aIdx)
     if err != nil { return setErr(sqllex, err) }
     $$.val = res
   }
@@ -8753,13 +8752,15 @@ simple_db_object_name:
 complex_db_object_name:
   db_object_name_component '.' unrestricted_name
   {
-    res, err := tree.NewUnresolvedObjectName(2, [3]string{$3, $1})
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(2, [3]string{$3, $1}, aIdx)
     if err != nil { return setErr(sqllex, err) }
     $$.val = res
   }
 | db_object_name_component '.' unrestricted_name '.' unrestricted_name
   {
-    res, err := tree.NewUnresolvedObjectName(3, [3]string{$5, $3, $1})
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(3, [3]string{$5, $3, $1}, aIdx)
     if err != nil { return setErr(sqllex, err) }
     $$.val = res
   }
