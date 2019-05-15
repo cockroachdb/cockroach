@@ -1586,4 +1586,5 @@ sort
       ├── scan abc
       │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── windows
-           └── row-number [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── row-number [type=undefined]

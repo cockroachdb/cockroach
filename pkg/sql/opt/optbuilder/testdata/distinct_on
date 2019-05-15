@@ -341,7 +341,8 @@ distinct-on
  │         ├── scan xyz
  │         │    └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
  │         └── windows
- │              └── row-number [type=undefined]
+ │              └── windows-item: from unbounded to current-row [type=undefined]
+ │                   └── row-number [type=undefined]
  └── aggregations
       └── first-agg [type=int]
            └── variable: y [type=int]

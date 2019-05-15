@@ -54,4 +54,5 @@ project
       │    │    └── fd: (1)-->(2-7)
       │    └── const: 10 [type=int]
       └── windows
-           └── rank [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── rank [type=undefined]

@@ -1672,7 +1672,8 @@ window partition=()
  ├── columns: rank:5(int)
  ├── scan a
  └── windows
-      └── rank [type=undefined]
+      └── windows-item: from unbounded to current-row [type=undefined]
+           └── rank [type=undefined]
 
 norm expect=PruneWindowInputCols
 SELECT ntile(1) OVER () FROM a
@@ -1689,8 +1690,9 @@ project
       │    └── projections
       │         └── const: 1 [type=int]
       └── windows
-           └── ntile [type=int, outer=(6)]
-                └── variable: ntile_1_arg1 [type=int]
+           └── windows-item: from unbounded to current-row [type=int, outer=(6)]
+                └── ntile [type=int]
+                     └── variable: ntile_1_arg1 [type=int]
 
 norm expect=PruneWindowInputCols format=show-all
 SELECT ntile(i) OVER () FROM a
@@ -1711,8 +1713,9 @@ project
       │    ├── cost: 1050.02
       │    └── prune: (2)
       └── windows
-           └── ntile [type=int, outer=(2)]
-                └── variable: t.public.a.i [type=int]
+           └── windows-item: from unbounded to current-row [type=int, outer=(2)]
+                └── ntile [type=int]
+                     └── variable: t.public.a.i [type=int]
 
 # --------------------------------------------------
 # PruneWindowOutputCols
@@ -1733,8 +1736,9 @@ project
       │    └── projections
       │         └── const: 1 [type=int]
       └── windows
-           └── ntile [type=int, outer=(7)]
-                └── variable: ntile_1_arg1 [type=int]
+           └── windows-item: from unbounded to current-row [type=int, outer=(7)]
+                └── ntile [type=int]
+                     └── variable: ntile_1_arg1 [type=int]
 
 norm expect=(PruneWindowOutputCols,EliminateWindow)
 SELECT 1 FROM (SELECT ntile(1) OVER () FROM a)
@@ -1773,8 +1777,9 @@ sort
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(3,4)
       │    └── windows
-      │         └── avg [type=decimal, outer=(1)]
-      │              └── variable: k [type=int]
+      │         └── windows-item: from unbounded to current-row [type=decimal, outer=(1)]
+      │              └── avg [type=decimal]
+      │                   └── variable: k [type=int]
       └── projections
            └── round(avg) [type=decimal, outer=(5)]
 
@@ -1797,8 +1802,9 @@ project
       │    ├── cost: 1050.02
       │    └── prune: (2)
       └── windows
-           └── ntile [type=int, outer=(2)]
-                └── variable: t.public.a.i [type=int]
+           └── windows-item: from unbounded to current-row [type=int, outer=(2)]
+                └── ntile [type=int]
+                     └── variable: t.public.a.i [type=int]
 
 
 # --------------------------------------------------

@@ -103,14 +103,16 @@ project
       │         └── cast: INT8 [type=int]
       │              └── null [type=unknown]
       └── windows
-           ├── lag [type=string]
-           │    ├── variable: lag_1_arg1 [type=string]
-           │    ├── variable: lag_1_arg2 [type=int]
-           │    └── variable: lag_1_arg3 [type=string]
-           └── lag [type=int]
-                ├── variable: lag_1_arg2 [type=int]
-                ├── variable: lag_1_arg2 [type=int]
-                └── variable: lag_2_arg3 [type=int]
+           ├── windows-item: from unbounded to current-row [type=string]
+           │    └── lag [type=string]
+           │         ├── variable: lag_1_arg1 [type=string]
+           │         ├── variable: lag_1_arg2 [type=int]
+           │         └── variable: lag_1_arg3 [type=string]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── lag [type=int]
+                     ├── variable: lag_1_arg2 [type=int]
+                     ├── variable: lag_1_arg2 [type=int]
+                     └── variable: lag_2_arg3 [type=int]
 
 build
 SELECT count(*) OVER () FROM kv
@@ -122,7 +124,8 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── count-rows [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── count-rows [type=int]
 
 build
 SELECT lag((SELECT k FROM kv kv2 WHERE kv2.k = kv.k)) OVER () FROM kv
@@ -153,10 +156,11 @@ project
       │         └── cast: INT8 [type=int]
       │              └── null [type=unknown]
       └── windows
-           └── lag [type=int]
-                ├── variable: lag_1_arg1 [type=int]
-                ├── variable: lag_1_arg2 [type=int]
-                └── variable: lag_1_arg3 [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── lag [type=int]
+                     ├── variable: lag_1_arg1 [type=int]
+                     ├── variable: lag_1_arg2 [type=int]
+                     └── variable: lag_1_arg3 [type=int]
 
 build
 SELECT lag(1) OVER (), lead(1) OVER () FROM kv
@@ -174,14 +178,16 @@ project
       │         └── cast: INT8 [type=int]
       │              └── null [type=unknown]
       └── windows
-           ├── lag [type=int]
-           │    ├── variable: lag_1_arg1 [type=int]
-           │    ├── variable: lag_1_arg1 [type=int]
-           │    └── variable: lag_1_arg3 [type=int]
-           └── lead [type=int]
-                ├── variable: lag_1_arg1 [type=int]
-                ├── variable: lag_1_arg1 [type=int]
-                └── variable: lag_1_arg3 [type=int]
+           ├── windows-item: from unbounded to current-row [type=int]
+           │    └── lag [type=int]
+           │         ├── variable: lag_1_arg1 [type=int]
+           │         ├── variable: lag_1_arg1 [type=int]
+           │         └── variable: lag_1_arg3 [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── lead [type=int]
+                     ├── variable: lag_1_arg1 [type=int]
+                     ├── variable: lag_1_arg1 [type=int]
+                     └── variable: lag_1_arg3 [type=int]
 
 build
 SELECT
@@ -209,28 +215,33 @@ project
       │    │    │         └── cast: INT8 [type=int]
       │    │    │              └── null [type=unknown]
       │    │    └── windows
-      │    │         └── lag [type=int]
-      │    │              ├── variable: lag_1_arg1 [type=int]
-      │    │              ├── variable: lag_1_arg1 [type=int]
-      │    │              └── variable: lag_1_arg3 [type=int]
+      │    │         └── windows-item: from unbounded to current-row [type=int]
+      │    │              └── lag [type=int]
+      │    │                   ├── variable: lag_1_arg1 [type=int]
+      │    │                   ├── variable: lag_1_arg1 [type=int]
+      │    │                   └── variable: lag_1_arg3 [type=int]
       │    └── windows
-      │         ├── lag [type=int]
-      │         │    ├── variable: lag_1_arg1 [type=int]
-      │         │    ├── variable: lag_1_arg1 [type=int]
-      │         │    └── variable: lag_1_arg3 [type=int]
-      │         └── lead [type=int]
-      │              ├── variable: lag_1_arg1 [type=int]
-      │              ├── variable: lag_1_arg1 [type=int]
-      │              └── variable: lag_1_arg3 [type=int]
+      │         ├── windows-item: from unbounded to current-row [type=int]
+      │         │    └── lag [type=int]
+      │         │         ├── variable: lag_1_arg1 [type=int]
+      │         │         ├── variable: lag_1_arg1 [type=int]
+      │         │         └── variable: lag_1_arg3 [type=int]
+      │         └── windows-item: from unbounded to current-row [type=int]
+      │              └── lead [type=int]
+      │                   ├── variable: lag_1_arg1 [type=int]
+      │                   ├── variable: lag_1_arg1 [type=int]
+      │                   └── variable: lag_1_arg3 [type=int]
       └── windows
-           ├── lag [type=int]
-           │    ├── variable: lag_1_arg1 [type=int]
-           │    ├── variable: lag_1_arg1 [type=int]
-           │    └── variable: lag_1_arg3 [type=int]
-           └── lead [type=int]
-                ├── variable: lag_1_arg1 [type=int]
-                ├── variable: lag_1_arg1 [type=int]
-                └── variable: lag_1_arg3 [type=int]
+           ├── windows-item: from unbounded to current-row [type=int]
+           │    └── lag [type=int]
+           │         ├── variable: lag_1_arg1 [type=int]
+           │         ├── variable: lag_1_arg1 [type=int]
+           │         └── variable: lag_1_arg3 [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── lead [type=int]
+                     ├── variable: lag_1_arg1 [type=int]
+                     ├── variable: lag_1_arg1 [type=int]
+                     └── variable: lag_1_arg3 [type=int]
 
 build
 SELECT
@@ -260,29 +271,34 @@ project
       │    │    │    │         └── cast: INT8 [type=int]
       │    │    │    │              └── null [type=unknown]
       │    │    │    └── windows
-      │    │    │         └── lag [type=int]
-      │    │    │              ├── variable: lag_1_arg1 [type=int]
-      │    │    │              ├── variable: lag_1_arg1 [type=int]
-      │    │    │              └── variable: lag_1_arg3 [type=int]
+      │    │    │         └── windows-item: from unbounded to current-row [type=int]
+      │    │    │              └── lag [type=int]
+      │    │    │                   ├── variable: lag_1_arg1 [type=int]
+      │    │    │                   ├── variable: lag_1_arg1 [type=int]
+      │    │    │                   └── variable: lag_1_arg3 [type=int]
       │    │    └── windows
-      │    │         ├── lag [type=int]
-      │    │         │    ├── variable: lag_1_arg1 [type=int]
-      │    │         │    ├── variable: lag_1_arg1 [type=int]
-      │    │         │    └── variable: lag_1_arg3 [type=int]
-      │    │         └── lead [type=int]
-      │    │              ├── variable: lag_1_arg1 [type=int]
-      │    │              ├── variable: lag_1_arg1 [type=int]
-      │    │              └── variable: lag_1_arg3 [type=int]
+      │    │         ├── windows-item: from unbounded to current-row [type=int]
+      │    │         │    └── lag [type=int]
+      │    │         │         ├── variable: lag_1_arg1 [type=int]
+      │    │         │         ├── variable: lag_1_arg1 [type=int]
+      │    │         │         └── variable: lag_1_arg3 [type=int]
+      │    │         └── windows-item: from unbounded to current-row [type=int]
+      │    │              └── lead [type=int]
+      │    │                   ├── variable: lag_1_arg1 [type=int]
+      │    │                   ├── variable: lag_1_arg1 [type=int]
+      │    │                   └── variable: lag_1_arg3 [type=int]
       │    └── windows
-      │         └── lag [type=int]
-      │              ├── variable: lag_1_arg1 [type=int]
-      │              ├── variable: lag_1_arg1 [type=int]
-      │              └── variable: lag_1_arg3 [type=int]
+      │         └── windows-item: from unbounded to current-row [type=int]
+      │              └── lag [type=int]
+      │                   ├── variable: lag_1_arg1 [type=int]
+      │                   ├── variable: lag_1_arg1 [type=int]
+      │                   └── variable: lag_1_arg3 [type=int]
       └── windows
-           └── lead [type=int]
-                ├── variable: lag_1_arg1 [type=int]
-                ├── variable: lag_1_arg1 [type=int]
-                └── variable: lag_1_arg3 [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── lead [type=int]
+                     ├── variable: lag_1_arg1 [type=int]
+                     ├── variable: lag_1_arg1 [type=int]
+                     └── variable: lag_1_arg3 [type=int]
 
 build
 SELECT lag(1, 2) OVER (), lead(1, 2) OVER () FROM kv
@@ -301,14 +317,16 @@ project
       │         └── cast: INT8 [type=int]
       │              └── null [type=unknown]
       └── windows
-           ├── lag [type=int]
-           │    ├── variable: lag_1_arg1 [type=int]
-           │    ├── variable: lag_1_arg2 [type=int]
-           │    └── variable: lag_1_arg3 [type=int]
-           └── lead [type=int]
-                ├── variable: lag_1_arg1 [type=int]
-                ├── variable: lag_1_arg2 [type=int]
-                └── variable: lag_1_arg3 [type=int]
+           ├── windows-item: from unbounded to current-row [type=int]
+           │    └── lag [type=int]
+           │         ├── variable: lag_1_arg1 [type=int]
+           │         ├── variable: lag_1_arg2 [type=int]
+           │         └── variable: lag_1_arg3 [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── lead [type=int]
+                     ├── variable: lag_1_arg1 [type=int]
+                     ├── variable: lag_1_arg2 [type=int]
+                     └── variable: lag_1_arg3 [type=int]
 
 build
 SELECT lag(1, 2, 3) OVER (), lead(1, 2, 3) OVER () FROM kv
@@ -326,14 +344,16 @@ project
       │         ├── const: 2 [type=int]
       │         └── const: 3 [type=int]
       └── windows
-           ├── lag [type=int]
-           │    ├── variable: lag_1_arg1 [type=int]
-           │    ├── variable: lag_1_arg2 [type=int]
-           │    └── variable: lag_1_arg3 [type=int]
-           └── lead [type=int]
-                ├── variable: lag_1_arg1 [type=int]
-                ├── variable: lag_1_arg2 [type=int]
-                └── variable: lag_1_arg3 [type=int]
+           ├── windows-item: from unbounded to current-row [type=int]
+           │    └── lag [type=int]
+           │         ├── variable: lag_1_arg1 [type=int]
+           │         ├── variable: lag_1_arg2 [type=int]
+           │         └── variable: lag_1_arg3 [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── lead [type=int]
+                     ├── variable: lag_1_arg1 [type=int]
+                     ├── variable: lag_1_arg2 [type=int]
+                     └── variable: lag_1_arg3 [type=int]
 
 build
 SELECT avg(k) OVER () FROM kv
@@ -345,8 +365,9 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── avg [type=decimal]
-                └── variable: k [type=int]
+           └── windows-item: from unbounded to current-row [type=decimal]
+                └── avg [type=decimal]
+                     └── variable: k [type=int]
 
 build
 SELECT x FROM (SELECT avg(k) OVER () AS x FROM kv)
@@ -358,8 +379,9 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── avg [type=decimal]
-                └── variable: k [type=int]
+           └── windows-item: from unbounded to current-row [type=decimal]
+                └── avg [type=decimal]
+                     └── variable: k [type=int]
 
 build
 SELECT avg(DISTINCT k) OVER () FROM kv
@@ -389,8 +411,9 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                └── avg [type=decimal]
-                     └── variable: k [type=int]
+                └── windows-item: from unbounded to current-row [type=decimal]
+                     └── avg [type=decimal]
+                          └── variable: k [type=int]
 
 build
 SELECT k, v, rank() OVER w FROM kv WINDOW w AS ()
@@ -407,8 +430,9 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── first-value [type=int]
-                └── variable: v [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── first-value [type=int]
+                     └── variable: v [type=int]
 
 build
 SELECT avg(k), max(v), min(w), 2 + row_number() OVER () FROM kv ORDER BY 1
@@ -432,7 +456,8 @@ project
  │    │         └── min [type=int]
  │    │              └── variable: w [type=int]
  │    └── windows
- │         └── row-number [type=undefined]
+ │         └── windows-item: from unbounded to current-row [type=undefined]
+ │              └── row-number [type=undefined]
  └── projections
       └── plus [type=int]
            ├── const: 2 [type=int]
@@ -448,10 +473,14 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           ├── rank [type=undefined]
-           ├── dense-rank [type=undefined]
-           ├── percent-rank [type=undefined]
-           └── cume-dist [type=undefined]
+           ├── windows-item: from unbounded to current-row [type=undefined]
+           │    └── rank [type=undefined]
+           ├── windows-item: from unbounded to current-row [type=undefined]
+           │    └── dense-rank [type=undefined]
+           ├── windows-item: from unbounded to current-row [type=undefined]
+           │    └── percent-rank [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── cume-dist [type=undefined]
 
 build
 SELECT k, rank() OVER (), rank() OVER () FROM kv
@@ -463,7 +492,8 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── rank [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── rank [type=undefined]
 
 build
 SELECT k, rank() OVER (), row_number() OVER () FROM kv
@@ -475,8 +505,10 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           ├── rank [type=undefined]
-           └── row-number [type=undefined]
+           ├── windows-item: from unbounded to current-row [type=undefined]
+           │    └── rank [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── row-number [type=undefined]
 
 build
 SELECT k, rank() OVER (), row_number() OVER () FROM kv ORDER BY 1
@@ -491,8 +523,10 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                ├── rank [type=undefined]
-                └── row-number [type=undefined]
+                ├── windows-item: from unbounded to current-row [type=undefined]
+                │    └── rank [type=undefined]
+                └── windows-item: from unbounded to current-row [type=undefined]
+                     └── row-number [type=undefined]
 
 build
 SELECT k, v, rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
@@ -507,7 +541,8 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                └── rank [type=undefined]
+                └── windows-item: from unbounded to current-row [type=undefined]
+                     └── rank [type=undefined]
 
 build
 SELECT k, row_number() OVER (PARTITION BY v), rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
@@ -522,8 +557,10 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                ├── row-number [type=undefined]
-                └── rank [type=undefined]
+                ├── windows-item: from unbounded to current-row [type=undefined]
+                │    └── row-number [type=undefined]
+                └── windows-item: from unbounded to current-row [type=undefined]
+                     └── rank [type=undefined]
 
 build
 SELECT k, v, ntile(1) OVER () FROM kv
@@ -539,8 +576,9 @@ project
       │    └── projections
       │         └── const: 1 [type=int]
       └── windows
-           └── ntile [type=int]
-                └── variable: ntile_1_arg1 [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── ntile [type=int]
+                     └── variable: ntile_1_arg1 [type=int]
 
 build
 SELECT k, v, ntile(1) OVER (), ntile(50) OVER () FROM kv
@@ -557,10 +595,12 @@ project
       │         ├── const: 1 [type=int]
       │         └── const: 50 [type=int]
       └── windows
-           ├── ntile [type=int]
-           │    └── variable: ntile_1_arg1 [type=int]
-           └── ntile [type=int]
-                └── variable: ntile_2_arg1 [type=int]
+           ├── windows-item: from unbounded to current-row [type=int]
+           │    └── ntile [type=int]
+           │         └── variable: ntile_1_arg1 [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── ntile [type=int]
+                     └── variable: ntile_2_arg1 [type=int]
 
 build
 SELECT k, v, nth_value('foo', 1) OVER () FROM kv
@@ -577,9 +617,10 @@ project
       │         ├── const: 'foo' [type=string]
       │         └── const: 1 [type=int]
       └── windows
-           └── nth-value [type=string]
-                ├── variable: nth_value_1_arg1 [type=string]
-                └── variable: nth_value_1_arg2 [type=int]
+           └── windows-item: from unbounded to current-row [type=string]
+                └── nth-value [type=string]
+                     ├── variable: nth_value_1_arg1 [type=string]
+                     └── variable: nth_value_1_arg2 [type=int]
 
 build
 SELECT k, v, nth_value(1, k) OVER () FROM kv
@@ -595,9 +636,10 @@ project
       │    └── projections
       │         └── const: 1 [type=int]
       └── windows
-           └── nth-value [type=int]
-                ├── variable: nth_value_1_arg1 [type=int]
-                └── variable: k [type=int]
+           └── windows-item: from unbounded to current-row [type=int]
+                └── nth-value [type=int]
+                     ├── variable: nth_value_1_arg1 [type=int]
+                     └── variable: k [type=int]
 
 # Partitions
 
@@ -621,7 +663,8 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── row-number [type=undefined]
 
 build
 SELECT v, row_number() OVER (PARTITION BY v) FROM kv
@@ -633,7 +676,8 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── row-number [type=undefined]
 
 build
 SELECT v, row_number() OVER (PARTITION BY v+1) FROM kv
@@ -651,7 +695,8 @@ project
       │              ├── variable: v [type=int]
       │              └── const: 1 [type=int]
       └── windows
-           └── row-number [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── row-number [type=undefined]
 
 build
 SELECT v, row_number() OVER (PARTITION BY avg(k)) FROM kv GROUP BY v
@@ -671,7 +716,8 @@ project
       │         └── avg [type=decimal]
       │              └── variable: k [type=int]
       └── windows
-           └── row-number [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── row-number [type=undefined]
 
 # TODO(justin): expand these tuples.
 build
@@ -684,7 +730,8 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── row-number [type=undefined]
 
 build
 SELECT k, row_number() OVER (PARTITION BY kv.*) FROM kv
@@ -696,7 +743,8 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── row-number [type=undefined]
 
 build
 SELECT row_number() OVER (PARTITION BY v), rank() OVER (PARTITION BY v, f) FROM kv
@@ -710,9 +758,11 @@ project
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    └── windows
-      │         └── row-number [type=undefined]
+      │         └── windows-item: from unbounded to current-row [type=undefined]
+      │              └── row-number [type=undefined]
       └── windows
-           └── rank [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── rank [type=undefined]
 
 # Ordering
 
@@ -726,7 +776,8 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── windows-item: from unbounded to current-row [type=undefined]
+                └── row-number [type=undefined]
 
 build
 SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
@@ -741,7 +792,8 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                └── rank [type=undefined]
+                └── windows-item: from unbounded to current-row [type=undefined]
+                     └── rank [type=undefined]
 
 # Ensure tuples in orderings get expanded.
 
@@ -768,11 +820,14 @@ sort
            │    │    ├── scan kv
            │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            │    │    └── windows
-           │    │         └── rank [type=undefined]
+           │    │         └── windows-item: from unbounded to current-row [type=undefined]
+           │    │              └── rank [type=undefined]
            │    └── windows
-           │         └── row-number [type=undefined]
+           │         └── windows-item: from unbounded to current-row [type=undefined]
+           │              └── row-number [type=undefined]
            └── windows
-                └── dense-rank [type=undefined]
+                └── windows-item: from unbounded to current-row [type=undefined]
+                     └── dense-rank [type=undefined]
 
 build
 SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
@@ -787,7 +842,8 @@ sort
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    └── windows
-      │         └── row-number [type=undefined]
+      │         └── windows-item: from unbounded to current-row [type=undefined]
+      │              └── row-number [type=undefined]
       └── projections
            └── plus [type=int]
                 ├── plus [type=int]
@@ -819,7 +875,145 @@ distinct-on
  │              ├── scan kv
  │              │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
  │              └── windows
- │                   └── row-number [type=undefined]
+ │                   └── windows-item: from unbounded to current-row [type=undefined]
+ │                        └── row-number [type=undefined]
  └── aggregations
       └── first-agg [type=int]
            └── variable: w [type=int]
+
+# Frames
+
+# Default is unbounded to current-row
+build
+SELECT avg(k) OVER () FROM kv
+----
+project
+ ├── columns: avg:8(decimal)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── windows-item: from unbounded to current-row [type=decimal]
+                └── avg [type=decimal]
+                     └── variable: k [type=int]
+
+build
+SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM kv
+----
+error (42601): syntax error: frame end cannot be UNBOUNDED PRECEDING at or near "preceding"
+
+build
+SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM kv
+----
+error (42601): syntax error: frame start cannot be UNBOUNDED FOLLOWING at or near "following"
+
+build
+SELECT
+  avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+  avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+  avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)
+FROM kv
+----
+project
+ ├── columns: avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           ├── windows-item: from unbounded to unbounded [type=decimal]
+           │    └── avg [type=decimal]
+           │         └── variable: k [type=int]
+           ├── windows-item: from unbounded to current-row [type=decimal]
+           │    └── avg [type=decimal]
+           │         └── variable: k [type=int]
+           ├── windows-item: from current-row to unbounded [type=decimal]
+           │    └── avg [type=decimal]
+           │         └── variable: k [type=int]
+           └── windows-item: from current-row to current-row [type=decimal]
+                └── avg [type=decimal]
+                     └── variable: k [type=int]
+
+build
+SELECT
+  avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+  avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+  avg(k) OVER (ORDER BY v RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+  avg(k) OVER (ORDER BY v RANGE BETWEEN CURRENT ROW AND CURRENT ROW)
+FROM kv
+----
+project
+ ├── columns: avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           ├── windows-item: from unbounded to unbounded [type=decimal]
+           │    └── avg [type=decimal]
+           │         └── variable: k [type=int]
+           ├── windows-item: from unbounded to current-row [type=decimal]
+           │    └── avg [type=decimal]
+           │         └── variable: k [type=int]
+           ├── windows-item: from current-row to unbounded [type=decimal]
+           │    └── avg [type=decimal]
+           │         └── variable: k [type=int]
+           └── windows-item: from current-row to current-row [type=decimal]
+                └── avg [type=decimal]
+                     └── variable: k [type=int]
+
+build
+SELECT
+  avg(k) OVER (RANGE UNBOUNDED PRECEDING),
+  avg(k) OVER (RANGE CURRENT ROW)
+FROM kv
+----
+project
+ ├── columns: avg:8(decimal) avg:9(decimal)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg:9(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           ├── windows-item: from unbounded to current-row [type=decimal]
+           │    └── avg [type=decimal]
+           │         └── variable: k [type=int]
+           └── windows-item: from current-row to current-row [type=decimal]
+                └── avg [type=decimal]
+                     └── variable: k [type=int]
+
+# TODO(justin): add support for offset expressions.
+build
+SELECT avg(k) OVER (ORDER BY v RANGE BETWEEN k - 10 PRECEDING AND CURRENT ROW) FROM kv
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) FROM kv
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT
+    avg(v) OVER (PARTITION BY w ORDER BY f RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS avg_price
+FROM kv
+----
+error (0A000): unimplemented: unsupported window function
+
+# TODO(justin): add support for ROWS.
+build
+SELECT
+    avg(v) OVER (PARTITION BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS avg_price
+FROM kv
+----
+error (0A000): unimplemented: unsupported window function
+
+# TODO(justin): add support for GROUPS expressions.
+build
+SELECT
+    avg(v) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+FROM kv
+----
+error (0A000): unimplemented: unsupported window function

@@ -844,6 +844,7 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 			outputColIdx:   wi.OutputIdxs[i],
 			partitionIdxs:  partitionIdxs,
 			columnOrdering: wi.Ordering,
+			frame:          wi.Exprs[i].WindowDef.Frame,
 		}
 
 		p.windowRender[wi.OutputIdxs[i]] = p.funcs[i]

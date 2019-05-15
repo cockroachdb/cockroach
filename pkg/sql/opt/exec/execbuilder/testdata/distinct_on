@@ -298,16 +298,16 @@ render                    ·            ·            (min)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 ----
-render               ·            ·                     (y)              ·
- │                   render 0     y                     ·                ·
- └── distinct        ·            ·                     (y, row_number)  weak-key(row_number)
-      │              distinct on  row_number            ·                ·
-      └── window     ·            ·                     (y, row_number)  ·
-           │         window 0     row_number() OVER ()  ·                ·
-           │         render 1     row_number() OVER ()  ·                ·
-           └── scan  ·            ·                     (y)              ·
-·                    table        xyz@primary           ·                ·
-·                    spans        ALL                   ·                ·
+render               ·            ·                                                                      (y)              ·
+ │                   render 0     y                                                                      ·                ·
+ └── distinct        ·            ·                                                                      (y, row_number)  weak-key(row_number)
+      │              distinct on  row_number                                                             ·                ·
+      └── window     ·            ·                                                                      (y, row_number)  ·
+           │         window 0     row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
+           │         render 1     row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
+           └── scan  ·            ·                                                                      (y)              ·
+·                    table        xyz@primary                                                            ·                ·
+·                    spans        ALL                                                                    ·                ·
 
 ###########################
 # With ordinal references #
