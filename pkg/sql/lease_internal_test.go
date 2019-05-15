@@ -478,7 +478,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Populate the name cache.
 	ctx := context.TODO()
 	table, _, err := leaseManager.AcquireByName(
-		ctx, leaseManager.execCfg.Clock.Now(), tableDesc.ParentID, "test")
+		ctx, leaseManager.clock.Now(), tableDesc.ParentID, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,7 +500,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}()
 
 	for i := 0; i < 50; i++ {
-		timestamp := leaseManager.execCfg.Clock.Now()
+		timestamp := leaseManager.clock.Now()
 		ctx := context.TODO()
 		table, _, err := leaseManager.AcquireByName(ctx, timestamp, tableDesc.ParentID, "test")
 		if err != nil {
@@ -685,7 +685,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		m *LeaseManager,
 		acquireChan chan Result,
 	) {
-		table, e, err := m.Acquire(ctx, m.execCfg.Clock.Now(), descID)
+		table, e, err := m.Acquire(ctx, m.clock.Now(), descID)
 		acquireChan <- Result{err: err, exp: e, table: table}
 	}
 
