@@ -353,19 +353,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.internalMemMetrics = sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(s.internalMemMetrics)
 
-	// Set up Lease Manager
-	var lmKnobs sql.LeaseManagerTestingKnobs
-	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
-		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
-	}
-	s.leaseMgr = sql.NewLeaseManager(
-		s.cfg.AmbientCtx,
-		nil, /* execCfg - will be set later because of circular dependencies */
-		lmKnobs,
-		s.stopper,
-		s.cfg.LeaseManagerConfig,
-	)
-
 	// We do not set memory monitors or a noteworthy limit because the children of
 	// this monitor will be setting their own noteworthy limits.
 	rootSQLMemoryMonitor := mon.MakeMonitor(
@@ -513,6 +500,23 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
+
+	// Set up Lease Manager
+	var lmKnobs sql.LeaseManagerTestingKnobs
+	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
+		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
+	}
+	s.leaseMgr = sql.NewLeaseManager(
+		s.cfg.AmbientCtx,
+		&s.nodeIDContainer,
+		s.db,
+		s.clock,
+		nil, /* internalExecutor - will be set later because of circular dependencies */
+		st,
+		lmKnobs,
+		s.stopper,
+		s.cfg.LeaseManagerConfig,
+	)
 
 	// Set up the DistSQL server.
 	distSQLCfg := distsqlrun.ServerConfig{
@@ -724,7 +728,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.execCfg = &execCfg
 
-	s.leaseMgr.SetExecCfg(&execCfg)
+	s.leaseMgr.SetInternalExecutor(execCfg.InternalExecutor)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases()
 

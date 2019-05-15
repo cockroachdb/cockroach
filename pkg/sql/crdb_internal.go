@@ -376,7 +376,7 @@ CREATE TABLE crdb_internal.leases (
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		leaseMgr := p.LeaseMgr()
-		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.execCfg.NodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeIDContainer.Get())))
 
 		leaseMgr.mu.Lock()
 		defer leaseMgr.mu.Unlock()
@@ -605,7 +605,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		}
 
 		leaseMgr := p.LeaseMgr()
-		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.execCfg.NodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeIDContainer.Get())))
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.

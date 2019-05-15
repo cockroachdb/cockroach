@@ -16,8 +16,8 @@ package sql
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/config"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"

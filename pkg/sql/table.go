@@ -162,7 +162,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
-			tc.leaseMgr.execCfg.DB.Txn, tn.Catalog(), flags.required)
+			tc.leaseMgr.db.Txn, tn.Catalog(), flags.required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
@@ -218,7 +218,7 @@ func (tc *TableCollection) getTableVersion(
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
-			tc.leaseMgr.execCfg.DB.Txn, tn.Catalog(), flags.required)
+			tc.leaseMgr.db.Txn, tn.Catalog(), flags.required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
