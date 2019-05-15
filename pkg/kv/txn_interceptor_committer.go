@@ -28,7 +28,7 @@ import (
 var parallelCommitsEnabled = settings.RegisterBoolSetting(
 	"kv.transaction.parallel_commits_enabled",
 	"if enabled, transactional commits will be parallelized with transactional writes",
-	true,
+	false,
 )
 
 // txnCommitter is a txnInterceptor that concerns itself with committing and
@@ -152,7 +152,13 @@ func (tc *txnCommitter) SendLocked(
 	// write set; no writes will be in-flight concurrently with the EndTransaction
 	// request.
 	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallelWithWrites(ba, et) {
-		et.IntentSpans = mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
+		// NB: when parallel commits is disabled, this is the best place to
+		// detect whether the batch has only distinct spans. We can set this
+		// flag based on whether any of previously declared in-flight writes
+		// in this batch overlap with each other. This will have (rare) false
+		// negatives when the in-flight writes overlap with existing intent
+		// spans, but never false positives.
+		et.IntentSpans, ba.Header.DistinctSpans = mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
 		// Disable parallel commits.
 		et.InFlightWrites = nil
 	}
@@ -223,7 +229,7 @@ func (tc *txnCommitter) SendLocked(
 	// determination about the status of our STAGING transaction. To avoid this,
 	// we transition to an explicitly committed transaction as soon as possible.
 	// This also has the side-effect of kicking off intent resolution.
-	mergedIntentSpans := mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
+	mergedIntentSpans, _ := mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
 	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedIntentSpans)
 
 	// Switch the status on the batch response's transaction to COMMITTED. No
@@ -317,15 +323,17 @@ func (tc *txnCommitter) canCommitInParallelWithWrites(
 	return true
 }
 
-func mergeIntoSpans(s []roachpb.Span, ws []roachpb.SequencedWrite) []roachpb.Span {
+// mergeIntoSpans merges all provided sequenced writes into the span slice. It
+// then sorts the spans and merges an that overlap. Returns true iff all of the
+// spans are distinct.
+func mergeIntoSpans(s []roachpb.Span, ws []roachpb.SequencedWrite) ([]roachpb.Span, bool) {
 	if s == nil {
 		s = make([]roachpb.Span, 0, len(ws))
 	}
 	for _, w := range ws {
 		s = append(s, roachpb.Span{Key: w.Key})
 	}
-	s, _ = roachpb.MergeSpans(s)
-	return s
+	return roachpb.MergeSpans(s)
 }
 
 // needTxnRetryAfterStaging determines whether the transaction needs to refresh

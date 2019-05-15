@@ -28,9 +28,12 @@ import (
 )
 
 func makeMockTxnCommitter() (txnCommitter, *mockLockedSender) {
+	st := cluster.MakeTestingClusterSettings()
+	// TODO(nvanbenschoten): remove when parallel commits are enabled.
+	parallelCommitsEnabled.Override(&st.SV, true)
 	mockSender := &mockLockedSender{}
 	return txnCommitter{
-		st:      cluster.MakeTestingClusterSettings(),
+		st:      st,
 		stopper: stop.NewStopper(),
 		wrapped: mockSender,
 		mu:      new(syncutil.Mutex),
