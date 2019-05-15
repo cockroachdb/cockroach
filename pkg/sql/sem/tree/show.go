@@ -96,13 +96,18 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 
 // ShowColumns represents a SHOW COLUMNS statement.
 type ShowColumns struct {
-	Table TableName
+	Table       TableName
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowColumns) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW COLUMNS FROM ")
 	ctx.FormatNode(&node.Table)
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowDatabases represents a SHOW DATABASES statement.
