@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -243,21 +244,25 @@ func (h *SnapshotRequest_Header) IsPreemptive() bool {
 	return h.RaftMessageRequest.ToReplica.ReplicaID == 0
 }
 
+func (r *Replica) shouldTraceRaft() bool {
+	return log.V(1) || tracing.IsComponentRecordingActive() || r.store.TestingKnobs().TraceAllRaftEvents
+}
+
 // traceEntries records the provided event for all proposals corresponding
 // to the entries contained in ents. The vmodule level for raft must be at
 // least 1.
 func (r *Replica) traceEntries(ents []raftpb.Entry, event string) {
-	if log.V(1) || r.store.TestingKnobs().TraceAllRaftEvents {
+	if r.shouldTraceRaft() {
 		ids := extractIDs(nil, ents)
 		traceProposals(r, ids, event)
 	}
 }
 
-// traceMessageSends records the provided event for all proposals contained in
+// traceMessageSends records the provided event for all proposals contained
 // in entries contained in msgs. The vmodule level for raft must be at
 // least 1.
 func (r *Replica) traceMessageSends(msgs []raftpb.Message, event string) {
-	if log.V(1) || r.store.TestingKnobs().TraceAllRaftEvents {
+	if r.shouldTraceRaft() {
 		var ids []storagebase.CmdIDKey
 		for _, m := range msgs {
 			ids = extractIDs(ids, m.Entries)

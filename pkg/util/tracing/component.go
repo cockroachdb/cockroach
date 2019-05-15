@@ -142,8 +142,8 @@ func incErrorCount(component string, inc int64) {
 	compMetrics.getComponentMetrics(component).errorCount.Inc(inc)
 }
 
-// isRecording returns whether there are active recordings. For testing.
-func isRecording() bool {
+// IsComponentRecordingActive returns whether there are active recordings.
+func IsComponentRecordingActive() bool {
 	activeRecordings.RLock()
 	defer activeRecordings.RUnlock()
 	return len(activeRecordings.values) > 0
@@ -182,7 +182,7 @@ func Record(stop <-chan time.Time, targetCount int64) map[string]ComponentTraces
 		for _, ps := range pendingSpans {
 			sp := ps.Span.(*span)
 			sample := ComponentSamples_Sample{
-				Attributes: sp.getTags(),
+				Attributes: sp.getTags("%+v"),
 				Stuck:      stuck,
 				Pending:    true,
 				Spans:      GetRecording(sp),
@@ -382,7 +382,7 @@ func (c *ComponentSpan) Finish() {
 	errStr := strings.Join(errStrs, "\n")
 
 	sample := ComponentSamples_Sample{
-		Attributes: c.Span.(*span).getTags(),
+		Attributes: c.Span.(*span).getTags("%+v"),
 		Error:      errStr,
 		Stuck:      c.stuck,
 		Spans:      spans,
@@ -439,9 +439,11 @@ func (c *ComponentSpan) MarkAsStuck(ctx context.Context) context.Context {
 // a singleton instance of a ComponentTraces map, to be returned with
 // any call to inspect system component traces.
 //
-// Returns a derived context for further use, a finish method which must be
-// invoked by the caller when the caller exits. Note that the finish method
-// should be invoked with the error value (if any) for the calling method.
+// Returns a derived context for further use, and a finish method
+// which must be invoked by the caller when the caller exits. Note
+// that the finish method should be invoked with the error value (if
+// any) for the calling method.
+//
 // !!! comment about how a different span is being put in the ctx
 func StartComponentSpan(
 	ctx context.Context, tracer opentracing.Tracer, component string, operation string,
@@ -453,8 +455,6 @@ func StartComponentSpan(
 func startComponentSpanInner(
 	ctx context.Context, tracer opentracing.Tracer, component string, operation string, stuck bool,
 ) (context.Context, ComponentSpan) {
-	opName := fmt.Sprintf("%s: %s", component, operation)
-
 	t := tracer.(*Tracer)
 	// Get parent span if one exists and determine whether it's recording.
 	var parentIsRecording bool
@@ -466,8 +466,15 @@ func startComponentSpanInner(
 	// Determine whether this component should be recorded based on
 	// pending component recordings.
 	shouldRecord := stuck
+	separateRecording := true
 	if parentIsRecording && GetRecordingType(pSpan) == ComponentRecording {
 		shouldRecord = true
+		// Create a separate recording unless the parent's recording group
+		// doesn't contain a component span. In this case, we want to keep
+		// a single recording group so we record the non-component spans
+		// along with this component span's sample. This happens across
+		// RPC boundaries.
+		separateRecording = parentRecordingHasComponentSpan(pSpan)
 	}
 	shouldRecord = shouldRecord || shouldRecordComponent(component)
 
@@ -475,14 +482,14 @@ func startComponentSpanInner(
 	if !shouldRecord {
 		var cSpan opentracing.Span
 		if pSpan != nil {
-			cSpan = StartChildSpan(opName, pSpan, nil /* logTags */, false /* separateRecording */)
+			cSpan = StartChildSpan(operation, pSpan, nil /* logTags */, false /* separateRecording */)
 		} else {
 			cSpan = &t.noopSpan
 		}
 		compSpan := ComponentSpan{
 			Span:      cSpan,
 			component: component,
-			operation: opName,
+			operation: operation,
 			// !!! t:         cSpan.Tracer(),
 		}
 		ctx = opentracing.ContextWithSpan(ctx, cSpan)
@@ -493,11 +500,15 @@ func startComponentSpanInner(
 	// black hole span, then create a new span that's recordable.
 	var cSpan opentracing.Span
 	if pSpan == nil || IsBlackHoleSpan(pSpan) {
-		cSpan = t.StartSpan(opName, Recordable, LogTagsFromCtx(ctx))
+		cSpan = t.StartSpan(operation, Recordable, LogTagsFromCtx(ctx))
 	} else {
 		// Otherwise, start a child span which uses its own recording group.
-		cSpan = StartChildSpan(opName, pSpan, logtags.FromContext(ctx), true /* separateRecording */)
+		if !separateRecording {
+			fmt.Printf("using parent %+v recording for %s\n", pSpan, component)
+		}
+		cSpan = StartChildSpan(operation, pSpan, logtags.FromContext(ctx), separateRecording)
 	}
+	cSpan.SetTag("component", component)
 
 	// Start the recording (if not already started by the parent) and
 	// set up the span collection.
@@ -516,6 +527,25 @@ func startComponentSpanInner(
 	startRecordingComponent(&compSpan)
 
 	return opentracing.ContextWithSpan(ctx, cSpan), compSpan
+}
+
+func parentRecordingHasComponentSpan(osp opentracing.Span) bool {
+	sp := osp.(*span)
+	sp.mu.Lock()
+	rg := sp.mu.recordingGroup
+	sp.mu.Unlock()
+
+	rg.Lock()
+	defer rg.Unlock()
+	for _, s := range rg.spans {
+		s.mu.Lock()
+		_, ok := s.mu.tags["component"]
+		s.mu.Unlock()
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 func convertToStrings(values []interface{}) []string {

@@ -59,7 +59,7 @@ export class TraceLine {
 
   formatMessage = () => {
     if (this.sample) {
-      return this.span.operation + (isSpanPending(this.span) ? " [pending]" : "");
+      return this.span.tags["component"] + ": " + this.span.operation + (isSpanPending(this.span) ? " [pending]" : "");
     } else if (this.span) {
       return this.span.operation + (isSpanPending(this.span) ? " [pending]" : "");
     } else if (this.log.fields.length == 1) {
@@ -190,7 +190,7 @@ export class ExpandedSpan {
     const baseDepth: number = (idx >= this.lines.length) ? this.lines[this.lines.length-1].depth : this.lines[idx].depth;
     // Augment depth of embedded lines.
     es.lines.forEach((l) => {
-      l.depth += (1 + baseDepth);
+      l.depth += baseDepth;
     });
     // Embed lines.
     this.lines.splice(idx + 1, 0, ...es.lines);
@@ -402,11 +402,13 @@ export class ExpandedSample {
   active: boolean;
   error: any;
   trace_id: Long;
+  span_id: Long;
   root: ExpandedSpan;
 
-  constructor(trace_id: Long, nodes: protos.cockroach.server.serverpb.ComponentTraceResponse.INodeResponse[]) {
+  constructor(trace_id: Long, span_id: Long, nodes: protos.cockroach.server.serverpb.ComponentTraceResponse.INodeResponse[]) {
     this.active = false;
     this.trace_id = trace_id;
+    this.span_id = span_id;
 
     const spans: {[span_id: Long]: ExpandedSpan} = {};
     const roots: Long[] = [];
@@ -419,7 +421,7 @@ export class ExpandedSample {
       _.map(n.samples, (ca, name) => {
         ca.samples.forEach((s) => {
           s.spans.forEach((sp) => {
-            spans[sp.span_id] = new ExpandedSpan(n.node_id, sp, sp == s.spans[0] ? s : null);
+            spans[sp.span_id] = new ExpandedSpan(n.node_id, sp, sp.tags["component"] == name ? s : null);
             if (sp.parent_span_id && sp.parent_span_id.toNumber() != 0) {
               if (!(sp.parent_span_id.toString() in children)) {
                 children[sp.parent_span_id] = [];

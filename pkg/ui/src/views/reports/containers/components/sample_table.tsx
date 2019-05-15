@@ -145,7 +145,7 @@ function SampleRow(props) {
   const { s, cols, expandedSample, onToggleSample } = props;
 
   function onClick(c, e) {
-    onToggleSample(s.spans[0].trace_id);
+    onToggleSample(s.spans[0].trace_id, s.spans[0].span_id);
   }
 
   return (
@@ -157,7 +157,7 @@ function SampleRow(props) {
           ))
         }
         </tr>
-      {expandedSample && s.spans[0].trace_id.equals(expandedSample.trace_id) &&
+      {expandedSample && s.spans[0].span_id.equals(expandedSample.span_id) &&
          <tr>
            <td className="sample-expanded" colspan={cols.length}>
              <Loading

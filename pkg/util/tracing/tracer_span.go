@@ -517,10 +517,13 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 	return s
 }
 
-func (s *span) getTags() map[string]string {
+func (s *span) getTags(fmtStr string) map[string]string {
 	result := make(map[string]string)
 	s.mu.Lock()
 	for k, v := range s.mu.tags {
+		if fmtStr != "" {
+			result[k] = fmt.Sprintf(fmtStr, v)
+		}
 		result[k] = fmt.Sprint(v)
 	}
 	s.mu.Unlock()
