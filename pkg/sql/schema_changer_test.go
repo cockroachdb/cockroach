@@ -204,7 +204,11 @@ func TestSchemaChangeProcess(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	leaseMgr := sql.NewLeaseManager(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
-		&execCfg,
+		execCfg.NodeID,
+		execCfg.DB,
+		execCfg.Clock,
+		execCfg.InternalExecutor,
+		execCfg.Settings,
 		sql.LeaseManagerTestingKnobs{},
 		stopper,
 		cfg,

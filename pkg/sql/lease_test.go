@@ -206,7 +206,11 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 		cfgCpy.NodeInfo.NodeID = nc
 		mgr = sql.NewLeaseManager(
 			log.AmbientContext{Tracer: tracing.NewTracer()},
-			&cfgCpy,
+			nc,
+			cfgCpy.DB,
+			cfgCpy.Clock,
+			cfgCpy.InternalExecutor,
+			cfgCpy.Settings,
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
 			t.cfg,
