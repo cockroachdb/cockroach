@@ -86,7 +86,7 @@ func (q *consistencyQueue) shouldQueue(
 	}
 	// Check if all replicas are live. Some tests run without a NodeLiveness configured.
 	if repl.store.cfg.NodeLiveness != nil {
-		for _, rep := range repl.Desc().Replicas {
+		for _, rep := range repl.Desc().Replicas().Unwrap() {
 			if live, err := repl.store.cfg.NodeLiveness.IsLive(rep.NodeID); err != nil {
 				log.VErrEventf(ctx, 3, "node %d liveness failed: %s", rep.NodeID, err)
 				return false, 0

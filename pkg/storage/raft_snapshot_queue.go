@@ -107,7 +107,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	desc := repl.Desc()
 	repDesc, ok := desc.GetReplicaDescriptorByID(id)
 	if !ok {
-		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas)
+		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
 	err := repl.sendSnapshot(ctx, repDesc, snapTypeRaft, SnapshotRequest_RECOVERY)
 

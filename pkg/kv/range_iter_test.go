@@ -40,7 +40,7 @@ func init() {
 			RangeID:  roachpb.RangeID(i + 2),
 			StartKey: lastKey,
 			EndKey:   key,
-			Replicas: []roachpb.ReplicaDescriptor{
+			InternalReplicas: []roachpb.ReplicaDescriptor{
 				{
 					NodeID:  1,
 					StoreID: 1,

@@ -276,7 +276,7 @@ func replicaSliceOrErr(desc roachpb.RangeDescriptor, gsp *gossip.Gossip) (kv.Rep
 	if len(replicas) == 0 {
 		// We couldn't get node descriptors for any replicas.
 		var nodeIDs []roachpb.NodeID
-		for _, r := range desc.Replicas {
+		for _, r := range desc.Replicas().Unwrap() {
 			nodeIDs = append(nodeIDs, r.NodeID)
 		}
 		return kv.ReplicaSlice{}, sqlbase.NewRangeUnavailableError(

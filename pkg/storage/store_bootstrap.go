@@ -152,14 +152,14 @@ func WriteInitialClusterData(
 			StartKey:      startKey,
 			EndKey:        endKey,
 			NextReplicaID: 2,
-			Replicas: []roachpb.ReplicaDescriptor{
-				{
-					NodeID:    1,
-					StoreID:   1,
-					ReplicaID: 1,
-				},
-			},
 		}
+		desc.SetReplicas(roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{
+			{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
+			},
+		}))
 		if err := desc.Validate(); err != nil {
 			return err
 		}

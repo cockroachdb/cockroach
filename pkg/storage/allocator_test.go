@@ -296,8 +296,8 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 func testRangeInfo(replicas []roachpb.ReplicaDescriptor, rangeID roachpb.RangeID) RangeInfo {
 	return RangeInfo{
 		Desc: &roachpb.RangeDescriptor{
-			Replicas: replicas,
-			RangeID:  rangeID,
+			InternalReplicas: replicas,
+			RangeID:          rangeID,
 		},
 	}
 }
@@ -822,8 +822,8 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	repl.writeStats = newReplicaStats(clock, nil)
 
 	desc := &roachpb.RangeDescriptor{
-		Replicas: replicas,
-		RangeID:  firstRange,
+		InternalReplicas: replicas,
+		RangeID:          firstRange,
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
@@ -2542,7 +2542,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 		rangeInfo := testRangeInfo(existingRepls, firstRange)
 		zone := &config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: tc.constraints}
 		analyzed := analyzeConstraints(
-			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
+			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.InternalReplicas, zone)
 		candidates := allocateCandidates(
 			sl,
 			analyzed,
@@ -2767,7 +2767,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 		rangeInfo := testRangeInfo(existingRepls, firstRange)
 		zone := &config.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: tc.constraints}
 		analyzed := analyzeConstraints(
-			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
+			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.InternalReplicas, zone)
 		candidates := removeCandidates(
 			sl,
 			analyzed,
@@ -3562,7 +3562,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			NumReplicas: proto.Int32(tc.zoneNumReplicas),
 		}
 		analyzed := analyzeConstraints(
-			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
+			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.InternalReplicas, zone)
 		results := rebalanceCandidates(
 			context.Background(),
 			sl,
@@ -3999,7 +3999,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4028,7 +4028,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4067,7 +4067,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4091,7 +4091,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4125,7 +4125,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4159,7 +4159,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4193,7 +4193,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4237,7 +4237,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4276,7 +4276,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4310,7 +4310,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4351,7 +4351,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4380,7 +4380,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   10,
 						NodeID:    10,
@@ -4409,7 +4409,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 				RangeMaxBytes: proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4467,7 +4467,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 		NumReplicas: proto.Int32(3),
 	}
 	threeReplDesc := roachpb.RangeDescriptor{
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				StoreID:   1,
 				NodeID:    1,
@@ -4486,7 +4486,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 		},
 	}
 	fourReplDesc := threeReplDesc
-	fourReplDesc.Replicas = append(fourReplDesc.Replicas, roachpb.ReplicaDescriptor{
+	fourReplDesc.InternalReplicas = append(fourReplDesc.InternalReplicas, roachpb.ReplicaDescriptor{
 		StoreID:   4,
 		NodeID:    4,
 		ReplicaID: 4,
@@ -4569,7 +4569,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4599,7 +4599,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4629,7 +4629,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4664,7 +4664,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4699,7 +4699,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4728,7 +4728,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						StoreID:   1,
 						NodeID:    1,
@@ -4990,10 +4990,10 @@ func makeDescriptor(storeList []roachpb.StoreID) roachpb.RangeDescriptor {
 		EndKey: roachpb.RKey(keys.SystemPrefix),
 	}
 
-	desc.Replicas = make([]roachpb.ReplicaDescriptor, len(storeList))
+	desc.InternalReplicas = make([]roachpb.ReplicaDescriptor, len(storeList))
 
 	for i, node := range storeList {
-		desc.Replicas[i] = roachpb.ReplicaDescriptor{
+		desc.InternalReplicas[i] = roachpb.ReplicaDescriptor{
 			StoreID:   node,
 			NodeID:    roachpb.NodeID(node),
 			ReplicaID: roachpb.ReplicaID(node),

@@ -139,10 +139,10 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		ls.AddStore(store)
 
 		desc := &roachpb.RangeDescriptor{
-			RangeID:  rangeID,
-			StartKey: roachpb.RKey("a"),
-			EndKey:   roachpb.RKey("b"),
-			Replicas: []roachpb.ReplicaDescriptor{{StoreID: storeID}},
+			RangeID:          rangeID,
+			StartKey:         roachpb.RKey("a"),
+			EndKey:           roachpb.RKey("b"),
+			InternalReplicas: []roachpb.ReplicaDescriptor{{StoreID: storeID}},
 		}
 
 		replica, err := NewReplica(desc, store, 0)

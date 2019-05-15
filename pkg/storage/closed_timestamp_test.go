@@ -441,7 +441,7 @@ func pickRandomTarget(
 	tc serverutils.TestClusterInterface, lh roachpb.ReplicationTarget, desc roachpb.RangeDescriptor,
 ) (t roachpb.ReplicationTarget) {
 	for {
-		if t = tc.Target(rand.Intn(len(desc.Replicas))); t != lh {
+		if t = tc.Target(rand.Intn(len(desc.InternalReplicas))); t != lh {
 			return t
 		}
 	}

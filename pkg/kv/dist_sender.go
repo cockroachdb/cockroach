@@ -289,7 +289,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 					if err := value.GetProto(&desc); err != nil {
 						log.Errorf(ctx, "unable to parse gossiped first range descriptor: %s", err)
 					} else {
-						log.Infof(ctx, "gossiped first range descriptor: %+v", desc.Replicas)
+						log.Infof(ctx, "gossiped first range descriptor: %+v", desc.Replicas())
 					}
 				}
 				err := ds.rangeCache.EvictCachedRangeDescriptor(ctx, roachpb.RKeyMin, nil, false)
