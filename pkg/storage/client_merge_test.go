@@ -3295,9 +3295,11 @@ func TestMergeQueue(t *testing.T) {
 	store := mtc.Store(0)
 	store.SetMergeQueueActive(true)
 
-	split := func(t *testing.T, key roachpb.Key) {
+	split := func(t *testing.T, key roachpb.Key, manual bool) {
 		t.Helper()
-		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), adminSplitArgs(key)); pErr != nil {
+		args := adminSplitArgs(key)
+		args.Manual = manual
+		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -3315,7 +3317,7 @@ func TestMergeQueue(t *testing.T) {
 	rhsStartKey := roachpb.RKey("b")
 	rhsEndKey := roachpb.RKey("c")
 	for _, k := range []roachpb.RKey{lhsStartKey, rhsStartKey, rhsEndKey} {
-		split(t, k.AsRawKey())
+		split(t, k.AsRawKey(), false /* manual */)
 	}
 	lhs := func() *storage.Replica { return store.LookupReplica(lhsStartKey) }
 	rhs := func() *storage.Replica { return store.LookupReplica(rhsStartKey) }
@@ -3340,7 +3342,7 @@ func TestMergeQueue(t *testing.T) {
 		}
 		setZones(*storeCfg.DefaultZoneConfig)
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
-		split(t, roachpb.Key("b"))
+		split(t, roachpb.Key("b"), false /* manual */)
 	}
 
 	verifyMerged := func(t *testing.T) {
@@ -3411,6 +3413,55 @@ func TestMergeQueue(t *testing.T) {
 		mtc.transferLease(ctx, rhs().RangeID, 0, 1)
 		mtc.unreplicateRange(rhs().RangeID, 0)
 		clearRange(t, lhsStartKey, rhsEndKey)
+		store.MustForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	// TODO(jeffreyxiao): Add subtest to consider load when making merging
+	// decisions.
+
+	t.Run("sticky bit", func(t *testing.T) {
+		reset(t)
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// Perform manual merge and verify that no merge occurred.
+		split(t, rhsStartKey.AsRawKey(), true /* manual */)
+		clearRange(t, lhsStartKey, rhsEndKey)
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// TODO(jeffreyxiao): Use same mechanism as ALTER TABLE ... UNSPLIT AT
+		// does when it is added.
+		// Delete sticky bit and verify that merge occurs.
+		rhsDescKey := keys.RangeDescriptorKey(rhsStartKey)
+		var rhsDesc roachpb.RangeDescriptor
+		if err := store.DB().GetProto(ctx, rhsDescKey, &rhsDesc); err != nil {
+			t.Fatal(err)
+		}
+		rhsDesc.StickyBit = nil
+		if err := store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			b := txn.NewBatch()
+			marshalledDesc, err := protoutil.Marshal(&rhsDesc)
+			if err != nil {
+				return err
+			}
+			b.Put(rhsDescKey, marshalledDesc)
+			b.Put(keys.RangeMetaKey(rhsDesc.EndKey).AsRawKey(), marshalledDesc)
+			// End the transaction manually in order to provide a sticky bit trigger.
+			// Note that this hack will be removed. See above TODO.
+			b.AddRawRequest(&roachpb.EndTransactionRequest{
+				Commit: true,
+				InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+					StickyBitTrigger: &roachpb.StickyBitTrigger{
+						StickyBit: nil,
+					},
+				},
+			})
+			return txn.Run(ctx, b)
+		}); err != nil {
+			t.Fatal(err)
+		}
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
