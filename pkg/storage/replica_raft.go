@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/kr/pretty"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -1762,11 +1763,44 @@ func (r *Replica) processRaftCommand(
 		// We initiated this command, so use the caller-supplied context.
 		ctx = proposal.ctx
 		delete(r.mu.proposals, idKey)
+	} else if raftCmd.TraceData != nil {
+		// The proposal isn't local, and trace data is available. Extract
+		// the span context and start a server-side span.
+		spanCtx, err := r.AmbientContext.Tracer.Extract(opentracing.TextMap, opentracing.TextMapCarrier(raftCmd.TraceData))
+		if err != nil {
+			log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
+		} else {
+			sp := r.AmbientContext.Tracer.StartSpan("server-side raft apply", opentracing.FollowsFrom(spanCtx))
+			defer sp.Finish()
+			ctx = opentracing.ContextWithSpan(ctx, sp)
+		}
 	}
 
 	leaseIndex, proposalRetry, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
 
 	r.mu.Unlock()
+
+	var response proposalResult
+
+	ctx, csp := tracing.StartComponentSpan(ctx, r.AmbientContext.Tracer, "storage.replica.raft.process", "process raft command")
+	csp.SetTag("repl_eval", raftCmd.ReplicatedEvalResult)
+	csp.SetTag("write_batch", raftCmd.WriteBatch)
+	if raftCmd.LogicalOpLog != nil {
+		csp.SetTag("logical_ops", raftCmd.LogicalOpLog)
+	}
+	defer func() {
+		csp.SetTag("reply", response.Reply)
+		if len(response.Intents) > 0 {
+			csp.SetTag("intents", response.Intents)
+		}
+		if len(response.EndTxns) > 0 {
+			csp.SetTag("end_txns", response.EndTxns)
+		}
+		if changedRepl {
+			csp.SetTag("changed_repl", changedRepl)
+		}
+		csp.FinishWithError(response.Err.GoError())
+	}()
 
 	if forcedErr == nil {
 		// Verify that the batch timestamp is after the GC threshold. This is
@@ -1821,7 +1855,6 @@ func (r *Replica) processRaftCommand(
 		}
 	}
 
-	var response proposalResult
 	var writeBatch *storagepb.WriteBatch
 	{
 		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil {

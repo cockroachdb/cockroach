@@ -179,12 +179,12 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
     });
   }
 
-  getComponentTrace = (sample_traces_id: Long, trace_id: Long) => {
+  getComponentTrace = (sample_traces_id: Long, trace_id: Long, span_id: Long) => {
     if (!sample_traces_id) {
       return
     }
     // Clear the current component trace before fetching the new one.
-    this.setState({expandedSample: {active: true, trace_id: trace_id}});
+    this.setState({expandedSample: {active: true, trace_id: trace_id, span_id: span_id}});
     // Fetch the requested component traces.
     getComponentTrace(new protos.cockroach.server.serverpb.ComponentTraceRequest({
       node_id: this.props.params[nodeIDAttr],
@@ -195,9 +195,9 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
       if (isTesting()) {
         result.nodes = genComponentTrace(trace_id, this.state.testSampleMaps[sample_traces_id]);
       }
-      this.setState({expandedSample: new ExpandedSample(trace_id, result.nodes)});
+      this.setState({expandedSample: new ExpandedSample(trace_id, span_id, result.nodes)});
     }).catch((err) => {
-      this.setState({expandedSample: {error: err, trace_id: trace_id}});
+      this.setState({expandedSample: {error: err, trace_id: trace_id, span_id: span_id}});
     });
   }
 
@@ -228,12 +228,12 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
     }
   }
 
-  onToggleSample = (trace_id: Long) => {
-    if (this.state.expandedTrace && this.state.expandedTrace.equals(trace_id)) {
-      this.setState({expandedTrace: null, expandedSample: null});
+  onToggleSample = (trace_id: Long, span_id: Long) => {
+    if (this.state.expandedSpanID && this.state.expandedSpanID.equals(span_id)) {
+      this.setState({expandedSpanID: null, expandedSample: null});
     } else {
-      this.setState({expandedTrace: trace_id});
-      this.getComponentTrace(this.state.sample_traces_id, trace_id);
+      this.setState({expandedSpanID: span_id});
+      this.getComponentTrace(this.state.sample_traces_id, trace_id, span_id);
     }
   }
 

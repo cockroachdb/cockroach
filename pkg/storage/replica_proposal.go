@@ -1008,8 +1008,26 @@ func (r *Replica) requestToProposal(
 			ReplicatedEvalResult: res.Replicated,
 			WriteBatch:           res.WriteBatch,
 			LogicalOpLog:         res.LogicalOpLog,
+			TraceData:            r.getTraceData(ctx),
 		}
 	}
 
 	return proposal, pErr
+}
+
+// getTraceData extracts details about the current span context and
+// returns them as a map. This method is used in preparation for
+// sending a Raft command to other nodes in order to propogate state
+// required for distributed tracing.
+func (r *Replica) getTraceData(ctx context.Context) map[string]string {
+	span := opentracing.SpanFromContext(ctx)
+	if span == nil {
+		return nil
+	}
+	traceData := opentracing.TextMapCarrier{}
+	if err := r.AmbientContext.Tracer.Inject(span.Context(), opentracing.TextMap, traceData); err != nil {
+		log.Errorf(ctx, "failed to inject span context (%+v) as trace data: %s", span.Context(), err)
+		return nil
+	}
+	return traceData
 }

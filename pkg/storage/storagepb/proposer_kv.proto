@@ -276,5 +276,8 @@ message RaftCommand {
   // to the physical operations being made in the write_batch.
   LogicalOpLog logical_op_log = 15;
 
+  // trace_data contains details of caller's trace, if applicable.
+  map<string, string> trace_data = 16;
+
   reserved 1, 10001 to 10014;
 }
