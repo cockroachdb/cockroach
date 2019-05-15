@@ -263,8 +263,8 @@ const componentsReducerObj = new KeyedCachedDataReducer(
   api.getComponents,
   "components",
   componentsRequestKey,
-  moment.duration(5, "s"),
   moment.duration(10, "s"),
+  moment.duration(60, "s"),
 );
 export const refreshComponents = componentsReducerObj.refresh;
 

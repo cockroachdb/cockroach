@@ -82,7 +82,7 @@ function getCurrentTime() {
 
 function getRandomDuration() {
   return new protos.google.protobuf.Duration({
-    seconds: Math.floor(Math.random() * 2),
+    seconds: Long.fromNumber(Math.floor(Math.random() * 2)),
     nanos: 1000000 * Math.floor(Math.random() * 1000),
   });
 }
@@ -261,21 +261,25 @@ function genActivityResponse(node_id: number) {
     return new protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse(
       {node_id: node_id, error_message: "no route to host"});
   }
-  const compActivities: {[k: string]: protos.cockroach.util.tracing.IComponentActivity} = {};
+  const activities: {[k: string]: protos.cockroach.util.tracing.IComponentActivity} = {};
+  const cur_time: protos.google.protobuf.ITimestamp = getCurrentTime();
   _.map(static_components, (c) => {
     if (Math.random() < 0.05) {
       return null;
     }
-    compActivities[c.name] = new protos.cockroach.util.tracing.ComponentActivity(
+    activities[c.name] = new protos.cockroach.util.tracing.ComponentActivity(
       {
         span_count: Long.fromNumber(Math.max(2, Math.floor(Math.random() * c.freq - c.freq/2) + c.freq)),
-        stuck_count: Long.fromNumber(Math.random() < 0.0001 ? Math.floor(Math.random() * 3) : 0),
+        stuck_count: Long.fromNumber(Math.random() < 0.001 ? Math.floor(Math.random() * 3) : 0),
         errors: Long.fromNumber(Math.random() < 0.02 * (c.freq / 100) ? Math.floor(Math.random() * 5) : 0),
-        timestamp: getCurrentTime(),
+        timestamp: cur_time,
       });
   });
+  const start_time: protos.google.protobuf.ITimestamp = new protos.google.protobuf.Timestamp({
+    seconds: cur_time.seconds.sub(100);
+  });
   return new protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse(
-    {node_id: node_id, components: compActivities});
+    {node_id: node_id, components: activities, start_time: start_time});
 }
 
 export function genActivityResponses() {
