@@ -63,8 +63,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
     };
     if (isTesting()) {
       // NOTE: For testing purposes only.
-      this.state.testActivityResponses = genActivityResponses();
-      this.state.testSampleMap = genSampleMap();
+      this.state.testSampleMaps = {};
     }
   };
 
@@ -74,6 +73,9 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
 
   componentWillReceiveProps(nextProps: ComponentsProps) {
     this.props.refreshComponents(componentsRequestFromProps(nextProps));
+    if (isTesting() && (!this.props.components || nextProps.components.data != this.props.components.data)) {
+      this.state.testActivityResponses = genActivityResponses();
+    }
   }
 
   renderReportBody() {
@@ -137,6 +139,9 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
       target_count: this.state.sampleState.target_count,
     })).then((result) => {
       console.log("sampled system component traces", result);
+      if (isTesting()) {
+        this.state.testSampleMaps[result.sample_traces_id] = genSampleMap();
+      }
       this.setState({
         sample_traces_id: result.sample_traces_id,
         sampleState: Object.assign(this.state.sampleState, {active: false})
@@ -166,7 +171,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
     })).then((result) => {
       console.log("fetched component traces", result);
       if (isTesting()) {
-        result.traces = genComponentTraces(cell.node_id, cell.components, this.state.testSampleMap);
+        result.traces = genComponentTraces(cell.node_id, cell.components, this.state.testSampleMaps[sample_traces_id]);
       }
       this.setState({componentTraces: new CombinedTraces(result.traces)});
     }).catch((err) => {
@@ -188,7 +193,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
     })).then((result) => {
       console.log("fetched component trace", result);
       if (isTesting()) {
-        result.nodes = genComponentTrace(trace_id, this.state.testSampleMap);
+        result.nodes = genComponentTrace(trace_id, this.state.testSampleMaps[sample_traces_id]);
       }
       this.setState({expandedSample: new ExpandedSample(trace_id, result.nodes)});
     }).catch((err) => {

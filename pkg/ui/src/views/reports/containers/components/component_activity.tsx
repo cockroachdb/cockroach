@@ -116,26 +116,20 @@ function activity() {
       .attr("fill-opacity", error ? 1 : metrics.fillOpacity(activity));
 
     // Add optional stuck symbol.
-    const stuckCount: number = activity.stuck_count.toNumber();
-    if (stuckCount > 0) {
-      const stuckG = sel.selectAll(".stuck-symbol")
-        .data([stuckCount])
-        .enter()
-        .append("g")
-        .attr("class", "stuck-symbol");
-      stuckG.selectAll("path")
-        .data([stuckCount])
-        .enter()
-        .append("path")
-        .attr("transform", "scale(1.7)translate(7,6)")
-        .attr("d", d3.svg.symbol().type("triangle-up"));
-      stuckG.selectAll("text")
-        .data([stuckCount])
-        .enter()
-        .append("text")
-        .attr("transform", "translate(9.5,17)")
-        .text("!");
+    const stuck_data: number[] = [];
+    if (activity.stuck_count.toNumber() > 0) {
+      stuck_data.push(activity.stuck_count.toNumber());
     }
+    const stuckSel = sel.selectAll(".stuck-symbol").data(stuck_data);
+    const stuckG = stuckSel.enter().append("g")
+      .attr("class", "stuck-symbol");
+    stuckSel.exit().remove();
+    stuckG.append("path")
+      .attr("transform", "scale(1.7)translate(7,6)")
+      .attr("d", d3.svg.symbol().type("triangle-up"));
+    stuckG.append("text")
+      .attr("transform", "translate(9.5,17)")
+      .text("!");
   };
 }
 
