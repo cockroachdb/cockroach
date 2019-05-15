@@ -128,7 +128,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// hands.
 			r.mu.proposalQuota = newQuotaPool(r.store.cfg.RaftProposalQuota)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas, timeutil.Now())
+			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Wrapped(), timeutil.Now())
 			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
@@ -164,7 +164,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// Find the minimum index that active followers have acknowledged.
 	now := timeutil.Now()
 	minIndex := status.Commit
-	for _, rep := range r.mu.state.Desc.Replicas {
+	for _, rep := range r.mu.state.Desc.Replicas().Wrapped() {
 		// Only consider followers that that have "healthy" RPC connections.
 
 		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID); err != nil {

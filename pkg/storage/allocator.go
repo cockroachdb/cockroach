@@ -300,8 +300,9 @@ func (a *Allocator) ComputeAction(
 	}
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 
-	have := len(rangeInfo.Desc.Replicas)
-	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
+	have := len(rangeInfo.Desc.Replicas().Wrapped())
+	decommissioningReplicas := a.storePool.decommissioningReplicas(
+		rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas().Wrapped())
 	clusterNodes := a.storePool.ClusterNodeCount()
 	need := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
 	desiredQuorum := computeQuorum(need)
@@ -326,7 +327,8 @@ func (a *Allocator) ComputeAction(
 		return AllocatorAdd, priority
 	}
 
-	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
+	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(
+		rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas().Wrapped())
 	if len(liveReplicas) < quorum {
 		// Do not take any removal action if we do not have a quorum of live
 		// replicas.
@@ -494,18 +496,18 @@ func (a Allocator) RemoveTarget(
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
+		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas().Wrapped(), zone)
 	options := a.scorerOptions()
 	rankedCandidates := removeCandidates(
 		sl,
 		analyzedConstraints,
 		rangeInfo,
-		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
+		a.storePool.getLocalities(rangeInfo.Desc.Replicas().Wrapped()),
 		options,
 	)
 	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
 	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
-		for _, exist := range rangeInfo.Desc.Replicas {
+		for _, exist := range rangeInfo.Desc.Replicas().Wrapped() {
 			if exist.StoreID == bad.store.StoreID {
 				log.VEventf(ctx, 3, "remove target: %s", bad)
 				details := decisionDetails{Target: bad.compactString(options)}
@@ -555,20 +557,22 @@ func (a Allocator) RebalanceTarget(
 	// we'll have to wait for the down node to be declared dead and go through the
 	// dead-node removal dance: remove dead replica, add new replica.
 	//
-	// NB: The len(rangeInfo.Desc.Replicas) > 1 check allows rebalancing of ranges
-	// with only a single replica. This is a corner case which could happen in
-	// practice and also affects tests.
-	if len(rangeInfo.Desc.Replicas) > 1 {
+	// NB: The len(replicas) > 1 check allows rebalancing of ranges with only a
+	// single replica. This is a corner case which could happen in practice and
+	// also affects tests.
+	if len(rangeInfo.Desc.Replicas().Wrapped()) > 1 {
 		var numLiveReplicas int
 		for _, s := range sl.stores {
-			for _, repl := range rangeInfo.Desc.Replicas {
+			for _, repl := range rangeInfo.Desc.Replicas().Wrapped() {
 				if s.StoreID == repl.StoreID {
 					numLiveReplicas++
 					break
 				}
 			}
 		}
-		newQuorum := computeQuorum(len(rangeInfo.Desc.Replicas) + 1)
+		newReplicas := rangeInfo.Desc.Replicas().DeepCopy()
+		newReplicas.AddReplica(roachpb.ReplicaDescriptor{})
+		newQuorum := newReplicas.QuorumSize()
 		if numLiveReplicas < newQuorum {
 			// Don't rebalance as we won't be able to make quorum after the rebalance
 			// until the new replica has been caught up.
@@ -577,14 +581,14 @@ func (a Allocator) RebalanceTarget(
 	}
 
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
+		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas().Wrapped(), zone)
 	options := a.scorerOptions()
 	results := rebalanceCandidates(
 		ctx,
 		sl,
 		analyzedConstraints,
 		rangeInfo,
-		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
+		a.storePool.getLocalities(rangeInfo.Desc.Replicas().Wrapped()),
 		a.storePool.getNodeLocalityString,
 		options,
 	)
@@ -617,16 +621,18 @@ func (a Allocator) RebalanceTarget(
 			ReplicaID: rangeInfo.Desc.NextReplicaID,
 		}
 		desc := rangeInfo.Desc
-		desc.Replicas = append(desc.Replicas[:len(desc.Replicas):len(desc.Replicas)], newReplica)
+		newReplicas := desc.Replicas().DeepCopy()
+		newReplicas.AddReplica(newReplica)
+		desc.SetReplicas(newReplicas)
 
 		// If we can, filter replicas as we would if we were actually removing one.
 		// If we can't (e.g. because we're the leaseholder but not the raft leader),
 		// it's better to simulate the removal with the info that we do have than to
 		// assume that the rebalance is ok (#20241).
-		replicaCandidates := desc.Replicas
+		replicaCandidates := desc.Replicas().Wrapped()
 		if raftStatus != nil && raftStatus.Progress != nil {
 			replicaCandidates = simulateFilterUnremovableReplicas(
-				raftStatus, desc.Replicas, newReplica.ReplicaID)
+				raftStatus, desc.Replicas().Wrapped(), newReplica.ReplicaID)
 		}
 		if len(replicaCandidates) == 0 {
 			// No existing replicas are suitable to remove.
@@ -651,7 +657,8 @@ func (a Allocator) RebalanceTarget(
 
 		log.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
 			target.store.StoreID, removeDetails)
-		desc.Replicas = desc.Replicas[:len(desc.Replicas)-1]
+		// WIP what sort of replica removals do we need to support?
+		desc.InternalReplicas = desc.InternalReplicas[:len(desc.InternalReplicas)-1]
 	}
 
 	// Compile the details entry that will be persisted into system.rangelog for

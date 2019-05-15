@@ -354,8 +354,8 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 // can achieve quorum.
 func (r *Replica) HasQuorum() bool {
 	desc := r.Desc()
-	liveReplicas, _ := r.store.allocator.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
-	quorum := computeQuorum(len(desc.Replicas))
+	liveReplicas, _ := r.store.allocator.storePool.liveAndDeadReplicas(desc.RangeID, desc.InternalReplicas)
+	quorum := computeQuorum(len(desc.InternalReplicas))
 	return len(liveReplicas) >= quorum
 }
 

@@ -2023,7 +2023,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 		// nonexistent right-hand-side, giving it a head start. This code looks
 		// fairly complicated since it wants to ensure that the two replicas
 		// don't diverge.
-		if trigger != nil && len(trigger.RightDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 {
+		if trigger != nil && len(trigger.RightDesc.InternalReplicas) == 2 && args.Hdr.Txn.Epoch == 0 {
 			seen.Lock()
 			defer seen.Unlock()
 			sid, sl := int(args.Sid)-1, seen.sids[args.CmdID]
@@ -2078,7 +2078,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 
 			trigger := <-currentTrigger // our own copy
 			// Make sure the first node is first for convenience.
-			replicas := trigger.RightDesc.Replicas
+			replicas := trigger.RightDesc.InternalReplicas
 			if replicas[0].NodeID > replicas[1].NodeID {
 				tmp := replicas[1]
 				replicas[1] = replicas[0]

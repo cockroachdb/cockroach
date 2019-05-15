@@ -284,7 +284,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 					if err := value.GetProto(&desc); err != nil {
 						log.Errorf(ctx, "unable to parse gossiped first range descriptor: %s", err)
 					} else {
-						log.Infof(ctx, "gossiped first range descriptor: %+v", desc.Replicas)
+						log.Infof(ctx, "gossiped first range descriptor: %+v", desc.Replicas())
 					}
 				}
 				err := ds.rangeCache.EvictCachedRangeDescriptor(ctx, roachpb.RKeyMin, nil, false)
@@ -468,7 +468,7 @@ func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Try to send the call.
-	replicas := NewReplicaSlice(ds.gossip, desc)
+	replicas := NewReplicaSlice(ds.gossip, desc.Replicas().Wrapped())
 
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.

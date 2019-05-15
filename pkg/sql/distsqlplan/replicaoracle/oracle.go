@@ -272,11 +272,12 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 // is available in gossip. If no nodes are available, a RangeUnavailableError is
 // returned.
 func replicaSliceOrErr(desc roachpb.RangeDescriptor, gsp *gossip.Gossip) (kv.ReplicaSlice, error) {
-	replicas := kv.NewReplicaSlice(gsp, &desc)
+	replicaDescs := desc.Replicas().Wrapped()
+	replicas := kv.NewReplicaSlice(gsp, replicaDescs)
 	if len(replicas) == 0 {
 		// We couldn't get node descriptors for any replicas.
 		var nodeIDs []roachpb.NodeID
-		for _, r := range desc.Replicas {
+		for _, r := range replicaDescs {
 			nodeIDs = append(nodeIDs, r.NodeID)
 		}
 		return kv.ReplicaSlice{}, sqlbase.NewRangeUnavailableError(
