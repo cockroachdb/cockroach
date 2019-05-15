@@ -18,8 +18,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
+	"time"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -102,6 +104,13 @@ func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
+	}
+	// Sometimes pick from a predetermined list of known interesting datums.
+	if rng.Intn(10) == 0 {
+		specials := randInterestingDatums[typ.Family()]
+		if len(specials) > 0 {
+			return specials[rng.Intn(len(specials))]
+		}
 	}
 	switch typ.Family() {
 	case types.BoolFamily:
@@ -210,6 +219,109 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		panic(fmt.Sprintf("invalid type %v", typ.DebugString()))
 	}
 }
+
+var (
+	// randInterestingDatums is a collection of interesting datums that can be
+	// used for random testing.
+	randInterestingDatums = map[types.Family][]tree.Datum{
+		types.IntFamily: {
+			tree.NewDInt(tree.DInt(0)),
+			tree.NewDInt(tree.DInt(-1)),
+			tree.NewDInt(tree.DInt(1)),
+			tree.NewDInt(tree.DInt(math.MaxInt32)),
+			tree.NewDInt(tree.DInt(math.MinInt32)),
+			tree.NewDInt(tree.DInt(math.MaxInt64)),
+			// Use +1 because that's the SQL range.
+			tree.NewDInt(tree.DInt(math.MinInt64 + 1)),
+		},
+		types.FloatFamily: {
+			tree.NewDFloat(tree.DFloat(0)),
+			tree.NewDFloat(tree.DFloat(1)),
+			tree.NewDFloat(tree.DFloat(-1)),
+			tree.NewDFloat(tree.DFloat(math.SmallestNonzeroFloat32)),
+			tree.NewDFloat(tree.DFloat(math.MaxFloat32)),
+			tree.NewDFloat(tree.DFloat(math.SmallestNonzeroFloat64)),
+			tree.NewDFloat(tree.DFloat(math.MaxFloat64)),
+			tree.NewDFloat(tree.DFloat(math.Inf(1))),
+			tree.NewDFloat(tree.DFloat(math.Inf(-1))),
+			tree.NewDFloat(tree.DFloat(math.NaN())),
+		},
+		types.DecimalFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				"0",
+				"1",
+				"-1",
+				"Inf",
+				"-Inf",
+				"NaN",
+				"-12.34e400",
+			} {
+				d, err := tree.ParseDDecimal(s)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.DateFamily: {
+			tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(0)),
+			tree.NewDDate(pgdate.LowDate),
+			tree.NewDDate(pgdate.HighDate),
+			tree.NewDDate(pgdate.PosInfDate),
+			tree.NewDDate(pgdate.NegInfDate),
+		},
+		types.TimeFamily: {
+			tree.MakeDTime(timeofday.Min),
+			tree.MakeDTime(timeofday.Max),
+		},
+		types.TimestampFamily: func() []tree.Datum {
+			res := make([]tree.Datum, len(randTimestampSpecials))
+			for i, t := range randTimestampSpecials {
+				res[i] = tree.MakeDTimestamp(t, time.Microsecond)
+			}
+			return res
+		}(),
+		types.TimestampTZFamily: func() []tree.Datum {
+			res := make([]tree.Datum, len(randTimestampSpecials))
+			for i, t := range randTimestampSpecials {
+				res[i] = tree.MakeDTimestampTZ(t, time.Microsecond)
+			}
+			return res
+		}(),
+		types.IntervalFamily: {
+			&tree.DInterval{Duration: duration.MakeDuration(0, 0, 0)},
+			&tree.DInterval{Duration: duration.MakeDuration(0, 1, 0)},
+			&tree.DInterval{Duration: duration.MakeDuration(1, 0, 0)},
+			&tree.DInterval{Duration: duration.MakeDuration(1, 1, 1)},
+			// TODO(mjibson): fix intervals to stop overflowing then this can be larger.
+			&tree.DInterval{Duration: duration.MakeDuration(0, 0, 290*12)},
+		},
+		types.StringFamily: {
+			tree.NewDString(""),
+			tree.NewDString("X"),
+			tree.NewDString(`"`),
+			tree.NewDString(`'`),
+			tree.NewDString("\x00"),
+			tree.NewDString("\u2603"), // unicode snowman
+		},
+		types.BytesFamily: {
+			tree.NewDBytes(""),
+			tree.NewDBytes("X"),
+			tree.NewDBytes(`"`),
+			tree.NewDBytes(`'`),
+			tree.NewDBytes("\x00"),
+			tree.NewDBytes("\u2603"), // unicode snowman
+			tree.NewDBytes("\xFF"),   // invalid utf-8 sequence, but a valid bytes
+		},
+	}
+	randTimestampSpecials = []time.Time{
+		{},
+		time.Date(-2000, time.January, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(3000, time.January, 1, 0, 0, 0, 0, time.UTC),
+	}
+)
 
 var (
 	// seedTypes includes the following types that form the basis of randomly

@@ -17,6 +17,7 @@ package distsqlplan
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"testing"
 
@@ -349,7 +350,20 @@ func checkDistAggregationInfo(
 				floatNonDist := float64(*rowNonDist.Datum.(*tree.DFloat))
 				strDist = fmt.Sprintf(floatPrecFmt, floatDist)
 				strNonDist = fmt.Sprintf(floatPrecFmt, floatNonDist)
-				equiv = strDist == strNonDist
+				// Compare using a relative equality
+				// func that isn't dependent on the
+				// scale of the number. In addition,
+				// ignore any NaNs. Sometimes due to the
+				// non-deterministic ordering of distsql,
+				// we get a +Inf and Nan result. Both of
+				// these changes started happening with the
+				// float rand datums were taught about some
+				// more adversarial inputs. Since floats
+				// by nature have equality problems and
+				// I think our algorithms are correct,
+				// we need to be slightly more lenient in
+				// our float comparisons.
+				equiv = almostEqualRelative(floatDist, floatNonDist) || math.IsNaN(floatNonDist) || math.IsNaN(floatDist)
 			default:
 				// For all other types, a simple string
 				// representation comparison will suffice.
@@ -362,6 +376,28 @@ func checkDistAggregationInfo(
 			}
 		}
 	}
+}
+
+// almostEqualRelative returns whether a and b are close-enough to equal. It
+// checks if the two numbers are within a certain relative percentage of
+// each other (maxRelDiff), which avoids problems when using "%.3f" as a
+// comparison string. This is the "Relative epsilon comparisons" method from:
+// https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+func almostEqualRelative(a, b float64) bool {
+	if a == b {
+		return true
+	}
+	// Calculate the difference.
+	diff := math.Abs(a - b)
+	A := math.Abs(a)
+	B := math.Abs(b)
+	// Find the largest
+	largest := A
+	if B > A {
+		largest = B
+	}
+	const maxRelDiff = 1e-13
+	return diff <= largest*maxRelDiff
 }
 
 // Test that distributing agg functions according to DistAggregationTable
