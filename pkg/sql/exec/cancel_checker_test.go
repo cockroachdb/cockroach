@@ -29,7 +29,7 @@ import (
 func TestCancelChecker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	batch := coldata.NewMemBatch([]types.T{types.Int64})
-	op := NewCancelChecker(NewNoop(newRepeatableBatchSource(batch)))
+	op := NewCancelChecker(NewNoop(NewRepeatableBatchSource(batch)))
 	cancel()
 	require.PanicsWithValue(t, sqlbase.QueryCanceledError, func() {
 		op.Next(ctx)
