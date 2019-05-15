@@ -10,6 +10,18 @@ TABLE b
  └── INDEX primary
       └── k int not null
 
+exec-ddl
+CREATE TABLE a (v INT PRIMARY KEY, w INT, x FLOAT, y STRING NOT NULL, z JSON)
+----
+TABLE a
+ ├── v int not null
+ ├── w int
+ ├── x float
+ ├── y string not null
+ ├── z jsonb
+ └── INDEX primary
+      └── v int not null
+
 # --------------------------------------------------
 # EliminateUnionAllLeft
 # --------------------------------------------------
@@ -57,3 +69,410 @@ values
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(11)
+
+# --------------------------------------------------
+# PushFilterIntoSetOp
+# --------------------------------------------------
+
+opt expect=PushFilterIntoSetOp
+SELECT k FROM
+  ((SELECT k FROM b)
+  UNION ALL
+  (SELECT k FROM b))
+WHERE k < 10
+----
+union-all
+ ├── columns: k:11(int!null)
+ ├── left columns: b.k:1(int)
+ ├── right columns: b.k:6(int)
+ ├── scan b
+ │    ├── columns: b.k:1(int!null)
+ │    ├── constraint: /1: [ - /9]
+ │    └── key: (1)
+ └── scan b
+      ├── columns: b.k:6(int!null)
+      ├── constraint: /6: [ - /9]
+      └── key: (6)
+
+opt expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  UNION
+  (SELECT w FROM a))
+WHERE k < 10 AND k > 1
+----
+union
+ ├── columns: k:11(int!null)
+ ├── left columns: b.k:1(int)
+ ├── right columns: w:7(int)
+ ├── key: (11)
+ ├── scan b
+ │    ├── columns: b.k:1(int!null)
+ │    ├── constraint: /1: [/2 - /9]
+ │    └── key: (1)
+ └── select
+      ├── columns: w:7(int!null)
+      ├── scan a
+      │    └── columns: w:7(int)
+      └── filters
+           └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+opt expect=PushFilterIntoSetOp
+SELECT
+(SELECT k FROM
+((SELECT k FROM b)
+  UNION ALL
+  (SELECT k FROM b))
+WHERE k < w)
+FROM a
+----
+project
+ ├── columns: k:17(int)
+ ├── left-join-apply
+ │    ├── columns: w:2(int) k:16(int)
+ │    ├── scan a
+ │    │    └── columns: w:2(int)
+ │    ├── max1-row
+ │    │    ├── columns: k:16(int!null)
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(16)
+ │    │    └── union-all
+ │    │         ├── columns: k:16(int!null)
+ │    │         ├── left columns: b.k:6(int)
+ │    │         ├── right columns: b.k:11(int)
+ │    │         ├── outer: (2)
+ │    │         ├── select
+ │    │         │    ├── columns: b.k:6(int!null)
+ │    │         │    ├── outer: (2)
+ │    │         │    ├── key: (6)
+ │    │         │    ├── scan b
+ │    │         │    │    ├── columns: b.k:6(int!null)
+ │    │         │    │    └── key: (6)
+ │    │         │    └── filters
+ │    │         │         └── b.k < w [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── select
+ │    │              ├── columns: b.k:11(int!null)
+ │    │              ├── outer: (2)
+ │    │              ├── key: (11)
+ │    │              ├── scan b
+ │    │              │    ├── columns: b.k:11(int!null)
+ │    │              │    └── key: (11)
+ │    │              └── filters
+ │    │                   └── b.k < w [type=bool, outer=(2,11), constraints=(/2: (/NULL - ]; /11: (/NULL - ])]
+ │    └── filters (true)
+ └── projections
+      └── variable: k [type=int, outer=(16)]
+
+opt expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  EXCEPT
+  (SELECT w FROM a))
+WHERE k < 10 AND k > 1
+----
+except
+ ├── columns: k:1(int!null)
+ ├── left columns: k:1(int!null)
+ ├── right columns: w:7(int)
+ ├── key: (1)
+ ├── scan b
+ │    ├── columns: k:1(int!null)
+ │    ├── constraint: /1: [/2 - /9]
+ │    └── key: (1)
+ └── select
+      ├── columns: w:7(int!null)
+      ├── scan a
+      │    └── columns: w:7(int)
+      └── filters
+           └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+opt expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  EXCEPT ALL
+  (SELECT w FROM a))
+WHERE k < 10 AND k > 1
+----
+except-all
+ ├── columns: k:1(int!null)
+ ├── left columns: k:1(int!null)
+ ├── right columns: w:7(int)
+ ├── scan b
+ │    ├── columns: k:1(int!null)
+ │    ├── constraint: /1: [/2 - /9]
+ │    └── key: (1)
+ └── select
+      ├── columns: w:7(int!null)
+      ├── scan a
+      │    └── columns: w:7(int)
+      └── filters
+           └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+opt expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  INTERSECT
+  (SELECT w FROM a))
+WHERE k < 10 AND k > 1
+----
+intersect
+ ├── columns: k:1(int!null)
+ ├── left columns: k:1(int!null)
+ ├── right columns: w:7(int)
+ ├── key: (1)
+ ├── scan b
+ │    ├── columns: k:1(int!null)
+ │    ├── constraint: /1: [/2 - /9]
+ │    └── key: (1)
+ └── select
+      ├── columns: w:7(int!null)
+      ├── scan a
+      │    └── columns: w:7(int)
+      └── filters
+           └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+opt expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  INTERSECT ALL
+  (SELECT w FROM a))
+WHERE k < 10 AND k > 1
+----
+intersect-all
+ ├── columns: k:1(int!null)
+ ├── left columns: k:1(int!null)
+ ├── right columns: w:7(int)
+ ├── scan b
+ │    ├── columns: k:1(int!null)
+ │    ├── constraint: /1: [/2 - /9]
+ │    └── key: (1)
+ └── select
+      ├── columns: w:7(int!null)
+      ├── scan a
+      │    └── columns: w:7(int)
+      └── filters
+           └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
+
+opt expect=PushFilterIntoSetOp
+SELECT k FROM
+((SELECT k FROM b)
+  UNION
+  (SELECT w FROM a))
+WHERE k < 10 AND k > 1 AND random() < 0.5
+----
+union
+ ├── columns: k:11(int!null)
+ ├── left columns: b.k:1(int)
+ ├── right columns: w:7(int)
+ ├── side-effects
+ ├── key: (11)
+ ├── select
+ │    ├── columns: b.k:1(int!null)
+ │    ├── side-effects
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1(int!null)
+ │    │    ├── constraint: /1: [/2 - /9]
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── random() < 0.5 [type=bool, side-effects]
+ └── select
+      ├── columns: w:7(int!null)
+      ├── side-effects
+      ├── scan a
+      │    └── columns: w:7(int)
+      └── filters
+           ├── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
+           └── random() < 0.5 [type=bool, side-effects]
+
+opt expect=PushFilterIntoSetOp
+SELECT * FROM
+  (SELECT k FROM b
+    UNION ALL
+  SELECT k FROM b) t1
+  WHERE EXISTS(
+  SELECT * FROM a WHERE v=1)
+----
+union-all
+ ├── columns: k:11(int!null)
+ ├── left columns: b.k:1(int)
+ ├── right columns: b.k:6(int)
+ ├── select
+ │    ├── columns: b.k:1(int!null)
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── exists [type=bool, subquery]
+ │              └── scan a
+ │                   ├── columns: v:12(int!null) w:13(int) x:14(float) y:15(string!null) z:16(jsonb)
+ │                   ├── constraint: /12: [/1 - /1]
+ │                   ├── cardinality: [0 - 1]
+ │                   ├── key: ()
+ │                   └── fd: ()-->(12-16)
+ └── select
+      ├── columns: b.k:6(int!null)
+      ├── key: (6)
+      ├── scan b
+      │    ├── columns: b.k:6(int!null)
+      │    └── key: (6)
+      └── filters
+           └── exists [type=bool, subquery]
+                └── scan a
+                     ├── columns: v:12(int!null) w:13(int) x:14(float) y:15(string!null) z:16(jsonb)
+                     ├── constraint: /12: [/1 - /1]
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     └── fd: ()-->(12-16)
+
+opt expect=PushFilterIntoSetOp
+SELECT * FROM
+(SELECT k FROM (SELECT k FROM b UNION ALL SELECT k FROM b)
+  UNION ALL
+  SELECT k FROM (SELECT k FROM b UNION ALL SELECT k FROM b)) t1
+WHERE EXISTS(
+  SELECT * FROM a WHERE v=1) AND random() < 0.5
+----
+union-all
+ ├── columns: k:23(int!null)
+ ├── left columns: k:11(int)
+ ├── right columns: k:22(int)
+ ├── side-effects
+ ├── union-all
+ │    ├── columns: k:11(int!null)
+ │    ├── left columns: b.k:1(int)
+ │    ├── right columns: b.k:6(int)
+ │    ├── side-effects
+ │    ├── select
+ │    │    ├── columns: b.k:1(int!null)
+ │    │    ├── side-effects
+ │    │    ├── key: (1)
+ │    │    ├── scan b
+ │    │    │    ├── columns: b.k:1(int!null)
+ │    │    │    └── key: (1)
+ │    │    └── filters
+ │    │         ├── exists [type=bool, subquery]
+ │    │         │    └── scan a
+ │    │         │         ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
+ │    │         │         ├── constraint: /24: [/1 - /1]
+ │    │         │         ├── cardinality: [0 - 1]
+ │    │         │         ├── key: ()
+ │    │         │         └── fd: ()-->(24-28)
+ │    │         └── random() < 0.5 [type=bool, side-effects]
+ │    └── select
+ │         ├── columns: b.k:6(int!null)
+ │         ├── side-effects
+ │         ├── key: (6)
+ │         ├── scan b
+ │         │    ├── columns: b.k:6(int!null)
+ │         │    └── key: (6)
+ │         └── filters
+ │              ├── exists [type=bool, subquery]
+ │              │    └── scan a
+ │              │         ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
+ │              │         ├── constraint: /24: [/1 - /1]
+ │              │         ├── cardinality: [0 - 1]
+ │              │         ├── key: ()
+ │              │         └── fd: ()-->(24-28)
+ │              └── random() < 0.5 [type=bool, side-effects]
+ └── union-all
+      ├── columns: k:22(int!null)
+      ├── left columns: b.k:12(int)
+      ├── right columns: b.k:17(int)
+      ├── side-effects
+      ├── select
+      │    ├── columns: b.k:12(int!null)
+      │    ├── side-effects
+      │    ├── key: (12)
+      │    ├── scan b
+      │    │    ├── columns: b.k:12(int!null)
+      │    │    └── key: (12)
+      │    └── filters
+      │         ├── exists [type=bool, subquery]
+      │         │    └── scan a
+      │         │         ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
+      │         │         ├── constraint: /24: [/1 - /1]
+      │         │         ├── cardinality: [0 - 1]
+      │         │         ├── key: ()
+      │         │         └── fd: ()-->(24-28)
+      │         └── random() < 0.5 [type=bool, side-effects]
+      └── select
+           ├── columns: b.k:17(int!null)
+           ├── side-effects
+           ├── key: (17)
+           ├── scan b
+           │    ├── columns: b.k:17(int!null)
+           │    └── key: (17)
+           └── filters
+                ├── exists [type=bool, subquery]
+                │    └── scan a
+                │         ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
+                │         ├── constraint: /24: [/1 - /1]
+                │         ├── cardinality: [0 - 1]
+                │         ├── key: ()
+                │         └── fd: ()-->(24-28)
+                └── random() < 0.5 [type=bool, side-effects]
+
+opt
+SELECT * FROM ((values (1,2))
+  EXCEPT (values (0,1)))
+WHERE 1 / column1 > 0
+----
+except
+ ├── columns: column1:1(int) column2:2(int)
+ ├── left columns: column1:1(int) column2:2(int)
+ ├── right columns: column1:3(int) column2:4(int)
+ ├── cardinality: [0 - 1]
+ ├── side-effects
+ ├── key: (1,2)
+ ├── values
+ │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    └── (1, 2) [type=tuple{int, int}]
+ └── select
+      ├── columns: column1:3(int) column2:4(int)
+      ├── cardinality: [0 - 1]
+      ├── side-effects
+      ├── key: ()
+      ├── fd: ()-->(3,4)
+      ├── values
+      │    ├── columns: column1:3(int) column2:4(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(3,4)
+      │    └── (0, 1) [type=tuple{int, int}]
+      └── filters
+           └── (1 / 0) > 0 [type=bool, side-effects]
+
+opt
+SELECT * FROM ((values (1.0::decimal)) EXCEPT (values (1.00::decimal))) WHERE column1::string != '1.00';
+----
+select
+ ├── columns: column1:1(decimal)
+ ├── cardinality: [0 - 1]
+ ├── key: (1)
+ ├── except
+ │    ├── columns: column1:1(decimal)
+ │    ├── left columns: column1:1(decimal)
+ │    ├── right columns: column1:2(decimal)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: (1)
+ │    ├── values
+ │    │    ├── columns: column1:1(decimal)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1.0,) [type=tuple{decimal}]
+ │    └── values
+ │         ├── columns: column1:2(decimal)
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(2)
+ │         └── (1.00,) [type=tuple{decimal}]
+ └── filters
+      └── column1::STRING != '1.00' [type=bool, outer=(1)]
