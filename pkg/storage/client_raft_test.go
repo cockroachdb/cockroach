@@ -424,12 +424,12 @@ func TestRestoreReplicas(t *testing.T) {
 			t.Fatal(err)
 		}
 		desc := repl.Desc()
-		if len(desc.Replicas) != 2 {
-			t.Fatalf("store %d: expected 2 replicas, found %d", i, len(desc.Replicas))
+		if len(desc.InternalReplicas) != 2 {
+			t.Fatalf("store %d: expected 2 replicas, found %d", i, len(desc.InternalReplicas))
 		}
-		if desc.Replicas[0].NodeID != mtc.stores[0].Ident.NodeID {
+		if desc.InternalReplicas[0].NodeID != mtc.stores[0].Ident.NodeID {
 			t.Errorf("store %d: expected replica[0].NodeID == %d, was %d",
-				i, mtc.stores[0].Ident.NodeID, desc.Replicas[0].NodeID)
+				i, mtc.stores[0].Ident.NodeID, desc.InternalReplicas[0].NodeID)
 		}
 	}
 }
@@ -479,7 +479,7 @@ func TestFailedReplicaChange(t *testing.T) {
 
 	// After the aborted transaction, r.Desc was not updated.
 	// TODO(bdarnell): expose and inspect raft's internal state.
-	if replicas := repl.Desc().Replicas; len(replicas) != 1 {
+	if replicas := repl.Desc().InternalReplicas; len(replicas) != 1 {
 		t.Fatalf("expected 1 replica, found %v", replicas)
 	}
 
@@ -513,7 +513,7 @@ func TestFailedReplicaChange(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if replicas := rang.Desc().Replicas; len(replicas) <= 1 {
+			if replicas := rang.Desc().InternalReplicas; len(replicas) <= 1 {
 				return errors.Errorf("expected > 1 replicas; got %v", replicas)
 			}
 		}
@@ -1581,7 +1581,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 			if n := s.ReservationCount(); n != 0 {
 				return errors.Errorf("expected 0 reservations, but found %d", n)
 			}
-			if len(r.Desc().Replicas) != 3 {
+			if len(r.Desc().InternalReplicas) != 3 {
 				// This fails even after the preemptive snapshot has arrived and
 				// only goes through once the replica has properly caught up to
 				// the fully replicated descriptor.
@@ -2037,7 +2037,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 
 	desc := mtc.stores[0].LookupReplica(roachpb.RKeyMin).Desc()
 	replicaIDsByStore := map[roachpb.StoreID]roachpb.ReplicaID{}
-	for _, rep := range desc.Replicas {
+	for _, rep := range desc.InternalReplicas {
 		replicaIDsByStore[rep.StoreID] = rep.ReplicaID
 	}
 	expected := map[roachpb.StoreID]roachpb.ReplicaID{1: 1, 4: 2, 3: 4}
@@ -2996,7 +2996,7 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 	mtc.replicateRange(replica.RangeID, 1, 2)
 
-	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).InternalReplicas
 
 	ctx := context.Background()
 	decommingNodeIdx := 2
@@ -3015,7 +3015,7 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 		}
 		// Wait for a replacement replica for the decommissioning node to be added
 		// and the replica on the decommissioning node to be removed.
-		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).InternalReplicas
 		if len(curReplicas) != 5 {
 			return errors.Errorf("expected 5 replicas, got %v", curReplicas)
 		}
@@ -3617,8 +3617,8 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 			return err
 		}
 		desc := rep.Desc()
-		if len(desc.Replicas) != 1 {
-			return errors.Errorf("range has %d replicas", len(desc.Replicas))
+		if len(desc.InternalReplicas) != 1 {
+			return errors.Errorf("range has %d replicas", len(desc.InternalReplicas))
 		}
 		return nil
 	})
@@ -4047,7 +4047,7 @@ func TestFailedConfChange(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if l := len(repl.Desc().Replicas); l != 2 {
+		if l := len(repl.Desc().InternalReplicas); l != 2 {
 			return errors.Errorf("store %d: expected 2 replicas in descriptor, found %d in %s",
 				i, l, repl.Desc())
 		}

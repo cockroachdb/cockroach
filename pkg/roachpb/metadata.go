@@ -126,10 +126,40 @@ func (r RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
 	return r.RSpan().ContainsKeyRange(start, end)
 }
 
+// Replicas returns the set of nodes/stores on which replicas of this range are
+// stored.
+func (r RangeDescriptor) Replicas() ReplicaDescriptors {
+	return MakeReplicaDescriptors(r.InternalReplicas)
+}
+
+// SetReplicas overwrites the set of nodes/stores on which replicas of this
+// range are stored.
+func (r *RangeDescriptor) SetReplicas(replicas ReplicaDescriptors) {
+	r.InternalReplicas = replicas.AsProto()
+}
+
+// AddReplica adds the given replica to this range's set.
+func (r *RangeDescriptor) AddReplica(toAdd ReplicaDescriptor) {
+	rs := r.Replicas()
+	rs.AddReplica(toAdd)
+	r.SetReplicas(rs)
+}
+
+// RemoveReplica removes the given replica from this range's set. If it wasn't
+// found to remove, false is returned.
+func (r *RangeDescriptor) RemoveReplica(toRemove ReplicaDescriptor) bool {
+	rs := r.Replicas()
+	found := rs.RemoveReplica(toRemove)
+	if found {
+		r.SetReplicas(rs)
+	}
+	return found
+}
+
 // GetReplicaDescriptor returns the replica which matches the specified store
 // ID.
 func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas {
+	for _, repDesc := range r.Replicas().Unwrap() {
 		if repDesc.StoreID == storeID {
 			return repDesc, true
 		}
@@ -140,7 +170,7 @@ func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescripto
 // GetReplicaDescriptorByID returns the replica which matches the specified store
 // ID.
 func (r RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
-	for _, repDesc := range r.Replicas {
+	for _, repDesc := range r.Replicas().Unwrap() {
 		if repDesc.ReplicaID == replicaID {
 			return repDesc, true
 		}
@@ -177,7 +207,7 @@ func (r RangeDescriptor) Validate() error {
 		return errors.Errorf("NextReplicaID must be non-zero")
 	}
 	seen := map[ReplicaID]struct{}{}
-	for i, rep := range r.Replicas {
+	for i, rep := range r.Replicas().Unwrap() {
 		if err := rep.Validate(); err != nil {
 			return errors.Errorf("replica %d is invalid: %s", i, err)
 		}
@@ -204,8 +234,8 @@ func (r RangeDescriptor) String() string {
 	}
 	buf.WriteString(" [")
 
-	if len(r.Replicas) > 0 {
-		for i, rep := range r.Replicas {
+	if len(r.Replicas().Unwrap()) > 0 {
+		for i, rep := range r.Replicas().Unwrap() {
 			if i > 0 {
 				buf.WriteString(", ")
 			}

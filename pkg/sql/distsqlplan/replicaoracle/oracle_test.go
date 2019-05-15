@@ -81,7 +81,7 @@ func TestClosest(t *testing.T) {
 	}
 	o := of.Oracle(nil)
 	info, err := o.ChoosePreferredReplica(context.TODO(), roachpb.RangeDescriptor{
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
 			{NodeID: 3, StoreID: 3},

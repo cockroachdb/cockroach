@@ -39,7 +39,7 @@ func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *
 	raftStatus := r.raftStatusRLocked()
 	if raftStatus != nil {
 		updateRaftProgressFromActivity(
-			ctx, raftStatus.Progress, r.descRLocked().Replicas, r.mu.lastUpdateTimes, timeutil.Now(),
+			ctx, raftStatus.Progress, r.descRLocked().Replicas().Unwrap(), r.mu.lastUpdateTimes, timeutil.Now(),
 		)
 	}
 	r.mu.RUnlock()

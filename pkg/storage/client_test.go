@@ -656,7 +656,7 @@ func (rd rangeDescByAge) Less(i, j int) bool {
 	}
 	// If two RangeDescriptor versions have the same NextReplicaID, then the one
 	// with the fewest replicas is the newest.
-	return len(rd[i].Replicas) > len(rd[j].Replicas)
+	return len(rd[i].InternalReplicas) > len(rd[j].InternalReplicas)
 }
 
 // FirstRange implements the RangeDescriptorDB interface. It returns the range
@@ -1078,7 +1078,7 @@ func (m *multiTestContext) findMemberStoreLocked(desc roachpb.RangeDescriptor) *
 			// Store is stopped.
 			continue
 		}
-		for _, r := range desc.Replicas {
+		for _, r := range desc.InternalReplicas {
 			if s.StoreID() == r.StoreID {
 				return s
 			}
@@ -1458,10 +1458,10 @@ func TestSortRangeDescByAge(t *testing.T) {
 	newRangeVersion := func(marker string) {
 		currentRepls := append([]roachpb.ReplicaDescriptor(nil), replicaDescs...)
 		rangeDescs = append(rangeDescs, &roachpb.RangeDescriptor{
-			RangeID:       roachpb.RangeID(1),
-			Replicas:      currentRepls,
-			NextReplicaID: roachpb.ReplicaID(nextReplID),
-			EndKey:        roachpb.RKey(marker),
+			RangeID:          roachpb.RangeID(1),
+			InternalReplicas: currentRepls,
+			NextReplicaID:    roachpb.ReplicaID(nextReplID),
+			EndKey:           roachpb.RKey(marker),
 		})
 	}
 

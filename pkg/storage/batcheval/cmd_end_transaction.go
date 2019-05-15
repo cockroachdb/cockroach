@@ -1143,7 +1143,7 @@ func changeReplicasTrigger(
 		desc := rec.Desc()
 		cpy = *desc
 	}
-	cpy.Replicas = change.UpdatedReplicas
+	cpy.SetReplicas(roachpb.MakeReplicaDescriptors(change.UpdatedReplicas))
 	cpy.NextReplicaID = change.NextReplicaID
 	// TODO(tschottdorf): duplication of Desc with the trigger below, should
 	// likely remove it from the trigger.
