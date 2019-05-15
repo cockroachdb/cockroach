@@ -71,7 +71,7 @@ func BenchmarkOffset(b *testing.B) {
 	ctx := context.Background()
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
 	batch.SetLength(coldata.BatchSize)
-	source := newRepeatableBatchSource(batch)
+	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
 	o := NewOffsetOp(source, 1)

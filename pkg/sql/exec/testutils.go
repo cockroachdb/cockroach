@@ -49,3 +49,56 @@ func (b *BatchBuffer) Next(context.Context) coldata.Batch {
 	b.buffer = b.buffer[1:]
 	return batch
 }
+
+// RepeatableBatchSource is an Operator that returns the same batch forever.
+type RepeatableBatchSource struct {
+	internalBatch coldata.Batch
+	batchLen      uint16
+	// sel specifies the desired selection vector for the batch.
+	sel []uint16
+
+	batchesToReturn int
+	batchesReturned int
+}
+
+var _ Operator = &RepeatableBatchSource{}
+
+// NewRepeatableBatchSource returns a new Operator initialized to return its
+// input batch forever (including the selection vector if batch comes with it).
+func NewRepeatableBatchSource(batch coldata.Batch) *RepeatableBatchSource {
+	src := &RepeatableBatchSource{
+		internalBatch: batch,
+		batchLen:      batch.Length(),
+	}
+	if batch.Selection() != nil {
+		src.sel = make([]uint16, batch.Length())
+		copy(src.sel, batch.Selection())
+	}
+	return src
+}
+
+// Next is part of the Operator interface.
+func (s *RepeatableBatchSource) Next(context.Context) coldata.Batch {
+	s.internalBatch.SetSelection(s.sel != nil)
+	s.batchesReturned++
+	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
+		s.internalBatch.SetLength(0)
+	} else {
+		s.internalBatch.SetLength(s.batchLen)
+	}
+	if s.sel != nil {
+		// Since selection vectors are mutable, to make sure that we return the
+		// batch with the given selection vector, we need to reset
+		// s.internalBatch.Selection() to s.sel on every iteration.
+		copy(s.internalBatch.Selection(), s.sel)
+	}
+	return s.internalBatch
+}
+
+// Init is part of the Operator interface.
+func (s *RepeatableBatchSource) Init() {}
+
+func (s *RepeatableBatchSource) resetBatchesToReturn(b int) {
+	s.batchesToReturn = b
+	s.batchesReturned = 0
+}

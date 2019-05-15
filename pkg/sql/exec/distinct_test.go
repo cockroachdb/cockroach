@@ -107,7 +107,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 		bCol[i] = lastB
 	}
 	batch.SetLength(coldata.BatchSize)
-	source := newRepeatableBatchSource(batch)
+	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
 	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []types.T{types.Int64, types.Int64, types.Int64})
