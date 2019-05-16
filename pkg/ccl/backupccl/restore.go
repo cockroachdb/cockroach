@@ -793,7 +793,7 @@ func splitAndScatter(
 			// TODO(dan): Really, this should be splitting the Key of the first
 			// entry in the _next_ chunk.
 			log.VEventf(restoreCtx, 1, "presplitting chunk %d of %d", idx, len(importSpanChunks))
-			if err := db.AdminSplit(ctx, chunkKey, chunkKey); err != nil {
+			if err := db.AdminSplit(ctx, chunkKey, chunkKey, false /* manual */); err != nil {
 				return err
 			}
 
@@ -849,7 +849,7 @@ func splitAndScatter(
 					// TODO(dan): Really, this should be splitting the Key of
 					// the _next_ entry.
 					log.VEventf(restoreCtx, 1, "presplitting %d of %d", idx, len(importSpans))
-					if err := db.AdminSplit(ctx, newSpanKey, newSpanKey); err != nil {
+					if err := db.AdminSplit(ctx, newSpanKey, newSpanKey, false /* manual */); err != nil {
 						return err
 					}
 

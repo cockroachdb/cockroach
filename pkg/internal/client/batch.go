@@ -587,7 +587,7 @@ func (b *Batch) adminMerge(key interface{}) {
 
 // adminSplit is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}) {
+func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, manual bool) {
 	spanKey, err := marshalKey(spanKeyIn)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -602,8 +602,9 @@ func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}) {
 		RequestHeader: roachpb.RequestHeader{
 			Key: spanKey,
 		},
+		SplitKey: splitKey,
+		Manual:   manual,
 	}
-	req.SplitKey = splitKey
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
 }

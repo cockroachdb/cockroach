@@ -320,10 +320,10 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 				t.Fatalf("failed to rewrite key: %s", reqMidKey2)
 			}
 
-			if err := kvDB.AdminSplit(ctx, reqMidKey1, reqMidKey1); err != nil {
+			if err := kvDB.AdminSplit(ctx, reqMidKey1, reqMidKey1, true /* manual */); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.AdminSplit(ctx, reqMidKey2, reqMidKey2); err != nil {
+			if err := kvDB.AdminSplit(ctx, reqMidKey2, reqMidKey2, true /* manual */); err != nil {
 				t.Fatal(err)
 			}
 

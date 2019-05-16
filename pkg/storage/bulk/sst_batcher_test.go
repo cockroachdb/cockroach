@@ -107,10 +107,10 @@ func runTestImport(t *testing.T, batchSize int64) {
 				return encoding.EncodeStringAscending(append([]byte{}, prefix...), fmt.Sprintf("k%d", i))
 			}
 
-			if err := kvDB.AdminSplit(ctx, key(split1), key(split1)); err != nil {
+			if err := kvDB.AdminSplit(ctx, key(split1), key(split1), true /* manual */); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.AdminSplit(ctx, key(split2), key(split2)); err != nil {
+			if err := kvDB.AdminSplit(ctx, key(split2), key(split2), true /* manual */); err != nil {
 				t.Fatal(err)
 			}
 

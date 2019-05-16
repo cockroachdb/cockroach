@@ -223,6 +223,43 @@ func (r *Replica) adminSplitWithDescriptor(
 			log.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
 		}
 		log.Event(ctx, "range already split")
+		// Even if the range is already split, we should still set the sticky bit
+		if args.Manual {
+			nowTs := r.store.Clock().Now()
+			newDesc := *desc
+			newDesc.StickyBit = &nowTs
+			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				descKey := keys.RangeDescriptorKey(desc.StartKey)
+				if err := updateRangeDescriptor(b, descKey, desc, &newDesc); err != nil {
+					return err
+				}
+				if err := updateRangeAddressing(b, &newDesc); err != nil {
+					return err
+				}
+				// End the transaction manually, instead of letting RunTransaction loop
+				// do it, in order to provide a sticky bit trigger.
+				b.AddRawRequest(&roachpb.EndTransactionRequest{
+					Commit: true,
+					InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+						StickyBitTrigger: &roachpb.StickyBitTrigger{
+							StickyBit: &nowTs,
+						},
+					},
+				})
+				return txn.Run(ctx, b)
+			})
+			// The ConditionFailedError can occur because the descriptors acting as
+			// expected values in the CPuts used to update the range descriptor are
+			// picked outside the transaction. Return ConditionFailedError in the
+			// error detail so that the command can be retried.
+			if msg, ok := maybeDescriptorChangedError(desc, err); ok {
+				// NB: we have to wrap the existing error here as consumers of this code
+				// look at the root cause to sniff out the changed descriptor.
+				err = &benignError{errors.Wrap(err, msg)}
+			}
+			return reply, err
+		}
 		return reply, nil
 	}
 	log.Event(ctx, "found split key")
@@ -231,6 +268,12 @@ func (r *Replica) adminSplitWithDescriptor(
 	rightDesc, err := r.store.NewRangeDescriptor(ctx, splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
 		return reply, errors.Errorf("unable to allocate right hand side range descriptor: %s", err)
+	}
+
+	// Add sticky bit.
+	if args.Manual {
+		nowTs := r.store.Clock().Now()
+		rightDesc.StickyBit = &nowTs
 	}
 
 	// Init updated version of existing range descriptor.
