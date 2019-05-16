@@ -226,6 +226,9 @@ type UnresolvedObjectName struct {
 	AnnotatedNode
 }
 
+// UnresolvedObjectName implements TableExpr.
+func (*UnresolvedObjectName) tableExpr() {}
+
 // NewUnresolvedObjectName creates an unresolved object name, verifying that it
 // is well-formed.
 func NewUnresolvedObjectName(

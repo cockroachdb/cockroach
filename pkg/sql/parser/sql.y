@@ -2151,8 +2151,7 @@ opt_stats_columns:
 create_stats_target:
   table_name
   {
-    name := $1.unresolvedObjectName().ToTableName()
-    $$.val = &name
+    $$.val = $1.unresolvedObjectName()
   }
 | '[' iconst64 ']'
   {
