@@ -8445,7 +8445,7 @@ func TestReplicaMetrics(t *testing.T) {
 
 	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			zoneConfig := cfg.DefaultZoneConfig
+			zoneConfig := protoutil.Clone(cfg.DefaultZoneConfig).(*config.ZoneConfig)
 			zoneConfig.NumReplicas = proto.Int32(c.replicas)
 
 			// Alternate between quiescent and non-quiescent replicas to test the
