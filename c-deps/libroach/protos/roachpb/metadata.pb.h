@@ -761,6 +761,13 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::int32 next_replica_id() const;
   void set_next_replica_id(::google::protobuf::int32 value);
 
+  // optional bool sticky_bit = 7;
+  bool has_sticky_bit() const;
+  void clear_sticky_bit();
+  static const int kStickyBitFieldNumber = 7;
+  bool sticky_bit() const;
+  void set_sticky_bit(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeDescriptor)
  private:
   void set_has_range_id();
@@ -773,6 +780,8 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   void clear_has_next_replica_id();
   void set_has_generation();
   void clear_has_generation();
+  void set_has_sticky_bit();
+  void clear_has_sticky_bit();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -783,6 +792,7 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::int64 range_id_;
   ::google::protobuf::int64 generation_;
   ::google::protobuf::int32 next_replica_id_;
+  bool sticky_bit_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -2659,6 +2669,30 @@ inline void RangeDescriptor::set_generation(::google::protobuf::int64 value) {
   set_has_generation();
   generation_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.generation)
+}
+
+// optional bool sticky_bit = 7;
+inline bool RangeDescriptor::has_sticky_bit() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void RangeDescriptor::set_has_sticky_bit() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void RangeDescriptor::clear_has_sticky_bit() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void RangeDescriptor::clear_sticky_bit() {
+  sticky_bit_ = false;
+  clear_has_sticky_bit();
+}
+inline bool RangeDescriptor::sticky_bit() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeDescriptor.sticky_bit)
+  return sticky_bit_;
+}
+inline void RangeDescriptor::set_sticky_bit(bool value) {
+  set_has_sticky_bit();
+  sticky_bit_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.sticky_bit)
 }
 
 // -------------------------------------------------------------------

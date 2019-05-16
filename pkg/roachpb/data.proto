@@ -193,6 +193,18 @@ message ModifiedSpanTrigger {
   Span node_liveness_span = 2;
 }
 
+// StickyBitTrigger indicates that the sticky bit of a range has been changed.
+// This trigger is used in two cases:
+// 1. Unsplitting a range.
+// 2. Splitting at the start key of a range. In this case, no range is split but
+//    the sticky bit is still set, so we need to use this trigger instead of
+//    SplitTrigger.
+message StickyBitTrigger {
+  option (gogoproto.equal) = true;
+
+  bool sticky_bit = 1;
+}
+
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.
 // Only one may be set.
 message InternalCommitTrigger {
@@ -206,6 +218,7 @@ message InternalCommitTrigger {
   MergeTrigger merge_trigger = 2;
   ChangeReplicasTrigger change_replicas_trigger = 3;
   ModifiedSpanTrigger modified_span_trigger = 4;
+  StickyBitTrigger sticky_bit_trigger = 5;
 }
 
 // TransactionStatus specifies possible states for a transaction.

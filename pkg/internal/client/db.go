@@ -469,9 +469,9 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 // properly.
 //
 // The keys can be either byte slices or a strings.
-func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}) error {
+func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}, manual bool) error {
 	b := &Batch{}
-	b.adminSplit(spanKey, splitKey)
+	b.adminSplit(spanKey, splitKey, manual)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

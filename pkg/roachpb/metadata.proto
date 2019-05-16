@@ -171,6 +171,7 @@ message RangeDescriptor {
   // replica is gc'able or not. If it is not gc'able, then by definition the
   // replica applying the merge is.
   optional int64 generation = 6;
+  optional bool sticky_bit = 7;
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize

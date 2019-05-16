@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -652,6 +653,15 @@ func RunCommitTrigger(
 	if ct.GetMergeTrigger() != nil {
 		// Merge triggers were handled earlier, before intent resolution.
 		return result.Result{}, nil
+	}
+	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
+		newDesc := *rec.Desc()
+		newDesc.StickyBit = proto.Bool(sbt.StickyBit)
+		var res result.Result
+		res.Replicated.State = &storagepb.ReplicaState{
+			Desc: &newDesc,
+		}
+		return res, nil
 	}
 
 	log.Fatalf(ctx, "unknown commit trigger: %+v", ct)

@@ -57,7 +57,7 @@ func TestLogSplits(t *testing.T) {
 	initialSplits := countSplits()
 
 	// Generate an explicit split event.
-	if err := kvDB.AdminSplit(ctx, "splitkey", "splitkey"); err != nil {
+	if err := kvDB.AdminSplit(ctx, "splitkey", "splitkey", true /* manual */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -178,10 +178,10 @@ func TestLogMerges(t *testing.T) {
 	}
 
 	// Create two ranges, then merge them.
-	if err := kvDB.AdminSplit(ctx, "a", "a"); err != nil {
+	if err := kvDB.AdminSplit(ctx, "a", "a", true /* manual */); err != nil {
 		t.Fatal(err)
 	}
-	if err := kvDB.AdminSplit(ctx, "b", "b"); err != nil {
+	if err := kvDB.AdminSplit(ctx, "b", "b", true /* manual */); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.AdminMerge(ctx, "a"); err != nil {
