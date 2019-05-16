@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -112,7 +113,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	for _, splitRKey := range splitKeys {
 		splitKey := roachpb.Key(splitRKey)
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if err := s.DB.AdminSplit(ctx, splitKey, splitKey); err != nil {
+		if err := s.DB.AdminSplit(ctx, splitKey, splitKey, true /* manual */); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -158,7 +159,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 			<-txnChannel
 		}
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if pErr := s.DB.AdminSplit(context.TODO(), splitKey, splitKey); pErr != nil {
+		if pErr := s.DB.AdminSplit(context.TODO(), splitKey, splitKey, true /* manual */); pErr != nil {
 			t.Error(pErr)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -251,11 +252,86 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 
 	splitKey := roachpb.Key("aa")
 	log.Infof(ctx, "starting split at key %q...", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey, splitKey); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, splitKey, true /* manual */); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "split at key %q first time complete", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey, splitKey); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, splitKey, true /* manual */); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestSplitStickyBit checks that the sticky bit is set when performing a manual
+// split. There are two cases to consider:
+// 1. Range is split so sticky bit is set on RHS.
+// 2. Range is already split and split key is the start key of a range, so set
+//    the sticky bit of that range, but no range is split.
+func TestRangeSplitsStickyBit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), &storage.StoreTestingKnobs{
+		DisableScanner:    true,
+		DisableSplitQueue: true,
+		DisableMergeQueue: true,
+	})
+	defer s.Stop()
+
+	ctx := context.TODO()
+	splitKey := roachpb.RKey("aa")
+	descKey := keys.RangeDescriptorKey(splitKey)
+
+	// Splitting range.
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey(), true /* manual */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Checking sticky bit.
+	var desc roachpb.RangeDescriptor
+	err := s.DB.GetProto(ctx, descKey, &desc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if desc.StickyBit == nil {
+		t.Fatal("Sticky bit not set after splitting")
+	}
+
+	// TODO(jeffreyxiao): Use same mechanism as ALTER TABLE ... UNSPLIT AT
+	// does when it is added.
+	// Removing sticky bit.
+	desc.StickyBit = nil
+	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		b := txn.NewBatch()
+		marshalledDesc, err := protoutil.Marshal(&desc)
+		if err != nil {
+			return err
+		}
+		b.Put(descKey, marshalledDesc)
+		b.Put(keys.RangeMetaKey(desc.EndKey).AsRawKey(), marshalledDesc)
+		// End the transaction manually in order to provide a sticky bit trigger.
+		// Note that this hack will be removed. See above TODO.
+		b.AddRawRequest(&roachpb.EndTransactionRequest{
+			Commit: true,
+			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				StickyBitTrigger: &roachpb.StickyBitTrigger{
+					StickyBit: nil,
+				},
+			},
+		})
+		return txn.Run(ctx, b)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Splitting range.
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey(), true /* manual */); err != nil {
+		t.Fatal(err)
+	}
+
+	// Checking sticky bit.
+	err = s.DB.GetProto(ctx, descKey, &desc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if desc.StickyBit == nil {
+		t.Fatal("Sticky bit not set after splitting")
 	}
 }

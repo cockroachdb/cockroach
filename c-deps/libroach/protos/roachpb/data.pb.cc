@@ -23,13 +23,14 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ModifiedSpanTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ObservedTimestamp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_SplitTrigger;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_StickyBitTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_MergeTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicaDescriptor;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RangeDescriptor;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeDescriptor;
 }  // namespace protobuf_roachpb_2fmetadata_2eproto
 namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TxnMeta;
@@ -82,6 +83,11 @@ class ModifiedSpanTriggerDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<ModifiedSpanTrigger>
       _instance;
 } _ModifiedSpanTrigger_default_instance_;
+class StickyBitTriggerDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<StickyBitTrigger>
+      _instance;
+} _StickyBitTrigger_default_instance_;
 class InternalCommitTriggerDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<InternalCommitTrigger>
@@ -250,6 +256,21 @@ static void InitDefaultsModifiedSpanTrigger() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsModifiedSpanTrigger}, {
       &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,}};
 
+static void InitDefaultsStickyBitTrigger() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_StickyBitTrigger_default_instance_;
+    new (ptr) ::cockroach::roachpb::StickyBitTrigger();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::StickyBitTrigger::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_StickyBitTrigger =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsStickyBitTrigger}, {
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
+
 static void InitDefaultsInternalCommitTrigger() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -261,12 +282,13 @@ static void InitDefaultsInternalCommitTrigger() {
   ::cockroach::roachpb::InternalCommitTrigger::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<4> scc_info_InternalCommitTrigger =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsInternalCommitTrigger}, {
+::google::protobuf::internal::SCCInfo<5> scc_info_InternalCommitTrigger =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 5, InitDefaultsInternalCommitTrigger}, {
       &protobuf_roachpb_2fdata_2eproto::scc_info_SplitTrigger.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_MergeTrigger.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_ChangeReplicasTrigger.base,
-      &protobuf_roachpb_2fdata_2eproto::scc_info_ModifiedSpanTrigger.base,}};
+      &protobuf_roachpb_2fdata_2eproto::scc_info_ModifiedSpanTrigger.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_StickyBitTrigger.base,}};
 
 static void InitDefaultsObservedTimestamp() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -407,6 +429,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_MergeTrigger.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ChangeReplicasTrigger.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ModifiedSpanTrigger.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_StickyBitTrigger.base);
   ::google::protobuf::internal::InitSCC(&scc_info_InternalCommitTrigger.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ObservedTimestamp.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Transaction.base);
@@ -2479,6 +2502,202 @@ void ModifiedSpanTrigger::InternalSwap(ModifiedSpanTrigger* other) {
 
 // ===================================================================
 
+void StickyBitTrigger::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_StickyBitTrigger_default_instance_._instance.get_mutable()->sticky_bit_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+}
+void StickyBitTrigger::clear_sticky_bit() {
+  if (GetArenaNoVirtual() == NULL && sticky_bit_ != NULL) {
+    delete sticky_bit_;
+  }
+  sticky_bit_ = NULL;
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int StickyBitTrigger::kStickyBitFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+StickyBitTrigger::StickyBitTrigger()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fdata_2eproto::scc_info_StickyBitTrigger.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.StickyBitTrigger)
+}
+StickyBitTrigger::StickyBitTrigger(const StickyBitTrigger& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_sticky_bit()) {
+    sticky_bit_ = new ::cockroach::util::hlc::Timestamp(*from.sticky_bit_);
+  } else {
+    sticky_bit_ = NULL;
+  }
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.StickyBitTrigger)
+}
+
+void StickyBitTrigger::SharedCtor() {
+  sticky_bit_ = NULL;
+}
+
+StickyBitTrigger::~StickyBitTrigger() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.StickyBitTrigger)
+  SharedDtor();
+}
+
+void StickyBitTrigger::SharedDtor() {
+  if (this != internal_default_instance()) delete sticky_bit_;
+}
+
+void StickyBitTrigger::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const StickyBitTrigger& StickyBitTrigger::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fdata_2eproto::scc_info_StickyBitTrigger.base);
+  return *internal_default_instance();
+}
+
+
+void StickyBitTrigger::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.StickyBitTrigger)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  if (GetArenaNoVirtual() == NULL && sticky_bit_ != NULL) {
+    delete sticky_bit_;
+  }
+  sticky_bit_ = NULL;
+  _internal_metadata_.Clear();
+}
+
+bool StickyBitTrigger::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.StickyBitTrigger)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // .cockroach.util.hlc.Timestamp sticky_bit = 1;
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_sticky_bit()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.StickyBitTrigger)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.StickyBitTrigger)
+  return false;
+#undef DO_
+}
+
+void StickyBitTrigger::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.StickyBitTrigger)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // .cockroach.util.hlc.Timestamp sticky_bit = 1;
+  if (this->has_sticky_bit()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_sticky_bit(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.StickyBitTrigger)
+}
+
+size_t StickyBitTrigger::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.StickyBitTrigger)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // .cockroach.util.hlc.Timestamp sticky_bit = 1;
+  if (this->has_sticky_bit()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *sticky_bit_);
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void StickyBitTrigger::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const StickyBitTrigger*>(&from));
+}
+
+void StickyBitTrigger::MergeFrom(const StickyBitTrigger& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.StickyBitTrigger)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.has_sticky_bit()) {
+    mutable_sticky_bit()->::cockroach::util::hlc::Timestamp::MergeFrom(from.sticky_bit());
+  }
+}
+
+void StickyBitTrigger::CopyFrom(const StickyBitTrigger& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.StickyBitTrigger)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool StickyBitTrigger::IsInitialized() const {
+  return true;
+}
+
+void StickyBitTrigger::Swap(StickyBitTrigger* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void StickyBitTrigger::InternalSwap(StickyBitTrigger* other) {
+  using std::swap;
+  swap(sticky_bit_, other->sticky_bit_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string StickyBitTrigger::GetTypeName() const {
+  return "cockroach.roachpb.StickyBitTrigger";
+}
+
+
+// ===================================================================
+
 void InternalCommitTrigger::InitAsDefaultInstance() {
   ::cockroach::roachpb::_InternalCommitTrigger_default_instance_._instance.get_mutable()->split_trigger_ = const_cast< ::cockroach::roachpb::SplitTrigger*>(
       ::cockroach::roachpb::SplitTrigger::internal_default_instance());
@@ -2488,12 +2707,15 @@ void InternalCommitTrigger::InitAsDefaultInstance() {
       ::cockroach::roachpb::ChangeReplicasTrigger::internal_default_instance());
   ::cockroach::roachpb::_InternalCommitTrigger_default_instance_._instance.get_mutable()->modified_span_trigger_ = const_cast< ::cockroach::roachpb::ModifiedSpanTrigger*>(
       ::cockroach::roachpb::ModifiedSpanTrigger::internal_default_instance());
+  ::cockroach::roachpb::_InternalCommitTrigger_default_instance_._instance.get_mutable()->sticky_bit_trigger_ = const_cast< ::cockroach::roachpb::StickyBitTrigger*>(
+      ::cockroach::roachpb::StickyBitTrigger::internal_default_instance());
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int InternalCommitTrigger::kSplitTriggerFieldNumber;
 const int InternalCommitTrigger::kMergeTriggerFieldNumber;
 const int InternalCommitTrigger::kChangeReplicasTriggerFieldNumber;
 const int InternalCommitTrigger::kModifiedSpanTriggerFieldNumber;
+const int InternalCommitTrigger::kStickyBitTriggerFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 InternalCommitTrigger::InternalCommitTrigger()
@@ -2527,13 +2749,18 @@ InternalCommitTrigger::InternalCommitTrigger(const InternalCommitTrigger& from)
   } else {
     modified_span_trigger_ = NULL;
   }
+  if (from.has_sticky_bit_trigger()) {
+    sticky_bit_trigger_ = new ::cockroach::roachpb::StickyBitTrigger(*from.sticky_bit_trigger_);
+  } else {
+    sticky_bit_trigger_ = NULL;
+  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.InternalCommitTrigger)
 }
 
 void InternalCommitTrigger::SharedCtor() {
   ::memset(&split_trigger_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&modified_span_trigger_) -
-      reinterpret_cast<char*>(&split_trigger_)) + sizeof(modified_span_trigger_));
+      reinterpret_cast<char*>(&sticky_bit_trigger_) -
+      reinterpret_cast<char*>(&split_trigger_)) + sizeof(sticky_bit_trigger_));
 }
 
 InternalCommitTrigger::~InternalCommitTrigger() {
@@ -2546,6 +2773,7 @@ void InternalCommitTrigger::SharedDtor() {
   if (this != internal_default_instance()) delete merge_trigger_;
   if (this != internal_default_instance()) delete change_replicas_trigger_;
   if (this != internal_default_instance()) delete modified_span_trigger_;
+  if (this != internal_default_instance()) delete sticky_bit_trigger_;
 }
 
 void InternalCommitTrigger::SetCachedSize(int size) const {
@@ -2579,6 +2807,10 @@ void InternalCommitTrigger::Clear() {
     delete modified_span_trigger_;
   }
   modified_span_trigger_ = NULL;
+  if (GetArenaNoVirtual() == NULL && sticky_bit_trigger_ != NULL) {
+    delete sticky_bit_trigger_;
+  }
+  sticky_bit_trigger_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -2646,6 +2878,18 @@ bool InternalCommitTrigger::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.StickyBitTrigger sticky_bit_trigger = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_sticky_bit_trigger()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -2696,6 +2940,12 @@ void InternalCommitTrigger::SerializeWithCachedSizes(
       4, this->_internal_modified_span_trigger(), output);
   }
 
+  // .cockroach.roachpb.StickyBitTrigger sticky_bit_trigger = 5;
+  if (this->has_sticky_bit_trigger()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5, this->_internal_sticky_bit_trigger(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.InternalCommitTrigger)
@@ -2735,6 +2985,13 @@ size_t InternalCommitTrigger::ByteSizeLong() const {
         *modified_span_trigger_);
   }
 
+  // .cockroach.roachpb.StickyBitTrigger sticky_bit_trigger = 5;
+  if (this->has_sticky_bit_trigger()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *sticky_bit_trigger_);
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -2764,6 +3021,9 @@ void InternalCommitTrigger::MergeFrom(const InternalCommitTrigger& from) {
   if (from.has_modified_span_trigger()) {
     mutable_modified_span_trigger()->::cockroach::roachpb::ModifiedSpanTrigger::MergeFrom(from.modified_span_trigger());
   }
+  if (from.has_sticky_bit_trigger()) {
+    mutable_sticky_bit_trigger()->::cockroach::roachpb::StickyBitTrigger::MergeFrom(from.sticky_bit_trigger());
+  }
 }
 
 void InternalCommitTrigger::CopyFrom(const InternalCommitTrigger& from) {
@@ -2787,6 +3047,7 @@ void InternalCommitTrigger::InternalSwap(InternalCommitTrigger* other) {
   swap(merge_trigger_, other->merge_trigger_);
   swap(change_replicas_trigger_, other->change_replicas_trigger_);
   swap(modified_span_trigger_, other->modified_span_trigger_);
+  swap(sticky_bit_trigger_, other->sticky_bit_trigger_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -5669,6 +5930,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ChangeReplic
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ModifiedSpanTrigger* Arena::CreateMaybeMessage< ::cockroach::roachpb::ModifiedSpanTrigger >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::ModifiedSpanTrigger >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::StickyBitTrigger* Arena::CreateMaybeMessage< ::cockroach::roachpb::StickyBitTrigger >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::StickyBitTrigger >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::InternalCommitTrigger* Arena::CreateMaybeMessage< ::cockroach::roachpb::InternalCommitTrigger >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::InternalCommitTrigger >(arena);
