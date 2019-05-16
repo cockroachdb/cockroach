@@ -384,7 +384,7 @@ func (node *ShowFingerprints) Format(ctx *FmtCtx) {
 
 // ShowTableStats represents a SHOW STATISTICS FOR TABLE statement.
 type ShowTableStats struct {
-	Table     TableName
+	Table     *UnresolvedObjectName
 	UsingJSON bool
 }
 
@@ -395,7 +395,7 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 		ctx.WriteString("USING JSON ")
 	}
 	ctx.WriteString("FOR TABLE ")
-	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(node.Table)
 }
 
 // ShowHistogram represents a SHOW HISTOGRAM statement.
