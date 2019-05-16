@@ -468,10 +468,14 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 // #16008 for details, and #16344 for the tracking issue to clean this mess up
 // properly.
 //
+// When manual is true, the sticky bit associated with the split range is set.
+// Any ranges with the sticky bit set will be skipped by the merge queue when
+// scanning for potential ranges to merge.
+//
 // The keys can be either byte slices or a strings.
-func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}) error {
+func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}, manual bool) error {
 	b := &Batch{}
-	b.adminSplit(spanKey, splitKey)
+	b.adminSplit(spanKey, splitKey, manual)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

@@ -30,6 +30,7 @@
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include "util/unresolved_addr.pb.h"
+#include "util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
 #define PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto 
 
@@ -742,6 +743,18 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
+  // optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
+  bool has_sticky_bit() const;
+  void clear_sticky_bit();
+  static const int kStickyBitFieldNumber = 7;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_sticky_bit() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& sticky_bit() const;
+  ::cockroach::util::hlc::Timestamp* release_sticky_bit();
+  ::cockroach::util::hlc::Timestamp* mutable_sticky_bit();
+  void set_allocated_sticky_bit(::cockroach::util::hlc::Timestamp* sticky_bit);
+
   bool has_range_id() const;
   void clear_range_id();
   static const int kRangeIdFieldNumber = 1;
@@ -773,6 +786,8 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   void clear_has_next_replica_id();
   void set_has_generation();
   void clear_has_generation();
+  void set_has_sticky_bit();
+  void clear_has_sticky_bit();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -780,6 +795,7 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > replicas_;
   ::google::protobuf::internal::ArenaStringPtr start_key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
+  ::cockroach::util::hlc::Timestamp* sticky_bit_;
   ::google::protobuf::int64 range_id_;
   ::google::protobuf::int64 generation_;
   ::google::protobuf::int32 next_replica_id_;
@@ -2433,13 +2449,13 @@ inline void ReplicaIdent::set_allocated_replica(::cockroach::roachpb::ReplicaDes
 // RangeDescriptor
 
 inline bool RangeDescriptor::has_range_id() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void RangeDescriptor::set_has_range_id() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void RangeDescriptor::clear_has_range_id() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void RangeDescriptor::clear_range_id() {
   range_id_ = GOOGLE_LONGLONG(0);
@@ -2615,13 +2631,13 @@ RangeDescriptor::replicas() const {
 }
 
 inline bool RangeDescriptor::has_next_replica_id() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
+  return (_has_bits_[0] & 0x00000020u) != 0;
 }
 inline void RangeDescriptor::set_has_next_replica_id() {
-  _has_bits_[0] |= 0x00000010u;
+  _has_bits_[0] |= 0x00000020u;
 }
 inline void RangeDescriptor::clear_has_next_replica_id() {
-  _has_bits_[0] &= ~0x00000010u;
+  _has_bits_[0] &= ~0x00000020u;
 }
 inline void RangeDescriptor::clear_next_replica_id() {
   next_replica_id_ = 0;
@@ -2639,13 +2655,13 @@ inline void RangeDescriptor::set_next_replica_id(::google::protobuf::int32 value
 
 // optional int64 generation = 6;
 inline bool RangeDescriptor::has_generation() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void RangeDescriptor::set_has_generation() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void RangeDescriptor::clear_has_generation() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void RangeDescriptor::clear_generation() {
   generation_ = GOOGLE_LONGLONG(0);
@@ -2659,6 +2675,60 @@ inline void RangeDescriptor::set_generation(::google::protobuf::int64 value) {
   set_has_generation();
   generation_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.generation)
+}
+
+// optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
+inline bool RangeDescriptor::has_sticky_bit() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void RangeDescriptor::set_has_sticky_bit() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void RangeDescriptor::clear_has_sticky_bit() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline const ::cockroach::util::hlc::Timestamp& RangeDescriptor::_internal_sticky_bit() const {
+  return *sticky_bit_;
+}
+inline const ::cockroach::util::hlc::Timestamp& RangeDescriptor::sticky_bit() const {
+  const ::cockroach::util::hlc::Timestamp* p = sticky_bit_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeDescriptor.sticky_bit)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* RangeDescriptor::release_sticky_bit() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeDescriptor.sticky_bit)
+  clear_has_sticky_bit();
+  ::cockroach::util::hlc::Timestamp* temp = sticky_bit_;
+  sticky_bit_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* RangeDescriptor::mutable_sticky_bit() {
+  set_has_sticky_bit();
+  if (sticky_bit_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    sticky_bit_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeDescriptor.sticky_bit)
+  return sticky_bit_;
+}
+inline void RangeDescriptor::set_allocated_sticky_bit(::cockroach::util::hlc::Timestamp* sticky_bit) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(sticky_bit_);
+  }
+  if (sticky_bit) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      sticky_bit = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, sticky_bit, submessage_arena);
+    }
+    set_has_sticky_bit();
+  } else {
+    clear_has_sticky_bit();
+  }
+  sticky_bit_ = sticky_bit;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeDescriptor.sticky_bit)
 }
 
 // -------------------------------------------------------------------

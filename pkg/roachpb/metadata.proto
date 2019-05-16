@@ -17,6 +17,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "util/unresolved_addr.proto";
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // Attributes specifies a list of arbitrary strings describing
@@ -171,6 +172,22 @@ message RangeDescriptor {
   // replica is gc'able or not. If it is not gc'able, then by definition the
   // replica applying the merge is.
   optional int64 generation = 6;
+  // The presence of the sticky_bit indicates that the range should not be
+  // automatically merged by the merge queue with the range to its left. It is
+  // set during a split operation with the manual flag set and unset during an
+  // unsplit operation. Note that the unsplit operation is a different
+  // operation from the merge operation. Unsplit only unsets sticky_bit. It is
+  // represented using a timestamp to support the possible feature of having an
+  // expiration policy for manual splits in the future. Additionally, it could
+  // be useful for users to know when this range was manually split.
+  //
+  // The reason the sticky_bit exists is because when the merge queue is
+  // enabled and a manual split happens, the split ranges would immediately be
+  // merged by the merge queue. Previous, we threw an error when a user
+  // attempted to execute ALTER TABLE/INDEX ... SPLIT AT ... when the merge
+  // queue is enabled. With sticky_bit, users can manually split ranges without
+  // diabling the merge queue.
+  optional util.hlc.Timestamp sticky_bit = 7;
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize

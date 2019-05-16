@@ -653,6 +653,15 @@ func RunCommitTrigger(
 		// Merge triggers were handled earlier, before intent resolution.
 		return result.Result{}, nil
 	}
+	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
+		newDesc := *rec.Desc()
+		newDesc.StickyBit = sbt.StickyBit
+		var res result.Result
+		res.Replicated.State = &storagepb.ReplicaState{
+			Desc: &newDesc,
+		}
+		return res, nil
+	}
 
 	log.Fatalf(ctx, "unknown commit trigger: %+v", ct)
 	return result.Result{}, nil
