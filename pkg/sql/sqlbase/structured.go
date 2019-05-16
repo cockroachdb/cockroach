@@ -1053,6 +1053,35 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 	}
 }
 
+// MaybeIncrementVersion increments the version of a descriptor if necessary.
+func (desc *MutableTableDescriptor) MaybeIncrementVersion(
+	ctx context.Context, txn *client.Txn,
+) error {
+	// Already incremented, no-op.
+	if desc.Version == desc.ClusterVersion.Version+1 {
+		return nil
+	}
+	desc.Version++
+	// We need to set ModificationTime to the transaction's commit
+	// timestamp. Using CommitTimestamp() guarantees that the
+	// transaction will commit at the CommitTimestamp().
+	//
+	// TODO(vivek): Stop needing to do this by deprecating the
+	// ModificationTime. A Descriptor modification time can be
+	// the mvcc timestamp of the descriptor. This requires moving the
+	// schema change lease out of the descriptor making the
+	// descriptor truly immutable at a version.
+	// Also recognize that the leases are released before the transaction
+	// is committed through a call to TableCollection.releaseLeases(),
+	// so updating this policy will also need to consider not doing
+	// that.
+	modTime := txn.CommitTimestamp()
+	desc.ModificationTime = modTime
+	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
+		desc.ID, desc.Name, desc.Version, modTime.GoTime())
+	return nil
+}
+
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
 func (desc *TableDescriptor) Validate(
@@ -3003,4 +3032,45 @@ func (desc *MutableTableDescriptor) TableDesc() *TableDescriptor {
 // TableDesc implements the ObjectDescriptor interface.
 func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
+}
+
+// DatabaseKey implements DescriptorKey.
+type DatabaseKey struct {
+	name string
+}
+
+// NewDatabaseKey returns a new DatabaseKey.
+func NewDatabaseKey(name string) DatabaseKey {
+	return DatabaseKey{name}
+}
+
+// Key implements DescriptorKey interface.
+func (dk DatabaseKey) Key() roachpb.Key {
+	return MakeNameMetadataKey(keys.RootNamespaceID, dk.name)
+}
+
+// Name implements DescriptorKey interface.
+func (dk DatabaseKey) Name() string {
+	return dk.name
+}
+
+// TableKey implements DescriptorKey interface.
+type TableKey struct {
+	parentID ID
+	name     string
+}
+
+// NewTableKey returns a new TableKey.
+func NewTableKey(parentID ID, name string) TableKey {
+	return TableKey{parentID, name}
+}
+
+// Key implements DescriptorKey interface.
+func (tk TableKey) Key() roachpb.Key {
+	return MakeNameMetadataKey(tk.parentID, tk.name)
+}
+
+// Name implements DescriptorKey interface.
+func (tk TableKey) Name() string {
+	return tk.name
 }

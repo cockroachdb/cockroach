@@ -376,7 +376,7 @@ CREATE TABLE crdb_internal.leases (
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		leaseMgr := p.LeaseMgr()
-		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.execCfg.NodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeIDContainer.Get())))
 
 		leaseMgr.mu.Lock()
 		defer leaseMgr.mu.Unlock()
@@ -605,7 +605,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		}
 
 		leaseMgr := p.LeaseMgr()
-		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.execCfg.NodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeIDContainer.Get())))
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
@@ -1800,6 +1800,32 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}, nil
 		}, nil
 	},
+}
+
+type namespaceKey struct {
+	parentID sqlbase.ID
+	name     string
+}
+
+// getAllNames returns a map from ID to namespaceKey for every entry in
+// system.namespace.
+func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey, error) {
+	namespace := map[sqlbase.ID]namespaceKey{}
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+		ctx, "get-all-names", p.txn,
+		`SELECT id, "parentID", name FROM system.namespace`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
+		namespace[sqlbase.ID(id)] = namespaceKey{
+			parentID: sqlbase.ID(parentID),
+			name:     string(name),
+		}
+	}
+	return namespace, nil
 }
 
 // crdbInternalZonesTable decodes and exposes the zone configs in the

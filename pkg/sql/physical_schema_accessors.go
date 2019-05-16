@@ -58,7 +58,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return &sysDB, nil
 	}
 
-	descID, err := getDescriptorID(ctx, txn, databaseKey{name})
+	descID, err := getDescriptorID(ctx, txn, sqlbase.NewDatabaseKey(name))
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	// can be modified on a running cluster.
 	descID := sqlbase.LookupSystemTableDescriptorID(dbID, name.Table())
 	if descID == sqlbase.InvalidID {
-		descID, err = getDescriptorID(ctx, txn, tableKey{parentID: dbID, name: name.Table()})
+		descID, err = getDescriptorID(ctx, txn, sqlbase.NewTableKey(dbID, name.Table()))
 		if err != nil {
 			return nil, err
 		}
@@ -215,7 +215,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 		// The database was not known in the uncommitted list. Have the db
 		// cache look it up by name for us.
 		return a.tc.databaseCache.getDatabaseDesc(ctx,
-			a.tc.leaseMgr.execCfg.DB.Txn, name, flags.required)
+			a.tc.leaseMgr.db.Txn, name, flags.required)
 	}
 
 	// We avoided the cache. Go lower.
