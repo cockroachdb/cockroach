@@ -56,8 +56,8 @@ func (p *planner) ShowFingerprints(
 ) (planNode, error) {
 	// We avoid the cache so that we can observe the fingerprints without
 	// taking a lease, like other SHOW commands.
-	tableDesc, err := p.ResolveUncachedTableDescriptor(
-		ctx, &n.Table, true /*required*/, ResolveRequireTableDesc)
+	tableDesc, err := p.ResolveUncachedTableDescriptorEx(
+		ctx, n.Table, true /*required*/, ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}

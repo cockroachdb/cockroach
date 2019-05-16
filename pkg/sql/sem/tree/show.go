@@ -378,13 +378,13 @@ func (node *ShowRanges) Format(ctx *FmtCtx) {
 
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
 type ShowFingerprints struct {
-	Table TableName
+	Table *UnresolvedObjectName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowFingerprints) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ")
-	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(node.Table)
 }
 
 // ShowTableStats represents a SHOW STATISTICS FOR TABLE statement.
