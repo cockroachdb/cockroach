@@ -31,11 +31,13 @@ import (
 )
 
 type queryBench struct {
-	flags     workload.Flags
-	connFlags *workload.ConnFlags
-	queryFile string
-	useOpt    bool
-	verbose   bool
+	flags           workload.Flags
+	connFlags       *workload.ConnFlags
+	queryFile       string
+	numRunsPerQuery int
+	useOptimizer    bool
+	useVectorized   bool
+	verbose         bool
 
 	queries []string
 }
@@ -54,9 +56,15 @@ var queryBenchMeta = workload.Meta{
 		g.flags.FlagSet = pflag.NewFlagSet(`querybench`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`query-file`: {RuntimeOnly: true},
+			`optimizer`:  {RuntimeOnly: true},
+			`vectorized`: {RuntimeOnly: true},
+			`num-runs`:   {RuntimeOnly: true},
 		}
 		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run`)
-		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
+		g.flags.IntVar(&g.numRunsPerQuery, `num-runs`, 0, `Specifies the number of times each query in the query file to be run `+
+			`(note that --duration and --max-ops take precedence, so if duration or max-ops is reached, querybench will exit without honoring --num-runs)`)
+		g.flags.BoolVar(&g.useOptimizer, `optimizer`, true, `Use cost-based optimizer`)
+		g.flags.BoolVar(&g.useVectorized, `vectorized`, false, `Turn experimental vectorized execution on`)
 		g.flags.BoolVar(&g.verbose, `verbose`, true, `Prints out the queries being run as well as histograms`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -76,7 +84,7 @@ func (g *queryBench) Hooks() workload.Hooks {
 			if g.queryFile == "" {
 				return errors.Errorf("Missing required argument '--query-file'")
 			}
-			queries, err := getQueries(g.queryFile)
+			queries, err := GetQueries(g.queryFile)
 			if err != nil {
 				return err
 			}
@@ -84,6 +92,9 @@ func (g *queryBench) Hooks() workload.Hooks {
 				return errors.New("no queries found in file")
 			}
 			g.queries = queries
+			if g.numRunsPerQuery < 0 {
+				return errors.New("negative --num-runs specified")
+			}
 			return nil
 		},
 	}
@@ -109,8 +120,14 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
 
-	if !g.useOpt {
+	if !g.useOptimizer {
 		_, err := db.Exec("SET optimizer=off")
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+	}
+	if g.useVectorized {
+		_, err := db.Exec("SET experimental_vectorize=on")
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
@@ -130,22 +147,28 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 		}
 	}
 
+	maxNumStmts := 0
+	if g.numRunsPerQuery > 0 {
+		maxNumStmts = g.numRunsPerQuery * len(g.queries)
+	}
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		op := queryBenchWorker{
-			hists:   reg.GetHandle(),
-			db:      db,
-			stmts:   stmts,
-			verbose: g.verbose,
+			hists:       reg.GetHandle(),
+			db:          db,
+			stmts:       stmts,
+			verbose:     g.verbose,
+			maxNumStmts: maxNumStmts,
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 	}
 	return ql, nil
 }
 
-// getQueries returns the lines of a file as a string slice. Ignores lines
+// GetQueries returns the lines of a file as a string slice. Ignores lines
 // beginning with '#' or '--'.
-func getQueries(path string) ([]string, error) {
+func GetQueries(path string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -180,13 +203,24 @@ type queryBenchWorker struct {
 
 	stmtIdx int
 	verbose bool
+
+	// maxNumStmts indicates the maximum number of statements for the worker to
+	// execute. It is non-zero only when --num-runs flag is specified for the
+	// workload.
+	maxNumStmts int
 }
 
 func (o *queryBenchWorker) run(ctx context.Context) error {
+	if o.maxNumStmts > 0 {
+		if o.stmtIdx >= o.maxNumStmts {
+			// This worker has already reached the maximum number of statements to
+			// execute.
+			return nil
+		}
+	}
 	start := timeutil.Now()
-	stmt := o.stmts[o.stmtIdx]
+	stmt := o.stmts[o.stmtIdx%len(o.stmts)]
 	o.stmtIdx++
-	o.stmtIdx %= len(o.stmts)
 
 	rows, err := stmt.stmt.Query()
 	if err != nil {
