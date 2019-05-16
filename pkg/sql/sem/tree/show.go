@@ -96,13 +96,13 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 
 // ShowColumns represents a SHOW COLUMNS statement.
 type ShowColumns struct {
-	Table TableName
+	Table *UnresolvedObjectName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowColumns) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW COLUMNS FROM ")
-	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(node.Table)
 }
 
 // ShowDatabases represents a SHOW DATABASES statement.
@@ -139,15 +139,15 @@ func (node *ShowTraceForSession) Format(ctx *FmtCtx) {
 	ctx.WriteString(" FOR SESSION")
 }
 
-// ShowIndex represents a SHOW INDEX statement.
-type ShowIndex struct {
-	Table TableName
+// ShowIndexes represents a SHOW INDEX statement.
+type ShowIndexes struct {
+	Table *UnresolvedObjectName
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowIndex) Format(ctx *FmtCtx) {
+func (node *ShowIndexes) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW INDEXES FROM ")
-	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(node.Table)
 }
 
 // ShowQueries represents a SHOW QUERIES statement
@@ -254,13 +254,13 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
 type ShowConstraints struct {
-	Table TableName
+	Table *UnresolvedObjectName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowConstraints) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CONSTRAINTS FROM ")
-	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(node.Table)
 }
 
 // ShowGrants represents a SHOW GRANTS statement.
@@ -304,13 +304,13 @@ func (node *ShowRoleGrants) Format(ctx *FmtCtx) {
 
 // ShowCreate represents a SHOW CREATE statement.
 type ShowCreate struct {
-	Name TableName
+	Name *UnresolvedObjectName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowCreate) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ")
-	ctx.FormatNode(&node.Name)
+	ctx.FormatNode(node.Name)
 }
 
 // ShowSyntax represents a SHOW SYNTAX statement.
