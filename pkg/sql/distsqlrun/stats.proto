@@ -31,6 +31,7 @@ message InputStats {
 // TableReaderStats are the stats collected during a tableReader run.
 message TableReaderStats {
   InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  int64 bytes_read = 2;
 }
 
 // HashJoinerStats are the stats collected during a hashJoiner run.
