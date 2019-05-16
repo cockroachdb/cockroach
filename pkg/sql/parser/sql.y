@@ -3200,14 +3200,12 @@ session_var:
 show_stats_stmt:
   SHOW STATISTICS FOR TABLE table_name
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowTableStats{Table: name}
+    $$.val = &tree.ShowTableStats{Table: $5.unresolvedObjectName()}
   }
 | SHOW STATISTICS USING JSON FOR TABLE table_name
   {
     /* SKIP DOC */
-    name := $7.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowTableStats{Table: name, UsingJSON: true}
+    $$.val = &tree.ShowTableStats{Table: $7.unresolvedObjectName(), UsingJSON: true}
   }
 | SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
 
