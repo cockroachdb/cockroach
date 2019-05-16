@@ -94,8 +94,11 @@ func makeRenameTable(s *scope) (tree.Statement, bool) {
 	}
 
 	return &tree.RenameTable{
-		Name:    *tableRef.TableName,
-		NewName: tree.MakeUnqualifiedTableName(s.schema.name("tab")),
+		Name: tableRef.TableName.ToUnresolvedObjectName(),
+		NewName: &tree.UnresolvedObjectName{
+			NumParts: 1,
+			Parts:    [3]string{string(s.schema.name("tab"))},
+		},
 	}, true
 }
 

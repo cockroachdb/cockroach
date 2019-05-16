@@ -611,7 +611,7 @@ func (m *pgDumpReader) readFile(
 			if err != nil {
 				break
 			}
-			seq := m.descs[name.Table()]
+			seq := m.descs[name.Parts[0]]
 			if seq == nil {
 				break
 			}
