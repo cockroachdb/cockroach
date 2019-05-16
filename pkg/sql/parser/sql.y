@@ -3654,8 +3654,7 @@ show_fingerprints_stmt:
   SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
   {
     /* SKIP DOC */
-    name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowFingerprints{Table: name}
+    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
   }
 
 opt_on_targets_roles:
