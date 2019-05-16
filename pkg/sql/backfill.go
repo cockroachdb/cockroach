@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -125,8 +126,8 @@ func (sc *SchemaChanger) runBackfill(
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexSpans []roachpb.Span
 
-	var addedChecks []*sqlbase.TableDescriptor_CheckConstraint
-	var checksToValidate []sqlbase.ConstraintToUpdate
+	var constraintsToAdd []sqlbase.ConstraintToUpdate
+	var constraintsToValidate []sqlbase.ConstraintToUpdate
 
 	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
 	if err != nil {
@@ -157,14 +158,8 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Index:
 				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(t.Index.ID))
 			case *sqlbase.DescriptorMutation_Constraint:
-				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK:
-					addedChecks = append(addedChecks, &t.Constraint.Check)
-					checksToValidate = append(checksToValidate, *t.Constraint)
-				default:
-					return pgerror.AssertionFailedf(
-						"unsupported constraint type: %d", log.Safe(t.Constraint.ConstraintType))
-				}
+				constraintsToAdd = append(constraintsToAdd, *t.Constraint)
+				constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 			default:
 				return pgerror.AssertionFailedf(
 					"unsupported mutation: %+v", m)
@@ -216,7 +211,7 @@ func (sc *SchemaChanger) runBackfill(
 		}
 	}
 
-	// Add check constraints, publish the new version of the table descriptor,
+	// Add check and foreign key constraints, publish the new version of the table descriptor,
 	// and wait until the entire cluster is on the new version. This is basically
 	// a state transition for the schema change, which must happen after the
 	// columns are backfilled and before constraint validation begins. This
@@ -225,44 +220,63 @@ func (sc *SchemaChanger) runBackfill(
 	// a constraint references both public and non-public columns), and 2) the
 	// validation occurs only when the entire cluster is already enforcing the
 	// constraint on insert/update.
-	if len(addedChecks) > 0 {
-		if err := sc.addChecks(ctx, addedChecks); err != nil {
+	if len(constraintsToAdd) > 0 {
+		if err := sc.AddConstraints(ctx, constraintsToAdd); err != nil {
 			return err
 		}
 	}
 
-	// Validate check constraints.
-	if len(checksToValidate) > 0 {
-		if err := sc.validateChecks(ctx, evalCtx, lease, checksToValidate); err != nil {
+	// Validate check and foreign key constraints.
+	if len(constraintsToValidate) > 0 {
+		if err := sc.validateConstraints(ctx, evalCtx, lease, constraintsToValidate); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// addChecks publishes a new version of the given table descriptor with the
+// AddConstraints publishes a new version of the given table descriptor with the
 // given check constraint added to it, and waits until the entire cluster is on
 // the new version of the table descriptor.
-func (sc *SchemaChanger) addChecks(
-	ctx context.Context, addedChecks []*sqlbase.TableDescriptor_CheckConstraint,
+func (sc *SchemaChanger) AddConstraints(
+	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
 ) error {
 	_, err := sc.leaseMgr.Publish(ctx, sc.tableID,
 		func(desc *sqlbase.MutableTableDescriptor) error {
-			for i, added := range addedChecks {
-				found := false
-				for _, c := range desc.Checks {
-					if c.Name == added.Name {
-						log.VEventf(
-							ctx, 2,
-							"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
-							added, c,
-						)
-						found = true
-						break
+			for i, added := range constraints {
+				switch added.ConstraintType {
+				case sqlbase.ConstraintToUpdate_CHECK:
+					found := false
+					for _, c := range desc.Checks {
+						if c.Name == added.Name {
+							log.VEventf(
+								ctx, 2,
+								"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
+								added, c,
+							)
+							found = true
+							break
+						}
 					}
-				}
-				if !found {
-					desc.Checks = append(desc.Checks, addedChecks[i])
+					if !found {
+						desc.Checks = append(desc.Checks, &constraints[i].Check)
+					}
+				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+					idx, err := desc.FindIndexByID(added.ForeignKeyIndex)
+					if err != nil {
+						return err
+					}
+					if idx.ForeignKey.IsSet() {
+						if log.V(2) {
+							log.VEventf(
+								ctx, 2,
+								"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
+								added, idx.ForeignKey,
+							)
+						}
+					} else {
+						idx.ForeignKey = added.ForeignKey
+					}
 				}
 			}
 			return nil
@@ -275,11 +289,11 @@ func (sc *SchemaChanger) addChecks(
 	return sc.waitToUpdateLeases(ctx, sc.tableID)
 }
 
-func (sc *SchemaChanger) validateChecks(
+func (sc *SchemaChanger) validateConstraints(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	checks []sqlbase.ConstraintToUpdate,
+	constraints []sqlbase.ConstraintToUpdate,
 ) error {
 	if testDisableTableLeases {
 		return nil
@@ -311,10 +325,10 @@ func (sc *SchemaChanger) validateChecks(
 		grp := ctxgroup.WithContext(ctx)
 
 		// Notify when validation is finished (or has returned an error) for a check.
-		countDone := make(chan struct{}, len(checks))
+		countDone := make(chan struct{}, len(constraints))
 
-		for i := range checks {
-			c := checks[i]
+		for i := range constraints {
+			c := constraints[i]
 			grp.GoCtx(func(ctx context.Context) error {
 				defer func() { countDone <- struct{}{} }()
 
@@ -333,13 +347,25 @@ func (sc *SchemaChanger) validateChecks(
 				// Create a new eval context only because the eval context cannot be shared across many
 				// goroutines.
 				newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.ieFactory)
-				return validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, &c.Name)
+				switch c.ConstraintType {
+				case sqlbase.ConstraintToUpdate_CHECK:
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Name); err != nil {
+						return err
+					}
+				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+					if err := validateFkInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Name); err != nil {
+						return err
+					}
+				default:
+					return errors.Errorf("unsupported constraint type: %d", c.ConstraintType)
+				}
+				return nil
 			})
 		}
 
 		// Periodic schema change lease extension.
 		grp.GoCtx(func(ctx context.Context) error {
-			count := len(checks)
+			count := len(constraints)
 			refreshTimer := timeutil.NewTimer()
 			defer refreshTimer.Stop()
 			refreshTimer.Reset(checkpointInterval)
@@ -1114,7 +1140,7 @@ func runSchemaChangesInTxn(
 	// all column mutations.
 	doneColumnBackfill := false
 	// Checks are validated after all other mutations have been applied.
-	var checksToValidate []sqlbase.ConstraintToUpdate
+	var constraintsToValidate []sqlbase.ConstraintToUpdate
 
 	for _, m := range tableDesc.Mutations {
 		immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc.TableDesc())
@@ -1139,11 +1165,17 @@ func runSchemaChangesInTxn(
 				switch t.Constraint.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
 					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
-					checksToValidate = append(checksToValidate, *t.Constraint)
+				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+					idx, err := tableDesc.FindIndexByID(t.Constraint.ForeignKeyIndex)
+					if err != nil {
+						return err
+					}
+					idx.ForeignKey = t.Constraint.ForeignKey
 				default:
 					return pgerror.AssertionFailedf(
 						"unsupported constraint type: %d", log.Safe(t.Constraint.ConstraintType))
 				}
+				constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 
 			default:
 				return pgerror.AssertionFailedf(
@@ -1184,42 +1216,124 @@ func runSchemaChangesInTxn(
 
 	// Now that the table descriptor is in a valid state with all column and index
 	// mutations applied, it can be used for validating check constraints
-	for _, c := range checksToValidate {
-		if err := validateCheckInTxn(ctx, tc.leaseMgr, evalCtx, tableDesc, txn, &c.Name); err != nil {
-			return err
+	for _, c := range constraintsToValidate {
+		switch c.ConstraintType {
+		case sqlbase.ConstraintToUpdate_CHECK:
+			if err := validateCheckInTxn(ctx, tc.leaseMgr, evalCtx, tableDesc, txn, c.Name); err != nil {
+				return err
+			}
+		case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+			// We can't support adding a validated foreign key constraint in the same
+			// transaction as the CREATE TABLE statement. This would require adding
+			// the backreference to the other table and then validating the constraint
+			// for whatever rows were inserted into the referencing table in this
+			// transaction, which requires multiple schema changer states across
+			// multiple transactions.
+			// TODO (lucy): Add a validation job that runs after the user transaction.
+			// This won't roll back the original transaction if validation fails, but
+			// it will at least leave the constraint in the Validated state if
+			// validation succeeds.
+
+			// For now, revert the constraint to an unvalidated state.
+			idx, err := tableDesc.FindIndexByID(c.ForeignKeyIndex)
+			if err != nil {
+				return err
+			}
+			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
+		default:
+			return pgerror.AssertionFailedf(
+				"unsupported constraint type: %d", log.Safe(c.ConstraintType))
 		}
 	}
 	return nil
 }
 
 // validateCheckInTxn validates check constraints within the provided
-// transaction. The table descriptor that is passed in will be used for the
-// InternalExecutor that performs the validation query.
+// transaction. If the provided table descriptor version is newer than the
+// cluster version, it will be used in the InternalExecutor that performs the
+// validation query.
+// TODO (lucy): The special case where the table descriptor version is the same
+// as the cluster version only happens because the query in VALIDATE CONSTRAINT
+// still runs in the user transaction instead of a step in the schema changer.
+// When that's no longer true, this function should be updated.
 func validateCheckInTxn(
 	ctx context.Context,
 	leaseMgr *LeaseManager,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
 	txn *client.Txn,
-	checkName *string,
+	checkName string,
 ) error {
-	newTc := &TableCollection{leaseMgr: leaseMgr}
-	// pretend that the schema has been modified.
-	if err := newTc.addUncommittedTable(*tableDesc); err != nil {
-		return err
+	ie := evalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
+	if tableDesc.Version > tableDesc.ClusterVersion.Version {
+		newTc := &TableCollection{leaseMgr: leaseMgr}
+		// pretend that the schema has been modified.
+		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
+			return err
+		}
+
+		ie.impl.tcModifier = newTc
+		defer func() {
+			ie.impl.tcModifier = nil
+		}()
 	}
 
-	ie := evalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
-	ie.impl.tcModifier = newTc
-	defer func() {
-		ie.impl.tcModifier = nil
-	}()
-
-	check, err := tableDesc.FindCheckByName(*checkName)
+	check, err := tableDesc.FindCheckByName(checkName)
 	if err != nil {
 		return err
 	}
 	return validateCheckExpr(ctx, check.Expr, tableDesc.TableDesc(), ie, txn)
+}
+
+// validateFkInTxn validates foreign key constraints within the provided
+// transaction. If the provided table descriptor version is newer than the
+// cluster version, it will be used in the InternalExecutor that performs the
+// validation query.
+// TODO (lucy): The special case where the table descriptor version is the same
+// as the cluster version only happens because the query in VALIDATE CONSTRAINT
+// still runs in the user transaction instead of a step in the schema changer.
+// When that's no longer true, this function should be updated.
+func validateFkInTxn(
+	ctx context.Context,
+	leaseMgr *LeaseManager,
+	evalCtx *tree.EvalContext,
+	tableDesc *MutableTableDescriptor,
+	txn *client.Txn,
+	fkName string,
+) error {
+	ie := evalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
+	if tableDesc.Version > tableDesc.ClusterVersion.Version {
+		newTc := &TableCollection{leaseMgr: leaseMgr}
+		// pretend that the schema has been modified.
+		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
+			return err
+		}
+
+		ie.impl.tcModifier = newTc
+		defer func() {
+			ie.impl.tcModifier = nil
+		}()
+	}
+
+	var fkIdx *sqlbase.IndexDescriptor
+	if tableDesc.PrimaryIndex.ForeignKey.IsSet() && tableDesc.PrimaryIndex.ForeignKey.Name == fkName {
+		fkIdx = &tableDesc.PrimaryIndex
+	} else {
+		found := false
+		for i := range tableDesc.Indexes {
+			idx := &tableDesc.Indexes[i]
+			if idx.ForeignKey.IsSet() && idx.ForeignKey.Name == fkName {
+				fkIdx = idx
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("foreign key %s does not exist", fkName)
+		}
+	}
+
+	return validateForeignKey(ctx, tableDesc.TableDesc(), fkIdx, ie, txn)
 }
 
 // columnBackfillInTxn backfills columns for all mutation columns in
