@@ -31,7 +31,7 @@ const (
 
 func bigInitialData(meta workload.Meta) bool {
 	switch meta.Name {
-	case `tpcc`, `tpch`:
+	case `tpcc`, `tpch`, `tpcds`:
 		return true
 	default:
 		return false
