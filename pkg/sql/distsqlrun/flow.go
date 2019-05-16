@@ -148,6 +148,12 @@ type startable interface {
 	start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc)
 }
 
+type startableFn func(context.Context, *sync.WaitGroup, context.CancelFunc)
+
+func (f startableFn) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
+	f(ctx, wg, ctxCancel)
+}
+
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
 	FlowCtx
@@ -213,6 +219,19 @@ func newFlow(
 	return f
 }
 
+// checkInboundStreamID takes a stream id and returns an error if an inbound
+// stream already exists with that ID in the inbound streams map, creating the
+// inbound streams map if it is nil.
+func (f *Flow) checkInboundStreamID(sid distsqlpb.StreamID) error {
+	if _, found := f.inboundStreams[sid]; found {
+		return errors.Errorf("inbound stream %d already exists in map", sid)
+	}
+	if f.inboundStreams == nil {
+		f.inboundStreams = make(map[distsqlpb.StreamID]*inboundStreamInfo)
+	}
+	return nil
+}
+
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
 func (f *Flow) setupInboundStream(
@@ -224,11 +243,8 @@ func (f *Flow) setupInboundStream(
 		return errors.Errorf("inbound stream of type SYNC_RESPONSE")
 
 	case distsqlpb.StreamEndpointSpec_REMOTE:
-		if _, found := f.inboundStreams[sid]; found {
-			return errors.Errorf("inbound stream %d has multiple consumers", sid)
-		}
-		if f.inboundStreams == nil {
-			f.inboundStreams = make(map[distsqlpb.StreamID]*inboundStreamInfo)
+		if err := f.checkInboundStreamID(sid); err != nil {
+			return err
 		}
 		if log.V(2) {
 			log.Infof(ctx, "set up inbound stream %d", sid)
@@ -483,19 +499,18 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
-	// First step: setup the input synchronizers for all processors.
-	inputSyncs, err := f.setupInputSyncs(ctx)
-	if err != nil {
-		return err
-	}
-
 	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
 		err := f.setupVectorized(ctx)
 		if err == nil {
 			log.VEventf(ctx, 1, "vectorized flow.")
 			return nil
 		}
-		// Vectorization attempt failed with an error.
+		// Vectorization attempt failed with an error. Reset state to be used by
+		// the row execution branch.
+		f.processors = nil
+		f.inboundStreams = nil
+		f.startables = nil
+
 		if f.EvalCtx.SessionData.Vectorize == sessiondata.VectorizeAlways {
 			// Only return the error if we are running a local planNode that is an
 			// exception to the rule that failures to set up a vectorized flow when
@@ -516,6 +531,12 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 			}
 		}
 		log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+	}
+
+	// First step: setup the input synchronizers for all processors.
+	inputSyncs, err := f.setupInputSyncs(ctx)
+	if err != nil {
+		return err
 	}
 
 	// Then, populate f.processors.
