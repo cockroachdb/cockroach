@@ -149,7 +149,9 @@ type Table struct {
 	// <name>` prefix omitted.
 	Schema string
 	// InitialRows is the initial rows that will be present in the table after
-	// setup is completed.
+	// setup is completed. Note that the default value of NumBatches (zero) is
+	// special - such a Table will be skipped during `init`; non-zero NumBatches
+	// with a nil FillBatch function will trigger an error during `init`.
 	InitialRows BatchedTuples
 	// Splits is the initial splits that will be present in the table after
 	// setup is completed.
