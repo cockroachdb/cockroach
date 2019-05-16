@@ -1,0 +1,72 @@
+# LogicTest: 5node-dist-vec
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+
+statement ok
+INSERT INTO kv SELECT i, i FROM generate_series(1,5) AS g(i)
+
+statement ok
+CREATE TABLE kw (k INT PRIMARY KEY, w INT)
+
+statement ok
+INSERT INTO kw SELECT i, i FROM generate_series(1,5) AS g(i)
+
+# Split into 5 parts, each row from each table goes to one node.
+statement ok
+ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i)
+
+statement ok
+ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i)
+
+statement ok
+ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
+
+statement ok
+ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
+
+# Verify data placement.
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE kv]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {1}       1
+/2         /3       {2}       2
+/3         /4       {3}       3
+/4         /5       {4}       4
+/5         NULL     {5}       5
+
+# Verify data placement.
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE kw]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {5}       5
+/1         /2       {1}       1
+/2         /3       {2}       2
+/3         /4       {3}       3
+/4         /5       {4}       4
+/5         NULL     {5}       5
+
+# Verify EXPLAIN ANALYZE works in a distributed setting.
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT COUNT(*) FROM kv]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzclkGL2zAQhe_9FWZOW5Bry3ayWZ229JRDk5Jk6aGYRWsPrqljGUledlny34vtQh3TSoLQFHzUKC_vzegLmTeoRY4bfkQF7BtQIBABgRgIJEBgASmBRooMlRKy-8ggWOcvwEICZd20uiunBDIhEdgb6FJXCAwO_KnCHfIcZRACgRw1L6veppHlkcvX-x_PQGDf8Foxzw86422rmbcRNQKBJ66z76g80eqmK3fhdNtUk5LCCjNdPpf6lXnhh7DzUppXlafLIzIvVJCeCAySX1mV5gUCoyfi3s_HopBYcC1ksDhv59P2YXN43G2_7m_eX5YbXzBrdSlqe_bor9l_R25rIXOUmJ_lTU_m7ujktfYPnx_Xm8PNPb1ed_FZd9SdNGonLYj8IP5nrF2fW8t0Ri-7vCK3_-d3ELmTEjmQEvtBMiNSLNMZkXI7e1Jid1JiB1ISv_9XmAsplumMSFnNnpTEnZTEgZSFPyNOLLMZcXI3e04s--MOVSNqhZNd7M_fHHY7GuYFDgudEq3M8IsUWW8zHLe9ri_kqPRwS4fDuh6uuoBjMTWKozMxnYojs7PFOjaqE7M4uST3wihemp2XlzjfGsUrs_PqEuc781uFFkzMkE2909O7nwEAAP__JverUg==
+
+# Verify execution.
+statement ok
+SET experimental_vectorize = always;
+
+query I rowsort
+SELECT kv.k FROM kv JOIN kw ON kv.k = kw.k
+----
+1
+2
+3
+4
+5
+
+statement ok
+RESET experimental_vectorize;

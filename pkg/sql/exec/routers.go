@@ -261,10 +261,10 @@ type hashRouter struct {
 	}
 }
 
-// newHashRouter creates a new hash router that consumes coldata.Batches from
+// NewHashRouter creates a new hash router that consumes coldata.Batches from
 // input and hashes each row according to hashCols to one of numOutputs outputs.
 // These outputs are exposed as Operators.
-func newHashRouter(
+func NewHashRouter(
 	input Operator, types []types.T, hashCols []int, numOutputs int,
 ) (*hashRouter, []Operator) {
 	outputs := make([]routerOutput, numOutputs)
@@ -307,7 +307,7 @@ func newHashRouterWithOutputs(
 	return r
 }
 
-func (r *hashRouter) run(ctx context.Context) {
+func (r *hashRouter) Run(ctx context.Context) {
 	r.input.Init()
 	cancelOutputs := func() {
 		for _, o := range r.outputs {

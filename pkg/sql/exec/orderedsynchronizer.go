@@ -39,6 +39,17 @@ type orderedSynchronizer struct {
 	output      coldata.Batch
 }
 
+// NewOrderedSynchronizer creates a new OrderedSynchronizer.
+func NewOrderedSynchronizer(
+	inputs []Operator, typs []types.T, ordering sqlbase.ColumnOrdering,
+) *orderedSynchronizer {
+	return &orderedSynchronizer{
+		inputs:      inputs,
+		ordering:    ordering,
+		columnTypes: typs,
+	}
+}
+
 func (o *orderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if o.inputBatches == nil {
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
