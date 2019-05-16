@@ -2392,6 +2392,18 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return err
 				}
 				idx.ForeignKey.Validity = ConstraintValidity_Validated
+			case ConstraintToUpdate_NOT_NULL:
+				// Remove the dummy check constraint that was in place during validation
+				for i, c := range desc.Checks {
+					if c.Name == t.Constraint.Check.Name {
+						desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
+					}
+				}
+				col, err := desc.FindColumnByID(t.Constraint.NotNullColumn)
+				if err != nil {
+					return err
+				}
+				col.Nullable = false
 			default:
 				return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
 			}
@@ -2434,6 +2446,28 @@ func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(
 				Name:            fk.Name,
 				ForeignKey:      *fk,
 				ForeignKeyIndex: idx,
+			},
+		},
+		Direction: DescriptorMutation_ADD,
+	}
+	desc.addMutation(m)
+}
+
+// AddNotNullValidationMutation adds a not null constraint validation mutation to desc.Mutations.
+func (desc *MutableTableDescriptor) AddNotNullValidationMutation(name string, c ColumnID) {
+	// TODO (lucy): generate this constraint properly, as in MakeCheckConstraint
+	ck := TableDescriptor_CheckConstraint{
+		Name: fmt.Sprintf("%s_not_null", name),
+		Expr: fmt.Sprintf("%s IS NOT NULL", name),
+		Validity: ConstraintValidity_Validating,
+		ColumnIDs: []ColumnID{c},
+	}
+	m := DescriptorMutation{
+		Descriptor_: &DescriptorMutation_Constraint{
+			Constraint: &ConstraintToUpdate{
+				ConstraintType: ConstraintToUpdate_NOT_NULL,
+				NotNullColumn: c,
+				Check: ck,
 			},
 		},
 		Direction: DescriptorMutation_ADD,
@@ -2493,7 +2527,7 @@ func (desc *MutableTableDescriptor) addMutation(m DescriptorMutation) {
 // This is super valuable when trying to run SQL over data associated
 // with a schema mutation that is still not yet public: Data validation,
 // error reporting.
-func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic() (*MutableTableDescriptor, error) {
+func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic(includeConstraints bool) (*MutableTableDescriptor, error) {
 	// Clone the ImmutableTable descriptor because we want to create an Immutable one.
 	table := NewMutableExistingTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*TableDescriptor))
 	mutationID := desc.Mutations[0].MutationID
@@ -2504,8 +2538,10 @@ func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic() (*MutableTableDe
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		if err := table.MakeMutationComplete(mutation); err != nil {
-			return nil, err
+		if includeConstraints || mutation.GetConstraint() == nil {
+			if err := table.MakeMutationComplete(mutation); err != nil {
+				return nil, err
+			}
 		}
 		i++
 	}

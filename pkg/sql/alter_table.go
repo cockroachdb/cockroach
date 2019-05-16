@@ -287,6 +287,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"unsupported constraint: %T", t.ConstraintDef)
 			}
 
+		case *tree.AlterTableSetNotNull:
+			col, dropped, err := n.tableDesc.FindColumnByName(t.Column)
+			if err != nil {
+				return err
+			}
+			if dropped {
+				return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
+					"column %q in the middle of being dropped", t.Column)
+			}
+			n.tableDesc.AddNotNullValidationMutation(string(t.Column), col.ID)
+
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {
 				return pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will remove all data in that column")

@@ -1442,9 +1442,9 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 	ctx context.Context, desc *MutableTableDescriptor, constraint *sqlbase.ConstraintToUpdate,
 ) error {
 	switch constraint.ConstraintType {
-	case sqlbase.ConstraintToUpdate_CHECK:
+	case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 		for j, c := range desc.Checks {
-			if c.Name == constraint.Name {
+			if c.Name == constraint.Check.Name {
 				desc.Checks = append(desc.Checks[:j], desc.Checks[j+1:]...)
 				return nil
 			}
@@ -1453,7 +1453,7 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			log.Infof(
 				ctx,
 				"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
-				constraint.Name,
+				constraint.Check.Name,
 			)
 		}
 	case sqlbase.ConstraintToUpdate_FOREIGN_KEY:

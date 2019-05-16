@@ -896,3 +896,27 @@ ALTER TABLE t32917_2 ADD CONSTRAINT fk_c_a FOREIGN KEY (c) references t32917 (a)
 
 statement ok
 ROLLBACK
+
+# Test SET NOT NULL
+# TODO (lucy): add more tests
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (1), (NULL)
+
+statement error validation of CHECK "a IS NOT NULL" failed on row: a=NULL
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement ok
+DELETE FROM t WHERE a IS NULL
+
+statement ok
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement error null value in column "a" violates not-null constraint
+INSERT INTO t VALUES (NULL)
+
+statement ok
+DROP TABLE t

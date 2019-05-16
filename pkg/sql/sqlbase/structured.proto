@@ -342,12 +342,14 @@ message ConstraintToUpdate {
   enum ConstraintType {
     CHECK = 0;
     FOREIGN_KEY = 1;
+    NOT_NULL = 2;
   }
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
   optional TableDescriptor.CheckConstraint check = 3 [(gogoproto.nullable) = false];
   optional ForeignKeyReference foreign_key = 4 [(gogoproto.nullable) = false];
   optional uint32 foreign_key_index = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
 }
 
 // A DescriptorMutation represents a column or an index that

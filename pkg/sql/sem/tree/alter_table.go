@@ -61,6 +61,7 @@ func (*AlterTableDropColumn) alterTableCmd()         {}
 func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
 func (*AlterTableDropStored) alterTableCmd()         {}
+func (*AlterTableSetNotNull) alterTableCmd()         {}
 func (*AlterTableRenameColumn) alterTableCmd()       {}
 func (*AlterTableRenameConstraint) alterTableCmd()   {}
 func (*AlterTableRenameTable) alterTableCmd()        {}
@@ -77,6 +78,7 @@ var _ AlterTableCmd = &AlterTableDropColumn{}
 var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
 var _ AlterTableCmd = &AlterTableDropStored{}
+var _ AlterTableCmd = &AlterTableSetNotNull{}
 var _ AlterTableCmd = &AlterTableRenameColumn{}
 var _ AlterTableCmd = &AlterTableRenameConstraint{}
 var _ AlterTableCmd = &AlterTableRenameTable{}
@@ -317,6 +319,19 @@ func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
 		ctx.WriteString(" SET DEFAULT ")
 		ctx.FormatNode(node.Default)
 	}
+}
+
+// AlterTableSetNotNull represents an ALTER COLUMN SET NOT NULL
+// command.
+type AlterTableSetNotNull struct {
+	Column Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetNotNull) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	ctx.WriteString(" SET NOT NULL")
 }
 
 // AlterTableDropNotNull represents an ALTER COLUMN DROP NOT NULL

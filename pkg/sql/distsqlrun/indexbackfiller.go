@@ -113,7 +113,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 		return orig
 	}
 
-	desc, err := ib.desc.MakeFirstMutationPublic()
+	desc, err := ib.desc.MakeFirstMutationPublic(true)
 	immutable := sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
 	if err != nil {
 		return err
