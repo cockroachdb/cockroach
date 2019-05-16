@@ -2835,10 +2835,9 @@ scrub_database_stmt:
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE table_name opt_as_of_clause opt_scrub_options_clause
   {
-    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.Scrub{
       Typ: tree.ScrubTable,
-      Table: name,
+      Table: $4.unresolvedObjectName(),
       AsOf: $5.asOfClause(),
       Options: $6.scrubOptions(),
     }

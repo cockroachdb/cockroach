@@ -156,7 +156,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	var err error
 	switch t := n.Table.(type) {
 	case *tree.UnresolvedObjectName:
-		tableDesc, err = n.p.ResolveExistingObjectEx(ctx, n.p, t, true /*required*/, ResolveRequireTableDesc)
+		tableDesc, err = n.p.ResolveExistingObjectEx(ctx, t, true /*required*/, ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}
