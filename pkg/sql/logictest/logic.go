@@ -432,6 +432,7 @@ var logicTestConfigs = []testClusterConfig{
 		distSQLUseDisk: true, skipShort: true},
 	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
 	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
+	{name: "5node-dist-vec", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off", overrideExpVectorize: "on", overrideAutoStats: "false"},
 	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
 	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "on", distSQLMetadataTestEnabled: true,
 		skipShort: true, overrideOptimizerMode: "off"},

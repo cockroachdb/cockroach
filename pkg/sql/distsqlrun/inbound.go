@@ -52,8 +52,7 @@ func (s vectorizedInboundStreamStrategy) run(
 }
 
 func (s vectorizedInboundStreamStrategy) timeout(_ error) {
-	// TODO(asubiotto): We should probably add a cancellation strategy to the
-	//  inbox.
+	// TODO(asubiotto): We need to add a cancellation strategy to the inbox.
 }
 
 type rowInboundStreamStrategy struct {
