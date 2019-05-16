@@ -668,7 +668,7 @@ func (p *planner) ResolveUncachedTableDescriptorEx(
 	requiredType ResolveRequiredType,
 ) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		table, err = p.ResolveExistingObjectEx(ctx, p, name, required, requiredType)
+		table, err = p.ResolveExistingObjectEx(ctx, name, required, requiredType)
 	})
 	return table, err
 }
@@ -676,13 +676,12 @@ func (p *planner) ResolveUncachedTableDescriptorEx(
 // See ResolveExistingObject.
 func (p *planner) ResolveExistingObjectEx(
 	ctx context.Context,
-	sc SchemaResolver,
 	name *tree.UnresolvedObjectName,
 	required bool,
 	requiredType ResolveRequiredType,
 ) (res *ImmutableTableDescriptor, err error) {
 	tn := name.ToTableName()
-	desc, err := resolveExistingObjectImpl(ctx, sc, &tn, required, false /* requiredMutable */, requiredType)
+	desc, err := resolveExistingObjectImpl(ctx, p, &tn, required, false /* requiredMutable */, requiredType)
 	if err != nil || desc == nil {
 		return nil, err
 	}
