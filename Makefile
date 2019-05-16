@@ -755,7 +755,8 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/selection_ops.eg.go \
   pkg/sql/exec/sort.eg.go \
   pkg/sql/exec/sum_agg.eg.go \
-  pkg/sql/exec/tuples_differ.eg.go
+  pkg/sql/exec/tuples_differ.eg.go \
+  pkg/sql/exec/vec_comparators.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
