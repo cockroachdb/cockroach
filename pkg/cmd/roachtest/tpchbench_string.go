@@ -10,11 +10,12 @@ func _() {
 	var x [1]struct{}
 	_ = x[sql20-0]
 	_ = x[tpch-1]
+	_ = x[tpch_vec-2]
 }
 
-const _tpchBench_name = "sql20tpch"
+const _tpchBench_name = "sql20tpchtpch_vec"
 
-var _tpchBench_index = [...]uint8{0, 5, 9}
+var _tpchBench_index = [...]uint8{0, 5, 9, 17}
 
 func (i tpchBench) String() string {
 	if i < 0 || i >= tpchBench(len(_tpchBench_index)-1) {
