@@ -31,10 +31,10 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
         AND schema_name = %[5]s
         AND descriptor_name = %[2]s`
 
-	return d.showTableDetails(&n.Name, showCreateQuery)
+	return d.showTableDetails(n.Name, showCreateQuery)
 }
 
-func (d *delegator) delegateShowIndex(n *tree.ShowIndex) (tree.Statement, error) {
+func (d *delegator) delegateShowIndexes(n *tree.ShowIndexes) (tree.Statement, error) {
 	const getIndexesQuery = `
     SELECT table_name,
            index_name,
@@ -47,7 +47,7 @@ func (d *delegator) delegateShowIndex(n *tree.ShowIndex) (tree.Statement, error)
     FROM %[4]s.information_schema.statistics
     WHERE table_catalog=%[1]s AND table_schema=%[5]s AND table_name=%[2]s`
 
-	return d.showTableDetails(&n.Table, getIndexesQuery)
+	return d.showTableDetails(n.Table, getIndexesQuery)
 }
 
 func (d *delegator) delegateShowColumns(n *tree.ShowColumns) (tree.Statement, error) {
@@ -94,7 +94,7 @@ FROM
 	getColumnsQuery += `
 ORDER BY ordinal_position`
 
-	return d.showTableDetails(&n.Table, getColumnsQuery)
+	return d.showTableDetails(n.Table, getColumnsQuery)
 }
 
 func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.Statement, error) {
@@ -120,7 +120,7 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
       AND t.oid = c.conrelid
     ORDER BY 1, 2`
 
-	return d.showTableDetails(&n.Table, getConstraintsQuery)
+	return d.showTableDetails(n.Table, getConstraintsQuery)
 }
 
 // showTableDetails returns the AST of a query which extracts information about
@@ -131,11 +131,14 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
 //   %[3]s the given table name as SQL string literal.
 //   %[4]s the database name as SQL identifier.
 //   %[5]s the schema name as SQL string literal.
-func (d *delegator) showTableDetails(tn *tree.TableName, query string) (tree.Statement, error) {
+func (d *delegator) showTableDetails(
+	name *tree.UnresolvedObjectName, query string,
+) (tree.Statement, error) {
 	// We avoid the cache so that we can observe the details without
 	// taking a lease, like other SHOW commands.
 	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
-	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, tn)
+	tn := name.ToTableName()
+	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, &tn)
 	if err != nil {
 		return nil, err
 	}
