@@ -3287,8 +3287,7 @@ show_csettings_stmt:
 show_columns_stmt:
   SHOW COLUMNS FROM table_name with_comment
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowColumns{Table: name, WithComment: $5.bool()}
+    $$.val = &tree.ShowColumns{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW COLUMNS error // SHOW HELP: SHOW COLUMNS
 
@@ -3331,20 +3330,17 @@ show_grants_stmt:
 show_indexes_stmt:
   SHOW INDEX FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowIndex{Table: name}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
   }
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
 | SHOW INDEXES FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowIndex{Table: name}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowIndex{Table: name}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 
@@ -3355,14 +3351,12 @@ show_indexes_stmt:
 show_constraints_stmt:
   SHOW CONSTRAINT FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowConstraints{Table: name}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
   }
 | SHOW CONSTRAINT error // SHOW HELP: SHOW CONSTRAINTS
 | SHOW CONSTRAINTS FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowConstraints{Table: name}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
   }
 | SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
 
@@ -3551,14 +3545,12 @@ show_transaction_stmt:
 show_create_stmt:
   SHOW CREATE table_name
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowCreate{Name: name}
+    $$.val = &tree.ShowCreate{Name: $3.unresolvedObjectName()}
   }
 | SHOW CREATE create_kw table_name
   {
     /* SKIP DOC */
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowCreate{Name: name}
+    $$.val = &tree.ShowCreate{Name: $4.unresolvedObjectName()}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
