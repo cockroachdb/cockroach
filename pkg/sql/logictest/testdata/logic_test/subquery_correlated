@@ -889,6 +889,41 @@ WY
 NULL
 WA
 
+query ITI colnames
+SELECT
+    *
+FROM
+    (SELECT c_id AS c_c_id, bill FROM c),
+    LATERAL (SELECT row_number() OVER () AS rownum FROM o WHERE c_id = c_c_id)
+ORDER BY c_c_id, bill, rownum
+----
+c_c_id  bill  rownum
+1       CA    1
+1       CA    2
+1       CA    3
+2       TX    1
+2       TX    2
+2       TX    3
+4       TX    1
+4       TX    2
+6       FL    1
+
+query TI colnames rowsort
+SELECT
+    *
+FROM
+    (SELECT bill FROM c),
+    LATERAL (SELECT row_number() OVER (PARTITION BY bill) AS rownum FROM o WHERE ship = bill)
+ORDER BY bill, rownum
+----
+bill  rownum
+CA    1
+CA    2
+CA    3
+CA    4
+TX    1
+TX    1
+
 # ------------------------------------------------------------------------------
 # Subqueries in other interesting locations.
 # ------------------------------------------------------------------------------
