@@ -660,18 +660,34 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 	return table, nil
 }
 
+// See ResolveUncachedTableDescriptor.
 func (p *planner) ResolveUncachedTableDescriptorEx(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,
 	required bool,
 	requiredType ResolveRequiredType,
 ) (table *ImmutableTableDescriptor, err error) {
-	tn := name.ToTableName()
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		table, err = ResolveExistingObject(ctx, p, &tn, required, requiredType)
+		table, err = p.ResolveExistingObjectEx(ctx, p, name, required, requiredType)
 	})
-	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
 	return table, err
+}
+
+// See ResolveExistingObject.
+func (p *planner) ResolveExistingObjectEx(
+	ctx context.Context,
+	sc SchemaResolver,
+	name *tree.UnresolvedObjectName,
+	required bool,
+	requiredType ResolveRequiredType,
+) (res *ImmutableTableDescriptor, err error) {
+	tn := name.ToTableName()
+	desc, err := resolveExistingObjectImpl(ctx, sc, &tn, required, false /* requiredMutable */, requiredType)
+	if err != nil || desc == nil {
+		return nil, err
+	}
+	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
+	return desc.(*ImmutableTableDescriptor), nil
 }
 
 // ResolvedName is a convenience wrapper for UnresolvedObjectName.Resolved.
