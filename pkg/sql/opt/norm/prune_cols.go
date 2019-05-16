@@ -400,6 +400,16 @@ func (c *CustomFuncs) PruneWindows(needed opt.ColSet, windows memo.WindowsExpr) 
 	return result
 }
 
+// AddToPartitionCols unions the given set of columns with a window private's
+// partition columns.
+func (c *CustomFuncs) AddToPartitionCols(
+	priv *memo.WindowPrivate, cols opt.ColSet,
+) *memo.WindowPrivate {
+	cpy := *priv
+	cpy.Partition = cpy.Partition.Union(cols)
+	return &cpy
+}
+
 // DerivePruneCols returns the subset of the given expression's output columns
 // that are candidates for pruning. Each operator has its own custom rule for
 // what columns it allows to be pruned. Note that if an operator allows columns

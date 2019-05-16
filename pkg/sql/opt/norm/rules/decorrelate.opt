@@ -575,6 +575,79 @@
     $on
 )
 
+# TryDecorrelateWindow "pushes down" a Join into a Window operator, in an
+# attempt to keep "digging" down to find and eliminate unnecessary correlation.
+# The eventual hope is to trigger the DecorrelateJoin rule to turn a JoinApply
+# operator into a non-apply Join operator.
+#
+# This rule adds the output columns of the left side of the join to the Window
+# operator's partition cols. This effectively means that each row of the left
+# side of the join is windowed independently, assuming the left side has a key.
+#
+# Sketch of why this rule works (assume x has a key):
+#
+#      (InnerJoinApply x (Window y P) p)
+# 1. = (Select (InnerJoinApply x (Window y P) true) p)
+# 2. = (Select
+#        (Concat {r \in x} {r} \times (Window y P)[r])
+#        p
+#      )
+# 3. = (Select
+#        (Concat {r \in x} {r} \times (Window y[r] P))
+#        p
+#      )
+# 4. = (Select
+#        (Concat {r \in x} (Window {r} \times y[r] P))
+#        p
+#      )
+# 5. = (Select
+#        (Window
+#          (Concat {r \in x} {r} \times y[r])
+#          (Union P (OutputCols x))
+#        )
+#        p
+#      )
+# 6. = (Select
+#        (Window
+#          (InnerJoinApply x y true)
+#          (Union P (OutputCols x))
+#        )
+#        p
+#      )
+#
+# (1) is simply the inverse of MergeSelectInnerJoin.
+# (2) is the definition of Apply from 'Orthogonal Optimization of Subqueries
+#     and Aggregation.'
+# (3) is by the fact that by construction, window functions only refer to
+#     variable references in their input.
+# (4) is because the Window only looks at columns from y[r].
+# (5) is the most subtle. Roughly, since x has a key, partitioning
+#     (Concat {r \in x} r \times y[r]) by r results in exactly one partition
+#     for each row in x, and so partitioning higher up has the same effect as
+#     performing the window function for each row.
+# (6) is again by the definition of Apply.
+[TryDecorrelateWindow, Normalize]
+(InnerJoinApply | InnerJoin
+    $left:*
+    $right:(Window $input:* $windows:* $private:*) & (HasOuterCols $right)
+    $on:*
+    $joinPrivate:*
+)
+=>
+(Select
+    (Window
+        ((OpName)
+            $newLeft:(EnsureKey $left)
+            $input
+            []
+            $joinPrivate
+        )
+        $windows
+        (AddToPartitionCols $private (OutputCols $newLeft))
+    )
+    $on
+)
+
 # HoistSelectExists extracts existential subqueries from Select filters,
 # turning them into semi-joins. This eliminates the subquery, which is often
 # expensive to execute and restricts the optimizer's plan choices.
