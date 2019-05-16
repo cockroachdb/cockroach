@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// orderedSynchronizer receives rows from multiple inputs and produces a single
+// OrderedSynchronizer receives rows from multiple inputs and produces a single
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
-type orderedSynchronizer struct {
+type OrderedSynchronizer struct {
 	inputs      []Operator
 	ordering    sqlbase.ColumnOrdering
 	columnTypes []types.T
@@ -39,7 +39,19 @@ type orderedSynchronizer struct {
 	output      coldata.Batch
 }
 
-func (o *orderedSynchronizer) Next(ctx context.Context) coldata.Batch {
+// NewOrderedSynchronizer creates a new OrderedSynchronizer.
+func NewOrderedSynchronizer(
+	inputs []Operator, typs []types.T, ordering sqlbase.ColumnOrdering,
+) *OrderedSynchronizer {
+	return &OrderedSynchronizer{
+		inputs:      inputs,
+		ordering:    ordering,
+		columnTypes: typs,
+	}
+}
+
+// Next is part of the Operator interface.
+func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if o.inputBatches == nil {
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
 		for i := range o.inputs {
@@ -92,7 +104,8 @@ func (o *orderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	return o.output
 }
 
-func (o *orderedSynchronizer) Init() {
+// Init is part of the Operator interface.
+func (o *OrderedSynchronizer) Init() {
 	o.inputIndices = make([]uint16, len(o.inputs))
 	o.output = coldata.NewMemBatch(o.columnTypes)
 	for i := range o.inputs {
@@ -105,7 +118,7 @@ func (o *orderedSynchronizer) Init() {
 	}
 }
 
-func (o *orderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
+func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 	batch1 := o.inputBatches[batchIdx1]
 	batch2 := o.inputBatches[batchIdx2]
 	valIdx1 := o.inputIndices[batchIdx1]
@@ -135,7 +148,7 @@ func (o *orderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 
 // updateComparators should be run whenever a new batch is fetched. It updates
 // all the relevant vectors in o.comparators.
-func (o *orderedSynchronizer) updateComparators(batchIdx int) {
+func (o *OrderedSynchronizer) updateComparators(batchIdx int) {
 	batch := o.inputBatches[batchIdx]
 	if batch.Length() == 0 {
 		return
