@@ -128,10 +128,14 @@ func (r *Replica) maybeBackpressureWriteBatch(ctx context.Context, ba roachpb.Ba
 		// Wait for the callback to be called.
 		select {
 		case <-ctx.Done():
-			return errors.Wrap(ctx.Err(), "aborted while applying backpressure")
+			return errors.Wrapf(
+				ctx.Err(), "aborted while applying backpressure to %s on range %s", ba, r.Desc(),
+			)
 		case err := <-splitC:
 			if err != nil {
-				return errors.Wrap(err, "split failed while applying backpressure")
+				return errors.Wrapf(
+					err, "split failed while applying backpressure to %s on range %s", ba, r.Desc(),
+				)
 			}
 		}
 	}
