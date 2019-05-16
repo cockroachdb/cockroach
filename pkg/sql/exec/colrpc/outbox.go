@@ -76,10 +76,6 @@ func NewOutbox(
 	return o, nil
 }
 
-// Get rid of unused warning.
-// TODO(asubiotto): Remove this once Outbox is used.
-var _ = (&Outbox{}).Run
-
 // Run starts an outbox by connecting to the provided node and pushing
 // coldata.Batches over the stream after sending a header with the provided flow
 // and stream ID. Note that an extra goroutine is spawned so that Recv may be
@@ -107,9 +103,6 @@ func (o *Outbox) Run(
 	cancelFn context.CancelFunc,
 ) {
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
 	conn, err := dialer.Dial(ctx, nodeID)

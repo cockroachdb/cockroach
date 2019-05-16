@@ -523,7 +523,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	t.Run("BeforeRun", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		r.run(ctx)
+		r.Run(ctx)
 
 		if numCancels != int64(len(outputs)) {
 			t.Fatalf("expected %d canceled outputs, actual %d", len(outputs), numCancels)
@@ -564,7 +564,7 @@ func TestHashRouterCancellation(t *testing.T) {
 
 			doneCh := make(chan struct{})
 			go func() {
-				r.run(ctx)
+				r.Run(ctx)
 				close(doneCh)
 			}()
 
@@ -601,7 +601,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	data, _ := getDataAndFullSelection()
 	typs := []types.T{types.Int64}
 
-	r, routerOutputs := newHashRouter(
+	r, routerOutputs := NewHashRouter(
 		newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
 	)
 
@@ -619,7 +619,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		r.run(ctx)
+		r.Run(ctx)
 		wg.Done()
 	}()
 
@@ -724,7 +724,7 @@ func TestHashRouterRandom(t *testing.T) {
 			ctx, cancelFunc := context.WithCancel(context.Background())
 			wg.Add(1)
 			go func() {
-				r.run(ctx)
+				r.Run(ctx)
 				wg.Done()
 			}()
 
@@ -780,7 +780,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	for _, numOutputs := range []int{2, 4, 8, 16} {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
-				r, outputs := newHashRouter(input, types, []int{0}, numOutputs)
+				r, outputs := NewHashRouter(input, types, []int{0}, numOutputs)
 				b.SetBytes(8 * coldata.BatchSize * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.
@@ -806,7 +806,7 @@ func BenchmarkHashRouter(b *testing.B) {
 							wg.Done()
 						}(j)
 					}
-					r.run(ctx)
+					r.Run(ctx)
 					wg.Wait()
 					// sum sanity checks that we are actually pushing as many values as we
 					// expect.
