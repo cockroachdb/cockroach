@@ -4834,42 +4834,42 @@ alter_user_password_stmt:
 alter_rename_table_stmt:
   ALTER TABLE relation_expr RENAME TO table_name
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    newName := $6.unresolvedObjectName().ToTableName()
+    name := $3.unresolvedObjectName()
+    newName := $6.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsView: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO table_name
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    newName := $8.unresolvedObjectName().ToTableName()
+    name := $5.unresolvedObjectName()
+    newName := $8.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: false}
   }
 
 alter_rename_view_stmt:
   ALTER VIEW relation_expr RENAME TO view_name
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    newName := $6.unresolvedObjectName().ToTableName()
+    name := $3.unresolvedObjectName()
+    newName := $6.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsView: true}
   }
 | ALTER VIEW IF EXISTS relation_expr RENAME TO view_name
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    newName := $8.unresolvedObjectName().ToTableName()
+    name := $5.unresolvedObjectName()
+    newName := $8.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: true}
   }
 
 alter_rename_sequence_stmt:
   ALTER SEQUENCE relation_expr RENAME TO sequence_name
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    newName := $6.unresolvedObjectName().ToTableName()
+    name := $3.unresolvedObjectName()
+    newName := $6.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsSequence: true}
   }
 | ALTER SEQUENCE IF EXISTS relation_expr RENAME TO sequence_name
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    newName := $8.unresolvedObjectName().ToTableName()
+    name := $5.unresolvedObjectName()
+    newName := $8.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsSequence: true}
   }
 
