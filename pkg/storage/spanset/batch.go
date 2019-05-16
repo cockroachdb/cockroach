@@ -237,6 +237,16 @@ func (s spanSetReader) NewIterator(opts engine.IterOptions) engine.Iterator {
 	return &Iterator{s.r.NewIterator(opts), s.spans, nil, false}
 }
 
+// GetSpanReader is a getter to access the engine.Reader field of the
+// spansetReader.
+func GetSpanReader(r ReadWriter, span roachpb.Span) engine.Reader {
+	if err := r.spanSetReader.spans.CheckAllowed(SpanReadOnly, span); err != nil {
+		panic("Not in the span")
+	}
+
+	return r.spanSetReader.r
+}
+
 type spanSetWriter struct {
 	w     engine.Writer
 	spans *SpanSet
@@ -301,15 +311,16 @@ func (s spanSetWriter) LogLogicalOp(
 	s.w.LogLogicalOp(op, details)
 }
 
-type spanSetReadWriter struct {
+// ReadWriter is used outside of the spanset package internally, in ccl.
+type ReadWriter struct {
 	spanSetReader
 	spanSetWriter
 }
 
-var _ engine.ReadWriter = spanSetReadWriter{}
+var _ engine.ReadWriter = ReadWriter{}
 
-func makeSpanSetReadWriter(rw engine.ReadWriter, spans *SpanSet) spanSetReadWriter {
-	return spanSetReadWriter{
+func makeSpanSetReadWriter(rw engine.ReadWriter, spans *SpanSet) ReadWriter {
+	return ReadWriter{
 		spanSetReader{
 			r:     rw,
 			spans: spans,
@@ -328,7 +339,7 @@ func NewReadWriter(rw engine.ReadWriter, spans *SpanSet) engine.ReadWriter {
 }
 
 type spanSetBatch struct {
-	spanSetReadWriter
+	ReadWriter
 	b     engine.Batch
 	spans *SpanSet
 }
