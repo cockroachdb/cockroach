@@ -498,10 +498,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 			switch constraint.Kind {
 			case sqlbase.ConstraintTypeCheck:
 				found := false
-				var idx int
-				for idx = range n.tableDesc.Checks {
-					if n.tableDesc.Checks[idx].Name == name {
+				var ck *sqlbase.TableDescriptor_CheckConstraint
+				for _, c := range n.tableDesc.Checks {
+					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
+					if c.Name == name && c.Validity != sqlbase.ConstraintValidity_Validating {
 						found = true
+						ck = c
 						break
 					}
 				}
@@ -509,45 +511,42 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
-
-				ck := n.tableDesc.Checks[idx]
-				if err := validateCheckExpr(
-					params.ctx, ck.Expr, n.tableDesc.TableDesc(), params.EvalContext().InternalExecutor, params.EvalContext().Txn,
+				if err := validateCheckInTxn(
+					params.ctx, params.p.LeaseMgr(), params.EvalContext(), n.tableDesc, params.EvalContext().Txn, name,
 				); err != nil {
 					return err
 				}
-				n.tableDesc.Checks[idx].Validity = sqlbase.ConstraintValidity_Validated
-				descriptorChanged = true
+				ck.Validity = sqlbase.ConstraintValidity_Validated
 
 			case sqlbase.ConstraintTypeFK:
 				found := false
-				var id sqlbase.IndexID
+				var fkIdx *sqlbase.IndexDescriptor
 				for _, idx := range n.tableDesc.AllNonDropIndexes() {
-					if idx.ForeignKey.IsSet() && idx.ForeignKey.Name == name {
+					fk := &idx.ForeignKey
+					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
+					if fk.IsSet() && fk.Name == name && fk.Validity != sqlbase.ConstraintValidity_Validating {
 						found = true
-						id = idx.ID
+						fkIdx = idx
 						break
 					}
 				}
 				if !found {
-					return pgerror.AssertionFailedf(
-						"constraint returned by GetConstraintInfo not found")
+					return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
+						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
-				idx, err := n.tableDesc.FindIndexByID(id)
-				if err != nil {
-					return pgerror.NewAssertionErrorWithWrappedErrf(err, "")
-				}
-				if err := params.p.validateForeignKey(params.ctx, n.tableDesc.TableDesc(), idx); err != nil {
+				if err := validateFkInTxn(
+					params.ctx, params.p.LeaseMgr(), params.EvalContext(), n.tableDesc, params.EvalContext().Txn, name,
+				); err != nil {
 					return err
 				}
-				idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
-				descriptorChanged = true
+				fkIdx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
 
 			default:
 				return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
 					"constraint %q of relation %q is not a foreign key or check constraint",
 					tree.ErrString(&t.Constraint), tree.ErrString(n.n.Table))
 			}
+			descriptorChanged = true
 
 		case tree.ColumnMutationCmd:
 			// Column mutations

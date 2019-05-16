@@ -422,16 +422,28 @@ func (p *planner) removeFKBackReference(
 		// The referenced table is being dropped. No need to modify it further.
 		return nil
 	}
-	targetIdx, err := t.FindIndexByID(idx.ForeignKey.Index)
+	if err := removeFKBackReferenceFromTable(t, idx.ForeignKey.Index, tableDesc.ID, idx.ID); err != nil {
+		return err
+	}
+	return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
+}
+
+func removeFKBackReferenceFromTable(
+	targetDesc *sqlbase.MutableTableDescriptor,
+	referencedIdx sqlbase.IndexID,
+	source sqlbase.ID,
+	sourceIdx sqlbase.IndexID,
+) error {
+	targetIdx, err := targetDesc.FindIndexByID(referencedIdx)
 	if err != nil {
 		return err
 	}
 	for k, ref := range targetIdx.ReferencedBy {
-		if ref.Table == tableDesc.ID && ref.Index == idx.ID {
+		if ref.Table == source && ref.Index == sourceIdx {
 			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
 		}
 	}
-	return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
+	return nil
 }
 
 func (p *planner) removeInterleaveBackReference(

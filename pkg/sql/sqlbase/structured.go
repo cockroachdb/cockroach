@@ -601,11 +601,46 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 		}
 	}
 	for _, m := range desc.Mutations {
-		if c := m.GetConstraint(); c != nil {
+		if c := m.GetConstraint(); c != nil && c.ConstraintType == ConstraintToUpdate_CHECK {
 			checks = append(checks, &c.Check)
 		}
 	}
 	return checks
+}
+
+// AllActiveAndInactiveForeignKeys returns all foreign keys, including both
+// "active" ones on the index descriptor which are being enforced for all
+// writes, and "inactive" ones queued in the mutations list. An error is
+// returned if multiple foreign keys (including mutations) are found for the
+// same index.
+func (desc *TableDescriptor) AllActiveAndInactiveForeignKeys() (
+	map[IndexID]*ForeignKeyReference,
+	error,
+) {
+	fks := make(map[IndexID]*ForeignKeyReference)
+	// While a foreign key constraint is being validated for existing rows, the
+	// foreign key reference is present both on the index descriptor and in the
+	// mutations list in the Validating state, so those FKs are excluded here to
+	// avoid double-counting.
+	if desc.PrimaryIndex.ForeignKey.IsSet() && desc.PrimaryIndex.ForeignKey.Validity != ConstraintValidity_Validating {
+		fks[desc.PrimaryIndex.ID] = &desc.PrimaryIndex.ForeignKey
+	}
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.ForeignKey.IsSet() && idx.ForeignKey.Validity != ConstraintValidity_Validating {
+			fks[idx.ID] = &idx.ForeignKey
+		}
+	}
+	for i := range desc.Mutations {
+		if c := desc.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == ConstraintToUpdate_FOREIGN_KEY {
+			if _, ok := fks[c.ForeignKeyIndex]; ok {
+				return nil, pgerror.AssertionFailedf(
+					"foreign key mutation found for index that already has a foreign key")
+			}
+			fks[c.ForeignKeyIndex] = &c.ForeignKey
+		}
+	}
+	return fks, nil
 }
 
 // ForeachNonDropIndex runs a function on all indexes, including those being
@@ -2226,6 +2261,11 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 		return desc.RenameIndexDescriptor(detail.Index, newName)
 
 	case ConstraintTypeFK:
+		if detail.FK.Validity == ConstraintValidity_Validating {
+			return pgerror.Unimplementedf("rename-constraint-fk-mutation",
+				"constraint %q in the middle of being added, try again later",
+				tree.ErrNameStringP(&detail.FK.Name))
+		}
 		idx, err := desc.FindIndexByID(detail.Index.ID)
 		if err != nil {
 			return err
@@ -2346,6 +2386,12 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 						break
 					}
 				}
+			case ConstraintToUpdate_FOREIGN_KEY:
+				idx, err := desc.FindIndexByID(t.Constraint.ForeignKeyIndex)
+				if err != nil {
+					return err
+				}
+				idx.ForeignKey.Validity = ConstraintValidity_Validated
 			default:
 				return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
 			}
@@ -2370,6 +2416,24 @@ func (desc *MutableTableDescriptor) AddCheckValidationMutation(
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
 				ConstraintType: ConstraintToUpdate_CHECK, Name: ck.Name, Check: *ck,
+			},
+		},
+		Direction: DescriptorMutation_ADD,
+	}
+	desc.addMutation(m)
+}
+
+// AddForeignKeyValidationMutation adds a foreign key constraint validation mutation to desc.Mutations.
+func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(
+	fk *ForeignKeyReference, idx IndexID,
+) {
+	m := DescriptorMutation{
+		Descriptor_: &DescriptorMutation_Constraint{
+			Constraint: &ConstraintToUpdate{
+				ConstraintType:  ConstraintToUpdate_FOREIGN_KEY,
+				Name:            fk.Name,
+				ForeignKey:      *fk,
+				ForeignKeyIndex: idx,
 			},
 		},
 		Direction: DescriptorMutation_ADD,
