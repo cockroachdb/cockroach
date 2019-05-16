@@ -283,6 +283,361 @@ inner-join
  └── filters (true)
 
 # --------------------------------------------------
+# TryDecorrelateWindow
+# --------------------------------------------------
+
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    uv,
+    LATERAL (SELECT rank() OVER (), i FROM (SELECT * FROM a WHERE k = u))
+WHERE i = 3
+----
+project
+ ├── columns: u:1(int!null) v:2(int) rank:8(int) i:4(int!null)
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,8)
+ └── select
+      ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int!null) rank:8(int)
+      ├── key: (3)
+      ├── fd: ()-->(4), (1)-->(2), (1)==(3), (3)==(1), (3)-->(8)
+      ├── window partition=(1)
+      │    ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int) rank:8(int)
+      │    ├── key: (3)
+      │    ├── fd: (1)-->(2), (3)-->(4), (1)==(3), (3)==(1)
+      │    ├── inner-join
+      │    │    ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int)
+      │    │    ├── key: (3)
+      │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(3), (3)==(1)
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:1(int!null) v:2(int)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:3(int!null) i:4(int)
+      │    │    │    ├── key: (3)
+      │    │    │    └── fd: (3)-->(4)
+      │    │    └── filters
+      │    │         └── k = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+      │    └── windows
+      │         └── rank [type=undefined]
+      └── filters
+           └── i = 3 [type=bool, outer=(4), constraints=(/4: [/3 - /3]; tight), fd=()-->(4)]
+
+# TryDecorrelateWindow will trigger twice here: first to pull the window above
+# the non-apply join, and then again the pull it above the apply join.
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    uv,
+    LATERAL (
+        SELECT
+            *
+        FROM
+            (SELECT x FROM xy) CROSS JOIN (SELECT ntile(u) OVER (), i FROM a)
+    )
+WHERE
+    i = 3
+----
+project
+ ├── columns: u:1(int!null) v:2(int) x:3(int!null) ntile:10(int) i:6(int!null)
+ ├── fd: ()-->(6), (1)-->(2)
+ └── select
+      ├── columns: u:1(int!null) v:2(int) x:3(int!null) i:6(int!null) ntile:10(int) ntile_1_arg1:11(int)
+      ├── fd: ()-->(6), (1)-->(2,11)
+      ├── window partition=(1,3)
+      │    ├── columns: u:1(int!null) v:2(int) x:3(int!null) i:6(int) ntile:10(int) ntile_1_arg1:11(int)
+      │    ├── fd: (1)-->(2,11)
+      │    ├── project
+      │    │    ├── columns: ntile_1_arg1:11(int) u:1(int!null) v:2(int) x:3(int!null) i:6(int)
+      │    │    ├── fd: (1)-->(2,11)
+      │    │    ├── inner-join
+      │    │    │    ├── columns: u:1(int!null) v:2(int) x:3(int!null) i:6(int)
+      │    │    │    ├── fd: (1)-->(2)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: u:1(int!null) v:2(int)
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    └── fd: (1)-->(2)
+      │    │    │    ├── inner-join
+      │    │    │    │    ├── columns: x:3(int!null) i:6(int)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    ├── columns: x:3(int!null)
+      │    │    │    │    │    └── key: (3)
+      │    │    │    │    ├── scan a
+      │    │    │    │    │    └── columns: i:6(int)
+      │    │    │    │    └── filters (true)
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── variable: u [type=int, outer=(1)]
+      │    └── windows
+      │         └── ntile [type=int, outer=(11)]
+      │              └── variable: ntile_1_arg1 [type=int]
+      └── filters
+           └── i = 3 [type=bool, outer=(6), constraints=(/6: [/3 - /3]; tight), fd=()-->(6)]
+
+# If the LHS has no key, we need to add one, or else identical rows would end up in the same
+# partition.
+
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    (VALUES (1), (1), (1)) AS v (x),
+    LATERAL (SELECT row_number() OVER (), i FROM (SELECT * FROM a WHERE k = x))
+----
+project
+ ├── columns: x:1(int!null) row_number:7(int) i:3(int)
+ ├── fd: (1)-->(3)
+ └── window partition=(8)
+      ├── columns: column1:1(int!null) k:2(int!null) i:3(int) row_number:7(int) rownum:8(int!null)
+      ├── key: (8)
+      ├── fd: (8)-->(1), (2)-->(3), (1)==(2), (2)==(1)
+      ├── inner-join
+      │    ├── columns: column1:1(int!null) k:2(int!null) i:3(int) rownum:8(int!null)
+      │    ├── key: (8)
+      │    ├── fd: (8)-->(1), (2)-->(3), (1)==(2), (2)==(1)
+      │    ├── ordinality
+      │    │    ├── columns: column1:1(int) rownum:8(int!null)
+      │    │    ├── cardinality: [3 - 3]
+      │    │    ├── key: (8)
+      │    │    ├── fd: (8)-->(1)
+      │    │    └── values
+      │    │         ├── columns: column1:1(int)
+      │    │         ├── cardinality: [3 - 3]
+      │    │         ├── (1,) [type=tuple{int}]
+      │    │         ├── (1,) [type=tuple{int}]
+      │    │         └── (1,) [type=tuple{int}]
+      │    ├── scan a
+      │    │    ├── columns: k:2(int!null) i:3(int)
+      │    │    ├── key: (2)
+      │    │    └── fd: (2)-->(3)
+      │    └── filters
+      │         └── k = column1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      └── windows
+           └── row-number [type=undefined]
+
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    (VALUES (1), (1), (1)) AS v (x),
+    LATERAL (SELECT row_number() OVER (ORDER BY i), i FROM (SELECT * FROM a WHERE x > 3))
+----
+project
+ ├── columns: x:1(int!null) row_number:7(int) i:3(int)
+ └── window partition=(8) ordering=+3 opt(1,8)
+      ├── columns: column1:1(int!null) i:3(int) row_number:7(int) rownum:8(int!null)
+      ├── fd: (8)-->(1)
+      ├── inner-join
+      │    ├── columns: column1:1(int!null) i:3(int) rownum:8(int!null)
+      │    ├── fd: (8)-->(1)
+      │    ├── select
+      │    │    ├── columns: column1:1(int!null) rownum:8(int!null)
+      │    │    ├── cardinality: [0 - 3]
+      │    │    ├── key: (8)
+      │    │    ├── fd: (8)-->(1)
+      │    │    ├── ordinality
+      │    │    │    ├── columns: column1:1(int) rownum:8(int!null)
+      │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    ├── key: (8)
+      │    │    │    ├── fd: (8)-->(1)
+      │    │    │    └── values
+      │    │    │         ├── columns: column1:1(int)
+      │    │    │         ├── cardinality: [3 - 3]
+      │    │    │         ├── (1,) [type=tuple{int}]
+      │    │    │         ├── (1,) [type=tuple{int}]
+      │    │    │         └── (1,) [type=tuple{int}]
+      │    │    └── filters
+      │    │         └── column1 > 3 [type=bool, outer=(1), constraints=(/1: [/4 - ]; tight)]
+      │    ├── scan a
+      │    │    └── columns: i:3(int)
+      │    └── filters (true)
+      └── windows
+           └── row-number [type=undefined]
+
+# In this example, we introduce a key called rownum, and after TryDecorrelateWindow triggers
+# PARTITION BY x becomes PARTITION BY x, rownum. Then later, ReduceWindowPartitionCols triggers,
+# recognizing that rownum determines x.
+
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    (VALUES (1), (1), (1)) AS v (x),
+    LATERAL (SELECT row_number() OVER (PARTITION BY x), i FROM (SELECT * FROM a WHERE k = x))
+----
+project
+ ├── columns: x:1(int!null) row_number:7(int) i:3(int)
+ ├── fd: (1)-->(3)
+ └── window partition=(9)
+      ├── columns: column1:1(int!null) i:3(int) row_number:7(int) rownum:9(int!null)
+      ├── key: (9)
+      ├── fd: (9)-->(1), (1)-->(3)
+      ├── project
+      │    ├── columns: column1:1(int!null) i:3(int) rownum:9(int!null)
+      │    ├── key: (9)
+      │    ├── fd: (9)-->(1), (1)-->(3)
+      │    └── inner-join
+      │         ├── columns: column1:1(int!null) k:2(int!null) i:3(int) rownum:9(int!null)
+      │         ├── key: (9)
+      │         ├── fd: (9)-->(1), (2)-->(3), (1)==(2), (2)==(1)
+      │         ├── ordinality
+      │         │    ├── columns: column1:1(int) rownum:9(int!null)
+      │         │    ├── cardinality: [3 - 3]
+      │         │    ├── key: (9)
+      │         │    ├── fd: (9)-->(1)
+      │         │    └── values
+      │         │         ├── columns: column1:1(int)
+      │         │         ├── cardinality: [3 - 3]
+      │         │         ├── (1,) [type=tuple{int}]
+      │         │         ├── (1,) [type=tuple{int}]
+      │         │         └── (1,) [type=tuple{int}]
+      │         ├── scan a
+      │         │    ├── columns: k:2(int!null) i:3(int)
+      │         │    ├── key: (2)
+      │         │    └── fd: (2)-->(3)
+      │         └── filters
+      │              └── k = column1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+      └── windows
+           └── row-number [type=undefined]
+
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    (VALUES (1, 2), (1, 3), (1, 4)) AS v (x, y),
+    LATERAL (SELECT row_number() OVER (PARTITION BY x ORDER BY y), i FROM (SELECT * FROM a WHERE k = x))
+----
+project
+ ├── columns: x:1(int!null) y:2(int) row_number:8(int) i:4(int)
+ ├── fd: (1)-->(4)
+ └── window partition=(11)
+      ├── columns: column1:1(int!null) column2:2(int) i:4(int) row_number:8(int) rownum:11(int!null)
+      ├── key: (11)
+      ├── fd: (11)-->(1,2), (1)-->(4)
+      ├── project
+      │    ├── columns: column1:1(int!null) column2:2(int) i:4(int) rownum:11(int!null)
+      │    ├── key: (11)
+      │    ├── fd: (11)-->(1,2), (1)-->(4)
+      │    └── inner-join
+      │         ├── columns: column1:1(int!null) column2:2(int) k:3(int!null) i:4(int) rownum:11(int!null)
+      │         ├── key: (11)
+      │         ├── fd: (11)-->(1,2), (3)-->(4), (1)==(3), (3)==(1)
+      │         ├── ordinality
+      │         │    ├── columns: column1:1(int) column2:2(int) rownum:11(int!null)
+      │         │    ├── cardinality: [3 - 3]
+      │         │    ├── key: (11)
+      │         │    ├── fd: (11)-->(1,2)
+      │         │    └── values
+      │         │         ├── columns: column1:1(int) column2:2(int)
+      │         │         ├── cardinality: [3 - 3]
+      │         │         ├── (1, 2) [type=tuple{int, int}]
+      │         │         ├── (1, 3) [type=tuple{int, int}]
+      │         │         └── (1, 4) [type=tuple{int, int}]
+      │         ├── scan a
+      │         │    ├── columns: k:3(int!null) i:4(int)
+      │         │    ├── key: (3)
+      │         │    └── fd: (3)-->(4)
+      │         └── filters
+      │              └── k = column1 [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+      └── windows
+           └── row-number [type=undefined]
+
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    uv,
+    LATERAL (SELECT row_number() OVER (PARTITION BY u), i FROM (SELECT * FROM a WHERE k = u))
+----
+window partition=(1)
+ ├── columns: u:1(int!null) v:2(int) row_number:8(int) i:4(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2,4)
+ ├── project
+ │    ├── columns: u:1(int!null) v:2(int) i:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,4)
+ │    └── inner-join
+ │         ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int)
+ │         ├── key: (3)
+ │         ├── fd: (1)-->(2), (3)-->(4), (1)==(3), (3)==(1)
+ │         ├── scan uv
+ │         │    ├── columns: u:1(int!null) v:2(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         ├── scan a
+ │         │    ├── columns: k:3(int!null) i:4(int)
+ │         │    ├── key: (3)
+ │         │    └── fd: (3)-->(4)
+ │         └── filters
+ │              └── k = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── windows
+      └── row-number [type=undefined]
+
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    uv,
+    LATERAL (SELECT row_number() OVER (PARTITION BY s), i FROM (SELECT * FROM a WHERE k = u))
+----
+project
+ ├── columns: u:1(int!null) v:2(int) row_number:8(int) i:4(int)
+ ├── key: (1,8)
+ ├── fd: (1)-->(2,4)
+ └── window partition=(1)
+      ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int) row_number:8(int)
+      ├── key: (3)
+      ├── fd: (1)-->(2), (3)-->(4), (1)==(3), (3)==(1)
+      ├── inner-join
+      │    ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int)
+      │    ├── key: (3)
+      │    ├── fd: (1)-->(2), (3)-->(4), (1)==(3), (3)==(1)
+      │    ├── scan uv
+      │    │    ├── columns: u:1(int!null) v:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan a
+      │    │    ├── columns: k:3(int!null) i:4(int)
+      │    │    ├── key: (3)
+      │    │    └── fd: (3)-->(4)
+      │    └── filters
+      │         └── k = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+      └── windows
+           └── row-number [type=undefined]
+
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    uv,
+    LATERAL (SELECT row_number() OVER (PARTITION BY s), i FROM (SELECT * FROM a WHERE i = u))
+----
+project
+ ├── columns: u:1(int!null) v:2(int) row_number:8(int) i:4(int!null)
+ ├── fd: (1)-->(2), (1)==(4), (4)==(1)
+ └── window partition=(1,6)
+      ├── columns: u:1(int!null) v:2(int) i:4(int!null) s:6(string) row_number:8(int)
+      ├── fd: (1)-->(2), (1)==(4), (4)==(1)
+      ├── inner-join
+      │    ├── columns: u:1(int!null) v:2(int) i:4(int!null) s:6(string)
+      │    ├── fd: (1)-->(2), (1)==(4), (4)==(1)
+      │    ├── scan uv
+      │    │    ├── columns: u:1(int!null) v:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan a
+      │    │    └── columns: i:4(int) s:6(string)
+      │    └── filters
+      │         └── i = u [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      └── windows
+           └── row-number [type=undefined]
+
+
+# --------------------------------------------------
 # TryDecorrelateSelect
 # --------------------------------------------------
 opt expect=TryDecorrelateSelect
