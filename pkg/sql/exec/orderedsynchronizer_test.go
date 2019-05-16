@@ -160,7 +160,7 @@ func TestOrderedSync(t *testing.T) {
 						cols[i] = i
 					}
 
-					op := orderedSynchronizer{
+					op := OrderedSynchronizer{
 						inputs:      inputs,
 						ordering:    tc.ordering,
 						columnTypes: columnTypes,
@@ -206,7 +206,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		inputs[i] = newOpTestInput(batchSize, sources[i])
 	}
 
-	op := orderedSynchronizer{
+	op := OrderedSynchronizer{
 		inputs: inputs,
 		ordering: sqlbase.ColumnOrdering{
 			{
@@ -242,7 +242,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 		inputs[i] = NewRepeatableBatchSource(batches[i])
 	}
 
-	op := orderedSynchronizer{
+	op := OrderedSynchronizer{
 		inputs: inputs,
 		ordering: sqlbase.ColumnOrdering{
 			{ColIdx: 0, Direction: encoding.Ascending},

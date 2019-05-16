@@ -17,9 +17,12 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/vecbuiltins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -89,9 +92,11 @@ func wrapRowSource(
 	return newColumnarizer(flowCtx, processorID, toWrap)
 }
 
+// newColOperator creates a new columnar operator according to the given spec.
+// The operator and its output types are returned if there was no error.
 func newColOperator(
 	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
-) (exec.Operator, error) {
+) (exec.Operator, []types.T, error) {
 	core := &spec.Core
 	post := &spec.Post
 	var err error
@@ -107,13 +112,13 @@ func newColOperator(
 	switch {
 	case core.Noop != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		op = exec.NewNoop(inputs[0])
 		columnTypes = spec.Input[0].ColumnTypes
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		op, err = newColBatchScan(flowCtx, core.TableReader, post)
 		// We want to check for cancellation once per input batch, and wrapping
@@ -127,7 +132,7 @@ func newColOperator(
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		aggSpec := core.Aggregator
 		if len(aggSpec.GroupCols) == 0 &&
@@ -135,7 +140,7 @@ func newColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			return exec.NewCountOp(inputs[0]), nil
+			return exec.NewCountOp(inputs[0]), []types.T{types.Int64}, nil
 		}
 
 		var groupCols, orderedCols util.FastIntSet
@@ -152,7 +157,7 @@ func newColOperator(
 			groupCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(groupCols) {
-			return nil, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
+			return nil, nil, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
 		}
 
 		aggTyps := make([][]semtypes.T, len(aggSpec.Aggregations))
@@ -161,13 +166,13 @@ func newColOperator(
 		columnTypes = make([]semtypes.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
-				return nil, errors.Newf("distinct aggregation not supported")
+				return nil, nil, errors.Newf("distinct aggregation not supported")
 			}
 			if agg.FilterColIdx != nil {
-				return nil, errors.Newf("filtering aggregation not supported")
+				return nil, nil, errors.Newf("filtering aggregation not supported")
 			}
 			if len(agg.Arguments) > 0 {
-				return nil, errors.Newf("aggregates with arguments not supported")
+				return nil, nil, errors.Newf("aggregates with arguments not supported")
 			}
 			aggTyps[i] = make([]semtypes.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
@@ -182,12 +187,12 @@ func newColOperator(
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
-					return nil, errors.Newf("sum on int cols not supported (use sum_int)")
+					return nil, nil, errors.Newf("sum on int cols not supported (use sum_int)")
 				}
 			}
 			_, retType, err := GetAggregateInfo(agg.Func, aggTyps[i]...)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			columnTypes[i] = *retType
 		}
@@ -203,7 +208,7 @@ func newColOperator(
 
 	case core.Distinct != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		var distinctCols, orderedCols util.FastIntSet
@@ -213,12 +218,12 @@ func newColOperator(
 		}
 		for _, col := range core.Distinct.DistinctColumns {
 			if !orderedCols.Contains(int(col)) {
-				return nil, errors.Newf("unsorted distinct not supported")
+				return nil, nil, errors.Newf("unsorted distinct not supported")
 			}
 			distinctCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(distinctCols) {
-			return nil, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
+			return nil, nil, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
@@ -227,11 +232,11 @@ func newColOperator(
 
 	case core.HashJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if !core.HashJoiner.OnExpr.Empty() {
-			return nil, errors.Newf("can't plan hash join with on expressions")
+			return nil, nil, errors.Newf("can't plan hash join with on expressions")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -281,14 +286,14 @@ func newColOperator(
 
 	case core.MergeJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if !core.MergeJoiner.OnExpr.Empty() {
-			return nil, errors.Newf("can't plan merge join with on expressions")
+			return nil, nil, errors.Newf("can't plan merge join with on expressions")
 		}
 		if core.MergeJoiner.Type != sqlbase.InnerJoin {
-			return nil, errors.Newf("can plan only inner merge join")
+			return nil, nil, errors.Newf("can plan only inner merge join")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -335,7 +340,7 @@ func newColOperator(
 
 	case core.JoinReader != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		op, err = wrapRowSource(flowCtx, inputs[0], spec.Input[0].ColumnTypes, func(input RowSource) (RowSource, error) {
@@ -366,7 +371,7 @@ func newColOperator(
 
 	case core.Sorter != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		input := inputs[0]
 		inputTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -390,17 +395,17 @@ func newColOperator(
 
 	case core.Windower != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if len(core.Windower.WindowFns) != 1 {
-			return nil, errors.Newf("only a single window function is currently supported")
+			return nil, nil, errors.Newf("only a single window function is currently supported")
 		}
 		wf := core.Windower.WindowFns[0]
 		if wf.Frame != nil {
-			return nil, errors.Newf("window functions with window frames are not supported")
+			return nil, nil, errors.Newf("window functions with window frames are not supported")
 		}
 		if wf.Func.AggregateFunc != nil {
-			return nil, errors.Newf("aggregate functions used as window functions are not supported")
+			return nil, nil, errors.Newf("aggregate functions used as window functions are not supported")
 		}
 
 		input := inputs[0]
@@ -423,7 +428,7 @@ func newColOperator(
 			}
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		switch *wf.Func.WindowFunc {
@@ -434,7 +439,7 @@ func newColOperator(
 		case distsqlpb.WindowerSpec_DENSE_RANK:
 			op, err = vecbuiltins.NewRankOperator(input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		default:
-			return nil, errors.Newf("window function %s is not supported", wf.String())
+			return nil, nil, errors.Newf("window function %s is not supported", wf.String())
 		}
 
 		if partitionColIdx != -1 {
@@ -451,29 +456,29 @@ func newColOperator(
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
 
 	default:
-		return nil, errors.Newf("unsupported processor core %s", core)
+		return nil, nil, errors.Newf("unsupported processor core %s", core)
 	}
 	log.VEventf(ctx, 1, "Made op %T\n", op)
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if columnTypes == nil {
-		return nil, errors.AssertionFailedf("output columnTypes unset after planning %T", op)
+		return nil, nil, errors.AssertionFailedf("output columnTypes unset after planning %T", op)
 	}
 
 	if !post.Filter.Empty() {
 		var helper exprHelper
 		err := helper.init(post.Filter, columnTypes, flowCtx.EvalCtx)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var filterColumnTypes []semtypes.T
 		op, _, filterColumnTypes, err = planSelectionOperators(
 			flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 		if err != nil {
-			return nil, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
+			return nil, nil, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
 		}
 		if len(filterColumnTypes) > len(columnTypes) {
 			// Additional columns were appended to store projection results while
@@ -487,22 +492,28 @@ func newColOperator(
 	}
 	if post.Projection {
 		op = exec.NewSimpleProjectOp(op, post.OutputColumns)
+		// Update output columnTypes.
+		newTypes := make([]semtypes.T, 0, len(post.OutputColumns))
+		for _, j := range post.OutputColumns {
+			newTypes = append(newTypes, columnTypes[j])
+		}
+		columnTypes = newTypes
 	} else if post.RenderExprs != nil {
 		var renderedCols []uint32
 		for _, expr := range post.RenderExprs {
 			var helper exprHelper
 			err := helper.init(expr, columnTypes, flowCtx.EvalCtx)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			var outputIdx int
 			op, outputIdx, columnTypes, err = planProjectionOperators(
 				flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 			if err != nil {
-				return nil, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
+				return nil, nil, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
 			if outputIdx < 0 {
-				return nil, errors.AssertionFailedf("missing outputIdx")
+				return nil, nil, errors.AssertionFailedf("missing outputIdx")
 			}
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
@@ -514,7 +525,7 @@ func newColOperator(
 	if post.Limit != 0 {
 		op = exec.NewLimitOp(op, post.Limit)
 	}
-	return op, nil
+	return op, conv.FromColumnTypes(columnTypes), nil
 }
 
 func planSelectionOperators(
@@ -681,30 +692,245 @@ func wrapWithVectorizedStatsCollector(
 	return vsc, nil
 }
 
-func (f *Flow) setupVectorized(ctx context.Context) error {
-	f.processors = make([]Processor, 1)
+func (f *Flow) setupVectorizedRemoteOutputStream(
+	op exec.Operator,
+	outputTyps []types.T,
+	stream *distsqlpb.StreamEndpointSpec,
+	metadataSourcesQueue []distsqlpb.MetadataSource,
+) error {
+	outbox, err := colrpc.NewOutbox(op, outputTyps, metadataSourcesQueue)
+	if err != nil {
+		return err
+	}
+	f.startables = append(
+		f.startables,
+		startableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
+			if wg != nil {
+				wg.Add(1)
+			}
+			go func() {
+				outbox.Run(ctx, f.nodeDialer, stream.TargetNodeID, f.id, stream.StreamID, cancelFn)
+				if wg != nil {
+					wg.Done()
+				}
+			}()
+		}),
+	)
+	return nil
+}
 
+// finishVectorizedStatsCollectors finishes the given stats collectors and
+// outputs their stats to the trace contained in the ctx's span.
+func finishVectorizedStatsCollectors(
+	ctx context.Context,
+	deterministicStats bool,
+	vectorizedStatsCollectors []*exec.VectorizedStatsCollector,
+	procIDs []int32,
+) {
+	spansByProcID := make(map[int32]opentracing.Span)
+	for _, pid := range procIDs {
+		// We're creating a new span for every processor setting the
+		// appropriate tag so that it is displayed correctly on the flow
+		// diagram.
+		// TODO(yuzefovich): these spans are created and finished right
+		// away which is not the way they are supposed to be used, so this
+		// should be fixed.
+		_, spansByProcID[pid] = tracing.ChildSpan(ctx, fmt.Sprintf("operator for processor %d", pid))
+		spansByProcID[pid].SetTag(distsqlpb.ProcessorIDTagKey, pid)
+	}
+	for _, vsc := range vectorizedStatsCollectors {
+		// TODO(yuzefovich): I'm not sure whether there are cases when
+		// multiple operators correspond to a single processor. We might
+		// need to do some aggregation here in that case.
+		vsc.FinalizeStats()
+		if deterministicStats {
+			vsc.VectorizedStats.Time = 0
+		}
+		if vsc.ID < 0 {
+			// Ignore stats collectors not associated with a processor.
+			continue
+		}
+		tracing.SetSpanStats(spansByProcID[vsc.ID], &vsc.VectorizedStats)
+	}
+	for _, sp := range spansByProcID {
+		sp.Finish()
+	}
+}
+
+// setupVectorizedRouter sets up a vectorized hash router according to the
+// output router spec. If the outputs are local, these are added to
+// streamIDToInputOp to be used as inputs in further planning.
+// metadataSourcesQueue is passed along to any outboxes created to be drained,
+// an error is returned if this does not happen (i.e. no router outputs are
+// remote).
+func (f *Flow) setupVectorizedRouter(
+	input exec.Operator,
+	outputTyps []types.T,
+	output *distsqlpb.OutputRouterSpec,
+	metadataSourcesQueue []distsqlpb.MetadataSource,
+	streamIDToInputOp map[distsqlpb.StreamID]exec.Operator,
+) error {
+	if output.Type == distsqlpb.OutputRouterSpec_PASS_THROUGH {
+		// Nothing to do.
+		return nil
+	}
+	if output.Type != distsqlpb.OutputRouterSpec_BY_HASH {
+		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
+	}
+
+	// TODO(asubiotto): Change hashRouter's hashCols to be uint32s.
+	hashCols := make([]int, len(output.HashColumns))
+	for i := range hashCols {
+		hashCols[i] = int(output.HashColumns[i])
+	}
+	router, outputs := exec.NewHashRouter(input, outputTyps, hashCols, len(output.Streams))
+	f.startables = append(
+		f.startables,
+		startableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
+			if wg != nil {
+				wg.Add(1)
+			}
+			go func() {
+				router.Run(ctx)
+				if wg != nil {
+					wg.Done()
+				}
+			}()
+		}),
+	)
+
+	consumedMetadataSources := false
+	for i, op := range outputs {
+		stream := &output.Streams[i]
+		switch stream.Type {
+		case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+			return errors.Errorf("unexpected sync response output when setting up router")
+		case distsqlpb.StreamEndpointSpec_REMOTE:
+			if err := f.setupVectorizedRemoteOutputStream(
+				op, outputTyps, stream, metadataSourcesQueue,
+			); err != nil {
+				return err
+			}
+			// We only need one outbox to drain metadata.
+			metadataSourcesQueue = nil
+			consumedMetadataSources = true
+		case distsqlpb.StreamEndpointSpec_LOCAL:
+			streamIDToInputOp[stream.StreamID] = op
+		}
+	}
+
+	if !consumedMetadataSources {
+		return errors.Errorf("router had no remote outputs so metadata could not be consumed")
+	}
+	return nil
+}
+
+// setupVectorizedInputSynchronizer sets up one or more input operators (local
+// or remote) and a synchronizer to expose these separate streams as one
+// exec.Operator which is returned. If recordingStats is true, these inputs and
+// synchronizer are wrapped in stats collectors if not done so, although these
+// stats are not exposed as of yet.
+// Inboxes that are created are also returned as []distqlpb.MetadataSource, so
+// that any remote metadata can be read through calling DrainMeta.
+func (f *Flow) setupVectorizedInputSynchronizer(
+	input distsqlpb.InputSyncSpec,
+	streamIDToInputOp map[distsqlpb.StreamID]exec.Operator,
+	recordingStats bool,
+) (exec.Operator, []distsqlpb.MetadataSource, error) {
+	inputStreamOps := make([]exec.Operator, 0, len(input.Streams))
+	metaSources := make([]distsqlpb.MetadataSource, 0, len(input.Streams))
+	for _, inputStream := range input.Streams {
+		switch inputStream.Type {
+		case distsqlpb.StreamEndpointSpec_LOCAL:
+			inputStreamOps = append(inputStreamOps, streamIDToInputOp[inputStream.StreamID])
+		case distsqlpb.StreamEndpointSpec_REMOTE:
+			// If the input is remote, the input operator does not exist in
+			// streamIDToInputOp. Create an inbox.
+			if err := f.checkInboundStreamID(inputStream.StreamID); err != nil {
+				return nil, nil, err
+			}
+			inbox, err := colrpc.NewInbox(conv.FromColumnTypes(input.ColumnTypes))
+			if err != nil {
+				return nil, nil, err
+			}
+			f.inboundStreams[inputStream.StreamID] = &inboundStreamInfo{
+				receiver:  vectorizedInboundStreamStrategy{inbox},
+				waitGroup: &f.waitGroup,
+			}
+			metaSources = append(metaSources, inbox)
+			op := exec.Operator(inbox)
+			if recordingStats {
+				op, err = wrapWithVectorizedStatsCollector(
+					inbox,
+					nil, /* inputs */
+					// TODO(asubiotto): Vectorized stats collectors currently expect a
+					// processor ID. These stats will not be shown until we extend stats
+					// collectors to take in a stream ID.
+					&distsqlpb.ProcessorSpec{
+						ProcessorID: -1,
+					},
+				)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			inputStreamOps = append(inputStreamOps, op)
+		default:
+			return nil, nil, errors.Errorf("unsupported input stream type %s", inputStream.Type)
+		}
+	}
+	op := inputStreamOps[0]
+	if len(inputStreamOps) > 1 {
+		statsInputs := inputStreamOps
+		if input.Type == distsqlpb.InputSyncSpec_ORDERED {
+			op = exec.NewOrderedSynchronizer(
+				inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), distsqlpb.ConvertToColumnOrdering(input.Ordering),
+			)
+		} else {
+			op = exec.NewUnorderedSynchronizer(inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), &f.waitGroup)
+			// Don't use the unordered synchronizer's inputs for stats collection
+			// given that they run concurrently. The stall time will be collected
+			// instead.
+			statsInputs = nil
+		}
+		if recordingStats {
+			// TODO(asubiotto): Once we have IDs for synchronizers, plumb them into
+			// this stats collector to display stats.
+			var err error
+			op, err = wrapWithVectorizedStatsCollector(op, statsInputs, &distsqlpb.ProcessorSpec{ProcessorID: -1})
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	return op, metaSources, nil
+}
+
+func (f *Flow) setupVectorized(ctx context.Context) error {
 	streamIDToInputOp := make(map[distsqlpb.StreamID]exec.Operator)
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
 	// queue is a queue of indices into f.spec.Processors, for topologically
 	// ordered processing.
 	queue := make([]int, 0, len(f.spec.Processors))
 	for i := range f.spec.Processors {
-		if len(f.spec.Processors[i].Input) == 0 {
-			// Queue all procs with no inputs.
-			queue = append(queue, i)
-		}
+		hasLocalInput := false
 		for j := range f.spec.Processors[i].Input {
 			input := &f.spec.Processors[i].Input[j]
 			for k := range input.Streams {
-				if input.Streams[k].Type == distsqlpb.StreamEndpointSpec_LOCAL {
-					id := input.Streams[k].StreamID
-					streamIDToSpecIdx[id] = i
-				} else {
-					return errors.Errorf("unsupported input stream type %s", input.Streams[k].Type)
+				stream := &input.Streams[k]
+				streamIDToSpecIdx[stream.StreamID] = i
+				if stream.Type != distsqlpb.StreamEndpointSpec_REMOTE {
+					hasLocalInput = true
 				}
 			}
 		}
+
+		if hasLocalInput {
+			continue
+		}
+
+		// Queue all processors with either no inputs or remote inputs.
+		queue = append(queue, i)
 	}
 
 	inputs := make([]exec.Operator, 0, 2)
@@ -723,27 +949,17 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		if len(pspec.Output) > 1 {
 			return errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
 		}
-		output := pspec.Output[0]
-		if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
-			return errors.Errorf("unsupported routed proc %s", output.Type)
-		}
-		if len(output.Streams) != 1 {
-			return errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
-		}
 		inputs = inputs[:0]
 		for i := range pspec.Input {
-			input := &pspec.Input[i]
-			if len(input.Streams) > 1 {
-				return errors.Errorf("unsupported multi inputstream proc (%d streams)", len(input.Streams))
+			synchronizer, metadataSources, err := f.setupVectorizedInputSynchronizer(pspec.Input[i], streamIDToInputOp, recordingStats)
+			if err != nil {
+				return err
 			}
-			inputStream := &input.Streams[0]
-			if inputStream.Type != distsqlpb.StreamEndpointSpec_LOCAL {
-				return errors.Errorf("unsupported input stream type %s", inputStream.Type)
-			}
-			inputs = append(inputs, streamIDToInputOp[inputStream.StreamID])
+			metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
+			inputs = append(inputs, synchronizer)
 		}
 
-		op, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
+		op, outputTypes, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
 		if err != nil {
 			return err
 		}
@@ -760,68 +976,93 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 			op = vsc
 		}
 
-		outputStream := output.Streams[0]
-		switch outputStream.Type {
-		case distsqlpb.StreamEndpointSpec_LOCAL:
-		case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
-			// Make the materializer, which will write to the given receiver.
-			columnTypes := f.syncFlowConsumer.Types()
-			outputToInputColIdx := make([]int, len(columnTypes))
-			for i := range outputToInputColIdx {
-				outputToInputColIdx[i] = i
-			}
-			var outputStatsToTrace func()
-			if recordingStats {
-				vectorizedStatsCollectors := vectorizedStatsCollectorsQueue
-				outputStatsToTrace = func() {
-					spansByProcID := make(map[int32]opentracing.Span)
-					for _, pid := range procIDs {
-						// We're creating a new span for every processor setting the
-						// appropriate tag so that it is displayed correctly on the flow
-						// diagram.
-						// TODO(yuzefovich): these spans are created and finished right
-						// away which is not the way they are supposed to be used, so this
-						// should be fixed.
-						_, spansByProcID[pid] = tracing.ChildSpan(ctx, fmt.Sprintf("operator for processor %d", pid))
-						spansByProcID[pid].SetTag(distsqlpb.ProcessorIDTagKey, pid)
-					}
-					for _, vsc := range vectorizedStatsCollectors {
-						// TODO(yuzefovich): I'm not sure whether there are cases when
-						// multiple operators correspond to a single processor. We might
-						// need to do some aggregation here in that case.
-						vsc.FinalizeStats()
-						if f.FlowCtx.testingKnobs.DeterministicStats {
-							vsc.VectorizedStats.Time = 0
-						}
-						tracing.SetSpanStats(spansByProcID[vsc.ID], &vsc.VectorizedStats)
-					}
-					for _, sp := range spansByProcID {
-						sp.Finish()
-					}
-				}
-			}
-			proc, err := newMaterializer(
-				&f.FlowCtx,
-				pspec.ProcessorID,
-				op,
-				columnTypes,
-				outputToInputColIdx,
-				&distsqlpb.PostProcessSpec{},
-				f.syncFlowConsumer,
-				metadataSourcesQueue,
-				outputStatsToTrace,
-			)
-			if err != nil {
+		output := &pspec.Output[0]
+		if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
+			if err := f.setupVectorizedRouter(
+				op, outputTypes, output, append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...), streamIDToInputOp,
+			); err != nil {
 				return err
 			}
 			metadataSourcesQueue = metadataSourcesQueue[:0]
-			vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
-			f.processors[0] = proc
-		default:
-			return errors.Errorf("unsupported output stream type %s", outputStream.Type)
+		} else {
+			if len(output.Streams) != 1 {
+				return errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
+			}
+			outputStream := &output.Streams[0]
+			switch outputStream.Type {
+			case distsqlpb.StreamEndpointSpec_LOCAL:
+			case distsqlpb.StreamEndpointSpec_REMOTE:
+				// Set up an Outbox. Note that we pass in a copy of metadataSourcesQueue
+				// so that we can reset it below and keep on writing to it.
+				if recordingStats {
+					// If recording stats, we add a metadata source that will generate all
+					// stats data as metadata for the stats collectors created so far.
+					vscs := append([]*exec.VectorizedStatsCollector(nil), vectorizedStatsCollectorsQueue...)
+					vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
+					metadataSourcesQueue = append(
+						metadataSourcesQueue,
+						distsqlpb.CallbackMetadataSource{
+							DrainMetaCb: func(ctx context.Context) []distsqlpb.ProducerMetadata {
+								// TODO(asubiotto): Who is responsible for the recording of the
+								// parent context?
+								// Start a separate recording so that GetRecording will return
+								// the recordings for only the child spans containing stats.
+								ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
+								finishVectorizedStatsCollectors(ctx, f.FlowCtx.testingKnobs.DeterministicStats, vscs, procIDs)
+								return []distsqlpb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
+							},
+						},
+					)
+				}
+				if err := f.setupVectorizedRemoteOutputStream(
+					op, outputTypes, outputStream, append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
+				); err != nil {
+					return err
+				}
+				metadataSourcesQueue = metadataSourcesQueue[:0]
+			case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+				// Make the materializer, which will write to the given receiver.
+				columnTypes := f.syncFlowConsumer.Types()
+				outputToInputColIdx := make([]int, len(columnTypes))
+				for i := range outputToInputColIdx {
+					outputToInputColIdx[i] = i
+				}
+				var outputStatsToTrace func()
+				if recordingStats {
+					// Make a copy given that vectorizedStatsCollectorsQueue is reset and
+					// appended to.
+					vscq := append([]*exec.VectorizedStatsCollector(nil), vectorizedStatsCollectorsQueue...)
+					outputStatsToTrace = func() {
+						finishVectorizedStatsCollectors(
+							ctx, f.FlowCtx.testingKnobs.DeterministicStats, vscq, procIDs,
+						)
+					}
+				}
+				proc, err := newMaterializer(
+					&f.FlowCtx,
+					pspec.ProcessorID,
+					op,
+					columnTypes,
+					outputToInputColIdx,
+					&distsqlpb.PostProcessSpec{},
+					f.syncFlowConsumer,
+					// Pass in a copy of the queue to reset metadataSourcesQueue for
+					// further appends without overwriting.
+					append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
+					outputStatsToTrace,
+				)
+				if err != nil {
+					return err
+				}
+				metadataSourcesQueue = metadataSourcesQueue[:0]
+				vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
+				f.processors = make([]Processor, 1)
+				f.processors[0] = proc
+			default:
+				return errors.Errorf("unsupported output stream type %s", outputStream.Type)
+			}
+			streamIDToInputOp[outputStream.StreamID] = op
 		}
-
-		streamIDToInputOp[outputStream.StreamID] = op
 
 		// Now queue all outputs from this op whose inputs are already all
 		// populated.
@@ -839,8 +1080,15 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				outputSpec := &f.spec.Processors[procIdx]
 				for k := range outputSpec.Input {
 					for l := range outputSpec.Input[k].Streams {
-						id := outputSpec.Input[k].Streams[l].StreamID
-						if _, ok := streamIDToInputOp[id]; !ok {
+						stream := outputSpec.Input[k].Streams[l]
+						if stream.Type == distsqlpb.StreamEndpointSpec_REMOTE {
+							// Remote streams are not present in streamIDToInputOp. The
+							// Inboxes that consume these streams are created at the same time
+							// as the operator that needs them, so skip the creation check for
+							// this input.
+							continue
+						}
+						if _, ok := streamIDToInputOp[stream.StreamID]; !ok {
 							continue NEXTOUTPUT
 						}
 					}
@@ -853,7 +1101,10 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 	}
 
 	if len(metadataSourcesQueue) > 0 {
-		panic("Not all metadata sources have been processed.")
+		panic("not all metadata sources have been processed")
+	}
+	if len(vectorizedStatsCollectorsQueue) > 0 {
+		panic("not all vectorized stats collectors have been processed")
 	}
 	return nil
 }
