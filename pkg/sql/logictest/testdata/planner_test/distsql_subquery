@@ -26,7 +26,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj0FLAzEUhO_-imVOLQRMr7
 query T
 SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkEFLxDAQhe_-ivBOChHbmwSEXQShsFTZ1pP0kG2GJZA2ZSZFZel_lzYH8SDs8b038-ZjLhijo9oOJDAfKNFpTBx7Eom8Wnmgcl8whYYfpzmtdqfRRyaYC5JPgWDQ2lOgI1lH_FBAw1GyPmy1E_vB8vfOnnpoNJMdxah7aLz4kIiN2pXqST3vm_a2fj8c1L5RVd0-3kGD46coJuuMWksl2RBU8gMZVQi6RSPO6RdKkj0TTLno68GPJFMchf4w_9dcLJ0GuTPl50icuac3jv12JsvXbW8zHEnKaZlFNeZo6ZabnwAAAP__E-l7Eg==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUE1LxDAQvfsrwjspRGxvEhB2FYSFZZVtPUkPaTMsgbQpmSm6LP3v0gYUD4LH9zFv5s0FQ3R0sD0xzDtKNBpjih0xx7RQ2bBznzCFhh_GSRa60ehiIpgLxEsgGNS2DXQk6yjdFdBwJNaHNXZMvrfpvLFtB41qtAMbdQuNZx-EklGbUj2op21VXx_e9nu1rdTuUN_fQCPFD1aJrDNqCWWxISjxPRlVMDTas9C3QT2imTXiJD9nstgTwZSz_n-VI_EYB6ZfLf5KLuZGg9yJ8rs4Tqmj1xS7dU2GL-vcSjhiyWqZwW7I0tzMV18BAAD__2BwgFE=
 
 
 # Ensure subquery outside of the explain doesn't mess anything up
@@ -34,4 +34,4 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkEFLxDAQhe_-ivBOChHbmw
 query TB
 SELECT url, exists (SELECT 1) FROM [EXPLAIN ANALYZE (DISTSQL) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkEFLxDAQhe_-ivBOChHbmwSEXQShsFTZ1pP0kG2GJZA2ZSZFZel_lzYH8SDs8b038-ZjLhijo9oOJDAfKNFpTBx7Eom8Wnmgcl8whYYfpzmtdqfRRyaYC5JPgWDQ2lOgI1lH_FBAw1GyPmy1E_vB8vfOnnpoNJMdxah7aLz4kIiN2pXqST3vm_a2fj8c1L5RVd0-3kGD46coJuuMWksl2RBU8gMZVQi6RSPO6RdKkj0TTLno68GPJFMchf4w_9dcLJ0GuTPl50icuac3jv12JsvXbW8zHEnKaZlFNeZo6ZabnwAAAP__E-l7Eg==  true
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUE1LxDAQvfsrwjspRGxvEhB2FYSFZZVtPUkPaTMsgbQpmSm6LP3v0gYUD4LH9zFv5s0FQ3R0sD0xzDtKNBpjih0xx7RQ2bBznzCFhh_GSRa60ehiIpgLxEsgGNS2DXQk6yjdFdBwJNaHNXZMvrfpvLFtB41qtAMbdQuNZx-EklGbUj2op21VXx_e9nu1rdTuUN_fQCPFD1aJrDNqCWWxISjxPRlVMDTas9C3QT2imTXiJD9nstgTwZSz_n-VI_EYB6ZfLf5KLuZGg9yJ8rs4Tqmj1xS7dU2GL-vcSjhiyWqZwW7I0tzMV18BAAD__2BwgFE=  true
