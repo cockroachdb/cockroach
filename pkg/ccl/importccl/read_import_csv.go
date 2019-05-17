@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -26,7 +25,7 @@ import (
 )
 
 type csvInputReader struct {
-	flowCtx      *distsqlrun.FlowCtx
+	evalCtx      *tree.EvalContext
 	kvCh         chan []roachpb.KeyValue
 	recordCh     chan csvRecord
 	batchSize    int
@@ -42,10 +41,10 @@ func newCSVInputReader(
 	kvCh chan []roachpb.KeyValue,
 	opts roachpb.CSVOptions,
 	tableDesc *sqlbase.TableDescriptor,
-	flowCtx *distsqlrun.FlowCtx,
+	evalCtx *tree.EvalContext,
 ) *csvInputReader {
 	return &csvInputReader{
-		flowCtx:      flowCtx,
+		evalCtx:      evalCtx,
 		opts:         opts,
 		kvCh:         kvCh,
 		expectedCols: len(tableDesc.VisibleColumns()),
@@ -161,7 +160,8 @@ type csvRecord struct {
 func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 	// Create a new evalCtx per converter so each go routine gets its own
 	// collationenv, which can't be accessed in parallel.
-	conv, err := newRowConverter(c.tableDesc, c.flowCtx.NewEvalCtx(), c.kvCh)
+	evalCtx := c.evalCtx.Copy()
+	conv, err := newRowConverter(c.tableDesc, evalCtx, c.kvCh)
 	if err != nil {
 		return err
 	}

@@ -528,7 +528,7 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		n.run.computeExprs,
 		n.run.insertCols,
 		n.run.computedCols,
-		*params.EvalContext().Copy(),
+		params.EvalContext().Copy(),
 		n.run.ti.tableDesc(),
 		sourceVals,
 		&n.run.iVarContainerForComputedCols,
@@ -623,7 +623,7 @@ func GenerateInsertRow(
 	computeExprs []tree.TypedExpr,
 	insertCols []sqlbase.ColumnDescriptor,
 	computedCols []sqlbase.ColumnDescriptor,
-	evalCtx tree.EvalContext,
+	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *sqlbase.RowIndexedVarContainer,
@@ -644,7 +644,7 @@ func GenerateInsertRow(
 				rowVals[i] = tree.DNull
 				continue
 			}
-			d, err := defaultExprs[i].Eval(&evalCtx)
+			d, err := defaultExprs[i].Eval(evalCtx)
 			if err != nil {
 				return nil, err
 			}
@@ -661,7 +661,7 @@ func GenerateInsertRow(
 			// since we disallow computed columns from referencing other computed
 			// columns, all the columns which could possibly be referenced *are*
 			// available.
-			d, err := computeExprs[i].Eval(&evalCtx)
+			d, err := computeExprs[i].Eval(evalCtx)
 			if err != nil {
 				return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 					"computed column %s", tree.ErrString((*tree.Name)(&computedCols[i].Name)))

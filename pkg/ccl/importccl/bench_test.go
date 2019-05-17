@@ -15,14 +15,18 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/format"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
@@ -136,6 +140,54 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 		s.Stopper().Stop(ctx)
 	}
 	b.SetBytes(totalBytes / int64(b.N))
+}
+
+func BenchmarkConvertToKVs(b *testing.B) {
+	if testing.Short() {
+		b.Skip("skipping long benchmark")
+	}
+
+	tpccGen := tpcc.FromWarehouses(1)
+	b.Run(`tpcc/warehouses=1`, func(b *testing.B) {
+		benchmarkConvertToKVs(b, tpccGen)
+	})
+}
+
+func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
+	ctx := context.Background()
+	const tableID = sqlbase.ID(keys.MinUserDescID)
+	ts := timeutil.Now()
+
+	var bytes int64
+	b.ResetTimer()
+	for _, t := range g.Tables() {
+		tableDesc, err := format.ToTableDescriptor(t, tableID, ts)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		kvCh := make(chan []roachpb.KeyValue)
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			defer close(kvCh)
+			wc := importccl.NewWorkloadKVConverter(
+				tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh)
+			evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
+			finishedBatchFn := func() {}
+			return wc.Worker(ctx, evalCtx, finishedBatchFn)
+		})
+		for kvBatch := range kvCh {
+			for i := range kvBatch {
+				kv := &kvBatch[i]
+				bytes += int64(len(kv.Key) + len(kv.Value.RawBytes))
+			}
+		}
+		if err := g.Wait(); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	b.SetBytes(bytes)
 }
 
 func BenchmarkConvertToSSTable(b *testing.B) {
