@@ -75,21 +75,19 @@ export class TraceLine {
 
   formatMessageTitle = () => {
     if (this.sample) {
-      const span_d: any = timestampToDate(this.span.start_time);
-      var attrs: string[] = _.map(this.sample.attributes, (value, key) => { return "\n" + key + ": " + value; });
+      var attrs: string[] = _.map(this.sample.attributes, (v, k) => { return "\n" + k + ": " + v });
       return "Node: " + this.node_id +
-        "\nTimestamp: " + formatDateTime(span_d) +
+        "\nTimestamp: " + formatDateTime(this.span.start_time, false) +
         "\nDuration: " + formatDuration(this.span.duration, false) +
         "\nPending: " + (this.sample.pending ? "Yes" : "No") +
         "\nStuck: " + (this.sample.stuck ? "Yes" : "No") +
         (this.sample.error ? ("\nError: " + this.sample.error) : "") +
-        attrs.join(", ");
+        attrs.join("");
     } else if (this.span) {
       return this.span.operation + " " + formatDuration(this.span.duration, false) +
-        " @" + formatDateTime(timestampToDate(this.span.start_time));
+        " @" + formatDateTime(this.span.start_time, false);
     }
-    const log_d: any = timestampToDate(this.log.time);
-    return this.formatMessage() + " @" + formatDateTime(log_d);
+    return this.formatMessage() + " @" + formatDateTime(this.log.time, false);
   }
 
   formatTime = (last_node_id: number, last_time: protos.google.protobuf.ITimestamp) => {
@@ -103,7 +101,7 @@ export class TraceLine {
         date_str = " " + span_d.getMonth() + "/" + span_d.getDate() + "/" + span_d.getFullYear() + " @";
       }
       const node_prefix: string = last_node_id != this.node_id ? ("Node " + this.node_id + ": ") : "";
-      return node_prefix + date_str + formatDateTime(span_d);
+      return node_prefix + date_str + formatDateTime(this.span.start_time, true);
     } else if (this.span) {
       const delta: protos.google.protobuf.Duration = subtractTimestamps(this.span.start_time, last_time);
       const node_prefix: string = last_node_id != this.node_id ? ("Node " + this.node_id + ": ") : "";
@@ -115,9 +113,9 @@ export class TraceLine {
 
   formatTimeTitle = () => {
     if (this.span) {
-      return formatDuration(this.span.duration, false) + " @" + formatDateTime(timestampToDate(this.span.start_time));
+      return formatDuration(this.span.duration, false) + " @" + formatDateTime(this.span.start_time, false);
     }
-    return "@" + formatDateTime(timestampToDate(this.log.time));
+    return "@" + formatDateTime(this.log.time, false);
   }
 }
 
@@ -167,6 +165,12 @@ export class ExpandedSpan {
   overlaps = (span: protos.cockroach.util.tracing.IRecordedSpan) => {
     // If the span is still pending, assume overlap.
     if (isSpanPending(span) && this.lines.length > 1) {
+      return true;
+    }
+    // If the child span extends beyond the parent, consider it an overlap.
+    if (!isSpanPending(this.span) &&
+        compareTimestamps(addDuration(span.start_time, span.duration),
+                          addDuration(this.span.start_time, this.span.duration)) > 0) {
       return true;
     }
     if (span.logs.length == 0) {

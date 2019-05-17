@@ -37,6 +37,15 @@ enum ColType {
   Attribute,
 }
 
+function findCompSpan(s: protos.cockroach.util.tracing.ComponentSamples.ISample) {
+  for (var idx in s.spans) {
+    if (s.spans[idx].tags["component"]) {
+      return s.spans[idx];
+    }
+  }
+  return s.spans[0];
+}
+
 class Column {
   name: string;
   typ: ColType;
@@ -47,16 +56,16 @@ class Column {
   }
 
   format(s: protos.cockroach.util.tracing.ComponentSamples.ISample, sort?: boolean) {
-    const sp0: protos.cockroach.util.tracing.IRecordedSpan = s.spans[0];
+    const compSp: protos.cockroach.util.tracing.IRecordedSpan = findCompSpan(s);
 
     switch (this.typ) {
-    case ColType.OpName: return (s.prefix ? s.prefix + ": " : "") + sp0.operation;
+    case ColType.OpName: return (s.prefix ? s.prefix + ": " : "") + compSp.operation;
     case ColType.Duration:
       if (sort) {
-        const {seconds, nanos } = sp0.duration;
+        const {seconds, nanos } = compSp.duration;
         return seconds.toString().padStart(19, '0') + "." + nanos.toString().padStart(9, 0);
       }
-      return formatDuration(sp0.duration);
+      return formatDuration(compSp.duration);
     case ColType.Pending: return s.pending ? "Yes" : "No";
     case ColType.Stuck: return s.stuck ? "Yes" : "No";
     case ColType.Error: return s.error ? s.error : "";

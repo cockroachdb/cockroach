@@ -12,6 +12,7 @@ package tracing
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"sort"
@@ -517,14 +518,24 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 	return s
 }
 
-func (s *span) getTags(fmtStr string) map[string]string {
+func (s *span) getTags() map[string]string {
 	result := make(map[string]string)
 	s.mu.Lock()
 	for k, v := range s.mu.tags {
-		if fmtStr != "" {
-			result[k] = fmt.Sprintf(fmtStr, v)
+		switch v := v.(type) {
+		case bool, string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, float32, float64, complex64, complex128:
+			result[k] = fmt.Sprint(v)
+		default:
+			if _, ok := v.(fmt.Stringer); ok {
+				result[k] = fmt.Sprint(v)
+			} else {
+				if bytes, err := json.MarshalIndent(v, "", "    "); err != nil {
+					result[k] = fmt.Sprintf("%+v", v)
+				} else {
+					result[k] = string(bytes)
+				}
+			}
 		}
-		result[k] = fmt.Sprint(v)
 	}
 	s.mu.Unlock()
 	return result

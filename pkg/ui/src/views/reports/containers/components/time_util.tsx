@@ -83,11 +83,12 @@ export function formatDuration(duration: protos.google.protobuf.IDuration, trunc
   return formatNumber(nanos) + "ns";
 }
 
-export function formatDateTime(date) {
+export function formatDateTime(ts: protos.google.protobuf.ITimestamp, truncate: boolean) {
+  const date: any = timestampToDate(ts);
   return date.getHours().toString().padStart(2, '0') + ":" +
     date.getMinutes().toString().padStart(2, '0') + ":" +
     date.getSeconds().toString().padStart(2, '0') + "." +
-    date.getMilliseconds().toString().padStart(3, '0');
+    (truncate ? date.getMilliseconds().toString().padStart(3, '0') : ts.nanos.toString().padStart(9, 0));
 }
 
 export function timestampToDate(ts: protos.google.protobuf.ITimestamp) {
