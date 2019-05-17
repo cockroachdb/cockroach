@@ -300,7 +300,7 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 	var computedCols []sqlbase.ColumnDescriptor
 
 	insertRow, err := sql.GenerateInsertRow(
-		c.defaultExprs, computeExprs, c.cols, computedCols, *c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
+		c.defaultExprs, computeExprs, c.cols, computedCols, c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
 	if err != nil {
 		return pgerror.Wrap(err, pgerror.CodeDataExceptionError,
 			"generate insert row")
@@ -437,9 +437,9 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			}
 		}
 		if isWorkload {
-			conv = newWorkloadReader(kvCh, singleTable, cp.flowCtx.NewEvalCtx)
+			conv = newWorkloadReader(kvCh, singleTable, evalCtx)
 		} else {
-			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, cp.flowCtx)
+			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, evalCtx)
 		}
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
