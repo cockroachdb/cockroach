@@ -664,6 +664,9 @@ func (ds *DistSender) Send(
 
 	tracing.AnnotateTrace()
 
+	// TODO(nvanbenschoten): This causes ba to escape to the heap. Either
+	// commit to passing BatchRequests by reference or return an updated
+	// value from this method instead.
 	if pErr := ds.initAndVerifyBatch(ctx, &ba); pErr != nil {
 		return nil, pErr
 	}
@@ -1295,7 +1298,8 @@ func fillSkippedResponses(
 				hdr.ResumeSpan.Key = origSpan.Key
 			} else if roachpb.RKey(origSpan.Key).Less(nextKey) {
 				// Some keys have yet to be processed.
-				hdr.ResumeSpan = &origSpan
+				hdr.ResumeSpan = new(roachpb.Span)
+				*hdr.ResumeSpan = origSpan
 				if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
 					// The original span has been partially processed.
 					hdr.ResumeSpan.EndKey = nextKey.AsRawKey()
@@ -1315,7 +1319,8 @@ func fillSkippedResponses(
 				// latter case.
 				if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
 					// Some keys have yet to be processed.
-					hdr.ResumeSpan = &origSpan
+					hdr.ResumeSpan = new(roachpb.Span)
+					*hdr.ResumeSpan = origSpan
 					if roachpb.RKey(origSpan.Key).Less(nextKey) {
 						// The original span has been partially processed.
 						hdr.ResumeSpan.Key = nextKey.AsRawKey()
