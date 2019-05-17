@@ -472,7 +472,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 ) client.TxnSender {
 	meta.Txn.AssertInitialized(context.TODO())
 	tcs := &TxnCoordSender{
-		typ: typ,
+		typ:                   typ,
 		TxnCoordSenderFactory: tcf,
 	}
 	tcs.mu.txnState = txnPending
@@ -758,15 +758,12 @@ func (tc *TxnCoordSender) Send(
 		return nil, roachpb.NewErrorf("BeginTransaction added before the TxnCoordSender")
 	}
 
-	ctx, sp := tc.AnnotateCtxWithSpan(ctx, opTxnCoordSender)
-	defer sp.Finish()
-
 	// Associate the txnID with the trace.
 	if tc.mu.txn.ID == (uuid.UUID{}) {
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
-	if !tracing.IsBlackHoleSpan(sp) {
-		sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
+	if !tracing.IsBlackHoleSpan(csp.Span) {
+		csp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
 	}
 	ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
 	if log.V(2) {
