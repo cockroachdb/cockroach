@@ -25,8 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type Node time.Duration
@@ -60,14 +57,8 @@ func TestSendToOneClient(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-		&cluster.MakeTestingClusterSettings().Version,
-	)
-
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	// This test uses the testing function sendBatch() which does not
 	// support setting the node ID on GRPCDialNode(). Disable Node ID
 	// checks to avoid log.Fatal.
@@ -83,7 +74,7 @@ func TestSendToOneClient(t *testing.T) {
 		return ln.Addr(), nil
 	})
 
-	reply, err := sendBatch(context.Background(), nil, []net.Addr{ln.Addr()}, nodeDialer)
+	reply, err := sendBatch(context.Background(), nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,23 +127,12 @@ func TestComplexScenarios(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	nodeContext := rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-		&cluster.MakeTestingClusterSettings().Version,
-	)
-
-	// Ensure that tests using this test context and restart/shut down
-	// their servers do not inadvertently start talking to servers from
-	// unrelated concurrent tests.
-	nodeContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
-
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	// We're going to serve multiple node IDs with that one
 	// context. Disable node ID checks.
-	nodeContext.TestingAllowNamedRPCToAnonymousServer = true
-	nodeDialer := nodedialer.New(nodeContext, nil)
+	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
+	nodeDialer := nodedialer.New(rpcContext, nil)
 
 	// TODO(bdarnell): the retryable flag is no longer used for RPC errors.
 	// Rework this test to incorporate application-level errors carried in
@@ -194,6 +174,7 @@ func TestComplexScenarios(t *testing.T) {
 				}, nil
 			},
 			serverAddrs,
+			rpcContext,
 			nodeDialer,
 		)
 		if test.success {
@@ -289,13 +270,24 @@ func sendBatch(
 	ctx context.Context,
 	transportFactory TransportFactory,
 	addrs []net.Addr,
+	rpcContext *rpc.Context,
 	nodeDialer *nodedialer.Dialer,
 ) (*roachpb.BatchResponse, error) {
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		RPCContext: rpcContext,
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: transportFactory,
 		},
 	}, nil)
-	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, nodeDialer, roachpb.ReplicaDescriptor{})
+	return ds.sendToReplicas(
+		ctx,
+		roachpb.BatchRequest{},
+		SendOptions{metrics: &ds.metrics},
+		0, /* rangeID */
+		makeReplicas(addrs...),
+		nodeDialer,
+		roachpb.ReplicaDescriptor{},
+		false, /* withCommit */
+	)
 }

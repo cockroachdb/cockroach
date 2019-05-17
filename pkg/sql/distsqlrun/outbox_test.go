@@ -21,8 +21,10 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -54,7 +57,8 @@ func TestOutbox(t *testing.T) {
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,10 +66,7 @@ func TestOutbox(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	clientRPC := newInsecureRPCContext(stopper)
-	// Ensure the cluster ID in client matches the server's.
-	clientRPC.ClusterID.Reset(clusterID)
-
+	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
@@ -209,7 +210,8 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,10 +220,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	clientRPC := newInsecureRPCContext(stopper)
-	// Ensure the cluster ID in client matches the server's.
-	clientRPC.ClusterID.Reset(clusterID)
-
+	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
@@ -283,7 +282,8 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
-			clusterID, mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
+			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -292,10 +292,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 
-			clientRPC := newInsecureRPCContext(stopper)
-			// Ensure the cluster ID in client matches the server's.
-			clientRPC.ClusterID.Reset(clusterID)
-
+			clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 			flowCtx := FlowCtx{
 				Settings:   st,
 				stopper:    stopper,
@@ -414,7 +411,8 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,10 +421,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	clientRPC := newInsecureRPCContext(stopper)
-	// Ensure the cluster ID in client matches the server's.
-	clientRPC.ClusterID.Reset(clusterID)
-
+	clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 	flowCtx := FlowCtx{
 		Settings:   st,
 		stopper:    stopper,
@@ -529,7 +524,8 @@ func BenchmarkOutbox(b *testing.B) {
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -545,10 +541,7 @@ func BenchmarkOutbox(b *testing.B) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 
-			clientRPC := newInsecureRPCContext(stopper)
-			// Ensure the cluster ID in client matches the server's.
-			clientRPC.ClusterID.Reset(clusterID)
-
+			clientRPC := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
 			flowCtx := FlowCtx{
 				Settings:   st,
 				stopper:    stopper,
