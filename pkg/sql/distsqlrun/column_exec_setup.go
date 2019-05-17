@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -387,6 +387,7 @@ func newColOperator(
 				conv.FromColumnTypes(spec.Input[0].ColumnTypes),
 				core.Sorter.OutputOrdering.Columns)
 		}
+		columnTypes = spec.Input[0].ColumnTypes
 
 	case core.Windower != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
@@ -452,6 +453,8 @@ func newColOperator(
 			op = exec.NewSimpleProjectOp(op, projection)
 		}
 
+		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
+
 	default:
 		return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 			"unsupported processor core %s", core)
@@ -462,11 +465,11 @@ func newColOperator(
 		return nil, err
 	}
 
+	if columnTypes == nil {
+		return nil, pgerror.AssertionFailedf("output columnTypes unset after planning %T", op)
+	}
+
 	if !post.Filter.Empty() {
-		if columnTypes == nil {
-			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
-				"unable to columnarize filter expression %q: columnTypes is unset", post.Filter.Expr)
-		}
 		var helper exprHelper
 		err := helper.init(post.Filter, columnTypes, flowCtx.EvalCtx)
 		if err != nil {
@@ -492,10 +495,6 @@ func newColOperator(
 	if post.Projection {
 		op = exec.NewSimpleProjectOp(op, post.OutputColumns)
 	} else if post.RenderExprs != nil {
-		if columnTypes == nil {
-			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
-				"unable to columnarize projection. columnTypes is unset")
-		}
 		var renderedCols []uint32
 		for _, expr := range post.RenderExprs {
 			var helper exprHelper
