@@ -31,7 +31,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 
 	// We don't allow the statement under Explain to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	stmtScope := b.buildStmt(explain.Statement, &scope{builder: b})
+	stmtScope := b.buildStmt(explain.Statement, nil /* desiredTypes */, &scope{builder: b})
 	outScope = inScope.push()
 
 	var cols sqlbase.ResultColumns

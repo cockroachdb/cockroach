@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -154,7 +155,7 @@ func (b *Builder) Build() (err error) {
 
 	// Build the memo, and call SetRoot on the memo to indicate the root group
 	// and physical properties.
-	outScope := b.buildStmt(b.stmt, b.allocScope())
+	outScope := b.buildStmt(b.stmt, nil /* desiredTypes */, b.allocScope())
 	physical := outScope.makePhysicalProps()
 	b.factory.Memo().SetRoot(outScope.expr, physical)
 	return nil
@@ -192,9 +193,11 @@ func unimplementedWithIssueDetailf(
 //
 // outScope  This return value contains the newly bound variables that will be
 //           visible to enclosing statements, as well as a pointer to any
-//           "parent" scope that is still visible. The top-level memo group ID
-//           for the built statement/expression is returned in outScope.group.
-func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scope) {
+//           "parent" scope that is still visible. The top-level memo expression
+//           for the built statement/expression is returned in outScope.expr.
+func (b *Builder) buildStmt(
+	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
+) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.CreateTable:
@@ -210,10 +213,10 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 		return b.buildInsert(stmt, inScope)
 
 	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, nil /* desiredTypes */, inScope)
+		return b.buildSelect(stmt.Select, desiredTypes, inScope)
 
 	case *tree.Select:
-		return b.buildSelect(stmt, nil /* desiredTypes */, inScope)
+		return b.buildSelect(stmt, desiredTypes, inScope)
 
 	case *tree.ShowTraceForSession:
 		return b.buildShowTrace(stmt, inScope)
@@ -231,7 +234,7 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 			// register all those dependencies with the metadata (for cache
 			// invalidation). We don't care about caching plans for these statements.
 			b.DisableMemoReuse = true
-			return b.buildStmt(newStmt, inScope)
+			return b.buildStmt(newStmt, desiredTypes, inScope)
 		}
 		panic(unimplementedWithIssueDetailf(34848, stmt.StatementTag(), "unsupported statement: %T", stmt))
 	}

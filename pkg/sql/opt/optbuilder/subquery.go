@@ -53,6 +53,21 @@ type subquery struct {
 	// columns which are referenced within the subquery but are bound in an
 	// outer scope.
 	outerCols opt.ColSet
+
+	// desiredNumColumns specifies the desired number of columns for the subquery.
+	// Specifying -1 for desiredNumColumns allows the subquery to return any
+	// number of columns and is used when the normal type checking machinery will
+	// verify that the correct number of columns is returned.
+	desiredNumColumns int
+
+	// extraColsAllowed indicates that extra columns built from the subquery
+	// (such as columns for which orderings have been requested) will not be
+	// stripped away.
+	extraColsAllowed bool
+
+	// scope is the input scope of the subquery. It is needed to lazily build
+	// the subquery in TypeCheck.
+	scope *scope
 }
 
 // isMultiRow returns whether the subquery can return multiple rows.
@@ -70,6 +85,20 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedE
 	if s.typ != nil {
 		return s, nil
 	}
+
+	// Convert desired to an array of desired types for building the subquery.
+	var desiredTypes []*types.T
+	tupleContents := desired.TupleContents()
+	if tupleContents != nil {
+		desiredTypes = make([]*types.T, len(tupleContents))
+		for i := range desiredTypes {
+			desiredTypes[i] = &tupleContents[i]
+		}
+	}
+
+	// Build the subquery. We cannot build the subquery earlier because we do
+	// not know the desired types until TypeCheck is called.
+	s.buildSubquery(desiredTypes)
 
 	// The typing for subqueries is complex, but regular.
 	//
@@ -169,6 +198,57 @@ func (s *subquery) ResolvedType() *types.T {
 // Eval is part of the tree.TypedExpr interface.
 func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic(pgerror.AssertionFailedf("subquery must be replaced before evaluation"))
+}
+
+// buildSubquery builds a relational expression that represents this subquery.
+// It stores the resulting relational expression in s.node, and also updates
+// s.cols and s.ordering with the output columns and ordering of the subquery.
+func (s *subquery) buildSubquery(desiredTypes []*types.T) {
+	if s.scope.replaceSRFs {
+		// We need to save and restore the previous value of the replaceSRFs field in
+		// case we are recursively called within a subquery context.
+		defer func() { s.scope.replaceSRFs = true }()
+		s.scope.replaceSRFs = false
+	}
+
+	// Save and restore the previous value of s.builder.subquery in case we are
+	// recursively called within a subquery context.
+	outer := s.scope.builder.subquery
+	defer func() { s.scope.builder.subquery = outer }()
+	s.scope.builder.subquery = s
+
+	outScope := s.scope.builder.buildStmt(s.Subquery.Select, desiredTypes, s.scope)
+	ord := outScope.ordering
+
+	// Treat the subquery result as an anonymous data source (i.e. column names
+	// are not qualified). Remove hidden columns, as they are not accessible
+	// outside the subquery.
+	outScope.setTableAlias("")
+	outScope.removeHiddenCols()
+
+	if s.desiredNumColumns > 0 && len(outScope.cols) != s.desiredNumColumns {
+		n := len(outScope.cols)
+		switch s.desiredNumColumns {
+		case 1:
+			panic(pgerror.Newf(pgerror.CodeSyntaxError,
+				"subquery must return only one column, found %d", n))
+		default:
+			panic(pgerror.Newf(pgerror.CodeSyntaxError,
+				"subquery must return %d columns, found %d", s.desiredNumColumns, n))
+		}
+	}
+
+	if len(outScope.extraCols) > 0 && !s.extraColsAllowed {
+		// We need to add a projection to remove the extra columns.
+		projScope := outScope.push()
+		projScope.appendColumnsFromScope(outScope)
+		projScope.expr = s.scope.builder.constructProject(outScope.expr.(memo.RelExpr), projScope.cols)
+		outScope = projScope
+	}
+
+	s.cols = outScope.cols
+	s.node = outScope.expr.(memo.RelExpr)
+	s.ordering = ord
 }
 
 // buildSubqueryProjection ensures that a subquery returns exactly one column.
@@ -309,3 +389,8 @@ func (b *Builder) buildMultiRowSubquery(
 
 var _ tree.Expr = &subquery{}
 var _ tree.TypedExpr = &subquery{}
+
+// SubqueryExpr implements the SubqueryExpr interface.
+func (*subquery) SubqueryExpr() {}
+
+var _ tree.SubqueryExpr = &subquery{}

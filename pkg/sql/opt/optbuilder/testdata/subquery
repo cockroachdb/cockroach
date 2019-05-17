@@ -246,16 +246,16 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: y:1(int!null)
+           │    ├── columns: y:2(int!null)
            │    ├── values
            │    │    └── tuple [type=tuple]
            │    └── projections
            │         └── const: 1 [type=int]
            └── subquery [type=int]
                 └── max1-row
-                     ├── columns: x:2(int!null)
+                     ├── columns: x:1(int!null)
                      └── project
-                          ├── columns: x:2(int!null)
+                          ├── columns: x:1(int!null)
                           ├── values
                           │    └── tuple [type=tuple]
                           └── projections
@@ -304,7 +304,7 @@ project
            ├── project
            │    ├── columns: column5:5(tuple{int, int})
            │    ├── project
-           │    │    ├── columns: c:1(int!null) d:2(int!null)
+           │    │    ├── columns: c:3(int!null) d:4(int!null)
            │    │    ├── values
            │    │    │    └── tuple [type=tuple]
            │    │    └── projections
@@ -320,7 +320,7 @@ project
                      └── project
                           ├── columns: column6:6(tuple{int, int})
                           ├── project
-                          │    ├── columns: a:3(int!null) b:4(int!null)
+                          │    ├── columns: a:1(int!null) b:2(int!null)
                           │    ├── values
                           │    │    └── tuple [type=tuple]
                           │    └── projections
@@ -381,7 +381,7 @@ project
            ├── project
            │    ├── columns: column4:4(tuple{int, int})
            │    ├── project
-           │    │    ├── columns: b:1(int!null) c:2(int!null)
+           │    │    ├── columns: b:2(int!null) c:3(int!null)
            │    │    ├── values
            │    │    │    └── tuple [type=tuple]
            │    │    └── projections
@@ -393,9 +393,9 @@ project
            │              └── variable: c [type=int]
            └── subquery [type=tuple{int, int}]
                 └── max1-row
-                     ├── columns: a:3(tuple{int, int})
+                     ├── columns: a:1(tuple{int, int})
                      └── project
-                          ├── columns: a:3(tuple{int, int})
+                          ├── columns: a:1(tuple{int, int})
                           ├── values
                           │    └── tuple [type=tuple]
                           └── projections
@@ -442,7 +442,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: c:1(tuple{int, int})
+           │    ├── columns: c:3(tuple{int, int})
            │    ├── values
            │    │    └── tuple [type=tuple]
            │    └── projections
@@ -455,7 +455,7 @@ project
                      └── project
                           ├── columns: column4:4(tuple{int, int})
                           ├── project
-                          │    ├── columns: a:2(int!null) b:3(int!null)
+                          │    ├── columns: a:1(int!null) b:2(int!null)
                           │    ├── values
                           │    │    └── tuple [type=tuple]
                           │    └── projections
@@ -476,7 +476,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: b:1(tuple{int, int})
+           │    ├── columns: b:2(tuple{int, int})
            │    ├── values
            │    │    └── tuple [type=tuple]
            │    └── projections
@@ -485,9 +485,9 @@ project
            │              └── const: 2 [type=int]
            └── subquery [type=tuple{int, int}]
                 └── max1-row
-                     ├── columns: a:2(tuple{int, int})
+                     ├── columns: a:1(tuple{int, int})
                      └── project
-                          ├── columns: a:2(tuple{int, int})
+                          ├── columns: a:1(tuple{int, int})
                           ├── values
                           │    └── tuple [type=tuple]
                           └── projections
@@ -1965,7 +1965,7 @@ SELECT min(a) IN (SELECT b FROM u) FROM t
 project
  ├── columns: "?column?":6(bool)
  ├── scalar-group-by
- │    ├── columns: min:5(string)
+ │    ├── columns: min:3(string)
  │    ├── project
  │    │    ├── columns: a:1(string)
  │    │    └── scan t
@@ -1976,9 +1976,9 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: b:3(string)
+           │    ├── columns: b:4(string)
            │    └── scan u
-           │         └── columns: b:3(string) u.rowid:4(int!null)
+           │         └── columns: b:4(string) u.rowid:5(int!null)
            └── variable: min [type=string]
 
 # Regression test for #28240. Make sure that the tuple labels are stripped from
@@ -2365,35 +2365,35 @@ FROM
 project
  ├── columns: "?column?":21(tuple{bool, int})
  ├── scalar-group-by
- │    ├── columns: max:16(int) max:19(int)
+ │    ├── columns: max:8(int) max:18(int)
  │    ├── project
- │    │    ├── columns: column15:15(int) a:18(int)
+ │    │    ├── columns: a:7(int) column17:17(int)
  │    │    ├── scan t3
  │    │    │    └── columns: t3.a:1(int) t3.b:2(int) t3.rowid:3(int!null)
  │    │    └── projections
- │    │         ├── subquery [type=int]
- │    │         │    └── max1-row
- │    │         │         ├── columns: max:13(int)
- │    │         │         └── project
- │    │         │              ├── columns: max:13(int)
- │    │         │              └── group-by
- │    │         │                   ├── columns: max:13(int) b:14(int)
- │    │         │                   ├── grouping columns: b:14(int)
- │    │         │                   ├── project
- │    │         │                   │    ├── columns: b:14(int) t1.a:10(int)
- │    │         │                   │    ├── scan t1
- │    │         │                   │    │    └── columns: t1.a:10(int) t1.b:11(int) t1.rowid:12(int!null)
- │    │         │                   │    └── projections
- │    │         │                   │         └── variable: t3.b [type=int]
- │    │         │                   └── aggregations
- │    │         │                        └── max [type=int]
- │    │         │                             └── variable: t1.a [type=int]
- │    │         └── variable: t3.a [type=int]
+ │    │         ├── variable: t3.a [type=int]
+ │    │         └── subquery [type=int]
+ │    │              └── max1-row
+ │    │                   ├── columns: max:15(int)
+ │    │                   └── project
+ │    │                        ├── columns: max:15(int)
+ │    │                        └── group-by
+ │    │                             ├── columns: max:15(int) b:16(int)
+ │    │                             ├── grouping columns: b:16(int)
+ │    │                             ├── project
+ │    │                             │    ├── columns: b:16(int) t1.a:12(int)
+ │    │                             │    ├── scan t1
+ │    │                             │    │    └── columns: t1.a:12(int) t1.b:13(int) t1.rowid:14(int!null)
+ │    │                             │    └── projections
+ │    │                             │         └── variable: t3.b [type=int]
+ │    │                             └── aggregations
+ │    │                                  └── max [type=int]
+ │    │                                       └── variable: t1.a [type=int]
  │    └── aggregations
  │         ├── max [type=int]
- │         │    └── variable: column15 [type=int]
+ │         │    └── variable: a [type=int]
  │         └── max [type=int]
- │              └── variable: a [type=int]
+ │              └── variable: column17 [type=int]
  └── projections
       └── subquery [type=tuple{bool, int}]
            └── max1-row
@@ -2407,9 +2407,9 @@ project
                                ├── not [type=bool]
                                │    └── any: ge [type=bool]
                                │         ├── project
-                               │         │    ├── columns: max:17(int)
+                               │         │    ├── columns: max:19(int)
                                │         │    ├── scan t1
-                               │         │    │    └── columns: t1.a:7(int) t1.b:8(int) t1.rowid:9(int!null)
+                               │         │    │    └── columns: t1.a:9(int) t1.b:10(int) t1.rowid:11(int!null)
                                │         │    └── projections
                                │         │         └── variable: max [type=int]
                                │         └── variable: t2.a [type=int]
@@ -2526,3 +2526,27 @@ build
 SELECT * FROM xyzs WHERE (SELECT sum(x) FROM (SELECT u FROM kuv) GROUP BY u) > 100;
 ----
 error (42803): aggregate functions are not allowed in WHERE
+
+# Regression test for #37263.
+build
+SELECT 3::decimal IN (SELECT 1)
+----
+project
+ ├── columns: "?column?":2(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: "?column?":1(decimal!null)
+           │    ├── values
+           │    │    └── tuple [type=tuple]
+           │    └── projections
+           │         └── const: 1 [type=decimal]
+           └── cast: DECIMAL [type=decimal]
+                └── const: 3 [type=decimal]
+
+build
+SELECT 3::decimal IN (SELECT 1::int)
+----
+error (22023): unsupported comparison operator: <decimal> IN <tuple{int}>
