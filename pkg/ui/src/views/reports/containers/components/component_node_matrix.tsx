@@ -199,7 +199,7 @@ function ExpandedCellGuts(props) {
         <span id="title">
           {traces.samples.samples.length} traces for <span className="component-name">{expanded.name}</span> on
           <span className="component-node"> node {expanded.node_id}</span> collected @
-          {time_util.formatDateTime(time_util.timestampToDate(traces.timestamp))}
+          {time_util.formatDateTime(traces.timestamp, true)}
         </span>
         <SampleTable
           name={expanded.name}

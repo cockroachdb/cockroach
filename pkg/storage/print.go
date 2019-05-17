@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package debug
+package storage
 
 import (
 	"bytes"
@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -36,7 +35,7 @@ import (
 // PrintKeyValue attempts to pretty-print the specified MVCCKeyValue to
 // os.Stdout, falling back to '%q' formatting.
 func PrintKeyValue(kv engine.MVCCKeyValue) {
-	fmt.Println(SprintKeyValue(kv))
+	fmt.Println(SprintKeyValue(kv, true /* printKey */))
 }
 
 // SprintKey pretty-prings the specified MVCCKey.
@@ -44,10 +43,14 @@ func SprintKey(key engine.MVCCKey) string {
 	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, engine.EncodeKey(key))
 }
 
-// SprintKeyValue is like PrintKeyValue, but returns a string.
-func SprintKeyValue(kv engine.MVCCKeyValue) string {
+// SprintKeyValue is like PrintKeyValue, but returns a string. If
+// printKey is true, prints the key and the value together; otherwise,
+// prints just the value.
+func SprintKeyValue(kv engine.MVCCKeyValue, printKey bool) string {
 	var sb strings.Builder
-	sb.WriteString(SprintKey(kv.Key))
+	if printKey {
+		sb.WriteString(SprintKey(kv.Key))
+	}
 	decoders := []func(kv engine.MVCCKeyValue) (string, error){
 		tryRaftLogEntry,
 		tryRangeDescriptor,
@@ -127,7 +130,7 @@ func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
 			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintKeyValue(engine.MVCCKeyValue{
 				Key:   mvccKey,
 				Value: r.Value(),
-			})))
+			}, true /* printKey */)))
 		case engine.BatchTypeMerge:
 			mvccKey, err := r.MVCCKey()
 			if err != nil {
@@ -136,7 +139,7 @@ func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
 			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintKeyValue(engine.MVCCKeyValue{
 				Key:   mvccKey,
 				Value: r.Value(),
-			})))
+			}, true /* printKey */)))
 		case engine.BatchTypeSingleDeletion:
 			mvccKey, err := r.MVCCKey()
 			if err != nil {
@@ -169,7 +172,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 	}
 	if ent.Type == raftpb.EntryNormal {
 		if len(ent.Data) > 0 {
-			_, cmdData := storage.DecodeRaftCommand(ent.Data)
+			_, cmdData := DecodeRaftCommand(ent.Data)
 			var cmd storagepb.RaftCommand
 			if err := protoutil.Unmarshal(cmdData, &cmd); err != nil {
 				return "", err
@@ -195,7 +198,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		if err := protoutil.Unmarshal(ent.Data, &cc); err != nil {
 			return "", err
 		}
-		var ctx storage.ConfChangeContext
+		var ctx ConfChangeContext
 		if err := protoutil.Unmarshal(cc.Context, &ctx); err != nil {
 			return "", err
 		}
@@ -364,4 +367,14 @@ func maybeUnmarshalInline(v []byte, dest protoutil.Message) error {
 		RawBytes: meta.RawBytes,
 	}
 	return value.GetProto(dest)
+}
+
+type stringifyWriteBatch storagepb.WriteBatch
+
+func (s *stringifyWriteBatch) String() string {
+	if wbStr, err := decodeWriteBatch((*storagepb.WriteBatch)(s)); err == nil {
+		return wbStr
+	} else {
+		return fmt.Sprintf("failed to stringify write batch: %x", s.Data)
+	}
 }

@@ -182,7 +182,7 @@ func Record(stop <-chan time.Time, targetCount int64) map[string]ComponentTraces
 		for _, ps := range pendingSpans {
 			sp := ps.Span.(*span)
 			sample := ComponentSamples_Sample{
-				Attributes: sp.getTags("%+v"),
+				Attributes: sp.getTags(),
 				Stuck:      stuck,
 				Pending:    true,
 				Spans:      GetRecording(sp),
@@ -382,7 +382,7 @@ func (c *ComponentSpan) Finish() {
 	errStr := strings.Join(errStrs, "\n")
 
 	sample := ComponentSamples_Sample{
-		Attributes: c.Span.(*span).getTags("%+v"),
+		Attributes: c.Span.(*span).getTags(),
 		Error:      errStr,
 		Stuck:      c.stuck,
 		Spans:      spans,

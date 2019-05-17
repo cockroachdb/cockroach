@@ -1784,7 +1784,7 @@ func (r *Replica) processRaftCommand(
 
 	ctx, csp := tracing.StartComponentSpan(ctx, r.AmbientContext.Tracer, "storage.replica.raft.process", "process raft command")
 	csp.SetTag("repl_eval", raftCmd.ReplicatedEvalResult)
-	csp.SetTag("write_batch", raftCmd.WriteBatch)
+	csp.SetTag("write_batch", (*stringifyWriteBatch)(raftCmd.WriteBatch))
 	if raftCmd.LogicalOpLog != nil {
 		csp.SetTag("logical_ops", raftCmd.LogicalOpLog)
 	}
