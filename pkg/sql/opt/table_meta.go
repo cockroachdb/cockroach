@@ -130,6 +130,12 @@ type TableMeta struct {
 	// is always an unqualified name.
 	Alias tree.TableName
 
+	// IgnoreForeignKeys is true if we should disable any rules that depend on the
+	// consistency of outgoing foreign key references. Set by the
+	// IGNORE_FOREIGN_KEYS table hint; useful for scrub queries meant to verify
+	// the consistency of foreign keys.
+	IgnoreForeignKeys bool
+
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 }

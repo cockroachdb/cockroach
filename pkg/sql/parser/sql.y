@@ -508,7 +508,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
-%token <str> IF IFERROR IFNULL ILIKE IMMEDIATE IMPORT IN INCREMENT INCREMENTAL
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
@@ -5975,7 +5975,13 @@ index_flags_param:
 |
   NO_INDEX_JOIN
   {
-     $$.val = &tree.IndexFlags{NoIndexJoin: true}
+    $$.val = &tree.IndexFlags{NoIndexJoin: true}
+  }
+|
+  IGNORE_FOREIGN_KEYS
+  {
+    /* SKIP DOC */
+    $$.val = &tree.IndexFlags{IgnoreForeignKeys: true}
   }
 
 index_flags_param_list:
@@ -6035,6 +6041,7 @@ opt_index_flags:
 // Index flags:
 //   '{' FORCE_INDEX = <idxname> [, ...] '}'
 //   '{' NO_INDEX_JOIN [, ...] '}'
+//   '{' IGNORE_FOREIGN_KEYS [, ...] '}'
 //
 // Join types:
 //   { INNER | { LEFT | RIGHT | FULL } [OUTER] } [ { HASH | MERGE | LOOKUP } ]
@@ -8960,6 +8967,7 @@ unreserved_keyword:
 | NO
 | NORMAL
 | NO_INDEX_JOIN
+| IGNORE_FOREIGN_KEYS
 | OF
 | OFF
 | OID

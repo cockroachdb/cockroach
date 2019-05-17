@@ -1576,7 +1576,7 @@ inner-join
       └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
 
 # Left joins on a foreign key turn into inner joins.
-opt
+opt expect=SimplifyLeftJoinWithFilters
 SELECT *
 FROM c
 LEFT OUTER JOIN a
@@ -1598,7 +1598,7 @@ inner-join
       └── y = k [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
 
 # Left joins on a multiple-column foreign key turn into inner joins.
-opt
+opt expect=SimplifyLeftJoinWithFilters
 SELECT *
 FROM d
 LEFT OUTER JOIN c
@@ -1624,7 +1624,7 @@ inner-join (merge)
  └── filters (true)
 
 # Left join on a part of a foreign key turns into an inner join.
-opt
+opt expect=SimplifyLeftJoinWithFilters
 SELECT *
 FROM d
 LEFT OUTER JOIN c
@@ -1646,7 +1646,7 @@ inner-join
       └── d.z = c.z [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 # Can't simplify: joins on non-foreign keys.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT *
 FROM c
 LEFT OUTER JOIN a
@@ -1668,7 +1668,7 @@ left-join
       └── z = k [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
 
 # Can't simplify: joins on non-foreign keys still in foreign key index.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT *
 FROM c
 LEFT OUTER JOIN a
@@ -1693,7 +1693,7 @@ left-join (merge)
  └── filters (true)
 
 # Can't simplify: non-equality condition.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM a FULL JOIN a AS a2 ON a.k<a2.k
 ----
 full-join
@@ -1712,7 +1712,7 @@ full-join
       └── a.k < a2.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Can't simplify: non-join equality condition.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM a FULL JOIN a AS a2 ON a.f=1 AND a.f=a2.f
 ----
 full-join
@@ -1732,7 +1732,7 @@ full-join
       └── a.f = a2.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
 
 # Can't simplify: non-null column.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM a FULL JOIN a AS a2 ON a.s=a2.s
 ----
 full-join
@@ -1751,7 +1751,7 @@ full-join
       └── a.s = a2.s [type=bool, outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
 
 # Can't simplify: equality column that is synthesized.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM a FULL JOIN (SELECT k+1 AS k FROM a) AS a2 ON a.k=a2.k
 ----
 full-join
@@ -1772,7 +1772,7 @@ full-join
       └── a.k = k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
 
 # Can't simplify: equality condition with different column ordinals.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.f
 ----
 full-join
@@ -1791,7 +1791,7 @@ full-join
       └── a.k = a2.f [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Can't simplify: one equality condition has columns from same side of join.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
 ----
 full-join (merge)
@@ -1815,7 +1815,7 @@ full-join (merge)
       └── a2.f = a2.f [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
 
 # Can't simplify: equality conditions have columns from different tables.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM (SELECT * FROM a, b) AS a FULL JOIN a AS a2 ON a.k=a2.k AND a.x=a2.k
 ----
 full-join
@@ -1844,7 +1844,7 @@ full-join
       └── x = a2.k [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
 
 # Can't simplify: The a2.x column is not part of unfilteredCols.
-opt
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM a LEFT JOIN (SELECT * FROM a, b) AS a2 ON a.k=a2.x
 ----
 right-join
@@ -1870,6 +1870,28 @@ right-join
  │    └── fd: (1)-->(2-5)
  └── filters
       └── k = x [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+# Can't simplify if IGNORE_FOREIGN_KEYS hint is passed.
+opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
+SELECT *
+FROM c@{IGNORE_FOREIGN_KEYS}
+LEFT OUTER JOIN a
+ON c.y = a.k
+----
+left-join
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── key: (1,4)
+ ├── fd: (1)-->(2,3), (4)-->(5-8)
+ ├── scan c
+ │    ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ ├── scan a
+ │    ├── columns: k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
+ │    ├── key: (4)
+ │    └── fd: (4)-->(5-8)
+ └── filters
+      └── y = k [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
 
 # --------------------------------------------------
 # EliminateSemiJoin

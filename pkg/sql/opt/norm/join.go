@@ -427,6 +427,10 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 	// Condition #5: All remaining left columns correspond to a validated foreign
 	// key relation.
 	leftTabMeta := md.TableMeta(leftTab)
+	if leftTabMeta.IgnoreForeignKeys {
+		// We are not allowed to use any of the left table's outbound foreign keys.
+		return false
+	}
 	rightTabMeta := md.TableMeta(rightTab)
 	for i, cnt := 0, leftTabMeta.Table.IndexCount(); i < cnt; i++ {
 		index := leftTabMeta.Table.Index(i)
