@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -148,14 +147,7 @@ func TestOracleFactory(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	aCtx := log.AmbientContext{Tracer: tracing.NewTracer()}
-	rpcContext := rpc.NewContext(
-		aCtx,
-		&base.Config{Insecure: true},
-		clock,
-		stopper,
-		&st.Version,
-	)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	c := client.NewDB(log.AmbientContext{
 		Tracer: tracing.NewTracer(),
 	}, client.MockTxnSenderFactory{},

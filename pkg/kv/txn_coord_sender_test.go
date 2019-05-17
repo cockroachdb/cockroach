@@ -251,6 +251,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 		DistSenderConfig{
 			AmbientCtx: ambient,
 			Clock:      s.Clock,
+			RPCContext: s.Cfg.RPCContext,
 			TestingKnobs: ClientTestingKnobs{
 				TransportFactory: adaptSimpleTransport(sendFn),
 			},
