@@ -54,22 +54,21 @@ func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
 		ts := d.Timestamp
 		const format = `%s%d.%09d,%d %s
 %s    ts:%s
-%s    value:%q
+%s    value:%s
 %s    raw mvcc_key/value: %x %x
 `
-		// TODO(tschottdorf): add pretty-printed value. We have the code in
-		// cli/debug/SprintKeyValue.
 		var prettyTime string
 		if d.Timestamp == (hlc.Timestamp{}) {
 			prettyTime = "<zero>"
 		} else {
 			prettyTime = d.Timestamp.GoTime().UTC().String()
 		}
+		mvccKey := engine.MVCCKey{Key: d.Key, Timestamp: ts}
 		num, err := fmt.Fprintf(w, format,
 			prefix, ts.WallTime/1E9, ts.WallTime%1E9, ts.Logical, d.Key,
 			prefix, prettyTime,
-			prefix, d.Value,
-			prefix, engine.EncodeKey(engine.MVCCKey{Key: d.Key, Timestamp: ts}), d.Value)
+			prefix, SprintKeyValue(engine.MVCCKeyValue{Key: mvccKey, Value: d.Value}, false /* printKey */),
+			prefix, engine.EncodeKey(mvccKey), d.Value)
 		if err != nil {
 			return 0, err
 		}
