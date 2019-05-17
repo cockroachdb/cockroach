@@ -14,6 +14,7 @@
 
 import classNames from "classnames";
 import _ from "lodash";
+import moment from "moment";
 import Long from "long";
 import React from "react";
 import { Helmet } from "react-helmet";
@@ -29,6 +30,7 @@ import { nodeIDAttr } from "src/util/constants";
 
 import { ExpandedSample } from "./expanded_sample";
 import { ComponentNodeMatrix, CombinedTraces, Cell } from "./component_node_matrix";
+import { ComponentActivityRates } from "./component_activity";
 import { SampleState } from "./sample";
 import { genActivityResponses, genSampleMap, genComponentTraces, genComponentTrace } from "./testing";
 
@@ -54,6 +56,38 @@ function componentsRequestFromProps(props: ComponentsProps) {
   });
 }
 
+class NodeResponse {
+  node_id: number;
+  components: {[name: string]: ComponentActivityRates};
+
+  constructor(node_id: number) {
+    this.node_id = node_id;
+    this.components = {};
+  }
+}
+
+function diffActivityResponses(cur: protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse[],
+                               last: protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse[]) {
+  if (!cur && !last) return [];
+
+  var last_by_node_id: {[node_id: number]: protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse} = {};
+  if (last) {
+    last.forEach((n) => {
+      last_by_node_id[n.node_id] = n;
+    });
+  }
+  var nodes: NodeResponse[] = [];
+  cur.forEach((n) => {
+    var node: NodeResponse = new NodeResponse(n.node_id);
+    _.map(n.components, (ca, name) => {
+      const last_n: protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse = last_by_node_id[n.node_id];
+      node.components[name] = new ComponentActivityRates(ca, last_n ? last_n.components[name] : null, n.start_time);
+    });
+    nodes.push(node);
+  });
+  return nodes;
+}
+
 class Components extends React.Component<ComponentsProps, ComponentsState> {
   constructor(props) {
     super(props);
@@ -73,8 +107,17 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
 
   componentWillReceiveProps(nextProps: ComponentsProps) {
     this.props.refreshComponents(componentsRequestFromProps(nextProps));
-    if (isTesting() && (!this.props.components || nextProps.components.data != this.props.components.data)) {
-      this.state.testActivityResponses = genActivityResponses();
+    var newResponses: protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse[];
+    if (!this.props.components || nextProps.components.data != this.props.components.data) {
+      if (isTesting()) {
+        newActivityResponses = genActivityResponses();
+        this.state.activityResponses = diffActivityResponses(newActivityResponses, this.state.testActivityResponses);
+        this.state.testActivityResponses = newActivityResponses();
+      } else {
+        this.state.activityResponses = diffActivityResponses(
+          nextProps.components && nextProps.components.data ? nextProps.components.data.nodes : null,
+          this.props.components && this.props.components.data ? this.props.components.data.nodes : null);
+      }
     }
   }
 
@@ -100,8 +143,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
       }
     }
 
-    var activityResponses = this.props.components.data.nodes;
-    const nodeIDs = _.keys(_.pickBy(activityResponses, d => {
+    const nodeIDs = _.keys(_.pickBy(this.state.activityResponses, d => {
       return _.isEmpty(d.error_message);
     }));
     if (nodeIDs.length === 0) {
@@ -111,13 +153,10 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
         return <h2>No results reported for node n{this.props.params[nodeIDAttr]}</h2>;
       }
     }
-    if (isTesting()) {
-      activityResponses = this.state.testActivityResponses;
-    }
 
     return (
         <ComponentNodeMatrix
-          activityResponses={activityResponses}
+          activityResponses={this.state.activityResponses}
           componentTraces={this.state.componentTraces}
           collapsedComponents={this.state.collapsed}
           onToggleComponent={this.onToggleComponent}
@@ -137,7 +176,7 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
       node_id: this.props.params[nodeIDAttr],
       duration: this.state.sampleState.duration,
       target_count: this.state.sampleState.target_count,
-    })).then((result) => {
+    }), moment.duration(120, "s")).then((result) => {
       console.log("sampled system component traces", result);
       if (isTesting()) {
         this.state.testSampleMaps[result.sample_traces_id] = genSampleMap();

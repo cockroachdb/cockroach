@@ -56,7 +56,7 @@ function countLegend(axis) {
         .attr("stop-opacity", d => d.opacity);
     });
 
-    const left = 60;
+    const left = 70;
     const legendBG = sel.selectAll("rect")
       .data(errorColors);
     legendBG.enter()
@@ -75,9 +75,9 @@ function countLegend(axis) {
       .append("text")
       .attr("class", "name")
       .attr("transform", "translate(0, 20)")
-      .text("Velocity");
+      .text("Requests/s");
 
-    const domain = [0, props.metrics.maxSpanCount];
+    const domain = [0, props.metrics.max_span_rate];
     const scale = d3.scale.linear().range([0, props.width]).domain(domain);
     axis.scale(scale)
       .tickSize(2, 2)
@@ -85,10 +85,10 @@ function countLegend(axis) {
       .tickFormat(d => d);
 
     const countAxisG = sel.selectAll("#countaxis")
-      .attr("class", "axis")
       .data([props]);
     countAxisG.enter()
       .append("g")
+      .attr("class", "axis")
       .attr("id", "countaxis")
       .attr("transform", "translate(" + left + ", 13)");
     countAxisG.call(axis);
@@ -121,7 +121,7 @@ function errorsLegend(axis) {
       .attr("stop-color", d => d)
       .attr("stop-opacity", 1);
 
-    const left = 60;
+    const left = 70;
     const legendBG = sel.selectAll("rect")
       .data([props]);
     legendBG.enter()
@@ -140,9 +140,9 @@ function errorsLegend(axis) {
       .append("text")
       .attr("class", "name")
       .attr("transform", "translate(0, 50)")
-      .text("Errors");
+      .text("Errors/s");
 
-    const domain = [0, props.metrics.maxErrors];
+    const domain = [0, props.metrics.max_error_rate];
     const scale = d3.scale.linear().range([0, props.width]).domain(domain);
     axis.scale(scale)
       .tickSize(2, 2)
@@ -150,10 +150,10 @@ function errorsLegend(axis) {
       .tickFormat(d => d);
 
     const countAxisG = sel.selectAll("#countaxis")
-      .attr("class", "axis")
       .data([props]);
     countAxisG.enter()
       .append("g")
+      .attr("class", "axis")
       .attr("id", "countaxis")
       .attr("transform", "translate(" + left + ", 43)");
     countAxisG.call(axis);

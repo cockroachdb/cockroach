@@ -19,57 +19,89 @@ import * as React from "react";
 import * as protos from  "src/js/protos";
 import createChartComponent from "src/views/shared/util/d3-react";
 import { errorColors } from "./legend";
+import * as time_util from "./time_util";
+
 import "./component_activity.styl";
 
-interface ComponentActivityMetricsI {
-  minSpanCount: number;
-  maxSpanCount: number;
-  minErrors: number;
-  maxErrors: number;
-  fillColor: (ca: protos.cockroach.util.tracing.IComponentActivity) => string;
-  fillOpacity: (ca: protos.cockroach.util.tracing.IComponentActivity) => number;
+export class ComponentActivityRates {
+  span_rate: number;
+  event_rate: number;
+  error_rate: number;
+  stuck_count: number;
+
+  constructor(ca?: protos.cockroach.util.tracing.IComponentActivity,
+              last?: protos.cockroach.util.tracing.IComponentActivity,
+              server_ts?: protos.google.protobuf.Timestamp) {
+    if (ca && last) {
+      const diff: number = time_util.durationAsNumber(time_util.subtractTimestamps(ca.timestamp, last.timestamp));
+      this.span_rate = ca.span_count.sub(last.span_count).toNumber() / diff;
+      this.event_rate = ca.event_count.sub(last.event_count).toNumber() / diff;
+      this.error_rate = ca.errors.sub(last.errors).toNumber() / diff;
+      this.stuck_count = ca.stuck_count.toNumber();
+    } else if (ca && server_ts) {
+      const diff: number = time_util.durationAsNumber(time_util.subtractTimestamps(ca.timestamp, server_ts));
+      this.span_rate = ca.span_count.toNumber() / diff;
+      this.event_rate = ca.event_count.toNumber() / diff;
+      this.error_rate = ca.errors.toNumber() / diff;
+      this.stuck_count = ca.stuck_count.toNumber();
+    } else {
+      this.span_rate = 0;
+      this.event_rate = 0;
+      this.error_rate = 0;
+      this.stuck_count = 0;
+    }
+  }
+}
+
+interface IComponentActivityMetrics {
+  min_span_rate: number;
+  max_span_rate: number;
+  min_error_rate: number;
+  max_error_rate: number;
+  fillColor: (ca: ComponentActivityRates) => string;
+  fillOpacity: (ca: ComponentActivityRates) => number;
 }
 
 export class ComponentActivityMetrics {
   count: number;
-  minSpanCount: number;
-  maxSpanCount: number;
-  minErrors: number;
-  maxErrors: number;
+  min_span_rate: number;
+  max_span_rate: number;
+  min_error_rate: number;
+  max_error_rate: number;
 
   constructor(){
     this.count = 0;
   }
 
-  addComponentActivity(ca: protos.cockroach.util.tracing.IComponentActivity) {
+  addComponentActivity(ca: ComponentActivityRates) {
     if (!ca) {
       return;
     }
     if (this.count == 0) {
-      this.minSpanCount = ca.span_count;
-      this.maxSpanCount = ca.span_count;
-      this.minErrors = ca.errors;
-      this.maxErrors = ca.errors;
+      this.min_span_rate = ca.span_rate;
+      this.max_span_rate = ca.span_rate;
+      this.min_error_rate = ca.error_rate;
+      this.max_error_rate = ca.error_rate;
     } else {
-      if (ca.span_count.gt(this.maxSpanCount)) {
-        this.maxSpanCount = ca.span_count;
+      if (ca.span_rate > this.max_span_rate) {
+        this.max_span_rate = ca.span_rate;
       }
-      if (ca.span_count.lt(this.minSpanCount)) {
-        this.minSpanCount = ca.span_count;
+      if (ca.span_rate < this.min_span_rate) {
+        this.min_span_rate = ca.span_rate;
       }
-      if (ca.errors.gt(this.maxErrors)) {
-        this.maxErrors = ca.errors;
+      if (ca.error_rate > this.max_error_rate) {
+        this.max_error_rate = ca.error_rate;
       }
-      if (ca.errors.lt(this.minErrors)) {
-        this.minErrors = ca.errors;
+      if (ca.error_rate < this.min_error_rate) {
+        this.min_error_rate = ca.error_rate;
       }
     }
     this.count++;
-    if (this.minSpanCount.add(1).gt(this.maxSpanCount)) {
-      this.maxSpanCount = this.minSpanCount.add(1);
+    if (this.min_span_rate + 1 > this.max_span_rate) {
+      this.max_span_rate = this.min_span_rate + 1;
     }
-    if (this.minErrors.add(1).gt(this.maxErrors)) {
-      this.maxErrors = this.minErrors.add(1);
+    if (this.min_error_rate + 1 > this.max_error_rate) {
+      this.max_error_rate = this.min_error_rate + 1;
     }
   }
 
@@ -77,26 +109,26 @@ export class ComponentActivityMetrics {
     if (this.countScale) {
       return;
     }
-    this.countScale = d3.scale.linear().domain([0, this.maxSpanCount.toNumber()]).range([0.1, 1]);
-    const step = d3.scale.linear().domain([1, errorColors.length]).range([0, this.maxErrors.toNumber()]);
+    this.countScale = d3.scale.linear().domain([0, this.max_span_rate]).range([0.1, 1]);
+    const step = d3.scale.linear().domain([1, errorColors.length]).range([0, this.max_error_rate]);
     this.errorsScale = d3.scale.linear().domain([step(1), step(2), step(3), step(4), step(5), step(6), step(7)])
       .interpolate(d3.interpolateHcl)
       .range(errorColors);
   }
 
-  fillColor(ca: protos.cockroach.util.tracing.IComponentActivity) {
+  fillColor(ca: ComponentActivityRates) {
     this.initScales();
-    return this.errorsScale(ca.errors.toNumber());
+    return this.errorsScale(ca.error_rate);
   }
-  fillOpacity(ca: protos.cockroach.util.tracing.IComponentActivity) {
+  fillOpacity(ca: ComponentActivityRates) {
     this.initScales();
-    return this.countScale(ca.span_count.toNumber());
+    return this.countScale(ca.span_rate);
   }
 }
 
 interface ComponentActivityProps {
-  metrics: ComponentActivityMetricsI;
-  activity: protos.cockroach.util.tracing.IComponentActivity;
+  metrics: IComponentActivityMetrics;
+  activity: ComponentActivityRates;
 }
 
 function activity() {
@@ -117,8 +149,8 @@ function activity() {
 
     // Add optional stuck symbol.
     const stuck_data: number[] = [];
-    if (activity.stuck_count.toNumber() > 0) {
-      stuck_data.push(activity.stuck_count.toNumber());
+    if (activity.stuck_count > 0) {
+      stuck_data.push(activity.stuck_count);
     }
     const stuckSel = sel.selectAll(".stuck-symbol").data(stuck_data);
     const stuckG = stuckSel.enter().append("g")

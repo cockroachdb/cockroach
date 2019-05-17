@@ -73,8 +73,11 @@ export class TraceLine {
     return str;
   }
 
-  formatMessageTitle = () => {
+  formatMessageTitle = (expanded: boolean) => {
     if (this.sample) {
+      if (expanded) {
+        return this.formatMessage();
+      }
       var attrs: string[] = _.map(this.sample.attributes, (v, k) => { return "\n" + k + ": " + v });
       return "Node: " + this.node_id +
         "\nTimestamp: " + formatDateTime(this.span.start_time, false) +
@@ -301,7 +304,7 @@ export class ExpandedSpan {
       time_class += " bottom";
     }
     const msg: string = line.formatMessage();
-    const msg_title: string = expanded ? "" : line.formatMessageTitle();
+    const msg_title: string = line.formatMessageTitle(expanded);
     columns.push(
         <td className={log_class} style={log_style} title={msg_title} onClick={onClick}>
           {msg}
