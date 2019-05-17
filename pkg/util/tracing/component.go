@@ -28,6 +28,8 @@ import (
 	"github.com/rcrowley/go-metrics"
 )
 
+const ComponentTagName string = "component"
+
 // componentTraces wraps a ComponentTraces protobuf message with a
 // mutex for concurrency, sample & target counts for reservoir
 // sampling, and a map for pending spans.
@@ -492,6 +494,7 @@ func startComponentSpanInner(
 			operation: operation,
 			// !!! t:         cSpan.Tracer(),
 		}
+		cSpan.SetTag(ComponentTagName, component)
 		ctx = opentracing.ContextWithSpan(ctx, cSpan)
 		return ctx, compSpan
 	}
@@ -508,7 +511,7 @@ func startComponentSpanInner(
 		}
 		cSpan = StartChildSpan(operation, pSpan, logtags.FromContext(ctx), separateRecording)
 	}
-	cSpan.SetTag("component", component)
+	cSpan.SetTag(ComponentTagName, component)
 
 	// Start the recording (if not already started by the parent) and
 	// set up the span collection.
