@@ -59,7 +59,7 @@ func Load(
 
 	var txCtx transform.ExprTransformContext
 	curTime := timeutil.Unix(0, ts.WallTime)
-	evalCtx := tree.EvalContext{}
+	evalCtx := &tree.EvalContext{}
 	evalCtx.SetTxnTimestamp(curTime)
 	evalCtx.SetStmtTimestamp(curTime)
 
@@ -164,7 +164,7 @@ func Load(
 			// At this point the CREATE statements in the loaded SQL do not
 			// use the SERIAL type so we need not process SERIAL types here.
 			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.ID,
-				0 /* table ID */, ts, privs, affected, nil, &evalCtx)
+				0 /* table ID */, ts, privs, affected, nil, evalCtx)
 			if err != nil {
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}
@@ -188,7 +188,7 @@ func Load(
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make row inserter")
 			}
 			cols, defaultExprs, err =
-				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &evalCtx)
+				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, evalCtx)
 			if err != nil {
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "process default columns")
 			}
@@ -256,7 +256,7 @@ func insertStmtToKVs(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	defaultExprs []tree.TypedExpr,
 	cols []sqlbase.ColumnDescriptor,
-	evalCtx tree.EvalContext,
+	evalCtx *tree.EvalContext,
 	ri row.Inserter,
 	stmt *tree.Insert,
 	f func(roachpb.KeyValue),

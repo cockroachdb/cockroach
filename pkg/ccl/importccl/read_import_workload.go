@@ -34,17 +34,17 @@ import (
 )
 
 type workloadReader struct {
-	newEvalCtx func() *tree.EvalContext
-	table      *sqlbase.TableDescriptor
-	kvCh       chan []roachpb.KeyValue
+	evalCtx *tree.EvalContext
+	table   *sqlbase.TableDescriptor
+	kvCh    chan []roachpb.KeyValue
 }
 
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
-	kvCh chan []roachpb.KeyValue, table *sqlbase.TableDescriptor, newEvalCtx func() *tree.EvalContext,
+	kvCh chan []roachpb.KeyValue, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
 ) *workloadReader {
-	return &workloadReader{newEvalCtx: newEvalCtx, table: table, kvCh: kvCh}
+	return &workloadReader{evalCtx: evalCtx, table: table, kvCh: kvCh}
 }
 
 func (w *workloadReader) start(ctx ctxgroup.Group) {
@@ -174,7 +174,7 @@ func (w *workloadReader) readFiles(
 		wc := NewWorkloadKVConverter(
 			w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh)
 		if err := ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
-			evalCtx := w.newEvalCtx()
+			evalCtx := w.evalCtx.Copy()
 			return wc.Worker(ctx, evalCtx, finishedBatchFn)
 		}); err != nil {
 			return err
