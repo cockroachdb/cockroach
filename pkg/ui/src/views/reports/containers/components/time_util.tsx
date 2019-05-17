@@ -40,6 +40,10 @@ export function subtractTimestamps(tsa: protos.google.protobuf.ITimestamp,
   });
 }
 
+export function durationAsNumber(dur: protos.google.protobuf.IDuration) {
+  return dur.seconds.toNumber() + dur.nanos / 1E9;
+}
+
 export function addDuration(ts: protos.google.protobuf.ITimestamp,
                             duration: protos.google.protobuf.IDuration) {
   if (ts.nanos + duration.nanos > 1E9) {
@@ -51,7 +55,7 @@ export function addDuration(ts: protos.google.protobuf.ITimestamp,
   }
 }
 
-export function formatNumber(num: number) {
+export function formatNumber(num: number, precision?: number) {
   const numStr: string = num.toString();
   const idxOfDot: number = numStr.indexOf(".")
   const intStr: string = numStr.substring(0, idxOfDot == -1 ? numStr.length : idxOfDot);
@@ -66,7 +70,7 @@ export function formatNumber(num: number) {
     }
     lastIdx = i;
   }
-  return fmt + decStr;
+  return fmt + (precision ? decStr.substring(0, Math.min(decStr.length, precision + 1)) : decStr);
 }
 
 export function formatDuration(duration: protos.google.protobuf.IDuration, truncate: boolean) {

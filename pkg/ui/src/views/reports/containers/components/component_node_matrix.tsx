@@ -19,7 +19,7 @@ import * as React from "react";
 import * as protos from  "src/js/protos";
 
 import Loading from "src/views/shared/components/loading";
-import { ComponentActivity, ComponentActivityMetricsI, ComponentActivityMetrics } from "./component_activity";
+import { ComponentActivity, ComponentActivityRate, IComponentActivityMetrics, ComponentActivityMetrics } from "./component_activity";
 import { SampleOptions, SampleState } from "./sample";
 import { Legend } from "./legend";
 import { SortProps, SampleTable } from "./sample_table";
@@ -46,7 +46,7 @@ interface ISystemComponentRow {
   // Map from node id to a map from component name (full) to component
   // activities. If there are no collapsed children, the map will have
   // just one entry.
-  nodeActivities?: {[id: number]: {[name: string]: protos.cockroach.server.serverpb.ComponentsResponse.IComponentActivity[]}};
+  nodeActivities?: {[id: number]: {[name: string]: ComponentActivityRate[]}};
 }
 
 export class SystemComponentRow {
@@ -66,17 +66,13 @@ export class SystemComponentRow {
       return this.nodeActivities[node_id][compNames[0]];
     }
     // First clone the result using the first component activity and then aggregate the remainder.
-    const result: protos.cockroach.util.tracing.IComponentActivity = new protos.cockroach.util.tracing.ComponentActivity();
-    result.span_count = Long.fromNumber(0);
-    result.event_count = Long.fromNumber(0);
-    result.stuck_count = Long.fromNumber(0);
-    result.errors = Long.fromNumber(0);
+    const result: ComponentActivityRates = new ComponentActivityRates();
     _.map(compNames, (name) => {
-      const ca: protos.cockroach.server.serverpb.ComponentsResponse.IComponentActivity = this.nodeActivities[node_id][name];
-      result.span_count = result.span_count.add(ca.span_count);
-      result.stuck_count = result.stuck_count.add(ca.stuck_count);
-      result.event_count = result.event_count.add(ca.event_count);
-      result.errors = result.errors.add(ca.errors);
+      const ca: ComponentActivityRates = this.nodeActivities[node_id][name];
+      result.span_rate += ca.span_rate;
+      result.event_rate += ca.event_rate;
+      result.error_rate += ca.error_rate;
+      result.stuck_count += ca.stuck_count;
     });
     return result;
   }
@@ -239,11 +235,11 @@ function MatrixCell(props) {
   }
 
   const reported: boolean = (node_id in sc.nodeActivities);
-  const activity: protos.cockroach.util.tracing.IComponentActivity =
-    reported ? sc.getNodeActivity(node_id) : new protos.cockroach.util.tracing.ComponentActivity({
-      span_count: Long.fromNumber(0), event_count: Long.fromNumber(0), stuck_count: Long.fromNumber(0), errors: Long.fromNumber(0)});
-  const title: string =
-    reported ? "Request count: " + activity.span_count + ", errors: " + activity.errors + ", stuck: " + activity.stuck_count : "Unreported";
+  const activity: ComponentActivityRates = reported ? sc.getNodeActivity(node_id) : new ComponentActivityRates();
+  const title: string = reported ? ("Requests/s: " + time_util.formatNumber(activity.span_rate, 3) +
+                                    ", errors/s: " + time_util.formatNumber(activity.error_rate, 3) +
+                                    ", stuck: " + activity.stuck_count)
+    : "Unreported";
   const className: string = isExpanded ? "matrix-cell matrix-cell--expanded" : "matrix-cell";
   const style: any = { width: cellWidth };
 
@@ -408,7 +404,7 @@ export class ComponentNodeMatrix extends React.Component<ComponentNodeMatrixProp
     });
 
     // Compute metrics across all components.
-    const metrics: ComponentActivityMetricsI = new ComponentActivityMetrics();
+    const metrics: IComponentActivityMetrics = new ComponentActivityMetrics();
     const computeMetrics = function(sc: ISystemComponentRow) {
       if (sc.nodeActivities) {
         _.map(sc.nodeActivities, (na, node_id) => {
