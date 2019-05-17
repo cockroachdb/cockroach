@@ -1421,6 +1421,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("sql/.*exported func .* returns unexported type sql.planNode"),
 				stream.GrepNot("struct field (XXX_NoUnkeyedLiteral|XXX_sizecache) should be"),
 				stream.GrepNot("pkg/sql/types/types.go.* var Uuid should be UUID"),
+				stream.GrepNot("pkg/sql/exec/vecbuiltins/.*_tmpl.go.* use lowercase for SQL built-in functions"),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
