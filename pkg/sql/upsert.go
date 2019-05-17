@@ -371,7 +371,7 @@ func (n *upsertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		n.run.computeExprs,
 		n.run.insertCols,
 		n.run.computedCols,
-		*params.EvalContext().Copy(),
+		params.EvalContext().Copy(),
 		n.run.tw.tableDesc(),
 		sourceVals,
 		&n.run.iVarContainerForComputedCols,
