@@ -466,6 +466,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 						if err != nil && err != ErrNoLivenessRecord {
 							log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 						}
+						csp.SetTag("before heartbeat", liveness)
 						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
 							if err == ErrEpochIncremented {
 								log.Infof(ctx, "%s; retrying", err)
@@ -482,6 +483,8 @@ func (nl *NodeLiveness) StartHeartbeat(
 				csp.SetError(err)
 				log.Warningf(ctx, "failed node liveness heartbeat: %+v", err)
 			} else {
+				liveness, _ := nl.Self()
+				csp.SetTag("after heartbeat", liveness)
 				csp.Finish()
 				cspIsOpen = false
 			}
