@@ -17,10 +17,7 @@ package kv
 
 import (
 	"context"
-	"encoding/hex"
-	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -28,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
@@ -156,34 +152,6 @@ func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 	return len(resurrect) > 0
 }
 
-func withMarshalingDebugging(ctx context.Context, ba roachpb.BatchRequest, f func()) {
-	nPre := ba.Size()
-	defer func() {
-		nPost := ba.Size()
-		if r := recover(); r != nil || nPre != nPost {
-			var buf strings.Builder
-			_, _ = fmt.Fprintf(&buf, "batch size %d -> %d bytes\n", nPre, nPost)
-			func() {
-				defer func() {
-					if rInner := recover(); rInner != nil {
-						_, _ = fmt.Fprintln(&buf, "panic while re-marshaling:", rInner)
-					}
-				}()
-				data, mErr := protoutil.Marshal(&ba)
-				if mErr != nil {
-					_, _ = fmt.Fprintln(&buf, "while re-marshaling:", mErr)
-				} else {
-					_, _ = fmt.Fprintln(&buf, "re-marshaled protobuf:")
-					_, _ = fmt.Fprintln(&buf, hex.Dump(data))
-				}
-			}()
-			_, _ = fmt.Fprintln(&buf, "original panic: ", r)
-			panic(buf.String())
-		}
-	}()
-	f()
-}
-
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
@@ -197,11 +165,7 @@ func (gt *grpcTransport) SendNext(
 	}
 
 	ba.Replica = client.replica
-	var reply *roachpb.BatchResponse
-
-	withMarshalingDebugging(ctx, ba, func() {
-		reply, err = gt.sendBatch(ctx, client.replica.NodeID, iface, ba)
-	})
+	reply, err := gt.sendBatch(ctx, client.replica.NodeID, iface, ba)
 
 	// NotLeaseHolderErrors can be retried.
 	var retryable bool

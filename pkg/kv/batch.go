@@ -110,12 +110,11 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 			if newSpan.EqualValue(oldHeader.Span()) {
 				truncBA.Requests = append(truncBA.Requests, ba.Requests[pos])
 			} else {
-				var union roachpb.RequestUnion
 				oldHeader.SetSpan(newSpan)
 				shallowCopy := inner.ShallowCopy()
 				shallowCopy.SetHeader(oldHeader)
-				union.MustSetInner(shallowCopy)
-				truncBA.Requests = append(truncBA.Requests, union)
+				truncBA.Requests = append(truncBA.Requests, roachpb.RequestUnion{})
+				truncBA.Requests[len(truncBA.Requests)-1].MustSetInner(shallowCopy)
 			}
 			positions = append(positions, pos)
 		}
