@@ -1684,6 +1684,8 @@ func typeCheckComparisonOp(
 
 	_, leftIsTuple := foldedLeft.(*Tuple)
 	rightTuple, rightIsTuple := foldedRight.(*Tuple)
+
+	_, rightIsSubquery := foldedRight.(SubqueryExpr)
 	switch {
 	case foldedOp == In && rightIsTuple:
 		sameTypeExprs := make([]Expr, len(rightTuple.Exprs)+1)
@@ -1716,6 +1718,37 @@ func typeCheckComparisonOp(
 			return rightTuple, typedLeft, fn, false, nil
 		}
 		return typedLeft, rightTuple, fn, false, nil
+
+	case foldedOp == In && rightIsSubquery:
+		typedLeft, err := foldedLeft.TypeCheck(ctx, types.Any)
+		if err != nil {
+			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
+			return nil, nil, nil, false,
+				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+		}
+
+		typ := typedLeft.ResolvedType()
+		fn, ok := ops.lookupImpl(typ, types.AnyTuple)
+		if !ok {
+			sig := fmt.Sprintf(compSignatureFmt, typ, op, types.AnyTuple)
+			return nil, nil, nil, false,
+				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
+		}
+
+		desired := types.MakeTuple([]types.T{*typ})
+		typedRight, err := foldedRight.TypeCheck(ctx, desired)
+		if err != nil {
+			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
+			return nil, nil, nil, false,
+				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+		}
+
+		if err := typeCheckSubqueryWithIn(
+			typedLeft.ResolvedType(), typedRight.ResolvedType(),
+		); err != nil {
+			return nil, nil, nil, false, err
+		}
+		return typedLeft, typedRight, fn, false, nil
 
 	case leftIsTuple && rightIsTuple:
 		fn, ok := ops.lookupImpl(types.AnyTuple, types.AnyTuple)
@@ -1750,12 +1783,6 @@ func typeCheckComparisonOp(
 	}
 	leftReturn := leftExpr.ResolvedType()
 	rightReturn := rightExpr.ResolvedType()
-
-	if foldedOp == In {
-		if err := typeCheckSubqueryWithIn(leftReturn, rightReturn); err != nil {
-			return nil, nil, nil, false, err
-		}
-	}
 
 	// Return early if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
