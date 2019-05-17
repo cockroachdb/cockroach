@@ -90,6 +90,25 @@ export class TraceLine {
     return this.formatMessage() + " @" + formatDateTime(this.log.time, false);
   }
 
+  formatMessageHTML = () => {
+    return (
+        <div className="tags">
+          <div><span className="tag">Node</span>: {this.node_id}</div>
+          <div><span className="tag">Timestamp</span>: {formatDateTime(this.span.start_time, false)}</div>
+          <div><span className="tag">Duration</span>: {formatDuration(this.span.duration, false)}</div>
+          <div><span className="tag">Pending</span>: {this.sample.pending ? "Yes" : "No"}</div>
+          <div><span className="tag">Stuck</span>: {this.sample.stuck ? "Yes" : "No"}</div>
+          {this.sample.error &&
+           <div><span className="tag">Error</span>: {this.sample.error}</div>
+          }
+          {
+            _.map(this.sample.attributes, (v, k) => (
+                <div><span className="tag">{k}</span>: {v}</div>
+            ));
+        </div>
+    );
+  }
+
   formatTime = (last_node_id: number, last_time: protos.google.protobuf.ITimestamp) => {
     if (this.span && this.depth == 0) {
       var date_str: string = "";
@@ -252,6 +271,10 @@ export class ExpandedSpan {
   renderTraceColumns = (props: ExpandedSampleProps) => {
     var columns = [];
     const line: TraceLine = this.lines[props.line_no - this.line_no];
+    const expanded: boolean = line.sample && (line.span.span_id in props.expandedComponents);
+    function onClick(e) {
+      props.onToggleComponent(line.span.span_id);
+    }
     const log_style: any = {
       "padding-left": (5 + line.depth * 10) + "px",
       "background":   getColor(line.node_id),
@@ -263,6 +286,9 @@ export class ExpandedSpan {
     var time_class: string = "time";
     if (line.sample) {
       log_class += " component-span";
+      if (expanded) {
+        log_class += " expanded";
+      }
     } else if (line.span) {
       log_class += " span";
     }
@@ -275,8 +301,15 @@ export class ExpandedSpan {
       time_class += " bottom";
     }
     const msg: string = line.formatMessage();
-    const msg_title: string = line.formatMessageTitle();
-    columns.push(<td className={log_class} style={log_style} title={msg_title}>{msg}</td>);
+    const msg_title: string = expanded ? "" : line.formatMessageTitle();
+    columns.push(
+        <td className={log_class} style={log_style} title={msg_title} onClick={onClick}>
+          {msg}
+          {expanded &&
+           <line.formatMessageHTML />
+          }
+        </td>
+    );
     const last_line: TraceLine = (props.line_no - this.line_no) == 0 ? null : this.lines[props.line_no - this.line_no - 1];
     const last_node_id: number = last_line ? last_line.node_id : null;
     const last_time: protos.google.protobuf.ITimestamp = last_line ? last_line.timestamp() : null;
