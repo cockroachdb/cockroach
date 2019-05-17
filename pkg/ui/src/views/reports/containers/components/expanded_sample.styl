@@ -34,6 +34,7 @@
   overflow hidden
   text-overflow ellipsis
   border-left solid 1px #666
+  vertical-align top
   min-width 100px
   max-width 400px
   height 20px
@@ -45,6 +46,7 @@
   padding-left 10px
   padding-right 5px
   text-align right
+  vertical-align top
   border-right solid 1px #666
   min-width 100px
   max-width 200px
@@ -52,11 +54,8 @@
 
 #matrix #sample-trace .log.component-span
   font-weight bold
-  text-decoration underline solid
+  color $link-color
   cursor pointer
-
-#matrix #sample-trace .log.span
-  text-decoration underline dotted
 
 #matrix #sample-trace .top
   border-top solid 1px #666
@@ -68,4 +67,18 @@
   stroke #666
   stroke-width 1
 
+#matrix #sample-trace .log.component-span.expanded .tags
+  white-space pre
+  overflow scroll
+  max-width 600px
+  max-height 300px
+  font-weight normal
+  text-decoration no
+  border 1px solid #900
+  padding-left 10px
+  color #000
+
+#matrix #sample-trace .log.component-span.expanded .tag
+  color #900
+  text-decoration no
 

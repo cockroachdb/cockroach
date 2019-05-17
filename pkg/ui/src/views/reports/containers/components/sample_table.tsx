@@ -151,10 +151,17 @@ function SampleHeader(props) {
 }
 
 function SampleRow(props) {
-  const { s, cols, expandedSample, onToggleSample } = props;
+  const { s, cols, expandedSample, onToggleSample, onToggleComponent, expandedComponents, setComponent } = props;
 
   function onClick(c, e) {
     onToggleSample(s.spans[0].trace_id, s.spans[0].span_id);
+    setComponent(s.spans[0].span_id);
+  }
+
+  function renderExpandedSample() {
+    return (
+        <expandedSample.Render onToggleComponent={onToggleComponent} expandedComponents={expandedComponents} />
+    );
   }
 
   return (
@@ -162,7 +169,7 @@ function SampleRow(props) {
         <tr className="sample-row">
         {
           _.map(cols, (c) => (
-              <td className="sample" title={c.format(s)} onClick={(e) => onClick(s, e)}>{c.format(s)}</td>
+              <td className="sample" title={c.format(s)} onClick={(e) => onClick(c, e)}>{c.format(s)}</td>
           ))
         }
         </tr>
@@ -172,7 +179,7 @@ function SampleRow(props) {
              <Loading
                loading={expandedSample.active}
                error={expandedSample.error}
-               render={expandedSample.Render}
+               render={renderExpandedSample}
              />
            </td>
          </tr>
@@ -184,6 +191,7 @@ function SampleRow(props) {
 export class SampleTable extends React.Component<SampleTableProps> {
   constructor(props: SampleTableProps) {
     super(props);
+    this.state = {expandedComponents: {}};
   }
 
   extractColumns = (samples: protos.cockroach.util.tracing.ComponentSamples.ISample[]) => {
@@ -225,6 +233,22 @@ export class SampleTable extends React.Component<SampleTableProps> {
     return samples;
   }
 
+  onToggleComponent = (span_id: Long) => {
+    var expandedComponents = this.state.expandedComponents;
+    if (span_id in this.state.expandedComponents) {
+      delete expandedComponents[span_id];
+    } else {
+      expandedComponents[span_id] = true;
+    }
+    this.setState({expandedComponents: expandedComponents});
+  }
+
+  setComponent = (span_id: Long) => {
+    var expandedComponents = {};
+    expandedComponents[span_id] = true;
+    this.setState({expandedComponents: expandedComponents});
+  }
+
   render() {
     const {name, node_id, samples, sortProps, expandedSample, onSortSamples, onToggleSample } = this.props;
     const cols: Column[] = this.extractColumns(samples);
@@ -237,7 +261,15 @@ export class SampleTable extends React.Component<SampleTableProps> {
             <SampleHeader cols={cols} sortProps={sortProps} onSortSamples={onSortSamples} />
             {
               _.map(sortedSamples, (s) => (
-                  <SampleRow s={s} cols={cols} expandedSample={expandedSample} onToggleSample={onToggleSample} />
+                  <SampleRow
+                    s={s}
+                    cols={cols}
+                    expandedSample={expandedSample}
+                    onToggleSample={onToggleSample}
+                    onToggleComponent={this.onToggleComponent}
+                    expandedComponents={this.state.expandedComponents}
+                    setComponent={this.setComponent}
+                  />
               ))
             }
           </React.Fragment>
