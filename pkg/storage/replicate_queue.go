@@ -254,8 +254,7 @@ func (rq *replicateQueue) process(
 	// snapshot errors, usually signaling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		const maxAttempts = 3
-		for i := 1; i <= maxAttempts; i++ {
+		for {
 			requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */)
 			if IsSnapshotError(err) {
 				// If ChangeReplicas failed because the preemptive snapshot failed, we
@@ -282,14 +281,7 @@ func (rq *replicateQueue) process(
 				return nil
 			}
 
-			if i == maxAttempts {
-				log.VEventf(ctx, 1, "exhausted re-processing attempts #%d", i)
-				// Enqueue this replica again to see if there are more changes to be made.
-				rq.MaybeAddAsync(ctx, repl, rq.store.Clock().Now())
-				return nil
-			}
-
-			log.VEventf(ctx, 1, "re-processing #%d", i)
+			log.VEventf(ctx, 1, "re-processing")
 		}
 	}
 
