@@ -276,7 +276,9 @@ export class ExpandedSpan {
     const line: TraceLine = this.lines[props.line_no - this.line_no];
     const expanded: boolean = line.sample && (line.span.span_id in props.expandedComponents);
     function onClick(e) {
-      props.onToggleComponent(line.span.span_id);
+      if (line.sample) {
+        props.onToggleComponent(line.span.span_id);
+      }
     }
     const log_style: any = {
       "padding-left": (5 + line.depth * 10) + "px",
