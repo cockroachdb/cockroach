@@ -109,6 +109,7 @@
 <tr><td><code>sql.stats.automatic_collection.fraction_stale_rows</code></td><td>float</td><td><code>0.2</code></td><td>target fraction of stale rows per table that will trigger a statistics refresh</td></tr>
 <tr><td><code>sql.stats.automatic_collection.max_fraction_idle</code></td><td>float</td><td><code>0.9</code></td><td>maximum fraction of time that automatic statistics sampler processors are idle</td></tr>
 <tr><td><code>sql.stats.automatic_collection.min_stale_rows</code></td><td>integer</td><td><code>500</code></td><td>target minimum number of stale rows per table that will trigger a statistics refresh</td></tr>
+<tr><td><code>sql.stats.max_timestamp_age</code></td><td>duration</td><td><code>5m0s</code></td><td>maximum age of timestamp during table statistics collection</td></tr>
 <tr><td><code>sql.stats.post_events.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if set, an event is shown for every CREATE STATISTICS job</td></tr>
 <tr><td><code>sql.tablecache.lease.refresh_limit</code></td><td>integer</td><td><code>50</code></td><td>maximum number of tables to periodically refresh leases for</td></tr>
 <tr><td><code>sql.trace.log_statement_execute</code></td><td>boolean</td><td><code>false</code></td><td>set to true to enable logging of executed statements</td></tr>
