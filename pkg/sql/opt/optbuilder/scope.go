@@ -1146,9 +1146,9 @@ const (
 	noExtraColsAllowed = false
 )
 
-// Replace a raw subquery node with a typed subquery. wrapInTuple specifies
-// whether the return type of the subquery should be wrapped in a tuple.
-// wrapInTuple is true for subqueries that may return multiple rows in
+// Replace a raw tree.Subquery node with a lazily typed subquery. wrapInTuple
+// specifies whether the return type of the subquery should be wrapped in a
+// tuple. wrapInTuple is true for subqueries that may return multiple rows in
 // comparison expressions (e.g., IN, ANY, ALL) and EXISTS expressions.
 // desiredColumns specifies the desired number of columns for the
 // subquery. Specifying -1 for desiredColumns allows the subquery to return any
@@ -1161,57 +1161,13 @@ const (
 func (s *scope) replaceSubquery(
 	sub *tree.Subquery, wrapInTuple bool, desiredColumns int, extraColsAllowed bool,
 ) *subquery {
-	if s.replaceSRFs {
-		// We need to save and restore the previous value of the replaceSRFs field in
-		// case we are recursively called within a subquery context.
-		defer func() { s.replaceSRFs = true }()
-		s.replaceSRFs = false
+	return &subquery{
+		Subquery:         sub,
+		wrapInTuple:      wrapInTuple,
+		desiredColumns:   desiredColumns,
+		extraColsAllowed: extraColsAllowed,
+		scope:            s,
 	}
-
-	subq := subquery{
-		Subquery:    sub,
-		wrapInTuple: wrapInTuple,
-	}
-
-	// Save and restore the previous value of s.builder.subquery in case we are
-	// recursively called within a subquery context.
-	outer := s.builder.subquery
-	defer func() { s.builder.subquery = outer }()
-	s.builder.subquery = &subq
-
-	outScope := s.builder.buildStmt(sub.Select, s)
-	ord := outScope.ordering
-
-	// Treat the subquery result as an anonymous data source (i.e. column names
-	// are not qualified). Remove hidden columns, as they are not accessible
-	// outside the subquery.
-	outScope.setTableAlias("")
-	outScope.removeHiddenCols()
-
-	if desiredColumns > 0 && len(outScope.cols) != desiredColumns {
-		n := len(outScope.cols)
-		switch desiredColumns {
-		case 1:
-			panic(pgerror.Newf(pgerror.CodeSyntaxError,
-				"subquery must return only one column, found %d", n))
-		default:
-			panic(pgerror.Newf(pgerror.CodeSyntaxError,
-				"subquery must return %d columns, found %d", desiredColumns, n))
-		}
-	}
-
-	if len(outScope.extraCols) > 0 && !extraColsAllowed {
-		// We need to add a projection to remove the extra columns.
-		projScope := outScope.push()
-		projScope.appendColumnsFromScope(outScope)
-		projScope.expr = s.builder.constructProject(outScope.expr.(memo.RelExpr), projScope.cols)
-		outScope = projScope
-	}
-
-	subq.cols = outScope.cols
-	subq.node = outScope.expr.(memo.RelExpr)
-	subq.ordering = ord
-	return &subq
 }
 
 // VisitPost is part of the Visitor interface.
