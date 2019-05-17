@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/biogo/store/llrb"
@@ -162,7 +163,7 @@ func (rdc *RangeDescriptorCache) String() string {
 }
 
 func (rdc *RangeDescriptorCache) stringLocked() string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	rdc.rangeCache.cache.Do(func(k, v interface{}) bool {
 		fmt.Fprintf(&buf, "key=%s desc=%+v\n", roachpb.Key(k.(rangeCacheKey)), v)
 		return false
