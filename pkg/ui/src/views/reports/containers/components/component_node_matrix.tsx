@@ -19,7 +19,7 @@ import * as React from "react";
 import * as protos from  "src/js/protos";
 
 import Loading from "src/views/shared/components/loading";
-import { ComponentActivity, ComponentActivityRate, IComponentActivityMetrics, ComponentActivityMetrics } from "./component_activity";
+import { ComponentActivity, ComponentActivityRates, IComponentActivityMetrics, ComponentActivityMetrics } from "./component_activity";
 import { SampleOptions, SampleState } from "./sample";
 import { Legend } from "./legend";
 import { SortProps, SampleTable } from "./sample_table";
