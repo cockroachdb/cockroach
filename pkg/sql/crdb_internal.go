@@ -774,6 +774,7 @@ CREATE TABLE crdb_internal.session_trace (
                                    -- NULL if the span was not finished at the time
                                    -- the trace has been collected.
   operation   STRING NULL,         -- The span's operation.
+  component   STRING NULL,         -- The span's component.
   loc         STRING NOT NULL,     -- The file name / line number prefix, if any.
   tag         STRING NOT NULL,     -- The logging tag, if any.
   message     STRING NOT NULL,     -- The logged message.

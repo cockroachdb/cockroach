@@ -1516,6 +1516,8 @@ const (
 	traceDurationCol
 	// operation   STRING NULL,         -- The span's operation.
 	traceOpCol
+	// component   STRING NULL,         -- The span's component.
+	traceComponentCol
 	// loc         STRING NOT NULL,     -- The file name / line number prefix, if any.
 	traceLocCol
 	// tag         STRING NOT NULL,     -- The logging tag, if any.
@@ -1633,12 +1635,21 @@ func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error
 			return nil, fmt.Errorf("unable to split trace message: %q", lrr.msg)
 		}
 
+		component := lrr.span.Tags[tracing.ComponentTagName]
+		var componentDatum tree.Datum
+		if component != "" {
+			componentDatum = tree.NewDString(component)
+		} else {
+			componentDatum = tree.DNull
+		}
+
 		row := traceRow{
 			tree.NewDInt(tree.DInt(lrr.span.index)),               // span_idx
 			tree.NewDInt(tree.DInt(lrr.index)),                    // message_idx
 			tree.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
 			tree.DNull,                              // duration, will be populated below
-			tree.DNull,                              // operation, will be populated below
+			tree.NewDString(lrr.span.Operation),     // operation
+			componentDatum,                          // component
 			tree.NewDString(lrr.msg[loc[2]:loc[3]]), // location
 			tree.NewDString(lrr.msg[loc[4]:loc[5]]), // tag
 			tree.NewDString(lrr.msg[loc[6]:loc[7]]), // message
@@ -1652,13 +1663,14 @@ func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error
 		return res, nil
 	}
 
-	// Populate the operation and age columns.
+	// Populate the operation, component, duration and age columns.
 	for i := range res {
 		spanIdx := res[i][traceSpanIdxCol]
 
-		if opStr, ok := opMap[*(spanIdx.(*tree.DInt))]; ok {
-			res[i][traceOpCol] = opStr
-		}
+		// !!!
+		// if opStr, ok := opMap[*(spanIdx.(*tree.DInt))]; ok {
+		//   res[i][traceOpCol] = opStr
+		// }
 
 		if dur, ok := durMap[*(spanIdx.(*tree.DInt))]; ok {
 			res[i][traceDurationCol] = dur

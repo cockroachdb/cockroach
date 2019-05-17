@@ -69,18 +69,29 @@ func TestTrace(t *testing.T) {
 				}
 
 				return sqlDB.Query(
-					"SELECT DISTINCT operation AS op FROM crdb_internal.session_trace " +
-						"WHERE operation IS NOT NULL ORDER BY op")
+					`SELECT DISTINCT
+						 CASE
+							 WHEN component IS NOT NULL THEN
+									concat(component, ': ', operation)
+							 ELSE
+									operation
+							 END
+						 AS op
+					 FROM crdb_internal.session_trace
+					 ORDER BY op`)
 			},
 			expSpans: []string{
-				"sql.executor",
+				"sql.executor: execCmd",
+				"sql.executor.planner: plan",
 				"flow",
 				"session recording",
 				"sql txn",
 				"table reader",
 				"consuming rows",
-				"txn coordinator send",
+				"client.txncoord.sender: send",
+				"dist sender send",
 				"client.dist.sender: send",
+				"client.dist.divider: split",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
@@ -354,7 +365,7 @@ func TestTrace(t *testing.T) {
 									t.Errorf("extra span: %s", op)
 									remainingErr = true
 								} else if op != test.expSpans[r] {
-									t.Errorf("expected span: %q, got: %q", test.expSpans[r], op)
+									t.Errorf("expected span: %q, got: %q (all spans: %s)", test.expSpans[r], op, spans)
 									remainingErr = true
 								}
 								if remainingErr {

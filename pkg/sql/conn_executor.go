@@ -1270,7 +1270,9 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	if err != nil {
 		return err // err could be io.EOF
 	}
-	ctx, csp := tracing.StartComponentSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql.executor", cmd.String() /* operation */)
+	ctx, csp := tracing.StartComponentSpan(
+		ctx, ex.server.cfg.AmbientCtx.Tracer, "sql.executor", "execCmd" /* operation */)
+	csp.SetTag("command", cmd.String())
 	interceptor := &resultInterceptor{csp: &csp}
 	defer csp.FinishWithError(nil) // !!! The error is provided by interceptor. Figure out how that will work.
 

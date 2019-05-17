@@ -131,6 +131,10 @@ func (n *showTraceNode) processTraceRows(evalCtx *tree.EvalContext, traceRows []
 		spanIdx := r[traceSpanIdxCol]
 		op := r[traceOpCol]
 		age := r[traceAgeCol]
+		if r[traceComponentCol] != tree.DNull {
+			op = tree.NewDString(string(*r[traceComponentCol].(*tree.DString)) +
+				": " + string(*(op.(*tree.DString))))
+		}
 
 		if !n.compact {
 			n.run.resultRows[i] = tree.Datums{ts, age, msg, tag, loc, op, spanIdx}

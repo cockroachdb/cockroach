@@ -483,8 +483,8 @@ export class ExpandedSample {
       });
       if (!(parent_id.toString() in spans)) {
         // Create a parent span placeholder for orphaned child list.
-        const firstChild: ExpandedSpan = spans[l[0]];
-        const placeSpan: protos.cockroach.util.tracing.RecordedSpan.create({
+        const firstChild: ExpandedSpan = spans[l[0]]; 
+        const placeSpan= protos.cockroach.util.tracing.RecordedSpan.create({
           trace_id: trace_id,
           span_id: parent_id,
           operation: "[missing parent span]",
