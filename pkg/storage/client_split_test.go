@@ -1114,7 +1114,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 		{splitOngoing: true, splitErr: false, expErr: ""},
 		{splitOngoing: true, splitErr: true, expErr: "split failed while applying backpressure.* boom"},
 		{splitOngoing: false, expErr: ""},
-		{splitImpossible: true, expErr: "split failed while applying backpressure: could not find valid split key"},
+		{splitImpossible: true, expErr: "split failed while applying backpressure.* could not find valid split key"},
 	}
 	for _, tc := range testCases {
 		var name string
