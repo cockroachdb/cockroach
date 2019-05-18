@@ -407,7 +407,7 @@ INSERT INTO t.test VALUES (10, 2);
 	}
 }
 
-// TestScrubFKConstraintFKIsNull tests that `SCRUB TABLE ... CONSTRAINT
+// TestScrubFKConstraintFKMissing tests that `SCRUB TABLE ... CONSTRAINT
 // ALL` will report an error when a foreign key constraint is violated.
 // To test this, the secondary index used for the foreign key lookup is
 // modified using the KV client to change the value and cause a
@@ -517,11 +517,10 @@ INSERT INTO t.child VALUES (10, 314);
 	}
 }
 
-// TestScrubFKConstraintFKIsNullAndMissing tests that
-// `SCRUB TABLE ... CONSTRAINT ALL` will fail if a foreign key
-// constraint is violated when there is no referenced foreign key row
-// found and the foreign key values are partially null. To test this, a
-// row's underlying value is modified using the KV client.
+// TestScrubFKConstraintFKNulls tests that `SCRUB TABLE ... CONSTRAINT ALL` will
+// fail if a MATCH FULL foreign key constraint is violated when foreign key
+// values are partially null. To test this, a row's underlying value is
+// modified using the KV client.
 func TestScrubFKConstraintFKIsNullAndMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -540,7 +539,7 @@ CREATE TABLE t.child (
 	parent_id INT,
 	parent_id2 INT,
 	INDEX (parent_id, parent_id2),
-	FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent (id, id2)
+	FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent (id, id2) MATCH FULL
 );
 INSERT INTO t.parent VALUES (1337, 300);
 INSERT INTO t.child VALUES (11, 1337, 300);
