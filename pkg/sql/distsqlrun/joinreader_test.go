@@ -268,6 +268,90 @@ func TestJoinReader(t *testing.T) {
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
 		},
+		{
+			description: "Test left semi lookup join",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(1)), sqlutils.RowEnglishFn(2)},
+				{tree.NewDInt(tree.DInt(1234)), sqlutils.RowEnglishFn(2)},
+				{tree.NewDInt(tree.DInt(6)), sqlutils.RowEnglishFn(2)},
+				{tree.NewDInt(tree.DInt(7)), sqlutils.RowEnglishFn(2)},
+				{tree.NewDInt(tree.DInt(1)), sqlutils.RowEnglishFn(2)},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftSemiJoin,
+			inputTypes:  []types.T{*types.Int, *types.String},
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[1 'two'] [6 'two'] [7 'two'] [1 'two']]",
+		},
+		{
+			description: "Test left semi lookup join on secondary index with NULL lookup value",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(0), tree.DNull},
+			},
+			lookupCols:  []uint32{0, 1},
+			joinType:    sqlbase.LeftSemiJoin,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.OneIntCol,
+			expected:    "[]",
+		},
+		{
+			description: "Test left anti lookup join",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(1234)), tree.NewDInt(tree.DInt(1234))},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftAntiJoin,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[1234 1234]]",
+		},
+		{
+			description: "Test left anti lookup join with match",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{aFn(10), tree.NewDInt(tree.DInt(1234))},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftAntiJoin,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.OneIntCol,
+			expected:    "[]",
+		},
+		{
+			description: "Test left anti lookup join on secondary index with NULL lookup value",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(0), tree.DNull},
+			},
+			lookupCols:  []uint32{0, 1},
+			joinType:    sqlbase.LeftAntiJoin,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[0 NULL]]",
+		},
 	}
 	for i, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
 		for _, c := range testCases {
@@ -313,7 +397,6 @@ func TestJoinReader(t *testing.T) {
 
 				// Set a lower batch size to force multiple batches.
 				jr.batchSize = 3
-
 				jr.Run(ctx)
 
 				if !in.Done {

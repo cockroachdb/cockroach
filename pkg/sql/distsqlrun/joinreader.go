@@ -102,6 +102,7 @@ type joinReader struct {
 	inputRowIdxToOutputRows []sqlbase.EncDatumRows
 	finalLookupBatch        bool
 	toEmit                  sqlbase.EncDatumRows
+	inputRowIndicesToKey    map[int]string
 
 	// A few scratch buffers, to avoid re-allocating.
 	lookupRows  []lookupRow
@@ -139,6 +140,7 @@ func newJoinReader(
 		lookupCols:           spec.LookupColumns,
 		batchSize:            joinReaderBatchSize,
 		keyToInputRowIndices: make(map[string][]int),
+		inputRowIndicesToKey: make(map[int]string),
 	}
 
 	var err error
@@ -375,6 +377,7 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 			spans = append(spans, span)
 		}
 		jr.keyToInputRowIndices[string(span.Key)] = append(inputRowIndices, i)
+		jr.inputRowIndicesToKey[i] = string(span.Key)
 	}
 	if len(spans) == 0 {
 		// All of the input rows were filtered out. Skip the index lookup.
@@ -425,6 +428,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 
 	// Iterate over the lookup results, map them to the input rows, and emit the
 	// rendered rows.
+	isJoinTypeLeftSemiJoin := jr.joinType == sqlbase.LeftSemiJoin
 	for _, lookupRow := range jr.lookupRows {
 		if jr.indexFilter.expr != nil {
 			// Apply index filter.
@@ -438,20 +442,34 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 			}
 		}
 		for _, inputRowIdx := range jr.keyToInputRowIndices[lookupRow.key] {
-			renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
-			if err != nil {
-				jr.MoveToDraining(err)
-				return jrStateUnknown, jr.DrainHelper()
-			}
-			if renderedRow != nil {
-				rowCopy := jr.out.rowAlloc.CopyRow(renderedRow)
-				jr.inputRowIdxToOutputRows[inputRowIdx] = append(
-					jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
+			_, ok := jr.inputRowIndicesToKey[inputRowIdx]
+			// Only add to output if jointType is  not LeftSemiJoin or if we have not gotten the match
+			if !isJoinTypeLeftSemiJoin || ok {
+				renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
+				if isJoinTypeLeftSemiJoin {
+					delete(jr.inputRowIndicesToKey, inputRowIdx)
+				}
+				if err != nil {
+					jr.MoveToDraining(err)
+					return jrStateUnknown, jr.DrainHelper()
+				}
+				if renderedRow != nil {
+					rowCopy := jr.out.rowAlloc.CopyRow(renderedRow)
+					jr.inputRowIdxToOutputRows[inputRowIdx] = append(
+						jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
+				}
 			}
 		}
 	}
+	// if joinType was LeftSemiJoin update the map to look for indexes we haven't seen so far
+	if isJoinTypeLeftSemiJoin {
+		jr.keyToInputRowIndices = make(map[string][]int)
+		for inputRowIdx, rowKey := range jr.inputRowIndicesToKey {
+			jr.keyToInputRowIndices[rowKey] = append(jr.keyToInputRowIndices[rowKey], inputRowIdx)
+		}
+	}
 
-	if jr.finalLookupBatch {
+	if jr.finalLookupBatch || len(jr.keyToInputRowIndices) == 0 {
 		return jrCollectingOutputRows, nil
 	}
 
@@ -460,17 +478,19 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 
 // collectOutputRows iterates over jr.inputRowIdxToOutputRows and adds output
 // rows to jr.Emit, rendering rows for unmatched inputs if the join is a left
-// outer join, while preserving the input order.
+// outer join or left anti join, while preserving the input order.
 func (jr *joinReader) collectOutputRows() joinReaderState {
 	for i, outputRows := range jr.inputRowIdxToOutputRows {
 		if len(outputRows) == 0 {
-			if jr.joinType == sqlbase.LeftOuterJoin {
+			if (jr.joinType == sqlbase.LeftOuterJoin) || (jr.joinType == sqlbase.LeftAntiJoin) {
 				if row := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); row != nil {
 					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
 				}
 			}
 		} else {
-			jr.toEmit = append(jr.toEmit, outputRows...)
+			if jr.joinType != sqlbase.LeftAntiJoin {
+				jr.toEmit = append(jr.toEmit, outputRows...)
+			}
 		}
 	}
 	return jrEmittingRows
@@ -480,7 +500,9 @@ func (jr *joinReader) collectOutputRows() joinReaderState {
 // prepares for another input batch.
 func (jr *joinReader) emitRow() (joinReaderState, sqlbase.EncDatumRow) {
 	if len(jr.toEmit) == 0 {
-		if jr.finalLookupBatch {
+		// if joinType was LeftSemiJoin, we would have already removed all the matching keys
+		// if no keys are left match skip and read next batch of input
+		if jr.finalLookupBatch || len(jr.keyToInputRowIndices) == 0 {
 			// Ready for another input batch. Reset state.
 			jr.inputRows = jr.inputRows[:0]
 			jr.keyToInputRowIndices = make(map[string][]int)
