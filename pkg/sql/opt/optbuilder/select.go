@@ -92,6 +92,9 @@ func (b *Builder) buildDataSource(
 		switch t := ds.(type) {
 		case cat.Table:
 			tabID := b.factory.Metadata().AddTableWithAlias(t, &resName)
+			if indexFlags != nil && indexFlags.IgnoreForeignKeys {
+				b.factory.Metadata().TableMeta(tabID).IgnoreForeignKeys = true
+			}
 			return b.buildScan(tabID, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case cat.View:
 			return b.buildView(t, inScope)

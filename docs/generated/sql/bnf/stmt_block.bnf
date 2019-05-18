@@ -682,6 +682,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
+	| 'IGNORE_FOREIGN_KEYS'
 	| 'OF'
 	| 'OFF'
 	| 'OID'

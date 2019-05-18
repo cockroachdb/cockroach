@@ -674,8 +674,9 @@ func TestParse(t *testing.T) {
 		{`SELECT 'a' FROM t@primary`},
 		{`SELECT 'a' FROM t@like`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN}`},
+		{`SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}`},
 		{`SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}`},
-		{`SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC}`},
+		{`SELECT 'a' FROM t@{FORCE_INDEX=idx,DESC,IGNORE_FOREIGN_KEYS}`},
 		{`SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'`},
 
 		{`SELECT BOOL 'foo', 'foo'::BOOL`},
@@ -2308,6 +2309,13 @@ SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
 			`syntax error: NO_INDEX_JOIN specified multiple times at or near "no_index_join"
 SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
                                  ^
+`,
+		},
+		{
+			`SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}`,
+			`syntax error: IGNORE_FOREIGN_KEYS specified multiple times at or near "ignore_foreign_keys"
+SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
+                                       ^
 `,
 		},
 		{
