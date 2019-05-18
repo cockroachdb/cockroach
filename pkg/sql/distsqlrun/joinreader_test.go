@@ -268,6 +268,38 @@ func TestJoinReader(t *testing.T) {
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
 		},
+		{
+			description: "Test left semi lookup join",
+			indexIdx: 1,
+			post: distsqlpb.PostProcessSpec{
+				Projection: true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(0)),  sqlutils.RowEnglishFn(2)},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftSemiJoin,
+			inputTypes:  []types.T{*types.Int, *types.String},
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[0 'two']]",
+		},
+		{
+			description: "Test left anti lookup join",
+			indexIdx: 1,
+			post: distsqlpb.PostProcessSpec{
+				Projection: true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(1234)), tree.NewDInt(tree.DInt(1234))},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftAntiJoin,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[1234 1234]]",
+		},
 	}
 	for i, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
 		for _, c := range testCases {
