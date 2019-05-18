@@ -16,8 +16,12 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -407,7 +411,7 @@ INSERT INTO t.test VALUES (10, 2);
 	}
 }
 
-// TestScrubFKConstraintFKIsNull tests that `SCRUB TABLE ... CONSTRAINT
+// TestScrubFKConstraintFKMissing tests that `SCRUB TABLE ... CONSTRAINT
 // ALL` will report an error when a foreign key constraint is violated.
 // To test this, the secondary index used for the foreign key lookup is
 // modified using the KV client to change the value and cause a
@@ -416,24 +420,23 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
+	r := sqlutils.MakeSQLRunner(db)
 
 	// Create the table and the row entry.
-	if _, err := db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.parent (
-	id INT PRIMARY KEY
-);
-CREATE TABLE t.child (
-	child_id INT PRIMARY KEY,
-	parent_id INT,
-	INDEX (parent_id),
-	FOREIGN KEY (parent_id) REFERENCES t.parent (id)
-);
-INSERT INTO t.parent VALUES (314);
-INSERT INTO t.child VALUES (10, 314);
-`); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
+	r.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.parent (
+			id INT PRIMARY KEY
+		);
+		CREATE TABLE t.child (
+			child_id INT PRIMARY KEY,
+			parent_id INT,
+			INDEX (parent_id),
+			FOREIGN KEY (parent_id) REFERENCES t.parent (id)
+		);
+		INSERT INTO t.parent VALUES (314);
+		INSERT INTO t.child VALUES (10, 314);
+	`)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "child")
 
@@ -483,46 +486,34 @@ INSERT INTO t.child VALUES (10, 314);
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
+	exp := expectedScrubResult{
+		ErrorType:    scrub.ForeignKeyConstraintViolation,
+		Database:     "t",
+		Table:        "child",
+		PrimaryKey:   "(10)",
+		DetailsRegex: `{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "10", "parent_id": "0"}}`,
 	}
-	defer rows.Close()
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
+	// Run again with AS OF SYSTEM TIME.
+	time.Sleep(1 * time.Millisecond)
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 
-	results, err := sqlutils.GetScrubResultRows(rows)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
-	}
-
-	if result := results[0]; result.ErrorType != string(scrub.ForeignKeyConstraintViolation) {
-		t.Fatalf("expected %q error, instead got: %s",
-			scrub.ForeignKeyConstraintViolation, result.ErrorType)
-	} else if result.Database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.Database)
-	} else if result.Table != "child" {
-		t.Fatalf("expected table %q, got %q", "child", result.Table)
-	} else if result.PrimaryKey != "(10)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
-	} else if result.Repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details,
-		`{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "10", "parent_id": "0"}}`) {
-		t.Fatalf("expected error details to contain %s, got %s",
-			`{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "10", "parent_id": "0"}}`,
-			result.Details)
-	}
+	// Verify that AS OF SYSTEM TIME actually operates in the past.
+	ts := r.QueryStr(t, `SELECT cluster_logical_timestamp()`)[0][0]
+	r.Exec(t, "INSERT INTO t.parent VALUES (0)")
+	runScrub(
+		t, db, fmt.Sprintf(
+			`EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '%s' WITH OPTIONS CONSTRAINT ALL`, ts,
+		),
+		exp,
+	)
 }
 
-// TestScrubFKConstraintFKIsNullAndMissing tests that
-// `SCRUB TABLE ... CONSTRAINT ALL` will fail if a foreign key
-// constraint is violated when there is no referenced foreign key row
-// found and the foreign key values are partially null. To test this, a
-// row's underlying value is modified using the KV client.
-func TestScrubFKConstraintFKIsNullAndMissing(t *testing.T) {
+// TestScrubFKConstraintFKNulls tests that `SCRUB TABLE ... CONSTRAINT ALL` will
+// fail if a MATCH FULL foreign key constraint is violated when foreign key
+// values are partially null. To test this, a row's underlying value is
+// modified using the KV client.
+func TestScrubFKConstraintFKNulls(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
@@ -540,7 +531,7 @@ CREATE TABLE t.child (
 	parent_id INT,
 	parent_id2 INT,
 	INDEX (parent_id, parent_id2),
-	FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent (id, id2)
+	FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent (id, id2) MATCH FULL
 );
 INSERT INTO t.parent VALUES (1337, 300);
 INSERT INTO t.child VALUES (11, 1337, 300);
@@ -591,38 +582,16 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
+	exp := expectedScrubResult{
+		ErrorType:    scrub.ForeignKeyConstraintViolation,
+		Database:     "t",
+		Table:        "child",
+		PrimaryKey:   "(11)",
+		DetailsRegex: `{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
 	}
-	defer rows.Close()
-
-	results, err := sqlutils.GetScrubResultRows(rows)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
-	}
-
-	if result := results[0]; result.ErrorType != string(scrub.ForeignKeyConstraintViolation) {
-		t.Fatalf("expected %q error, instead got: %s",
-			scrub.ForeignKeyConstraintViolation, result.ErrorType)
-	} else if result.Database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.Database)
-	} else if result.Table != "child" {
-		t.Fatalf("expected table %q, got %q", "child", result.Table)
-	} else if result.PrimaryKey != "(11)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(11)", result.PrimaryKey)
-	} else if result.Repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details,
-		`{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`) {
-		t.Fatalf("expected error details to contain %s, got %s",
-			`{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
-			result.Details)
-	}
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`, exp)
+	time.Sleep(1 * time.Millisecond)
+	runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.child AS OF SYSTEM TIME '-1ms' WITH OPTIONS CONSTRAINT ALL`, exp)
 }
 
 // TestScrubPhysicalNonnullableNullInSingleColumnFamily tests that
@@ -1005,4 +974,65 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	} else if !strings.Contains(result.Details, `"b": "<unset>"`) {
 		t.Fatalf("expected error details to contain `%s`, got %s", `"b": "<unset>"`, result.Details)
 	}
+}
+
+type expectedScrubResult struct {
+	ErrorType    string
+	Database     string
+	Table        string
+	PrimaryKey   string
+	Repaired     bool
+	DetailsRegex string
+}
+
+func checkScrubResult(t *testing.T, res sqlutils.ScrubResult, exp expectedScrubResult) {
+	t.Helper()
+
+	if res.ErrorType != exp.ErrorType {
+		t.Errorf("expected %q error, instead got: %s", exp.ErrorType, res.ErrorType)
+	}
+
+	if res.Database != exp.Database {
+		t.Errorf("expected database %q, got %q", exp.Database, res.Database)
+	}
+
+	if res.Table != exp.Table {
+		t.Errorf("expected table %q, got %q", exp.Table, res.Table)
+	}
+
+	if res.PrimaryKey != exp.PrimaryKey {
+		t.Errorf("expected primary key %q, got %q", exp.PrimaryKey, res.PrimaryKey)
+	}
+	if res.Repaired != exp.Repaired {
+		t.Fatalf("expected repaired %v, got %v", exp.Repaired, res.Repaired)
+	}
+
+	if matched, err := regexp.MatchString(exp.DetailsRegex, res.Details); err != nil {
+		t.Fatal(err)
+	} else if !matched {
+		t.Errorf("expected error details to contain `%s`, got `%s`", exp.DetailsRegex, res.Details)
+	}
+}
+
+// runScrub runs a SCRUB statement and checks that it returns exactly one scrub
+// result and that it matches the expected result.
+func runScrub(t *testing.T, db *gosql.DB, scrubStmt string, exp expectedScrubResult) {
+	t.Helper()
+
+	// Run SCRUB and find the FOREIGN KEY violation created.
+	rows, err := db.Query(scrubStmt)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	defer rows.Close()
+
+	results, err := sqlutils.GetScrubResultRows(rows)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
+	}
+	checkScrubResult(t, results[0], exp)
 }
