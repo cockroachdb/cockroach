@@ -30,6 +30,8 @@ const (
 	daysInMonth   = 30
 	nanosInDay    = 24 * int64(time.Hour) // Try as I might, couldn't do this without the cast.
 	nanosInMonth  = daysInMonth * nanosInDay
+	nanosInHour   = nanosInMinute * 60
+	nanosInMinute = nanosInSecond * 60
 	nanosInSecond = 1000 * 1000 * 1000
 	nanosInMicro  = 1000
 
@@ -485,10 +487,13 @@ func (d Duration) Div(x int64) Duration {
 
 // MulFloat returns a Duration representing a time length of d*x.
 func (d Duration) MulFloat(x float64) Duration {
+	monthInt, monthFrac := math.Modf(float64(d.Months) * x)
+	dayInt, dayFrac := math.Modf((float64(d.Days) * x) + (monthFrac * daysInMonth))
+
 	return MakeDuration(
-		int64(float64(d.nanos)*x),
-		int64(float64(d.Days)*x),
-		int64(float64(d.Months)*x),
+		int64((float64(d.nanos)*x)+(dayFrac*float64(nanosInDay))),
+		int64(dayInt),
+		int64(monthInt),
 	)
 }
 
