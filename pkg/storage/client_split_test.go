@@ -931,6 +931,10 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// TODO(giorgosp): Why msLeft.ContainsEstimates is 193 and msRight.ContainsEstimates is 0??
+	fmt.Println("leftEstimates", msLeft.ContainsEstimates)
+	fmt.Println("rightEstimates", msRight.ContainsEstimates)
+
 	// Stats should both have the new timestamp.
 	now := manual.UnixNano()
 	if lTs := msLeft.LastUpdateNanos; lTs != now {

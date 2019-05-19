@@ -908,13 +908,13 @@ bool MVCCStatsDelta::MergePartialFromCodedStream(
         break;
       }
 
-      // bool contains_estimates = 14;
+      // sint64 contains_estimates = 14;
       case 14: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(112u /* 112 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SINT64>(
                  input, &contains_estimates_)));
         } else {
           goto handle_unusual;
@@ -1012,9 +1012,9 @@ void MVCCStatsDelta::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteSInt64(13, this->sys_count(), output);
   }
 
-  // bool contains_estimates = 14;
+  // sint64 contains_estimates = 14;
   if (this->contains_estimates() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(14, this->contains_estimates(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteSInt64(14, this->contains_estimates(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -1112,9 +1112,11 @@ size_t MVCCStatsDelta::ByteSizeLong() const {
         this->sys_count());
   }
 
-  // bool contains_estimates = 14;
+  // sint64 contains_estimates = 14;
   if (this->contains_estimates() != 0) {
-    total_size += 1 + 1;
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::SInt64Size(
+        this->contains_estimates());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -1487,13 +1489,13 @@ bool MVCCPersistentStats::MergePartialFromCodedStream(
         break;
       }
 
-      // bool contains_estimates = 14;
+      // int64 contains_estimates = 14;
       case 14: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(112u /* 112 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
                  input, &contains_estimates_)));
         } else {
           goto handle_unusual;
@@ -1591,9 +1593,9 @@ void MVCCPersistentStats::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(13, this->sys_count(), output);
   }
 
-  // bool contains_estimates = 14;
+  // int64 contains_estimates = 14;
   if (this->contains_estimates() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(14, this->contains_estimates(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(14, this->contains_estimates(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -1691,9 +1693,11 @@ size_t MVCCPersistentStats::ByteSizeLong() const {
         this->sys_count());
   }
 
-  // bool contains_estimates = 14;
+  // int64 contains_estimates = 14;
   if (this->contains_estimates() != 0) {
-    total_size += 1 + 1;
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->contains_estimates());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);

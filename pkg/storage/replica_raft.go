@@ -2279,17 +2279,14 @@ func (r *Replica) applyRaftCommand(
 
 	// Exploit the fact that a split will result in a full stats
 	// recomputation to reset the ContainsEstimates flag.
-	//
-	// TODO(tschottdorf): We want to let the usual MVCCStats-delta
-	// machinery update our stats for the left-hand side. But there is no
-	// way to pass up an MVCCStats object that will clear out the
-	// ContainsEstimates flag. We should introduce one, but the migration
-	// makes this worth a separate effort (ContainsEstimates would need to
-	// have three possible values, 'UNCHANGED', 'NO', and 'YES').
-	// Until then, we're left with this rather crude hack.
-	if rResult.Split != nil {
-		r.mu.state.Stats.ContainsEstimates = false
+	// If we were running the new VersionContainsEstimatesCounter cluster version,
+	// the consistency checker will be able to reset the stats itself.
+	if !r.ClusterSettings().Version.IsActive(cluster.VersionContainsEstimatesCounter) {
+		if rResult.Split != nil {
+			r.mu.state.Stats.ContainsEstimates = 0
+		}
 	}
+
 	ms := *r.mu.state.Stats
 	r.mu.Unlock()
 

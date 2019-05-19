@@ -118,7 +118,7 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.Forward(oms.LastUpdateNanos)
 	oms.Forward(ms.LastUpdateNanos) // on local copy
 	// If either stats object contains estimates, their sum does too.
-	ms.ContainsEstimates = ms.ContainsEstimates || oms.ContainsEstimates
+	ms.ContainsEstimates = ms.ContainsEstimates + oms.ContainsEstimates
 	// Now that we've done that, we may just add them.
 	ms.IntentAge += oms.IntentAge
 	ms.GCBytesAge += oms.GCBytesAge
@@ -142,7 +142,9 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.Forward(oms.LastUpdateNanos)
 	oms.Forward(ms.LastUpdateNanos)
 	// If either stats object contains estimates, their difference does too.
-	ms.ContainsEstimates = ms.ContainsEstimates || oms.ContainsEstimates
+	// TODO(giorgosp): This is problematic, i.e. 1 - 1 = 0, which means the stats
+	// are exact. Should we add them or just keep one of them?
+	ms.ContainsEstimates = ms.ContainsEstimates - oms.ContainsEstimates
 	// Now that we've done that, we may subtract.
 	ms.IntentAge -= oms.IntentAge
 	ms.GCBytesAge -= oms.GCBytesAge

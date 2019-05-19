@@ -96,7 +96,8 @@ func EvalAddSSTable(
 	// Callers can trigger such a re-computation to fixup any discrepancies (and
 	// remove the ContainsEstimates flag) after they are done ingesting files by
 	// sending an explicit recompute.
-	stats.ContainsEstimates = true
+	// TODO(giorgosp): Should I check if it's 1 already or it always comes as 0?
+	stats.ContainsEstimates = 1
 	ms.Add(stats)
 
 	return result.Result{

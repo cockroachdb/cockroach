@@ -70,6 +70,7 @@ const (
 	Version19_1
 	VersionStart19_2
 	VersionQueryTxnTimestamp
+	VersionContainsEstimatesCounter
 
 	// Add new versions here (step one of two).
 
@@ -466,6 +467,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionQueryTxnTimestamp is https://github.com/cockroachdb/cockroach/pull/36307.
 		Key:     VersionQueryTxnTimestamp,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 2},
+	},
+	{
+		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
+		Key:     VersionContainsEstimatesCounter,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 3},
 	},
 
 	// Add new versions here (step two of two).
