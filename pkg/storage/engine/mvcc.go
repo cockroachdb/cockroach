@@ -206,7 +206,7 @@ func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCS
 	var ms enginepb.MVCCStats
 	sys := isSysLocal(key)
 	ms.AgeTo(nowNanos)
-	ms.ContainsEstimates = true
+	ms.ContainsEstimates = 1
 	if sys {
 		ms.SysBytes += valSize
 	} else {

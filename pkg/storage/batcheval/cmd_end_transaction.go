@@ -866,7 +866,7 @@ func splitTrigger(
 
 	// Compute (absolute) stats for RHS range.
 	var rightMS enginepb.MVCCStats
-	if origBothMS.ContainsEstimates || bothDeltaMS.ContainsEstimates {
+	if origBothMS.ContainsEstimates > 0 || bothDeltaMS.ContainsEstimates > 0 {
 		// Because either the original stats or the delta stats contain
 		// estimate values, we cannot perform arithmetic to determine the
 		// new range's stats. Instead, we must recompute by iterating
@@ -1045,8 +1045,8 @@ func splitTrigger(
 	// to turn it into a delta so the upstream machinery can digest it.
 	leftDeltaMS := leftMS // start with new left-hand side absolute stats
 	recStats := rec.GetMVCCStats()
-	leftDeltaMS.Subtract(recStats)        // subtract pre-split absolute stats
-	leftDeltaMS.ContainsEstimates = false // if there were any, recomputation removed them
+	leftDeltaMS.Subtract(recStats)    // subtract pre-split absolute stats
+	leftDeltaMS.ContainsEstimates = 0 // if there were any, recomputation removed them
 
 	// Perform a similar computation for the right hand side. The difference
 	// is that there isn't yet a Replica which could apply these stats, so
