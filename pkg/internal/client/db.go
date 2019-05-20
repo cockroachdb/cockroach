@@ -15,9 +15,9 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -153,12 +153,12 @@ func (r Result) String() string {
 	if r.Err != nil {
 		return r.Err.Error()
 	}
-	var buf bytes.Buffer
-	for i, row := range r.Rows {
+	var buf strings.Builder
+	for i := range r.Rows {
 		if i > 0 {
 			buf.WriteString("\n")
 		}
-		fmt.Fprintf(&buf, "%d: %s", i, &row)
+		fmt.Fprintf(&buf, "%d: %s", i, &r.Rows[i])
 	}
 	return buf.String()
 }
