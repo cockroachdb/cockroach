@@ -1011,36 +1011,9 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	return s.builder.buildAggregateFunction(f, &private, s)
 }
 
-func isSupportedFrame(f *tree.WindowDef) bool {
-	if f == nil {
-		return true
-	}
-
-	if f.Frame == nil {
-		return true
-	}
-
-	if f.Frame.Mode != tree.RANGE {
-		return false
-	}
-	if f.Frame.Bounds.StartBound != nil &&
-		(f.Frame.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
-			f.Frame.Bounds.StartBound.BoundType == tree.OffsetFollowing) {
-		return false
-	}
-	if f.Frame.Bounds.EndBound != nil &&
-		(f.Frame.Bounds.EndBound.BoundType == tree.OffsetFollowing ||
-			f.Frame.Bounds.EndBound.BoundType == tree.OffsetPreceding) {
-		return false
-	}
-	return true
-}
-
 func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
 	if f.Filter != nil ||
-		f.Type == tree.DistinctFuncType ||
-		f.WindowDef.RefName != "" ||
-		!isSupportedFrame(f.WindowDef) {
+		f.WindowDef.RefName != "" {
 		panic(unimplementedWithIssueDetailf(34251, "", "unsupported window function"))
 	}
 

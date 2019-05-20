@@ -352,6 +352,14 @@ func (jf JoinFlags) String() string {
 	return b.String()
 }
 
+// WindowFrame denotes the definition of a window frame for an individual
+// window function, excluding the OFFSET expressions, if present.
+type WindowFrame struct {
+	Mode           tree.WindowFrameMode
+	StartBoundType tree.WindowFrameBoundType
+	EndBoundType   tree.WindowFrameBoundType
+}
+
 // NeedResults returns true if the mutation operator can return the rows that
 // were mutated.
 func (m *MutationPrivate) NeedResults() bool {

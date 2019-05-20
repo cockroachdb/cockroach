@@ -1714,6 +1714,33 @@ project
            └── ntile [type=int, outer=(2)]
                 └── variable: t.public.a.i [type=int]
 
+# Ensure OFFSET expressions don't get pruned.
+norm expect=PruneWindowInputCols format=show-all
+SELECT ntile(i) OVER (ORDER BY i RANGE BETWEEN f::INT PRECEDING AND CURRENT ROW) FROM a
+----
+project
+ ├── columns: ntile:5(int)
+ ├── stats: [rows=1000]
+ ├── cost: 1070.04
+ ├── prune: (5)
+ └── window partition=() ordering=+2
+      ├── columns: t.public.a.i:2(int) t.public.a.f:3(float) ntile:5(int)
+      ├── stats: [rows=1000]
+      ├── cost: 1060.03
+      ├── prune: (5)
+      ├── scan t.public.a
+      │    ├── columns: t.public.a.i:2(int) t.public.a.f:3(float)
+      │    ├── stats: [rows=1000]
+      │    ├── cost: 1060.02
+      │    └── prune: (2,3)
+      └── windows
+           └── windows-item: range from offset to current-row [type=int, outer=(2,3)]
+                └── window-from-offset [type=int]
+                     ├── ntile [type=int]
+                     │    └── variable: t.public.a.i [type=int]
+                     └── cast: INT8 [type=int]
+                          └── variable: t.public.a.f [type=float]
+
 # --------------------------------------------------
 # PruneWindowOutputCols
 # --------------------------------------------------

@@ -564,8 +564,9 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		case opt.WindowsItemOp:
 			// Only show this if the frame differs from the default.
 			frame := scalar.Private().(*WindowsItemPrivate).Frame
-			if frame.Bounds.StartBound.BoundType == tree.UnboundedPreceding &&
-				frame.Bounds.EndBound.BoundType == tree.CurrentRow {
+			if frame.Mode == tree.RANGE &&
+				frame.StartBoundType == tree.UnboundedPreceding &&
+				frame.EndBoundType == tree.CurrentRow {
 				scalar = scalar.Child(0).(opt.ScalarExpr)
 			}
 		}
@@ -902,13 +903,18 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s", t.Name)
 
 	case *WindowsItemPrivate:
-		if t.Frame.Bounds.StartBound.BoundType != tree.UnboundedPreceding ||
-			t.Frame.Bounds.EndBound.BoundType != tree.CurrentRow {
-			fmt.Fprintf(f.Buffer, " from %s to %s",
-				frameBoundName(t.Frame.Bounds.StartBound.BoundType),
-				frameBoundName(t.Frame.Bounds.EndBound.BoundType),
-			)
+		switch t.Frame.Mode {
+		case tree.GROUPS:
+			fmt.Fprintf(f.Buffer, " groups")
+		case tree.ROWS:
+			fmt.Fprintf(f.Buffer, " rows")
+		case tree.RANGE:
+			fmt.Fprintf(f.Buffer, " range")
 		}
+		fmt.Fprintf(f.Buffer, " from %s to %s",
+			frameBoundName(t.Frame.StartBoundType),
+			frameBoundName(t.Frame.EndBoundType),
+		)
 
 	case *WindowPrivate:
 		fmt.Fprintf(f.Buffer, " partition=%s", t.Partition)
