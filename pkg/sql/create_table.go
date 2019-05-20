@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -303,10 +304,12 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 			n.run.rowsAffected++
 		}
-
-		// Initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(desc.ID, n.run.rowsAffected)
 	}
+
+	// Initiate a run of CREATE STATISTICS. We use a large number
+	// for rowsAffected because we want to make sure that stats always get
+	// created/refreshed here.
+	params.ExecCfg().StatsRefresher.NotifyMutation(desc.ID, math.MaxInt32 /* rowsAffected */)
 	return nil
 }
 
