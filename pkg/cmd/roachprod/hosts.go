@@ -116,6 +116,9 @@ func loadClusters() error {
 		return err
 	}
 
+	debugDir := os.ExpandEnv(config.DefaultDebugDir)
+	_ = os.MkdirAll(debugDir, 0755)
+
 	for _, file := range files {
 		if !file.Mode().IsRegular() {
 			continue
@@ -132,7 +135,8 @@ func loadClusters() error {
 		lines := strings.Split(string(contents), "\n")
 
 		c := &install.SyncedCluster{
-			Name: file.Name(),
+			Name:     file.Name(),
+			DebugDir: debugDir,
 		}
 
 		for _, l := range lines {
