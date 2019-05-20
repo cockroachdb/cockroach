@@ -41,7 +41,8 @@ func init() {
 // take place on the local machine.  Later in the refactoring,
 // this ought to be replaced by a LocalCloudProvider or somesuch.
 const (
-	DefaultHostDir = "${HOME}/.roachprod/hosts"
-	EmailDomain    = "@cockroachlabs.com"
-	Local          = "local"
+	DefaultDebugDir = "${HOME}/.roachprod/debug"
+	DefaultHostDir  = "${HOME}/.roachprod/hosts"
+	EmailDomain     = "@cockroachlabs.com"
+	Local           = "local"
 )

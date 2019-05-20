@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,9 +51,9 @@ type remoteSession struct {
 	logfile string // captures ssh -vvv
 }
 
-func newRemoteSession(user, host string) (*remoteSession, error) {
+func newRemoteSession(user, host string, logdir string) (*remoteSession, error) {
 	logfile := filepath.Join(
-		os.TempDir(),
+		logdir,
 		fmt.Sprintf("ssh_%s_%s", host, timeutil.Now().Format(time.RFC3339)),
 	)
 	args := []string{
@@ -80,8 +79,8 @@ func newRemoteSession(user, host string) (*remoteSession, error) {
 
 func (s *remoteSession) errWithDebug(err error) error {
 	if err != nil {
-		debug, _ := ioutil.ReadFile(s.logfile)
-		err = errors.Wrapf(err, "ssh verbose log:\n%s\n%s", s.Cmd.Args, debug)
+		err = errors.Wrapf(err, "ssh verbose log retained in %s", s.logfile)
+		s.logfile = "" // prevent removal on close
 	}
 	return err
 }
@@ -138,8 +137,10 @@ func (s *remoteSession) Wait() error {
 }
 
 func (s *remoteSession) Close() {
-	_ = os.Remove(s.logfile)
 	s.cancel()
+	if s.logfile != "" {
+		_ = os.Remove(s.logfile)
+	}
 }
 
 type localSession struct {
