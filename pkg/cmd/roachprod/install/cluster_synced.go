@@ -79,6 +79,9 @@ type SyncedCluster struct {
 	Quiet       bool
 	// AuthorizedKeys is used by SetupSSH to add additional authorized keys.
 	AuthorizedKeys []byte
+
+	// Used to stash debug information.
+	DebugDir string
 }
 
 func (c *SyncedCluster) host(index int) string {
@@ -144,7 +147,7 @@ func (c *SyncedCluster) newSession(i int) (session, error) {
 	if c.IsLocal() {
 		return newLocalSession(), nil
 	}
-	return newRemoteSession(c.user(i), c.host(i))
+	return newRemoteSession(c.user(i), c.host(i), c.DebugDir)
 }
 
 // Stop TODO(peter): document

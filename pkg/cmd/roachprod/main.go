@@ -1715,7 +1715,7 @@ Node specification
 		os.Exit(1)
 	}
 
-	if err := initHostDir(); err != nil {
+	if err := initDirs(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
