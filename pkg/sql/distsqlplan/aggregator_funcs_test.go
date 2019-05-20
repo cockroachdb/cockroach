@@ -341,28 +341,27 @@ func checkDistAggregationInfo(
 					equiv = decNonDist.Coeff.Cmp(bigOne) == 0
 				}
 			case *tree.DFloat:
-				// Float results are highly variable and
-				// loss of precision between non-local and
-				// local is expected. We reduce the precision
-				// specified by floatPrecFmt and compare
-				// their string representations.
+				// Float results are highly variable and loss
+				// of precision between non-local and local is
+				// expected. We reduce the precision specified
+				// by floatPrecFmt and compare their string
+				// representations.
 				floatDist := float64(*typedDist)
 				floatNonDist := float64(*rowNonDist.Datum.(*tree.DFloat))
 				strDist = fmt.Sprintf(floatPrecFmt, floatDist)
 				strNonDist = fmt.Sprintf(floatPrecFmt, floatNonDist)
 				// Compare using a relative equality
-				// func that isn't dependent on the
-				// scale of the number. In addition,
-				// ignore any NaNs. Sometimes due to the
-				// non-deterministic ordering of distsql,
-				// we get a +Inf and Nan result. Both of
-				// these changes started happening with the
-				// float rand datums were taught about some
-				// more adversarial inputs. Since floats
-				// by nature have equality problems and
-				// I think our algorithms are correct,
-				// we need to be slightly more lenient in
-				// our float comparisons.
+				// func that isn't dependent on the scale
+				// of the number. In addition, ignore any
+				// NaNs. Sometimes due to the non-deterministic
+				// ordering of distsql, we get a +Inf and
+				// Nan result. Both of these changes started
+				// happening with the float rand datums
+				// were taught about some more adversarial
+				// inputs. Since floats by nature have equality
+				// problems and I think our algorithms are
+				// correct, we need to be slightly more lenient
+				// in our float comparisons.
 				equiv = almostEqualRelative(floatDist, floatNonDist) || math.IsNaN(floatNonDist) || math.IsNaN(floatDist)
 			default:
 				// For all other types, a simple string
@@ -396,7 +395,7 @@ func almostEqualRelative(a, b float64) bool {
 	if B > A {
 		largest = B
 	}
-	const maxRelDiff = 1e-13
+	const maxRelDiff = 1e-10
 	return diff <= largest*maxRelDiff
 }
 

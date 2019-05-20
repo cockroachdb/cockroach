@@ -29,6 +29,7 @@ type kvFetcher struct {
 	kvs []roachpb.KeyValue
 
 	batchResponse []byte
+	bytesRead     int64
 	span          roachpb.Span
 	newSpan       bool
 }
@@ -77,5 +78,6 @@ func (f *kvFetcher) nextKV(
 			return false, kv, false, nil
 		}
 		f.newSpan = true
+		f.bytesRead += int64(len(f.batchResponse))
 	}
 }

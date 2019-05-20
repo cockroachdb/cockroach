@@ -1390,6 +1390,11 @@ func (rf *Fetcher) GetRangesInfo() []roachpb.RangeInfo {
 	return f.getRangesInfo()
 }
 
+// GetBytesRead returns total number of bytes read by the underlying kvFetcher.
+func (rf *Fetcher) GetBytesRead() int64 {
+	return rf.kvFetcher.bytesRead
+}
+
 // Only unique secondary indexes have extra columns to decode (namely the
 // primary index columns).
 func hasExtraCols(table *tableInfo) bool {

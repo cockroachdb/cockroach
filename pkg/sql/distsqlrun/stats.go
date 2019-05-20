@@ -53,6 +53,7 @@ const (
 	stallTimeTagSuffix = "stalltime"
 	maxMemoryTagSuffix = "mem.max"
 	maxDiskTagSuffix   = "disk.max"
+	bytesReadTagSuffix = "bytes.read"
 )
 
 // Stats is a utility method that returns a map of the InputStats` stats to
@@ -69,6 +70,7 @@ const (
 	stallTimeQueryPlanSuffix = "stall time"
 	maxMemoryQueryPlanSuffix = "max memory used"
 	maxDiskQueryPlanSuffix   = "max disk used"
+	bytesReadQueryPlanSuffix = "bytes read"
 )
 
 // StatsForQueryPlan is a utility method that returns a list of the InputStats'
