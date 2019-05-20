@@ -33,7 +33,7 @@ func init() {
 // declareKeysWriteTransaction is the shared portion of
 // declareKeys{Begin,End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -44,7 +44,7 @@ func declareKeysWriteTransaction(
 }
 
 func declareKeysBeginTransaction(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	declareKeysWriteTransaction(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{

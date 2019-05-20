@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"go.etcd.io/etcd/raft"
 )
 
 // MaxQuotaReplicaLivenessDuration is the maximum duration that a replica
@@ -152,80 +153,75 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// We're still the leader.
 
-	// TODO(peter): Can we avoid retrieving the Raft status on every invocation
-	// in order to avoid the associated allocation? Tracking the progress
-	// ourselves via looking at MsgAppResp messages would be overkill. Perhaps
-	// another accessor on RawNode.
-	status := r.raftStatusRLocked()
-	if status == nil {
-		log.Fatal(ctx, "leader with nil RaftStatus")
-	}
-
 	// Find the minimum index that active followers have acknowledged.
 	now := timeutil.Now()
-	minIndex := status.Commit
-	for _, rep := range r.mu.state.Desc.Replicas {
-		// Only consider followers that that have "healthy" RPC connections.
-
-		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID); err != nil {
-			continue
+	status := r.mu.internalRaftGroup.StatusWithoutProgress()
+	commitIndex, minIndex := status.Commit, status.Commit
+	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress raft.Progress) {
+		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
+		if !ok {
+			return
 		}
 
 		// Only consider followers that are active.
 		if !r.mu.lastUpdateTimes.isFollowerActive(ctx, rep.ReplicaID, now) {
-			continue
+			return
 		}
-		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
-			// Note that the Match field has different semantics depending on
-			// the State.
-			//
-			// In state ProgressStateReplicate, the Match index is optimistically
-			// updated whenever a message is *sent* (not received). Due to Raft
-			// flow control, only a reasonably small amount of data can be en
-			// route to a given follower at any point in time.
-			//
-			// In state ProgressStateProbe, the Match index equals Next-1, and
-			// it tells us the leader's optimistic best guess for the right log
-			// index (and will try once per heartbeat interval to update its
-			// estimate). In the usual case, the follower responds with a hint
-			// when it rejects the first probe and the leader replicates or
-			// sends a snapshot. In the case in which the follower does not
-			// respond, the leader reduces Match by one each heartbeat interval.
-			// But if the follower does not respond, we've already filtered it
-			// out above. We use the Match index as is, even though the follower
-			// likely isn't there yet because that index won't go up unless the
-			// follower is actually catching up, so it won't cause it to fall
-			// behind arbitrarily.
-			//
-			// Another interesting tidbit about this state is that the Paused
-			// field is usually true as it is used to limit the number of probes
-			// (i.e. appends) sent to this follower to one per heartbeat
-			// interval.
-			//
-			// In state ProgressStateSnapshot, the Match index is the last known
-			// (possibly optimistic, depending on previous state) index before
-			// the snapshot went out. Once the snapshot applies, the follower
-			// will enter ProgressStateReplicate again. So here the Match index
-			// works as advertised too.
 
-			// Only consider followers who are in advance of the quota base
-			// index. This prevents a follower from coming back online and
-			// preventing throughput to the range until it has caught up.
-			if progress.Match < r.mu.proposalQuotaBaseIndex {
-				continue
-			}
-			if progress.Match > 0 && progress.Match < minIndex {
-				minIndex = progress.Match
-			}
-			// If this is the most recently added replica and it has caught up, clear
-			// our state that was tracking it. This is unrelated to managing proposal
-			// quota, but this is a convenient place to do so.
-			if rep.ReplicaID == r.mu.lastReplicaAdded && progress.Match >= status.Commit {
-				r.mu.lastReplicaAdded = 0
-				r.mu.lastReplicaAddedTime = time.Time{}
-			}
+		// Only consider followers that that have "healthy" RPC connections.
+		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID); err != nil {
+			return
 		}
-	}
+
+		// Note that the Match field has different semantics depending on
+		// the State.
+		//
+		// In state ProgressStateReplicate, the Match index is optimistically
+		// updated whenever a message is *sent* (not received). Due to Raft
+		// flow control, only a reasonably small amount of data can be en
+		// route to a given follower at any point in time.
+		//
+		// In state ProgressStateProbe, the Match index equals Next-1, and
+		// it tells us the leader's optimistic best guess for the right log
+		// index (and will try once per heartbeat interval to update its
+		// estimate). In the usual case, the follower responds with a hint
+		// when it rejects the first probe and the leader replicates or
+		// sends a snapshot. In the case in which the follower does not
+		// respond, the leader reduces Match by one each heartbeat interval.
+		// But if the follower does not respond, we've already filtered it
+		// out above. We use the Match index as is, even though the follower
+		// likely isn't there yet because that index won't go up unless the
+		// follower is actually catching up, so it won't cause it to fall
+		// behind arbitrarily.
+		//
+		// Another interesting tidbit about this state is that the Paused
+		// field is usually true as it is used to limit the number of probes
+		// (i.e. appends) sent to this follower to one per heartbeat
+		// interval.
+		//
+		// In state ProgressStateSnapshot, the Match index is the last known
+		// (possibly optimistic, depending on previous state) index before
+		// the snapshot went out. Once the snapshot applies, the follower
+		// will enter ProgressStateReplicate again. So here the Match index
+		// works as advertised too.
+
+		// Only consider followers who are in advance of the quota base
+		// index. This prevents a follower from coming back online and
+		// preventing throughput to the range until it has caught up.
+		if progress.Match < r.mu.proposalQuotaBaseIndex {
+			return
+		}
+		if progress.Match > 0 && progress.Match < minIndex {
+			minIndex = progress.Match
+		}
+		// If this is the most recently added replica and it has caught up, clear
+		// our state that was tracking it. This is unrelated to managing proposal
+		// quota, but this is a convenient place to do so.
+		if rep.ReplicaID == r.mu.lastReplicaAdded && progress.Match >= commitIndex {
+			r.mu.lastReplicaAdded = 0
+			r.mu.lastReplicaAddedTime = time.Time{}
+		}
+	})
 
 	if r.mu.proposalQuotaBaseIndex < minIndex {
 		// We've persisted minIndex - r.mu.proposalQuotaBaseIndex entries to
