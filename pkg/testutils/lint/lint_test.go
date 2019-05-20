@@ -1460,6 +1460,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/.*\.pb(\.gw|)\.go:`),
 				// Skip generated file.
 				stream.GrepNot(`pkg/ui/distoss/bindata.go`),
+				stream.GrepNot(`pkg/ui/distccl/bindata.go`),
 				// sql.go is the generated parser, which sets sqlDollar in all cases,
 				// even if it might not be used again.
 				stream.GrepNot(`pkg/sql/parser/sql.go:.*this value of sqlDollar is never used`),
