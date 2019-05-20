@@ -31,9 +31,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-func initHostDir() error {
+func initDirs() error {
 	hd := os.ExpandEnv(config.DefaultHostDir)
-	return os.MkdirAll(hd, 0755)
+	if err := os.MkdirAll(hd, 0755); err != nil {
+		return err
+	}
+	return os.MkdirAll(os.ExpandEnv(config.DefaultDebugDir), 0755)
 }
 
 func syncHosts(cloud *cloud.Cloud) error {
@@ -116,6 +119,8 @@ func loadClusters() error {
 		return err
 	}
 
+	debugDir := os.ExpandEnv(config.DefaultDebugDir)
+
 	for _, file := range files {
 		if !file.Mode().IsRegular() {
 			continue
@@ -132,7 +137,8 @@ func loadClusters() error {
 		lines := strings.Split(string(contents), "\n")
 
 		c := &install.SyncedCluster{
-			Name: file.Name(),
+			Name:     file.Name(),
+			DebugDir: debugDir,
 		}
 
 		for _, l := range lines {
