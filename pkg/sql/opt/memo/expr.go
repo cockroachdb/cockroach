@@ -208,6 +208,21 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	return colSet
 }
 
+// RetainCommonFilters retains only the filters found in n and other.
+func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
+	// TODO(ridwanmsharif): Faster intersection using a map
+	common := (*n)[:0]
+	for _, filter := range *n {
+		for _, otherFilter := range other {
+			if filter.Condition == otherFilter.Condition {
+				common = append(common, filter)
+				break
+			}
+		}
+	}
+	*n = common
+}
+
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {
@@ -379,5 +394,86 @@ func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncD
 		if id != 0 {
 			fdset.AddEquivalency(t, id)
 		}
+	}
+}
+
+// ExprIsNeverNull makes a best-effort attempt to prove that the provided
+// scalar is always non-NULL, given the set of outer columns that are known
+// to be not null. This is particularly useful with check constraints.
+// Check constraints are satisfied when the condition evaluates to NULL,
+// whereas filters are not. For example consider the following check constraint:
+//
+// CHECK (col IN (1, 2, NULL))
+//
+// Any row evaluating this check constraint with any value for the column will
+// satisfy this check constraint, as they would evaluate to true (in the case
+// of 1 or 2) or NULL (in the case of everything else).
+func ExprIsNeverNull(e opt.ScalarExpr, notNullCols *opt.ColSet) bool {
+	switch t := e.(type) {
+	case *VariableExpr:
+		return notNullCols.Contains(int(t.Col))
+
+	case *TrueExpr, *FalseExpr, *ConstExpr:
+		return true
+
+	case *NullExpr:
+		return false
+
+	case *TupleExpr:
+		// TODO(ridwanmsharif): Make this less conservative and instead update how
+		// IN and NOT IN behave w.r.t tuples and how IndirectionExpr works with arrays.
+		for i := range t.Elems {
+			if !ExprIsNeverNull(t.Elems[i], notNullCols) {
+				return false
+			}
+		}
+		return true
+
+	case *ArrayExpr:
+		for i := range t.Elems {
+			if !ExprIsNeverNull(t.Elems[i], notNullCols) {
+				return false
+			}
+		}
+		return true
+
+	case *CaseExpr:
+		nullableChildren := false
+		for i := range t.Whens {
+			if !ExprIsNeverNull(t.Whens[i], notNullCols) {
+				nullableChildren = true
+				break
+			}
+		}
+		return ExprIsNeverNull(t.Input, notNullCols) &&
+			ExprIsNeverNull(t.OrElse, notNullCols) && !nullableChildren
+
+	case *IndirectionExpr:
+		res := false
+		switch t.Index.(type) {
+		case *VariableExpr:
+			// Index could be could be out of range. Cannot make guarantees.
+			res = false
+		case *ConstExpr:
+			index := int(*t.Index.(*ConstExpr).Value.(*tree.DInt))
+			arrayLen := len(t.Input.(*ArrayExpr).Elems)
+			res = ExprIsNeverNull(t.Input, notNullCols) && index > 0 && index <= arrayLen
+		}
+		return res
+
+	case *CastExpr, *NotExpr, *RangeExpr:
+		return ExprIsNeverNull(t.Child(0).(opt.ScalarExpr), notNullCols)
+
+	case *InExpr, *NotInExpr, *AndExpr, *OrExpr, *GeExpr, *GtExpr, *NeExpr, *EqExpr, *LeExpr,
+		*LtExpr, *LikeExpr, *NotLikeExpr, *ILikeExpr, *NotILikeExpr, *SimilarToExpr,
+		*NotSimilarToExpr, *RegMatchExpr, *NotRegMatchExpr, *RegIMatchExpr, *NotRegIMatchExpr,
+		*ContainsExpr, *JsonExistsExpr, *JsonAllExistsExpr, *JsonSomeExistsExpr, *AnyScalarExpr,
+		*BitandExpr, *BitorExpr, *BitxorExpr, *PlusExpr, *MinusExpr, *MultExpr, *DivExpr,
+		*FloorDivExpr, *ModExpr, *PowExpr, *ConcatExpr, *LShiftExpr, *RShiftExpr, *WhenExpr:
+		return ExprIsNeverNull(t.Child(0).(opt.ScalarExpr), notNullCols) &&
+			ExprIsNeverNull(t.Child(1).(opt.ScalarExpr), notNullCols)
+
+	default:
+		return false
 	}
 }

@@ -135,14 +135,17 @@ type Table interface {
 	Family(i int) Family
 }
 
-// CheckConstraint is the SQL text for a check constraint on a table. Check
-// constraints are user-defined restrictions on the content of each row in a
-// table. For example, this check constraint ensures that only values greater
-// than zero can be inserted into the table:
+// CheckConstraint contains the SQL text and the validity status for a check
+// constraint on a table. Check constraints are user-defined restrictions
+// on the content of each row in a table. For example, this check constraint
+// ensures that only values greater than zero can be inserted into the table:
 //
 //   CREATE TABLE a (a INT CHECK (a > 0))
 //
-type CheckConstraint string
+type CheckConstraint struct {
+	Constraint string
+	Validated  bool
+}
 
 // TableStatistic is an interface to a table statistic. Each statistic is
 // associated with a set of columns.
@@ -233,7 +236,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	}
 
 	for i := 0; i < tab.CheckCount(); i++ {
-		child.Childf("CHECK (%s)", tab.Check(i))
+		child.Childf("CHECK (%s)", tab.Check(i).Constraint)
 	}
 
 	// Don't print the primary family, since it's implied.

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
@@ -55,6 +56,18 @@ import (
 //
 //        Information about IndexedVar columns.
 //
+//  - scalar-is-nullable [args]
+//
+//    Builds a scalar expression using the input and performs a best-effort
+//    check to see if the scalar expression is nullable. It outputs this
+//    result as a boolean.
+//
+//    The supported args (in addition to the ones supported by OptTester:
+//
+//      - vars=(type1,type2,...)
+//
+//      Adding a !null suffix on a var type is used to mark that var as
+//      non-nullable.
 func TestBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -76,11 +89,18 @@ func TestBuilder(t *testing.T) {
 				memo.ExprFmtHideQualifications
 
 			switch d.Cmd {
-			case "build-scalar":
+			case "build-scalar", "scalar-is-nullable":
+				var notNullCols opt.ColSet
 				for _, arg := range d.CmdArgs {
 					key, vals := arg.Key, arg.Vals
 					switch key {
 					case "vars":
+						for i := 0; i < len(vals); i++ {
+							if strings.HasSuffix(strings.ToLower(vals[i]), "!null") {
+								vals[i] = strings.TrimSuffix(strings.ToLower(vals[i]), "!null")
+								notNullCols.Add(i + 1)
+							}
+						}
 						varTypes, err = exprgen.ParseTypes(vals)
 						if err != nil {
 							d.Fatalf(t, "%v", err)
@@ -118,9 +138,13 @@ func TestBuilder(t *testing.T) {
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}
-				f := memo.MakeExprFmtCtx(tester.Flags.ExprFormat, o.Memo())
-				f.FormatExpr(o.Memo().RootExpr())
-				return f.Buffer.String()
+				if d.Cmd == "build-scalar" {
+					f := memo.MakeExprFmtCtx(tester.Flags.ExprFormat, o.Memo())
+					f.FormatExpr(o.Memo().RootExpr())
+					return f.Buffer.String()
+				} else {
+					return fmt.Sprintf("%t\n", !memo.ExprIsNeverNull(o.Memo().RootExpr().(opt.ScalarExpr), &notNullCols))
+				}
 
 			default:
 				return tester.RunCommand(t, d)

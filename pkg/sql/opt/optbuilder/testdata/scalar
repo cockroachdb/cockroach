@@ -1175,3 +1175,78 @@ if-err [type=decimal]
  │    └── variable: @1 [type=decimal]
  └── err-code
       └── const: '10000' [type=string]
+
+# Test nullability of scalar expressions to make a column non-nullable,
+# add !null to the var type declaration.
+scalar-is-nullable
+true AND false
+----
+false
+
+scalar-is-nullable vars=(int)
+@1 >= 5
+----
+true
+
+scalar-is-nullable vars=(int!null)
+@1 >= 5
+----
+false
+
+scalar-is-nullable vars=(int!null, int!NULL)
+@1 >= 5 AND @1 <= 10 AND @2 < 4
+----
+false
+
+scalar-is-nullable vars=(int!null, int)
+@1 >= 5 AND @1 <= 10 AND @2 < 4
+----
+true
+
+scalar-is-nullable vars=(int!null)
+@1 >= 5 AND @1 IN (1, 2)
+----
+false
+
+scalar-is-nullable vars=(int!null)
+@1 >= 5 AND @1 IN (1, 2, NULL)
+----
+true
+
+scalar-is-nullable vars=(int!null, int!null)
+CASE WHEN @1 >= 5 THEN @1 <= 10 ELSE @2 < 4 END
+----
+false
+
+scalar-is-nullable vars=(int!null, int!null)
+CASE WHEN @1 >= 5 THEN @1 <= 10 ELSE (@2 IN (4, NULL)) END
+----
+true
+
+# Index out of range.
+scalar-is-nullable
+1 = (array[1])[10]
+----
+true
+
+# Arrays are indexed by 1.
+scalar-is-nullable
+1 = (array[1])[0]
+----
+true
+
+scalar-is-nullable
+1 = (array[1])[1]
+----
+false
+
+scalar-is-nullable
+1 = (array[NULL])[1]
+----
+true
+
+# Cannot guarantee non-nullability with a variable index.
+scalar-is-nullable vars=(int)
+1 = (array[NULL])[@1]
+----
+true
