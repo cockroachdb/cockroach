@@ -207,6 +207,16 @@ SELECT * FROM crdb_internal.zones WHERE false
 ----
 zone_id  zone_name cli_specifier  config_yaml  config_sql  config_protobuf
 
+query ITTTTTTTTTT colnames
+SELECT * FROM crdb_internal.ranges WHERE range_id < 0
+----
+range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  manual_split_time  lease_holder
+
+query ITTTTTTTTT colnames
+SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
+----
+range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  manual_split_time
+
 statement ok
 INSERT INTO system.zones (id, config) VALUES
   (18, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
@@ -316,6 +326,21 @@ node_id  store_id  attrs  used
 
 statement ok
 CREATE TABLE foo (a INT PRIMARY KEY); INSERT INTO foo VALUES(1)
+
+statement ok
+ALTER TABLE foo SPLIT AT VALUES(2)
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE manual_split_time IS NOT NULL
+----
+start_pretty   end_pretty
+/Table/56/1/2  /Max
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE manual_split_time IS NOT NULL
+----
+start_pretty   end_pretty
+/Table/56/1/2  /Max
 
 # Make sure that the cluster id isn't unset.
 query B
