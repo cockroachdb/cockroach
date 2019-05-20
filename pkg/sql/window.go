@@ -293,12 +293,13 @@ func constructWindowDef(
 	var refName string
 	switch {
 	case def.RefName != "":
-		// SELECT rank() OVER (w) FROM t WINDOW w as (...)
+		// SELECT rank() OVER (w) FROM t WINDOW w AS (...)
 		// We copy the referenced window specification, and modify it if necessary.
 		refName = string(def.RefName)
 		modifyRef = true
 	case def.Name != "":
-		// SELECT rank() OVER w FROM t WINDOW w as (...)
+		// SELECT rank() OVER w FROM t WINDOW w AS (...)
+		// Note the lack of parens around w, compared to the first case.
 		// We use the referenced window specification directly, without modification.
 		refName = string(def.Name)
 	}
