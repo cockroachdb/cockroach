@@ -865,6 +865,7 @@ func TestLint(t *testing.T) {
 			"*.go",
 			":!*.pb.go",
 			":!*.pb.gw.go",
+			":!errors",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
@@ -1208,6 +1209,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/cmd/`),
 			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
 			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
+			stream.GrepNot(`cockroach/pkg/errors/safedetails: syscall$`),
+			stream.GrepNot(`cockroach/pkg/errors/errbase: log$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroach/pkg/server/debug/pprofui: path$`),
@@ -1419,6 +1422,13 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("sql/.*exported func .* returns unexported type sql.planNode"),
 				stream.GrepNot("struct field (XXX_NoUnkeyedLiteral|XXX_sizecache) should be"),
 				stream.GrepNot("pkg/sql/types/types.go.* var Uuid should be UUID"),
+				// The error library is made of composable bits that are not
+				// meant to be used further than the public interface, so
+				// these linter checks are irrelevant.
+				stream.GrepNot(`pkg/errors/.*/.*\.go:.* func name will be used as .* and that stutters`),
+				// It's OK to list a function type when forwarding a function definition,
+				// it helps with reading the code.
+				stream.GrepNot(`pkg/errors/.*\.go:.* should omit type func.* from declaration .* it will be inferred`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
@@ -1466,6 +1476,8 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/sql/pgwire/pgerror/codes.go:.* const Code.* is unused`),
 				// The methods in exprgen.customFuncs are used via reflection.
 				stream.GrepNot(`pkg/sql/opt/optgen/exprgen/custom_funcs.go:.* func .* is unused`),
+				// The API forwards in the errors package are declared for documentation purposes.
+				stream.GrepNot(`pkg/errors/.*_api.go:.* is unused`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
