@@ -1227,6 +1227,13 @@ alter_range_stmt:
 //   ALTER INDEX ... RENAME TO <newname>
 //   ALTER INDEX ... SPLIT AT <selectclause>
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
+//   ALTER PARTITION ... OF INDEX ... CONFIGURE ZONE <zoneconfig>
+//
+// Zone configurations:
+//   DISCARD
+//   USING <var> = <expr> [, ...]
+//   USING <var> = COPY FROM PARENT [, ...]
+//   { TO | = } <expr>
 //
 // %SeeAlso: WEBDOCS/alter-index.html
 alter_index_stmt:
@@ -1373,6 +1380,15 @@ alter_zone_index_stmt:
     s := $4.setZoneConfig()
     s.ZoneSpecifier = tree.ZoneSpecifier{
        TableOrIndex: $3.tableIndexName(),
+    }
+    $$.val = s
+  }
+| ALTER PARTITION partition_name OF INDEX table_index_name set_zone_config
+  {
+    s := $7.setZoneConfig()
+    s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: $6.tableIndexName(),
+       Partition: tree.Name($3),
     }
     $$.val = s
   }
@@ -3562,6 +3578,7 @@ show_zone_stmt:
     name := $6.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
         TableOrIndex: tree.TableIndexName{Table: name},
+        Partition: tree.Name($7),
     }}
   }
 | SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF TABLE table_name
@@ -3569,13 +3586,21 @@ show_zone_stmt:
     name := $9.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
       TableOrIndex: tree.TableIndexName{Table: name},
-        Partition: tree.Name($6),
+      Partition: tree.Name($6),
     }}
   }
-| SHOW ZONE CONFIGURATION FOR INDEX table_index_name
+| SHOW ZONE CONFIGURATION FOR INDEX table_index_name opt_partition
   {
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
       TableOrIndex: $6.tableIndexName(),
+      Partition: tree.Name($7),
+    }}
+  }
+| SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF INDEX table_index_name
+  {
+    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
+      TableOrIndex: $9.tableIndexName(),
+      Partition: tree.Name($6),
     }}
   }
 | SHOW ZONE CONFIGURATIONS
