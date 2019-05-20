@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 )
 
-// DefaultDeclareKeys is the default implementation of Command.DeclareKeys
+// DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
@@ -32,6 +32,14 @@ func DefaultDeclareKeys(
 	} else {
 		spans.Add(spanset.SpanReadWrite, req.Header().Span())
 	}
+}
+
+// DeclareKeysForBatch adds all keys that the batch with the provided header
+// touches to the given SpanSet. This does not include keys touched during the
+// processing of the batch's individual commands.
+func DeclareKeysForBatch(
+	desc roachpb.RangeDescriptor, header roachpb.Header, spans *spanset.SpanSet,
+) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(spanset.SpanReadOnly, roachpb.Span{
