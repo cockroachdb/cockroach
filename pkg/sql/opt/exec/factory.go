@@ -162,11 +162,11 @@ type Factory interface {
 	//
 	// If the input is guaranteed to have an ordering on grouping columns, a
 	// "streaming" aggregation is performed (i.e. aggregation happens separately
-	// for each distinct set of values on the orderedGroupCols).
+	// for each distinct set of values on the set of columns in the ordering).
 	ConstructGroupBy(
 		input Node,
 		groupCols []ColumnOrdinal,
-		orderedGroupCols ColumnOrdinalSet,
+		groupColOrdering sqlbase.ColumnOrdering,
 		aggregations []AggInfo,
 		reqOrdering OutputOrdering,
 	) (Node, error)

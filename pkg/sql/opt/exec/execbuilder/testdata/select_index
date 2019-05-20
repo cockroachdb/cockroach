@@ -761,7 +761,7 @@ sort                 ·            ·
  └── group           ·            ·
       │              aggregate 0  resource_key
       │              aggregate 1  count(resource_key)
-      │              group by     @1
+      │              group by     resource_key
       └── render     ·            ·
            └── scan  ·            ·
 ·                    table        favorites@favorites_glob_fav_idx

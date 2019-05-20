@@ -102,26 +102,29 @@ func distinctOnBuildProvided(expr memo.RelExpr, required *physical.OrderingChoic
 	return trimProvided(d.Input.ProvidedPhysical().Ordering, required, &d.Relational().FuncDeps)
 }
 
-// StreamingGroupingCols returns the subset of grouping columns that form a
-// prefix of the ordering required of the input. These columns can be used to
+// StreamingGroupingColOrdering returns an ordering on grouping columns that is
+// guaranteed on the input of an aggregation operator. This ordering can be used
 // perform a streaming aggregation.
-func StreamingGroupingCols(g *memo.GroupingPrivate, required *physical.OrderingChoice) opt.ColSet {
-	// The ordering required of the input is the intersection of the required
-	// ordering on the grouping operator and the internal ordering. We use both
-	// to determine the ordered grouping columns.
-	var res opt.ColSet
-	harvestCols := func(ord *physical.OrderingChoice) {
-		for i := range ord.Columns {
-			cols := ord.Columns[i].Group.Intersection(g.GroupingCols)
-			if cols.Empty() {
-				// This group refers to a column that is not a grouping column.
-				// The rest of the ordering is not useful.
-				break
-			}
-			res.UnionWith(cols)
+func StreamingGroupingColOrdering(
+	g *memo.GroupingPrivate, required *physical.OrderingChoice,
+) opt.Ordering {
+	inputOrdering := required.Intersection(&g.Ordering)
+
+	ordering := make(opt.Ordering, 0, len(inputOrdering.Columns))
+	for i := range inputOrdering.Columns {
+		cols := inputOrdering.Columns[i].Group.Intersection(g.GroupingCols)
+		if cols.Empty() {
+			// This group refers to a column that is not a grouping column.
+			// The rest of the ordering is not useful.
+			break
+		}
+		// If we have multiple equal grouping columns, add them all to the ordering.
+		for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+			ordering = append(
+				ordering,
+				opt.MakeOrderingColumn(opt.ColumnID(col), inputOrdering.Columns[i].Descending),
+			)
 		}
 	}
-	harvestCols(required)
-	harvestCols(&g.Ordering)
-	return res
+	return ordering
 }

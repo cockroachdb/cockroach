@@ -239,8 +239,8 @@ render                                       ·            ·
       │                                      aggregate 5  is_hidden
       │                                      aggregate 6  crdb_sql_type
       │                                      aggregate 7  array_agg(index_name)
-      │                                      group by     @1-@7
-      │                                      ordered      @2
+      │                                      group by     column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
+      │                                      ordered      +ordinal_position
       └── render                             ·            ·
            └── sort                          ·            ·
                 │                            order        +ordinal_position
