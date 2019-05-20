@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/workload/querybench"
 	"github.com/lib/pq"
 )
 
@@ -32,19 +33,21 @@ type tpchBench int
 const (
 	sql20 tpchBench = iota
 	tpch
+	tpchVec
 )
 
 var urlMap = map[tpchBench]string{
-	sql20: `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/2.1-sql-20`,
-	tpch:  `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries`,
+	sql20:   `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/2.1-sql-20`,
+	tpch:    `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries`,
+	tpchVec: `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries-vec`,
 }
 
 type tpchBenchSpec struct {
-	Nodes             int
-	CPUs              int
-	ScaleFactor       int
-	benchType         tpchBench
-	durationInMinutes int
+	Nodes           int
+	CPUs            int
+	ScaleFactor     int
+	benchType       tpchBench
+	numRunsPerQuery int
 }
 
 // runTPCHBench runs sets of queries against CockroachDB clusters in different
@@ -85,14 +88,22 @@ func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 
 		t.l.Printf("running %s benchmark on tpch scale-factor=%d", filename, b.ScaleFactor)
 
+		queries, err := querybench.GetQueries(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// maxOps flag will allow us to exit the workload once all the queries were
+		// run b.numRunsPerQuery number of times.
+		maxOps := b.numRunsPerQuery * len(queries)
+
 		// Run with only one worker to get best-case single-query performance.
-		// TODO(yuzefovich): instead of duration, specify --max-ops (we'll need to
-		// know the number of queries in file - probably just add it as the first
-		// non-comment line of the queries' files).
 		cmd := fmt.Sprintf(
-			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s --duration=%dm {pgurl%s} --histograms=logs/stats.json",
+			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
+				"--num-runs=%d --max-ops=%d --vectorized=%t {pgurl%s} --histograms=logs/stats.json",
 			filename,
-			b.durationInMinutes,
+			b.numRunsPerQuery,
+			maxOps,
+			b.benchType == tpchVec,
 			roachNodes,
 		)
 		if err := c.RunE(ctx, loadNode, cmd); err != nil {
@@ -184,18 +195,25 @@ func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
 func registerTPCHBench(r *registry) {
 	specs := []tpchBenchSpec{
 		{
-			Nodes:             3,
-			CPUs:              4,
-			ScaleFactor:       1,
-			benchType:         sql20,
-			durationInMinutes: 5,
+			Nodes:           3,
+			CPUs:            4,
+			ScaleFactor:     1,
+			benchType:       sql20,
+			numRunsPerQuery: 3,
 		},
 		{
-			Nodes:             3,
-			CPUs:              4,
-			ScaleFactor:       1,
-			benchType:         tpch,
-			durationInMinutes: 30,
+			Nodes:           3,
+			CPUs:            4,
+			ScaleFactor:     1,
+			benchType:       tpch,
+			numRunsPerQuery: 3,
+		},
+		{
+			Nodes:           3,
+			CPUs:            4,
+			ScaleFactor:     1,
+			benchType:       tpchVec,
+			numRunsPerQuery: 3,
 		},
 	}
 
