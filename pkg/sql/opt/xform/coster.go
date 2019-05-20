@@ -471,7 +471,7 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 		// The cost is chosen so that it's always less than the cost to sort the
 		// input.
 		hashCost := memo.Cost(inputRowCount) * cpuCostFactor
-		n := ordering.StreamingGroupingCols(private, &required.Ordering).Len()
+		n := len(ordering.StreamingGroupingColOrdering(private, &required.Ordering))
 		// n = 0:                factor = 1
 		// n = groupingColCount: factor = 0
 		hashCost *= 1 - memo.Cost(n)/memo.Cost(groupingColCount)
