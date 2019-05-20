@@ -196,11 +196,39 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 			frameIdx = len(frames) - 1
 		}
 
+		fn := b.constructWindowFn(w.def.Name, argLists[i])
+
+		if windowFrames[i].Bounds.StartBound.OffsetExpr != nil {
+			fn = b.factory.ConstructWindowFromOffset(
+				fn,
+				b.buildScalar(
+					w.frame.Bounds.StartBound.OffsetExpr.(tree.TypedExpr),
+					inScope,
+					nil, nil, nil,
+				),
+			)
+		}
+
+		if windowFrames[i].Bounds.EndBound.OffsetExpr != nil {
+			fn = b.factory.ConstructWindowToOffset(
+				fn,
+				b.buildScalar(
+					w.frame.Bounds.EndBound.OffsetExpr.(tree.TypedExpr),
+					inScope,
+					nil, nil, nil,
+				),
+			)
+		}
+
 		frames[frameIdx].Windows = append(frames[frameIdx].Windows,
 			memo.WindowsItem{
-				Function: b.constructWindowFn(w.def.Name, argLists[i]),
+				Function: fn,
 				WindowsItemPrivate: memo.WindowsItemPrivate{
-					Frame:      &windowFrames[i],
+					Frame: memo.WindowFrame{
+						Mode:           windowFrames[i].Mode,
+						StartBoundType: windowFrames[i].Bounds.StartBound.BoundType,
+						EndBoundType:   windowFrames[i].Bounds.EndBound.BoundType,
+					},
 					ColPrivate: memo.ColPrivate{Col: w.col.id},
 				},
 			},
