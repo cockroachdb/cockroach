@@ -481,15 +481,9 @@ func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
 	h.HashString(string(val))
 }
 
-func (h *hasher) HashWindowFrame(val *tree.WindowFrame) {
-	// TODO(justin): remove when we support OFFSET.
-	if val.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
-		val.Bounds.EndBound.BoundType == tree.OffsetFollowing {
-		panic(pgerror.AssertionFailedf("expected to have rejected offset"))
-	}
-
-	h.HashInt(int(val.Bounds.StartBound.BoundType))
-	h.HashInt(int(val.Bounds.EndBound.BoundType))
+func (h *hasher) HashWindowFrame(val WindowFrame) {
+	h.HashInt(int(val.StartBoundType))
+	h.HashInt(int(val.EndBoundType))
 	h.HashInt(int(val.Mode))
 }
 
@@ -547,6 +541,7 @@ func (h *hasher) HashWindowsExpr(val WindowsExpr) {
 		item := &val[i]
 		h.HashColumnID(item.Col)
 		h.HashScalarExpr(item.Function)
+		h.HashWindowFrame(item.Frame)
 	}
 }
 
@@ -763,17 +758,9 @@ func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
 	return l == r
 }
 
-func (h *hasher) IsWindowFrameEqual(l, r *tree.WindowFrame) bool {
-	// TODO(justin): remove when we support OFFSET.
-	if l.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
-		l.Bounds.EndBound.BoundType == tree.OffsetFollowing ||
-		r.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
-		r.Bounds.EndBound.BoundType == tree.OffsetFollowing {
-		panic(pgerror.AssertionFailedf("expected to have rejected offset"))
-	}
-
-	return l.Bounds.StartBound.BoundType == r.Bounds.StartBound.BoundType &&
-		l.Bounds.EndBound.BoundType == r.Bounds.EndBound.BoundType &&
+func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {
+	return l.StartBoundType == r.StartBoundType &&
+		l.EndBoundType == r.EndBoundType &&
 		l.Mode == r.Mode
 }
 
@@ -850,7 +837,9 @@ func (h *hasher) IsWindowsExprEqual(l, r WindowsExpr) bool {
 		return false
 	}
 	for i := range l {
-		if l[i].Col != r[i].Col || l[i].Function != r[i].Function {
+		if l[i].Col != r[i].Col ||
+			l[i].Function != r[i].Function ||
+			l[i].Frame != r[i].Frame {
 			return false
 		}
 	}

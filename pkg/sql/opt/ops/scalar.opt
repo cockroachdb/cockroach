@@ -900,6 +900,24 @@ define AggFilter {
     Filter ScalarExpr
 }
 
+# WindowFromOffset is used as a modifier that wraps the input of a window
+# function. It supplies the expression to be used as the lower bound of the
+# window frame, if the lower bound uses OFFSET mode.
+[Scalar]
+define WindowFromOffset {
+    Input      ScalarExpr
+    Offset     ScalarExpr
+}
+
+# WindowToOffset is used as a modifier that wraps the input of a window
+# function. It supplies the expression to be used as the upper bound of the
+# window frame, if the upper bound uses OFFSET mode.
+[Scalar]
+define WindowToOffset {
+    Input      ScalarExpr
+    Offset     ScalarExpr
+}
+
 # Windows is a set of window functions to be computed in the context of a
 # Window expression.
 [Scalar, List]
@@ -910,6 +928,15 @@ define Windows {
 # Window expression.
 [Scalar, ListItem]
 define WindowsItem {
+    # Function is the window function being computed. If the frame has offset
+    # expressions, the window function will be hanging off of additional
+    # operators containing those expressions, similar to AggDistinct and
+    # AggFilter.
+    #
+    # This is a little clunky sometimes because it means that any time you want
+    # to look at the window function itself you need to go through a helper to
+    # strip off the additional layers. The benefit is that we have additional data
+    # without having a bunch of fields that are empty in the common case.
     Function ScalarExpr
 
     _ WindowsItemPrivate
@@ -918,7 +945,10 @@ define WindowsItem {
 [Private]
 define WindowsItemPrivate {
     # Frame is the frame that this item is computed relative to within its
-    # partition. The bounds pointers within it are guaranteed to be non-nil.
+    # partition. The bounds pointers within it are guaranteed to be non-nil,
+    # however the OFFSET expressions are unused.
+    # TODO(justin): at this point we should probably just have a separate opt
+    # version of this structure.
     Frame WindowFrame
 
     _ ColPrivate
