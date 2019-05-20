@@ -215,8 +215,6 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 				return roachpb.NewError(roachpb.NewAmbiguousResultError(strconv.Itoa(int(r))))
 			},
 		},
-		// Prevent the merge queue from immediately discarding our splits.
-		DisableMergeQueue: true,
 	}}
 
 	ctx := context.Background()
@@ -320,10 +318,10 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 				t.Fatalf("failed to rewrite key: %s", reqMidKey2)
 			}
 
-			if err := kvDB.AdminSplit(ctx, reqMidKey1, reqMidKey1); err != nil {
+			if err := kvDB.AdminSplit(ctx, reqMidKey1, reqMidKey1, true /* manual */); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.AdminSplit(ctx, reqMidKey2, reqMidKey2); err != nil {
+			if err := kvDB.AdminSplit(ctx, reqMidKey2, reqMidKey2, true /* manual */); err != nil {
 				t.Fatal(err)
 			}
 

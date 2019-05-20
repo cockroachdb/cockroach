@@ -176,7 +176,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 						end = sst.span.EndKey
 					}
 
-					if err := sp.db.AdminSplit(ctx, end, end); err != nil {
+					if err := sp.db.AdminSplit(ctx, end, end, false /* manual */); err != nil {
 						return err
 					}
 

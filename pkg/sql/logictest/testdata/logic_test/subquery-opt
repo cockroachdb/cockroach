@@ -1,0 +1,26 @@
+# LogicTest: local-opt fakedist-opt
+
+# Regression test for #37263. This test is broken in the heuristic planner
+# because it does not correctly type check subqueries.
+query B
+SELECT 3::decimal IN (SELECT 1)
+----
+false
+
+query error unsupported comparison operator
+SELECT 3::decimal IN (SELECT 1::int)
+
+query B
+SELECT 1 IN (SELECT '1');
+----
+true
+
+# Regression test for #14554.
+query ITIIIII
+SELECT t.oid, t.typname, t.typsend, t.typreceive, t.typoutput, t.typinput, t.typelem
+	FROM pg_type AS t
+	WHERE t.oid NOT IN (
+	  SELECT (ARRAY[704,11676,10005,3912,11765,59410,11397])[i]
+	  FROM generate_series(1, 376) AS i
+	)
+----

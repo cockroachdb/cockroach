@@ -108,6 +108,16 @@ var _ Operator = UnaryOperator(0)
 var _ Operator = BinaryOperator(0)
 var _ Operator = ComparisonOperator(0)
 
+// SubqueryExpr is an interface used to identify an expression as a subquery.
+// It is implemented by both tree.Subquery and optbuilder.subquery, and is
+// used in TypeCheck.
+type SubqueryExpr interface {
+	Expr
+	SubqueryExpr()
+}
+
+var _ SubqueryExpr = &Subquery{}
+
 // exprFmtWithParen is a variant of Format() which adds a set of outer parens
 // if the expression involves an operator. It is used internally when the
 // expression is part of another expression and we know it is preceded or
@@ -961,6 +971,9 @@ func (node *Subquery) SetType(t *types.T) {
 
 // Variable implements the VariableExpr interface.
 func (*Subquery) Variable() {}
+
+// SubqueryExpr implements the SubqueryExpr interface.
+func (*Subquery) SubqueryExpr() {}
 
 // Format implements the NodeFormatter interface.
 func (node *Subquery) Format(ctx *FmtCtx) {

@@ -272,7 +272,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 
 	// Force a range split in between near past and far past. This guarantees
 	// that the pruning operation will issue a DeleteRange which spans ranges.
-	if err := db.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
+	if err := db.AdminSplit(context.TODO(), splitKey, splitKey, true /* manual */); err != nil {
 		t.Fatal(err)
 	}
 

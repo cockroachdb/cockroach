@@ -244,9 +244,6 @@ func TestTrace(t *testing.T) {
 	if _, err := clusterDB.Exec(`
 		CREATE DATABASE test;
 
-		-- Prevent the merge queue from immediately discarding our splits.
-		SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
-
 		--- test.foo is a single range table.
 		CREATE TABLE test.foo (id INT PRIMARY KEY);
 

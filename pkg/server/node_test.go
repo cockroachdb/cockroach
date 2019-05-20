@@ -553,12 +553,6 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DisableEventLog: true,
-		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
-				// Prevent the merge queue from immediately discarding our splits.
-				DisableMergeQueue: true,
-			},
-		},
 	})
 	defer srv.Stopper().Stop(context.TODO())
 	ts := srv.(*TestServer)
@@ -698,7 +692,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 
 	// Split the range.
-	if err := ts.db.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
+	if err := ts.db.AdminSplit(context.TODO(), splitKey, splitKey, true /* manual */); err != nil {
 		t.Fatal(err)
 	}
 

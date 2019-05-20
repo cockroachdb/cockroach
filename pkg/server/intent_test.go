@@ -112,8 +112,6 @@ func TestIntentResolution(t *testing.T) {
 					}
 					return nil
 				}
-			// Prevent the merge queue from immediately discarding our splits.
-			storeKnobs.DisableMergeQueue = true
 
 			// TODO(benesch): starting a test server for every test case is needlessly
 			// inefficient.
@@ -121,7 +119,7 @@ func TestIntentResolution(t *testing.T) {
 				Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			defer s.Stopper().Stop(context.TODO())
 			// Split the Range. This should not have any asynchronous intents.
-			if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
+			if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey, true /* manual */); err != nil {
 				t.Fatal(err)
 			}
 

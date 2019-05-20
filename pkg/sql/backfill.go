@@ -1078,7 +1078,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	sc.execCfg.Gossip.DisableMerges(disableCtx, []uint32{uint32(sc.tableID)})
 
 	for _, span := range addingSpans {
-		if err := sc.db.AdminSplit(ctx, span.Key, span.Key); err != nil {
+		if err := sc.db.AdminSplit(ctx, span.Key, span.Key, false /* manual */); err != nil {
 			return err
 		}
 	}

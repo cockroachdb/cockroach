@@ -8780,7 +8780,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	splitKey := roachpb.Key("b")
-	if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey); err != nil {
+	if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey, true /* manual */); err != nil {
 		t.Fatal(err)
 	}
 

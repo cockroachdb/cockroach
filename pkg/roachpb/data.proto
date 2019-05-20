@@ -193,6 +193,25 @@ message ModifiedSpanTrigger {
   Span node_liveness_span = 2;
 }
 
+// StickyBitTrigger indicates that the sticky bit of a range should be changed.
+// This trigger is used in two cases:
+// 1. Unsplitting a range. Note that unsplitting and merging are different
+//    operations. Unsplitting a range will only remove the sticky bit
+//    associated with the range.
+// 2. Splitting at the start key of a range. In this case, no range is split but
+//    the sticky bit is still set, so we need to use this trigger instead of
+//    SplitTrigger.
+//
+// Note that the sticky_bit should always be set to the same timestamp used to
+// update the range descriptor and it's the client's responsibility that the
+// timestamps are aligned.
+message StickyBitTrigger {
+  option (gogoproto.equal) = true;
+
+  // Set to nil to remove a RangeDescriptor's sticky bit.
+  util.hlc.Timestamp sticky_bit = 1;
+}
+
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.
 // Only one may be set.
 message InternalCommitTrigger {
@@ -206,6 +225,7 @@ message InternalCommitTrigger {
   MergeTrigger merge_trigger = 2;
   ChangeReplicasTrigger change_replicas_trigger = 3;
   ModifiedSpanTrigger modified_span_trigger = 4;
+  StickyBitTrigger sticky_bit_trigger = 5;
 }
 
 // TransactionStatus specifies possible states for a transaction.

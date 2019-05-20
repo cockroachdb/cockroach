@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -41,16 +40,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 
 	const numHosts = 3
 
-	// Prevent the merge queue from immediately discarding our splits. This is
-	// more foolproof than changing the cluster setting because the cluster
-	// setting change has to be propagated to all nodes via gossip so there's
-	// still a small chance that a non-gateway node will try a merge after we
-	// change the setting.
-	var testClusterArgs base.TestClusterArgs
-	testClusterArgs.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
-		DisableMergeQueue: true,
-	}
-	tc := serverutils.StartTestCluster(t, numHosts, testClusterArgs)
+	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.TODO())
 
 	sqlutils.CreateTable(
@@ -137,8 +127,6 @@ func TestScatterResponse(t *testing.T) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
-	// Prevent the merge queue from immediately discarding our splits.
-	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 	rows := r.Query(t, "ALTER TABLE test.t SCATTER")
 
