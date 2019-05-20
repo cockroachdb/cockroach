@@ -828,7 +828,7 @@ func (t Transaction) Clone() *Transaction {
 // AssertInitialized crashes if the transaction is not initialized.
 func (t *Transaction) AssertInitialized(ctx context.Context) {
 	if t.ID == (uuid.UUID{}) || t.Timestamp == (hlc.Timestamp{}) {
-		log.Fatalf(ctx, "uninitialized txn: %s", t)
+		log.Fatalf(ctx, "uninitialized txn: %s", *t)
 	}
 }
 

@@ -34,7 +34,7 @@ func init() {
 }
 
 func declareKeysPushTransaction(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	pr := req.(*roachpb.PushTxnRequest)
 	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, pr.PusheeTxn.ID)})
@@ -208,6 +208,7 @@ func PushTxn(
 	}
 	reply.PusheeTxn.UpgradePriority(args.PusheeTxn.Priority)
 
+	pushType := args.PushType
 	var pusherWins bool
 	var reason string
 
@@ -216,9 +217,9 @@ func PushTxn(
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
-		args.PushType = roachpb.PUSH_ABORT
+		pushType = roachpb.PUSH_ABORT
 		pusherWins = true
-	case args.PushType == roachpb.PUSH_TOUCH:
+	case pushType == roachpb.PUSH_TOUCH:
 		// If just attempting to cleanup old or already-committed txns,
 		// pusher always fails.
 		pusherWins = false
@@ -236,7 +237,7 @@ func PushTxn(
 			s = "failed to push"
 		}
 		log.Infof(ctx, "%s "+s+" (push type=%s) %s: %s (pushee last active: %s)",
-			args.PusherTxn.Short(), args.PushType, args.PusheeTxn.Short(),
+			args.PusherTxn.Short(), pushType, args.PusheeTxn.Short(),
 			reason, reply.PusheeTxn.LastActive())
 	}
 
@@ -264,7 +265,7 @@ func PushTxn(
 	reply.PusheeTxn.UpgradePriority(args.PusherTxn.Priority - 1)
 
 	// Determine what to do with the pushee, based on the push type.
-	switch args.PushType {
+	switch pushType {
 	case roachpb.PUSH_ABORT:
 		// If aborting the transaction, set the new status.
 		reply.PusheeTxn.Status = roachpb.ABORTED
@@ -281,7 +282,7 @@ func PushTxn(
 		// ever being written with a timestamp beneath this timestamp.
 		reply.PusheeTxn.Timestamp.Forward(args.PushTo)
 	default:
-		return result.Result{}, errors.Errorf("unexpected push type: %v", args.PushType)
+		return result.Result{}, errors.Errorf("unexpected push type: %v", pushType)
 	}
 
 	// If the transaction record was already present, persist the updates to it.

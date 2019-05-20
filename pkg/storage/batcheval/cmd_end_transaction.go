@@ -51,7 +51,7 @@ func init() {
 }
 
 func declareKeysEndTransaction(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	et := req.(*roachpb.EndTransactionRequest)
 	declareKeysWriteTransaction(desc, header, req, spans)

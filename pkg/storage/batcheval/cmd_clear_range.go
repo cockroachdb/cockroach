@@ -41,7 +41,7 @@ func init() {
 }
 
 func declareKeysClearRange(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
 	// We look up the range descriptor key to check whether the span

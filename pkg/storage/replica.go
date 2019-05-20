@@ -1068,14 +1068,20 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	if ba.IsReadOnly() {
 		spans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	} else {
-		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, len(ba.Requests))
+		guess := len(ba.Requests)
+		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			// EndTransaction declares a global write for each of its intent spans.
+			guess += len(et.(*roachpb.EndTransactionRequest).IntentSpans) - 1
+		}
+		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
 	}
 
 	desc := r.Desc()
+	batcheval.DeclareKeysForBatch(desc, ba.Header, spans)
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(*desc, ba.Header, inner, spans)
+			cmd.DeclareKeys(desc, ba.Header, inner, spans)
 		} else {
 			return nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
@@ -1195,11 +1201,7 @@ func (r *Replica) beginCmds(
 	// Handle load-based splitting.
 	if r.SplitByLoadEnabled() {
 		shouldInitSplit := r.loadBasedSplitter.Record(timeutil.Now(), len(ba.Requests), func() roachpb.Span {
-			boundarySpan := spans.BoundarySpan(spanset.SpanGlobal)
-			if boundarySpan == nil {
-				return roachpb.Span{}
-			}
-			return *boundarySpan
+			return spans.BoundarySpan(spanset.SpanGlobal)
 		})
 		if shouldInitSplit {
 			r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())

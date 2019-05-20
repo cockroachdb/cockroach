@@ -26,16 +26,16 @@ import (
 
 // A Command is the implementation of a single request within a BatchRequest.
 type Command struct {
-	// DeclareKeys adds all keys this command touches to the given spanSet.
+	// DeclareKeys adds all keys this command touches to the given SpanSet.
 	// TODO(nvanbenschoten): rationalize this RangeDescriptor. Can it change
 	// between key declaration and cmd evaluation?
-	DeclareKeys func(roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet)
+	DeclareKeys func(*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet)
 
-	// Eval evaluates a command on the given engine. It should populate
-	// the supplied response (always a non-nil pointer to the correct
-	// type) and return special side effects (if any) in the Result.
-	// If it writes to the engine it should also update
-	// *CommandArgs.Stats.
+	// Eval evaluates a command on the given engine. It should populate the
+	// supplied response (always a non-nil pointer to the correct type) and
+	// return special side effects (if any) in the Result. If it writes to the
+	// engine it should also update *CommandArgs.Stats. It should treat the
+	// provided request as immutable.
 	Eval func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error)
 }
 
@@ -45,7 +45,7 @@ var cmds = make(map[roachpb.Method]Command)
 // called before any evaluation takes place.
 func RegisterCommand(
 	method roachpb.Method,
-	declare func(roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet),
+	declare func(*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet),
 	impl func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
 	if _, ok := cmds[method]; ok {

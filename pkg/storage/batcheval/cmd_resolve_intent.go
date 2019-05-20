@@ -30,7 +30,7 @@ func init() {
 }
 
 func declareKeysResolveIntentCombined(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
 	var status roachpb.TransactionStatus
@@ -49,7 +49,7 @@ func declareKeysResolveIntentCombined(
 }
 
 func declareKeysResolveIntent(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	declareKeysResolveIntentCombined(desc, header, req, spans)
 }

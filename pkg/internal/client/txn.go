@@ -559,7 +559,8 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 			log.Fatalf(ctx, "deadline below txn.OrigTimestamp() is nonsensical; "+
 				"txn has would have no change to commit. Deadline: %s", deadline)
 		}
-		txn.mu.deadline = &deadline
+		txn.mu.deadline = new(hlc.Timestamp)
+		*txn.mu.deadline = deadline
 		return true
 	}
 	return false

@@ -16,9 +16,9 @@
 package spanset
 
 import (
-	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -80,7 +80,7 @@ type SpanSet struct {
 
 // String prints a string representation of the span set.
 func (ss *SpanSet) String() string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	for i := SpanAccess(0); i < NumSpanAccess; i++ {
 		for j := SpanScope(0); j < NumSpanScope; j++ {
 			for _, span := range ss.GetSpans(i, j) {
@@ -133,24 +133,18 @@ func (ss *SpanSet) GetSpans(access SpanAccess, scope SpanScope) []roachpb.Span {
 }
 
 // BoundarySpan returns a span containing all the spans with the given params.
-func (ss *SpanSet) BoundarySpan(scope SpanScope) *roachpb.Span {
-	readOnlySpans := ss.GetSpans(SpanReadOnly, scope)
-	readWriteSpans := ss.GetSpans(SpanReadWrite, scope)
-	spans := append(readOnlySpans, readWriteSpans...)
-	if len(spans) == 0 {
-		return nil
-	}
-	smallestKey := spans[0].Key
-	largestKey := spans[0].EndKey
-	for _, span := range spans {
-		if bytes.Compare(span.Key, smallestKey) < 0 {
-			smallestKey = span.Key
-		}
-		if bytes.Compare(span.EndKey, largestKey) > 0 {
-			largestKey = span.EndKey
+func (ss *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
+	var boundary roachpb.Span
+	for i := SpanAccess(0); i < NumSpanAccess; i++ {
+		for _, span := range ss.spans[i][scope] {
+			if !boundary.Valid() {
+				boundary = span
+				continue
+			}
+			boundary = boundary.Combine(span)
 		}
 	}
-	return &roachpb.Span{Key: smallestKey, EndKey: largestKey}
+	return boundary
 }
 
 // AssertAllowed calls checkAllowed and fatals if the access is not allowed.
