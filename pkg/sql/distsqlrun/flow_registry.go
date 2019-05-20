@@ -44,11 +44,12 @@ const expectedConnectionTime time.Duration = 500 * time.Millisecond
 // stream to a receiver to push rows to.
 type inboundStreamInfo struct {
 	// receiver is the entity that will receive rows from another host, which is
-	// part of a processor (normally an input synchronizer).
+	// part of a processor (normally an input synchronizer) for row-based
+	// execution and a colrpc.Inbox for vectorized execution.
 	//
-	// During a FlowStream RPC, rows are pushed to this entity using the
-	// RowReceiver interface.
-	receiver  RowReceiver
+	// During a FlowStream RPC, the stream is handed off to this strategy to
+	// process.
+	receiver  inboundStreamHandler
 	connected bool
 	// if set, indicates that we waited too long for an inbound connection, or
 	// we don't want this stream to connect anymore due to flow cancellation.
@@ -226,11 +227,8 @@ func (fr *flowRegistry) RegisterFlow(
 				)
 			}
 			for _, r := range timedOutReceivers {
-				go func(r RowReceiver) {
-					r.Push(
-						nil, /* row */
-						&distsqlpb.ProducerMetadata{Err: errNoInboundStreamConnection})
-					r.ProducerDone()
+				go func(r inboundStreamHandler) {
+					r.timeout(errNoInboundStreamConnection)
 				}(r)
 			}
 		})
@@ -244,12 +242,12 @@ func (fr *flowRegistry) RegisterFlow(
 // streams that were canceled. The caller is expected to send those
 // RowReceivers a cancellation message - this method can't do it because sending
 // those messages shouldn't happen under the flow registry's lock.
-func (fr *flowRegistry) cancelPendingStreamsLocked(id distsqlpb.FlowID) []RowReceiver {
+func (fr *flowRegistry) cancelPendingStreamsLocked(id distsqlpb.FlowID) []inboundStreamHandler {
 	entry := fr.flows[id]
 	if entry == nil || entry.flow == nil {
 		return nil
 	}
-	pendingReceivers := make([]RowReceiver, 0)
+	pendingReceivers := make([]inboundStreamHandler, 0)
 	for streamID, is := range entry.inboundStreams {
 		// Connected, non-finished inbound streams will get an error
 		// returned in ProcessInboundStream(). Non-connected streams
@@ -433,7 +431,7 @@ func (fr *flowRegistry) ConnectInboundStream(
 	streamID distsqlpb.StreamID,
 	stream distsqlpb.DistSQL_FlowStreamServer,
 	timeout time.Duration,
-) (_ *Flow, _ RowReceiver, _ func(), retErr error) {
+) (_ *Flow, _ inboundStreamHandler, _ func(), retErr error) {
 	fr.Lock()
 	defer fr.Unlock()
 
