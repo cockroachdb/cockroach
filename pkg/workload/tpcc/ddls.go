@@ -23,6 +23,7 @@ import (
 )
 
 const (
+	// WAREHOUSE table.
 	tpccWarehouseSchema = `(
 		w_id        integer   not null primary key,
 		w_name      varchar(10),
@@ -34,7 +35,9 @@ const (
 		w_tax       decimal(4,4),
 		w_ytd       decimal(12,2)
 	)`
-	tpccDistrictSchema = `(
+
+	// DISTRICT table.
+	tpccDistrictSchemaBase = `(
 		d_id         integer       not null,
 		d_w_id       integer       not null,
 		d_name       varchar(10),
@@ -48,8 +51,11 @@ const (
 		d_next_o_id  integer,
 		primary key (d_w_id, d_id)
 	)`
-	tpccDistrictSchemaInterleave = ` interleave in parent warehouse (d_w_id)`
-	tpccCustomerSchema           = `(
+	tpccDistrictSchemaInterleaveSuffix = `
+		interleave in parent warehouse (d_w_id)`
+
+	// CUSTOMER table.
+	tpccCustomerSchemaBase = `(
 		c_id           integer        not null,
 		c_d_id         integer        not null,
 		c_w_id         integer        not null,
@@ -74,22 +80,27 @@ const (
 		primary key (c_w_id, c_d_id, c_id),
 		index customer_idx (c_w_id, c_d_id, c_last, c_first)
 	)`
-	tpccCustomerSchemaInterleave = ` interleave in parent district (c_w_id, c_d_id)`
-	// No PK necessary for this table.
-	tpccHistorySchema = `(
-		rowid    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-		h_c_id   integer,
-		h_c_d_id integer,
-		h_c_w_id integer,
-		h_d_id   integer,
-		h_w_id   integer,
+	tpccCustomerSchemaInterleaveSuffix = `
+		interleave in parent district (c_w_id, c_d_id)`
+
+	// HISTORY table.
+	tpccHistorySchemaBase = `(
+		rowid    uuid    not null default gen_random_uuid(),
+		h_c_id   integer not null,
+		h_c_d_id integer not null,
+		h_c_w_id integer not null,
+		h_d_id   integer not null,
+		h_w_id   integer not null,
 		h_date   timestamp,
 		h_amount decimal(6,2),
 		h_data   varchar(24),
-		index (h_w_id, h_d_id),
-		index (h_c_w_id, h_c_d_id, h_c_id)
-	)`
-	tpccOrderSchema = `(
+		primary key (h_w_id, rowid)`
+	tpccHistorySchemaFkSuffix = `
+		index history_customer_fk_idx (h_c_w_id, h_c_d_id, h_c_id),
+		index history_district_fk_idx (h_w_id, h_d_id)`
+
+	// ORDER table.
+	tpccOrderSchemaBase = `(
 		o_id         integer      not null,
 		o_d_id       integer      not null,
 		o_w_id       integer      not null,
@@ -98,19 +109,27 @@ const (
 		o_carrier_id integer,
 		o_ol_cnt     integer,
 		o_all_local  integer,
-		primary key (o_w_id, o_d_id, o_id DESC),
-		unique index order_idx (o_w_id, o_d_id, o_carrier_id, o_id),
-		index (o_w_id, o_d_id, o_c_id)
+		primary key  (o_w_id, o_d_id, o_id DESC),
+		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC)
 	)`
-	tpccOrderSchemaInterleave = ` interleave in parent district (o_w_id, o_d_id)`
-	tpccNewOrderSchema        = `(
+	tpccOrderSchemaInterleaveSuffix = `
+		interleave in parent district (o_w_id, o_d_id)`
+
+	// NEW-ORDER table.
+	tpccNewOrderSchema = `(
 		no_o_id  integer   not null,
 		no_d_id  integer   not null,
 		no_w_id  integer   not null,
 		primary key (no_w_id, no_d_id, no_o_id)
 	)`
-	tpccNewOrderSchemaInterleave = ` interleave in parent "order" (no_w_id, no_d_id, no_o_id)`
-	tpccItemSchema               = `(
+	// This natural-seeming interleave makes performance worse, because this
+	// table has a ton of churn and produces a lot of MVCC tombstones, which
+	// then will gum up the works of scans over the parent table.
+	// tpccNewOrderSchemaInterleaveSuffix = `
+	// 	interleave in parent "order" (no_w_id, no_d_id, no_o_id)`
+
+	// ITEM table.
+	tpccItemSchema = `(
 		i_id     integer      not null,
 		i_im_id  integer,
 		i_name   varchar(24),
@@ -118,7 +137,9 @@ const (
 		i_data   varchar(50),
 		primary key (i_id)
 	)`
-	tpccStockSchema = `(
+
+	// STOCK table.
+	tpccStockSchemaBase = `(
 		s_i_id       integer       not null,
 		s_w_id       integer       not null,
 		s_quantity   integer,
@@ -136,11 +157,14 @@ const (
 		s_order_cnt  integer,
 		s_remote_cnt integer,
 		s_data       varchar(50),
-		primary key (s_w_id, s_i_id),
-		index (s_i_id)
-	)`
-	tpccStockSchemaInterleave = ` interleave in parent warehouse (s_w_id)`
-	tpccOrderLineSchema       = `(
+		primary key (s_w_id, s_i_id)`
+	tpccStockSchemaFkSuffix = `
+		index stock_item_fk_idx (s_i_id)`
+	tpccStockSchemaInterleaveSuffix = `
+		interleave in parent warehouse (s_w_id)`
+
+	// ORDER-LINE table.
+	tpccOrderLineSchemaBase = `(
 		ol_o_id         integer   not null,
 		ol_d_id         integer   not null,
 		ol_w_id         integer   not null,
@@ -151,11 +175,27 @@ const (
 		ol_quantity     integer,
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
-		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
-		index order_line_fk (ol_supply_w_id, ol_i_id)
-	)`
-	tpccOrderLineSchemaInterleave = ` interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
+		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`
+	tpccOrderLineSchemaFkSuffix = `
+		index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id)`
+	tpccOrderLineSchemaInterleaveSuffix = `
+		interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
+
+func maybeAddFkSuffix(fks bool, base, suffix string) string {
+	const endSchema = "\n\t)"
+	if !fks {
+		return base + endSchema
+	}
+	return base + "," + suffix + endSchema
+}
+
+func maybeAddInterleaveSuffix(interleave bool, base, suffix string) string {
+	if !interleave {
+		return base
+	}
+	return base + suffix
+}
 
 func scatterRanges(db *gosql.DB) error {
 	tables := []string{

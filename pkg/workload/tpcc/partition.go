@@ -18,12 +18,9 @@ package tpcc
 import (
 	"bytes"
 	gosql "database/sql"
-	"encoding/binary"
 	"fmt"
-	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/rand"
 )
@@ -223,6 +220,14 @@ func partitionTable(
 func partitionIndex(
 	db *gosql.DB, p *partitioner, zones []string, table, index, col string, idx int,
 ) error {
+	if exists, err := indexExists(db, table, index); err != nil {
+		return err
+	} else if !exists {
+		// If the index doesn't exist then there's nothing to do. This is the
+		// case for a few of the indexes that are only needed for foreign keys
+		// when foreign keys are disabled.
+		return nil
+	}
 	indexStr := fmt.Sprintf("%s@%s", table, index)
 	return partitionObject(db, p, zones, "INDEX", indexStr, col, table, idx)
 }
@@ -243,24 +248,21 @@ func partitionOrder(db *gosql.DB, wPart *partitioner, zones []string) error {
 	if err := partitionTable(db, wPart, zones, `"order"`, "o_w_id", 0); err != nil {
 		return err
 	}
-	if err := partitionIndex(db, wPart, zones, `"order"`, "order_idx", "o_w_id", 1); err != nil {
-		return err
-	}
-	return partitionIndex(db, wPart, zones, `"order"`, "order_o_w_id_o_d_id_o_c_id_idx", "o_w_id", 2)
+	return partitionIndex(db, wPart, zones, `"order"`, "order_idx", "o_w_id", 1)
 }
 
 func partitionOrderLine(db *gosql.DB, wPart *partitioner, zones []string) error {
 	if err := partitionTable(db, wPart, zones, "order_line", "ol_w_id", 0); err != nil {
 		return err
 	}
-	return partitionIndex(db, wPart, zones, "order_line", "order_line_fk", "ol_supply_w_id", 1)
+	return partitionIndex(db, wPart, zones, "order_line", "order_line_stock_fk_idx", "ol_supply_w_id", 1)
 }
 
 func partitionStock(db *gosql.DB, wPart, iPart *partitioner, zones []string) error {
 	if err := partitionTable(db, wPart, zones, "stock", "s_w_id", 0); err != nil {
 		return err
 	}
-	return partitionIndex(db, iPart, zones, "stock", "stock_s_i_id_idx", "s_i_id", 1)
+	return partitionIndex(db, iPart, zones, "stock", "stock_item_fk_idx", "s_i_id", 1)
 }
 
 func partitionCustomer(db *gosql.DB, wPart *partitioner, zones []string) error {
@@ -271,48 +273,13 @@ func partitionCustomer(db *gosql.DB, wPart *partitioner, zones []string) error {
 }
 
 func partitionHistory(db *gosql.DB, wPart *partitioner, zones []string) error {
-	const maxVal = math.MaxUint64
-	temp := make([]byte, 16)
-	rowids := make([]uuid.UUID, wPart.parts+1)
-	for i := 0; i < wPart.parts; i++ {
-		var err error
-
-		// We're splitting the UUID rowid column evenly into N partitions. The
-		// column is sorted lexicographically on the bytes of the UUID which means
-		// we should put the partitioning values at the front of the UUID.
-		binary.BigEndian.PutUint64(temp, uint64(i)*(maxVal/uint64(wPart.parts)))
-		rowids[i], err = uuid.FromBytes(temp)
-		if err != nil {
-			return err
-		}
-	}
-
-	rowids[wPart.parts], _ = uuid.FromString("ffffffff-ffff-ffff-ffff-ffffffffffff")
-
-	var buf bytes.Buffer
-	buf.WriteString("ALTER TABLE history PARTITION BY RANGE (rowid) (\n")
-	for i := 0; i < wPart.parts; i++ {
-		fmt.Fprintf(&buf, "  PARTITION p0_%d VALUES FROM ('%s') to ('%s')", i, rowids[i], rowids[i+1])
-		if i+1 < wPart.parts {
-			buf.WriteString(",")
-		}
-		buf.WriteString("\n")
-	}
-	buf.WriteString(")\n")
-	if _, err := db.Exec(buf.String()); err != nil {
-		return errors.Wrapf(err, "Couldn't exec %s", buf.String())
-	}
-
-	for i := 0; i < wPart.parts; i++ {
-		if err := configureZone(db, `history`, fmt.Sprintf("p0_%d", i), i, zones); err != nil {
-			return err
-		}
-	}
-
-	if err := partitionIndex(db, wPart, zones, "history", "history_h_w_id_h_d_id_idx", "h_w_id", 1); err != nil {
+	if err := partitionTable(db, wPart, zones, "history", "h_w_id", 0); err != nil {
 		return err
 	}
-	return partitionIndex(db, wPart, zones, "history", "history_h_c_w_id_h_c_d_id_h_c_id_idx", "h_c_w_id", 2)
+	if err := partitionIndex(db, wPart, zones, "history", "history_customer_fk_idx", "h_c_w_id", 1); err != nil {
+		return err
+	}
+	return partitionIndex(db, wPart, zones, "history", "history_district_fk_idx", "h_w_id", 2)
 }
 
 func partitionItem(db *gosql.DB, iPart *partitioner, zones []string) error {
@@ -368,4 +335,17 @@ func partitionCount(db *gosql.DB) (int, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+func indexExists(db *gosql.DB, table, index string) (bool, error) {
+	var exists bool
+	if err := db.QueryRow(`
+		SELECT count(*) > 0
+		FROM information_schema.statistics
+		WHERE table_name = $1
+		AND   index_name = $2
+	`, table, index).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
 }
