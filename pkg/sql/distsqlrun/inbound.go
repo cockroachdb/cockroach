@@ -15,6 +15,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -22,6 +23,61 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+type inboundStreamHandler interface {
+	// run is called once a FlowStream RPC is handled and a stream is obtained to
+	// make this stream accessible to the rest of the flow.
+	run(
+		ctx context.Context, stream distsqlpb.DistSQL_FlowStreamServer, firstMsg *distsqlpb.ProducerMessage, f *Flow,
+	) error
+	// timeout is called with an error, which results in the teardown of the
+	// stream strategy with the given error.
+	// WARNING: timeout may block.
+	timeout(err error)
+}
+
+type vectorizedInboundStreamHandler struct {
+	*colrpc.Inbox
+}
+
+var _ inboundStreamHandler = vectorizedInboundStreamHandler{}
+
+func (s vectorizedInboundStreamHandler) run(
+	ctx context.Context,
+	stream distsqlpb.DistSQL_FlowStreamServer,
+	_ *distsqlpb.ProducerMessage,
+	_ *Flow,
+) error {
+	return s.RunWithStream(ctx, stream)
+}
+
+func (s vectorizedInboundStreamHandler) timeout(_ error) {
+	// TODO(asubiotto): We should probably add a cancellation strategy to the
+	//  inbox.
+}
+
+type rowInboundStreamHandler struct {
+	RowReceiver
+}
+
+var _ inboundStreamHandler = rowInboundStreamHandler{}
+
+func (s rowInboundStreamHandler) run(
+	ctx context.Context,
+	stream distsqlpb.DistSQL_FlowStreamServer,
+	firstMsg *distsqlpb.ProducerMessage,
+	f *Flow,
+) error {
+	return ProcessInboundStream(ctx, stream, firstMsg, s.RowReceiver, f)
+}
+
+func (s rowInboundStreamHandler) timeout(err error) {
+	s.Push(
+		nil, /* row */
+		&distsqlpb.ProducerMetadata{Err: err},
+	)
+	s.ProducerDone()
+}
 
 // ProcessInboundStream receives rows from a DistSQL_FlowStreamServer and sends
 // them to a RowReceiver. Optionally processes an initial StreamMessage that was
