@@ -518,7 +518,7 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 		projectionsScope.appendColumnsFromScope(mb.outScope)
 
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
-			expr, err := parser.ParseExpr(string(mb.tab.Check(i)))
+			expr, err := parser.ParseExpr(string(mb.tab.Check(i).Constraint))
 			if err != nil {
 				panic(builderError{err})
 			}

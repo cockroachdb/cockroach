@@ -208,6 +208,22 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	return colSet
 }
 
+// IntersectionWith removes all items not found in the intersection of
+// the two FiltersExprs.
+func (n *FiltersExpr) IntersectionWith(other FiltersExpr) {
+	// TODO(ridwanmsharif): Faster intersection using a map
+	intersection := (*n)[:0]
+	for _, filter := range *n {
+		for _, otherFilter := range other {
+			if filter.Condition == otherFilter.Condition {
+				intersection = append(intersection, filter)
+				break
+			}
+		}
+	}
+	*n = intersection
+}
+
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {
@@ -379,5 +395,182 @@ func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncD
 		if id != 0 {
 			fdset.AddEquivalency(t, id)
 		}
+	}
+}
+
+// CheckMaybeEvaluatesToNull makes a best-effort check to see if a check constraint
+// can evaluate to a NULL value. Check constraints are satisfied when this happens
+// where as filters are not. For example consider the following check constraint:
+//
+// CHECK (col IN (1, 2, NULL))
+//
+// Any row evaluating this check constrain with any value for the column will
+// satisfy this check constrain, as they would evaluate to true (in the case
+// of 1 or 2) or NULL (in the case of everything else).
+//
+// CheckMaybeEvaluatesToNull does not introspect into the scalar expression to
+// determine whether the columns being referenced are nullable. It tries to
+// determine whether a NULL can be evaluated, regardless of the column
+// composition. For example:
+// CheckMaybeEvaluatesToNull will determine that CHECK (col < x) does not evaluate
+// to NULL but that is not true if the col itself has a NULL value.
+func CheckMaybeEvaluatesToNull(e opt.ScalarExpr) bool {
+	switch t := e.(type) {
+	case *NullExpr:
+		return true
+
+	case *TupleExpr:
+		for i := range t.Elems {
+			if CheckMaybeEvaluatesToNull(t.Elems[i]) {
+				return true
+			}
+		}
+		return false
+
+	case *ArrayExpr:
+		for i := range t.Elems {
+			if CheckMaybeEvaluatesToNull(t.Elems[i]) {
+				return true
+			}
+		}
+		return false
+
+	case *RangeExpr:
+		return CheckMaybeEvaluatesToNull(t.And)
+
+	case *CaseExpr:
+		return CheckMaybeEvaluatesToNull(t.Input)
+
+	case *CastExpr:
+		return CheckMaybeEvaluatesToNull(t.Input)
+
+	case *NotExpr:
+		return CheckMaybeEvaluatesToNull(t.Input)
+
+	case *WhenExpr:
+		return CheckMaybeEvaluatesToNull(t.Condition) || CheckMaybeEvaluatesToNull(t.Value)
+
+	case *InExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *NotInExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *AndExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *OrExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *GeExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *GtExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *NeExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *EqExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *LeExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *LtExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *LikeExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *NotLikeExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *ILikeExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *NotILikeExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *SimilarToExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *NotSimilarToExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *RegMatchExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *NotRegMatchExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *RegIMatchExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *NotRegIMatchExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *IsExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *IsNotExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *ContainsExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *JsonExistsExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *JsonAllExistsExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *JsonSomeExistsExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *AnyScalarExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *BitandExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *BitorExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *BitxorExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *PlusExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *MinusExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *MultExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *DivExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *FloorDivExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *ModExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *PowExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *ConcatExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *LShiftExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	case *RShiftExpr:
+		return CheckMaybeEvaluatesToNull(t.Left) || CheckMaybeEvaluatesToNull(t.Right)
+
+	default:
+		return false
 	}
 }
