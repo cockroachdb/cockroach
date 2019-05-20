@@ -32,7 +32,7 @@ func init() {
 }
 
 func declareKeysComputeChecksum(
-	roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet,
+	*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet,
 ) {
 	// Intentionally declare no keys, as ComputeChecksum does not need to be
 	// serialized with any other commands. It simply needs to be committed into

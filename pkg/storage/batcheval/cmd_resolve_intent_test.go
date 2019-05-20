@@ -203,13 +203,13 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 
 				if !ranged {
 					cArgs.Args = &ri
-					declareKeysResolveIntent(desc, h, &ri, &spans)
+					declareKeysResolveIntent(&desc, h, &ri, &spans)
 					if _, err := ResolveIntent(ctx, batch, cArgs, &roachpb.ResolveIntentResponse{}); err != nil {
 						t.Fatal(err)
 					}
 				} else {
 					cArgs.Args = &rir
-					declareKeysResolveIntentRange(desc, h, &rir, &spans)
+					declareKeysResolveIntentRange(&desc, h, &rir, &spans)
 					if _, err := ResolveIntentRange(ctx, batch, cArgs, &roachpb.ResolveIntentRangeResponse{}); err != nil {
 						t.Fatal(err)
 					}

@@ -25,7 +25,7 @@ import (
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	if roachpb.IsReadOnly(req) {
 		spans.Add(spanset.SpanReadOnly, req.Header().Span())
@@ -38,7 +38,7 @@ func DefaultDeclareKeys(
 // touches to the given SpanSet. This does not include keys touched during the
 // processing of the batch's individual commands.
 func DeclareKeysForBatch(
-	desc roachpb.RangeDescriptor, header roachpb.Header, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, spans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())

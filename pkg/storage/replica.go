@@ -1077,11 +1077,11 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	}
 
 	desc := r.Desc()
-	batcheval.DeclareKeysForBatch(*desc, ba.Header, spans)
+	batcheval.DeclareKeysForBatch(desc, ba.Header, spans)
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(*desc, ba.Header, inner, spans)
+			cmd.DeclareKeys(desc, ba.Header, inner, spans)
 		} else {
 			return nil, errors.Errorf("unrecognized command %s", inner.Method())
 		}
