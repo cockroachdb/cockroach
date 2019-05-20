@@ -518,7 +518,7 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 		projectionsScope.appendColumnsFromScope(mb.outScope)
 
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
-			expr, err := parser.ParseExpr(string(mb.tab.Check(i)))
+			expr, err := parser.ParseExpr(string(mb.tab.Check(i).Constraint))
 			if err != nil {
 				panic(builderError{err})
 			}
@@ -526,6 +526,9 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 			alias := fmt.Sprintf("check%d", i+1)
 			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
 			scopeCol := mb.b.addColumn(projectionsScope, alias, texpr)
+
+			// TODO(ridwanmsharif): Maybe we can avoid building constraints here
+			// and instead use the constraints stored in the table metadata.
 			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
 			mb.checkOrds[i] = scopeOrdinal(len(projectionsScope.cols) - 1)
 		}

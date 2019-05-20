@@ -153,7 +153,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	}
 
 	for i := 0; i < tab.CheckCount(); i++ {
-		child.Childf("CHECK (%s)", tab.Check(i))
+		child.Childf("CHECK (%s)", tab.Check(i).Constraint)
 	}
 
 	// Don't print the primary family, since it's implied.

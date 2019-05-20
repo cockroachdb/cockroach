@@ -208,6 +208,21 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	return colSet
 }
 
+// RetainCommonFilters retains only the filters found in n and other.
+func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
+	// TODO(ridwanmsharif): Faster intersection using a map
+	common := (*n)[:0]
+	for _, filter := range *n {
+		for _, otherFilter := range other {
+			if filter.Condition == otherFilter.Condition {
+				common = append(common, filter)
+				break
+			}
+		}
+	}
+	*n = common
+}
+
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {
@@ -379,5 +394,79 @@ func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncD
 		if id != 0 {
 			fdset.AddEquivalency(t, id)
 		}
+	}
+}
+
+// ExprIsNeverNull makes a best-effort attempt to prove that the provided
+// scalar is always non-NULL, given the set of outer columns that are known
+// to be not null. This is particularly useful with check constraints.
+// Check constraints are satisfied when the condition evaluates to NULL,
+// whereas filters are not. For example consider the following check constraint:
+//
+// CHECK (col IN (1, 2, NULL))
+//
+// Any row evaluating this check constraint with any value for the column will
+// satisfy this check constraint, as they would evaluate to true (in the case
+// of 1 or 2) or NULL (in the case of everything else).
+func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
+	switch t := e.(type) {
+	case *VariableExpr:
+		return notNullCols.Contains(int(t.Col))
+
+	case *TrueExpr, *FalseExpr, *ConstExpr, *IsExpr, *IsNotExpr:
+		return true
+
+	case *NullExpr:
+		return false
+
+	case *TupleExpr:
+		// TODO(ridwanmsharif): Make this less conservative and instead update how
+		// IN and NOT IN behave w.r.t tuples and how IndirectionExpr works with arrays.
+		// Currently, the semantics of this function on Tuples are different
+		// as it returns whether a NULL evaluation is possible given the composition of
+		// the tuple. Changing this will require some additional logic in the IN cases.
+		for i := range t.Elems {
+			if !ExprIsNeverNull(t.Elems[i], notNullCols) {
+				return false
+			}
+		}
+		return true
+
+	case *InExpr, *NotInExpr:
+		// TODO(ridwanmsharif): If a tuple is found in either side, determine if the
+		// expression is nullable based on the composition of the tuples.
+		return ExprIsNeverNull(t.Child(0).(opt.ScalarExpr), notNullCols) &&
+			ExprIsNeverNull(t.Child(1).(opt.ScalarExpr), notNullCols)
+
+	case *ArrayExpr:
+		for i := range t.Elems {
+			if !ExprIsNeverNull(t.Elems[i], notNullCols) {
+				return false
+			}
+		}
+		return true
+
+	case *CaseExpr:
+		for i := range t.Whens {
+			if !ExprIsNeverNull(t.Whens[i], notNullCols) {
+				return false
+			}
+		}
+		return ExprIsNeverNull(t.Input, notNullCols) && ExprIsNeverNull(t.OrElse, notNullCols)
+
+	case *CastExpr, *NotExpr, *RangeExpr:
+		return ExprIsNeverNull(t.Child(0).(opt.ScalarExpr), notNullCols)
+
+	case *AndExpr, *OrExpr, *GeExpr, *GtExpr, *NeExpr, *EqExpr, *LeExpr, *LtExpr, *LikeExpr,
+		*NotLikeExpr, *ILikeExpr, *NotILikeExpr, *SimilarToExpr, *NotSimilarToExpr, *RegMatchExpr,
+		*NotRegMatchExpr, *RegIMatchExpr, *NotRegIMatchExpr, *ContainsExpr, *JsonExistsExpr,
+		*JsonAllExistsExpr, *JsonSomeExistsExpr, *AnyScalarExpr, *BitandExpr, *BitorExpr, *BitxorExpr,
+		*PlusExpr, *MinusExpr, *MultExpr, *DivExpr, *FloorDivExpr, *ModExpr, *PowExpr, *ConcatExpr,
+		*LShiftExpr, *RShiftExpr, *WhenExpr:
+		return ExprIsNeverNull(t.Child(0).(opt.ScalarExpr), notNullCols) &&
+			ExprIsNeverNull(t.Child(1).(opt.ScalarExpr), notNullCols)
+
+	default:
+		return false
 	}
 }

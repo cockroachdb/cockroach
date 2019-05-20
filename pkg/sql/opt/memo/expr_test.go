@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package optbuilder_test
+package memo_test
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
@@ -35,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// TestBuilder runs data-driven testcases of the form
+// TestExprIsNeverNull runs data-driven testcases of the form
 //   <command> [<args>]...
 //   <SQL statement or expression>
 //   ----
@@ -44,21 +45,22 @@ import (
 // See OptTester.Handle for supported commands. In addition to those, we
 // support:
 //
-//  - build-scalar [args]
+//  - scalar-is-not-nullable [args]
 //
-//    Builds a memo structure from a SQL scalar expression and outputs a
-//    representation of the "expression view" of the memo structure.
+//    Builds a scalar expression using the input and performs a best-effort
+//    check to see if the scalar expression is nullable. It outputs this
+//    result as a boolean.
 //
 //    The supported args (in addition to the ones supported by OptTester):
 //
 //      - vars=(type1,type2,...)
 //
-//        Information about IndexedVar columns.
-//
-func TestBuilder(t *testing.T) {
+//      Adding a !null suffix on a var type is used to mark that var as
+//      non-nullable.
+func TestExprIsNeverNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, "testdata/expr", func(t *testing.T, path string) {
 		catalog := testcat.New()
 
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
@@ -67,20 +69,19 @@ func TestBuilder(t *testing.T) {
 			var err error
 
 			tester := opttester.New(catalog, d.Input)
-			tester.Flags.ExprFormat = memo.ExprFmtHideMiscProps |
-				memo.ExprFmtHideConstraints |
-				memo.ExprFmtHideFuncDeps |
-				memo.ExprFmtHideRuleProps |
-				memo.ExprFmtHideStats |
-				memo.ExprFmtHideCost |
-				memo.ExprFmtHideQualifications
-
 			switch d.Cmd {
-			case "build-scalar":
+			case "scalar-is-not-nullable":
+				var notNullCols opt.ColSet
 				for _, arg := range d.CmdArgs {
 					key, vals := arg.Key, arg.Vals
 					switch key {
 					case "vars":
+						for i := 0; i < len(vals); i++ {
+							if strings.HasSuffix(strings.ToLower(vals[i]), "!null") {
+								vals[i] = strings.TrimSuffix(strings.ToLower(vals[i]), "!null")
+								notNullCols.Add(i + 1)
+							}
+						}
 						varTypes, err = exprgen.ParseTypes(vals)
 						if err != nil {
 							d.Fatalf(t, "%v", err)
@@ -109,18 +110,12 @@ func TestBuilder(t *testing.T) {
 				for i, typ := range varTypes {
 					o.Memo().Metadata().AddColumn(fmt.Sprintf("@%d", i+1), typ)
 				}
-				// Disable normalization rules: we want the tests to check the result
-				// of the build process.
-				o.DisableOptimizations()
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
-				b.AllowUnsupportedExpr = tester.Flags.AllowUnsupportedExpr
 				err = b.Build(typedExpr)
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}
-				f := memo.MakeExprFmtCtx(tester.Flags.ExprFormat, o.Memo())
-				f.FormatExpr(o.Memo().RootExpr())
-				return f.Buffer.String()
+				return fmt.Sprintf("%t\n", memo.ExprIsNeverNull(o.Memo().RootExpr().(opt.ScalarExpr), notNullCols))
 
 			default:
 				return tester.RunCommand(t, d)
