@@ -142,7 +142,10 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.CheckConstraintTableDef:
-			tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
+			tab.Checks = append(tab.Checks, cat.CheckConstraint{
+				Constraint: tree.Serialize(def.Expr),
+				Validated:  true,
+			})
 		}
 	}
 
