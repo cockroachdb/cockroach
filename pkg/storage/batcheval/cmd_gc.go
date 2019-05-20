@@ -31,7 +31,7 @@ func init() {
 }
 
 func declareKeysGC(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	// Intentionally don't call DefaultDeclareKeys: the key range in the header
 	// is usually the whole range (pending resolution of #7880).

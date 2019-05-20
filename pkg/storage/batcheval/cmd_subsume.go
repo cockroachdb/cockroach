@@ -32,7 +32,7 @@ func init() {
 }
 
 func declareKeysSubsume(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	// Subsume must not run concurrently with any other command. It declares that
 	// it reads and writes every addressable key in the range; this guarantees
@@ -43,7 +43,7 @@ func declareKeysSubsume(
 	// has completed its migration.
 	args := req.(*roachpb.SubsumeRequest)
 	if args.RightDesc != nil {
-		desc = *args.RightDesc
+		desc = args.RightDesc
 	}
 	spans.Add(spanset.SpanReadWrite, roachpb.Span{
 		Key:    desc.StartKey.AsRawKey(),

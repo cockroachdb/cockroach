@@ -2669,7 +2669,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	var spans spanset.SpanSet
 	cmd, _ := batcheval.LookupCommand(roachpb.EndTransaction)
 	cmd.DeclareKeys(
-		roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("d")},
+		&roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("d")},
 		roachpb.Header{},
 		&roachpb.EndTransactionRequest{
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
@@ -7913,7 +7913,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 func TestGCWithoutThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	desc := roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
+	desc := &roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 	ctx := context.Background()
 
 	tc := &testContext{}

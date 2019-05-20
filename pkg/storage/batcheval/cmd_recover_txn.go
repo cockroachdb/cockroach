@@ -33,7 +33,7 @@ func init() {
 }
 
 func declareKeysRecoverTransaction(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	rr := req.(*roachpb.RecoverTxnRequest)
 	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rr.Txn.Key, rr.Txn.ID)})
