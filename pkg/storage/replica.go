@@ -1195,11 +1195,7 @@ func (r *Replica) beginCmds(
 	// Handle load-based splitting.
 	if r.SplitByLoadEnabled() {
 		shouldInitSplit := r.loadBasedSplitter.Record(timeutil.Now(), len(ba.Requests), func() roachpb.Span {
-			boundarySpan := spans.BoundarySpan(spanset.SpanGlobal)
-			if boundarySpan == nil {
-				return roachpb.Span{}
-			}
-			return *boundarySpan
+			return spans.BoundarySpan(spanset.SpanGlobal)
 		})
 		if shouldInitSplit {
 			r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
