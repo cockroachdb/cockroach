@@ -48,7 +48,9 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 // to be backpressured.
 var backpressurableSpans = []roachpb.Span{
 	{Key: keys.TimeseriesPrefix, EndKey: keys.TimeseriesKeyMax},
-	{Key: keys.TableDataMin, EndKey: keys.TableDataMax},
+	// Backpressure from the end of the system config forward instead of
+	// over all table data to avoid backpressuring unsplittable ranges.
+	{Key: keys.SystemConfigTableDataMax, EndKey: keys.TableDataMax},
 }
 
 // canBackpressureBatch returns whether the provided BatchRequest is eligible
