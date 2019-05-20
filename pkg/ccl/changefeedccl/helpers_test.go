@@ -22,9 +22,6 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -347,17 +344,5 @@ func forceTableGC(
 	database, table string,
 ) {
 	t.Helper()
-	tblID := sqlutils.QueryTableID(t, sqlDB.DB, database, table)
-
-	tblKey := roachpb.Key(keys.MakeTablePrefix(tblID))
-	gcr := roachpb.GCRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    tblKey,
-			EndKey: tblKey.PrefixEnd(),
-		},
-		Threshold: tsi.Clock().Now(),
-	}
-	if _, err := client.SendWrapped(context.Background(), tsi.DistSender(), &gcr); err != nil {
-		t.Fatal(err)
-	}
+	serverutils.ForceTableGC(t, tsi, sqlDB.DB, database, table, tsi.Clock().Now())
 }
