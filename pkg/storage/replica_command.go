@@ -380,6 +380,54 @@ func (r *Replica) adminSplitWithDescriptor(
 	return reply, nil
 }
 
+// AdminUnsplit removes the sticky bit of the range specified by the
+// args.Key.
+func (r *Replica) AdminUnsplit(
+	ctx context.Context, args roachpb.AdminUnsplitRequest, reason string,
+) (roachpb.AdminUnsplitResponse, *roachpb.Error) {
+	var reply roachpb.AdminUnsplitResponse
+
+	desc := *r.Desc()
+	if !bytes.Equal(desc.StartKey.AsRawKey(), args.Header().Key) {
+		return reply, roachpb.NewErrorf("key %s is not the start of a range", args.Header().Key)
+	}
+
+	// If the range's sticky bit is not set, we treat the unsplit command
+	// as a no-op and return success instead of throwing an error.
+	if desc.StickyBit == nil {
+		return reply, nil
+	}
+
+	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		b := txn.NewBatch()
+		newDesc := desc
+		newDesc.StickyBit = nil
+		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
+
+		if err := updateRangeDescriptor(b, descKey, &desc, &newDesc); err != nil {
+			return err
+		}
+		if err := updateRangeAddressing(b, &newDesc); err != nil {
+			return err
+		}
+		// End the transaction manually in order to provide a sticky bit trigger.
+		b.AddRawRequest(&roachpb.EndTransactionRequest{
+			Commit: true,
+			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				StickyBitTrigger: &roachpb.StickyBitTrigger{
+					// Setting StickyBit to nil unsets the sticky bit.
+					StickyBit: nil,
+				},
+			},
+		})
+		return txn.Run(ctx, b)
+	}); err != nil {
+		return reply, roachpb.NewError(errors.Wrapf(err, "unsplit at key %s failed", args.Header().Key))
+	}
+
+	return reply, nil
+}
+
 // AdminMerge extends this range to subsume the range that comes next
 // in the key space. The merge is performed inside of a distributed
 // transaction which writes the left hand side range descriptor (the
