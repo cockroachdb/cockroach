@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -316,12 +318,17 @@ const tableReaderTagPrefix = "tablereader."
 
 // Stats implements the SpanStats interface.
 func (trs *TableReaderStats) Stats() map[string]string {
-	return trs.InputStats.Stats(tableReaderTagPrefix)
+	inputStatsMap := trs.InputStats.Stats(tableReaderTagPrefix)
+	inputStatsMap[tableReaderTagPrefix+bytesReadTagSuffix] = humanizeutil.IBytes(trs.BytesRead)
+	return inputStatsMap
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (trs *TableReaderStats) StatsForQueryPlan() []string {
-	return trs.InputStats.StatsForQueryPlan("" /* prefix */)
+	return append(
+		trs.InputStats.StatsForQueryPlan("" /* prefix */),
+		fmt.Sprintf("%s: %s", bytesReadQueryPlanSuffix, humanizeutil.IBytes(trs.BytesRead)),
+	)
 }
 
 // outputStatsToTrace outputs the collected tableReader stats to the trace. Will
@@ -332,7 +339,10 @@ func (tr *tableReader) outputStatsToTrace() {
 		return
 	}
 	if sp := opentracing.SpanFromContext(tr.Ctx); sp != nil {
-		tracing.SetSpanStats(sp, &TableReaderStats{InputStats: is})
+		tracing.SetSpanStats(sp, &TableReaderStats{
+			InputStats: is,
+			BytesRead:  tr.fetcher.GetBytesRead(),
+		})
 	}
 }
 
