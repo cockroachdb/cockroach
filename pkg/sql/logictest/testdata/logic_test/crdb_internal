@@ -342,6 +342,19 @@ SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE manual
 start_pretty   end_pretty
 /Table/56/1/2  /Max
 
+statement ok
+ALTER TABLE foo UNSPLIT AT VALUES(2)
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE manual_split_time IS NOT NULL
+----
+start_pretty   end_pretty
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE manual_split_time IS NOT NULL
+----
+start_pretty   end_pretty
+
 # Make sure that the cluster id isn't unset.
 query B
 select crdb_internal.cluster_id() != '00000000-0000-0000-0000-000000000000' FROM foo

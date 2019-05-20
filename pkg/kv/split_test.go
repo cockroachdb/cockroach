@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -294,30 +293,8 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 		t.Fatal("Sticky bit not set after splitting")
 	}
 
-	// TODO(jeffreyxiao): Use same mechanism as ALTER TABLE ... UNSPLIT AT
-	// does when it is added.
 	// Removing sticky bit.
-	desc.StickyBit = nil
-	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		b := txn.NewBatch()
-		marshalledDesc, err := protoutil.Marshal(&desc)
-		if err != nil {
-			return err
-		}
-		b.Put(descKey, marshalledDesc)
-		b.Put(keys.RangeMetaKey(desc.EndKey).AsRawKey(), marshalledDesc)
-		// End the transaction manually in order to provide a sticky bit trigger.
-		// Note that this hack will be removed. See above TODO.
-		b.AddRawRequest(&roachpb.EndTransactionRequest{
-			Commit: true,
-			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-				StickyBitTrigger: &roachpb.StickyBitTrigger{
-					StickyBit: nil,
-				},
-			},
-		})
-		return txn.Run(ctx, b)
-	}); err != nil {
+	if err := s.DB.AdminUnsplit(ctx, splitKey.AsRawKey()); err != nil {
 		t.Fatal(err)
 	}
 

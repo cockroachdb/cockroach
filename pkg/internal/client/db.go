@@ -488,6 +488,19 @@ func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}, man
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// AdminUnsplit removes the sticky bit of the range specified by splitKey.
+//
+// splitKey is the start key of the range whose sticky bit should be removed.
+//
+// If splitKey is not the start key of a range, then this method will throw an
+// error. If the range specified by splitKey does not have a sticky bit set,
+// then this method will not throw an error and is a no-op.
+func (db *DB) AdminUnsplit(ctx context.Context, splitKey interface{}) error {
+	b := &Batch{}
+	b.adminUnsplit(splitKey)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // AdminTransferLease transfers the lease for the range containing key to the
 // specified target. The target replica for the lease transfer must be one of
 // the existing replicas of the range.

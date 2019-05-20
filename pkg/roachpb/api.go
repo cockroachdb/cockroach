@@ -493,6 +493,9 @@ func (*EndTransactionRequest) Method() Method { return EndTransaction }
 func (*AdminSplitRequest) Method() Method { return AdminSplit }
 
 // Method implements the Request interface.
+func (*AdminUnsplitRequest) Method() Method { return AdminUnsplit }
+
+// Method implements the Request interface.
 func (*AdminMergeRequest) Method() Method { return AdminMerge }
 
 // Method implements the Request interface.
@@ -657,6 +660,12 @@ func (etr *EndTransactionRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (asr *AdminSplitRequest) ShallowCopy() Request {
 	shallowCopy := *asr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (aur *AdminUnsplitRequest) ShallowCopy() Request {
+	shallowCopy := *aur
 	return &shallowCopy
 }
 
@@ -1028,6 +1037,7 @@ func (*BeginTransactionRequest) flags() int { return isWrite | isTxn }
 // have Txn.WriteTooOld=true and must retry on EndTransaction.
 func (*EndTransactionRequest) flags() int      { return isWrite | isTxn | isAlone | updatesWriteTSCache }
 func (*AdminSplitRequest) flags() int          { return isAdmin | isAlone }
+func (*AdminUnsplitRequest) flags() int        { return isAdmin | isAlone }
 func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
 func (*AdminTransferLeaseRequest) flags() int  { return isAdmin | isAlone }
 func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }

@@ -35,6 +35,27 @@ func (node *Split) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Rows)
 }
 
+// Unsplit represents an `ALTER TABLE/INDEX .. UNSPLIT AT ..` statement.
+type Unsplit struct {
+	TableOrIndex TableIndexName
+	// Each row contains values for the columns in the PK or index (or a prefix
+	// of the columns).
+	Rows *Select
+}
+
+// Format implements the NodeFormatter interface.
+func (node *Unsplit) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ")
+	if node.TableOrIndex.Index != "" {
+		ctx.WriteString("INDEX ")
+	} else {
+		ctx.WriteString("TABLE ")
+	}
+	ctx.FormatNode(&node.TableOrIndex)
+	ctx.WriteString(" UNSPLIT AT ")
+	ctx.FormatNode(node.Rows)
+}
+
 // Relocate represents an `ALTER TABLE/INDEX .. EXPERIMENTAL_RELOCATE ..`
 // statement.
 type Relocate struct {

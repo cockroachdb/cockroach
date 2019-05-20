@@ -64,6 +64,8 @@ const (
 	EndTransaction
 	// AdminSplit is called to coordinate a split of a range.
 	AdminSplit
+	// AdminUnsplit is called to remove the sticky bit of a manually split range.
+	AdminUnsplit
 	// AdminMerge is called to coordinate a merge of two adjacent ranges.
 	AdminMerge
 	// AdminTransferLease is called to initiate a range lease transfer.
