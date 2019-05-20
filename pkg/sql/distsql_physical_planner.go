@@ -1335,11 +1335,11 @@ func (dsp *DistSQLPlanner) addAggregators(
 	for i, idx := range n.groupCols {
 		groupCols[i] = uint32(p.PlanToStreamColMap[idx])
 	}
-	orderedGroupCols := make([]uint32, len(n.orderedGroupCols))
+	orderedGroupCols := make([]uint32, len(n.groupColOrdering))
 	var orderedGroupColSet util.FastIntSet
-	for i, idx := range n.orderedGroupCols {
-		orderedGroupCols[i] = uint32(p.PlanToStreamColMap[idx])
-		orderedGroupColSet.Add(idx)
+	for i, c := range n.groupColOrdering {
+		orderedGroupCols[i] = uint32(p.PlanToStreamColMap[c.ColIdx])
+		orderedGroupColSet.Add(c.ColIdx)
 	}
 
 	// We either have a local stage on each stream followed by a final stage, or
@@ -1636,12 +1636,22 @@ func (dsp *DistSQLPlanner) addAggregators(
 			}
 		}
 
-		// Create the merge ordering for the local stage.
-		groupColProps := planPhysicalProps(n.plan)
-		groupColProps = groupColProps.project(n.groupCols)
-		ordCols := make([]distsqlpb.Ordering_Column, len(groupColProps.ordering))
-		for i, o := range groupColProps.ordering {
-			ordCols[i].ColIdx = finalGroupCols[o.ColIdx]
+		// Create the merge ordering for the local stage (this will be maintained
+		// for results going into the final stage).
+		ordCols := make([]distsqlpb.Ordering_Column, len(n.groupColOrdering))
+		for i, o := range n.groupColOrdering {
+			// Find the group column.
+			found := false
+			for j, col := range n.groupCols {
+				if col == o.ColIdx {
+					ordCols[i].ColIdx = finalGroupCols[j]
+					found = true
+					break
+				}
+			}
+			if !found {
+				return pgerror.AssertionFailedf("group column ordering contains non-grouping column %d", o.ColIdx)
+			}
 			if o.Direction == encoding.Descending {
 				ordCols[i].Direction = distsqlpb.Ordering_Column_DESC
 			} else {

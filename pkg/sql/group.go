@@ -49,8 +49,10 @@ type groupNode struct {
 
 	// Indices of the group by columns in the source plan.
 	groupCols []int
-	// Indices of the group by columns in the source plan that have an ordering.
-	orderedGroupCols []int
+
+	// Set when we have an input ordering on (a subset of) grouping columns. Only
+	// column indices in groupCols can appear in this ordering.
+	groupColOrdering sqlbase.ColumnOrdering
 
 	// isScalar is set for "scalar groupby", where we want a result
 	// even if there are no input rows, e.g. SELECT MIN(x) FROM t.

@@ -356,8 +356,8 @@ EXPLAIN (verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
 group           ·            ·              (b, count)  ·
  │              aggregate 0  b              ·           ·
  │              aggregate 1  count_rows()   ·           ·
- │              group by     @1             ·           ·
- │              ordered      @1             ·           ·
+ │              group by     b              ·           ·
+ │              ordered      +b             ·           ·
  └── render     ·            ·              (b)         +b
       │         render 0     b              ·           ·
       └── scan  ·            ·              (a, b)      +b
@@ -368,3 +368,13 @@ query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b];
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlFtr3DAQhd_7K5Z52lAFW9pLQU8OfVpI7bIXSilmUazBMWwsI8nQUPa_F1sBX7pR1m0pfZRnvplz5oB_QKkkxuIJDfBvQIEAAwIrSAlUWmVojNJNyTVu5HfgIYGirGrrPtvCnhA41KXSEjVKICDRiuLU1NNzSiBTGoF3rbG6VVWwHjUSULV9GZsSMFbkCHx5Jr3VtLf6wuC9eDjhFoVEHYSD8VDp4kno50gKKxqHu0qUhs8CehvQoLGd1JbPIgavCaFThNzlucZcWKUDNtQRtbvcpfisfd3FX49xsj_Gh_v7eURvgMDH5BDvj9vky25-M1LULXl4nj0K8_jL_PbmL6rZq6q7OZdyg4i-h4vh9awtf8fa7vDpuIn384iNnXWqFwPV7PrQ6ZWhN7GzyaG_IaR3mcV_FDr7u6Gv_k3oof_WWzSVKg1e9Q8JG0soc3QnMKrWGX7WKmvXuGfScu0Hica66gf32JSu1Ajsw9QLMz_MxjDtw4sBTKfBaz-88MoO_fDSC6_8nld_4tkPv-F5Pclzen73MwAA__-UYket
+
+statement ok
+CREATE TABLE uv (u INT PRIMARY KEY, v INT);
+INSERT INTO uv SELECT x, x*10 FROM generate_series(2, 8) AS g(x);
+
+# Regression test for #37211 (incorrect ordering between aggregator stages).
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll9vmzAUxd_3KdB9ajVHxDb5xxN97NQlU9c-TFNUucFKs7UYGTKtqvrdJ2BqCDT3wohYHgn52cc-5x7xApEJ9Vw96QT878CBgQAGEhh4wGAESwaxNSudJMZmfymAy_A3-EMGmyjeptnPSwYrYzX4L5Bu0kcNPtyo-0d9rVWorTsEBqFO1eYx3ya2mydln4NQpQoYfI1VlPjOwOWOikJHOCZ90DYBBott6jsBh-UrA7NNd5slqVpr8Pkray7ok9lEf_WM3tez_QUMroz5uY2dH2YTOSbKt38TwgLBAnlQjmgj52K9tnqtUmNdXrmfIPNgYUNtdeg7-dPF_NvdfHFzN7-9ujoLxHl2bbefzwJ5XlGz2-D-2XlQyUNl6ewyd4rlQcW7dUwhpLrOx2Ih7Fij2t7lY_HasfjbsfIDFpcuGBIA75_1iwP652ZgYlfsO3Jo-9He9rz5QPAmA-HygSvykeDFSLSeCEJRaSLGfUwEIaccHX4aE8GPPBHjnidCNI-kaBRJMXBlp0gSikqRnPQRSUJO2TtxGpEUR47kpOdIyuaRlI0iKQeu1ymShKJSJKd9RJKQU_ZOnkYk5ZEjOe05kl7zSHqNIukN8k_MdjEkVJRiOOsjhoScsl_eacTQO3IMZ__x8_Udadc6iU2U6EZfpsPscDpc6-IyErO1K_3FmlW-TfG4yLn8h1AnafGWFw-XUfEqE1iGOQoLHBZVmJdhuQfzdvC0C8xFJ3rchRZDnJbohXs47OFuEV6PUHqMw2MUnuDwpEtQcJgICg5TQSFoIig4TQVl2iUoM7wThkQpEJVCdUqtVNrYTdCE3wRNGU7hhOMETlnOa9XSxnOOVwv3CNfwcuEjAq-1SyvTcZoyHadJ0wmcMh3HSdPxZqVMr5XMvmtTwjW8ZfiMwGs908p0nKZMx2nSdAKnTMdxynSBN2zV9OXrhz8BAAD__2dkrLM=
