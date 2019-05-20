@@ -388,8 +388,27 @@ func (b *Builder) buildScan(
 				private.Flags.Direction = indexFlags.Direction
 			}
 		}
-
 		outScope.expr = b.factory.ConstructScan(&private)
+
+		// Find all the check constraints that apply to the table and add them
+		// to the table meta data. To do this, we must build them into scalar
+		// expressions.
+		for i, n := 0, tab.CheckCount(); i < n; i++ {
+			checkConstraint := tab.Check(i)
+
+			// The optimizer only considers validated check constraints.
+			if !checkConstraint.Validated {
+				continue
+			}
+			expr, err := parser.ParseExpr(string(checkConstraint.Constraint))
+			if err != nil {
+				panic(builderError{err})
+			}
+
+			texpr := outScope.resolveAndRequireType(expr, types.Bool)
+			tm := b.factory.Metadata().TableMeta(tabID)
+			tm.AddConstraint(b.buildScalar(texpr, inScope, nil, nil, nil))
+		}
 	}
 	return outScope
 }

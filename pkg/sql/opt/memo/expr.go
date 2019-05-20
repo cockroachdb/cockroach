@@ -16,6 +16,7 @@ package memo
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -206,6 +207,21 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 		colSet.UnionWith(n[i].ScalarProps(mem).OuterCols)
 	}
 	return colSet
+}
+
+// Intersection returns a new FiltersExpr that contains the intersection of
+// the two filter expressions.
+func (n FiltersExpr) Intersection(other FiltersExpr) FiltersExpr {
+	// TODO(ridwanmsharif): Faster intersection using a map
+	intersection := make(FiltersExpr, 0, int(math.Min(float64(len(n)), float64(len(other)))))
+	for _, filter := range n {
+		for _, otherFilter := range other {
+			if filter.Condition == otherFilter.Condition {
+				intersection = append(intersection, filter)
+			}
+		}
+	}
+	return intersection
 }
 
 // OutputCols returns the set of columns constructed by the Aggregations

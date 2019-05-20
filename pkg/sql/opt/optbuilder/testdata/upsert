@@ -1703,55 +1703,7 @@ upsert checks
 build
 INSERT INTO checks (a, b) VALUES (1, 2) ON CONFLICT (a) DO NOTHING
 ----
-insert checks
- ├── columns: <none>
- ├── insert-mapping:
- │    ├──  column1:5 => checks.a:1
- │    ├──  column2:6 => checks.b:2
- │    ├──  column7:7 => checks.c:3
- │    └──  column8:8 => checks.d:4
- ├── check columns: check1:13(bool) check2:14(bool)
- └── project
-      ├── columns: check1:13(bool) check2:14(bool) column1:5(int) column2:6(int) column7:7(int) column8:8(int)
-      ├── project
-      │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int)
-      │    └── select
-      │         ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) checks_1.a:9(int) checks_1.b:10(int) checks_1.c:11(int) checks_1.d:12(int)
-      │         ├── left-join
-      │         │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) checks_1.a:9(int) checks_1.b:10(int) checks_1.c:11(int) checks_1.d:12(int)
-      │         │    ├── project
-      │         │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
-      │         │    │    ├── project
-      │         │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
-      │         │    │    │    ├── values
-      │         │    │    │    │    ├── columns: column1:5(int) column2:6(int)
-      │         │    │    │    │    └── tuple [type=tuple{int, int}]
-      │         │    │    │    │         ├── const: 1 [type=int]
-      │         │    │    │    │         └── const: 2 [type=int]
-      │         │    │    │    └── projections
-      │         │    │    │         └── cast: INT8 [type=int]
-      │         │    │    │              └── null [type=unknown]
-      │         │    │    └── projections
-      │         │    │         └── plus [type=int]
-      │         │    │              ├── variable: column7 [type=int]
-      │         │    │              └── const: 1 [type=int]
-      │         │    ├── scan checks_1
-      │         │    │    └── columns: checks_1.a:9(int!null) checks_1.b:10(int) checks_1.c:11(int) checks_1.d:12(int)
-      │         │    └── filters
-      │         │         └── eq [type=bool]
-      │         │              ├── variable: column1 [type=int]
-      │         │              └── variable: checks_1.a [type=int]
-      │         └── filters
-      │              └── is [type=bool]
-      │                   ├── variable: checks_1.a [type=int]
-      │                   └── null [type=unknown]
-      └── projections
-           ├── lt [type=bool]
-           │    ├── variable: column2 [type=int]
-           │    └── variable: column8 [type=int]
-           └── gt [type=bool]
-                ├── variable: column1 [type=int]
-                └── const: 0 [type=int]
+error (42P01): no data source matches prefix: checks
 
 # UPSERT
 build
