@@ -91,7 +91,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	consumer := NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, RowBufferArgs{})
 	connectionInfo := map[distsqlpb.StreamID]*inboundStreamInfo{
 		streamID: {
-			receiver:  consumer,
+			receiver:  rowInboundStreamStrategy{consumer},
 			waitGroup: &f.waitGroup,
 		},
 	}
