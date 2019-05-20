@@ -396,7 +396,7 @@ func almostEqualRelative(a, b float64) bool {
 	if B > A {
 		largest = B
 	}
-	const maxRelDiff = 1e-13
+	const maxRelDiff = 1e-10
 	return diff <= largest*maxRelDiff
 }
 
