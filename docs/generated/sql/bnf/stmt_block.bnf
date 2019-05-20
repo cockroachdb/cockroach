@@ -790,6 +790,7 @@ unreserved_keyword ::=
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
 	| 'UNLOGGED'
+	| 'UNSPLIT'
 	| 'UPDATE'
 	| 'UPSERT'
 	| 'UUID'
@@ -908,6 +909,7 @@ opt_abort_mod ::=
 alter_table_stmt ::=
 	alter_onetable_stmt
 	| alter_split_stmt
+	| alter_unsplit_stmt
 	| alter_scatter_stmt
 	| alter_zone_table_stmt
 	| alter_rename_table_stmt
@@ -915,6 +917,7 @@ alter_table_stmt ::=
 alter_index_stmt ::=
 	alter_oneindex_stmt
 	| alter_split_index_stmt
+	| alter_unsplit_index_stmt
 	| alter_scatter_index_stmt
 	| alter_rename_index_stmt
 	| alter_zone_index_stmt
@@ -1223,6 +1226,9 @@ alter_onetable_stmt ::=
 alter_split_stmt ::=
 	'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt
 
+alter_unsplit_stmt ::=
+	'ALTER' 'TABLE' table_name 'UNSPLIT' 'AT' select_stmt
+
 alter_scatter_stmt ::=
 	'ALTER' 'TABLE' table_name 'SCATTER'
 	| 'ALTER' 'TABLE' table_name 'SCATTER' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')'
@@ -1241,6 +1247,9 @@ alter_oneindex_stmt ::=
 
 alter_split_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'SPLIT' 'AT' select_stmt
+
+alter_unsplit_index_stmt ::=
+	'ALTER' 'INDEX' table_index_name 'UNSPLIT' 'AT' select_stmt
 
 alter_scatter_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'SCATTER'
