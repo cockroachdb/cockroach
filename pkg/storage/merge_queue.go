@@ -291,6 +291,14 @@ func (mq *mergeQueue) process(
 		}
 	}
 
+	// Range was manually split, so skip merging.
+	if rhsDesc.StickyBit != nil {
+		log.VEventf(ctx, 2, "skipping merge: ranges were manually split")
+		// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
+		// repeatedly processing ranges that cannot be merged.
+		return nil
+	}
+
 	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)
 	reason := fmt.Sprintf("lhs+rhs has (size=%s+%s qps=%.2f+%.2f --> %.2fqps) below threshold (size=%s, qps=%.2f)",
 		humanizeutil.IBytes(lhsStats.Total()),

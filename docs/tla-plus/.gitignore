@@ -1,0 +1,16 @@
+**/.DS_Store
+**/*.toolbox/.project
+**/*.toolbox/.settings
+**/*.toolbox/model
+**/*.toolbox/*aux
+**/*.toolbox/*.log
+**/*.toolbox/*.pdf
+**/*.toolbox/*.tex
+**/*.toolbox/*.pmap
+**/*.toolbox/*___Model*SnapShot*.launch
+**/*.toolbox/**/*.tla
+**/*.toolbox/**/*.out
+**/*.toolbox/**/MC.cfg
+**/*.pdf
+**/*.old
+**/*~

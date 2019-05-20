@@ -311,11 +311,6 @@ func TestLimitScans(t *testing.T) {
 		100, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
-	// Prevent the merge queue from immediately discarding our splits.
-	if _, err := sqlDB.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
-		t.Fatal(err)
-	}
-
 	if _, err := sqlDB.Exec("ALTER TABLE t SPLIT AT VALUES (5)"); err != nil {
 		t.Fatal(err)
 	}

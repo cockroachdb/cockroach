@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -101,11 +102,13 @@ type splitRun struct {
 }
 
 func (n *splitNode) startExec(params runParams) error {
+	stickyBitEnabled := params.EvalContext().Settings.Version.IsActive(cluster.VersionStickyBit)
+	// TODO(jeffreyxiao): Remove this error in v20.1.
 	// This check is not intended to be foolproof. The setting could be outdated
 	// because of gossip inconsistency, or it could change halfway through the
 	// SPLIT AT's execution. It is, however, likely to prevent user error and
 	// confusion in the common case.
-	if !n.force && storagebase.MergeQueueEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+	if !n.force && storagebase.MergeQueueEnabled.Get(&params.p.ExecCfg().Settings.SV) && !stickyBitEnabled {
 		return errors.New("splits would be immediately discarded by merge queue; " +
 			"disable the merge queue first by running 'SET CLUSTER SETTING kv.range_merge.queue_enabled = false'")
 	}
@@ -126,7 +129,9 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey); err != nil {
+	// Don't set the manual flag if the cluster is not up-to-date.
+	stickyBitEnabled := params.EvalContext().Settings.Version.IsActive(cluster.VersionStickyBit)
+	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey, stickyBitEnabled); err != nil {
 		return false, err
 	}
 

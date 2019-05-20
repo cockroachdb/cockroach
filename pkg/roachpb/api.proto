@@ -655,11 +655,18 @@ message EndTransactionResponse {
 // thought of as a mostly logical operation, though some other
 // metadata (e.g. abort span and range stats must be copied or
 // recomputed).
+//
+// The manual flag should be set when the split is requested manually
+// from a user operation (I.E. Running ALTER TABLE/INDEX ... SPLIT AT).
+// It should also be set when the split ranges should not be merged back
+// together automatically by the merge queue. Any split requested by the
+// split queue will have the manual flag unset.
 message AdminSplitRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes split_key = 2 [(gogoproto.casttype) = "Key"];
+  bool manual = 3;
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()

@@ -111,7 +111,7 @@ func (b *Builder) buildDataSource(
 		return b.buildZip(source.Items, inScope)
 
 	case *tree.Subquery:
-		outScope = b.buildStmt(source.Select, inScope)
+		outScope = b.buildStmt(source.Select, nil /* desiredTypes */, inScope)
 
 		// Treat the subquery result as an anonymous data source (i.e. column names
 		// are not qualified). Remove hidden columns, as they are not accessible
@@ -122,7 +122,7 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.StatementSource:
-		outScope = b.buildStmt(source.Statement, inScope)
+		outScope = b.buildStmt(source.Statement, nil /* desiredTypes */, inScope)
 		if len(outScope.cols) == 0 {
 			panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
 				"statement source \"%v\" does not return any columns", source.Statement))
@@ -450,7 +450,7 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 
 	outScope.ctes = make(map[string]*cteSource)
 	for i := range ctes {
-		cteScope := b.buildStmt(ctes[i].Stmt, outScope)
+		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope)
 		cols := cteScope.cols
 		name := ctes[i].Name.Alias
 
