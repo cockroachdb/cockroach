@@ -34,7 +34,7 @@ func init() {
 }
 
 func declareKeysTruncateLog(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(header.RangeID)})
 	prefix := keys.RaftLogPrefix(header.RangeID)

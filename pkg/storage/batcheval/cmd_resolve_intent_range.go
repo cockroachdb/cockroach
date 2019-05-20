@@ -28,7 +28,7 @@ func init() {
 }
 
 func declareKeysResolveIntentRange(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	declareKeysResolveIntentCombined(desc, header, req, spans)
 }
