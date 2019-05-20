@@ -1403,6 +1403,13 @@ func (s *Server) Start(ctx context.Context) error {
 			hlcUpperBound,
 			timeutil.SleepUntil,
 		)
+
+		// Ensure that any subsequent use of `cockroach init` will receive
+		// an error "the cluster was already initialized."
+		if _, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
+			log.Fatal(ctx, err)
+		}
+
 	} else if len(s.cfg.GossipBootstrapResolvers) == 0 {
 		// If the _unfiltered_ list of hosts from the --join flag is
 		// empty, then this node can bootstrap a new cluster. We disallow
