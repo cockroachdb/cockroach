@@ -104,7 +104,7 @@ CREATE TABLE checks (
 	b INT,
 	c INT,
     d INT AS (c + 1) STORED,
-    CHECK (checks.b < d)
+    CHECK (b < d)
 )
 ----
 TABLE checks
@@ -114,7 +114,7 @@ TABLE checks
  ├── d int
  ├── INDEX primary
  │    └── a int not null
- ├── CHECK (checks.b < d)
+ ├── CHECK (b < d)
  └── CHECK (a > 0)
 
 exec-ddl

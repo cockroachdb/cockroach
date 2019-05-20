@@ -773,7 +773,9 @@ func (ot *optTable) CheckCount() int {
 // Check is part of the cat.Table interface.
 func (ot *optTable) Check(i int) cat.CheckConstraint {
 	check := ot.desc.ActiveChecks()[i]
-	return cat.CheckConstraint(check.Expr)
+	return cat.CheckConstraint{
+		Constraint: check.Expr,
+		Validity:   cat.ConstraintValidity(check.Validity)}
 }
 
 // FamilyCount is part of the cat.Table interface.

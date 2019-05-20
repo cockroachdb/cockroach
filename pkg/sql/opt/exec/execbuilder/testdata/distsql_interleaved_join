@@ -232,7 +232,7 @@ SELECT url FROM [EXPLAIN (DISTSQL)
     OR pid1 >= 31 AND pid1 <= 33
 ]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzslE9r3DAQxe_9FGJOu3RKLDnpH8GCCqXgUrzF9Nb6IKyJI3AkI8mlJfi7F9sk8Yb0X3pIDnuz9ObHG_xGcwXOGyr1JUWQX4ADggCEM6gR-uAbitGHSVoKC_MdZIZgXT-k6bpGaHwgkFeQbOoIJBQuUehIf6OKtKHwwVtH4SQDBENJ2252-kjnCSYPe6nDD9XrQC5N9pPA3tsuUZBss1GcfR2yLG92jOdSyqL8_HrL9tVKoh3jb26kt-U7tqYEv5a2C7fC8hsNECrbXqxbaoN2prmwnRHX6qP0tfw_QOjoPG0Uf77dhamZ-RMQ9kOSTHFUAtUpqjNUL1G9gnpE8EO6zSkm3RJIPuIvsryNcHA-GApkDjKrx3vSLv0L35_kdwrvtxYH1vxBY8SPY_QEx0g8KEtxzPIJZvmH9V5R7L2L9FcvPptWBpmWlv0S_RAa-hR8M9ssx_3MzReGYlpUvhwKN0tzg2uY_xY-PYCzu7D4H-f8n-B6fPYzAAD__4MtKf0=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMk8tq8zAQhff_U_zMqqVTYjlJC4aCtiklKdkWL4Q1cQSOZEZyaQl-9yJ5kQvpLd1kZ-nM8TdnGG3BOk1ztSEPxQsIQMgBYQolQsuuIu8dR2konOk3KDIEY9suxOsSoXJMUGwhmNAQFDCzgbgh9UpLUpr40RlLPMoAQVNQpkmkJ1oFiAyzUfwuW8VkQ8QvTb3eV2pWVldr0-jY2PAzQGhoFa6kuLl-4GhIn4Cw6ELxXwqUOcoJyinKO5T3UPYIrgu7pn1QNUEhevwk2C5PZx1rYtIHAcr-RPS5u3XtaHxUeBqdH6DFWTMVlz_T_Kxg-eUH--YVLMm3znr60S5kcZlI1zRsnncdV_TMrkqY4bhIvnShyYdBFcNhZpOUGtw3iy_NkwNzdmzO_0Ie_8pc9v8-AgAA__-qe3jr
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL)
@@ -242,7 +242,7 @@ SELECT url FROM [EXPLAIN (DISTSQL)
     OR pid1 >= 31 AND pid1 <= 33
 ]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzslE-L2zAQxe_9FGJOCZ2ylr1LW0FAhVJwKU4xvbU-CGvWK_BKRpJLy-LvXmyzGyek_9JDc8jN0psfb_AbzQNYp6lQ9xRAfAYOCCkg3ECF0HlXUwjOj9JcmOtvIBIEY7s-jtcVQu08gXiAaGJLICC3kXxL6iuVpDT5985Y8lcJIGiKyrST0we6jTB6mHvlv8vGK6vrO9Pq0X4U2TvTRvKCrVaSsy99kmT1hvFMCJEXn16t2bZcSLRh_PWT9KZ4y5ZUyh-l9cwtsOxJA4TSNHfLtjrlyUb-qPyXnub_Bwgt3caV5M_XGz82M30CwraPgkmOMkWZobxGeYPyJVQDguvjLqcQVUMg-IA_yXIXYW-d1-RJ72VWDUfSLtwL111lB4XHrdM9a37SGPHLGJ3hGKUnZZlesjzDLH-z3ksKnbOB_ujFJ-PKIN3QvF-C631NH72rJ5v5uJ246UJTiLPK50NuJ2lqcAnzX8LXe3ByCKf_4pz9FVwNz34EAAD__zwZKfQ=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMkz9rwzAQxfd-inJTS6_EchIKhoLWlJKUrMWDsC6OwJHMSS4twd-9SB7yh_RfumSz9O75d-84bcE6TXO1IQ_FKwhAyAFhCiVCy64i7x1HaSic6XcoMgRj2y7E6xKhckxQbCGY0BAUMLOBuCH1RktSmvjJGUs8ygBBU1CmSaRnWgWIDLNR_CFrVlZXa9PoiF-aer2vtorJhtjc8DNAaGgVbqS4u33kWJw-AWHRheJaCpQ5yjHKCcopygcoewTXhV3TPqiaoBA9fhFsl6ezjjUx6YMAZX8i-tzdu3Y0Pio8jc4P0OKsmYrLn2l-VrD88oP98AqW5FtnPf1qF7K4TKRrGjbPu44remFXJcxwXCRfutDkw6CK4TCzSUoN7pvFt-bJgTk7Nuf_IY__ZC77q88AAAD__6DKeOI=
 
 query TTT
 EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
@@ -258,12 +258,10 @@ render           ·               ·
       ├── scan   ·               ·
       │          table           grandchild2@primary
       │          spans           /11/#/56/1-/13/#/56/2 /19/#/56/1-/21/#/56/2 /31/#/56/1-/33/#/56/2
-      │          filter          ((pid1 <= 13) OR ((pid1 >= 19) AND (pid1 <= 21))) OR (pid1 >= 31)
       └── scan   ·               ·
 ·                table           parent1@primary
 ·                spans           /11-/13/# /19-/21/# /31-/33/#
 ·                parallel        ·
-·                filter          ((pid1 <= 13) OR ((pid1 >= 19) AND (pid1 <= 21))) OR (pid1 >= 31)
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).
 # Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14

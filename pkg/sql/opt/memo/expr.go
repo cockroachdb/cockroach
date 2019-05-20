@@ -208,6 +208,21 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	return colSet
 }
 
+// IntersectionWith returns a new FilterExpr that contains the intersection of
+// the two filter expressions.
+func (n FiltersExpr) IntersectionWith(other FiltersExpr) FiltersExpr {
+	// TODO(ridwanmsharif): Faster intersection using a map
+	var intersection FiltersExpr
+	for _, filter := range n {
+		for _, otherFilter := range other {
+			if filter.Condition == otherFilter.Condition {
+				intersection = append(intersection, filter)
+			}
+		}
+	}
+	return intersection
+}
+
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {

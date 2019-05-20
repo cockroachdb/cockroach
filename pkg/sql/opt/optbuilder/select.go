@@ -389,7 +389,26 @@ func (b *Builder) buildScan(
 			}
 		}
 
+		// TODO(ridwanmsharif): Add comments here about the check constraints
 		outScope.expr = b.factory.ConstructScan(&private)
+		for i, n := 0, tab.CheckCount(); i < n; i++ {
+			if tab.Check(i).Validity != cat.ConstraintValidity_Validated {
+				continue
+			}
+			expr, err := parser.ParseExpr(string(tab.Check(i).Constraint))
+			if err != nil {
+				panic(builderError{err})
+			}
+
+			texpr := outScope.resolveAndRequireType(expr, types.Bool)
+			switch texpr.(type) {
+			case *tree.ComparisonExpr:
+				tm := b.factory.Metadata().TableMeta(tabID)
+				tm.AddConstraint(b.buildScalar(texpr, inScope, nil, nil, nil))
+			default:
+				continue
+			}
+		}
 	}
 	return outScope
 }

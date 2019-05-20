@@ -157,19 +157,12 @@ distinct-on
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo')
 ----
-select
+scan a@secondary
  ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
+ ├── constraint: /-3/4: [/'foo' - /'bar'] [/'aaa' - /NULL)
  ├── stats: [rows=1000, distinct(1)=911.337892, null(1)=0, distinct(4)=294.797541, null(4)=0]
  ├── key: (1)
- ├── fd: (1)-->(3,4), (3,4)~~>(1)
- ├── scan a@secondary
- │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
- │    ├── constraint: /-3/4: [/'foo' - /'bar'] [/'aaa' - /NULL)
- │    ├── stats: [rows=1000, distinct(1)=911.337892, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=294.797541, null(4)=0]
- │    ├── key: (1)
- │    └── fd: (1)-->(3,4), (3,4)-->(1)
- └── filters
-      └── (s <= 'aaa') OR (s >= 'bar') [type=bool, outer=(3)]
+ └── fd: (1)-->(3,4), (3,4)~~>(1)
 
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo') OR s IS NULL
@@ -201,19 +194,12 @@ scan a@secondary
 opt
 SELECT s, d, x FROM a WHERE (s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')
 ----
-select
+scan a@secondary
  ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
+ ├── constraint: /-3/4: [ - /'foobar'] [/'foo' - /'bar']
  ├── stats: [rows=1000, distinct(1)=911.337892, null(1)=0, distinct(4)=294.797541, null(4)=0]
  ├── key: (1)
- ├── fd: (1)-->(3,4), (3,4)~~>(1)
- ├── scan a@secondary
- │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
- │    ├── constraint: /-3/4: [ - /'foobar'] [/'foo' - /'bar']
- │    ├── stats: [rows=1000, distinct(1)=911.337892, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=294.797541, null(4)=0]
- │    ├── key: (1)
- │    └── fd: (1)-->(3,4), (3,4)-->(1)
- └── filters
-      └── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+ └── fd: (1)-->(3,4), (3,4)~~>(1)
 
 opt
 SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d > 5.0
@@ -225,7 +211,7 @@ index-join a
  ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
  └── select
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
-      ├── stats: [rows=111.111111, distinct(1)=110.489355, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=97.0976681, null(4)=0]
+      ├── stats: [rows=333.333333, distinct(1)=327.279016, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=220.291003, null(4)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3,4)-->(1)
       ├── scan a@secondary
@@ -235,7 +221,6 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
            └── d > 5.0 [type=bool, outer=(4), constraints=(/4: (/5.0 - ]; tight)]
 
 opt
@@ -248,7 +233,7 @@ index-join a
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  └── select
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
-      ├── stats: [rows=37.037037, distinct(1)=36.9747958, null(1)=0, distinct(3)=1.99999999, null(3)=0, distinct(4)=35.7721483, null(4)=0]
+      ├── stats: [rows=111.111111, distinct(1)=110.501266, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=99.3377424, null(4)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3,4)-->(1)
       ├── scan a@secondary
@@ -258,7 +243,6 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
            └── d <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
 
 # Bump up null counts.
@@ -341,19 +325,12 @@ distinct-on
 opt
 SELECT s, d, x FROM a WHERE ((s <= 'aaa') OR (s >= 'bar' AND s <= 'foo')) AND s IS NOT NULL
 ----
-select
+scan a@secondary
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
+ ├── constraint: /-3/4: [/'foo' - /'bar'] [/'aaa' - /NULL)
  ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=294.797541, null(4)=0]
  ├── key: (1)
- ├── fd: (1)-->(3,4), (3,4)-->(1)
- ├── scan a@secondary
- │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
- │    ├── constraint: /-3/4: [/'foo' - /'bar'] [/'aaa' - /NULL)
- │    ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=294.797541, null(4)=0]
- │    ├── key: (1)
- │    └── fd: (1)-->(3,4), (3,4)-->(1)
- └── filters
-      └── (s <= 'aaa') OR (s >= 'bar') [type=bool, outer=(3)]
+ └── fd: (1)-->(3,4), (3,4)-->(1)
 
 opt
 SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo') OR s IS NULL
@@ -385,19 +362,12 @@ scan a@secondary
 opt
 SELECT s, d, x FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND s IS NOT NULL
 ----
-select
+scan a@secondary
  ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
+ ├── constraint: /-3/4: [ - /'foobar'] [/'foo' - /'bar']
  ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=294.797541, null(4)=0]
  ├── key: (1)
- ├── fd: (1)-->(3,4), (3,4)-->(1)
- ├── scan a@secondary
- │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
- │    ├── constraint: /-3/4: [ - /'foobar'] [/'foo' - /'bar']
- │    ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=294.797541, null(4)=0]
- │    ├── key: (1)
- │    └── fd: (1)-->(3,4), (3,4)-->(1)
- └── filters
-      └── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+ └── fd: (1)-->(3,4), (3,4)-->(1)
 
 opt
 SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d <= 5.0 AND s IS NOT NULL
@@ -409,7 +379,7 @@ index-join a
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  └── select
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
-      ├── stats: [rows=24.691358, distinct(1)=24.691358, null(1)=0, distinct(3)=1.99999586, null(3)=0, distinct(4)=24.5913408, null(4)=0]
+      ├── stats: [rows=74.0740741, distinct(1)=74.0740741, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=73.097773, null(4)=0]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3,4)-->(1)
       ├── scan a@secondary
@@ -419,7 +389,6 @@ index-join a
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3,4)-->(1)
       └── filters
-           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
            └── d <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
 
 exec-ddl
