@@ -232,7 +232,7 @@ func (f *Flow) setupInboundStream(
 		if log.V(2) {
 			log.Infof(ctx, "set up inbound stream %d", sid)
 		}
-		f.inboundStreams[sid] = &inboundStreamInfo{receiver: receiver, waitGroup: &f.waitGroup}
+		f.inboundStreams[sid] = &inboundStreamInfo{receiver: rowInboundStreamHandler{receiver}, waitGroup: &f.waitGroup}
 
 	case distsqlpb.StreamEndpointSpec_LOCAL:
 		if _, found := f.localStreams[sid]; found {
@@ -698,13 +698,10 @@ func (f *Flow) cancel() {
 	f.flowRegistry.Unlock()
 
 	for _, receiver := range timedOutReceivers {
-		go func(receiver RowReceiver) {
+		go func(receiver inboundStreamHandler) {
 			// Stream has yet to be started; send an error to its
 			// receiver and prevent it from being connected.
-			receiver.Push(
-				nil, /* row */
-				&distsqlpb.ProducerMetadata{Err: sqlbase.QueryCanceledError})
-			receiver.ProducerDone()
+			receiver.timeout(sqlbase.QueryCanceledError)
 		}(receiver)
 	}
 }
