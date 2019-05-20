@@ -1175,3 +1175,4 @@ if-err [type=decimal]
  │    └── variable: @1 [type=decimal]
  └── err-code
       └── const: '10000' [type=string]
+

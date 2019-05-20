@@ -142,7 +142,10 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.CheckConstraintTableDef:
-			tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
+			tab.Checks = append(tab.Checks, cat.CheckConstraint{
+				Constraint: tree.Serialize(def.Expr),
+				Validated:  validatedCheckConstraint(def),
+			})
 		}
 	}
 
@@ -571,4 +574,8 @@ func extractDeleteOnlyIndex(def *tree.IndexTableDef) (name string, ok bool) {
 		return "", false
 	}
 	return strings.TrimSuffix(string(def.Name), ":delete-only"), true
+}
+
+func validatedCheckConstraint(def *tree.CheckConstraintTableDef) bool {
+	return !strings.HasSuffix(string(def.Name), ":unvalidated")
 }
