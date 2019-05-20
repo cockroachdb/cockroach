@@ -31,7 +31,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/debug"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -178,7 +177,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	printer := printKey
 	if debugCtx.values {
 		printer = func(kv engine.MVCCKeyValue) (bool, error) {
-			debug.PrintKeyValue(kv)
+			storage.PrintKeyValue(kv)
 			return false, nil
 		}
 	}
@@ -279,7 +278,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		} else if !ok {
 			break
 		}
-		debug.PrintKeyValue(engine.MVCCKeyValue{
+		storage.PrintKeyValue(engine.MVCCKeyValue{
 			Key:   iter.Key(),
 			Value: iter.Value(),
 		})
@@ -306,7 +305,7 @@ func loadRangeDescriptor(
 			// We only want values, not MVCCMetadata.
 			return false, nil
 		}
-		if err := debug.IsRangeDescriptorKey(kv.Key); err != nil {
+		if err := storage.IsRangeDescriptorKey(kv.Key); err != nil {
 			// Range descriptor keys are interleaved with others, so if it
 			// doesn't parse as a range descriptor just skip it.
 			return false, nil
@@ -349,10 +348,10 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	end := engine.MakeMVCCMetadataKey(keys.LocalRangeMax)
 
 	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
-		if debug.IsRangeDescriptorKey(kv.Key) != nil {
+		if storage.IsRangeDescriptorKey(kv.Key) != nil {
 			return false, nil
 		}
-		debug.PrintKeyValue(kv)
+		storage.PrintKeyValue(kv)
 		return false, nil
 	})
 }
@@ -418,7 +417,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			}
 		}
 
-		debug.PrintKeyValue(engine.MVCCKeyValue{
+		storage.PrintKeyValue(engine.MVCCKeyValue{
 			Key:   k,
 			Value: bs[1],
 		})
@@ -456,7 +455,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		start, end, string(engine.EncodeKey(start)), string(engine.EncodeKey(end)))
 
 	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
-		debug.PrintKeyValue(kv)
+		storage.PrintKeyValue(kv)
 		return false, nil
 	})
 }
