@@ -1,5 +1,8 @@
 # LogicTest: local local-opt
 
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
 # Verify pg_catalog database handles mutation statements correctly.
 
 query error database "pg_catalog" does not exist

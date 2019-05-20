@@ -1,5 +1,8 @@
 # LogicTest: local
 
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----

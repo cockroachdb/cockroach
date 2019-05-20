@@ -1,5 +1,9 @@
 # LogicTest: fakedist fakedist-opt fakedist-metadata
 
+# Disable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
 statement ok
 CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX d_idx (d))
 
@@ -132,6 +136,17 @@ __auto__         {b}           550        0
 __auto__         {c}           550        0
 __auto__         {d}           550        0
 __auto__         {rowid}       550        0
+
+statement ok
+CREATE TABLE test_create (x INT PRIMARY KEY, y CHAR)
+
+query TTIII colnames,rowsort,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE test_create] ORDER BY column_names::STRING, created
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {x}           0          0               0
+__auto__         {y}           0          0               0
 
 # Test fast path delete.
 statement ok
