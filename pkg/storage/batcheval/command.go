@@ -31,11 +31,11 @@ type Command struct {
 	// between key declaration and cmd evaluation?
 	DeclareKeys func(*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet)
 
-	// Eval evaluates a command on the given engine. It should populate
-	// the supplied response (always a non-nil pointer to the correct
-	// type) and return special side effects (if any) in the Result.
-	// If it writes to the engine it should also update
-	// *CommandArgs.Stats.
+	// Eval evaluates a command on the given engine. It should populate the
+	// supplied response (always a non-nil pointer to the correct type) and
+	// return special side effects (if any) in the Result. If it writes to the
+	// engine it should also update *CommandArgs.Stats. It should treat the
+	// provided request as immutable.
 	Eval func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error)
 }
 
