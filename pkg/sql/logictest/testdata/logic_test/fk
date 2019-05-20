@@ -1337,6 +1337,40 @@ CREATE TABLE no_default_table (
 statement ok
 DROP TABLE a;
 
+# Test that no column can have more than 1 FK constraint
+subtest column_uniqueness
+
+statement ok
+CREATE TABLE t (a INT, b INT, c INT, INDEX (a, b), INDEX (b, c))
+
+statement ok
+CREATE TABLE t2 (x INT, y INT, z INT, w INT, UNIQUE INDEX (x, y), UNIQUE INDEX (z, w))
+
+statement ok
+ALTER TABLE t ADD FOREIGN KEY (a, b) REFERENCES t2 (x, y)
+
+statement error column "b" cannot be used by multiple foreign key constraints
+ALTER TABLE t ADD FOREIGN KEY (b, c) REFERENCES t2 (z, w)
+
+statement ok
+DROP TABLE t, t2
+
+# Also test the case where one of the FKs is on the primary key
+statement ok
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b), INDEX (b, c))
+
+statement ok
+CREATE TABLE t2 (x INT, y INT, z INT, w INT, UNIQUE INDEX (x, y), UNIQUE INDEX (z, w))
+
+statement ok
+ALTER TABLE t ADD FOREIGN KEY (a, b) REFERENCES t2 (x, y)
+
+statement error column "b" cannot be used by multiple foreign key constraints
+ALTER TABLE t ADD FOREIGN KEY (b, c) REFERENCES t2 (z, w)
+
+statement ok
+DROP TABLE t, t2
+
 subtest 24664
 
 statement ok
