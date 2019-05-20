@@ -143,7 +143,11 @@ func (b *Builder) indexedVar(
 	idx, ok := ctx.ivarMap.Get(int(colID))
 	if !ok {
 		if b.nullifyMissingVarExprs > 0 {
-			return tree.DNull
+			expr, err := tree.ReType(tree.DNull, md.ColumnMeta(colID).Type)
+			if err != nil {
+				panic(pgerror.AssertionFailedf("unexpected failure during ReType: %v", err))
+			}
+			return expr
 		}
 		panic(pgerror.AssertionFailedf("cannot map variable %d to an indexed var", log.Safe(colID)))
 	}
