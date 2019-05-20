@@ -208,6 +208,21 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	return colSet
 }
 
+// RetainCommonFilters retains only the filters found in n and other.
+func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
+	// TODO(ridwanmsharif): Faster intersection using a map
+	common := (*n)[:0]
+	for _, filter := range *n {
+		for _, otherFilter := range other {
+			if filter.Condition == otherFilter.Condition {
+				common = append(common, filter)
+				break
+			}
+		}
+	}
+	*n = common
+}
+
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {
@@ -379,5 +394,71 @@ func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncD
 		if id != 0 {
 			fdset.AddEquivalency(t, id)
 		}
+	}
+}
+
+// ExprIsNullable makes a best-effort check to see if the provided scalar
+// expression is nullable. This is particularly useful with check constraints.
+// Check constraints are satisfied when the condition evaluates to NULL,
+// whereas filters are not. For example consider the following check constraint:
+//
+// CHECK (col IN (1, 2, NULL))
+//
+// Any row evaluating this check constraint with any value for the column will
+// satisfy this check constraint, as they would evaluate to true (in the case
+// of 1 or 2) or NULL (in the case of everything else).
+func ExprIsNullable(e opt.ScalarExpr, notNullCols *opt.ColSet) bool {
+	switch t := e.(type) {
+	case *VariableExpr:
+		return !notNullCols.Contains(int(t.Col))
+
+	case *TrueExpr, *FalseExpr, *ConstExpr:
+		return false
+
+	case *NullExpr:
+		return true
+
+	case *TupleExpr:
+		for i := range t.Elems {
+			if ExprIsNullable(t.Elems[i], notNullCols) {
+				return true
+			}
+		}
+		return false
+
+	case *ArrayExpr:
+		for i := range t.Elems {
+			if ExprIsNullable(t.Elems[i], notNullCols) {
+				return true
+			}
+		}
+		return false
+
+	case *CaseExpr:
+		nullableChildren := false
+		for i := range t.Whens {
+			if ExprIsNullable(t.Whens[i], notNullCols) {
+				nullableChildren = true
+				break
+			}
+		}
+		return ExprIsNullable(t.Input, notNullCols) ||
+			ExprIsNullable(t.OrElse, notNullCols) || nullableChildren
+
+	case *CastExpr, *NotExpr, *RangeExpr:
+		return ExprIsNullable(t.Child(0).(opt.ScalarExpr), notNullCols)
+
+	case *InExpr, *NotInExpr, *AndExpr, *OrExpr, *GeExpr, *GtExpr, *NeExpr, *EqExpr, *LeExpr,
+		*LtExpr, *LikeExpr, *NotLikeExpr, *ILikeExpr, *NotILikeExpr, *SimilarToExpr,
+		*NotSimilarToExpr, *RegMatchExpr, *NotRegMatchExpr, *RegIMatchExpr, *NotRegIMatchExpr,
+		*IsExpr, *IsNotExpr, *ContainsExpr, *JsonExistsExpr, *JsonAllExistsExpr,
+		*JsonSomeExistsExpr, *AnyScalarExpr, *BitandExpr, *BitorExpr, *BitxorExpr, *PlusExpr,
+		*MinusExpr, *MultExpr, *DivExpr, *FloorDivExpr, *ModExpr, *PowExpr, *ConcatExpr,
+		*LShiftExpr, *RShiftExpr, *WhenExpr:
+		return ExprIsNullable(t.Child(0).(opt.ScalarExpr), notNullCols) ||
+			ExprIsNullable(t.Child(1).(opt.ScalarExpr), notNullCols)
+
+	default:
+		return true
 	}
 }
