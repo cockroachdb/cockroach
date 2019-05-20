@@ -1675,6 +1675,7 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	table_name,
 	index_name,
 	replicas,
+	split_time,
 	crdb_internal.lease_holder(start_key) AS lease_holder
 FROM crdb_internal.ranges_no_leases
 `,
@@ -1688,6 +1689,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "table_name", Typ: types.String},
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
+		{Name: "split_time", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
 	},
 }
@@ -1708,7 +1710,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   database_name     STRING NOT NULL,
   table_name      STRING NOT NULL,
   index_name      STRING NOT NULL,
-  replicas     INT[] NOT NULL
+	replicas     INT[] NOT NULL,
+	split_time   TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
@@ -1787,6 +1790,11 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			}
 
+			splitTime := tree.DNull
+			if desc.StickyBit != nil {
+				splitTime = tree.MakeDTimestamp(desc.StickyBit.GoTime(), time.Microsecond)
+			}
+
 			return tree.Datums{
 				tree.NewDInt(tree.DInt(desc.RangeID)),
 				tree.NewDBytes(tree.DBytes(desc.StartKey)),
@@ -1797,6 +1805,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
 				arr,
+				splitTime,
 			}, nil
 		}, nil
 	},
