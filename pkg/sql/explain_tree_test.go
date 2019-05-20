@@ -127,7 +127,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 2 group  (cid int, sum decimal) weak-key(cid)
 2 .aggregate 0 cid (cid int, sum decimal) weak-key(cid)
 2 .aggregate 1 sum(value) (cid int, sum decimal) weak-key(cid)
-2 .group by @1 (cid int, sum decimal) weak-key(cid)
+2 .group by cid (cid int, sum decimal) weak-key(cid)
 3 render  (cid int, sum decimal) weak-key(cid)
 3 .render 0 (@2)[int] (cid int, sum decimal) weak-key(cid)
 3 .render 1 (@3)[decimal] (cid int, sum decimal) weak-key(cid)
@@ -175,7 +175,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 									},
 									{
 										Key:   "group by",
-										Value: "@1",
+										Value: "cid",
 									},
 								},
 								Children: []*roachpb.ExplainTreePlanNode{

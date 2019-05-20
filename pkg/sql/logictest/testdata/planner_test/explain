@@ -242,7 +242,7 @@ sort                                       ·            ·
            │                               aggregate 5  ordinal_position
            │                               aggregate 6  is_hidden
            │                               aggregate 7  array_agg(index_name)
-           │                               group by     @1-@7
+           │                               group by     column_name, crdb_sql_type, is_nullable, column_default, generation_expression, ordinal_position, is_hidden
            └── render                      ·            ·
                 └── hash-join              ·            ·
                      │                     type         left outer
@@ -514,7 +514,7 @@ render                    ·            ·                                      
       └── group           ·            ·                                                                          (agg0 int, agg1 int)  ·
            │              aggregate 0  v                                                                          ·                     ·
            │              aggregate 1  count(k)                                                                   ·                     ·
-           │              group by     @1                                                                         ·                     ·
+           │              group by     v                                                                          ·                     ·
            └── render     ·            ·                                                                          (v int, k int)        ·
                 │         render 0     (v)[int]                                                                   ·                     ·
                 │         render 1     (k)[int]                                                                   ·                     ·
@@ -534,7 +534,7 @@ render                    ·            ·                                      
       └── group           ·            ·                                                                          (agg0 int, agg1 int)  agg0!=NULL; key(agg0)
            │              aggregate 0  v                                                                          ·                     ·
            │              aggregate 1  count(k)                                                                   ·                     ·
-           │              group by     @1                                                                         ·                     ·
+           │              group by     v                                                                          ·                     ·
            └── render     ·            ·                                                                          (v int, k int)        v!=NULL; k!=NULL; key(k)
                 │         render 0     (v)[int]                                                                   ·                     ·
                 │         render 1     (k)[int]                                                                   ·                     ·

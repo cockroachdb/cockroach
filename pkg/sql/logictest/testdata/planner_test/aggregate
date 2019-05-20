@@ -15,7 +15,7 @@ EXPLAIN (VERBOSE) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 group           ·            ·                                    (count, r)                      weak-key(r)
  │              aggregate 0  count_rows()                         ·                               ·
  │              aggregate 1  ?column?                             ·                               ·
- │              group by     @1                                   ·                               ·
+ │              group by     ?column?                             ·                               ·
  └── render     ·            ·                                    ("?column?")                    ·
       │         render 0     test.public.kv.k + test.public.kv.v  ·                               ·
       └── scan  ·            ·                                    (k, v, w[omitted], s[omitted])  k!=NULL; key(k)
@@ -33,8 +33,8 @@ render               ·            ·                 (count, r)                
       │              aggregate 0  count_rows()      ·                               ·
       │              aggregate 1  k                 ·                               ·
       │              aggregate 2  v                 ·                               ·
-      │              group by     @1-@2             ·                               ·
-      │              ordered      @1                ·                               ·
+      │              group by     k, v              ·                               ·
+      │              ordered      +k                ·                               ·
       └── render     ·            ·                 (k, v)                          k!=NULL; key(k); +k
            │         render 0     test.public.kv.k  ·                               ·
            │         render 1     test.public.kv.v  ·                               ·
@@ -96,7 +96,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ----
 group                ·            ·
  │                   aggregate 0  min(k)
- │                   group by     @1-@4
+ │                   group by     k, v, w, s
  └── render          ·            ·
       │              render 0     a.k
       │              render 1     a.v
@@ -119,7 +119,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ----
 group                ·            ·
  │                   aggregate 0  min(k)
- │                   group by     @1-@5
+ │                   group by     1, k, v, w, s
  └── render          ·            ·
       │              render 0     1
       │              render 1     a.k
@@ -144,7 +144,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ----
 group                ·            ·
  │                   aggregate 0  min(k)
- │                   group by     @1-@4
+ │                   group by     k, v, w, s
  └── render          ·            ·
       │              render 0     a.k
       │              render 1     a.v
@@ -168,7 +168,7 @@ EXPLAIN (VERBOSE) SELECT a.k FROM kv a, kv b GROUP BY a.*
 ----
 group                ·            ·
  │                   aggregate 0  k
- │                   group by     @1-@4
+ │                   group by     k, v, w, s
  └── render          ·            ·
       │              render 0     a.k
       │              render 1     a.v
@@ -497,7 +497,7 @@ sort                 ·            ·
  └── group           ·            ·
       │              aggregate 0  v
       │              aggregate 1  count(k)
-      │              group by     @1
+      │              group by     v
       └── render     ·            ·
            │         render 0     test.public.kv.v
            │         render 1     test.public.kv.k
@@ -515,7 +515,7 @@ sort                 ·            ·
  └── group           ·            ·
       │              aggregate 0  v
       │              aggregate 1  count_rows()
-      │              group by     @1
+      │              group by     v
       └── render     ·            ·
            │         render 0     test.public.kv.v
            └── scan  ·            ·
@@ -532,7 +532,7 @@ sort                 ·            ·
  └── group           ·            ·
       │              aggregate 0  v
       │              aggregate 1  count(1)
-      │              group by     @1
+      │              group by     v
       └── render     ·            ·
            │         render 0     test.public.kv.v
            │         render 1     1
@@ -549,7 +549,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v 
 group           ·            ·
  │              aggregate 0  v
  │              aggregate 1  count(1)
- │              group by     @1
+ │              group by     v
  └── render     ·            ·
       │         render 0     test.public.kv.v
       │         render 1     1
@@ -576,7 +576,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5)
 group           ·            ·
  │              aggregate 0  count_rows() FILTER (WHERE ?column?)
  │              aggregate 1  max(?column?) FILTER (WHERE ?column?)
- │              group by     @1
+ │              group by     v
  └── render     ·            ·
       │         render 0     test.public.filter_test.v
       │         render 1     test.public.filter_test.k > 5
@@ -589,7 +589,7 @@ EXPLAIN (TYPES) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
 group           ·            ·                                     (count int)                                                    ·
  │              aggregate 0  count_rows() FILTER (WHERE ?column?)  ·                                                              ·
- │              group by     @1                                    ·                                                              ·
+ │              group by     v                                     ·                                                              ·
  └── render     ·            ·                                     (v int, "?column?" bool)                                       ·
       │         render 0     (v)[int]                              ·                                                              ·
       │         render 1     ((k)[int] > (5)[int])[bool]           ·                                                              ·
@@ -606,8 +606,8 @@ EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY kv.*
 render          ·         ·
  │              render 0  1
  └── group      ·         ·
-      │         group by  @1-@4
-      │         ordered   @1
+      │         group by  k, v, w, s
+      │         ordered   +k
       └── scan  ·         ·
 ·               table     kv@primary
 ·               spans     ALL
@@ -619,7 +619,7 @@ EXPLAIN (VERBOSE) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY k
 ----
 group                ·            ·
  │                   aggregate 0  sum(d)
- │                   group by     @1-@4
+ │                   group by     k, v, w, s
  └── render          ·            ·
       │              render 0     test.public.kv.k
       │              render 1     test.public.kv.v
@@ -690,8 +690,8 @@ EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test GROUP BY k
 ----
 group      ·            ·                 (min)   ·
  │         aggregate 0  min(v)            ·       ·
- │         group by     @1                ·       ·
- │         ordered      @1                ·       ·
+ │         group by     k                 ·       ·
+ │         ordered      +k                ·       ·
  └── scan  ·            ·                 (k, v)  k!=NULL; key(k)
 ·          table        opt_test@primary  ·       ·
 ·          spans        ALL               ·       ·
@@ -706,8 +706,8 @@ render               ·            ·
  └── group           ·            ·
       │              aggregate 0  b
       │              aggregate 1  a
-      │              group by     @1-@2
-      │              ordered      @2
+      │              group by     b, a
+      │              ordered      +a
       └── render     ·            ·
            │         render 0     test.public.ab.b
            │         render 1     test.public.ab.a
@@ -732,7 +732,7 @@ render                    ·            ·
       │                   aggregate 0  min(y)
       │                   aggregate 1  b
       │                   aggregate 2  a
-      │                   group by     @1-@3
+      │                   group by     x, a, b
       └── render          ·            ·
            │              render 0     test.public.xy.x
            │              render 1     test.public.ab.a
@@ -764,8 +764,8 @@ EXPLAIN (VERBOSE) SELECT x, max(y) FROM group_ord GROUP BY x
 group           ·            ·                        (x, max)            x!=NULL; key(x)
  │              aggregate 0  x                        ·                   ·
  │              aggregate 1  max(y)                   ·                   ·
- │              group by     @1                       ·                   ·
- │              ordered      @1                       ·                   ·
+ │              group by     x                        ·                   ·
+ │              ordered      +x                       ·                   ·
  └── render     ·            ·                        (x, y)              x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·                   ·
       │         render 1     test.public.group_ord.y  ·                   ·
@@ -781,8 +781,8 @@ EXPLAIN (VERBOSE) SELECT x, max(y) FROM group_ord GROUP BY x ORDER BY x
 group           ·            ·                        (x, max)            x!=NULL; key(x); +x
  │              aggregate 0  x                        ·                   ·
  │              aggregate 1  max(y)                   ·                   ·
- │              group by     @1                       ·                   ·
- │              ordered      @1                       ·                   ·
+ │              group by     x                        ·                   ·
+ │              ordered      +x                       ·                   ·
  └── render     ·            ·                        (x, y)              x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·                   ·
       │         render 1     test.public.group_ord.y  ·                   ·
@@ -799,8 +799,8 @@ group           ·            ·                        (z, x, max)  x!=NULL; ke
  │              aggregate 0  z                        ·            ·
  │              aggregate 1  x                        ·            ·
  │              aggregate 2  max(y)                   ·            ·
- │              group by     @1-@2                    ·            ·
- │              ordered      @1                       ·            ·
+ │              group by     x, z                     ·            ·
+ │              ordered      +x                       ·            ·
  └── render     ·            ·                        (x, z, y)    x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·            ·
       │         render 1     test.public.group_ord.z  ·            ·
@@ -818,8 +818,8 @@ group           ·            ·                        (z, x, max)  x!=NULL; ke
  │              aggregate 0  z                        ·            ·
  │              aggregate 1  x                        ·            ·
  │              aggregate 2  max(y)                   ·            ·
- │              group by     @1-@2                    ·            ·
- │              ordered      @1                       ·            ·
+ │              group by     x, z                     ·            ·
+ │              ordered      +x                       ·            ·
  └── render     ·            ·                        (x, z, y)    x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·            ·
       │         render 1     test.public.group_ord.z  ·            ·
@@ -836,8 +836,8 @@ EXPLAIN (VERBOSE) SELECT z, max(y) FROM group_ord@foo GROUP BY z
 group                 ·            ·                        (z, max)                     weak-key(z)
  │                    aggregate 0  z                        ·                            ·
  │                    aggregate 1  max(y)                   ·                            ·
- │                    group by     @1                       ·                            ·
- │                    ordered      @1                       ·                            ·
+ │                    group by     z                        ·                            ·
+ │                    ordered      +z                       ·                            ·
  └── render           ·            ·                        (z, y)                       +z
       │               render 0     test.public.group_ord.z  ·                            ·
       │               render 1     test.public.group_ord.y  ·                            ·
@@ -860,8 +860,8 @@ merge-join                 ·               ·                        (x, max, z
  ├── group                 ·               ·                        (x, max)                     x!=NULL; key(x); +x
  │    │                    aggregate 0     x                        ·                            ·
  │    │                    aggregate 1     max(y)                   ·                            ·
- │    │                    group by        @1                       ·                            ·
- │    │                    ordered         @1                       ·                            ·
+ │    │                    group by        x                        ·                            ·
+ │    │                    ordered         +x                       ·                            ·
  │    └── render           ·               ·                        (x, y)                       x!=NULL; key(x); +x
  │         │               render 0        test.public.group_ord.x  ·                            ·
  │         │               render 1        test.public.group_ord.y  ·                            ·
@@ -871,8 +871,8 @@ merge-join                 ·               ·                        (x, max, z
  └── group                 ·               ·                        (z, min)                     weak-key(z); +z
       │                    aggregate 0     z                        ·                            ·
       │                    aggregate 1     min(y)                   ·                            ·
-      │                    group by        @1                       ·                            ·
-      │                    ordered         @1                       ·                            ·
+      │                    group by        z                        ·                            ·
+      │                    ordered         +z                       ·                            ·
       └── render           ·               ·                        (z, y)                       +z
            │               render 0        test.public.group_ord.z  ·                            ·
            │               render 1        test.public.group_ord.y  ·                            ·
@@ -890,7 +890,7 @@ render                    ·            ·                          (a)         
  │                        render 0     1                          ·                               ·
  └── group                ·            ·                          (agg0)                          weak-key(agg0)
       │                   aggregate 0  w                          ·                               ·
-      │                   group by     @1-@2                      ·                               ·
+      │                   group by     v, w                       ·                               ·
       └── filter          ·            ·                          (v, w)                          w!=NULL
            │              filter       w > 1                      ·                               ·
            └── render     ·            ·                          (v, w)                          ·

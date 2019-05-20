@@ -259,7 +259,7 @@ limit                                 ·            ·                          
            │                          aggregate 6  any_not_null(user_id)      ·                                                                                        ·
            │                          aggregate 7  any_not_null(created_at)   ·                                                                                        ·
            │                          aggregate 8  any_not_null(updated_at)   ·                                                                                        ·
-           │                          group by     @1                         ·                                                                                        ·
+           │                          group by     id                         ·                                                                                        ·
            └── render                 ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
                 │                     render 0     id                         ·                                                                                        ·
                 │                     render 1     body                       ·                                                                                        ·

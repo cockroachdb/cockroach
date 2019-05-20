@@ -397,7 +397,7 @@ func (ef *execFactory) ConstructScalarGroupBy(
 func (ef *execFactory) ConstructGroupBy(
 	input exec.Node,
 	groupCols []exec.ColumnOrdinal,
-	orderedGroupCols exec.ColumnOrdinalSet,
+	groupColOrdering sqlbase.ColumnOrdering,
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
@@ -406,7 +406,7 @@ func (ef *execFactory) ConstructGroupBy(
 		funcs:            make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
 		columns:          make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations)),
 		groupCols:        make([]int, len(groupCols)),
-		orderedGroupCols: make([]int, 0, orderedGroupCols.Len()),
+		groupColOrdering: groupColOrdering,
 		isScalar:         false,
 		props: physicalProps{
 			ordering: sqlbase.ColumnOrdering(reqOrdering),
@@ -416,9 +416,6 @@ func (ef *execFactory) ConstructGroupBy(
 	for i := range groupCols {
 		col := int(groupCols[i])
 		n.groupCols[i] = col
-		if orderedGroupCols.Contains(col) {
-			n.orderedGroupCols = append(n.orderedGroupCols, col)
-		}
 
 		// TODO(radu): only generate the grouping columns we actually need.
 		f := n.newAggregateFuncHolder(
