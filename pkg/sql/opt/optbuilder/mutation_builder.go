@@ -183,11 +183,11 @@ func (mb *mutationBuilder) buildInputForUpdateOrDelete(
 	//
 	//   UPDATE abc SET a=b
 	//
-	inputTabID := mb.md.AddTableWithAlias(mb.tab, &mb.alias)
 
 	// FROM
 	mb.outScope = mb.b.buildScan(
-		inputTabID,
+		mb.tab,
+		&mb.alias,
 		nil, /* ordinals */
 		nil, /* indexFlags */
 		includeMutations,
