@@ -1662,7 +1662,8 @@ CockroachDB supports the following flags:
 	),
 
 	// https://www.postgresql.org/docs/10/static/functions-datetime.html
-	"age": makeBuiltin(defProps(),
+	"age": makeBuiltin(
+		tree.FunctionProperties{Impure: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
