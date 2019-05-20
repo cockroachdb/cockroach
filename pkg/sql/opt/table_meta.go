@@ -115,6 +115,11 @@ var tableAnnIDCount TableAnnID
 // table struct.
 const maxTableAnnIDCount = 2
 
+type TableConstraint struct {
+	Constraint ScalarExpr
+	Validated  bool
+}
+
 // TableMeta stores information about one of the tables stored in the metadata.
 type TableMeta struct {
 	// MetaID is the identifier for this table that is unique within the query
@@ -138,6 +143,12 @@ type TableMeta struct {
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
+
+	// constraints stores the list of check constraints on the table
+	// stored in the ScalarExpr form so they can possibly be used as filters
+	// in certain queries. See comment above GenerateConstrainedScans for more
+	// detail.
+	constraints []TableConstraint
 }
 
 // clearAnnotations resets all the table annotations; used when copying a
@@ -173,6 +184,22 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 		indexCols.Add(int(tm.MetaID.ColumnID(ord)))
 	}
 	return indexCols
+}
+
+// NumTableConstraints looks up all the check constraints that are applied to the table.
+func (tm *TableMeta) NumTableConstraints() int {
+	return len(tm.constraints)
+}
+
+// TableConstraint looks up the ith table constraint on the table where
+// i < NumTableConstraints().
+func (tm *TableMeta) TableConstraint(i int) TableConstraint {
+	return tm.constraints[i]
+}
+
+// AddTableConstraint adds a table constraint to the table's metadata.
+func (tm *TableMeta) AddTableConstraint(tc TableConstraint) {
+	tm.constraints = append(tm.constraints, tc)
 }
 
 // TableAnnotation returns the given annotation that is associated with the
