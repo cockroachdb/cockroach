@@ -226,7 +226,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
-		streamID1: {receiver: consumer, waitGroup: wg},
+		streamID1: {receiver: rowInboundStreamStrategy{consumer}, waitGroup: wg},
 	}
 	if err := reg.RegisterFlow(
 		context.TODO(), id1, f1, inboundStreams, jiffy,
@@ -323,7 +323,7 @@ func TestHandshake(t *testing.T) {
 				wg := &sync.WaitGroup{}
 				wg.Add(1)
 				inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
-					streamID: {receiver: consumer, waitGroup: wg},
+					streamID: {receiver: rowInboundStreamStrategy{consumer}, waitGroup: wg},
 				}
 				if err := reg.RegisterFlow(
 					context.TODO(), flowID, f1, inboundStreams, time.Hour, /* timeout */
@@ -593,7 +593,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	rc.initWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 		0: {
-			receiver:  rc,
+			receiver:  rowInboundStreamStrategy{rc},
 			waitGroup: &wg,
 		},
 	}
@@ -636,7 +636,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	wg.Add(1)
 	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 		0: {
-			receiver:  rc,
+			receiver:  rowInboundStreamStrategy{rc},
 			waitGroup: &wg,
 		},
 	}
@@ -684,11 +684,11 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	wgRight.Add(1)
 	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
 		0: {
-			receiver:  left,
+			receiver:  rowInboundStreamStrategy{left},
 			waitGroup: &wgLeft,
 		},
 		1: {
-			receiver:  right,
+			receiver:  rowInboundStreamStrategy{right},
 			waitGroup: &wgRight,
 		},
 	}

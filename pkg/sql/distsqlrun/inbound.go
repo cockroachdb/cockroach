@@ -17,11 +17,66 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+type inboundStreamStrategy interface {
+	// run is called once a FlowStream RPC is handled and a stream is obtained to
+	// make this stream accessible the rest of the flow.
+	run(
+		ctx context.Context, stream distsqlpb.DistSQL_FlowStreamServer, firstMsg *distsqlpb.ProducerMessage, f *Flow,
+	) error
+	// timeout is called with an error
+	// WARNING: timeout may block.
+	timeout(err error)
+}
+
+type vectorizedInboundStreamStrategy struct {
+	*colrpc.Inbox
+}
+
+var _ inboundStreamStrategy = vectorizedInboundStreamStrategy{}
+
+func (s vectorizedInboundStreamStrategy) run(
+	ctx context.Context,
+	stream distsqlpb.DistSQL_FlowStreamServer,
+	_ *distsqlpb.ProducerMessage,
+	_ *Flow,
+) error {
+	return s.RunWithStream(ctx, stream)
+}
+
+func (s vectorizedInboundStreamStrategy) timeout(_ error) {
+	// TODO(asubiotto): We should probably add a cancellation strategy to the
+	//  inbox.
+}
+
+type rowInboundStreamStrategy struct {
+	RowReceiver
+}
+
+var _ inboundStreamStrategy = rowInboundStreamStrategy{}
+
+func (s rowInboundStreamStrategy) run(
+	ctx context.Context,
+	stream distsqlpb.DistSQL_FlowStreamServer,
+	firstMsg *distsqlpb.ProducerMessage,
+	f *Flow,
+) error {
+	return ProcessInboundStream(ctx, stream, firstMsg, s.RowReceiver, f)
+}
+
+func (s rowInboundStreamStrategy) timeout(err error) {
+	s.Push(
+		nil, /* row */
+		&distsqlpb.ProducerMetadata{Err: err},
+	)
+	s.ProducerDone()
+}
 
 // ProcessInboundStream receives rows from a DistSQL_FlowStreamServer and sends
 // them to a RowReceiver. Optionally processes an initial StreamMessage that was
