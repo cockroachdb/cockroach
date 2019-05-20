@@ -135,14 +135,33 @@ type Table interface {
 	Family(i int) Family
 }
 
-// CheckConstraint is the SQL text for a check constraint on a table. Check
-// constraints are user-defined restrictions on the content of each row in a
-// table. For example, this check constraint ensures that only values greater
-// than zero can be inserted into the table:
+// ConstraintValidity lets the optimizer know about the validity status of any
+// check constraint. It is the same as the ConstraintValidity type in sqlbase
+// but redefined here to avoid the cyclic dependency.
+type ConstraintValidity int32
+
+const (
+	// The constraint is valid for all rows.
+	ConstraintValidity_Validated ConstraintValidity = 0
+	// The constraint has not yet been validated for all rows (and will not be
+	// validated until VALIDATE CONSTRAINT is used).
+	ConstraintValidity_Unvalidated ConstraintValidity = 1
+	// The constraint was just added, but the validation for existing rows is not
+	// yet complete. If validation fails, the constraint will be dropped.
+	ConstraintValidity_Validating ConstraintValidity = 2
+)
+
+// CheckConstraint contains the SQL text and the validity status for a check
+// constraint on a table. Check constraints are user-defined restrictions
+// on the content of each row in a table. For example, this check constraint
+// ensures that only values greater than zero can be inserted into the table:
 //
 //   CREATE TABLE a (a INT CHECK (a > 0))
 //
-type CheckConstraint string
+type CheckConstraint struct {
+	Constraint string
+	Validity   ConstraintValidity
+}
 
 // TableStatistic is an interface to a table statistic. Each statistic is
 // associated with a set of columns.
@@ -233,7 +252,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	}
 
 	for i := 0; i < tab.CheckCount(); i++ {
-		child.Childf("CHECK (%s)", tab.Check(i))
+		child.Childf("CHECK (%s)", tab.Check(i).Constraint)
 	}
 
 	// Don't print the primary family, since it's implied.

@@ -121,6 +121,37 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 //
 // ----------------------------------------------------------------------
 
+// checkConstraintFilters finds all the constraints that are validated on the table
+// and converts them into filters that can potentially allow for more constrained
+// index scans. For more detail, see comment above GenerateConstrainedScans. A
+// constraint is only converted into a filter if it constrains a non nullable column,
+// has been validated and is a comparison check.
+func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr {
+	checkConstraints := c.e.mem.Metadata().TableMeta(tabID).Constraints()
+	var checkFilters memo.FiltersExpr
+	for _, check := range checkConstraints {
+		filterItem := memo.FiltersItem{Condition: check}
+		outCols := filterItem.ScalarProps(c.e.mem).OuterCols
+		colID, ok, hasNullableCols := 0, false, false
+		for colID, ok = outCols.Next(colID); ok; colID, ok = outCols.Next(colID + 1) {
+			ordinal := tabID.ColumnOrdinal(opt.ColumnID(colID))
+			if c.e.mem.Metadata().Table(tabID).Column(ordinal).IsNullable() {
+				hasNullableCols = true
+				break
+			}
+		}
+		if !hasNullableCols {
+			checkFilters = append(checkFilters, filterItem)
+		}
+	}
+
+	// TODO(ridwanmsharif): Remove this. This probably isn't necessary. Here for a theory.
+	if c.CanConsolidateFilters(checkFilters) {
+		return c.ConsolidateFilters(checkFilters)
+	}
+	return checkFilters
+}
+
 // GenerateConstrainedScans enumerates all secondary indexes on the Scan
 // operator's table and tries to push the given Select filter into new
 // constrained Scan operators using those indexes. Since this only needs to be
@@ -179,27 +210,46 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 //        $outerFilter
 //      )
 //
+// GenerateConstrainedScans will further constrain the enumerated index scans
+// by trying to use the check constrains that apply to the table being scanned.
 func (c *CustomFuncs) GenerateConstrainedScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, explicitFilters memo.FiltersExpr,
 ) {
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
+
+	// Generate all filters that we can derive from the check constraints.
+	// These filters do not really filter any rows, they are rather facts or
+	// guarantees about the data but treating them as filters may allow some
+	// indexes to be constrained and used.
+	checkFilters := c.checkConstraintFilters(scanPrivate.Table)
+
+	// Consider the checkFilters as well to constrain each of the indexes.
+	filters := append(explicitFilters, checkFilters...)
 
 	// Iterate over all indexes.
 	var iter scanIndexIter
 	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
 		// Check whether the filter can constrain the index.
-		constraint, remaining, ok := c.tryConstrainIndex(
+		constraintFilters, remainingFilters, ok := c.tryConstrainIndex(
 			filters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
 		if !ok {
 			continue
 		}
 
+		// If a check constraint filter wasn't able to constrain the index, it should
+		// not be used anymore.
+		// TODO(ridwanmsharif): Does it ever make sense for us to continue using any
+		//  constraint filter that wasn't able to constrain a scan? Maybe once we have
+		//  more information about data distribution, we may use it to further constrain
+		//  an index scan. Possibly something similar to an index skip scan.
+		explicitRemainingFilters := remainingFilters.IntersectionWith(explicitFilters)
+
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
-		newScanPrivate.Constraint = constraint
+		newScanPrivate.Constraint = constraintFilters
 
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
@@ -209,7 +259,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			// If there are remaining filters, then the constrained Scan operator
 			// will be created in a new group, and a Select operator will be added
 			// to the same group as the original operator.
-			sb.addSelect(remaining)
+			sb.addSelect(explicitRemainingFilters)
 			sb.build(grp)
 			continue
 		}
@@ -228,9 +278,9 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
-		remaining = sb.addSelectAfterSplit(remaining, newScanPrivate.Cols)
+		explicitRemainingFilters = sb.addSelectAfterSplit(explicitRemainingFilters, newScanPrivate.Cols)
 		sb.addIndexJoin(scanPrivate.Cols)
-		sb.addSelect(remaining)
+		sb.addSelect(explicitRemainingFilters)
 
 		sb.build(grp)
 	}

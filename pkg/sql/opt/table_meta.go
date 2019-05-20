@@ -132,6 +132,12 @@ type TableMeta struct {
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
+
+	// constraints stores the list of check constraints on the table
+	// stored in the ScalarExpr form so they can possibly be used as filters
+	// in certain queries. See comment above GenerateConstrainedScans for more
+	// detail.
+	constraints []ScalarExpr
 }
 
 // clearAnnotations resets all the table annotations; used when copying a
@@ -167,6 +173,18 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 		indexCols.Add(int(tm.MetaID.ColumnID(ord)))
 	}
 	return indexCols
+}
+
+// Constraints looks up all the check constraints that are applied to the table.
+func (tm *TableMeta) Constraints() []ScalarExpr {
+	return tm.constraints
+}
+
+// AddConstraint indexes a new reference to a schema used by the query.
+func (tm *TableMeta) AddConstraint(cf ScalarExpr) {
+	tm.constraints = append(tm.constraints, cf)
+	if cat.ConstraintValidity_Unvalidated != cat.ConstraintValidity_Validated {
+	}
 }
 
 // TableAnnotation returns the given annotation that is associated with the

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -142,7 +143,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.CheckConstraintTableDef:
-			tab.Checks = append(tab.Checks, cat.CheckConstraint(tree.Serialize(def.Expr)))
+			tab.Checks = append(tab.Checks, cat.CheckConstraint{
+				Constraint: tree.Serialize(def.Expr),
+				Validity:   cat.ConstraintValidity(sqlbase.ConstraintValidity_Validated)})
 		}
 	}
 
