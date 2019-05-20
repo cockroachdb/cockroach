@@ -1068,7 +1068,12 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	if ba.IsReadOnly() {
 		spans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	} else {
-		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, len(ba.Requests))
+		guess := len(ba.Requests)
+		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			// EndTransaction declares a global write for each of its intent spans.
+			guess += len(et.(*roachpb.EndTransactionRequest).IntentSpans) - 1
+		}
+		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
 	}
 
 	desc := r.Desc()
