@@ -2748,6 +2748,13 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	return &res
 }
 
+// TimestampToInexactDTimestamp converts the logical timestamp into an
+// inexact DTimestamp by dropping the logical counter and using the wall
+// time at the microsecond precision.
+func TimestampToInexactDTimestamp(ts hlc.Timestamp) *DTimestamp {
+	return MakeDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)
+}
+
 // GetRelativeParseTime implements ParseTimeContext.
 func (ctx *EvalContext) GetRelativeParseTime() time.Time {
 	ret := ctx.TxnTimestamp
