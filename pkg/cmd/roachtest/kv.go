@@ -274,6 +274,7 @@ func registerKVQuiescenceDead(r *registry) {
 
 func registerKVGracefulDraining(r *registry) {
 	r.Add(testSpec{
+		Skip:    "https://github.com/cockroachdb/cockroach/issues/33501",
 		Name:    "kv/gracefuldraining/nodes=3",
 		Cluster: makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {

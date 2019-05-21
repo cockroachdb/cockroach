@@ -178,7 +178,9 @@ func createPartitioningImpl(
 		}
 		cols = append(cols, *col)
 		if string(partBy.Fields[i]) != col.Name {
-			n := colOffset + len(partBy.Fields)
+			// This used to print the first `colOffset + len(partBy.Fields)` fields
+			// but there might not be this many columns in the index. See #37682.
+			n := colOffset + i + 1
 			return partDesc, pgerror.Newf(pgerror.CodeSyntaxError,
 				"declared partition columns (%s) do not match first %d columns in index being partitioned (%s)",
 				partitioningString(), n, strings.Join(indexDesc.ColumnNames[:n], ", "))
