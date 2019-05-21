@@ -130,7 +130,7 @@ func (c *CustomFuncs) CanMap(filters, src, dst memo.GroupID) bool {
 		return true
 	}
 
-	if c.HasHoistableSubquery(src) {
+	if c.HasCorrelatedSubquery(src) {
 		return false
 	}
 
