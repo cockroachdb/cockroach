@@ -39,6 +39,18 @@ c            FLOAT8     true         random()           ·                      
 d            DATE       true         now():::DATE       ·                      {}         false
 
 statement ok
+COMMENT ON COLUMN t.a IS 'a'
+
+query TTBTTTBT colnames
+SHOW COLUMNS FROM t WITH COMMENT
+----
+column_name  data_type  is_nullable  column_default     generation_expression  indices    is_hidden  comment
+a            INT8       false        42:::INT8          ·                      {primary}  false      a
+b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {}         false      NULL
+c            FLOAT8     true         random()           ·                      {}         false      NULL
+d            DATE       true         now():::DATE       ·                      {}         false      NULL
+
+statement ok
 INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT)
 
 query IBBB

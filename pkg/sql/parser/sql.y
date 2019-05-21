@@ -3292,10 +3292,10 @@ show_csettings_stmt:
 // %Text: SHOW COLUMNS FROM <tablename>
 // %SeeAlso: WEBDOCS/show-columns.html
 show_columns_stmt:
-  SHOW COLUMNS FROM table_name
+  SHOW COLUMNS FROM table_name with_comment
   {
     name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowColumns{Table: name}
+    $$.val = &tree.ShowColumns{Table: name, WithComment: $5.bool()}
   }
 | SHOW COLUMNS error // SHOW HELP: SHOW COLUMNS
 

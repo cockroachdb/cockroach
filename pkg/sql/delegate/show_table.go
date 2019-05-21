@@ -51,7 +51,7 @@ func (d *delegator) delegateShowIndex(n *tree.ShowIndex) (tree.Statement, error)
 }
 
 func (d *delegator) delegateShowColumns(n *tree.ShowColumns) (tree.Statement, error) {
-	const getColumnsQuery = `
+	getColumnsQuery := `
 SELECT
   column_name AS column_name,
   crdb_sql_type AS data_type,
@@ -59,7 +59,14 @@ SELECT
   column_default,
   generation_expression,
   IF(inames[1] IS NULL, ARRAY[]:::STRING[], inames) AS indices,
-  is_hidden::BOOL
+  is_hidden::BOOL`
+
+	if n.WithComment {
+		getColumnsQuery += `,
+  col_description(%[6]d, attnum) AS comment`
+	}
+
+	getColumnsQuery += `
 FROM
   (SELECT column_name, crdb_sql_type, is_nullable, column_default, generation_expression,
 	        ordinal_position, is_hidden, array_agg(index_name) AS inames
@@ -75,7 +82,16 @@ FROM
          USING(column_name)
     GROUP BY column_name, crdb_sql_type, is_nullable, column_default, generation_expression,
 		         ordinal_position, is_hidden
-   )
+   )`
+
+	if n.WithComment {
+		getColumnsQuery += `
+         LEFT OUTER JOIN pg_attribute 
+           ON column_name = pg_attribute.attname
+           AND attrelid = %[6]d`
+	}
+
+	getColumnsQuery += `
 ORDER BY ordinal_position`
 
 	return d.showTableDetails(&n.Table, getColumnsQuery)
@@ -133,6 +149,7 @@ func (d *delegator) showTableDetails(tn *tree.TableName, query string) (tree.Sta
 		lex.EscapeSQLString(resName.String()),
 		resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
 		lex.EscapeSQLString(resName.Schema()),
+		dataSource.ID(),
 	)
 
 	return parse(fullQuery)
