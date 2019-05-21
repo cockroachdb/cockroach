@@ -76,6 +76,18 @@ func TestSetNullRange(t *testing.T) {
 	}
 }
 
+func TestNullsTruncate(t *testing.T) {
+	for _, size := range pos {
+		n := NewNulls(BatchSize)
+		n.Truncate(uint16(size))
+		for i := uint16(0); i < BatchSize; i++ {
+			expected := uint64(i) >= size
+			require.Equal(t, expected, n.NullAt(i),
+				"NullAt(%d) should be %t after Truncate(%d)", i, expected, size)
+		}
+	}
+}
+
 func TestSetAndUnsetNulls(t *testing.T) {
 	n := NewNulls(BatchSize)
 	for i := uint16(0); i < BatchSize; i++ {
@@ -164,7 +176,7 @@ func TestSlice(t *testing.T) {
 	for _, start := range pos {
 		for _, end := range pos {
 			n := nulls3.Slice(start, end)
-			for i := uint64(0); i < uint64(64*len(n.nulls)); i++ {
+			for i := uint64(0); i < uint64(8*len(n.nulls)); i++ {
 				expected := start+i < end && nulls3.NullAt64(start+i)
 				require.Equal(t, expected, n.NullAt64(i),
 					"expected nulls3.Slice(%d, %d).NullAt(%d) to be %b", start, end, i, expected)

@@ -15,15 +15,21 @@
 package coldata
 
 // zeroedNulls is a zeroed out slice representing a bitmap of size BatchSize.
-// This is copied to efficiently clear a nulls slice.
-var zeroedNulls [(BatchSize-1)>>6 + 1]uint64
+// This is copied to efficiently set all nulls.
+var zeroedNulls [(BatchSize-1)/8 + 1]byte
 
 // filledNulls is a slice representing a bitmap of size BatchSize with every
 // single bit set.
-var filledNulls [(BatchSize-1)>>6 + 1]uint64
+var filledNulls [(BatchSize-1)/8 + 1]byte
 
-// onesMask is a max uint64, where every bit is set to 1.
-const onesMask = ^uint64(0)
+// bitMask[i] is a byte with a single bit set at i.
+var bitMask = [8]byte{0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80}
+
+// flippedBitMask[i] is a byte with all bits set except at i.
+var flippedBitMask = [8]byte{0xFE, 0xFD, 0xFB, 0xF7, 0xEF, 0xDF, 0xBF, 0x7F}
+
+// onesMask is a byte where every bit is set to 1.
+const onesMask = byte(255)
 
 func init() {
 	// Initializes filledNulls to the desired slice.
@@ -34,7 +40,7 @@ func init() {
 
 // Nulls represents a list of potentially nullable values.
 type Nulls struct {
-	nulls []uint64
+	nulls []byte
 	// hasNulls represents whether or not the memColumn has any null values set.
 	hasNulls bool
 }
@@ -42,12 +48,14 @@ type Nulls struct {
 // NewNulls returns a new nulls vector, initialized with a length.
 func NewNulls(len int) Nulls {
 	if len > 0 {
-		return Nulls{
-			nulls: make([]uint64, (len-1)>>6+1),
+		n := Nulls{
+			nulls: make([]byte, (len-1)/8+1),
 		}
+		n.UnsetNulls()
+		return n
 	}
 	return Nulls{
-		nulls: make([]uint64, 0),
+		nulls: make([]byte, 0),
 	}
 }
 
@@ -73,36 +81,42 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 	}
 
 	n.hasNulls = true
-	sIdx := start >> 6
-	eIdx := (end - 1) >> 6
+	sIdx := start / 8
+	eIdx := (end - 1) / 8
 
-	// Case where mask only spans one uint64.
+	// Case where mask only spans one byte.
 	if sIdx == eIdx {
-		mask := onesMask << (start % 64)
+		mask := onesMask >> (8 - (start % 8))
 		// Mask the end if needed.
-		if end%64 != 0 {
-			mask = mask & (onesMask >> (64 - (end % 64)))
+		if end%8 != 0 {
+			mask |= onesMask << (end % 8)
 		}
-		n.nulls[sIdx] |= mask
+		n.nulls[sIdx] &= mask
 		return
 	}
 
-	// Case where mask spans at least two uint64s.
+	// Case where mask spans at least two bytes.
 	if sIdx < eIdx {
-		mask := onesMask << (start % 64)
-		n.nulls[sIdx] |= mask
+		mask := onesMask >> (8 - (start % 8))
+		n.nulls[sIdx] &= mask
 
-		if end%64 == 0 {
-			n.nulls[eIdx] = onesMask
+		if end%8 == 0 {
+			n.nulls[eIdx] = 0
 		} else {
-			mask = onesMask >> (64 - (end % 64))
-			n.nulls[eIdx] |= mask
+			mask = onesMask << (end % 8)
+			n.nulls[eIdx] &= mask
 		}
 
 		for i := sIdx + 1; i < eIdx; i++ {
-			n.nulls[i] |= onesMask
+			n.nulls[i] = 0
 		}
 	}
+}
+
+// Truncate sets all values greater than start to null.
+func (n *Nulls) Truncate(start uint16) {
+	end := uint64(len(n.nulls) * 8)
+	n.SetNullRange(uint64(start), end)
 }
 
 // UnsetNulls sets the column to have no null values.
@@ -111,7 +125,7 @@ func (n *Nulls) UnsetNulls() {
 
 	startIdx := 0
 	for startIdx < len(n.nulls) {
-		startIdx += copy(n.nulls[startIdx:], zeroedNulls[:])
+		startIdx += copy(n.nulls[startIdx:], filledNulls[:])
 	}
 }
 
@@ -121,21 +135,19 @@ func (n *Nulls) SetNulls() {
 
 	startIdx := 0
 	for startIdx < len(n.nulls) {
-		startIdx += copy(n.nulls[startIdx:], filledNulls[:])
+		startIdx += copy(n.nulls[startIdx:], zeroedNulls[:])
 	}
 }
 
 // NullAt64 returns true if the ith value of the column is null.
 func (n *Nulls) NullAt64(i uint64) bool {
-	intIdx := i >> 6
-	return ((n.nulls[intIdx] >> (i % 64)) & 1) == 1
+	return n.nulls[i/8]&bitMask[i%8] == 0
 }
 
 // SetNull64 sets the ith value of the column to null.
 func (n *Nulls) SetNull64(i uint64) {
 	n.hasNulls = true
-	intIdx := i >> 6
-	n.nulls[intIdx] |= 1 << (i % 64)
+	n.nulls[i/8] &= flippedBitMask[i%8]
 }
 
 // Extend extends the nulls vector with the next toAppend values from src,
@@ -145,11 +157,11 @@ func (n *Nulls) Extend(src *Nulls, destStartIdx uint64, srcStartIdx uint16, toAp
 		return
 	}
 	outputLen := destStartIdx + uint64(toAppend)
-	// We will need ceil(outputLen/64) uint64s to encode the combined nulls.
-	needed := (outputLen-1)/64 + 1
+	// We will need ceil(outputLen/8) bytes to encode the combined nulls.
+	needed := (outputLen-1)/8 + 1
 	current := uint64(len(n.nulls))
 	if current < needed {
-		n.nulls = append(n.nulls, make([]uint64, needed-current)...)
+		n.nulls = append(n.nulls, filledNulls[:needed-current]...)
 	}
 	if src.HasNulls() {
 		for i := uint16(0); i < toAppend; i++ {
@@ -171,11 +183,11 @@ func (n *Nulls) ExtendWithSel(
 		return
 	}
 	outputLen := destStartIdx + uint64(toAppend)
-	// We will need ceil(outputLen/64) uint64s to encode the combined nulls.
-	needed := (outputLen-1)/64 + 1
+	// We will need ceil(outputLen/8) bytes to encode the combined nulls.
+	needed := (outputLen-1)/8 + 1
 	current := uint64(len(n.nulls))
 	if current < needed {
-		n.nulls = append(n.nulls, make([]uint64, needed-current)...)
+		n.nulls = append(n.nulls, filledNulls[:needed-current]...)
 	}
 	if src.HasNulls() {
 		for i := uint16(0); i < toAppend; i++ {
@@ -199,38 +211,38 @@ func (n *Nulls) Slice(start uint64, end uint64) Nulls {
 	}
 	s := NewNulls(int(end - start))
 	s.hasNulls = true
-	mod := start % 64
-	startIdx := int(start >> 6)
+	mod := start % 8
+	startIdx := int(start / 8)
 	if mod == 0 {
 		copy(s.nulls, n.nulls[startIdx:])
 	} else {
 		for i := range s.nulls {
-			// If start is not a multiple of 64, we need to shift over the bitmap
+			// If start is not a multiple of 8, we need to shift over the bitmap
 			// to have the first index correspond.
 			s.nulls[i] = n.nulls[startIdx+i] >> mod
 			if startIdx+i+1 < len(n.nulls) {
 				// And now bitwise or the remaining bits with the bits we want to
 				// bring over from the next index.
-				s.nulls[i] |= (n.nulls[startIdx+i+1] << (64 - mod))
+				s.nulls[i] |= (n.nulls[startIdx+i+1] << (8 - mod))
 			}
 		}
 	}
-	// Zero out any trailing bits in the final uint64.
-	endBits := (end - start) % 64
+	// Zero out any trailing bits in the final byte.
+	endBits := (end - start) % 8
 	if endBits != 0 {
-		mask := onesMask >> (64 - endBits)
-		s.nulls[len(s.nulls)-1] &= mask
+		mask := onesMask << endBits
+		s.nulls[len(s.nulls)-1] |= mask
 	}
 	return s
 }
 
 // NullBitmap returns the null bitmap.
-func (n *Nulls) NullBitmap() []uint64 {
+func (n *Nulls) NullBitmap() []byte {
 	return n.nulls
 }
 
 // SetNullBitmap sets the null bitmap.
-func (n *Nulls) SetNullBitmap(bm []uint64) {
+func (n *Nulls) SetNullBitmap(bm []byte) {
 	n.nulls = bm
 	n.hasNulls = false
 	for _, i := range bm {
@@ -248,10 +260,10 @@ func (n *Nulls) Or(n2 *Nulls) *Nulls {
 	if len(n.nulls) > len(n2.nulls) {
 		n, n2 = n2, n
 	}
-	nulls := make([]uint64, len(n2.nulls))
+	nulls := make([]byte, len(n2.nulls))
 	if n.hasNulls && n2.hasNulls {
 		for i := 0; i < len(n.nulls); i++ {
-			nulls[i] = n.nulls[i] | n2.nulls[i]
+			nulls[i] = n.nulls[i] & n2.nulls[i]
 		}
 		// If n2 is longer, we can just copy the remainder.
 		copy(nulls[len(n.nulls):], n2.nulls[len(n.nulls):])
@@ -270,7 +282,7 @@ func (n *Nulls) Or(n2 *Nulls) *Nulls {
 func (n *Nulls) Copy() Nulls {
 	c := Nulls{
 		hasNulls: n.hasNulls,
-		nulls:    make([]uint64, len(n.nulls)),
+		nulls:    make([]byte, len(n.nulls)),
 	}
 	copy(c.nulls, n.nulls)
 	return c
