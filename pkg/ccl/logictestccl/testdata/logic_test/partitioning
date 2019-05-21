@@ -46,6 +46,13 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a
     )
 )
 
+# Regression test for #37682
+statement error declared partition columns \(a, b\) do not match first 1 columns in index being partitioned \(rowid\)
+CREATE TABLE t (a INT DEFAULT 12, b INT DEFAULT 34) PARTITION BY LIST (a, b) (
+  PARTITION p1 VALUES IN ((1,2)),
+  PARTITION default VALUES IN (DEFAULT)
+)
+
 statement error PARTITION p1: name must be unique \(used twice in index "primary"\)
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (1),
