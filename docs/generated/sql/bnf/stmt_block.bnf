@@ -450,7 +450,7 @@ show_backup_stmt ::=
 	'SHOW' 'BACKUP' string_or_placeholder
 
 show_columns_stmt ::=
-	'SHOW' 'COLUMNS' 'FROM' table_name
+	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
 
 show_constraints_stmt ::=
 	'SHOW' 'CONSTRAINT' 'FROM' table_name
@@ -1124,6 +1124,10 @@ var_value ::=
 	a_expr
 	| extra_var_value
 
+with_comment ::=
+	'WITH' 'COMMENT'
+	| 
+
 opt_on_targets_roles ::=
 	'ON' targets_roles
 	| 
@@ -1147,10 +1151,6 @@ ranges_kw ::=
 table_index_name ::=
 	table_name '@' index_name
 	| standalone_index_name
-
-with_comment ::=
-	'WITH' 'COMMENT'
-	| 
 
 opt_compact ::=
 	'COMPACT'
