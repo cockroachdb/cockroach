@@ -962,8 +962,10 @@ func (c *checkConsistencyGenerator) Start() error {
 			Key:    c.from,
 			EndKey: c.to,
 		},
-		Mode:     c.mode,
-		WithDiff: true,
+		Mode: c.mode,
+		// No meaningful diff can be created if we're checking the stats only,
+		// so request one only if a full check is run.
+		WithDiff: c.mode == roachpb.ChecksumMode_CHECK_FULL,
 	})
 	if err := c.db.Run(c.ctx, &b); err != nil {
 		return err
