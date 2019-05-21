@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 type alterTableNode struct {
@@ -233,6 +235,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				n.tableDesc.AddCheckValidationMutation(ck)
 
 			case *tree.ForeignKeyConstraintTableDef:
+				// As of 19.2, foreign keys are added via a mutation that's processed in
+				// the schema changer. We will not support the older version, which adds
+				// the FK to the table descriptor immediately, in the middle of an
+				// upgrade to 19.2.
+				if !params.p.ExecCfg().Settings.Version.IsActive(cluster.VersionForeignKeyValidation) {
+					return errors.Errorf("Adding a foreign key in version %s or later requires all nodes to be upgraded to %s",
+						cluster.VersionByKey(cluster.VersionForeignKeyValidation), cluster.VersionByKey(cluster.VersionForeignKeyValidation))
+				}
 				for _, colName := range d.FromCols {
 					col, err := n.tableDesc.FindActiveColumnByName(string(colName))
 					if err != nil {

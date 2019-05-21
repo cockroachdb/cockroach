@@ -71,6 +71,7 @@ const (
 	VersionStart19_2
 	VersionQueryTxnTimestamp
 	VersionStickyBit
+	VersionForeignKeyValidation
 
 	// Add new versions here (step one of two).
 
@@ -472,6 +473,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionStickyBit is https://github.com/cockroachdb/cockroach/pull/37506
 		Key:     VersionStickyBit,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 3},
+	},
+	{
+		// VersionForeignKeyValidation is https://github.com/cockroachdb/cockroach/pull/37433
+		Key:     VersionForeignKeyValidation,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 4},
 	},
 
 	// Add new versions here (step two of two).
