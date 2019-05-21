@@ -793,7 +793,7 @@ func BenchmarkHashRouter(b *testing.B) {
 				zeroDistribution := make([]int, len(outputs))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					input.resetBatchesToReturn(numInputBatches)
+					input.ResetBatchesToReturn(numInputBatches)
 					r.reset()
 					wg.Add(len(outputs))
 					for j := range outputs {
