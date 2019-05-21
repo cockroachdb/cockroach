@@ -76,7 +76,8 @@ type overload struct {
 	RGoType string
 	RetTyp  types.T
 
-	AssignFunc assignFunc
+	AssignFunc  assignFunc
+	CompareFunc compareFunc
 
 	// TODO(solon): These would not be necessary if we changed the zero values of
 	// ComparisonOperator and BinaryOperator to be invalid.
@@ -86,6 +87,7 @@ type overload struct {
 }
 
 type assignFunc func(op overload, target, l, r string) string
+type compareFunc func(l, r string) string
 
 var binaryOpOverloads []*overload
 var comparisonOpOverloads []*overload
@@ -115,6 +117,20 @@ func (o overload) Assign(target, l, r string) string {
 	}
 	// Default assign form assumes an infix operator.
 	return fmt.Sprintf("%s = %s %s %s", target, l, o.OpStr, r)
+}
+
+// Compare produces a Go source string that assigns the "target" variable to the
+// result of comparing the two inputs, l and r.
+func (o overload) Compare(target, l, r string) string {
+	if o.CompareFunc != nil {
+		if ret := o.CompareFunc(l, r); ret != "" {
+			return fmt.Sprintf("%s = %s", target, ret)
+		}
+	}
+	// Default compare form assumes an infix operator.
+	return fmt.Sprintf(
+		"if %s < %s { %s = -1 } else if %s > %s { %s = 1 } else { %s = 0 }",
+		l, r, target, l, r, target, target)
 }
 
 func (o overload) UnaryAssign(target, v string) string {
@@ -178,7 +194,14 @@ func init() {
 			}
 			if customizer != nil {
 				if b, ok := customizer.(cmpOpTypeCustomizer); ok {
-					ov.AssignFunc = b.getCmpOpAssignFunc()
+					ov.AssignFunc = func(op overload, target, l, r string) string {
+						c := b.getCmpOpCompareFunc()(l, r)
+						if c == "" {
+							return ""
+						}
+						return fmt.Sprintf("%s = %s %s 0", target, c, op.OpStr)
+					}
+					ov.CompareFunc = b.getCmpOpCompareFunc()
 				}
 			}
 			comparisonOpOverloads = append(comparisonOpOverloads, ov)
@@ -224,7 +247,7 @@ type binOpTypeCustomizer interface {
 // cmpOpTypeCustomizer is a type customizer that changes how the templater
 // produces comparison operator output for a particular type.
 type cmpOpTypeCustomizer interface {
-	getCmpOpAssignFunc() assignFunc
+	getCmpOpCompareFunc() compareFunc
 }
 
 // hashTypeCustomizer is a type customizer that changes how the templater
@@ -251,14 +274,9 @@ type floatCustomizer struct{ width int }
 // intCustomizers are used for hash functions.
 type intCustomizer struct{ width int }
 
-func (boolCustomizer) getCmpOpAssignFunc() assignFunc {
-	return func(op overload, target, l, r string) string {
-		switch op.CmpOp {
-		case tree.EQ, tree.NE:
-			return ""
-		}
-		return fmt.Sprintf("%s = tree.CompareBools(%s, %s) %s 0",
-			target, l, r, op.OpStr)
+func (boolCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(l, r string) string {
+		return fmt.Sprintf("tree.CompareBools(%s, %s)", l, r)
 	}
 }
 
@@ -274,16 +292,9 @@ func (boolCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
-func (bytesCustomizer) getCmpOpAssignFunc() assignFunc {
-	return func(op overload, target, l, r string) string {
-		switch op.CmpOp {
-		case tree.EQ:
-			return fmt.Sprintf("%s = bytes.Equal(%s, %s)", target, l, r)
-		case tree.NE:
-			return fmt.Sprintf("%s = !bytes.Equal(%s, %s)", target, l, r)
-		}
-		return fmt.Sprintf("%s = bytes.Compare(%s, %s) %s 0",
-			target, l, r, op.OpStr)
+func (bytesCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(l, r string) string {
+		return fmt.Sprintf("bytes.Compare(%s, %s)", l, r)
 	}
 }
 
@@ -297,10 +308,9 @@ func (bytesCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
-func (decimalCustomizer) getCmpOpAssignFunc() assignFunc {
-	return func(op overload, target, l, r string) string {
-		return fmt.Sprintf("%s = tree.CompareDecimals(&%s, &%s) %s 0",
-			target, l, r, op.OpStr)
+func (decimalCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(l, r string) string {
+		return fmt.Sprintf("tree.CompareDecimals(&%s, &%s)", l, r)
 	}
 }
 
@@ -349,8 +359,9 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(types.Int64, intCustomizer{width: 64})
 }
 
-// Avoid unused warning for Assign, which is only used in templates.
+// Avoid unused warning for functions which are only used in templates.
 var _ = overload{}.Assign
+var _ = overload{}.Compare
 var _ = overload{}.UnaryAssign
 
 // buildDict is a template function that builds a dictionary out of its

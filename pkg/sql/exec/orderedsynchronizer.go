@@ -36,7 +36,9 @@ type orderedSynchronizer struct {
 	inputBatches []coldata.Batch
 	// inputIndices stores the current index into each input batch.
 	inputIndices []uint16
-	output       coldata.Batch
+	// comparators stores one comparator per ordering column.
+	comparators []vecComparator
+	output      coldata.Batch
 }
 
 func (o *orderedSynchronizer) Next(ctx context.Context) coldata.Batch {
@@ -44,6 +46,7 @@ func (o *orderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
 		for i := range o.inputs {
 			o.inputBatches[i] = o.inputs[i].Next(ctx)
+			o.updateComparators(i)
 		}
 	}
 	outputIdx := uint16(0)
@@ -82,6 +85,7 @@ func (o *orderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		} else {
 			o.inputBatches[minBatch] = o.inputs[minBatch].Next(ctx)
 			o.inputIndices[minBatch] = 0
+			o.updateComparators(minBatch)
 		}
 
 		outputIdx++
@@ -96,12 +100,27 @@ func (o *orderedSynchronizer) Init() {
 	for i := range o.inputs {
 		o.inputs[i].Init()
 	}
+	o.comparators = make([]vecComparator, len(o.ordering))
+	for i := range o.ordering {
+		typ := o.columnTypes[o.ordering[i].ColIdx]
+		o.comparators[i] = GetVecComparator(typ, len(o.inputs))
+	}
 }
 
-func (o *orderedSynchronizer) compareRow(batch1 int, batch2 int) int {
+func (o *orderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
+	batch1 := o.inputBatches[batchIdx1]
+	batch2 := o.inputBatches[batchIdx2]
+	valIdx1 := o.inputIndices[batchIdx1]
+	valIdx2 := o.inputIndices[batchIdx2]
+	if sel := batch1.Selection(); sel != nil {
+		valIdx1 = sel[valIdx1]
+	}
+	if sel := batch2.Selection(); sel != nil {
+		valIdx2 = sel[valIdx2]
+	}
 	for i := range o.ordering {
 		info := o.ordering[i]
-		res := o.compareCol(batch1, batch2, info.ColIdx)
+		res := o.comparators[i].compare(batchIdx1, batchIdx2, valIdx1, valIdx2)
 		if res != 0 {
 			switch d := info.Direction; d {
 			case encoding.Ascending:
@@ -116,45 +135,11 @@ func (o *orderedSynchronizer) compareRow(batch1 int, batch2 int) int {
 	return 0
 }
 
-func (o *orderedSynchronizer) compareCol(batchIdx1 int, batchIdx2 int, colIdx int) int {
-	batch1 := o.inputBatches[batchIdx1]
-	batch2 := o.inputBatches[batchIdx2]
-	rowIdx1 := o.inputIndices[batchIdx1]
-	rowIdx2 := o.inputIndices[batchIdx2]
-	if sel := batch1.Selection(); sel != nil {
-		rowIdx1 = sel[rowIdx1]
-	}
-	if sel := batch2.Selection(); sel != nil {
-		rowIdx2 = sel[rowIdx2]
-	}
-
-	// Handle null cases. Nulls sort before non-null values.
-	nulls1 := batch1.ColVec(colIdx).Nulls()
-	nulls2 := batch2.ColVec(colIdx).Nulls()
-	n1 := nulls1.HasNulls() && nulls1.NullAt(rowIdx1)
-	n2 := nulls2.HasNulls() && nulls2.NullAt(rowIdx2)
-	if n1 && n2 {
-		return 0
-	} else if n1 {
-		return -1
-	} else if n2 {
-		return 1
-	}
-
-	// Both values are non-null. Compare them according to type.
-	// TODO(solon): Template this to handle all types.
-	switch o.columnTypes[colIdx] {
-	case types.Int64:
-		left := batch1.ColVec(colIdx).Int64()[rowIdx1]
-		right := batch2.ColVec(colIdx).Int64()[rowIdx2]
-		if left < right {
-			return -1
-		} else if left > right {
-			return 1
-		} else {
-			return 0
-		}
-	default:
-		panic(fmt.Sprintf("unhandled type %v", o.columnTypes[colIdx]))
+// updateComparators should be run whenever a new batch is fetched. It updates
+// all the relevant vectors in o.comparators.
+func (o *orderedSynchronizer) updateComparators(batchIdx int) {
+	batch := o.inputBatches[batchIdx]
+	for i := range o.ordering {
+		o.comparators[i].setVec(batchIdx, batch.ColVecs()[o.ordering[i].ColIdx])
 	}
 }
