@@ -284,7 +284,7 @@ func (db *DB) queryAndComputeRollupsForSpan(
 		}
 		rollupDataMap[source] = rollup
 	}
-	return b.Results[0].ResumeSpan, nil
+	return b.Results[0].ResumeSpanAsValue(), nil
 }
 
 type parallelVarianceArgs struct {

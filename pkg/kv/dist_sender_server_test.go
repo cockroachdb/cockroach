@@ -207,7 +207,7 @@ func checkResumeSpanScanResults(
 		rowLen := len(res.Rows)
 		// Check that satisfied scans don't have resume spans.
 		if _, satisfied := expSatisfied[i]; satisfied {
-			if res.ResumeSpan.Key != nil || res.ResumeSpan.EndKey != nil {
+			if res.ResumeSpan != nil {
 				t.Fatalf("%s: satisfied scan %d (%s) has ResumeSpan: %v",
 					errInfo(), i, spans[i], res.ResumeSpan)
 			}
@@ -281,7 +281,7 @@ func checkResumeSpanReverseScanResults(
 		rowLen := len(res.Rows)
 		// Check that satisfied scans don't have resume spans.
 		if _, satisfied := expSatisfied[i]; satisfied {
-			if res.ResumeSpan.Key != nil || res.ResumeSpan.EndKey != nil {
+			if res.ResumeSpan != nil {
 				t.Fatalf("%s: satisfied scan %d has ResumeSpan: %v", errInfo(), i, res.ResumeSpan)
 			}
 			continue
@@ -514,7 +514,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 				if bound < maxExpCount {
 					newB := &client.Batch{}
 					for _, res := range b.Results {
-						if res.ResumeSpan.Key != nil {
+						if res.ResumeSpan != nil {
 							if !reverse {
 								newB.Scan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
 							} else {
@@ -528,7 +528,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 					// Add the results to the previous results.
 					j := 0
 					for i, res := range b.Results {
-						if res.ResumeSpan.Key != nil {
+						if res.ResumeSpan != nil {
 							b.Results[i].Rows = append(b.Results[i].Rows, newB.Results[j].Rows...)
 							b.Results[i].ResumeSpan = newB.Results[j].ResumeSpan
 							j++
@@ -640,7 +640,7 @@ func checkResumeSpanDelRangeResults(
 		if rowLen > 0 {
 			// The key can be empty once the entire span has been deleted.
 			if rowLen == len(expResults[i]) {
-				if res.ResumeSpan.Key == nil && res.ResumeSpan.EndKey == nil {
+				if res.ResumeSpan == nil {
 					// Done.
 					continue
 				}
@@ -1506,10 +1506,10 @@ func TestStopAtRangeBoundary(t *testing.T) {
 
 				// Update remaining for the next iteration; remove satisfied scans.
 				for batchIdx, res := range b.Results {
-					if res.ResumeSpan.Key == nil && res.ResumeSpan.EndKey == nil {
+					if res.ResumeSpan == nil {
 						delete(remaining, batchToOrig[batchIdx])
 					} else {
-						remaining[batchToOrig[batchIdx]] = res.ResumeSpan
+						remaining[batchToOrig[batchIdx]] = *res.ResumeSpan
 					}
 				}
 			}

@@ -270,7 +270,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			}
 			// Fill up the resume span.
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
-				result.ResumeSpan = *reply.Header().ResumeSpan
+				result.ResumeSpan = reply.Header().ResumeSpan
 				result.ResumeReason = reply.Header().ResumeReason
 				// The ResumeReason might be missing when talking to a 1.1 node; assume
 				// it's the key limit (which was the only reason why 1.1 would return a
