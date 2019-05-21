@@ -20,7 +20,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // numberChunk associates a value with a leading separator,
@@ -673,7 +673,7 @@ func (fe *fieldExtract) matchedSentinel(value time.Time, match string) error {
 // Reset replaces a value of an already-set field.
 func (fe *fieldExtract) Reset(field field, v int) error {
 	if !fe.has.Has(field) {
-		return pgerror.AssertionFailedf("field %s is not already set", field.Pretty())
+		return errors.AssertionFailedf("field %s is not already set", errors.Safe(field.Pretty()))
 	}
 	fe.data[field] = v
 	return nil
@@ -683,7 +683,7 @@ func (fe *fieldExtract) Reset(field field, v int) error {
 // the field has already been set.
 func (fe *fieldExtract) Set(field field, v int) error {
 	if !fe.wanted.Has(field) {
-		return pgerror.AssertionFailedf("field %s is not wanted in %v", field.Pretty(), fe.wanted)
+		return errors.AssertionFailedf("field %s is not wanted in %v", errors.Safe(field.Pretty()), errors.Safe(fe.wanted))
 	}
 	fe.data[field] = v
 	fe.has = fe.has.Add(field)
@@ -753,7 +753,7 @@ func (fe *fieldExtract) SetDayOfYear(chunk numberChunk) error {
 
 	y, ok := fe.Get(fieldYear)
 	if !ok {
-		return pgerror.AssertionFailedf("year must be set before day of year")
+		return errors.AssertionFailedf("year must be set before day of year")
 	}
 	y, m, d := julianDayToDate(dateToJulianDay(y, 1, 1) + chunk.v - 1)
 	if err := fe.Reset(fieldYear, y); err != nil {

@@ -1939,7 +1939,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 					" generated even though res.Err() has been set to: %s",
 				res.Err())
 			log.Error(ex.Ctx(), err)
-			err.(errorutil.UnexpectedWithIssueErr).SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV)
+			errorutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
 			return advanceInfo{}, err
 		}
 		scc := &ex.extraTxnState.schemaChangers

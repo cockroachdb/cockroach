@@ -18,49 +18,35 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
-// UnexpectedWithIssueErr indicates an error with an associated Github issue.
+// UnexpectedWithIssueErrorf indicates an error with an associated Github issue.
 // It's supposed to be used for conditions that would otherwise be checked by
 // assertions, except that they fail and we need the public's help for tracking
 // it down.
 // The error message will invite users to report repros.
-//
-// Modeled after pgerror.Unimplemented.
-type UnexpectedWithIssueErr struct {
-	issue   int
-	msg     string
-	safeMsg string
-}
-
-// UnexpectedWithIssueErrorf constructs an UnexpectedWithIssueError with the
-// provided issue and formatted message.
 func UnexpectedWithIssueErrorf(issue int, format string, args ...interface{}) error {
-	return UnexpectedWithIssueErr{
-		issue:   issue,
-		msg:     fmt.Sprintf(format, args...),
-		safeMsg: log.ReportablesToSafeError(1 /* depth */, format, args).Error(),
-	}
-}
-
-// Error implements the error interface.
-func (e UnexpectedWithIssueErr) Error() string {
-	return fmt.Sprintf("unexpected error: %s\nWe've been trying to track this particular issue down. "+
-		"Please report your reproduction at "+
-		"https://github.com/cockroachdb/cockroach/issues/%d "+
-		"unless that issue seems to have been resolved "+
-		"(in which case you might want to update crdb to a newer version).",
-		e.msg, e.issue)
-}
-
-// SafeMessage implements the SafeMessager interface.
-func (e UnexpectedWithIssueErr) SafeMessage() string {
-	return fmt.Sprintf("issue #%d: %s", e.issue, e.safeMsg)
+	err := errors.Newf(format, args...)
+	err = errors.Wrap(err, "unexpected error")
+	err = errors.WithSafeDetails(err, "issue #%d", errors.Safe(issue))
+	err = errors.WithHint(err,
+		fmt.Sprintf("We've been trying to track this particular issue down. "+
+			"Please report your reproduction at "+
+			"https://github.com/cockroachdb/cockroach/issues/%d "+
+			"unless that issue seems to have been resolved "+
+			"(in which case you might want to update crdb to a newer version).",
+			issue))
+	return err
 }
 
 // SendReport creates a Sentry report about the error, if the settings allow.
 // The format string will be reproduced ad litteram in the report; the arguments
 // will be sanitized.
-func (e UnexpectedWithIssueErr) SendReport(ctx context.Context, sv *settings.Values) {
-	log.SendCrashReport(ctx, sv, 1 /* depth */, "%s", []interface{}{e}, log.ReportTypeError)
+func SendReport(ctx context.Context, sv *settings.Values, err error) {
+	if !log.ShouldSendReport(sv) {
+		return
+	}
+	msg, details, extraDetails := errors.BuildSentryReport(err)
+	log.SendReport(ctx, msg, log.ReportTypeError, extraDetails, details...)
 }

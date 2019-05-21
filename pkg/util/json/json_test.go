@@ -22,9 +22,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 func eachPair(a, b JSON, f func(a, b JSON)) {
@@ -272,8 +272,8 @@ func TestJSONErrors(t *testing.T) {
 			if !strings.Contains(err.Error(), tc.msg) {
 				t.Fatalf("expected error message to be '%s', but was '%s'", tc.msg, err.Error())
 			}
-			if _, ok := err.(*pgerror.Error); !ok {
-				t.Fatalf("expected parsing '%s' to be a pgerror", tc.input)
+			if !errors.HasCandidateCode(err) {
+				t.Fatalf("expected parsing '%s' to provide a pg error code", tc.input)
 			}
 		})
 	}
