@@ -95,7 +95,7 @@ func registerVersion(r *registry) {
 				// Make sure everyone is still running.
 				for i := 1; i <= nodes; i++ {
 					t.WorkerStatus("checking ", i)
-					db := c.Conn(ctx, 1)
+					db := c.Conn(ctx, i)
 					defer db.Close()
 					rows, err := db.Query(`SHOW DATABASES`)
 					if err != nil {
