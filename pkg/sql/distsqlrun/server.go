@@ -396,6 +396,7 @@ func (ds *ServerImpl) setupFlow(
 				BytesEncodeFormat: be,
 				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
 			},
+			Vectorize: sessiondata.VectorizeExecMode(req.EvalContext.Vectorize),
 		}
 		// Enable better compatibility with PostgreSQL date math.
 		if req.Version >= 22 {
