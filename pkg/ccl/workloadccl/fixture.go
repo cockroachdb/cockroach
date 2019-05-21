@@ -265,6 +265,7 @@ func MakeFixture(
 	g := ctxgroup.WithContext(ctx)
 
 	for _, t := range gen.Tables() {
+		t := t
 		g.Go(func() error {
 			q := fmt.Sprintf(`BACKUP "%s"."%s" TO $1`, dbName, t.Name)
 			output := config.objectPathToURI(filepath.Join(fixtureFolder, t.Name))
