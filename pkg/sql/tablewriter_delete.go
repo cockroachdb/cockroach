@@ -142,7 +142,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	if l := len(td.b.Results); l != 1 {
 		panic(fmt.Sprintf("%d results returned", l))
 	}
-	return td.b.Results[0].ResumeSpan, nil
+	return td.b.Results[0].ResumeSpanAsValue(), nil
 }
 
 func (td *tableDeleter) deleteAllRowsScan(
@@ -235,7 +235,7 @@ func (td *tableDeleter) deleteIndexFast(
 	if l := len(td.b.Results); l != 1 {
 		panic(fmt.Sprintf("%d results returned, expected 1", l))
 	}
-	return td.b.Results[0].ResumeSpan, nil
+	return td.b.Results[0].ResumeSpanAsValue(), nil
 }
 
 func (td *tableDeleter) clearIndex(ctx context.Context, idx *sqlbase.IndexDescriptor) error {

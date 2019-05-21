@@ -316,12 +316,12 @@ func (s *Server) Query(
 // and will thus not be totally organized by series.
 func (s *Server) Dump(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpServer) error {
 	ctx := stream.Context()
-	span := roachpb.Span{
+	span := &roachpb.Span{
 		Key:    roachpb.Key(firstTSRKey),
 		EndKey: roachpb.Key(lastTSRKey),
 	}
 
-	for span.Valid() {
+	for span != nil {
 		b := &client.Batch{}
 		b.Header.MaxSpanRequestKeys = dumpBatchSize
 		b.Scan(span.Key, span.EndKey)
