@@ -108,7 +108,7 @@ func BenchmarkDeselector(b *testing.B) {
 				op.Init()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					input.resetBatchesToReturn(nBatches)
+					input.ResetBatchesToReturn(nBatches)
 					for b := op.Next(ctx); b.Length() != 0; b = op.Next(ctx) {
 					}
 					// We don't need to reset the deselector because it doesn't keep any
