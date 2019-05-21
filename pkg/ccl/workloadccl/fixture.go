@@ -258,8 +258,10 @@ func MakeFixture(
 	if _, err := sqlDB.Exec(`CREATE DATABASE IF NOT EXISTS ` + dbName); err != nil {
 		return Fixture{}, err
 	}
-	const direct, stats, csvServer = false, false, ""
-	if _, err := ImportFixture(ctx, sqlDB, gen, dbName, direct, filesPerNode, stats, csvServer); err != nil {
+	const direct, stats, skipPostLoad, csvServer = false, false, true, ""
+	if _, err := ImportFixture(
+		ctx, sqlDB, gen, dbName, direct, filesPerNode, stats, skipPostLoad, csvServer,
+	); err != nil {
 		return Fixture{}, err
 	}
 	g := ctxgroup.WithContext(ctx)
@@ -293,6 +295,7 @@ func ImportFixture(
 	directIngestion bool,
 	filesPerNode int,
 	injectStats bool,
+	skipPostLoad bool,
 	csvServer string,
 ) (int64, error) {
 	for _, t := range gen.Tables() {
@@ -339,8 +342,10 @@ func ImportFixture(
 	if err := g.Wait(); err != nil {
 		return 0, err
 	}
-	if err := runPostLoadSteps(ctx, sqlDB, gen); err != nil {
-		return 0, err
+	if !skipPostLoad {
+		if err := runPostLoadSteps(ctx, sqlDB, gen); err != nil {
+			return 0, err
+		}
 	}
 	return atomic.LoadInt64(&bytesAtomic), nil
 }
@@ -449,13 +454,12 @@ func RestoreFixture(
 ) (int64, error) {
 	var bytesAtomic int64
 	g := ctxgroup.WithContext(ctx)
+	genName := fixture.Generator.Meta().Name
 	for _, table := range fixture.Tables {
 		table := table
 		g.GoCtx(func(ctx context.Context) error {
-			// The IMPORT ... CSV DATA command generates a backup with the table in
-			// database `csv`.
 			start := timeutil.Now()
-			importStmt := fmt.Sprintf(`RESTORE csv.%s FROM $1 WITH into_db=$2`, table.TableName)
+			importStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
 			var rows, index, tableBytes int64
 			var discard interface{}
 			if err := sqlDB.QueryRow(importStmt, table.BackupURI, database).Scan(
