@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 func registerVersion(r *registry) {
@@ -103,6 +104,10 @@ func registerVersion(r *registry) {
 					}
 					if err := rows.Close(); err != nil {
 						return err
+					}
+					// Regression test for #37425.
+					if err := c.CheckReplicaDivergenceOnDB(ctx, db); err != nil {
+						return errors.Wrapf(err, "node %d", i)
 					}
 				}
 				return nil

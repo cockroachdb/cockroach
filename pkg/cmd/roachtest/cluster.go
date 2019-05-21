@@ -1041,39 +1041,75 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 	})
 }
 
-// FailOnReplicaDivergence fails the test if
-// crdb_internal.check_consistency(true, '', '') indicates that any ranges'
-// replicas are inconsistent with each other.
-func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
-	if c.nodes < 1 {
-		return // unit tests
-	}
-	// TODO(tbg): n1 isn't necessarily online at this point. Try to sniff out
-	// a node that is.
-	db := c.Conn(ctx, 1)
-	defer db.Close()
-
-	c.l.Printf("running (fast) consistency checks")
+// CheckReplicaDivergenceOnDB runs a fast consistency check of the whole keyspace
+// against the provided db. If an inconsistency is found, it returns it in the
+// error. Note that this will swallow errors returned directly from the consistency
+// check since we know that such spurious errors are possibly without any relation
+// to the check having failed.
+func (c *cluster) CheckReplicaDivergenceOnDB(ctx context.Context, db *gosql.DB) error {
 	rows, err := db.QueryContext(ctx, `
 SELECT t.range_id, t.start_key_pretty, t.status, t.detail
 FROM
 crdb_internal.check_consistency(true, '', '') as t
 WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 	if err != nil {
-		c.l.Printf("%s", err)
-		return
+		// TODO(tbg): the checks can fail for silly reasons like missing gossiped
+		// descriptors, etc. -- not worth failing the test for. Ideally this would
+		// be rock solid.
+		c.l.Printf("consistency check failed with %v; ignoring", err)
+		return nil
 	}
+	var buf bytes.Buffer
 	for rows.Next() {
 		var rangeID int32
 		var prettyKey, status, detail string
 		if err := rows.Scan(&rangeID, &prettyKey, &status, &detail); err != nil {
-			c.l.Printf("%s", err)
-			break
+			return err
 		}
-		t.Fatalf("r%d (%s) is inconsistent: %s %s", rangeID, prettyKey, status, detail)
+		fmt.Fprintf(&buf, "r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail)
 	}
 	if err := rows.Err(); err != nil {
-		c.l.Printf("%s", err)
+		return err
+	}
+
+	msg := buf.String()
+	if msg != "" {
+		return errors.New(msg)
+	}
+	return nil
+}
+
+// FailOnReplicaDivergence fails the test if
+// crdb_internal.check_consistency(true, '', '') indicates that any ranges'
+// replicas are inconsistent with each other. It uses the first node that
+// is up to run the query.
+func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
+	if c.nodes < 1 {
+		return // unit tests
+	}
+
+	// Find a live node to run against, if one exists.
+	var db *gosql.DB
+	for i := 1; i <= c.nodes; i++ {
+		db = c.Conn(ctx, i)
+		_, err := db.Exec(`SELECT 1`)
+		if err != nil {
+			_ = db.Close()
+			db = nil
+			continue
+		}
+		c.l.Printf("running (fast) consistency checks on node %d", i)
+		break
+	}
+	if db == nil {
+		c.l.Printf("no live node found, skipping consistency check")
+		return
+	}
+
+	defer db.Close()
+
+	if err := c.CheckReplicaDivergenceOnDB(ctx, db); err != nil {
+		t.Fatal(err)
 	}
 }
 
