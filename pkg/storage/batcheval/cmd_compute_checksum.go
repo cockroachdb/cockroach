@@ -42,7 +42,7 @@ func declareKeysComputeChecksum(
 // Version numbers for Replica checksum computation. Requests silently no-op
 // unless the versions are compatible.
 const (
-	ReplicaChecksumVersion    = 3
+	ReplicaChecksumVersion    = 4
 	ReplicaChecksumGCInterval = time.Hour
 )
 

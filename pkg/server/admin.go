@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -1353,12 +1354,12 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return nil
 	}
 
-	s.server.grpc.Stop()
-
 	go func() {
-		// The explicit closure here allows callers.Lookup() to return something
-		// sensible referring to this file (otherwise it ends up in runtime
-		// internals).
+		// TODO(tbg): why don't we stop the stopper first? Stopping the stopper
+		// first seems more reasonable since grpc.Stop closes the listener right
+		// away (and who knows whether gRPC-goroutines are tied up in some
+		// stopper task somewhere).
+		s.server.grpc.Stop()
 		s.server.stopper.Stop(ctx)
 	}()
 
@@ -1367,6 +1368,23 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-time.After(10 * time.Second):
+		// This is a hack to work around the problem in
+		// https://github.com/cockroachdb/cockroach/issues/37425#issuecomment-494336131
+		//
+		// There appear to be deadlock scenarios in which we don't manage to
+		// fully stop the grpc server (which implies closing the listener, i.e.
+		// seeming dead to the outside world) or don't manage to shut down the
+		// stopper (the evidence in #37425 is inconclusive which one it is).
+		//
+		// Other problems in this area are known, such as
+		// https://github.com/cockroachdb/cockroach/pull/31692
+		//
+		// The signal-based shutdown path uses a similar time-based escape hatch.
+		// Until we spend (potentially lots of time to) understand and fix this
+		// issue, this will serve us well.
+		os.Exit(1)
+		return errors.New("unreachable")
 	}
 }
 

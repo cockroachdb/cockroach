@@ -26,6 +26,7 @@ const (
 	directIngestion  = true
 	oneFilePerNode   = 1
 	noInjectStats    = false
+	noSkipPostLoad   = false
 	skipCSVRoundtrip = ``
 )
 
@@ -84,7 +85,8 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
 
 			if _, err := workloadccl.ImportFixture(
-				ctx, db, gen, `d`, directIngestion, oneFilePerNode, noInjectStats, skipCSVRoundtrip,
+				ctx, db, gen, `d`, directIngestion, oneFilePerNode, noInjectStats, noSkipPostLoad,
+				skipCSVRoundtrip,
 			); err != nil {
 				t.Fatal(err)
 			}
