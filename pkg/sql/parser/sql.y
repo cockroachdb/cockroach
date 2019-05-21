@@ -1170,13 +1170,11 @@ alter_sequence_stmt:
 alter_sequence_options_stmt:
   ALTER SEQUENCE sequence_name sequence_option_list
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.AlterSequence{Name: name, Options: $4.seqOpts(), IfExists: false}
+    $$.val = &tree.AlterSequence{Name: $3.unresolvedObjectName(), Options: $4.seqOpts(), IfExists: false}
   }
 | ALTER SEQUENCE IF EXISTS sequence_name sequence_option_list
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.AlterSequence{Name: name, Options: $6.seqOpts(), IfExists: true}
+    $$.val = &tree.AlterSequence{Name: $5.unresolvedObjectName(), Options: $6.seqOpts(), IfExists: true}
   }
 
 // %Help: ALTER USER - change user properties
@@ -2005,8 +2003,7 @@ comment_stmt:
   }
 | COMMENT ON TABLE table_name IS comment_text
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CommentOnTable{Table: name, Comment: $6.strPtr()}
+    $$.val = &tree.CommentOnTable{Table: $4.unresolvedObjectName(), Comment: $6.strPtr()}
   }
 | COMMENT ON COLUMN column_path IS comment_text
   {
@@ -2154,8 +2151,7 @@ opt_stats_columns:
 create_stats_target:
   table_name
   {
-    name := $1.unresolvedObjectName().ToTableName()
-    $$.val = &name
+    $$.val = $1.unresolvedObjectName()
   }
 | '[' iconst64 ']'
   {
@@ -2839,10 +2835,9 @@ scrub_database_stmt:
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE table_name opt_as_of_clause opt_scrub_options_clause
   {
-    name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.Scrub{
       Typ: tree.ScrubTable,
-      Table: name,
+      Table: $4.unresolvedObjectName(),
       AsOf: $5.asOfClause(),
       Options: $6.scrubOptions(),
     }
@@ -3205,14 +3200,12 @@ session_var:
 show_stats_stmt:
   SHOW STATISTICS FOR TABLE table_name
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowTableStats{Table: name}
+    $$.val = &tree.ShowTableStats{Table: $5.unresolvedObjectName()}
   }
 | SHOW STATISTICS USING JSON FOR TABLE table_name
   {
     /* SKIP DOC */
-    name := $7.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowTableStats{Table: name, UsingJSON: true}
+    $$.val = &tree.ShowTableStats{Table: $7.unresolvedObjectName(), UsingJSON: true}
   }
 | SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
 
@@ -3294,8 +3287,7 @@ show_csettings_stmt:
 show_columns_stmt:
   SHOW COLUMNS FROM table_name with_comment
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowColumns{Table: name, WithComment: $5.bool()}
+    $$.val = &tree.ShowColumns{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW COLUMNS error // SHOW HELP: SHOW COLUMNS
 
@@ -3338,20 +3330,17 @@ show_grants_stmt:
 show_indexes_stmt:
   SHOW INDEX FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowIndex{Table: name}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
   }
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
 | SHOW INDEXES FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowIndex{Table: name}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowIndex{Table: name}
+    $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 
@@ -3362,14 +3351,12 @@ show_indexes_stmt:
 show_constraints_stmt:
   SHOW CONSTRAINT FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowConstraints{Table: name}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
   }
 | SHOW CONSTRAINT error // SHOW HELP: SHOW CONSTRAINTS
 | SHOW CONSTRAINTS FROM table_name
   {
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowConstraints{Table: name}
+    $$.val = &tree.ShowConstraints{Table: $4.unresolvedObjectName()}
   }
 | SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
 
@@ -3558,14 +3545,12 @@ show_transaction_stmt:
 show_create_stmt:
   SHOW CREATE table_name
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowCreate{Name: name}
+    $$.val = &tree.ShowCreate{Name: $3.unresolvedObjectName()}
   }
 | SHOW CREATE create_kw table_name
   {
     /* SKIP DOC */
-    name := $4.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowCreate{Name: name}
+    $$.val = &tree.ShowCreate{Name: $4.unresolvedObjectName()}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
@@ -3669,8 +3654,7 @@ show_fingerprints_stmt:
   SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
   {
     /* SKIP DOC */
-    name := $5.unresolvedObjectName().ToTableName()
-    $$.val = &tree.ShowFingerprints{Table: name}
+    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
   }
 
 opt_on_targets_roles:
@@ -4850,42 +4834,42 @@ alter_user_password_stmt:
 alter_rename_table_stmt:
   ALTER TABLE relation_expr RENAME TO table_name
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    newName := $6.unresolvedObjectName().ToTableName()
+    name := $3.unresolvedObjectName()
+    newName := $6.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsView: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO table_name
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    newName := $8.unresolvedObjectName().ToTableName()
+    name := $5.unresolvedObjectName()
+    newName := $8.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: false}
   }
 
 alter_rename_view_stmt:
   ALTER VIEW relation_expr RENAME TO view_name
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    newName := $6.unresolvedObjectName().ToTableName()
+    name := $3.unresolvedObjectName()
+    newName := $6.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsView: true}
   }
 | ALTER VIEW IF EXISTS relation_expr RENAME TO view_name
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    newName := $8.unresolvedObjectName().ToTableName()
+    name := $5.unresolvedObjectName()
+    newName := $8.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: true}
   }
 
 alter_rename_sequence_stmt:
   ALTER SEQUENCE relation_expr RENAME TO sequence_name
   {
-    name := $3.unresolvedObjectName().ToTableName()
-    newName := $6.unresolvedObjectName().ToTableName()
+    name := $3.unresolvedObjectName()
+    newName := $6.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsSequence: true}
   }
 | ALTER SEQUENCE IF EXISTS relation_expr RENAME TO sequence_name
   {
-    name := $5.unresolvedObjectName().ToTableName()
-    newName := $8.unresolvedObjectName().ToTableName()
+    name := $5.unresolvedObjectName()
+    newName := $8.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsSequence: true}
   }
 

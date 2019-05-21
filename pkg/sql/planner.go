@@ -396,7 +396,12 @@ func (p *planner) ParseType(sql string) (*types.T, error) {
 func (p *planner) ParseQualifiedTableName(
 	ctx context.Context, sql string,
 ) (*tree.TableName, error) {
-	return parser.ParseTableName(sql)
+	name, err := parser.ParseTableName(sql)
+	if err != nil {
+		return nil, err
+	}
+	tn := name.ToTableName()
+	return &tn, nil
 }
 
 // ResolveTableName implements the tree.EvalDatabase interface.

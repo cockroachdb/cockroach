@@ -38,8 +38,8 @@ type renameTableNode struct {
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
-	oldTn := &n.Name
-	newTn := &n.NewName
+	oldTn := n.Name.ToTableName()
+	newTn := n.NewName.ToTableName()
 	toRequire := ResolveRequireTableOrViewDesc
 	if n.IsView {
 		toRequire = ResolveRequireViewDesc
@@ -47,7 +47,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		toRequire = ResolveRequireSequenceDesc
 	}
 
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, oldTn, !n.IfExists, toRequire)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, toRequire)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-		return nil, sqlbase.NewUndefinedRelationError(oldTn)
+		return nil, sqlbase.NewUndefinedRelationError(&oldTn)
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
@@ -73,7 +73,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 			ctx, tableDesc.TypeName(), oldTn.String(), tableDesc.ParentID, tableDesc.DependedOnBy[0].ID)
 	}
 
-	return &renameTableNode{n: n, oldTn: oldTn, newTn: newTn, tableDesc: tableDesc}, nil
+	return &renameTableNode{n: n, oldTn: &oldTn, newTn: &newTn, tableDesc: tableDesc}, nil
 }
 
 func (n *renameTableNode) startExec(params runParams) error {

@@ -103,12 +103,14 @@ func (n *scrubNode) startExec(params runParams) error {
 	case tree.ScrubTable:
 		// If the tableName provided refers to a view and error will be
 		// returned here.
-		tableDesc, err := ResolveExistingObject(
-			params.ctx, params.p, &n.n.Table, true /*required*/, ResolveRequireTableDesc)
+		tableDesc, err := params.p.ResolveExistingObjectEx(
+			params.ctx, n.n.Table, true /*required*/, ResolveRequireTableDesc)
 		if err != nil {
 			return err
 		}
-		if err := n.startScrubTable(params.ctx, params.p, tableDesc, &n.n.Table); err != nil {
+		if err := n.startScrubTable(
+			params.ctx, params.p, tableDesc, params.p.ResolvedName(n.n.Table),
+		); err != nil {
 			return err
 		}
 	case tree.ScrubDatabase:
