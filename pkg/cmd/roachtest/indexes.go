@@ -18,15 +18,19 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 func registerNIndexes(r *registry, secondaryIndexes int) {
 	const nodes = 6
-	const geoZones = "us-west1-b,us-east1-b,us-central1-a"
+	geoZones := []string{"us-west1-b", "us-east1-b", "us-central1-a"}
+	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
-		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(geoZones)),
+		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(geoZonesStr)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			firstAZ := geoZones[0]
 			lastNodeInFirstAZ := nodes / 3
 			var roachNodes, gatewayNodes, loadNode nodeListOption
 			for i := 0; i < c.nodes; i++ {
@@ -48,14 +52,26 @@ func registerNIndexes(r *registry, secondaryIndexes int) {
 			t.Status("running workload")
 			m := newMonitor(ctx, c, roachNodes)
 			m.Go(func(ctx context.Context) error {
-				payload := " --payload=256"
-				indexes := " --secondary-indexes=" + fmt.Sprint(secondaryIndexes)
-				concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*32))
-				duration := " --duration=" + ifLocal("10s", "30m")
+				secondary := " --secondary-indexes=" + strconv.Itoa(secondaryIndexes)
+				initCmd := "./workload init indexes" + secondary + " {pgurl:1}"
+				c.Run(ctx, loadNode, initCmd)
 
-				cmd := fmt.Sprintf("./workload run indexes --init --histograms=logs/stats.json"+
-					payload+indexes+concurrency+duration+" {pgurl%s}", gatewayNodes)
-				c.Run(ctx, loadNode, cmd)
+				// Set lease preferences so that all leases for the table are
+				// located in the availability zone with the load generator.
+				if !local {
+					leasePrefs := fmt.Sprintf(`ALTER TABLE indexes.indexes
+						                       CONFIGURE ZONE USING
+						                       constraints = COPY FROM PARENT,
+						                       lease_preferences = '[[+zone=%s]]'`, firstAZ)
+					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "`+leasePrefs+`"`)
+				}
+
+				payload := " --payload=256"
+				concurrency := ifLocal("", " --concurrency="+strconv.Itoa(nodes*32))
+				duration := " --duration=" + ifLocal("10s", "30m")
+				runCmd := fmt.Sprintf("./workload run indexes --histograms=logs/stats.json"+
+					payload+concurrency+duration+" {pgurl%s}", gatewayNodes)
+				c.Run(ctx, loadNode, runCmd)
 				return nil
 			})
 			m.Wait()
