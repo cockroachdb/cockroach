@@ -699,8 +699,8 @@ func upgradeDescsWithFn(
 	// use multiple transactions to prevent blocking reads on the
 	// table descriptors while running this upgrade process.
 	startKey := sqlbase.MakeAllDescsMetadataKey()
-	span := roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()}
-	for resumeSpan := (roachpb.Span{}); span.Key != nil; span = resumeSpan {
+	span := &roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()}
+	for span != nil {
 		// It's safe to use multiple transactions here because it is assumed
 		// that a new table created will be created upgraded.
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -714,7 +714,7 @@ func upgradeDescsWithFn(
 			result := b.Results[0]
 			kvs := result.Rows
 			// Store away the span for the next batch.
-			resumeSpan = result.ResumeSpan
+			span = result.ResumeSpan
 
 			var idVersions []sql.IDVersion
 			var now hlc.Timestamp

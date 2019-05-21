@@ -135,9 +135,9 @@ type Result struct {
 	// sequence of operations. It is returned whenever an operation over a
 	// span of keys is bounded and the operation returns before completely
 	// running over the span. It allows the operation to be called again with
-	// a new shorter span of keys. An empty span is returned when the
-	// operation has successfully completed running through the span.
-	ResumeSpan roachpb.Span
+	// a new shorter span of keys. A nil span is set when the operation has
+	// successfully completed running through the span.
+	ResumeSpan *roachpb.Span
 	// When ResumeSpan is populated, this specifies the reason why the operation
 	// wasn't completed and needs to be resumed.
 	ResumeReason roachpb.ResponseHeader_ResumeReason
@@ -147,6 +147,15 @@ type Result struct {
 	// This is only populated if Err == nil and if ReturnRangeInfo has been set on
 	// the request.
 	RangeInfos []roachpb.RangeInfo
+}
+
+// ResumeSpanAsValue returns the resume span as a value if one is set,
+// or an empty span if one is not set.
+func (r *Result) ResumeSpanAsValue() roachpb.Span {
+	if r.ResumeSpan == nil {
+		return roachpb.Span{}
+	}
+	return *r.ResumeSpan
 }
 
 func (r Result) String() string {
