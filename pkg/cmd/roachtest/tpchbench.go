@@ -17,6 +17,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -88,13 +92,13 @@ func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 
 		t.l.Printf("running %s benchmark on tpch scale-factor=%d", filename, b.ScaleFactor)
 
-		queries, err := querybench.GetQueries(filename)
+		numQueries, err := getNumQueriesInFile(filename, url)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// maxOps flag will allow us to exit the workload once all the queries were
 		// run b.numRunsPerQuery number of times.
-		maxOps := b.numRunsPerQuery * len(queries)
+		maxOps := b.numRunsPerQuery * numQueries
 
 		// Run with only one worker to get best-case single-query performance.
 		cmd := fmt.Sprintf(
@@ -112,6 +116,47 @@ func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 		return nil
 	})
 	m.Wait()
+}
+
+// getNumQueriesInFile downloads a file that url points to, stores it at a
+// temporary location, parses it using querybench, and deletes the file. It
+// returns the number of queries in the file.
+func getNumQueriesInFile(filename, url string) (int, error) {
+	tempFile, err := downloadFile(filename, url)
+	if err != nil {
+		return 0, err
+	}
+	// Use closure to make linter happy about unchecked error.
+	defer func() {
+		_ = os.Remove(tempFile.Name())
+	}()
+
+	queries, err := querybench.GetQueries(tempFile.Name())
+	if err != nil {
+		return 0, err
+	}
+	return len(queries), nil
+}
+
+// downloadFile will download a url as a local temporary file.
+func downloadFile(filename string, url string) (*os.File, error) {
+	// Get the data.
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Create the file.
+	out, err := ioutil.TempFile(`` /* dir */, filename)
+	if err != nil {
+		return nil, err
+	}
+	defer out.Close()
+
+	// Write the body to file.
+	_, err = io.Copy(out, resp.Body)
+	return out, err
 }
 
 // loadTPCHBench loads a TPC-H dataset for the specific benchmark spec. The
