@@ -194,7 +194,12 @@ type importSequenceOperators struct {
 func (so *importSequenceOperators) ParseQualifiedTableName(
 	ctx context.Context, sql string,
 ) (*tree.TableName, error) {
-	return parser.ParseTableName(sql)
+	name, err := parser.ParseTableName(sql)
+	if err != nil {
+		return nil, err
+	}
+	tn := name.ToTableName()
+	return &tn, nil
 }
 
 // Implements the tree.EvalDatabase interface.

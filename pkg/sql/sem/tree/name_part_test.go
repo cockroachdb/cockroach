@@ -52,13 +52,14 @@ func TestUnresolvedObjectName(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.in, func(t *testing.T) {
-			tn, err := parser.ParseTableName(tc.in)
+			name, err := parser.ParseTableName(tc.in)
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
 			}
 			if tc.err != "" {
 				return
 			}
+			tn := name.ToTableName()
 			if out := tn.String(); tc.out != out {
 				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.out, out)
 			}
@@ -93,11 +94,12 @@ func TestUnresolvedNameAnnotation(t *testing.T) {
 	// No annotation set.
 	expect("t")
 
-	tn, err := parser.ParseTableName("db.public.t")
+	name, err := parser.ParseTableName("db.public.t")
 	if err != nil {
 		t.Fatal(err)
 	}
-	u.SetAnnotation(&ann, tn)
+	tn := name.ToTableName()
+	u.SetAnnotation(&ann, &tn)
 
 	expect("db.public.t")
 

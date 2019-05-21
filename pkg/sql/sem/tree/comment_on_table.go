@@ -18,14 +18,14 @@ import "github.com/cockroachdb/cockroach/pkg/sql/lex"
 
 // CommentOnTable represents an COMMENT ON TABLE statement.
 type CommentOnTable struct {
-	Table   TableName
+	Table   *UnresolvedObjectName
 	Comment *string
 }
 
 // Format implements the NodeFormatter interface.
 func (n *CommentOnTable) Format(ctx *FmtCtx) {
 	ctx.WriteString("COMMENT ON TABLE ")
-	ctx.FormatNode(&n.Table)
+	ctx.FormatNode(n.Table)
 	ctx.WriteString(" IS ")
 	if n.Comment != nil {
 		lex.EncodeSQLStringWithFlags(&ctx.Buffer, *n.Comment, ctx.flags.EncodeFlags())

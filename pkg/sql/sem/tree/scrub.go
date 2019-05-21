@@ -31,7 +31,7 @@ type Scrub struct {
 	Typ     ScrubType
 	Options ScrubOptions
 	// Table is only set during SCRUB TABLE statements.
-	Table TableName
+	Table *UnresolvedObjectName
 	// Database is only set during SCRUB DATABASE statements.
 	Database Name
 	AsOf     AsOfClause

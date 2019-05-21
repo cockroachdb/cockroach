@@ -155,15 +155,12 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	var fqTableName string
 	var err error
 	switch t := n.Table.(type) {
-	case *tree.TableName:
-		// TODO(anyone): if CREATE STATISTICS is meant to be able to operate
-		// within a transaction, then the following should probably run with
-		// caching disabled, like other DDL statements.
-		tableDesc, err = ResolveExistingObject(ctx, n.p, t, true /*required*/, ResolveRequireTableDesc)
+	case *tree.UnresolvedObjectName:
+		tableDesc, err = n.p.ResolveExistingObjectEx(ctx, t, true /*required*/, ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}
-		fqTableName = t.FQString()
+		fqTableName = n.p.ResolvedName(t).FQString()
 
 	case *tree.TableRef:
 		flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{

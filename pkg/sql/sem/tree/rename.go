@@ -41,8 +41,8 @@ func (node *RenameDatabase) Format(ctx *FmtCtx) {
 // Whether the user has asked to rename a table or view is indicated
 // by the IsView field.
 type RenameTable struct {
-	Name       TableName
-	NewName    TableName
+	Name       *UnresolvedObjectName
+	NewName    *UnresolvedObjectName
 	IfExists   bool
 	IsView     bool
 	IsSequence bool
@@ -61,9 +61,9 @@ func (node *RenameTable) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(&node.Name)
+	ctx.FormatNode(node.Name)
 	ctx.WriteString(" RENAME TO ")
-	ctx.FormatNode(&node.NewName)
+	ctx.FormatNode(node.NewName)
 }
 
 // RenameIndex represents a RENAME INDEX statement.

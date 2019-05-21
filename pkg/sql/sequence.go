@@ -310,17 +310,18 @@ func maybeAddSequenceDependencies(
 		if err != nil {
 			return nil, err
 		}
+		tn := parsedSeqName.ToTableName()
 
 		var seqDesc *MutableTableDescriptor
 		p, ok := sc.(*planner)
 		if ok {
-			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, parsedSeqName, true /*required*/, ResolveRequireSequenceDesc)
+			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			// This is only executed via IMPORT which uses its own resolver.
-			seqDesc, err = ResolveMutableExistingObject(ctx, sc, parsedSeqName, true /*required*/, ResolveRequireSequenceDesc)
+			seqDesc, err = ResolveMutableExistingObject(ctx, sc, &tn, true /*required*/, ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}
