@@ -16,7 +16,6 @@ package colserde
 
 import (
 	"fmt"
-	"math"
 	"reflect"
 	"unsafe"
 
@@ -78,7 +77,6 @@ const (
 	sizeOfInt16   = int(unsafe.Sizeof(int16(0)))
 	sizeOfInt32   = int(unsafe.Sizeof(int32(0)))
 	sizeOfInt64   = int(unsafe.Sizeof(int64(0)))
-	sizeOfUint64  = int(unsafe.Sizeof(uint64(0)))
 	sizeOfFloat32 = int(unsafe.Sizeof(float32(0)))
 	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
 )
@@ -97,20 +95,10 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 
 		var arrowBitmap []byte
 		if vec.HasNulls() {
-			// Cast null bitmap.
-			vecBitmap := vec.Nulls().NullBitmap()
-			vecBitmapHeader := (*reflect.SliceHeader)(unsafe.Pointer(&vecBitmap))
-			arrowBitmapHeader := (*reflect.SliceHeader)(unsafe.Pointer(&arrowBitmap))
-			arrowBitmapHeader.Data = vecBitmapHeader.Data
-			arrowBitmapHeader.Len = vecBitmapHeader.Len * sizeOfUint64
-			arrowBitmapHeader.Cap = vecBitmapHeader.Cap * sizeOfUint64
-
-			// Per the arrow spec, null bitmaps represent a null value as an unset
-			// bit, which is the opposite of what we do, so invert the bitmap.
-			// TODO(asubiotto): Transition to using arrow bitmap semantics.
-			for i := range arrowBitmap {
-				arrowBitmap[i] = arrowBitmap[i] ^ math.MaxUint8
-			}
+			n := vec.Nulls()
+			// To conform to the Arrow spec, zero out all trailing null values.
+			n.Truncate(batch.Length())
+			arrowBitmap = n.NullBitmap()
 		}
 
 		if typ == types.Bool || typ == types.Bytes {
@@ -272,36 +260,9 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data) (coldata.Batch, e
 			}
 			vec.SetCol(col)
 		}
-
-		// TODO(asubiotto): We can skip the rest of this logic if arr.NullN() == 0.
-		// However, we don't keep track of the number of nulls in coldata.Vec yet,
-		// so cannot set the number of nulls properly on []*array.Data. Therefore,
-		// arr.NullN() on a converted coldata.Vec is meaningless.
-
 		arrowBitmap := arr.NullBitmapBytes()
 		if len(arrowBitmap) != 0 {
-			// Similar to BatchToArrow, our bitmap representations are currently the
-			// inverse of arrow, so convert them back.
-			// TODO(asubiotto): Transition to using arrow bitmap semantics.
-			endIdx := ((n - 1) >> 3) + 1
-			for i := range arrowBitmap[:endIdx] {
-				arrowBitmap[i] = arrowBitmap[i] ^ math.MaxUint8
-			}
-			// After n elements, the bitmap is unset, so we have to clear the
-			// remaining bits in the last element we iterated over.
-			mod := n & 7
-			if mod != 0 {
-				arrowBitmap[endIdx-1] = arrowBitmap[endIdx-1] ^ (math.MaxUint8 << uint8(mod))
-			}
-
-			var vecBitmap []uint64
-			arrowBitmapHeader := (*reflect.SliceHeader)(unsafe.Pointer(&arrowBitmap))
-			vecBitmapHeader := (*reflect.SliceHeader)(unsafe.Pointer(&vecBitmap))
-			vecBitmapHeader.Data = arrowBitmapHeader.Data
-			vecBitmapHeader.Len = arrowBitmapHeader.Len / sizeOfUint64
-			vecBitmapHeader.Cap = arrowBitmapHeader.Cap / sizeOfUint64
-
-			vec.Nulls().SetNullBitmap(vecBitmap)
+			vec.Nulls().SetNullBitmap(arrowBitmap)
 		}
 	}
 	c.scratch.batch.SetLength(uint16(n))
