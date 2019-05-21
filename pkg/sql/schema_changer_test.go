@@ -4246,6 +4246,8 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 	defer server.Stopper().Stop(context.TODO())
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 
+	sqlRun.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+
 	sqlRun.Exec(t, `
 		CREATE DATABASE t;
 		CREATE TABLE t.test (k INT PRIMARY KEY, v CHAR, w CHAR);`)
