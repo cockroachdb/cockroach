@@ -330,17 +330,17 @@ CREATE TABLE foo (a INT PRIMARY KEY); INSERT INTO foo VALUES(1)
 statement ok
 ALTER TABLE foo SPLIT AT VALUES(2)
 
-query TTB colnames
-SELECT start_pretty, end_pretty, manual_split_time IS NOT NULL AS manually_split FROM crdb_internal.ranges WHERE table_name = 'foo'
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE manual_split_time IS NOT NULL
 ----
-start_pretty   end_pretty     manually_split
-/Table/56/1/2  /Max           true
+start_pretty   end_pretty
+/Table/56/1/2  /Max
 
-query TTB colnames
-SELECT start_pretty, end_pretty, manual_split_time IS NOT NULL AS manually_split FROM crdb_internal.ranges_no_leases WHERE table_name = 'foo'
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE manual_split_time IS NOT NULL
 ----
-start_pretty   end_pretty     manually_split
-/Table/56/1/2  /Max           true
+start_pretty   end_pretty
+/Table/56/1/2  /Max
 
 # Make sure that the cluster id isn't unset.
 query B
