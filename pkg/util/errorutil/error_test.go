@@ -14,22 +14,31 @@
 
 package errorutil
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func TestUnexpectedWithIssueErrorf(t *testing.T) {
 	err := UnexpectedWithIssueErrorf(1234, "args: %d %s %f", 1, "two", 3.0)
-	exp := "unexpected error: args: 1 two 3.000000\n" +
-		"We've been trying to track this particular issue down. Please report your " +
+	exp := "unexpected error: args: 1 two 3.000000"
+	if err.Error() != exp {
+		t.Errorf("expected message:\n  %s\ngot:\n  %s", exp, err.Error())
+	}
+
+	safeMsg := fmt.Sprintf("%+v", err)
+	reqHint := "We've been trying to track this particular issue down. Please report your " +
 		"reproduction at https://github.com/cockroachdb/cockroach/issues/1234 unless " +
 		"that issue seems to have been resolved (in which case you might want to " +
 		"update crdb to a newer version)."
-	if err.Error() != exp {
-		t.Errorf("Expected message:\n  %s\ngot:\n  %s", exp, err.Error())
+	if !strings.Contains(safeMsg, reqHint) {
+		t.Errorf("expected substring in error\n%s\ngot:\n%s", exp, safeMsg)
 	}
 
-	safeMsg := err.(UnexpectedWithIssueErr).SafeMessage()
-	exp = "issue #1234: error_test.go:20: args: %d %s %f | int; string; float64"
-	if safeMsg != exp {
-		t.Errorf("Expected SafeMessage:\n%s\ngot:\n%s", exp, safeMsg)
+	// Check that the issue number is present in the safe details.
+	exp = "-- safe details:\nissue #%d\n-- arg 0: 1234"
+	if !strings.Contains(safeMsg, exp) {
+		t.Errorf("expected substring in error\n%s\ngot:\n%s", exp, safeMsg)
 	}
 }

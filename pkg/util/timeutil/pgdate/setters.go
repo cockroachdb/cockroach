@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/errors"
 )
 
 // The functions in this file are used by fieldExtract.Extract().
@@ -170,5 +170,5 @@ func fieldSetterUTC(fe *fieldExtract, _ string) error {
 // fieldSetterUnsupportedAbbreviation always returns an error, but
 // captures the abbreviation in telemetry.
 func fieldSetterUnsupportedAbbreviation(_ *fieldExtract, s string) error {
-	return pgerror.UnimplementedWithIssueDetail(31710, s, "timestamp abbreviations not supported")
+	return errors.UnimplementedWithIssueDetail(31710, s, "timestamp abbreviations not supported")
 }

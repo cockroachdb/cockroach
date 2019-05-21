@@ -32,8 +32,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -107,13 +108,14 @@ func MakeDateFromTime(t time.Time) (Date, error) {
 	return d, err
 }
 
+var errDateOutOfRange = errors.WithCandidateCode(errors.New("date is out of range"), pgcode.DatetimeFieldOverflow)
+
 // MakeDateFromUnixEpoch creates a Date from the number of days since the
 // Unix epoch.
 func MakeDateFromUnixEpoch(days int64) (Date, error) {
 	days, ok := arith.SubWithOverflow(days, unixEpochToPGEpoch)
 	if !ok || days <= math.MinInt32 || days >= math.MaxInt32 {
-		return Date{}, pgerror.New(pgerror.CodeDatetimeFieldOverflowError,
-			"date is out of range")
+		return Date{}, errDateOutOfRange
 	}
 	return MakeDateFromPGEpoch(int32(days))
 }
@@ -129,8 +131,7 @@ func MakeDateFromPGEpoch(days int32) (Date, error) {
 		return NegInfDate, nil
 	}
 	if days < lowDays || days > highDays {
-		return Date{}, pgerror.New(pgerror.CodeDatetimeFieldOverflowError,
-			"date is out of range")
+		return Date{}, errDateOutOfRange
 	}
 	return Date{days: days}, nil
 }
@@ -138,8 +139,8 @@ func MakeDateFromPGEpoch(days int32) (Date, error) {
 // ToTime returns d as a time.Time. Non finite dates return an error.
 func (d Date) ToTime() (time.Time, error) {
 	if d.days == math.MinInt32 || d.days == math.MaxInt32 {
-		return time.Time{}, pgerror.Newf(pgerror.CodeDatetimeFieldOverflowError,
-			"%s out of range for timestamp", d)
+		return time.Time{}, errors.WithCandidateCode(
+			errors.Newf("%s out of range for timestamp", d), pgcode.DatetimeFieldOverflow)
 	}
 	return timeutil.Unix(d.UnixEpochDays()*secondsPerDay, 0), nil
 }
@@ -225,8 +226,9 @@ func (d Date) AddDays(days int64) (Date, error) {
 	}
 	n, ok := arith.Add32to64WithOverflow(d.days, days)
 	if !ok {
-		return Date{}, pgerror.Newf(pgerror.CodeDatetimeFieldOverflowError,
-			"%s + %d is out of range", d, days)
+		return Date{}, errors.WithCandidateCode(
+			errors.Newf("%s + %d is out of range", d, errors.Safe(days)),
+			pgcode.DatetimeFieldOverflow)
 	}
 	return MakeDateFromPGEpoch(n)
 }
@@ -238,8 +240,9 @@ func (d Date) SubDays(days int64) (Date, error) {
 	}
 	n, ok := arith.Sub32to64WithOverflow(d.days, days)
 	if !ok {
-		return Date{}, pgerror.Newf(pgerror.CodeDatetimeFieldOverflowError,
-			"%s - %d is out of range", d, days)
+		return Date{}, errors.WithCandidateCode(
+			errors.Newf("%s - %d is out of range", d, errors.Safe(days)),
+			pgcode.DatetimeFieldOverflow)
 	}
 	return MakeDateFromPGEpoch(n)
 }
