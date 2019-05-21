@@ -94,7 +94,9 @@ func (s *RepeatableBatchSource) Next(context.Context) coldata.Batch {
 // Init is part of the Operator interface.
 func (s *RepeatableBatchSource) Init() {}
 
-func (s *RepeatableBatchSource) resetBatchesToReturn(b int) {
+// ResetBatchesToReturn sets a limit on how many batches the source returns, as
+// well as resetting how many batches the source has returned so far.
+func (s *RepeatableBatchSource) ResetBatchesToReturn(b int) {
 	s.batchesToReturn = b
 	s.batchesReturned = 0
 }
