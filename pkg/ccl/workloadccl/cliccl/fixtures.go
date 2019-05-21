@@ -333,9 +333,10 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 	directIngestion := *fixturesImportDirectIngestionTable
 	filesPerNode := *fixturesImportFilesPerNode
 	injectStats := *fixturesImportInjectStats
+	noSkipPostLoad := false
 	csvServer := *fixturesMakeImportCSVServerURL
 	bytes, err := workloadccl.ImportFixture(
-		ctx, sqlDB, gen, dbName, directIngestion, filesPerNode, injectStats, csvServer,
+		ctx, sqlDB, gen, dbName, directIngestion, filesPerNode, injectStats, noSkipPostLoad, csvServer,
 	)
 	if err != nil {
 		return errors.Wrap(err, `importing fixture`)
