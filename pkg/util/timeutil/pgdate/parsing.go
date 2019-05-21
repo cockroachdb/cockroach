@@ -16,7 +16,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -143,29 +144,27 @@ func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) 
 	return fe.MakeTimestamp(), nil
 }
 
-// badFieldPrefixError constructs a CodeInvalidDatetimeFormatError pgerror.
+// badFieldPrefixError constructs an error with pg code InvalidDatetimeFormat.
 func badFieldPrefixError(field field, prefix rune) error {
-	return inputErrorf("unexpected separator '%s' for field %s", string(prefix), field.Pretty())
+	return inputErrorf("unexpected separator '%s' for field %s", string(prefix), errors.Safe(field.Pretty()))
 }
 
-// inputErrorf returns a CodeInvalidDatetimeFormatError pgerror.
+// inputErrorf returns an error with pg code InvalidDatetimeFormat.
 func inputErrorf(format string, args ...interface{}) error {
-	return pgerror.Newf(pgerror.CodeInvalidDatetimeFormatError, format, args...)
+	return errors.WithCandidateCode(errors.Newf(format, args...), pgcode.InvalidDatetimeFormat)
 }
 
-// outOfRangeError returns a CodeDatetimeFieldOverflowError pgerror.
+// outOfRangeError returns an error with pg code DatetimeFieldOverflow.
 func outOfRangeError(field string, val int) error {
-	return pgerror.Newf(pgerror.CodeDatetimeFieldOverflowError,
-		"field %s value %d is out of range", field, val)
+	return errors.WithCandidateCode(
+		errors.Newf("field %s value %d is out of range", errors.Safe(field), errors.Safe(val)),
+		pgcode.DatetimeFieldOverflow)
 }
 
 // parseError ensures that any error we return to the client will
-// be some kind of pgerror.
+// be some kind of error with a pg code.
 func parseError(err error, kind string, s string) error {
-	if err, ok := err.(*pgerror.Error); ok {
-		err.Message += " as type " + kind
-		return err
-	}
-	return pgerror.Newf(pgerror.CodeInvalidDatetimeFormatError,
-		`could not parse "%s" as type %s`, s, kind)
+	return errors.WithCandidateCode(
+		errors.Wrapf(err, "parsing as type %s", errors.Safe(kind)),
+		pgcode.InvalidDatetimeFormat)
 }

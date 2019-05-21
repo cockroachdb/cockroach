@@ -25,8 +25,9 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 )
 
 // Type represents a JSON type.
@@ -256,7 +257,7 @@ func NewObjectBuilder(numAddsHint int) *ObjectBuilder {
 // Add appends key value pair to the sequence.
 func (b *ObjectBuilder) Add(k string, v JSON) {
 	if b.pairs == nil {
-		panic(msgModifyAfterBuild)
+		panic(errors.AssertionFailedf(msgModifyAfterBuild))
 	}
 	b.pairs = append(b.pairs, jsonKeyValuePair{k: jsonString(k), v: v})
 }
@@ -265,7 +266,7 @@ func (b *ObjectBuilder) Add(k string, v JSON) {
 // it should not be modified any longer.
 func (b *ObjectBuilder) Build() JSON {
 	if b.pairs == nil {
-		panic(msgModifyAfterBuild)
+		panic(errors.AssertionFailedf(msgModifyAfterBuild))
 	}
 	orders := make([]int, len(b.pairs))
 	for i := range orders {
@@ -489,7 +490,7 @@ func (j jsonObject) Compare(other JSON) (int, error) {
 	return 0, nil
 }
 
-var errTrailingCharacters = pgerror.New(pgerror.CodeInvalidTextRepresentationError, "trailing characters after JSON document")
+var errTrailingCharacters = errors.WithCandidateCode(errors.New("trailing characters after JSON document"), pgcode.InvalidTextRepresentation)
 
 func (jsonNull) Format(buf *bytes.Buffer) { buf.WriteString("null") }
 
@@ -669,7 +670,10 @@ func ParseJSON(s string) (JSON, error) {
 	decoder.UseNumber()
 	err := decoder.Decode(&result)
 	if err != nil {
-		return nil, pgerror.Newf(pgerror.CodeInvalidTextRepresentationError, "error decoding JSON: %s", err.Error())
+		err = errors.Handled(err)
+		err = errors.Wrap(err, "unable to decode JSON")
+		err = errors.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
+		return nil, err
 	}
 	if decoder.More() {
 		return nil, errTrailingCharacters
@@ -1004,7 +1008,7 @@ func MakeJSON(d interface{}) (JSON, error) {
 		// random JSON generator.
 		return v, nil
 	}
-	return nil, pgerror.New("invalid value %s passed to MakeJSON", d.(fmt.Stringer).String())
+	return nil, errors.AssertionFailedf("unknown value type passed to MakeJSON: %T", d)
 }
 
 // This value was determined through some rough experimental results as a good
@@ -1079,7 +1083,7 @@ func FetchPath(j JSON, path []string) (JSON, error) {
 	return j, nil
 }
 
-var errCannotSetPathInScalar = pgerror.New(pgerror.CodeInvalidParameterValueError, "cannot set path in scalar")
+var errCannotSetPathInScalar = errors.WithCandidateCode(errors.New("cannot set path in scalar"), pgcode.InvalidParameterValue)
 
 // setValKeyOrIdx sets a key or index within a JSON object or array. If the
 // provided value is neither an object or array the value is returned
@@ -1171,7 +1175,7 @@ func deepSet(j JSON, path []string, to JSON, createMissing bool) (JSON, error) {
 	}
 }
 
-var errCannotReplaceExistingKey = pgerror.New(pgerror.CodeInvalidParameterValueError, "cannot replace existing key")
+var errCannotReplaceExistingKey = errors.WithCandidateCode(errors.New("cannot replace existing key"), pgcode.InvalidParameterValue)
 
 func insertValKeyOrIdx(j JSON, key string, newVal JSON, insertAfter bool) (JSON, error) {
 	switch v := j.(type) {
@@ -1280,8 +1284,8 @@ func (jsonFalse) FetchValKeyOrIdx(string) (JSON, error)  { return nil, nil }
 func (jsonString) FetchValKeyOrIdx(string) (JSON, error) { return nil, nil }
 func (jsonNumber) FetchValKeyOrIdx(string) (JSON, error) { return nil, nil }
 
-var errCannotDeleteFromScalar = pgerror.New(pgerror.CodeInvalidParameterValueError, "cannot delete from scalar")
-var errCannotDeleteFromObject = pgerror.New(pgerror.CodeInvalidParameterValueError, "cannot delete from object using integer index")
+var errCannotDeleteFromScalar = errors.WithCandidateCode(errors.New("cannot delete from scalar"), pgcode.InvalidParameterValue)
+var errCannotDeleteFromObject = errors.WithCandidateCode(errors.New("cannot delete from object using integer index"), pgcode.InvalidParameterValue)
 
 func (j jsonObject) SetKey(key string, to JSON, createMissing bool) (jsonObject, error) {
 	result := make(jsonObject, 0, len(j)+1)
@@ -1391,7 +1395,7 @@ func (jsonFalse) RemoveIndex(int) (JSON, bool, error)  { return nil, false, errC
 func (jsonString) RemoveIndex(int) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
 func (jsonNumber) RemoveIndex(int) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
 
-var errInvalidConcat = pgerror.New(pgerror.CodeInvalidParameterValueError, "invalid concatenation of jsonb objects")
+var errInvalidConcat = errors.WithCandidateCode(errors.New("invalid concatenation of jsonb objects"), pgcode.InvalidParameterValue)
 
 func scalarConcat(left, other JSON) (JSON, error) {
 	switch other.Type() {
@@ -1694,10 +1698,10 @@ func Pretty(j JSON) (string, error) {
 	// Luckily for us, despite Go's random map ordering, MarshalIndent sorts the
 	// keys of objects.
 	res, err := json.MarshalIndent(asGo, "", "    ")
-	return string(res), err
+	return string(res), errors.Handled(err)
 }
 
-var errCannotDeletePathInScalar = pgerror.New(pgerror.CodeInvalidParameterValueError, "cannot delete path in scalar")
+var errCannotDeletePathInScalar = errors.WithCandidateCode(errors.New("cannot delete path in scalar"), pgcode.InvalidParameterValue)
 
 func (j jsonArray) RemovePath(path []string) (JSON, bool, error)  { return j.doRemovePath(path) }
 func (j jsonObject) RemovePath(path []string) (JSON, bool, error) { return j.doRemovePath(path) }
@@ -1726,10 +1730,9 @@ func (j jsonArray) doRemovePath(path []string) (JSON, bool, error) {
 	idx, err := strconv.Atoi(path[0])
 	if err != nil {
 		// TODO(yuzefovich): give the position of the path element to match psql.
-		return j, false, pgerror.Newf(
-			pgerror.CodeInvalidTextRepresentationError,
-			"a path element is not an integer: %s",
-			path[0])
+		err := errors.Newf("a path element is not an integer: %s", path[0])
+		err = errors.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
+		return j, false, err
 	}
 	if len(path) == 1 {
 		return j.RemoveIndex(idx)
