@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -134,7 +136,7 @@ func importPlanHook(
 	}
 
 	var createFileFn func() (string, error)
-	if !importStmt.Bundle && importStmt.CreateDefs == nil {
+	if !importStmt.Bundle && !importStmt.Into && importStmt.CreateDefs == nil {
 		createFileFn, err = p.TypeAsString(importStmt.CreateFile, "IMPORT")
 		if err != nil {
 			return nil, nil, nil, false, err
@@ -388,163 +390,220 @@ func importPlanHook(
 			}
 		}
 
-		var tableDescs []*sqlbase.TableDescriptor
-		var jobDesc string
-		seqVals := make(map[sqlbase.ID]int64)
-		if importStmt.Bundle {
-			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
-			if err != nil {
-				return err
-			}
-			defer store.Close()
-			raw, err := store.ReadFile(ctx, "")
-			if err != nil {
-				return err
-			}
-			defer raw.Close()
-			reader, err := decompressingReader(raw, files[0], format.Compression)
-			if err != nil {
-				return err
-			}
-			defer reader.Close()
-
-			var match string
-			if table != nil {
-				match = table.TableName.String()
-			}
-			fks := fkHandler{skip: skipFKs, allowed: true, resolver: make(fkResolver)}
-			switch format.Format {
-			case roachpb.IOFileFormat_Mysqldump:
-				evalCtx := &p.ExtendedEvalContext().EvalContext
-				tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, defaultCSVTableID, parentID, match, fks, seqVals)
-			case roachpb.IOFileFormat_PgDump:
-				evalCtx := &p.ExtendedEvalContext().EvalContext
-				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
-			default:
-				return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
-			}
-			if err != nil {
-				return err
-			}
-			if tableDescs == nil && table != nil {
-				return errors.Errorf("table definition not found for %q", table.TableName.String())
-			}
-
-			descStr, err := importJobDescription(p, importStmt, nil, files, opts)
-			if err != nil {
-				return err
-			}
-			jobDesc = descStr
-		} else {
-			if table == nil {
-				return errors.Errorf("non-bundle format %q should always have a table name", importStmt.FileFormat)
-			}
-			var create *tree.CreateTable
-			if importStmt.CreateDefs != nil {
-				create = &tree.CreateTable{
-					Table: *importStmt.Table,
-					Defs:  importStmt.CreateDefs,
-				}
-			} else {
-				filename, err := createFileFn()
-				if err != nil {
-					return err
-				}
-				create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
-				if err != nil {
-					return err
-				}
-
-				if table.TableName != create.Table.TableName {
-					return errors.Errorf(
-						"importing table %s, but file specifies a schema for table %s",
-						table.TableName, create.Table.TableName,
-					)
-				}
-			}
-
-			tbl, err := MakeSimpleTableDescriptor(
-				ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, NoFKs, walltime)
-			if err != nil {
-				return err
-			}
-			tableDescs = []*sqlbase.TableDescriptor{tbl.TableDesc()}
-			descStr, err := importJobDescription(p, importStmt, create.Defs, files, opts)
-			if err != nil {
-				return err
-			}
-			jobDesc = descStr
-		}
-
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			for _, tableDesc := range tableDescs {
-				if err := backupccl.CheckTableExists(ctx, txn, parentID, tableDesc.Name); err != nil {
-					return err
-				}
-			}
-			// Verification steps have passed, generate a new table ID if we're
-			// restoring. We do this last because we want to avoid calling
-			// GenerateUniqueDescID if there's any kind of error above.
-			// Reserving a table ID now means we can avoid the rekey work during restore.
-			tableRewrites := make(backupccl.TableRewriteMap)
-			newSeqVals := make(map[sqlbase.ID]int64, len(seqVals))
-			for _, tableDesc := range tableDescs {
-				id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
-				if err != nil {
-					return err
-				}
-				tableRewrites[tableDesc.ID] = &jobspb.RestoreDetails_TableRewrite{
-					TableID:  id,
-					ParentID: parentID,
-				}
-				if v, ok := seqVals[tableDesc.ID]; ok {
-					newSeqVals[id] = v
-				}
-			}
-			seqVals = newSeqVals
-			if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
-				return err
-			}
-
-			for i := range tableDescs {
-				tableDescs[i].State = sqlbase.TableDescriptor_IMPORTING
-			}
-
-			seqValKVs := make([]roachpb.KeyValue, 0, len(seqVals))
-			for i := range tableDescs {
-				if v, ok := seqVals[tableDescs[i].ID]; ok && v != 0 {
-					key, val, err := sql.MakeSequenceKeyVal(tableDescs[i], v, false)
-					if err != nil {
-						return err
-					}
-					kv := roachpb.KeyValue{Key: key}
-					kv.Value.SetInt(val)
-					seqValKVs = append(seqValKVs, kv)
-				}
-			}
-
-			// Write the new TableDescriptors and flip the namespace entries over to
-			// them. After this call, any queries on a table will be served by the newly
-			// imported data.
-			if err := backupccl.WriteTableDescs(ctx, txn, nil, tableDescs, p.User(), p.ExecCfg().Settings, seqValKVs); err != nil {
-				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "creating tables")
-			}
-
-			// TODO(dt): we should be creating the job with this txn too. Once a job
-			// is created, the contract is it does its own, explicit cleanup on
-			// failure (i.e. not just txn rollback) but everything up to and including
-			// the creation of the job *should* be a single atomic txn. As-is, if we
-			// fail to creat the job after committing this txn, we've leaving broken
-			// descs and namespace records.
-
-			return nil
-		}); err != nil {
+		var tableDetails []jobspb.ImportDetails_Table
+		jobDesc, err := importJobDescription(p, importStmt, nil, files, opts)
+		if err != nil {
 			return err
 		}
 
-		tableDetails := make([]jobspb.ImportDetails_Table, 0, len(tableDescs))
-		for _, tbl := range tableDescs {
-			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl, SeqVal: seqVals[tbl.ID], IsNew: true})
+		if importStmt.Into {
+			// TODO(dt): this is a prototype for incremental import but there are many
+			// TODOs remaining before it is ready to graduate to prime-time. Some of
+			// them are captured in specific TODOs below, but some of the big, scary
+			// things to do are:
+			// - review planner vs txn use very carefully. We should try to get to a
+			//   single txn used to plan the job and create it. Using the planner's
+			//   txn today is very wrong since it will not commit until after the job
+			//   has run, so starting a job based on reads it returned is very wrong.
+			// - audit every place that we resolve/lease/read table descs to be sure
+			//   that the IMPORTING state is handled correctly. SQL lease acquisition
+			//   is probably the easy one here since it has single read path -- the
+			//   things that read directly like the queues or background jobs are the
+			//   ones we'll need to really carefully look though.
+			// - Look at if/how cleanup/rollback works. Reconsider the cpu from the
+			//   desc version (perhaps we should be re-reading instead?).
+			// - Write _a lot_ of tests.
+			found, err := p.ResolveMutableTableDescriptor(ctx, table, true, sql.ResolveRequireTableDesc)
+			if err != nil {
+				return err
+			}
+
+			if len(found.Mutations) > 0 {
+				return errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", found.Mutations[0].String())
+			}
+			if err := p.CheckPrivilege(ctx, found, privilege.CREATE); err != nil {
+				return err
+			}
+			// TODO(dt): Ensure no other schema changes can start during ingest.
+			importing := found.TableDescriptor
+			importing.Version++
+			// Take the table offline for import.
+			// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
+			// ensure that filtering by state handles IMPORTING correctly.
+			importing.State = sqlbase.TableDescriptor_IMPORTING
+			// TODO(dt): de-validate all the FKs.
+
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				return errors.Wrap(
+					txn.CPut(ctx, sqlbase.MakeDescMetadataKey(found.TableDescriptor.ID),
+						sqlbase.WrapDescriptor(&importing), sqlbase.WrapDescriptor(&found.TableDescriptor),
+					), "another operation is currently operating on the table")
+			}); err != nil {
+				return err
+			}
+			// NB: we need to wait for the schema change to show up before it is safe
+			// to ingest, but rather than do that here, we'll wait for this schema
+			// change in the job's Resume hook, before running the ingest phase. That
+			// will hopefully let it get a head start on propagating, plus the more we
+			// do in the job, the more that has automatic cleanup on rollback.
+
+			// TODO(dt): configure target cols from ImportStmt.IntoCols
+			tableDetails = []jobspb.ImportDetails_Table{{Desc: &importing, IsNew: false}}
+		} else {
+			var tableDescs []*sqlbase.TableDescriptor
+			seqVals := make(map[sqlbase.ID]int64)
+
+			if importStmt.Bundle {
+				store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
+				if err != nil {
+					return err
+				}
+				defer store.Close()
+
+				raw, err := store.ReadFile(ctx, "")
+				if err != nil {
+					return err
+				}
+				defer raw.Close()
+				reader, err := decompressingReader(raw, files[0], format.Compression)
+				if err != nil {
+					return err
+				}
+				defer reader.Close()
+
+				var match string
+				if table != nil {
+					match = table.TableName.String()
+				}
+
+				fks := fkHandler{skip: skipFKs, allowed: true, resolver: make(fkResolver)}
+				switch format.Format {
+				case roachpb.IOFileFormat_Mysqldump:
+					evalCtx := &p.ExtendedEvalContext().EvalContext
+					tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, defaultCSVTableID, parentID, match, fks, seqVals)
+				case roachpb.IOFileFormat_PgDump:
+					evalCtx := &p.ExtendedEvalContext().EvalContext
+					tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
+				default:
+					return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
+				}
+				if err != nil {
+					return err
+				}
+				if tableDescs == nil && table != nil {
+					return errors.Errorf("table definition not found for %q", table.TableName.String())
+				}
+			} else {
+				if table == nil {
+					return errors.Errorf("non-bundle format %q should always have a table name", importStmt.FileFormat)
+				}
+				var create *tree.CreateTable
+				if importStmt.CreateDefs != nil {
+					create = &tree.CreateTable{
+						Table: *importStmt.Table,
+						Defs:  importStmt.CreateDefs,
+					}
+				} else {
+					filename, err := createFileFn()
+					if err != nil {
+						return err
+					}
+					create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
+					if err != nil {
+						return err
+					}
+
+					if table.TableName != create.Table.TableName {
+						return errors.Errorf(
+							"importing table %s, but file specifies a schema for table %s",
+							table.TableName, create.Table.TableName,
+						)
+					}
+				}
+
+				tbl, err := MakeSimpleTableDescriptor(
+					ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, NoFKs, walltime)
+				if err != nil {
+					return err
+				}
+				tableDescs = []*sqlbase.TableDescriptor{tbl.TableDesc()}
+				descStr, err := importJobDescription(p, importStmt, create.Defs, files, opts)
+				if err != nil {
+					return err
+				}
+				jobDesc = descStr
+			}
+
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				for _, tableDesc := range tableDescs {
+					if err := backupccl.CheckTableExists(ctx, txn, parentID, tableDesc.Name); err != nil {
+						return err
+					}
+				}
+				// Verification steps have passed, generate a new table ID if we're
+				// restoring. We do this last because we want to avoid calling
+				// GenerateUniqueDescID if there's any kind of error above.
+				// Reserving a table ID now means we can avoid the rekey work during restore.
+				tableRewrites := make(backupccl.TableRewriteMap)
+				newSeqVals := make(map[sqlbase.ID]int64, len(seqVals))
+				for _, tableDesc := range tableDescs {
+					id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+					if err != nil {
+						return err
+					}
+					tableRewrites[tableDesc.ID] = &jobspb.RestoreDetails_TableRewrite{
+						TableID:  id,
+						ParentID: parentID,
+					}
+					if v, ok := seqVals[tableDesc.ID]; ok {
+						newSeqVals[id] = v
+					}
+				}
+				seqVals = newSeqVals
+				if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
+					return err
+				}
+
+				for i := range tableDescs {
+					tableDescs[i].State = sqlbase.TableDescriptor_IMPORTING
+				}
+
+				seqValKVs := make([]roachpb.KeyValue, 0, len(seqVals))
+				for i := range tableDescs {
+					if v, ok := seqVals[tableDescs[i].ID]; ok && v != 0 {
+						key, val, err := sql.MakeSequenceKeyVal(tableDescs[i], v, false)
+						if err != nil {
+							return err
+						}
+						kv := roachpb.KeyValue{Key: key}
+						kv.Value.SetInt(val)
+						seqValKVs = append(seqValKVs, kv)
+					}
+				}
+
+				// Write the new TableDescriptors and flip the namespace entries over to
+				// them. After this call, any queries on a table will be served by the newly
+				// imported data.
+				if err := backupccl.WriteTableDescs(ctx, txn, nil, tableDescs, p.User(), p.ExecCfg().Settings, seqValKVs); err != nil {
+					return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "creating tables")
+				}
+
+				// TODO(dt): we should be creating the job with this txn too. Once a job
+				// is created, the contract is it does its own, explicit cleanup on
+				// failure (i.e. not just txn rollback) but everything up to and including
+				// the creation of the job *should* be a single atomic txn. As-is, if we
+				// fail to creat the job after committing this txn, we've leaving broken
+				// descs and namespace records.
+
+				return nil
+			}); err != nil {
+				return err
+			}
+
+			tableDetails = make([]jobspb.ImportDetails_Table, len(tableDescs))
+			for i := range tableDescs {
+				tableDetails[i] = jobspb.ImportDetails_Table{Desc: tableDescs[i], SeqVal: seqVals[tableDescs[i].ID], IsNew: true}
+			}
 		}
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
@@ -699,6 +758,7 @@ func (r *importResumer) Resume(
 	}
 
 	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
+	requiresSchemaChangeDelay := false
 	if details.Tables != nil {
 		for _, i := range details.Tables {
 			if i.Name != "" {
@@ -707,6 +767,18 @@ func (r *importResumer) Resume(
 				tables[i.Desc.Name] = i.Desc
 			} else {
 				return errors.Errorf("invalid table specification")
+			}
+			if !i.IsNew {
+				requiresSchemaChangeDelay = true
+			}
+		}
+	}
+
+	if requiresSchemaChangeDelay {
+		// TODO(dt): update job status to mention waiting for tables to go offline.
+		for _, i := range details.Tables {
+			if _, err := p.ExecCfg().LeaseManager.WaitForOneVersion(ctx, i.Desc.ID, retry.Options{}); err != nil {
+				return err
 			}
 		}
 	}
@@ -765,6 +837,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			// returning the table to public. Unfortunately the ingestion isn't
 			// transactional, so there is no clean way to just rollback our changes,
 			// but we could iterate by time to delete before returning to public.
+			// TODO(dt): re-validate any FKs?
 			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
 		}
@@ -787,6 +860,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		tableDesc := *tbl.Desc
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+		// TODO(dt): re-validate any FKs?
 		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
 	if err := txn.Run(ctx, b); err != nil {
