@@ -134,6 +134,16 @@ func (m *memColumn) CopyAt(src Vec, destStartIdx, srcStartIdx, srcEndIdx uint64,
 	// {{range .}}
 	case _TYPES_T:
 		copy(m._TemplateType()[destStartIdx:], src._TemplateType()[srcStartIdx:srcEndIdx])
+		// TODO(asubiotto): Improve this, there are cases where we don't need to
+		// allocate a new bitmap.
+		srcBitmap := src.Nulls().NullBitmap()
+		m.nulls.nulls = make([]byte, len(srcBitmap))
+		if src.HasNulls() {
+			m.nulls.hasNulls = true
+			copy(m.nulls.nulls, srcBitmap)
+		} else {
+			m.nulls.UnsetNulls()
+		}
 	// {{end}}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", typ))
