@@ -643,9 +643,9 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 		// Build the right side of the left outer join. Use a new metadata instance
 		// of the mutation table so that a different set of column IDs are used for
 		// the two tables in the self-join.
-		tn := mb.tab.Name().TableName
-		alias := tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s_%d", tn, idx+1)))
-		tabID := mb.md.AddTableWithAlias(mb.tab, &alias)
+		// TODO(ridwanmsharif): Confirm if using this alias makes sense. Its consistent with
+		//  the mutation builder init and buildInputForUpsert.
+		tabID := mb.md.AddTableWithAlias(mb.tab, &mb.alias)
 		scanScope := mb.b.buildScan(
 			tabID,
 			nil, /* ordinals */
