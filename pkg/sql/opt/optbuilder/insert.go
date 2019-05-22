@@ -645,9 +645,9 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 		// the two tables in the self-join.
 		tn := mb.tab.Name().TableName
 		alias := tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s_%d", tn, idx+1)))
-		tabID := mb.md.AddTableWithAlias(mb.tab, &alias)
 		scanScope := mb.b.buildScan(
-			tabID,
+			mb.tab,
+			&alias,
 			nil, /* ordinals */
 			nil, /* indexFlags */
 			excludeMutations,
@@ -728,9 +728,9 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	// Build the right side of the left outer join. Include mutation columns
 	// because they can be used by computed update expressions. Use a different
 	// instance of table metadata so that col IDs do not overlap.
-	inputTabID := mb.md.AddTableWithAlias(mb.tab, &mb.alias)
 	fetchScope := mb.b.buildScan(
-		inputTabID,
+		mb.tab,
+		&mb.alias,
 		nil, /* ordinals */
 		nil, /* indexFlags */
 		includeMutations,
