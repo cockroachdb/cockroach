@@ -1518,8 +1518,8 @@ func (desc *TableDescriptor) validateTableIndexes(
 		}
 
 		if _, ok := indexNames[index.Name]; ok {
-			for _, idx := range desc.Indexes {
-				if idx.Name == index.Name {
+			for i := range desc.Indexes {
+				if desc.Indexes[i].Name == index.Name {
 					return fmt.Errorf("duplicate index name: %q", index.Name)
 				}
 			}
@@ -2153,9 +2153,10 @@ func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, boo
 	if desc.IsPhysicalTable() && desc.PrimaryIndex.Name == name {
 		return &desc.PrimaryIndex, false, nil
 	}
-	for i, idx := range desc.Indexes {
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
 		if idx.Name == name {
-			return &desc.Indexes[i], false, nil
+			return idx, false, nil
 		}
 	}
 	for _, m := range desc.Mutations {
@@ -2304,9 +2305,10 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	if desc.PrimaryIndex.ID == id {
 		return &desc.PrimaryIndex, nil
 	}
-	for i, c := range desc.Indexes {
-		if c.ID == id {
-			return &desc.Indexes[i], nil
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.ID == id {
+			return idx, nil
 		}
 	}
 	for _, m := range desc.Mutations {

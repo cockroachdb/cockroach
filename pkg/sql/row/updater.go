@@ -410,7 +410,8 @@ func (ru *Updater) UpdateRow(
 	// We're iterating through all of the indexes, which should have corresponding entries in both oldSecondaryIndexEntries
 	// and newSecondaryIndexEntries. Inverted indexes could potentially have more entries at the end of both and we will
 	// update those separately.
-	for i, index := range ru.Helper.Indexes {
+	for i := range ru.Helper.Indexes {
+		index := &ru.Helper.Indexes[i]
 		oldSecondaryIndexEntry := &oldSecondaryIndexEntries[i]
 		newSecondaryIndexEntry := &newSecondaryIndexEntries[i]
 
