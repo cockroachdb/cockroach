@@ -867,7 +867,7 @@ func (c *cluster) setTest(t testI) {
 func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
-	sargs := []string{roachprod, "list", c.name, "--json"}
+	sargs := []string{roachprod, "list", c.name, "--json", "--quiet"}
 	out, err := execCmdWithBuffer(ctx, l, sargs...)
 	if err != nil {
 		return err
