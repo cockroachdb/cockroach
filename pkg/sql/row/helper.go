@@ -129,7 +129,8 @@ func (rh *rowHelper) skipColumnInPK(
 func (rh *rowHelper) sortedColumnFamily(famID sqlbase.FamilyID) ([]sqlbase.ColumnID, bool) {
 	if rh.sortedColumnFamilies == nil {
 		rh.sortedColumnFamilies = make(map[sqlbase.FamilyID][]sqlbase.ColumnID, len(rh.TableDesc.Families))
-		for _, family := range rh.TableDesc.Families {
+		for i := range rh.TableDesc.Families {
+			family := &rh.TableDesc.Families[i]
 			colIDs := append([]sqlbase.ColumnID(nil), family.ColumnIDs...)
 			sort.Sort(sqlbase.ColumnIDs(colIDs))
 			rh.sortedColumnFamilies[family.ID] = colIDs
