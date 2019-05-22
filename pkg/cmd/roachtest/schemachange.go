@@ -344,14 +344,16 @@ func makeSchemaChangeBulkIngestTest(numNodes, numRows int, length time.Duration)
 			crdbNodes := c.Range(1, c.nodes-1)
 			workloadNode := c.Node(c.nodes)
 
-			c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload", workloadNode)
 			// TODO (lucy): Remove flag once the faster import is enabled by default
 			c.Start(ctx, t, crdbNodes, startArgs("--env=COCKROACH_IMPORT_WORKLOAD_FASTER=true"))
 
 			// Don't add another index when importing.
 			cmdWrite := fmt.Sprintf(
-				"./workload fixtures import bulkingest {pgurl:1} --a %d --b %d --c %d --payload-bytes %d --index-b-c-a=false",
+				// For fixtures import, use the version built into the cockroach binary
+				// so the tpcc workload-versions match on release branches.
+				"./cockroach workload fixtures import bulkingest {pgurl:1} --a %d --b %d --c %d --payload-bytes %d --index-b-c-a=false",
 				aNum, bNum, cNum, payloadBytes,
 			)
 
