@@ -214,10 +214,10 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 	descs := []roachpb.RangeDescriptor{testMetaRangeDescriptor}
 	for i, s := range splits {
 		descs = append(descs, roachpb.RangeDescriptor{
-			RangeID:  roachpb.RangeID(2 + i),
-			StartKey: roachpb.RKey(s.Key),
-			EndKey:   roachpb.RKey(s.EndKey),
-			Replicas: []roachpb.ReplicaDescriptor{{NodeID: 1, StoreID: 1}},
+			RangeID:          roachpb.RangeID(2 + i),
+			StartKey:         roachpb.RKey(s.Key),
+			EndKey:           roachpb.RKey(s.EndKey),
+			InternalReplicas: []roachpb.ReplicaDescriptor{{NodeID: 1, StoreID: 1}},
 		})
 	}
 	descDB := mockRangeDescriptorDBForDescs(descs...)

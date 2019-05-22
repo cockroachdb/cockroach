@@ -160,7 +160,7 @@ func calcRangeCounter(
 	numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
-	for _, rd := range desc.Replicas {
+	for _, rd := range desc.Replicas().Unwrap() {
 		if livenessMap[rd.NodeID].IsLive {
 			rangeCounter = rd.StoreID == storeID
 			break
@@ -170,7 +170,7 @@ func calcRangeCounter(
 	// unavailable ranges for each range based on the liveness table.
 	if rangeCounter {
 		liveReplicas := calcLiveReplicas(desc, livenessMap)
-		if liveReplicas < computeQuorum(len(desc.Replicas)) {
+		if liveReplicas < desc.Replicas().QuorumSize() {
 			unavailable = true
 		}
 		needed := GetNeededReplicas(numReplicas, clusterNodes)
@@ -187,7 +187,7 @@ func calcRangeCounter(
 // determined by checking its node in the provided liveness map.
 func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap) int {
 	var live int
-	for _, rd := range desc.Replicas {
+	for _, rd := range desc.Replicas().Unwrap() {
 		if livenessMap[rd.NodeID].IsLive {
 			live++
 		}
@@ -201,7 +201,7 @@ func calcBehindCount(
 	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap IsLiveMap,
 ) int64 {
 	var behindCount int64
-	for _, rd := range desc.Replicas {
+	for _, rd := range desc.Replicas().Unwrap() {
 		if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
 			if progress.Match > 0 &&
 				progress.Match < raftStatus.Commit {

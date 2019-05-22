@@ -1695,10 +1695,10 @@ func TestSystemZoneConfigs(t *testing.T) {
 		replicas := make(map[roachpb.RangeID]int)
 		for _, s := range tc.Servers {
 			if err := storage.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) (bool, error) {
-				if existing, ok := replicas[desc.RangeID]; ok && existing != len(desc.Replicas) {
+				if existing, ok := replicas[desc.RangeID]; ok && existing != len(desc.InternalReplicas) {
 					conflictingID = desc.RangeID
 				}
-				replicas[desc.RangeID] = len(desc.Replicas)
+				replicas[desc.RangeID] = len(desc.InternalReplicas)
 				return false, nil
 			}); err != nil {
 				return err
@@ -1981,11 +1981,11 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	db := tc.Servers[0].DB()
 	rangeInfo, err := getRangeInfo(ctx, db, key)
 	require.Nil(t, err)
-	require.Len(t, rangeInfo.Desc.Replicas, 1)
+	require.Len(t, rangeInfo.Desc.InternalReplicas, 1)
 	targets1, targets2 := makeReplicationTargets(2, 3, 4), makeReplicationTargets(4, 5)
 	expects1 := rangeInfo.Desc
 	expects2 := rangeInfo.Desc
-	expects2.Replicas = append(expects2.Replicas, roachpb.ReplicaDescriptor{
+	expects2.InternalReplicas = append(expects2.InternalReplicas, roachpb.ReplicaDescriptor{
 		NodeID:    2,
 		StoreID:   2,
 		ReplicaID: expects2.NextReplicaID,
@@ -2023,7 +2023,7 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 		"expected only one of racing AdminChangeReplicasRequests to fail but both "+
 			"had errors and neither were snapshot: %v %v", err1, err2)
 	replicaNodeIDs := func(desc roachpb.RangeDescriptor) (ids []int) {
-		for _, r := range desc.Replicas {
+		for _, r := range desc.InternalReplicas {
 			ids = append(ids, int(r.NodeID))
 		}
 		return ids
@@ -2148,7 +2148,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	assert.Nil(t, db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 3)))
 	rangeInfo, err := getRangeInfo(ctx, db, key)
 	assert.Nil(t, err)
-	assert.Len(t, rangeInfo.Desc.Replicas, 3)
+	assert.Len(t, rangeInfo.Desc.InternalReplicas, 3)
 	assert.Equal(t, rangeInfo.Lease.Replica.NodeID, roachpb.NodeID(1))
 	for id := roachpb.StoreID(1); id <= 3; id++ {
 		_, hasReplica := rangeInfo.Desc.GetReplicaDescriptor(id)
@@ -2167,7 +2167,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	assert.Nil(t, err)
 	expDescAfterAdd := rangeInfo.Desc // for use with ChangeReplicas
 	expDescAfterAdd.NextReplicaID++
-	expDescAfterAdd.Replicas = append(expDescAfterAdd.Replicas, roachpb.ReplicaDescriptor{
+	expDescAfterAdd.InternalReplicas = append(expDescAfterAdd.InternalReplicas, roachpb.ReplicaDescriptor{
 		NodeID:    4,
 		StoreID:   4,
 		ReplicaID: 4,
@@ -2190,7 +2190,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	wg.Wait()
 	rangeInfo, err = getRangeInfo(ctx, db, key)
 	assert.Nil(t, err)
-	assert.True(t, len(rangeInfo.Desc.Replicas) >= 3)
+	assert.True(t, len(rangeInfo.Desc.InternalReplicas) >= 3)
 	assert.Falsef(t, relocateErr == nil && changeErr == nil,
 		"expected one of racing AdminRelocateReplicas and ChangeReplicas "+
 			"to fail but neither did")

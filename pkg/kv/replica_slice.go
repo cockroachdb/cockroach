@@ -50,8 +50,8 @@ func NewReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) Repli
 	if gossip == nil {
 		return nil
 	}
-	replicas := make(ReplicaSlice, 0, len(desc.Replicas))
-	for _, r := range desc.Replicas {
+	replicas := make(ReplicaSlice, 0, len(desc.Replicas().Unwrap()))
+	for _, r := range desc.Replicas().Unwrap() {
 		nd, err := gossip.GetNodeDescriptor(r.NodeID)
 		if err != nil {
 			if log.V(1) {

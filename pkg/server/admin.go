@@ -667,7 +667,7 @@ func (s *adminServer) statsForSpan(
 		if err := kv.Value.GetProto(&rng); err != nil {
 			return nil, s.serverError(err)
 		}
-		for _, repl := range rng.Replicas {
+		for _, repl := range rng.Replicas().Unwrap() {
 			nodeIDs[repl.NodeID] = struct{}{}
 		}
 	}
@@ -1423,7 +1423,7 @@ func (s *adminServer) DecommissionStatus(
 					if err := row.ValueProto(&rangeDesc); err != nil {
 						return errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
 					}
-					for _, r := range rangeDesc.Replicas {
+					for _, r := range rangeDesc.Replicas().Unwrap() {
 						if _, ok := replicaCounts[r.NodeID]; ok {
 							replicaCounts[r.NodeID]++
 						}
@@ -1592,7 +1592,7 @@ func (s *adminServer) DataDistribution(
 				return err
 			}
 
-			for _, replicaDesc := range rangeDesc.Replicas {
+			for _, replicaDesc := range rangeDesc.Replicas().Unwrap() {
 				tableInfo, ok := tableInfosByTableID[tableID]
 				if !ok {
 					// This is a database, skip.
@@ -1609,7 +1609,7 @@ func (s *adminServer) DataDistribution(
 	// Get zone configs.
 	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
 	zoneConfigsQuery := `
-		SELECT zone_name, config_sql, config_protobuf 
+		SELECT zone_name, config_sql, config_protobuf
 		FROM crdb_internal.zones
 		WHERE zone_name IS NOT NULL
 	`

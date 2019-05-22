@@ -740,7 +740,7 @@ func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 		return 0
 	}
 	var maxID roachpb.ReplicaID
-	for _, repl := range desc.Replicas {
+	for _, repl := range desc.Replicas().Unwrap() {
 		if repl.ReplicaID > maxID {
 			maxID = repl.ReplicaID
 		}
@@ -911,7 +911,7 @@ func (r *Replica) State() storagepb.RangeInfo {
 	}
 	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	if desc := ri.ReplicaState.Desc; desc != nil {
-		for _, replDesc := range desc.Replicas {
+		for _, replDesc := range desc.Replicas().Unwrap() {
 			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
 				mlai, found := e.MLAI[r.RangeID]
 				if !found {
@@ -1609,7 +1609,8 @@ func (r *Replica) getReplicaDescriptorByIDRLocked(
 		return fallback, nil
 	}
 	return roachpb.ReplicaDescriptor{},
-		errors.Errorf("replica %d not present in %v, %v", replicaID, fallback, r.mu.state.Desc.Replicas)
+		errors.Errorf("replica %d not present in %v, %v",
+			replicaID, fallback, r.mu.state.Desc.Replicas())
 }
 
 // checkIfTxnAborted checks the txn AbortSpan for the given

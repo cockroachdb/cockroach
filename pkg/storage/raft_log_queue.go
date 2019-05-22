@@ -205,7 +205,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
 	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
 	updateRaftProgressFromActivity(
-		ctx, raftStatus.Progress, r.descRLocked().Replicas, r.mu.lastUpdateTimes, now,
+		ctx, raftStatus.Progress, r.descRLocked().Replicas().Unwrap(), r.mu.lastUpdateTimes, now,
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
 	r.mu.RUnlock()

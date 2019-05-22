@@ -1043,7 +1043,7 @@ func (s *Store) SetDraining(drain bool) {
 						break
 					}
 
-					needsLeaseTransfer := len(r.Desc().Replicas) > 1 &&
+					needsLeaseTransfer := len(r.Desc().Replicas().Unwrap()) > 1 &&
 						drainingLease.OwnedBy(s.StoreID()) &&
 						r.IsLeaseValid(drainingLease, s.Clock().Now())
 
@@ -2075,16 +2075,17 @@ func (s *Store) NewRangeDescriptor(
 	if err != nil {
 		return nil, err
 	}
+	replicas = append([]roachpb.ReplicaDescriptor(nil), replicas...)
+	for i := range replicas {
+		replicas[i].ReplicaID = roachpb.ReplicaID(i + 1)
+	}
 	desc := &roachpb.RangeDescriptor{
 		RangeID:       roachpb.RangeID(id),
 		StartKey:      start,
 		EndKey:        end,
-		Replicas:      append([]roachpb.ReplicaDescriptor(nil), replicas...),
 		NextReplicaID: roachpb.ReplicaID(len(replicas) + 1),
 	}
-	for i := range desc.Replicas {
-		desc.Replicas[i].ReplicaID = roachpb.ReplicaID(i + 1)
-	}
+	desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
 	return desc, nil
 }
 
@@ -2194,7 +2195,7 @@ func splitPostApply(
 	r.store.replicateQueue.MaybeAddAsync(ctx, r, now)
 	r.store.replicateQueue.MaybeAddAsync(ctx, rightRng, now)
 
-	if len(split.RightDesc.Replicas) == 1 {
+	if len(split.RightDesc.Replicas().Unwrap()) == 1 {
 		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
 		// the split (the new range) for Raft processing so that the corresponding
 		// Raft group is created. This shouldn't be necessary for correctness, but
@@ -3789,7 +3790,7 @@ func (s *Store) nodeIsLiveCallback(nodeID roachpb.NodeID) {
 
 	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
 		r := (*Replica)(v)
-		for _, rep := range r.Desc().Replicas {
+		for _, rep := range r.Desc().Replicas().Unwrap() {
 			if rep.NodeID == nodeID {
 				r.unquiesce()
 			}

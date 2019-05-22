@@ -1242,7 +1242,7 @@ void RangeDescriptor::clear_sticky_bit() {
 const int RangeDescriptor::kRangeIdFieldNumber;
 const int RangeDescriptor::kStartKeyFieldNumber;
 const int RangeDescriptor::kEndKeyFieldNumber;
-const int RangeDescriptor::kReplicasFieldNumber;
+const int RangeDescriptor::kInternalReplicasFieldNumber;
 const int RangeDescriptor::kNextReplicaIdFieldNumber;
 const int RangeDescriptor::kGenerationFieldNumber;
 const int RangeDescriptor::kStickyBitFieldNumber;
@@ -1259,7 +1259,7 @@ RangeDescriptor::RangeDescriptor(const RangeDescriptor& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
       _has_bits_(from._has_bits_),
-      replicas_(from.replicas_) {
+      internal_replicas_(from.internal_replicas_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   start_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.has_start_key()) {
@@ -1314,7 +1314,7 @@ void RangeDescriptor::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  replicas_.Clear();
+  internal_replicas_.Clear();
   cached_has_bits = _has_bits_[0];
   if (cached_has_bits & 7u) {
     if (cached_has_bits & 0x00000001u) {
@@ -1392,7 +1392,7 @@ bool RangeDescriptor::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_replicas()));
+                input, add_internal_replicas()));
         } else {
           goto handle_unusual;
         }
@@ -1480,10 +1480,10 @@ void RangeDescriptor::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->replicas_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->internal_replicas_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       4,
-      this->replicas(static_cast<int>(i)),
+      this->internal_replicas(static_cast<int>(i)),
       output);
   }
 
@@ -1514,12 +1514,12 @@ size_t RangeDescriptor::ByteSizeLong() const {
   total_size += _internal_metadata_.unknown_fields().size();
 
   {
-    unsigned int count = static_cast<unsigned int>(this->replicas_size());
+    unsigned int count = static_cast<unsigned int>(this->internal_replicas_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->replicas(static_cast<int>(i)));
+          this->internal_replicas(static_cast<int>(i)));
     }
   }
 
@@ -1580,7 +1580,7 @@ void RangeDescriptor::MergeFrom(const RangeDescriptor& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  replicas_.MergeFrom(from.replicas_);
+  internal_replicas_.MergeFrom(from.internal_replicas_);
   cached_has_bits = from._has_bits_[0];
   if (cached_has_bits & 63u) {
     if (cached_has_bits & 0x00000001u) {
@@ -1624,7 +1624,7 @@ void RangeDescriptor::Swap(RangeDescriptor* other) {
 }
 void RangeDescriptor::InternalSwap(RangeDescriptor* other) {
   using std::swap;
-  CastToBase(&replicas_)->InternalSwap(CastToBase(&other->replicas_));
+  CastToBase(&internal_replicas_)->InternalSwap(CastToBase(&other->internal_replicas_));
   start_key_.Swap(&other->start_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   end_key_.Swap(&other->end_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),

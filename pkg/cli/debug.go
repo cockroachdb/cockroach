@@ -1168,8 +1168,8 @@ func removeDeadReplicas(
 	err = storage.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) (bool, error) {
 		hasSelf := false
 		numDeadPeers := 0
-		numReplicas := len(desc.Replicas)
-		for _, rep := range desc.Replicas {
+		numReplicas := len(desc.Replicas().Unwrap())
+		for _, rep := range desc.Replicas().Unwrap() {
 			if rep.StoreID == storeIdent.StoreID {
 				hasSelf = true
 			}
@@ -1182,11 +1182,11 @@ func removeDeadReplicas(
 			// Rewrite the replicas list. Bump the replica ID as an extra
 			// defense against one of the old replicas returning from the
 			// dead.
-			newDesc.Replicas = []roachpb.ReplicaDescriptor{{
+			newDesc.SetReplicas(roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{{
 				NodeID:    storeIdent.NodeID,
 				StoreID:   storeIdent.StoreID,
 				ReplicaID: desc.NextReplicaID,
-			}}
+			}}))
 			newDesc.NextReplicaID++
 			fmt.Printf("Replica %s -> %s\n", desc, newDesc)
 			newDescs = append(newDescs, newDesc)
@@ -1241,7 +1241,7 @@ var debugMergeLogsCommand = &cobra.Command{
 	Short: "merge multiple log files from different machines into a single stream",
 	Long: `
 Takes a list of glob patterns (not left exclusively to the shell because of
-MAX_ARG_STRLEN, usually 128kB) pointing to log files and merges them into a 
+MAX_ARG_STRLEN, usually 128kB) pointing to log files and merges them into a
 single stream printed to stdout. Files not matching the log file name pattern
 are ignored. If log lines appear out of order within a file (which happens), the
 timestamp is ratcheted to the highest value seen so far. The command supports

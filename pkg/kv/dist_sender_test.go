@@ -60,7 +60,7 @@ var (
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
 		EndKey:   testMetaEndKey,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -76,7 +76,7 @@ var (
 		RangeID:  2,
 		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKeyMax,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -88,7 +88,7 @@ var (
 		RangeID:  2,
 		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKeyMax,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -327,7 +327,7 @@ func TestSendRPCOrder(t *testing.T) {
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
 			t.Fatal(err)
 		}
-		descriptor.Replicas = append(descriptor.Replicas, roachpb.ReplicaDescriptor{
+		descriptor.AddReplica(roachpb.ReplicaDescriptor{
 			NodeID:  roachpb.NodeID(i),
 			StoreID: roachpb.StoreID(i),
 		})
@@ -385,7 +385,7 @@ func TestSendRPCOrder(t *testing.T) {
 		)
 		if tc.leaseHolder > 0 {
 			ds.leaseHolderCache.Update(
-				context.TODO(), rangeID, descriptor.Replicas[tc.leaseHolder-1].StoreID,
+				context.TODO(), rangeID, descriptor.InternalReplicas[tc.leaseHolder-1].StoreID,
 			)
 		}
 
@@ -625,7 +625,7 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	leaseHolders := testUserRangeDescriptor3Replicas.Replicas
+	leaseHolders := testUserRangeDescriptor3Replicas.InternalReplicas
 	for _, n := range leaseHolders {
 		if err := g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),
@@ -750,7 +750,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 				RangeID:  1,
 				StartKey: roachpb.RKeyMin,
 				EndKey:   roachpb.RKeyMax,
-				Replicas: []roachpb.ReplicaDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
 					{
 						NodeID:  1,
 						StoreID: 1,
@@ -858,7 +858,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -1357,7 +1357,7 @@ func TestSendRPCRetry(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		descriptor.Replicas = append(descriptor.Replicas, roachpb.ReplicaDescriptor{
+		descriptor.InternalReplicas = append(descriptor.InternalReplicas, roachpb.ReplicaDescriptor{
 			NodeID:  roachpb.NodeID(i),
 			StoreID: roachpb.StoreID(i),
 		})
@@ -1431,7 +1431,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		descriptor.Replicas = append(descriptor.Replicas, roachpb.ReplicaDescriptor{
+		descriptor.AddReplica(roachpb.ReplicaDescriptor{
 			NodeID:    roachpb.NodeID(i),
 			StoreID:   roachpb.StoreID(i),
 			ReplicaID: roachpb.ReplicaID(i),
@@ -1538,7 +1538,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 			RangeID:  roachpb.RangeID(i + 1),
 			StartKey: startKey,
 			EndKey:   keys.MustAddr(split),
-			Replicas: []roachpb.ReplicaDescriptor{
+			InternalReplicas: []roachpb.ReplicaDescriptor{
 				{
 					NodeID:  1,
 					StoreID: 1,
@@ -1624,7 +1624,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		RangeID:  2,
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKey("b"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -1637,7 +1637,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		RangeID:  2,
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKeyMax,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -1831,7 +1831,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		RangeID:  2,
 		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKey("b"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -1842,7 +1842,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		RangeID:  3,
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKey("c"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -1953,7 +1953,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		RangeID:  2,
 		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKey("b"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -1964,7 +1964,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		RangeID:  3,
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKey("c"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -1975,7 +1975,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		RangeID:  4,
 		StartKey: roachpb.RKey("c"),
 		EndKey:   roachpb.RKeyMax,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -2117,7 +2117,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		RangeID:  2,
 		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKey("b"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -2128,7 +2128,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		RangeID:  3,
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKeyMax,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -2218,7 +2218,7 @@ func TestCountRanges(t *testing.T) {
 			RangeID:  roachpb.RangeID(i + 2),
 			StartKey: startKey,
 			EndKey:   endKey,
-			Replicas: []roachpb.ReplicaDescriptor{
+			InternalReplicas: []roachpb.ReplicaDescriptor{
 				{
 					NodeID:  1,
 					StoreID: 1,
@@ -2371,7 +2371,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 		RangeID:  2,
 		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKey("b"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -2382,7 +2382,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 		RangeID:  3,
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKey("c"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -2393,7 +2393,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 		RangeID:  4,
 		StartKey: roachpb.RKey("c"),
 		EndKey:   roachpb.RKeyMax,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -2526,7 +2526,7 @@ func TestMixedSuccessErrorWrapped(t *testing.T) {
 		RangeID:  2,
 		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKey("b"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -2537,7 +2537,7 @@ func TestMixedSuccessErrorWrapped(t *testing.T) {
 		RangeID:  3,
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKey("c"),
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -2548,7 +2548,7 @@ func TestMixedSuccessErrorWrapped(t *testing.T) {
 		RangeID:  4,
 		StartKey: roachpb.RKey("c"),
 		EndKey:   roachpb.RKeyMax,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -2669,7 +2669,7 @@ func TestCanSendToFollower(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	leaseHolders := testUserRangeDescriptor3Replicas.Replicas
+	leaseHolders := testUserRangeDescriptor3Replicas.InternalReplicas
 	for _, n := range leaseHolders {
 		if err := g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),

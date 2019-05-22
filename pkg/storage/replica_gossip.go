@@ -47,7 +47,7 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 	}
 	if log.V(1) {
 		log.Infof(ctx, "gossiping first range from store %d, r%d: %s",
-			r.store.StoreID(), r.RangeID, r.mu.state.Desc.Replicas)
+			r.store.StoreID(), r.RangeID, r.mu.state.Desc.Replicas())
 	}
 	if err := r.store.Gossip().AddInfoProto(
 		gossip.KeyFirstRangeDescriptor, r.mu.state.Desc, configGossipTTL); err != nil {

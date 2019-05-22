@@ -231,7 +231,7 @@ func (rq *replicateQueue) shouldQueue(
 	if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, now) {
 		if rq.canTransferLease() &&
 			rq.allocator.ShouldTransferLease(
-				ctx, zone, desc.Replicas, lease.Replica.StoreID, desc.RangeID, repl.leaseholderStats) {
+				ctx, zone, desc.Replicas().Unwrap(), lease.Replica.StoreID, desc.RangeID, repl.leaseholderStats) {
 			log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 			return true, 0
 		}
@@ -295,9 +295,10 @@ func (rq *replicateQueue) processOneChange(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	liveReplicas, deadReplicas := rq.allocator.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
+	liveReplicas, deadReplicas := rq.allocator.storePool.liveAndDeadReplicas(
+		desc.RangeID, desc.Replicas().Unwrap())
 	{
-		quorum := computeQuorum(len(desc.Replicas))
+		quorum := desc.Replicas().QuorumSize()
 		if lr := len(liveReplicas); lr < quorum {
 			return false, newQuorumError(
 				"range requires a replication change, but lacks a quorum of live replicas (%d/%d)", lr, quorum)
@@ -327,7 +328,7 @@ func (rq *replicateQueue) processOneChange(
 
 		clusterNodes := rq.allocator.storePool.ClusterNodeCount()
 		need := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
-		willHave := len(desc.Replicas) + 1
+		willHave := len(desc.Replicas().Unwrap()) + 1
 
 		// Only up-replicate if there are suitable allocation targets such
 		// that, either the replication goal is met, or it is possible to get to the
@@ -341,15 +342,15 @@ func (rq *replicateQueue) processOneChange(
 		if willHave < need && willHave%2 == 0 {
 			// This means we are going to up-replicate to an even replica state.
 			// Check if it is possible to go to an odd replica state beyond it.
-			oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
-			oldPlusNewReplicas = append(oldPlusNewReplicas, roachpb.ReplicaDescriptor{
+			oldPlusNewReplicas := desc.Replicas().DeepCopy()
+			oldPlusNewReplicas.AddReplica(roachpb.ReplicaDescriptor{
 				NodeID:  newStore.Node.NodeID,
 				StoreID: newStore.StoreID,
 			})
 			_, _, err := rq.allocator.AllocateTarget(
 				ctx,
 				zone,
-				oldPlusNewReplicas,
+				oldPlusNewReplicas.Unwrap(),
 				rangeInfo,
 			)
 			if err != nil {
@@ -361,7 +362,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 		rq.metrics.AddReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "adding replica %+v due to under-replication: %s",
-			newReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
+			newReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
 		if err := rq.addReplica(
 			ctx,
 			repl,
@@ -400,9 +401,9 @@ func (rq *replicateQueue) processOneChange(
 				// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
 				return false, &benignError{errors.Errorf("not raft leader while range needs removal")}
 			}
-			candidates = filterUnremovableReplicas(raftStatus, desc.Replicas, lastReplAdded)
+			candidates = filterUnremovableReplicas(raftStatus, desc.Replicas().Unwrap(), lastReplAdded)
 			log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
-				desc.Replicas, candidates, rangeRaftProgress(raftStatus, desc.Replicas))
+				desc.Replicas(), candidates, rangeRaftProgress(raftStatus, desc.Replicas().Unwrap()))
 			if len(candidates) > 0 {
 				break
 			}
@@ -430,7 +431,7 @@ func (rq *replicateQueue) processOneChange(
 		if len(candidates) == 0 {
 			// If we timed out and still don't have any valid candidates, give up.
 			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
-				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
+				rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
 		}
 
 		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo)
@@ -467,7 +468,7 @@ func (rq *replicateQueue) processOneChange(
 		} else {
 			rq.metrics.RemoveReplicaCount.Inc(1)
 			log.VEventf(ctx, 1, "removing replica %+v due to over-replication: %s",
-				removeReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
+				removeReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
 			target := roachpb.ReplicationTarget{
 				NodeID:  removeReplica.NodeID,
 				StoreID: removeReplica.StoreID,
@@ -479,7 +480,8 @@ func (rq *replicateQueue) processOneChange(
 			}
 		}
 	case AllocatorRemoveDecommissioning:
-		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas)
+		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(
+			desc.RangeID, desc.Replicas().Unwrap())
 		if len(decommissioningReplicas) == 0 {
 			log.VEventf(ctx, 1, "range of replica %s was identified as having decommissioning replicas, "+
 				"but no decommissioning replicas were found", repl)
@@ -553,7 +555,7 @@ func (rq *replicateQueue) processOneChange(
 				}
 				rq.metrics.RebalanceReplicaCount.Inc(1)
 				log.VEventf(ctx, 1, "rebalancing to %+v: %s",
-					rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
+					rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
 				if err := rq.addReplica(
 					ctx,
 					repl,
@@ -614,7 +616,7 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 	zone *config.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
-	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
+	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas().Unwrap())
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone,

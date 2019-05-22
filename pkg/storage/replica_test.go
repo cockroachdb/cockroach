@@ -91,7 +91,7 @@ func testRangeDescriptor() *roachpb.RangeDescriptor {
 		RangeID:  1,
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
-		Replicas: []roachpb.ReplicaDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				ReplicaID: 1,
 				NodeID:    1,
@@ -347,7 +347,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	}
 	oldDesc := *tc.repl.Desc()
 	newDesc := oldDesc
-	newDesc.Replicas = append(newDesc.Replicas, secondReplica)
+	newDesc.InternalReplicas = append(newDesc.InternalReplicas, secondReplica)
 	newDesc.NextReplicaID = 3
 
 	// Update the "on-disk" replica state, so that it doesn't diverge from what we
@@ -6485,9 +6485,9 @@ func TestReplicaDestroy(t *testing.T) {
 	// First try and fail with a stale descriptor.
 	origDesc := repl.Desc()
 	newDesc := protoutil.Clone(origDesc).(*roachpb.RangeDescriptor)
-	for i := range newDesc.Replicas {
-		if newDesc.Replicas[i].StoreID == tc.store.StoreID() {
-			newDesc.Replicas[i].ReplicaID++
+	for i := range newDesc.InternalReplicas {
+		if newDesc.InternalReplicas[i].StoreID == tc.store.StoreID() {
+			newDesc.InternalReplicas[i].ReplicaID++
 			newDesc.NextReplicaID++
 			break
 		}
@@ -8232,7 +8232,7 @@ func TestReplicaMetrics(t *testing.T) {
 	desc := func(ids ...int) roachpb.RangeDescriptor {
 		var d roachpb.RangeDescriptor
 		for i, id := range ids {
-			d.Replicas = append(d.Replicas, roachpb.ReplicaDescriptor{
+			d.InternalReplicas = append(d.InternalReplicas, roachpb.ReplicaDescriptor{
 				ReplicaID: roachpb.ReplicaID(i + 1),
 				StoreID:   roachpb.StoreID(id),
 				NodeID:    roachpb.NodeID(id),
@@ -9127,7 +9127,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 			// this quiescer so that shouldReplicaQuiesce will return false.
 			q := &testQuiescer{
 				desc: roachpb.RangeDescriptor{
-					Replicas: []roachpb.ReplicaDescriptor{
+					InternalReplicas: []roachpb.ReplicaDescriptor{
 						{NodeID: 1, ReplicaID: 1},
 						{NodeID: 2, ReplicaID: 2},
 						{NodeID: 3, ReplicaID: 3},
@@ -9231,7 +9231,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	// replica IDs in the range descriptor.
 	for i := 0; i < 3; i++ {
 		test(false, func(q *testQuiescer) *testQuiescer {
-			q.desc.Replicas[i].ReplicaID = roachpb.ReplicaID(4 + i)
+			q.desc.InternalReplicas[i].ReplicaID = roachpb.ReplicaID(4 + i)
 			return q
 		})
 	}

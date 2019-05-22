@@ -268,9 +268,9 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
-	if !replicaSetsEqual(lhsDesc.Replicas, rhsDesc.Replicas) {
+	if !replicaSetsEqual(lhsDesc.Replicas().Unwrap(), rhsDesc.Replicas().Unwrap()) {
 		var targets []roachpb.ReplicationTarget
-		for _, lhsReplDesc := range lhsDesc.Replicas {
+		for _, lhsReplDesc := range lhsDesc.Replicas().Unwrap() {
 			targets = append(targets, roachpb.ReplicationTarget{
 				NodeID: lhsReplDesc.NodeID, StoreID: lhsReplDesc.StoreID,
 			})

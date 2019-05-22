@@ -704,16 +704,16 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
 
   // accessors -------------------------------------------------------
 
-  int replicas_size() const;
-  void clear_replicas();
-  static const int kReplicasFieldNumber = 4;
-  ::cockroach::roachpb::ReplicaDescriptor* mutable_replicas(int index);
+  int internal_replicas_size() const;
+  void clear_internal_replicas();
+  static const int kInternalReplicasFieldNumber = 4;
+  ::cockroach::roachpb::ReplicaDescriptor* mutable_internal_replicas(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
-      mutable_replicas();
-  const ::cockroach::roachpb::ReplicaDescriptor& replicas(int index) const;
-  ::cockroach::roachpb::ReplicaDescriptor* add_replicas();
+      mutable_internal_replicas();
+  const ::cockroach::roachpb::ReplicaDescriptor& internal_replicas(int index) const;
+  ::cockroach::roachpb::ReplicaDescriptor* add_internal_replicas();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
-      replicas() const;
+      internal_replicas() const;
 
   bool has_start_key() const;
   void clear_start_key();
@@ -792,7 +792,7 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > replicas_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > internal_replicas_;
   ::google::protobuf::internal::ArenaStringPtr start_key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
   ::cockroach::util::hlc::Timestamp* sticky_bit_;
@@ -2601,33 +2601,33 @@ inline void RangeDescriptor::set_allocated_end_key(::std::string* end_key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeDescriptor.end_key)
 }
 
-inline int RangeDescriptor::replicas_size() const {
-  return replicas_.size();
+inline int RangeDescriptor::internal_replicas_size() const {
+  return internal_replicas_.size();
 }
-inline void RangeDescriptor::clear_replicas() {
-  replicas_.Clear();
+inline void RangeDescriptor::clear_internal_replicas() {
+  internal_replicas_.Clear();
 }
-inline ::cockroach::roachpb::ReplicaDescriptor* RangeDescriptor::mutable_replicas(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeDescriptor.replicas)
-  return replicas_.Mutable(index);
+inline ::cockroach::roachpb::ReplicaDescriptor* RangeDescriptor::mutable_internal_replicas(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeDescriptor.internal_replicas)
+  return internal_replicas_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >*
-RangeDescriptor::mutable_replicas() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeDescriptor.replicas)
-  return &replicas_;
+RangeDescriptor::mutable_internal_replicas() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeDescriptor.internal_replicas)
+  return &internal_replicas_;
 }
-inline const ::cockroach::roachpb::ReplicaDescriptor& RangeDescriptor::replicas(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeDescriptor.replicas)
-  return replicas_.Get(index);
+inline const ::cockroach::roachpb::ReplicaDescriptor& RangeDescriptor::internal_replicas(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeDescriptor.internal_replicas)
+  return internal_replicas_.Get(index);
 }
-inline ::cockroach::roachpb::ReplicaDescriptor* RangeDescriptor::add_replicas() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeDescriptor.replicas)
-  return replicas_.Add();
+inline ::cockroach::roachpb::ReplicaDescriptor* RangeDescriptor::add_internal_replicas() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeDescriptor.internal_replicas)
+  return internal_replicas_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor >&
-RangeDescriptor::replicas() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeDescriptor.replicas)
-  return replicas_;
+RangeDescriptor::internal_replicas() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeDescriptor.internal_replicas)
+  return internal_replicas_;
 }
 
 inline bool RangeDescriptor::has_next_replica_id() const {

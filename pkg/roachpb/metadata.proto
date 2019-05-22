@@ -85,10 +85,11 @@ message RangeDescriptor {
   // contained in this range - it will be contained in the immediately
   // subsequent range.
   optional bytes end_key = 3 [(gogoproto.casttype) = "RKey"];
-  // replicas is the set of nodes/stores on which replicas of this
-  // range are stored, the ordering being arbitrary and subject to
-  // permutation.
-  repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = false];
+
+  // InternalReplicas is the is the set of nodes/stores on which replicas of
+  // this range are stored. DO NOT USE this field directly, use the `Replicas`
+  // method instead. The ordering is arbitrary and subject to permutation.
+  repeated ReplicaDescriptor internal_replicas = 4 [(gogoproto.nullable) = false];
 
   // next_replica_id is a counter used to generate replica IDs.
   optional int32 next_replica_id = 5 [(gogoproto.nullable) = false,
@@ -115,7 +116,7 @@ message RangeDescriptor {
   // newly created right hand side. On merges, we update the left hand side's
   // generation so that it exceeds by one the maximum of the left hand side and
   // the right hand side's generations from before the merge.
-  // 
+  //
   // If two replicas (perhaps one of them represented by a raft or preemptive
   // snapshot) as defined by their full range descriptor (including, notably,
   // the generation) overlap, then one of them has to be stale. This is because
