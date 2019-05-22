@@ -231,7 +231,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				ck.Validity = sqlbase.ConstraintValidity_Validating
-				n.tableDesc.AddCheckValidationMutation(ck)
+				n.tableDesc.AddCheckMutation(ck)
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
@@ -499,12 +499,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 			switch constraint.Kind {
 			case sqlbase.ConstraintTypeCheck:
 				found := false
-				var ck *sqlbase.TableDescriptor_CheckConstraint
 				for _, c := range n.tableDesc.Checks {
 					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
 					if c.Name == name && c.Validity != sqlbase.ConstraintValidity_Validating {
 						found = true
-						ck = c
 						break
 					}
 				}
@@ -512,22 +510,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
-				if err := validateCheckInTxn(
-					params.ctx, params.p.LeaseMgr(), params.EvalContext(), n.tableDesc, params.EvalContext().Txn, name,
-				); err != nil {
-					return err
-				}
-				ck.Validity = sqlbase.ConstraintValidity_Validated
+				n.tableDesc.AddValidateCheckMutation(name)
 
 			case sqlbase.ConstraintTypeFK:
 				found := false
-				var fkIdx *sqlbase.IndexDescriptor
 				for _, idx := range n.tableDesc.AllNonDropIndexes() {
 					fk := &idx.ForeignKey
 					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
 					if fk.IsSet() && fk.Name == name && fk.Validity != sqlbase.ConstraintValidity_Validating {
 						found = true
-						fkIdx = idx
 						break
 					}
 				}
@@ -535,12 +526,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
-				if err := validateFkInTxn(
-					params.ctx, params.p.LeaseMgr(), params.EvalContext(), n.tableDesc, params.EvalContext().Txn, name,
-				); err != nil {
-					return err
-				}
-				fkIdx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
+				n.tableDesc.AddValidateForeignKeyMutation(name)
 
 			default:
 				return pgerror.Newf(pgcode.WrongObjectType,

@@ -26,7 +26,11 @@ enum ConstraintValidity {
   // validated until VALIDATE CONSTRAINT is used).
   Unvalidated = 1;
   // The constraint was just added, but the validation for existing rows is not
-  // yet complete. If validation fails, the constraint will be dropped.
+  // yet complete. If validation fails, the constraint will be dropped. This
+  // state is unique to constraints being added using ADD CONSTRAINT, and
+  // indicates that the constraint should be dropped on failure. Unvalidated
+  // constraints undergoing validation using VALIDATE CONSTRAINT never enter
+  // this state.
   Validating = 2;
 }
 
@@ -323,19 +327,23 @@ message IndexDescriptor {
   optional Type type = 16 [(gogoproto.nullable)=false];
 }
 
-// ConstraintToUpdate represents a constraint to be added to the table and
-// validated for existing rows. More generally, in the future, when we support
-// adding constraints that are unvalidated for existing rows and can be
-// validated later using VALIDATE CONSTRAINT, this mutation will also represent
-// either adding an unvalidated constraint or validating an existing constraint.
+// ConstraintToUpdate represents a constraint to be added or validated. This
+// mutation effects changes only in the backfill step of the schema changer, as
+// follows:
 //
-// This mutation effects changes only in the backfill step of the schema
-// changer: First, a new version of the table descriptor with the constraint
+// In the case where a constraint is added and needs to be validated for
+// existing rows, a new version of the table descriptor with the constraint
 // added is published, after all columns being added have been backfilled. After
 // waiting for the constraint to be enforced for writes on all nodes, the
 // constraint is then validated for all existing rows. This ensures that
 // constraints added to columns that are being added are correctly enforced
 // before the column becomes public.
+//
+// If the constraint already exists and just needs to be validated, then only
+// the validation query is run.
+//
+// Adding a constraint without the validation step, with ADD CONSTRAINT ... NOT
+// VALID, is not yet supported.
 message ConstraintToUpdate {
   enum ConstraintType {
     CHECK = 0;
@@ -346,12 +354,19 @@ message ConstraintToUpdate {
     // constraint.
     NOT_NULL = 2;
   }
+  enum UpdateType {
+    // The constraint needs to be added (and possibly validated for existing rows before being made public)
+    ADD_CONSTRAINT = 0;
+    // The constraint already exists, and needs to be validated
+    VALIDATE_CONSTRAINT = 1;
+  }
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
   optional TableDescriptor.CheckConstraint check = 3 [(gogoproto.nullable) = false];
   optional ForeignKeyReference foreign_key = 4 [(gogoproto.nullable) = false];
   optional uint32 foreign_key_index = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  optional UpdateType update_type = 7 [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that

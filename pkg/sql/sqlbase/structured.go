@@ -601,7 +601,8 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 		}
 	}
 	for _, m := range desc.Mutations {
-		if c := m.GetConstraint(); c != nil && c.ConstraintType == ConstraintToUpdate_CHECK {
+		if c := m.GetConstraint(); c != nil && c.ConstraintType == ConstraintToUpdate_CHECK &&
+			c.UpdateType == ConstraintToUpdate_ADD_CONSTRAINT {
 			checks = append(checks, &c.Check)
 		}
 	}
@@ -632,7 +633,8 @@ func (desc *TableDescriptor) AllActiveAndInactiveForeignKeys() (
 		}
 	}
 	for i := range desc.Mutations {
-		if c := desc.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == ConstraintToUpdate_FOREIGN_KEY {
+		if c := desc.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == ConstraintToUpdate_FOREIGN_KEY &&
+			c.UpdateType == ConstraintToUpdate_ADD_CONSTRAINT {
 			if _, ok := fks[c.ForeignKeyIndex]; ok {
 				return nil, errors.AssertionFailedf(
 					"foreign key mutation found for index that already has a foreign key")
@@ -2383,11 +2385,17 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					}
 				}
 			case ConstraintToUpdate_FOREIGN_KEY:
-				idx, err := desc.FindIndexByID(t.Constraint.ForeignKeyIndex)
-				if err != nil {
-					return err
+				if desc.PrimaryIndex.ForeignKey.IsSet() && desc.PrimaryIndex.ForeignKey.Name == t.Constraint.Name {
+					desc.PrimaryIndex.ForeignKey.Validity = ConstraintValidity_Validated
+				} else {
+					for i := range desc.Indexes {
+						idx := &desc.Indexes[i]
+						if idx.ForeignKey.IsSet() && idx.ForeignKey.Name == t.Constraint.Name {
+							idx.ForeignKey.Validity = ConstraintValidity_Validated
+							break
+						}
+					}
 				}
-				idx.ForeignKey.Validity = ConstraintValidity_Validated
 			case ConstraintToUpdate_NOT_NULL:
 				// Remove the dummy check constraint that was in place during validation
 				for i, c := range desc.Checks {
@@ -2416,14 +2424,15 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 	return nil
 }
 
-// AddCheckValidationMutation adds a check constraint validation mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddCheckValidationMutation(
-	ck *TableDescriptor_CheckConstraint,
-) {
+// AddCheckMutation adds a mutation to add a check constraint to desc.Mutations.
+func (desc *MutableTableDescriptor) AddCheckMutation(ck *TableDescriptor_CheckConstraint) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
-				ConstraintType: ConstraintToUpdate_CHECK, Name: ck.Name, Check: *ck,
+				ConstraintType: ConstraintToUpdate_CHECK,
+				Name:           ck.Name,
+				Check:          *ck,
+				UpdateType:     ConstraintToUpdate_ADD_CONSTRAINT,
 			},
 		},
 		Direction: DescriptorMutation_ADD,
@@ -2431,10 +2440,8 @@ func (desc *MutableTableDescriptor) AddCheckValidationMutation(
 	desc.addMutation(m)
 }
 
-// AddForeignKeyValidationMutation adds a foreign key constraint validation mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(
-	fk *ForeignKeyReference, idx IndexID,
-) {
+// AddForeignKeyMutation adds a mutation to add a FK constraint to desc.Mutations.
+func (desc *MutableTableDescriptor) AddForeignKeyMutation(fk *ForeignKeyReference, idx IndexID) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
@@ -2442,6 +2449,37 @@ func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(
 				Name:            fk.Name,
 				ForeignKey:      *fk,
 				ForeignKeyIndex: idx,
+				UpdateType:      ConstraintToUpdate_ADD_CONSTRAINT,
+			},
+		},
+		Direction: DescriptorMutation_ADD,
+	}
+	desc.addMutation(m)
+}
+
+// AddValidateCheckMutation adds a mutation to validate an existing check constraint to desc.Mutations.
+func (desc *MutableTableDescriptor) AddValidateCheckMutation(name string) {
+	m := DescriptorMutation{
+		Descriptor_: &DescriptorMutation_Constraint{
+			Constraint: &ConstraintToUpdate{
+				ConstraintType: ConstraintToUpdate_CHECK,
+				Name:           name,
+				UpdateType:     ConstraintToUpdate_VALIDATE_CONSTRAINT,
+			},
+		},
+		Direction: DescriptorMutation_ADD,
+	}
+	desc.addMutation(m)
+}
+
+// AddValidateForeignKeyMutation adds a mutation to validate an existing FK constraint to desc.Mutations.
+func (desc *MutableTableDescriptor) AddValidateForeignKeyMutation(name string) {
+	m := DescriptorMutation{
+		Descriptor_: &DescriptorMutation_Constraint{
+			Constraint: &ConstraintToUpdate{
+				ConstraintType: ConstraintToUpdate_FOREIGN_KEY,
+				Name:           name,
+				UpdateType:     ConstraintToUpdate_VALIDATE_CONSTRAINT,
 			},
 		},
 		Direction: DescriptorMutation_ADD,

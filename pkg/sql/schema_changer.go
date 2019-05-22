@@ -1310,10 +1310,12 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
 			desc.Mutations[i], columns = sc.reverseMutation(mutation, false /*notStarted*/, columns)
 
-			// If the mutation is for validating a constraint that is being added,
-			// drop the constraint because validation has failed
+			// If the mutation is for adding a validated constraint, then the table
+			// descriptor has already been updated with the constraint in a Validating
+			// state. In that case, drop the constraint, because validation failed.
 			if constraint := mutation.GetConstraint(); constraint != nil &&
-				mutation.Direction == sqlbase.DescriptorMutation_ADD {
+				mutation.Direction == sqlbase.DescriptorMutation_ADD &&
+				constraint.UpdateType == sqlbase.ConstraintToUpdate_ADD_CONSTRAINT {
 				log.Warningf(ctx, "dropping constraint %+v", constraint)
 				if err := sc.maybeDropValidatingConstraint(ctx, desc, constraint); err != nil {
 					return err

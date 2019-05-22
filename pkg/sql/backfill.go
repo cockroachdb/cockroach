@@ -126,7 +126,7 @@ func (sc *SchemaChanger) runBackfill(
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexSpans []roachpb.Span
 
-	var constraintsToAdd []sqlbase.ConstraintToUpdate
+	var constraintsToAddPreValidation []sqlbase.ConstraintToUpdate
 	var constraintsToValidate []sqlbase.ConstraintToUpdate
 
 	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
@@ -158,7 +158,9 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Index:
 				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(t.Index.ID))
 			case *sqlbase.DescriptorMutation_Constraint:
-				constraintsToAdd = append(constraintsToAdd, *t.Constraint)
+				if t.Constraint.UpdateType == sqlbase.ConstraintToUpdate_ADD_CONSTRAINT {
+					constraintsToAddPreValidation = append(constraintsToAddPreValidation, *t.Constraint)
+				}
 				constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 			default:
 				return errors.AssertionFailedf(
@@ -220,8 +222,8 @@ func (sc *SchemaChanger) runBackfill(
 	// a constraint references both public and non-public columns), and 2) the
 	// validation occurs only when the entire cluster is already enforcing the
 	// constraint on insert/update.
-	if len(constraintsToAdd) > 0 {
-		if err := sc.AddConstraints(ctx, constraintsToAdd); err != nil {
+	if len(constraintsToAddPreValidation) > 0 {
+		if err := sc.addConstraints(ctx, constraintsToAddPreValidation); err != nil {
 			return err
 		}
 	}
@@ -238,7 +240,7 @@ func (sc *SchemaChanger) runBackfill(
 // AddConstraints publishes a new version of the given table descriptor with the
 // given check constraint added to it, and waits until the entire cluster is on
 // the new version of the table descriptor.
-func (sc *SchemaChanger) AddConstraints(
+func (sc *SchemaChanger) addConstraints(
 	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
 ) error {
 	fksByBackrefTable := make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
@@ -1220,13 +1222,17 @@ func runSchemaChangesInTxn(
 			case *sqlbase.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
-					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
-				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
-					idx, err := tableDesc.FindIndexByID(t.Constraint.ForeignKeyIndex)
-					if err != nil {
-						return err
+					if t.Constraint.UpdateType == sqlbase.ConstraintToUpdate_ADD_CONSTRAINT {
+						tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 					}
-					idx.ForeignKey = t.Constraint.ForeignKey
+				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+					if t.Constraint.UpdateType == sqlbase.ConstraintToUpdate_ADD_CONSTRAINT {
+						idx, err := tableDesc.FindIndexByID(t.Constraint.ForeignKeyIndex)
+						if err != nil {
+							return err
+						}
+						idx.ForeignKey = t.Constraint.ForeignKey
+					}
 				default:
 					return errors.AssertionFailedf(
 						"unsupported constraint type: %d", errors.Safe(t.Constraint.ConstraintType))
