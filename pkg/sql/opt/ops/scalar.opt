@@ -910,9 +910,18 @@ define Windows {
 # Window expression.
 [Scalar, ListItem]
 define WindowsItem {
-  Function ScalarExpr
+    Function ScalarExpr
 
-  _ ColPrivate
+    _ WindowsItemPrivate
+}
+
+[Private]
+define WindowsItemPrivate {
+    # Frame is the frame that this item is computed relative to within its
+    # partition. The bounds pointers within it are guaranteed to be non-nil.
+    Frame WindowFrame
+
+    _ ColPrivate
 }
 
 # Rank computes the position of a row relative to an ordering, with same-valued
