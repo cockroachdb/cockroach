@@ -491,6 +491,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 	// Some interceptors are only needed by roots.
 	if typ == client.RootTxn {
 		tcs.interceptorAlloc.txnHeartbeater.init(
+			tcf.AmbientContext,
 			&tcs.mu.Mutex,
 			&tcs.mu.txn,
 			tcf.st,

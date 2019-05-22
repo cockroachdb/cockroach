@@ -72,7 +72,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r.AmbientContext.AddLogTag("r", &r.rangeStr)
 	// Add replica pointer value. NB: this was historically useful for debugging
 	// replica GC issues, but is a distraction at the moment.
-	// r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
+	// r.AmbientContext.AddLogTag("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 	r.raftMu.stateLoader = stateloader.Make(rangeID)
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
