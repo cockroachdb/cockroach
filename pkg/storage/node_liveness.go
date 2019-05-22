@@ -448,7 +448,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 
 	stopper.RunWorker(ctx, func(context.Context) {
 		ambient := nl.ambientCtx
-		ambient.AddLogTag("hb", nil)
+		ambient.AddLogTag("liveness-hb", nil)
 		ctx, cancel := stopper.WithCancelOnStop(context.Background())
 		defer cancel()
 		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
