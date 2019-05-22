@@ -50,8 +50,8 @@ func newRowHelper(
 	rh.primIndexValDirs = sqlbase.IndexKeyValDirs(&rh.TableDesc.PrimaryIndex)
 
 	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
-	for i, index := range rh.Indexes {
-		rh.secIndexValDirs[i] = sqlbase.IndexKeyValDirs(&index)
+	for i := range rh.Indexes {
+		rh.secIndexValDirs[i] = sqlbase.IndexKeyValDirs(&rh.Indexes[i])
 	}
 
 	return rh
