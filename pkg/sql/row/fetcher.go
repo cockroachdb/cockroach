@@ -1199,9 +1199,10 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 
 	rh := rowHelper{TableDesc: table.desc, Indexes: table.desc.Indexes}
 
-	for _, family := range table.desc.Families {
+	for i := range table.desc.Families {
 		var lastColID sqlbase.ColumnID
-		familySortedColumnIDs, ok := rh.sortedColumnFamily(family.ID)
+		familyID := table.desc.Families[i].ID
+		familySortedColumnIDs, ok := rh.sortedColumnFamily(familyID)
 		if !ok {
 			panic("invalid family sorted column id map")
 		}
@@ -1213,7 +1214,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 				continue
 			}
 
-			if skip, err := rh.skipColumnInPK(colID, family.ID, rowVal.Datum); err != nil {
+			if skip, err := rh.skipColumnInPK(colID, familyID, rowVal.Datum); err != nil {
 				log.Errorf(ctx, "unexpected error: %s", err)
 				continue
 			} else if skip {

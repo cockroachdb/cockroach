@@ -232,16 +232,17 @@ func makeUpdaterWithoutCascader(
 		// If any part of a column family is being updated, fetch all columns in
 		// that column family so that we can reconstruct the column family with
 		// the updated columns before writing it.
-		for _, fam := range tableDesc.Families {
+		for i := range tableDesc.Families {
+			family := &tableDesc.Families[i]
 			familyBeingUpdated := false
-			for _, colID := range fam.ColumnIDs {
+			for _, colID := range family.ColumnIDs {
 				if _, ok := ru.UpdateColIDtoRowIndex[colID]; ok {
 					familyBeingUpdated = true
 					break
 				}
 			}
 			if familyBeingUpdated {
-				for _, colID := range fam.ColumnIDs {
+				for _, colID := range family.ColumnIDs {
 					if err := maybeAddCol(colID); err != nil {
 						return Updater{}, err
 					}
