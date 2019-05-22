@@ -722,7 +722,8 @@ func neededColumnFamilyIDs(
 	colIdxMap := tableDesc.ColumnIdxMap()
 
 	var needed []sqlbase.FamilyID
-	for _, family := range tableDesc.Families {
+	for i := range tableDesc.Families {
+		family := &tableDesc.Families[i]
 		for _, columnID := range family.ColumnIDs {
 			columnOrdinal := colIdxMap[columnID]
 			if neededCols.Contains(columnOrdinal) {
