@@ -293,12 +293,12 @@ SELECT x FROM a GROUP BY x, y
 ----
 project
  ├── columns: x:1(int!null)
- ├── stats: [rows=1000]
+ ├── stats: [rows=1001]
  ├── key: (1)
  └── group-by
       ├── columns: x:1(int!null) y:2(int)
       ├── grouping columns: x:1(int!null) y:2(int)
-      ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=1000]
+      ├── stats: [rows=1001, distinct(1,2)=1000, null(1,2)=1000]
       ├── key: (1)
       ├── fd: (1)-->(2)
       └── project
@@ -346,7 +346,7 @@ SELECT y, sum(z) FROM a GROUP BY y
 group-by
  ├── columns: y:2(int) sum:5(float)
  ├── grouping columns: y:2(int)
- ├── stats: [rows=400, distinct(2)=400, null(2)=400]
+ ├── stats: [rows=401, distinct(2)=400, null(2)=401]
  ├── key: (2)
  ├── fd: (2)-->(5)
  ├── project
@@ -366,11 +366,11 @@ SELECT max(x) FROM a GROUP BY y, z, s
 ----
 project
  ├── columns: max:5(int)
- ├── stats: [rows=600]
+ ├── stats: [rows=601]
  └── group-by
       ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
       ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
-      ├── stats: [rows=600, distinct(2-4)=600, null(2-4)=600]
+      ├── stats: [rows=601, distinct(2-4)=600, null(2-4)=601]
       ├── key: (2-4)
       ├── fd: (3,4)~~>(2), (2-4)-->(5)
       ├── scan a
@@ -413,16 +413,16 @@ SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
 ----
 project
  ├── columns: max:5(int)
- ├── stats: [rows=118.9]
+ ├── stats: [rows=119.1]
  └── select
       ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
-      ├── stats: [rows=118.9, distinct(3)=97.6, null(3)=0, distinct(4)=2, null(4)=0]
+      ├── stats: [rows=119.1, distinct(3)=97.7141858, null(3)=0, distinct(4)=2, null(4)=0]
       ├── key: (3,4)
       ├── fd: (3,4)-->(2), (2-4)-->(5)
       ├── group-by
       │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
       │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
-      │    ├── stats: [rows=600, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=5.5, distinct(2-4)=600, null(2-4)=600]
+      │    ├── stats: [rows=601, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=5.5, distinct(2-4)=600, null(2-4)=601]
       │    ├── key: (2-4)
       │    ├── fd: (3,4)~~>(2), (2-4)-->(5)
       │    ├── scan a
@@ -442,13 +442,13 @@ SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
 ----
 select
  ├── columns: sum:5(decimal!null) s:4(string)
- ├── stats: [rows=0.9, distinct(5)=0.9, null(5)=0]
+ ├── stats: [rows=1, distinct(5)=1, null(5)=0]
  ├── key: (4)
  ├── fd: ()-->(5)
  ├── group-by
  │    ├── columns: s:4(string) sum:5(decimal)
  │    ├── grouping columns: s:4(string)
- │    ├── stats: [rows=10, distinct(4)=10, null(4)=10, distinct(5)=10, null(5)=1]
+ │    ├── stats: [rows=11, distinct(4)=10, null(4)=11, distinct(5)=10, null(5)=1]
  │    ├── key: (4)
  │    ├── fd: (4)-->(5)
  │    ├── project
@@ -479,19 +479,19 @@ GROUP BY q.b
 project
  ├── columns: "?column?":4(int!null)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=0]
+ ├── stats: [rows=0.5]
  ├── fd: ()-->(4)
  ├── select
  │    ├── columns: column2:2(int) bool_or:3(bool!null)
  │    ├── cardinality: [0 - 3]
- │    ├── stats: [rows=0, distinct(3)=0, null(3)=0]
+ │    ├── stats: [rows=0.5, distinct(3)=0.5, null(3)=0]
  │    ├── key: (2)
  │    ├── fd: ()-->(3)
  │    ├── group-by
  │    │    ├── columns: column2:2(int) bool_or:3(bool)
  │    │    ├── grouping columns: column2:2(int)
  │    │    ├── cardinality: [0 - 3]
- │    │    ├── stats: [rows=0.875, distinct(2)=0.875, null(2)=0.875, distinct(3)=0.875, null(3)=0.875]
+ │    │    ├── stats: [rows=1.5, distinct(2)=0.875, null(2)=1, distinct(3)=0.875, null(3)=1]
  │    │    ├── key: (2)
  │    │    ├── fd: (2)-->(3)
  │    │    ├── select

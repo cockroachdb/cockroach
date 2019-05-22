@@ -523,11 +523,11 @@ GROUP BY y
 ----
 project
  ├── columns: count:8(int)
- ├── stats: [rows=399.903879]
+ ├── stats: [rows=400.903879]
  └── group-by
       ├── columns: y:2(int) count_rows:8(int)
       ├── grouping columns: y:2(int)
-      ├── stats: [rows=399.903879, distinct(2)=399.903879, null(2)=399.903879]
+      ├── stats: [rows=400.903879, distinct(2)=399.903879, null(2)=400.903879]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── right-join
@@ -556,11 +556,11 @@ GROUP BY y
 ----
 project
  ├── columns: count:8(int)
- ├── stats: [rows=400]
+ ├── stats: [rows=401]
  └── group-by
       ├── columns: y:2(int) count_rows:8(int)
       ├── grouping columns: y:2(int)
-      ├── stats: [rows=400, distinct(2)=400, null(2)=400]
+      ├── stats: [rows=401, distinct(2)=400, null(2)=401]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── full-join
@@ -944,3 +944,163 @@ left-join (merge)
  │         └── fd: (7)-->(5,6)
  └── filters
       └── y > v [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+
+# Check that true filters are handled correctly for all join types.
+norm
+SELECT * FROM (SELECT 1) JOIN (SELECT 1 WHERE false) ON true
+----
+values
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+norm
+SELECT * FROM (SELECT 1) LEFT JOIN (SELECT 1 WHERE false) ON true
+----
+left-join
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: "?column?":1(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,) [type=tuple{int}]
+ ├── values
+ │    ├── columns: "?column?":2(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(2)
+ └── filters (true)
+
+norm
+SELECT * FROM (SELECT 1) RIGHT JOIN (SELECT 1 WHERE false) ON true
+----
+values
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+norm
+SELECT * FROM (SELECT 1) FULL JOIN (SELECT 1 WHERE false) ON true
+----
+left-join
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: "?column?":1(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,) [type=tuple{int}]
+ ├── values
+ │    ├── columns: "?column?":2(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(2)
+ └── filters (true)
+
+norm
+SELECT * FROM (SELECT 1 WHERE false) JOIN (SELECT 1) ON true
+----
+values
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+norm
+SELECT * FROM (SELECT 1 WHERE false) LEFT JOIN (SELECT 1) ON true
+----
+values
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+norm
+SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
+----
+right-join
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: "?column?":1(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ ├── values
+ │    ├── columns: "?column?":2(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    └── (1,) [type=tuple{int}]
+ └── filters (true)
+
+norm
+SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
+----
+right-join
+ ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: "?column?":1(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ ├── values
+ │    ├── columns: "?column?":2(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    └── (1,) [type=tuple{int}]
+ └── filters (true)
+
+norm
+SELECT * FROM (SELECT 1) FULL JOIN (VALUES (1), (2)) ON true
+----
+inner-join
+ ├── columns: "?column?":1(int) column1:2(int)
+ ├── cardinality: [2 - 2]
+ ├── stats: [rows=2]
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── columns: "?column?":1(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,) [type=tuple{int}]
+ ├── values
+ │    ├── columns: column1:2(int)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2]
+ │    ├── (1,) [type=tuple{int}]
+ │    └── (2,) [type=tuple{int}]
+ └── filters (true)

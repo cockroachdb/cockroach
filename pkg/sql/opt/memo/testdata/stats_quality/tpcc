@@ -1497,7 +1497,7 @@ project
  ├── save-table-name: delivery_01_project_1
  ├── columns: no_o_id:1(int!null)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(1)=94.6943635, null(1)=0]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── cost: 1.09
  ├── key: ()
  ├── fd: ()-->(1)
@@ -1507,7 +1507,7 @@ project
       ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
       ├── constraint: /3/2/-1: [/7/6 - /7/6]
       ├── limit: 1(rev)
-      ├── stats: [rows=1, distinct(1)=94.6943635, null(1)=0, distinct(2)=9.99954852, null(2)=0, distinct(3)=9.99954852, null(3)=0]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
       ├── cost: 1.07
       ├── key: ()
       ├── fd: ()-->(1-3)
@@ -1522,9 +1522,9 @@ column_names  row_count  distinct_count  null_count
 {no_w_id}     1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{no_d_id}     1.00           1.00           10.00               10.00 <==           0.00            1.00
-{no_o_id}     1.00           1.00           95.00               95.00 <==           0.00            1.00
-{no_w_id}     1.00           1.00           10.00               10.00 <==           0.00            1.00
+{no_d_id}     1.00           1.00           1.00                1.00                0.00            1.00
+{no_o_id}     1.00           1.00           1.00                1.00                0.00            1.00
+{no_w_id}     1.00           1.00           1.00                1.00                0.00            1.00
 
 save-tables format=hide-qual database=tpcc save-tables-prefix=delivery_02
 SELECT sum(ol_amount)
