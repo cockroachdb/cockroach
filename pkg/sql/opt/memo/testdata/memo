@@ -317,11 +317,11 @@ memo (optimized, ~3KB, required=[presentation: array_agg:3])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:3]
  │         ├── best: (project G2 G3 array_agg)
- │         └── cost: 1072.04
+ │         └── cost: 1072.06
  ├── G2: (group-by G4 G5 cols=(2))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(2))
- │         └── cost: 1071.03
+ │         └── cost: 1071.04
  ├── G3: (projections)
  ├── G4: (scan a)
  │    └── []
@@ -357,7 +357,7 @@ memo (optimized, ~5KB, required=[presentation: field:3])
  ├── G1: (distinct-on G2 G3 cols=(3))
  │    └── [presentation: field:3]
  │         ├── best: (distinct-on G2 G3 cols=(3))
- │         └── cost: 0.04
+ │         └── cost: 0.34
  ├── G2: (explain G4 [presentation: k:1])
  │    └── []
  │         ├── best: (explain G4="[presentation: k:1]" [presentation: k:1])
@@ -379,7 +379,7 @@ memo (optimized, ~2KB, required=[presentation: tag:4])
  ├── G1: (distinct-on G2 G3 cols=(4))
  │    └── [presentation: tag:4]
  │         ├── best: (distinct-on G2 G3 cols=(4))
- │         └── cost: 0.02
+ │         └── cost: 0.32
  ├── G2: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
  │    └── []
  │         ├── best: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})

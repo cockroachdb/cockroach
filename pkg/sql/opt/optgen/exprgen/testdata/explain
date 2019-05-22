@@ -24,7 +24,7 @@ expr
 ----
 explain
  ├── mode: opt, verbose
- ├── stats: [rows=0]
+ ├── stats: [rows=10]
  ├── cost: 1050.03
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
@@ -44,7 +44,7 @@ expr
 ----
 explain
  ├── mode: verbose
- ├── stats: [rows=0]
+ ├── stats: [rows=10]
  ├── cost: 1050.03
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
@@ -64,7 +64,7 @@ expr
 ----
 explain
  ├── mode: opt
- ├── stats: [rows=0]
+ ├── stats: [rows=10]
  ├── cost: 1050.03
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
@@ -91,7 +91,7 @@ expr
 ----
 explain
  ├── mode: opt
- ├── stats: [rows=0]
+ ├── stats: [rows=10]
  ├── cost: 1279.35569
  └── sort
       ├── columns: a:1(int)  [hidden: t.public.abc.b:2(int)]
@@ -114,7 +114,7 @@ expr
 ----
 explain
  ├── mode: distsql
- ├── stats: [rows=0]
+ ├── stats: [rows=10]
  ├── cost: 1050.03
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)

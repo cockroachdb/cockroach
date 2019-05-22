@@ -209,3 +209,39 @@ limit
  │    └── filters
  │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
  └── const: 5 [type=int]
+
+exec-ddl
+CREATE TABLE b (x int)
+----
+TABLE b
+ ├── x int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Regression test for #32578. Ensure that we don't estimate 0 rows for the
+# offset.
+opt colstat=1
+SELECT * FROM b ORDER BY x LIMIT 1 OFFSET 9999
+----
+limit
+ ├── columns: x:1(int)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=0.995511979, null(1)=0.01]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── offset
+ │    ├── columns: x:1(int)
+ │    ├── internal-ordering: +1
+ │    ├── stats: [rows=1, distinct(1)=0.995511979, null(1)=0.01]
+ │    ├── ordering: +1
+ │    ├── sort
+ │    │    ├── columns: x:1(int)
+ │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    │    ├── ordering: +1
+ │    │    └── scan b
+ │    │         ├── columns: x:1(int)
+ │    │         └── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    └── const: 9999 [type=int]
+ └── const: 1 [type=int]
