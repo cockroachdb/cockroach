@@ -29,7 +29,6 @@ func registerTests(r *registry) {
 	registerClock(r)
 	registerCopy(r)
 	registerDecommission(r)
-	registerDiskUsage(r)
 	registerDiskFull(r)
 	registerDiskStalledDetection(r)
 	registerDrop(r)
