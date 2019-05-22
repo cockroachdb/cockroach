@@ -103,19 +103,7 @@ func (c *CustomFuncs) CanSimplifyWindowOrdering(in memo.RelExpr, private *memo.W
 	if private.Ordering.Any() {
 		return false
 	}
-	// Indiscriminately simplifying the ordering introduces a subtle bug right now:
-	// the framing behavior of aggregates is dependent on whether or not there was
-	// an ordering specified. If we eliminate the ordering here then we can lose
-	// that information because the execution engine doesn't know whether or not
-	// an ordering was initially specified. This will be fixed when we explicitly
-	// handle framing in the optimizer.
-	// TODO(justin): when the above is fixed, change this to just use CanSimplify.
 	deps := c.withinPartitionFuncDeps(in, private)
-	simplified := private.Ordering.Copy()
-	simplified.Simplify(deps)
-	if simplified.Any() {
-		return false
-	}
 
 	return private.Ordering.CanSimplify(deps)
 }

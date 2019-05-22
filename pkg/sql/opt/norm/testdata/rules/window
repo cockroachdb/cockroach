@@ -67,14 +67,12 @@ SELECT rank() OVER (PARTITION BY k ORDER BY i) FROM a
 ----
 project
  ├── columns: rank:6(int)
- └── window partition=(1) ordering=+2
-      ├── columns: k:1(int!null) i:2(int) rank:6(int)
+ └── window partition=(1)
+      ├── columns: k:1(int!null) rank:6(int)
       ├── key: (1)
-      ├── fd: (1)-->(2)
       ├── scan a
-      │    ├── columns: k:1(int!null) i:2(int)
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2)
+      │    ├── columns: k:1(int!null)
+      │    └── key: (1)
       └── windows
            └── rank [type=undefined]
 
