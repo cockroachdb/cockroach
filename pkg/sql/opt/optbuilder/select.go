@@ -91,11 +91,7 @@ func (b *Builder) buildDataSource(
 		ds, resName := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
 		case cat.Table:
-			tabID := b.factory.Metadata().AddTableWithAlias(t, &resName)
-			if indexFlags != nil && indexFlags.IgnoreForeignKeys {
-				b.factory.Metadata().TableMeta(tabID).IgnoreForeignKeys = true
-			}
-			return b.buildScan(tabID, nil /* ordinals */, indexFlags, excludeMutations, inScope)
+			return b.buildScan(t, &resName, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case cat.View:
 			return b.buildView(t, inScope)
 		case cat.Sequence:
@@ -292,8 +288,7 @@ func (b *Builder) buildScanFromTableRef(
 		}
 	}
 
-	tabID := b.factory.Metadata().AddTable(tab)
-	return b.buildScan(tabID, ordinals, indexFlags, excludeMutations, inScope)
+	return b.buildScan(tab, tab.Name(), ordinals, indexFlags, excludeMutations, inScope)
 }
 
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
@@ -308,15 +303,19 @@ func (b *Builder) buildScanFromTableRef(
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) buildScan(
-	tabID opt.TableID,
+	tab cat.Table,
+	alias *tree.TableName,
 	ordinals []int,
 	indexFlags *tree.IndexFlags,
 	scanMutationCols bool,
 	inScope *scope,
 ) (outScope *scope) {
 	md := b.factory.Metadata()
+	tabID := md.AddTableWithAlias(tab, alias)
 	tabMeta := md.TableMeta(tabID)
-	tab := tabMeta.Table
+	if indexFlags != nil && indexFlags.IgnoreForeignKeys {
+		tabMeta.IgnoreForeignKeys = true
+	}
 
 	colCount := len(ordinals)
 	if colCount == 0 {
