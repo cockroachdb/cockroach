@@ -110,7 +110,7 @@ select
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0]
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
@@ -127,7 +127,7 @@ select
  ├── fd: ()-->(2)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(2)=400, null(2)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
@@ -141,12 +141,12 @@ SELECT * FROM a WHERE x IS NULL
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.8, distinct(1)=0.8, null(1)=0]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0]
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
@@ -263,11 +263,11 @@ SELECT count(*) FROM (SELECT * FROM tab0 WHERE col3 = 10) GROUP BY col0
 ----
 project
  ├── columns: count:8(int)
- ├── stats: [rows=0]
+ ├── stats: [rows=1]
  └── group-by
       ├── columns: col0:2(int) count_rows:8(int)
       ├── grouping columns: col0:2(int)
-      ├── stats: [rows=0, distinct(2)=0, null(2)=0]
+      ├── stats: [rows=1, distinct(2)=0, null(2)=1]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── select
