@@ -179,6 +179,27 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // sync WAL ever, so setting it to zero is fine there too.
   options.wal_bytes_per_sync = 0;
 
+  // On ext4 and xfs, at least, `fallocate()`ing a large empty WAL is not enough
+  // to avoid inode writeback on every `fdatasync()`. Although `fallocate()` can
+  // preallocate space and preset the file size, it marks the preallocated
+  // "extents" as unwritten in the inode to guarantee readers cannot be exposed
+  // to data belonging to others. Every time `fdatasync()` happens, an inode
+  // writeback happens for the update to split an unwritten extent and mark part
+  // of it as written.
+  //
+  // Setting `recycle_log_file_num > 0` circumvents this as it'll eventually
+  // reuse WALs where extents are already all marked as written. When the DB
+  // opens, the first WAL will have its space preallocated as unwritten extents,
+  // so will still incur frequent inode writebacks. The second WAL will as well
+  // since the first WAL cannot be recycled until the first flush completes.
+  // From the third WAL onwards, however, we will have a previously written WAL
+  // readily available to recycle.
+  //
+  // We could pick a higher value if we see memtable flush backing up, or if we
+  // start using column families (WAL changes every time any column family
+  // initiates a flush, and WAL cannot be reused until that flush completes).
+  options.recycle_log_file_num = 1;
+
   // The size reads should be performed in for compaction. The
   // internets claim this can speed up compactions, though RocksDB
   // docs say it is only useful on spinning disks. Experimentally it

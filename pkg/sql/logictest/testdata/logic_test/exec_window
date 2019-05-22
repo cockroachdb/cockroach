@@ -10,6 +10,9 @@ INSERT INTO t VALUES
   (0, 'b'),
   (1, 'b')
 
+statement ok
+SET experimental_vectorize=always
+
 # We sort the output on all queries to get deterministic results.
 query ITI
 SELECT a, b, row_number() OVER () FROM t ORDER BY b, a
