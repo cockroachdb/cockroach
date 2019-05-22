@@ -513,7 +513,7 @@ func rebalanceCandidates(
 	var needRebalanceFrom bool
 	curDiversityScore := rangeDiversityScore(existingNodeLocalities)
 	for _, store := range allStores.stores {
-		for _, repl := range rangeInfo.Desc.Replicas {
+		for _, repl := range rangeInfo.Desc.Replicas().Unwrap() {
 			if store.StoreID != repl.StoreID {
 				continue
 			}
@@ -592,9 +592,10 @@ func rebalanceCandidates(
 			// rebalance targets. We do include stores that currently have a replica
 			// because we want them to be considered as valid stores in the
 			// ConvergesOnMean calculations below. This is subtle but important.
-			if nodeHasReplica(store.Node.NodeID, rangeInfo.Desc.Replicas) &&
-				!storeHasReplica(store.StoreID, rangeInfo.Desc.Replicas) {
-				log.VEventf(ctx, 2, "nodeHasReplica(n%d, %v)=true", store.Node.NodeID, rangeInfo.Desc.Replicas)
+			if nodeHasReplica(store.Node.NodeID, rangeInfo.Desc.Replicas().Unwrap()) &&
+				!storeHasReplica(store.StoreID, rangeInfo.Desc.Replicas().Unwrap()) {
+				log.VEventf(ctx, 2, "nodeHasReplica(n%d, %v)=true",
+					store.Node.NodeID, rangeInfo.Desc.Replicas())
 				continue
 			}
 			constraintsOK, necessary := rebalanceFromConstraintsCheck(
@@ -613,7 +614,9 @@ func rebalanceCandidates(
 				comparableCands = append(comparableCands, cand)
 				if !needRebalanceFrom && !needRebalanceTo && existing.cand.less(cand) {
 					needRebalanceTo = true
-					log.VEventf(ctx, 2, "s%d: should-rebalance(necessary/diversity=s%d): oldNecessary:%t, newNecessary:%t, oldDiversity:%f, newDiversity:%f, locality:%q",
+					log.VEventf(ctx, 2,
+						"s%d: should-rebalance(necessary/diversity=s%d): oldNecessary:%t, newNecessary:%t, "+
+							"oldDiversity:%f, newDiversity:%f, locality:%q",
 						existing.cand.store.StoreID, store.StoreID, existing.cand.necessary, cand.necessary,
 						existing.cand.diversityScore, cand.diversityScore, store.Node.Locality)
 				}

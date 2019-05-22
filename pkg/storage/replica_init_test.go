@@ -27,12 +27,12 @@ func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
 
 	desc := func(replicaIDs ...roachpb.ReplicaID) roachpb.RangeDescriptor {
 		d := roachpb.RangeDescriptor{
-			StartKey: roachpb.RKey("a"),
-			EndKey:   roachpb.RKey("b"),
-			Replicas: make([]roachpb.ReplicaDescriptor, len(replicaIDs)),
+			StartKey:         roachpb.RKey("a"),
+			EndKey:           roachpb.RKey("b"),
+			InternalReplicas: make([]roachpb.ReplicaDescriptor, len(replicaIDs)),
 		}
 		for i, id := range replicaIDs {
-			d.Replicas[i].ReplicaID = id
+			d.InternalReplicas[i].ReplicaID = id
 		}
 		return d
 	}

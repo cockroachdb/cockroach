@@ -1182,7 +1182,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			Desc: &roachpb.RangeDescriptor{},
 		}
 		for _, nodeID := range tc.existingNodeIDs {
-			rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
+			rangeInfo.Desc.InternalReplicas = append(rangeInfo.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:  nodeID,
 				StoreID: roachpb.StoreID(nodeID),
 			})

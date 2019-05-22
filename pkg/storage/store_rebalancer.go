@@ -310,7 +310,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 		descBeforeRebalance := replWithStats.repl.Desc()
 		log.VEventf(ctx, 1, "rebalancing r%d (%.2f qps) from %v to %v to better balance load",
-			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas, targets)
+			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas(), targets)
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", sr.rq.processTimeout, func(ctx context.Context) error {
 			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, targets)
 		}); err != nil {
@@ -326,8 +326,9 @@ func (sr *StoreRebalancer) rebalanceStore(
 		// TODO(a-robinson): This just updates the copies used locally by the
 		// storeRebalancer. We may also want to update the copies in the StorePool
 		// itself.
-		for i := range descBeforeRebalance.Replicas {
-			if storeDesc := storeMap[descBeforeRebalance.Replicas[i].StoreID]; storeDesc != nil {
+		replicasBeforeRebalance := descBeforeRebalance.Replicas().Unwrap()
+		for i := range replicasBeforeRebalance {
+			if storeDesc := storeMap[replicasBeforeRebalance[i].StoreID]; storeDesc != nil {
 				storeDesc.Capacity.RangeCount--
 			}
 		}
@@ -395,8 +396,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			desc.RangeID, replWithStats.qps)
 
 		// Check all the other replicas in order of increasing qps.
-		replicas := make([]roachpb.ReplicaDescriptor, len(desc.Replicas))
-		copy(replicas, desc.Replicas)
+		replicas := desc.Replicas().DeepCopy().Unwrap()
 		sort.Slice(replicas, func(i, j int) bool {
 			var iQPS, jQPS float64
 			if desc := storeMap[replicas[i].StoreID]; desc != nil {
@@ -429,7 +429,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				continue
 			}
 
-			preferred := sr.rq.allocator.preferredLeaseholders(zone, desc.Replicas)
+			preferred := sr.rq.allocator.preferredLeaseholders(zone, desc.Replicas().Unwrap())
 			if len(preferred) > 0 && !storeHasReplica(candidate.StoreID, preferred) {
 				log.VEventf(ctx, 3, "s%d not a preferred leaseholder for r%d; preferred: %v",
 					candidate.StoreID, desc.RangeID, preferred)
@@ -442,7 +442,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				filteredStoreList,
 				*localDesc,
 				candidate.StoreID,
-				desc.Replicas,
+				desc.Replicas().Unwrap(),
 				replWithStats.repl.leaseholderStats,
 			) {
 				log.VEventf(ctx, 3, "r%d is on s%d due to follow-the-workload; skipping",
@@ -507,25 +507,26 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 
 		// Check the range's existing diversity score, since we want to ensure we
 		// don't hurt locality diversity just to improve QPS.
-		curDiversity := rangeDiversityScore(sr.rq.allocator.storePool.getLocalities(desc.Replicas))
+		curDiversity := rangeDiversityScore(sr.rq.allocator.storePool.getLocalities(desc.Replicas().Unwrap()))
 
 		// Check the existing replicas, keeping around those that aren't overloaded.
-		for i := range desc.Replicas {
-			if desc.Replicas[i].StoreID == localDesc.StoreID {
+		replicas := desc.Replicas().Unwrap()
+		for i := range replicas {
+			if replicas[i].StoreID == localDesc.StoreID {
 				continue
 			}
 			// Keep the replica in the range if we don't know its QPS or if its QPS
 			// is below the upper threshold. Punishing stores not in our store map
 			// could cause mass evictions if the storePool gets out of sync.
-			storeDesc, ok := storeMap[desc.Replicas[i].StoreID]
+			storeDesc, ok := storeMap[replicas[i].StoreID]
 			if !ok || storeDesc.Capacity.QueriesPerSecond < maxQPS {
 				targets = append(targets, roachpb.ReplicationTarget{
-					NodeID:  desc.Replicas[i].NodeID,
-					StoreID: desc.Replicas[i].StoreID,
+					NodeID:  replicas[i].NodeID,
+					StoreID: replicas[i].StoreID,
 				})
 				targetReplicas = append(targetReplicas, roachpb.ReplicaDescriptor{
-					NodeID:  desc.Replicas[i].NodeID,
-					StoreID: desc.Replicas[i].StoreID,
+					NodeID:  replicas[i].NodeID,
+					StoreID: replicas[i].StoreID,
 				})
 			}
 		}
@@ -598,7 +599,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			// Ensure we don't transfer the lease to an existing replica that is behind
 			// in processing its raft log.
 			var replicaID roachpb.ReplicaID
-			for _, replica := range desc.Replicas {
+			for _, replica := range desc.Replicas().Unwrap() {
 				if replica.StoreID == targets[i].StoreID {
 					replicaID = replica.ReplicaID
 				}

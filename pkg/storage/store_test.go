@@ -520,7 +520,7 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 		RangeID:  rangeID,
 		StartKey: start,
 		EndKey:   end,
-		Replicas: []roachpb.ReplicaDescriptor{{
+		InternalReplicas: []roachpb.ReplicaDescriptor{{
 			NodeID:    1,
 			StoreID:   1,
 			ReplicaID: 1,
@@ -673,9 +673,9 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 	// First try and fail with a stale descriptor.
 	origDesc := rep.Desc()
 	newDesc := protoutil.Clone(origDesc).(*roachpb.RangeDescriptor)
-	for i := range newDesc.Replicas {
-		if newDesc.Replicas[i].StoreID == store.StoreID() {
-			newDesc.Replicas[i].ReplicaID++
+	for i := range newDesc.InternalReplicas {
+		if newDesc.InternalReplicas[i].StoreID == store.StoreID() {
+			newDesc.InternalReplicas[i].ReplicaID++
 			newDesc.NextReplicaID++
 			break
 		}
@@ -984,7 +984,7 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	newRangeID := roachpb.RangeID(3)
 	desc := &roachpb.RangeDescriptor{
 		RangeID: newRangeID,
-		Replicas: []roachpb.ReplicaDescriptor{{
+		InternalReplicas: []roachpb.ReplicaDescriptor{{
 			NodeID:    1,
 			StoreID:   1,
 			ReplicaID: 1,
@@ -1343,7 +1343,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
 	desc, err := store.NewRangeDescriptor(
-		context.Background(), splitKey, repl.Desc().EndKey, repl.Desc().Replicas)
+		context.Background(), splitKey, repl.Desc().EndKey, repl.Desc().InternalReplicas)
 	if err != nil {
 		t.Fatal(err)
 	}

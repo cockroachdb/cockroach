@@ -204,7 +204,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
         // Render each replica into a cell
         range.nodes.forEach((node) => {
           const nodeRange = node.range;
-          const replicaLocations = nodeRange.state.state.desc.replicas.map(
+          const replicaLocations = nodeRange.state.state.desc.internal_replicas.map(
             (replica) => "(Node " + replica.node_id.toString() +
               " Store " + replica.store_id.toString() +
               " ReplicaID " + replica.replica_id.toString() + ")",
