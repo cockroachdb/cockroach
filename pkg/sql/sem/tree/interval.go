@@ -287,7 +287,7 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 				month, errMonth = strconv.Atoi(yms[1])
 			}
 			if errYear == nil && errMonth == nil {
-				delta := duration.MakeDuration(0, 0, 1).Mul(int64(year)*12 + int64(month))
+				delta := duration.MakeDuration(0, 0, 1).Mul(float64(year)*12 + float64(month))
 				if neg {
 					d = d.Sub(delta)
 				} else {
@@ -322,7 +322,7 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 			} else if parsedIdx == hmsParsed {
 				// Day part.
 				// TODO(hainesc): support float value in day part?
-				delta := duration.MakeDuration(0, 1, 0).Mul(int64(value))
+				delta := duration.MakeDuration(0, 1, 0).Mul(float64(value))
 				if neg {
 					d = d.Sub(delta)
 				} else {
@@ -366,7 +366,7 @@ func iso8601ToDuration(s string) (duration.Duration, error) {
 		}
 
 		if unit, ok := unitMap[u]; ok {
-			d = d.Add(unit.Mul(v))
+			d = d.Add(unit.Mul(float64(v)))
 		} else {
 			return d, pgerror.Newf(
 				pgerror.CodeInvalidDatetimeFormatError,
@@ -456,7 +456,7 @@ func parseDuration(s string) (duration.Duration, error) {
 		l.consumeSpaces()
 		if unit, ok := unitMap[strings.ToLower(u)]; ok {
 			// A regular number followed by a unit, such as "9 day".
-			d = d.Add(unit.Mul(v))
+			d = d.Add(unit.Mul(float64(v)))
 			if hasDecimal {
 				d = addFrac(d, unit, vp)
 			}

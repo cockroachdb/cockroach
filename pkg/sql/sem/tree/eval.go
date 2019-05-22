@@ -1037,7 +1037,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Interval,
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return &DInterval{Duration: right.(*DInterval).Duration.Mul(int64(MustBeDInt(left)))}, nil
+				return &DInterval{Duration: right.(*DInterval).Duration.Mul(float64(MustBeDInt(left)))}, nil
 			},
 		},
 		&BinOp{
@@ -1045,7 +1045,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return &DInterval{Duration: left.(*DInterval).Duration.Mul(int64(MustBeDInt(right)))}, nil
+				return &DInterval{Duration: left.(*DInterval).Duration.Mul(float64(MustBeDInt(right)))}, nil
 			},
 		},
 		&BinOp{
@@ -1054,7 +1054,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := float64(*right.(*DFloat))
-				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(r)}, nil
+				return &DInterval{Duration: left.(*DInterval).Duration.Mul(r)}, nil
 			},
 		},
 		&BinOp{
@@ -1063,7 +1063,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := float64(*left.(*DFloat))
-				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(l)}, nil
+				return &DInterval{Duration: right.(*DInterval).Duration.Mul(l)}, nil
 			},
 		},
 		&BinOp{
@@ -1076,7 +1076,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if err != nil {
 					return nil, err
 				}
-				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(t)}, nil
+				return &DInterval{Duration: right.(*DInterval).Duration.Mul(t)}, nil
 			},
 		},
 		&BinOp{
@@ -1089,7 +1089,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if err != nil {
 					return nil, err
 				}
-				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(t)}, nil
+				return &DInterval{Duration: left.(*DInterval).Duration.Mul(t)}, nil
 			},
 		},
 	},
@@ -1175,7 +1175,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if rInt == 0 {
 					return nil, ErrDivByZero
 				}
-				return &DInterval{Duration: left.(*DInterval).Duration.Div(int64(rInt))}, nil
+				return &DInterval{Duration: left.(*DInterval).Duration.Div(float64(rInt))}, nil
 			},
 		},
 		&BinOp{
@@ -1187,7 +1187,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if r == 0.0 {
 					return nil, ErrDivByZero
 				}
-				return &DInterval{Duration: left.(*DInterval).Duration.DivFloat(r)}, nil
+				return &DInterval{Duration: left.(*DInterval).Duration.Div(r)}, nil
 			},
 		},
 	},

@@ -474,17 +474,7 @@ func (d Duration) Sub(x Duration) Duration {
 }
 
 // Mul returns a Duration representing a time length of d*x.
-func (d Duration) Mul(x int64) Duration {
-	return MakeDuration(d.nanos*x, d.Days*x, d.Months*x)
-}
-
-// Div returns a Duration representing a time length of d/x.
-func (d Duration) Div(x int64) Duration {
-	return MakeDuration(d.nanos/x, d.Days/x, d.Months/x)
-}
-
-// MulFloat returns a Duration representing a time length of d*x.
-func (d Duration) MulFloat(x float64) Duration {
+func (d Duration) Mul(x float64) Duration {
 	monthInt, monthFrac := math.Modf(float64(d.Months) * x)
 	dayInt, dayFrac := math.Modf((float64(d.Days) * x) + (monthFrac * daysInMonth))
 
@@ -495,12 +485,15 @@ func (d Duration) MulFloat(x float64) Duration {
 	)
 }
 
-// DivFloat returns a Duration representing a time length of d/x.
-func (d Duration) DivFloat(x float64) Duration {
+// Div returns a Duration representing a time length of d/x.
+func (d Duration) Div(x float64) Duration {
+	monthInt, monthFrac := math.Modf(float64(d.Months) / x)
+	dayInt, dayFrac := math.Modf((float64(d.Days) / x) + (monthFrac * daysInMonth))
+
 	return MakeDuration(
-		int64(float64(d.nanos)/x),
-		int64(float64(d.Days)/x),
-		int64(float64(d.Months)/x),
+		int64((float64(d.nanos)/x)+(dayFrac*float64(nanosInDay))),
+		int64(dayInt),
+		int64(monthInt),
 	)
 }
 
