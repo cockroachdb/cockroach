@@ -21,10 +21,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -134,7 +134,7 @@ func MaybeDecorateGRPCError(
 			// here, there was a TCP connection already.
 
 			// Did we fail due to security settings?
-			if wErr.Code == pgerror.CodeProtocolViolationError {
+			if wErr.Code == pgcode.ProtocolViolation {
 				return connSecurityHint()
 			}
 			// Otherwise, there was a regular SQL error. Just report that.
