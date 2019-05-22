@@ -719,13 +719,19 @@ func (ds *DistSender) Send(
 
 		// Determine whether this part of the BatchRequest contains a committing
 		// EndTransaction request.
-		var withCommit bool
+		var withCommit, withParallelCommit bool
 		if etArg, ok := ba.GetArg(roachpb.EndTransaction); ok {
-			withCommit = etArg.(*roachpb.EndTransactionRequest).Commit
+			et := etArg.(*roachpb.EndTransactionRequest)
+			withCommit = et.Commit
+			withParallelCommit = et.IsParallelCommit()
 		}
 
 		var rpl *roachpb.BatchResponse
-		rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, 0 /* batchIdx */)
+		if withParallelCommit {
+			rpl, pErr = ds.divideAndSendParallelCommit(ctx, ba, rs, 0 /* batchIdx */)
+		} else {
+			rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, 0 /* batchIdx */)
+		}
 
 		if pErr == errNo1PCTxn {
 			// If we tried to send a single round-trip EndTransaction but
@@ -778,6 +784,168 @@ type response struct {
 	reply     *roachpb.BatchResponse
 	positions []int
 	pErr      *roachpb.Error
+}
+
+// divideAndSendParallelCommit divides a parallel-committing batch into
+// sub-batches that can be evaluated in parallel but should not be evaluated
+// on a Store together.
+//
+// The case where this comes up is if the batch is performing a parallel
+// commit and the transaction has previously pipelined writes that have yet
+// to be proven successful. In this scenario, the EndTransaction request
+// will be preceded by a series of QueryIntent requests (see
+// txn_pipeliner.go). Before evaluating, each of these QueryIntent requests
+// will grab latches and wait for their corresponding write to finish. This
+// is how the QueryIntent requests synchronize with the write they are
+// trying to verify.
+//
+// If these QueryIntents remained in the same batch as the EndTransaction
+// request then they would force the EndTransaction request to wait for the
+// previous write before evaluating itself. This "pipeline stall" would
+// effectively negate the benefit of the parallel commit. To avoid this, we
+// make sure that these "pre-commit" QueryIntent requests are split from and
+// issued concurrently with the rest of the parallel commit batch.
+//
+// batchIdx indicates which partial fragment of the larger batch is being
+// processed by this method. Currently it is always set to zero because this
+// method is never invoked recursively, but it is exposed to maintain symmetry
+// with divideAndSendBatchToRanges.
+func (ds *DistSender) divideAndSendParallelCommit(
+	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
+) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// Search backwards, looking for the first pre-commit QueryIntent.
+	swapIdx := -1
+	lastIdx := len(ba.Requests) - 1
+	for i := lastIdx - 1; i >= 0; i-- {
+		req := ba.Requests[i].GetInner()
+		if req.Method() == roachpb.QueryIntent {
+			swapIdx = i
+		} else {
+			break
+		}
+	}
+	if swapIdx == -1 {
+		// No pre-commit QueryIntents. Nothing to split.
+		return ds.divideAndSendBatchToRanges(ctx, ba, rs, true /* withCommit */, batchIdx)
+	}
+
+	// Swap the EndTransaction request and the first pre-commit QueryIntent.
+	// This effectively creates a split point between the two groups of requests.
+	//
+	//  Before:    [put qi(1) put del qi(2) qi(3) qi(4) et]
+	//  After:     [put qi(1) put del et qi(3) qi(4) qi(2)]
+	//  Separated: [put qi(1) put del et] [qi(3) qi(4) qi(2)]
+	//
+	// NOTE: the non-pre-commit QueryIntent's must remain where they are in the
+	// batch. These ensure that the transaction always reads its writes (see
+	// txnPipeliner.chainToInFlightWrites). These will introduce pipeline stalls
+	// and undo most of the benefit of this method, but luckily they are rare in
+	// practice.
+	swappedReqs := append([]roachpb.RequestUnion(nil), ba.Requests...)
+	swappedReqs[swapIdx], swappedReqs[lastIdx] = swappedReqs[lastIdx], swappedReqs[swapIdx]
+
+	// Create a new pre-commit QueryIntent-only batch and issue it
+	// in a non-limited async task. This batch may need to be split
+	// over multiple ranges, so call into divideAndSendBatchToRanges.
+	qiBa := ba
+	qiBa.Requests = swappedReqs[swapIdx+1:]
+	qiRS, err := keys.Range(qiBa)
+	if err != nil {
+		return br, roachpb.NewError(err)
+	}
+	qiBatchIdx := batchIdx + 1
+	qiResponseCh := make(chan response, 1)
+
+	runTask := ds.rpcContext.Stopper.RunAsyncTask
+	if ds.disableParallelBatches {
+		runTask = ds.rpcContext.Stopper.RunTask
+	}
+	if err := runTask(ctx, "kv.DistSender: sending pre-commit query intents", func(ctx context.Context) {
+		// Map response index to the original un-swapped batch index.
+		// Remember that we moved the last QueryIntent in this batch
+		// from swapIdx to the end.
+		//
+		// From the example above:
+		//  Before:    [put qi(1) put del qi(2) qi(3) qi(4) et]
+		//  Separated: [put qi(1) put del et] [qi(3) qi(4) qi(2)]
+		//
+		//  qiBa.Requests = [qi(3) qi(4) qi(2)]
+		//  swapIdx       = 4
+		//  positions     = [5 6 4]
+		//
+		positions := make([]int, len(qiBa.Requests))
+		positions[len(positions)-1] = swapIdx
+		for i := range positions[:len(positions)-1] {
+			positions[i] = swapIdx + 1 + i
+		}
+
+		// Send the batch with withCommit=true since it will be inflight
+		// concurrently with the EndTransaction batch below.
+		reply, pErr := ds.divideAndSendBatchToRanges(ctx, qiBa, qiRS, true /* withCommit */, qiBatchIdx)
+		qiResponseCh <- response{reply: reply, positions: positions, pErr: pErr}
+	}); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	// Adjust the original batch request to ignore the pre-commit
+	// QueryIntent requests. Make sure to determine the request's
+	// new key span.
+	ba.Requests = swappedReqs[:swapIdx+1]
+	rs, err = keys.Range(ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	br, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, true /* withCommit */, batchIdx)
+
+	// Wait for the QueryIntent-only batch to complete and stitch
+	// the responses together.
+	qiReply := <-qiResponseCh
+
+	// Handle error conditions.
+	if pErr != nil {
+		// The batch with the EndTransaction returned an error. Ignore errors
+		// from the pre-commit QueryIntent requests because that request is
+		// read-only and will produce the same errors next time, if applicable.
+		if qiReply.reply != nil {
+			pErr.UpdateTxn(qiReply.reply.Txn)
+		}
+		maybeSwapErrorIndex(pErr, swapIdx, lastIdx)
+		return nil, pErr
+	}
+	if qiPErr := qiReply.pErr; qiPErr != nil {
+		// The batch with the pre-commit QueryIntent requests returned an error.
+		// Wrap this in a MixedSuccessError, as we know that the EndTransaction
+		// batch succeeded. It is not possible for qiPErr to be a MixedSuccessError
+		// itself, so we don't need to handle that case like we do down below.
+		qiPErr.UpdateTxn(ba.Txn)
+		maybeSwapErrorIndex(qiPErr, swapIdx, lastIdx)
+		pErr := roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: qiPErr})
+		pErr.Index = qiPErr.Index
+		return nil, pErr
+	}
+
+	// Both halves of the split batch succeeded. Piece them back together.
+	resps := make([]roachpb.ResponseUnion, len(swappedReqs))
+	copy(resps, br.Responses)
+	resps[swapIdx], resps[lastIdx] = resps[lastIdx], resps[swapIdx]
+	br.Responses = resps
+	if err := br.Combine(qiReply.reply, qiReply.positions); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	return br, nil
+}
+
+// maybeSwapErrorIndex swaps the error index from a to b or b to a if the
+// error's index is set and is equal to one of these to values.
+func maybeSwapErrorIndex(pErr *roachpb.Error, a, b int) {
+	if pErr.Index == nil {
+		return
+	}
+	if pErr.Index.Index == int32(a) {
+		pErr.Index.Index = int32(b)
+	} else if pErr.Index.Index == int32(b) {
+		pErr.Index.Index = int32(a)
+	}
 }
 
 // divideAndSendBatchToRanges sends the supplied batch to all of the
@@ -841,10 +1009,18 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	if ba.Txn == nil && ba.IsTransactional() && ba.ReadConsistency == roachpb.CONSISTENT {
 		return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
 	}
-	// If the request is more than but ends with EndTransaction, we want the
-	// caller to come again with the EndTransaction in an extra call.
+	// If the batch contains a non-parallel commit EndTransaction and spans
+	// ranges then we want the caller to come again with the EndTransaction in a
+	// separate (non-concurrent) batch.
+	//
+	// NB: withCommit allows us to short-circuit the check in the common case,
+	// but even when that's true, we still need to search for the EndTransaction
+	// in the batch.
 	if withCommit {
-		return nil, errNo1PCTxn
+		etArg, ok := ba.GetArg(roachpb.EndTransaction)
+		if ok && !etArg.(*roachpb.EndTransactionRequest).IsParallelCommit() {
+			return nil, errNo1PCTxn
+		}
 	}
 
 	// Make an empty slice of responses which will be populated with responses
@@ -902,15 +1078,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// If we experienced an error, don't neglect to update the error's
 		// attached transaction with any responses which were received.
 		if pErr != nil {
-			// The br.Txn != nil check looks unnecessary, but note that we might
-			// be returning errNo1PCTxn which is a singleton, so we could end up
-			// with data races.
-			//
-			// TODO(tschottdorf): get rid of the errNo1PCTxn singleton. It's
-			// ugly.
-			if br.Txn != nil {
-				pErr.UpdateTxn(br.Txn)
-			}
+			// Update the error's transaction with any new information from
+			// the batch response. This may contain interesting updates if
+			// the batch was parallelized and part of it succeeded.
+			pErr.UpdateTxn(br.Txn)
 			// If this is a write batch with any successful responses, but
 			// we're ultimately returning an error, wrap the error with a
 			// MixedSuccessError.
@@ -934,10 +1105,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	stopAtRangeBoundary := ba.Header.ScanOptions != nil && ba.Header.ScanOptions.StopAtRangeBoundary
 	// If min_results is set, num_results will count how many results scans have
 	// accumulated so far.
 	var numResults int64
+	stopAtRangeBoundary := ba.Header.ScanOptions != nil && ba.Header.ScanOptions.StopAtRangeBoundary
 	canParallelize := (ba.Header.MaxSpanRequestKeys == 0) && !stopAtRangeBoundary
 
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {

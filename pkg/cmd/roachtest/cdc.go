@@ -63,7 +63,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	crdbNodes := c.Range(1, c.nodes-1)
 	workloadNode := c.Node(c.nodes)
 	kafkaNode := c.Node(c.nodes)
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, cockroach, "./cockroach")
 	c.Put(ctx, workload, "./workload", workloadNode)
 	c.Start(ctx, t, crdbNodes)
 
@@ -725,12 +725,14 @@ type tpccWorkload struct {
 }
 
 func (tw *tpccWorkload) install(ctx context.Context, c *cluster, fixturesImport bool) {
-	command := `fixtures load`
+	command := `./workload fixtures load`
 	if fixturesImport {
-		command = `fixtures import`
+		// For fixtures import, use the version built into the cockroach binary so
+		// the tpcc workload-versions match on release branches.
+		command = `./cockroach workload fixtures import`
 	}
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./workload %s tpcc --warehouses=%d --checks=false {pgurl%s}`,
+		`%s tpcc --warehouses=%d --checks=false {pgurl%s}`,
 		command,
 		tw.tpccWarehouseCount,
 		tw.sqlNodes.randNode(),

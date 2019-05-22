@@ -562,8 +562,10 @@ output row: [8]
 output row: [9]
 output row: [10]
 rows affected: 10
+querying next range at /Table/61/1/1/#/62/1/1/0
+r20: sending batch 1 EndTxn to (n1,s1):1
 querying next range at /Table/61/1/1/0
-r20: sending batch 1 EndTxn, 10 QueryIntent to (n1,s1):1
+r20: sending batch 10 QueryIntent to (n1,s1):1
 
 statement ok
 DROP TABLE c; DROP TABLE b; DROP TABLE a
