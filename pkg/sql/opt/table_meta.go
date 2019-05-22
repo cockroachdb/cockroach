@@ -115,6 +115,8 @@ var tableAnnIDCount TableAnnID
 // table struct.
 const maxTableAnnIDCount = 2
 
+// TableConstraint stores the scalar expression of a constraint that applies to
+// the underlying table. It also stores the validation status of the constraint.
 type TableConstraint struct {
 	Constraint ScalarExpr
 	Validated  bool
