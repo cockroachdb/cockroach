@@ -134,7 +134,12 @@ func (ex *connExecutor) recordFailure() {
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context, stmt Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	ex.incrementStmtCounter(stmt)
+	ex.incrementStartedStmtCounter(stmt)
+	defer func() {
+		if retErr == nil && !payloadHasError(retPayload) {
+			ex.incrementExecutedStmtCounter(stmt)
+		}
+	}()
 	os := ex.machine.CurState().(stateOpen)
 
 	var timeoutTicker *time.Timer
@@ -950,10 +955,15 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 // stateOpen, at each point its results will also be flushed.
 func (ex *connExecutor) execStmtInNoTxnState(
 	ctx context.Context, stmt Statement,
-) (fsm.Event, fsm.EventPayload) {
+) (_ fsm.Event, payload fsm.EventPayload) {
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
-		ex.incrementStmtCounter(stmt)
+		ex.incrementStartedStmtCounter(stmt)
+		defer func() {
+			if !payloadHasError(payload) {
+				ex.incrementExecutedStmtCounter(stmt)
+			}
+		}()
 		pri, err := priorityToProto(s.Modes.UserPriority)
 		if err != nil {
 			return ex.makeErrEvent(err, s)
@@ -1099,8 +1109,13 @@ func (ex *connExecutor) execStmtInAbortedState(
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
 func (ex *connExecutor) execStmtInCommitWaitState(
 	stmt Statement, res RestrictedCommandResult,
-) (fsm.Event, fsm.EventPayload) {
-	ex.incrementStmtCounter(stmt)
+) (ev fsm.Event, payload fsm.EventPayload) {
+	ex.incrementStartedStmtCounter(stmt)
+	defer func() {
+		if !payloadHasError(payload) {
+			ex.incrementExecutedStmtCounter(stmt)
+		}
+	}()
 	switch stmt.AST.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
@@ -1108,8 +1123,8 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	default:
-		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		payload := eventNonRetriableErrPayload{
+		ev = eventNonRetriableErr{IsCommit: fsm.False}
+		payload = eventNonRetriableErrPayload{
 			err: sqlbase.NewTransactionCommittedError(),
 		}
 		return ev, payload
@@ -1294,8 +1309,23 @@ func (ex *connExecutor) handleAutoCommit(
 	return ev, payload
 }
 
-func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
-	ex.metrics.StatementCounters.incrementCount(ex, stmt.AST)
+// incrementStartedStmtCounter increments the appropriate started
+// statement counter for stmt's type.
+func (ex *connExecutor) incrementStartedStmtCounter(stmt Statement) {
+	ex.metrics.StartedStatementCounters.incrementCount(ex, stmt.AST)
+}
+
+// incrementExecutedStmtCounter increments the appropriate executed
+// statement counter for stmt's type.
+func (ex *connExecutor) incrementExecutedStmtCounter(stmt Statement) {
+	ex.metrics.ExecutedStatementCounters.incrementCount(ex, stmt.AST)
+}
+
+// payloadHasError returns true if the passed payload implements
+// payloadWithError.
+func payloadHasError(payload fsm.EventPayload) bool {
+	_, hasErr := payload.(payloadWithError)
+	return hasErr
 }
 
 // validateSavepointName validates that it is that the provided ident

@@ -263,8 +263,15 @@ type Metrics struct {
 	// for metrics registration.
 	EngineMetrics EngineMetrics
 
-	// StatementCounters contains metrics for statements.
-	StatementCounters StatementCounters
+	// StartedStatementCounters contains metrics for statements initiated by
+	// users. These metrics count user-initiated operations, regardless of
+	// success (in particular, TxnCommitCount is the number of COMMIT statements
+	// attempted, not the number of transactions that successfully commit).
+	StartedStatementCounters StatementCounters
+
+	// ExecutedStatementCounters contains metrics for successfully executed
+	// statements.
+	ExecutedStatementCounters StatementCounters
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -305,7 +312,8 @@ func makeMetrics(internal bool) Metrics {
 			TxnAbortCount: metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
 			FailureCount:  metric.NewCounter(getMetricMeta(MetaFailure, internal)),
 		},
-		StatementCounters: makeStatementCounters(internal),
+		StartedStatementCounters:  makeStartedStatementCounters(internal),
+		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
 	}
 }
 
@@ -365,7 +373,7 @@ func (s *Server) GetExecutorConfig() *ExecutorConfig {
 //   and an error is returned if this validation fails.
 // stmtBuf: The incoming statement for the new connExecutor.
 // clientComm: The interface through which the new connExecutor is going to
-// 	 produce results for the client.
+//   produce results for the client.
 // memMetrics: The metrics that statements executed on this connection will
 //   contribute to.
 func (s *Server) SetupConn(
@@ -2125,10 +2133,7 @@ func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args .
 }
 
 // StatementCounters groups metrics for counting different types of
-// statements. These metrics count user-initiated operations,
-// regardless of success (in particular, TxnCommitCount is the number
-// of COMMIT statements attempted, not the number of transactions that
-// successfully commit).
+// statements.
 type StatementCounters struct {
 	// QueryCount includes all statements and it is therefore the sum of
 	// all the below metrics.
@@ -2161,24 +2166,69 @@ type StatementCounters struct {
 	MiscCount telemetry.CounterWithMetric
 }
 
-func makeStatementCounters(internal bool) StatementCounters {
+func makeStartedStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount:         telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnBegin, internal)),
-		TxnCommitCount:        telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnCommit, internal)),
-		TxnRollbackCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnRollback, internal)),
-		SavepointCount:        telemetry.NewCounterWithMetric(getMetricMeta(MetaSavepoint, internal)),
-		RestartSavepointCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaRestartSavepoint, internal)),
+		TxnBeginCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnBeginStarted, internal)),
+		TxnCommitCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnCommitStarted, internal)),
+		TxnRollbackCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnRollbackStarted, internal)),
+		SavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaSavepointStarted, internal)),
+		RestartSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaRestartSavepointStarted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaReleaseRestartSavepoint, internal)),
+			getMetricMeta(MetaReleaseRestartSavepointStarted, internal)),
 		RollbackToRestartSavepointCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaRollbackToRestartSavepoint, internal)),
-		SelectCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaSelect, internal)),
-		UpdateCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaUpdate, internal)),
-		InsertCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaInsert, internal)),
-		DeleteCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaDelete, internal)),
-		DdlCount:    telemetry.NewCounterWithMetric(getMetricMeta(MetaDdl, internal)),
-		MiscCount:   telemetry.NewCounterWithMetric(getMetricMeta(MetaMisc, internal)),
-		QueryCount:  telemetry.NewCounterWithMetric(getMetricMeta(MetaQuery, internal)),
+			getMetricMeta(MetaRollbackToRestartSavepointStarted, internal)),
+		SelectCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaSelectStarted, internal)),
+		UpdateCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaUpdateStarted, internal)),
+		InsertCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaInsertStarted, internal)),
+		DeleteCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaDeleteStarted, internal)),
+		DdlCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaDdlStarted, internal)),
+		MiscCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaMiscStarted, internal)),
+		QueryCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaQueryStarted, internal)),
+	}
+}
+
+func makeExecutedStatementCounters(internal bool) StatementCounters {
+	return StatementCounters{
+		TxnBeginCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnBeginExecuted, internal)),
+		TxnCommitCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnCommitExecuted, internal)),
+		TxnRollbackCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnRollbackExecuted, internal)),
+		SavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaSavepointExecuted, internal)),
+		RestartSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaRestartSavepointExecuted, internal)),
+		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaReleaseRestartSavepointExecuted, internal)),
+		RollbackToRestartSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaRollbackToRestartSavepointExecuted, internal)),
+		SelectCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaSelectExecuted, internal)),
+		UpdateCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaUpdateExecuted, internal)),
+		InsertCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaInsertExecuted, internal)),
+		DeleteCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaDeleteExecuted, internal)),
+		DdlCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaDdlExecuted, internal)),
+		MiscCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaMiscExecuted, internal)),
+		QueryCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaQueryExecuted, internal)),
 	}
 }
 
