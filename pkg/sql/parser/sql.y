@@ -555,7 +555,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> TRUNCATE TRUSTED TYPE
 %token <str> TRACING
 
-%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED
+%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
 %token <str> UPDATE UPSERT USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIRTUAL
@@ -602,6 +602,7 @@ func newNameFromStr(s string) *tree.Name {
 // ALTER TABLE
 %type <tree.Statement> alter_onetable_stmt
 %type <tree.Statement> alter_split_stmt
+%type <tree.Statement> alter_unsplit_stmt
 %type <tree.Statement> alter_rename_table_stmt
 %type <tree.Statement> alter_scatter_stmt
 %type <tree.Statement> alter_relocate_stmt
@@ -619,6 +620,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_oneindex_stmt
 %type <tree.Statement> alter_scatter_index_stmt
 %type <tree.Statement> alter_split_index_stmt
+%type <tree.Statement> alter_unsplit_index_stmt
 %type <tree.Statement> alter_rename_index_stmt
 %type <tree.Statement> alter_relocate_index_stmt
 %type <tree.Statement> alter_relocate_index_lease_stmt
@@ -1107,6 +1109,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
 //   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
 //   ALTER TABLE ... SPLIT AT <selectclause>
+//   ALTER TABLE ... UNSPLIT AT <selectclause>
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER TABLE ... INJECT STATISTICS ...  (experimental)
 //   ALTER TABLE ... PARTITION BY RANGE ( <name...> ) ( <rangespec> )
@@ -1133,6 +1136,7 @@ alter_table_stmt:
 | alter_relocate_stmt
 | alter_relocate_lease_stmt
 | alter_split_stmt
+| alter_unsplit_stmt
 | alter_scatter_stmt
 | alter_zone_table_stmt
 | alter_rename_table_stmt
@@ -1225,6 +1229,7 @@ alter_range_stmt:
 // Commands:
 //   ALTER INDEX ... RENAME TO <newname>
 //   ALTER INDEX ... SPLIT AT <selectclause>
+//   ALTER INDEX ... UNSPLIT AT <selectclause>
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER PARTITION ... OF INDEX ... CONFIGURE ZONE <zoneconfig>
 //
@@ -1240,6 +1245,7 @@ alter_index_stmt:
 | alter_relocate_index_stmt
 | alter_relocate_index_lease_stmt
 | alter_split_index_stmt
+| alter_unsplit_index_stmt
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
 | alter_zone_index_stmt
@@ -1281,6 +1287,22 @@ alter_split_index_stmt:
   ALTER INDEX table_index_name SPLIT AT select_stmt
   {
     $$.val = &tree.Split{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
+  }
+
+alter_unsplit_stmt:
+  ALTER TABLE table_name UNSPLIT AT select_stmt
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Unsplit{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $6.slct(),
+    }
+  }
+
+alter_unsplit_index_stmt:
+  ALTER INDEX table_index_name UNSPLIT AT select_stmt
+  {
+    $$.val = &tree.Unsplit{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
   }
 
 relocate_kw:
@@ -9059,6 +9081,7 @@ unreserved_keyword:
 | UNCOMMITTED
 | UNKNOWN
 | UNLOGGED
+| UNSPLIT
 | UPDATE
 | UPSERT
 | UUID

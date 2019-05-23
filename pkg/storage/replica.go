@@ -1256,6 +1256,11 @@ func (r *Replica) executeAdminBatch(
 		reply, pErr = r.AdminSplit(ctx, *tArgs, "manual")
 		resp = &reply
 
+	case *roachpb.AdminUnsplitRequest:
+		var reply roachpb.AdminUnsplitResponse
+		reply, pErr = r.AdminUnsplit(ctx, *tArgs, "manual")
+		resp = &reply
+
 	case *roachpb.AdminMergeRequest:
 		var reply roachpb.AdminMergeResponse
 		reply, pErr = r.AdminMerge(ctx, *tArgs, "manual")

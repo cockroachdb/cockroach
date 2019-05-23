@@ -248,6 +248,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.EndTransactionRequest:
 			case *roachpb.AdminMergeRequest:
 			case *roachpb.AdminSplitRequest:
+			case *roachpb.AdminUnsplitRequest:
 			case *roachpb.AdminTransferLeaseRequest:
 			case *roachpb.AdminChangeReplicasRequest:
 			case *roachpb.AdminRelocateRangeRequest:
@@ -604,6 +605,20 @@ func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, manual bool) {
 		},
 		SplitKey: splitKey,
 		Manual:   manual,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) adminUnsplit(splitKeyIn interface{}) {
+	splitKey, err := marshalKey(splitKeyIn)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+	}
+	req := &roachpb.AdminUnsplitRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: splitKey,
+		},
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

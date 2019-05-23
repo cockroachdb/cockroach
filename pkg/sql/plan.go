@@ -219,6 +219,7 @@ var _ planNode = &showFingerprintsNode{}
 var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
+var _ planNode = &unsplitNode{}
 var _ planNode = &truncateNode{}
 var _ planNode = &unaryNode{}
 var _ planNode = &unionNode{}
@@ -710,6 +711,8 @@ func (p *planner) newPlan(
 		return p.ShowFingerprints(ctx, n)
 	case *tree.Split:
 		return p.Split(ctx, n)
+	case *tree.Unsplit:
+		return p.Unsplit(ctx, n)
 	case *tree.Truncate:
 		return p.Truncate(ctx, n)
 	case *tree.UnionClause:
@@ -811,6 +814,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowZoneConfig(ctx, n)
 	case *tree.Split:
 		return p.Split(ctx, n)
+	case *tree.Unsplit:
+		return p.Unsplit(ctx, n)
 	case *tree.Truncate:
 		return p.Truncate(ctx, n)
 	case *tree.Relocate:

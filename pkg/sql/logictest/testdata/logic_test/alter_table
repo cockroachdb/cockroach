@@ -677,6 +677,12 @@ ALTER TABLE nonexistent SPLIT AT VALUES (42)
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER INDEX nonexistent@noindex SPLIT AT VALUES (42)
 
+statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER TABLE nonexistent UNSPLIT AT VALUES (42)
+
+statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER INDEX nonexistent@noindex UNSPLIT AT VALUES (42)
+
 user root
 
 statement ok
@@ -687,6 +693,9 @@ ALTER TABLE privsview ADD d INT
 
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview SPLIT AT VALUES (42)
+
+statement error pgcode 42809 "privsview" is not a table
+ALTER TABLE privsview UNSPLIT AT VALUES (42)
 
 # Verify that impure defaults are evaluated separately on each row
 # (#14352)

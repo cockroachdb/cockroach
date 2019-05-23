@@ -3431,35 +3431,13 @@ func TestMergeQueue(t *testing.T) {
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
-		// TODO(jeffreyxiao): Use same mechanism as ALTER TABLE ... UNSPLIT AT
-		// does when it is added.
 		// Delete sticky bit and verify that merge occurs.
-		rhsDescKey := keys.RangeDescriptorKey(rhsStartKey)
-		var rhsDesc roachpb.RangeDescriptor
-		if err := store.DB().GetProto(ctx, rhsDescKey, &rhsDesc); err != nil {
-			t.Fatal(err)
+		unsplitArgs := &roachpb.AdminUnsplitRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: rhsStartKey.AsRawKey(),
+			},
 		}
-		rhsDesc.StickyBit = nil
-		if err := store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			b := txn.NewBatch()
-			marshalledDesc, err := protoutil.Marshal(&rhsDesc)
-			if err != nil {
-				return err
-			}
-			b.Put(rhsDescKey, marshalledDesc)
-			b.Put(keys.RangeMetaKey(rhsDesc.EndKey).AsRawKey(), marshalledDesc)
-			// End the transaction manually in order to provide a sticky bit trigger.
-			// Note that this hack will be removed. See above TODO.
-			b.AddRawRequest(&roachpb.EndTransactionRequest{
-				Commit: true,
-				InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-					StickyBitTrigger: &roachpb.StickyBitTrigger{
-						StickyBit: nil,
-					},
-				},
-			})
-			return txn.Run(ctx, b)
-		}); err != nil {
+		if _, err := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), unsplitArgs); err != nil {
 			t.Fatal(err)
 		}
 		store.MustForceMergeScanAndProcess()
