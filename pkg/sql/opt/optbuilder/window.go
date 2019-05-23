@@ -29,17 +29,8 @@ type windowInfo struct {
 
 	def memo.FunctionPrivate
 
-	// partition is the set of expressions used in the PARTITION BY clause.
-	partition []tree.TypedExpr
-
-	// orderBy is the set of expressions used in the ORDER BY clause.
-	orderBy tree.OrderBy
-
 	// col is the output column of the aggregation.
 	col *scopeColumn
-
-	// frame is the window frame this window function is computed relative to.
-	frame *tree.WindowFrame
 }
 
 // Walk is part of the tree.Expr interface.
@@ -71,10 +62,12 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	if len(inScope.windows) == 0 {
 		return
 	}
+
 	argLists := make([][]opt.ScalarExpr, len(inScope.windows))
 	partitions := make([]opt.ColSet, len(inScope.windows))
 	orderings := make([]physical.OrderingChoice, len(inScope.windows))
 	filterCols := make([]opt.ColumnID, len(inScope.windows))
+	defs := make([]*tree.WindowDef, len(inScope.windows))
 	windowFrames := make([]tree.WindowFrame, len(inScope.windows))
 	argScope := outScope.push()
 	argScope.appendColumnsFromScope(outScope)
@@ -87,6 +80,10 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	// values.
 	for i := range inScope.windows {
 		w := inScope.windows[i].expr.(*windowInfo)
+
+		def := w.WindowDef
+		defs[i] = def
+
 		argExprs := b.getTypedWindowArgs(w)
 
 		argLists[i] = make(memo.ScalarListExpr, len(argExprs))
@@ -104,8 +101,13 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 			argLists[i][j] = b.factory.ConstructVariable(col.id)
 		}
 
+		partition := make([]tree.TypedExpr, len(def.Partitions))
+		for i := range partition {
+			partition[i] = def.Partitions[i].(tree.TypedExpr)
+		}
+
 		// PARTITION BY (a, b) => PARTITION BY a, b
-		cols := flattenTuples(w.partition)
+		cols := flattenTuples(partition)
 		for j, e := range cols {
 			col := argScope.findExistingCol(e)
 			if col == nil {
@@ -120,8 +122,8 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 			partitions[i].Add(int(col.id))
 		}
 
-		ord := make(opt.Ordering, 0, len(w.orderBy))
-		for j, t := range w.orderBy {
+		ord := make(opt.Ordering, 0, len(def.OrderBy))
+		for j, t := range def.OrderBy {
 			// ORDER BY (a, b) => ORDER BY a, b
 			cols := flattenTuples([]tree.TypedExpr{t.Expr.(tree.TypedExpr)})
 
@@ -141,8 +143,8 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 		}
 		orderings[i].FromOrdering(ord)
 
-		if w.frame != nil {
-			windowFrames[i] = *w.frame
+		if def.Frame != nil {
+			windowFrames[i] = *def.Frame
 		}
 
 		if w.Filter != nil {
@@ -222,7 +224,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 			fn = b.factory.ConstructWindowFromOffset(
 				fn,
 				b.buildScalar(
-					w.frame.Bounds.StartBound.OffsetExpr.(tree.TypedExpr),
+					w.WindowDef.Frame.Bounds.StartBound.OffsetExpr.(tree.TypedExpr),
 					inScope,
 					nil, nil, nil,
 				),
@@ -233,7 +235,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 			fn = b.factory.ConstructWindowToOffset(
 				fn,
 				b.buildScalar(
-					w.frame.Bounds.EndBound.OffsetExpr.(tree.TypedExpr),
+					w.WindowDef.Frame.Bounds.EndBound.OffsetExpr.(tree.TypedExpr),
 					inScope,
 					nil, nil, nil,
 				),
