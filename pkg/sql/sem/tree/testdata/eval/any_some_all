@@ -70,6 +70,18 @@ eval
 ----
 NULL
 
+# Regression test for #37547 - ensure that null RHS of comparions with
+# suboperators are correctly handled.
+eval
+1 = ANY(NULL::int[])
+----
+NULL
+
+eval
+NULL = ANY(ARRAY[1,2])
+----
+NULL
+
 eval
 1 = ALL (ARRAY[1, 2, NULL])
 ----

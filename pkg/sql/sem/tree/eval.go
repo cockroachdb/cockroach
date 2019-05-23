@@ -3666,6 +3666,10 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return nil, err
 	}
 
+	if !expr.fn.NullableArgs && (left == DNull || right == DNull) {
+		return DNull, nil
+	}
+
 	op := expr.Operator
 	if op.hasSubOperator() {
 		var datums Datums
@@ -3681,9 +3685,6 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 
 	_, newLeft, newRight, _, not := foldComparisonExpr(op, left, right)
-	if !expr.fn.NullableArgs && (newLeft == DNull || newRight == DNull) {
-		return DNull, nil
-	}
 	d, err := expr.fn.Fn(ctx, newLeft.(Datum), newRight.(Datum))
 	if err != nil {
 		return nil, err
