@@ -562,7 +562,7 @@ func EncodeDatumsKeyAscending(b []byte, d tree.Datums) ([]byte, error) {
 //
 // If val's type is incompatible with col, or if col's type is not yet
 // implemented by this function, an error is returned.
-func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, error) {
+func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, error) {
 	var r roachpb.Value
 
 	if val == tree.DNull {

@@ -147,7 +147,7 @@ func (ri *Inserter) InsertRow(
 	for i, val := range values {
 		// Make sure the value can be written to the column before proceeding.
 		var err error
-		if ri.marshaled[i], err = sqlbase.MarshalColumnValue(ri.InsertCols[i], val); err != nil {
+		if ri.marshaled[i], err = sqlbase.MarshalColumnValue(&ri.InsertCols[i], val); err != nil {
 			return err
 		}
 	}

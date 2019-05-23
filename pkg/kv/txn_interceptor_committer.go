@@ -324,16 +324,15 @@ func (tc *txnCommitter) canCommitInParallelWithWrites(
 }
 
 // mergeIntoSpans merges all provided sequenced writes into the span slice. It
-// then sorts the spans and merges an that overlap. Returns true iff all of the
-// spans are distinct.
+// then sorts the spans and merges an that overlap. The function does not mutate
+// the provided span slice. Returns true iff all of the spans are distinct.
 func mergeIntoSpans(s []roachpb.Span, ws []roachpb.SequencedWrite) ([]roachpb.Span, bool) {
-	if s == nil {
-		s = make([]roachpb.Span, 0, len(ws))
+	m := make([]roachpb.Span, len(s)+len(ws))
+	copy(m, s)
+	for i, w := range ws {
+		m[len(s)+i] = roachpb.Span{Key: w.Key}
 	}
-	for _, w := range ws {
-		s = append(s, roachpb.Span{Key: w.Key})
-	}
-	return roachpb.MergeSpans(s)
+	return roachpb.MergeSpans(m)
 }
 
 // needTxnRetryAfterStaging determines whether the transaction needs to refresh

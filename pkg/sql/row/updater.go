@@ -232,16 +232,17 @@ func makeUpdaterWithoutCascader(
 		// If any part of a column family is being updated, fetch all columns in
 		// that column family so that we can reconstruct the column family with
 		// the updated columns before writing it.
-		for _, fam := range tableDesc.Families {
+		for i := range tableDesc.Families {
+			family := &tableDesc.Families[i]
 			familyBeingUpdated := false
-			for _, colID := range fam.ColumnIDs {
+			for _, colID := range family.ColumnIDs {
 				if _, ok := ru.UpdateColIDtoRowIndex[colID]; ok {
 					familyBeingUpdated = true
 					break
 				}
 			}
 			if familyBeingUpdated {
-				for _, colID := range fam.ColumnIDs {
+				for _, colID := range family.ColumnIDs {
 					if err := maybeAddCol(colID); err != nil {
 						return Updater{}, err
 					}
@@ -319,7 +320,7 @@ func (ru *Updater) UpdateRow(
 	// happen before index encoding because certain datum types (i.e. tuple)
 	// cannot be used as index values.
 	for i, val := range updateValues {
-		if ru.marshaled[i], err = sqlbase.MarshalColumnValue(ru.UpdateCols[i], val); err != nil {
+		if ru.marshaled[i], err = sqlbase.MarshalColumnValue(&ru.UpdateCols[i], val); err != nil {
 			return nil, err
 		}
 	}
@@ -409,7 +410,8 @@ func (ru *Updater) UpdateRow(
 	// We're iterating through all of the indexes, which should have corresponding entries in both oldSecondaryIndexEntries
 	// and newSecondaryIndexEntries. Inverted indexes could potentially have more entries at the end of both and we will
 	// update those separately.
-	for i, index := range ru.Helper.Indexes {
+	for i := range ru.Helper.Indexes {
+		index := &ru.Helper.Indexes[i]
 		oldSecondaryIndexEntry := &oldSecondaryIndexEntries[i]
 		newSecondaryIndexEntry := &newSecondaryIndexEntries[i]
 

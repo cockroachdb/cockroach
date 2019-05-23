@@ -991,7 +991,8 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 	}
 
 	columnsInFamilies := make(map[ColumnID]struct{}, len(desc.Columns))
-	for i, family := range desc.Families {
+	for i := range desc.Families {
+		family := &desc.Families[i]
 		if family.ID == 0 && i != 0 {
 			family.ID = desc.NextFamilyID
 			desc.NextFamilyID++
@@ -1007,7 +1008,7 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 			columnsInFamilies[family.ColumnIDs[j]] = struct{}{}
 		}
 
-		desc.Families[i] = family
+		desc.Families[i] = *family
 	}
 
 	primaryIndexColIDs := make(map[ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
@@ -1064,7 +1065,8 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 		}
 	}
 
-	for i, family := range desc.Families {
+	for i := range desc.Families {
+		family := &desc.Families[i]
 		if len(family.Name) == 0 {
 			family.Name = generatedFamilyName(family.ID, family.ColumnNames)
 		}
@@ -1084,7 +1086,7 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 			family.DefaultColumnID = defaultColumnID
 		}
 
-		desc.Families[i] = family
+		desc.Families[i] = *family
 	}
 }
 
@@ -1440,7 +1442,8 @@ func (desc *TableDescriptor) validateColumnFamilies(
 	familyNames := map[string]struct{}{}
 	familyIDs := map[FamilyID]string{}
 	colIDToFamilyID := map[ColumnID]FamilyID{}
-	for _, family := range desc.Families {
+	for i := range desc.Families {
+		family := &desc.Families[i]
 		if err := validateName(family.Name, "family"); err != nil {
 			return nil, err
 		}
@@ -1515,8 +1518,8 @@ func (desc *TableDescriptor) validateTableIndexes(
 		}
 
 		if _, ok := indexNames[index.Name]; ok {
-			for _, idx := range desc.Indexes {
-				if idx.Name == index.Name {
+			for i := range desc.Indexes {
+				if desc.Indexes[i].Name == index.Name {
 					return fmt.Errorf("duplicate index name: %q", index.Name)
 				}
 			}
@@ -1957,8 +1960,8 @@ func (desc *MutableTableDescriptor) AddColumnToFamilyMaybeCreate(
 
 // RemoveColumnFromFamily removes a colID from the family it's assigned to.
 func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
-	for i, family := range desc.Families {
-		for j, c := range family.ColumnIDs {
+	for i := range desc.Families {
+		for j, c := range desc.Families[i].ColumnIDs {
 			if c == colID {
 				desc.Families[i].ColumnIDs = append(
 					desc.Families[i].ColumnIDs[:j], desc.Families[i].ColumnIDs[j+1:]...)
@@ -2124,9 +2127,10 @@ func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescripto
 func (desc *ImmutableTableDescriptor) FindReadableColumnByID(
 	id ColumnID,
 ) (*ColumnDescriptor, bool, error) {
-	for i, c := range desc.ReadableColumns {
+	for i := range desc.ReadableColumns {
+		c := &desc.ReadableColumns[i]
 		if c.ID == id {
-			return &desc.ReadableColumns[i], i >= len(desc.Columns), nil
+			return c, i >= len(desc.Columns), nil
 		}
 	}
 	return nil, false, fmt.Errorf("column-id \"%d\" does not exist", id)
@@ -2134,9 +2138,10 @@ func (desc *ImmutableTableDescriptor) FindReadableColumnByID(
 
 // FindFamilyByID finds the family with specified ID.
 func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescriptor, error) {
-	for i, f := range desc.Families {
-		if f.ID == id {
-			return &desc.Families[i], nil
+	for i := range desc.Families {
+		family := &desc.Families[i]
+		if family.ID == id {
+			return family, nil
 		}
 	}
 	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
@@ -2148,9 +2153,10 @@ func (desc *TableDescriptor) FindIndexByName(name string) (*IndexDescriptor, boo
 	if desc.IsPhysicalTable() && desc.PrimaryIndex.Name == name {
 		return &desc.PrimaryIndex, false, nil
 	}
-	for i, idx := range desc.Indexes {
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
 		if idx.Name == name {
-			return &desc.Indexes[i], false, nil
+			return idx, false, nil
 		}
 	}
 	for _, m := range desc.Mutations {
@@ -2299,9 +2305,10 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	if desc.PrimaryIndex.ID == id {
 		return &desc.PrimaryIndex, nil
 	}
-	for i, c := range desc.Indexes {
-		if c.ID == id {
-			return &desc.Indexes[i], nil
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.ID == id {
+			return idx, nil
 		}
 	}
 	for _, m := range desc.Mutations {
