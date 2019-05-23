@@ -294,6 +294,9 @@ func (tc *txnCommitter) sendLockedWithElidedEndTransaction(
 func (tc *txnCommitter) canCommitInParallelWithWrites(
 	ba roachpb.BatchRequest, et *roachpb.EndTransactionRequest,
 ) bool {
+	if !tc.st.Version.IsActive(cluster.VersionParallelCommits) {
+		return false
+	}
 	if !parallelCommitsEnabled.Get(&tc.st.SV) {
 		return false
 	}
