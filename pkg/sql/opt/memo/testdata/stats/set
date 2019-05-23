@@ -926,3 +926,35 @@ except
       │    └── (3, 4) [type=tuple{int, int}]
       └── filters
            └── column1 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+
+# Make sure that we estimate at least 1 row for the intersect.
+opt
+VALUES (1) INTERSECT VALUES (NULL) ORDER BY 1
+----
+sort
+ ├── columns: column1:1(int)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── key: (1)
+ ├── ordering: +1
+ └── intersect
+      ├── columns: column1:1(int)
+      ├── left columns: column1:1(int)
+      ├── right columns: column1:3(int)
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+      ├── key: (1)
+      ├── values
+      │    ├── columns: column1:1(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1)
+      │    └── (1,) [type=tuple{int}]
+      └── values
+           ├── columns: column1:3(int)
+           ├── cardinality: [1 - 1]
+           ├── stats: [rows=1, distinct(3)=0, null(3)=1]
+           ├── key: ()
+           ├── fd: ()-->(3)
+           └── (NULL,) [type=tuple{int}]

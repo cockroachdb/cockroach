@@ -110,7 +110,7 @@ select
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0]
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
@@ -127,7 +127,7 @@ select
  ├── fd: ()-->(2)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(2)=400, null(2)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
@@ -141,12 +141,12 @@ SELECT * FROM a WHERE x IS NULL
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.8, distinct(1)=0.8, null(1)=0]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0]
+ │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
@@ -263,20 +263,20 @@ SELECT count(*) FROM (SELECT * FROM tab0 WHERE col3 = 10) GROUP BY col0
 ----
 project
  ├── columns: count:8(int)
- ├── stats: [rows=0]
+ ├── stats: [rows=1.99997344]
  └── group-by
       ├── columns: col0:2(int) count_rows:8(int)
       ├── grouping columns: col0:2(int)
-      ├── stats: [rows=0, distinct(2)=0, null(2)=0]
+      ├── stats: [rows=1.99997344, distinct(2)=0.999973439, null(2)=1.99997344]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── select
       │    ├── columns: col0:2(int) col3:5(int!null)
-      │    ├── stats: [rows=10, distinct(2)=0, null(2)=10, distinct(5)=1, null(5)=0]
+      │    ├── stats: [rows=10, distinct(2)=0.999973439, null(2)=10, distinct(5)=1, null(5)=0]
       │    ├── fd: ()-->(5)
       │    ├── scan tab0
       │    │    ├── columns: col0:2(int) col3:5(int)
-      │    │    └── stats: [rows=100, distinct(2)=0, null(2)=100, distinct(5)=10, null(5)=0]
+      │    │    └── stats: [rows=100, distinct(2)=1, null(2)=100, distinct(5)=10, null(5)=0]
       │    └── filters
       │         └── col3 = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
       └── aggregations
@@ -1308,16 +1308,16 @@ SELECT * FROM nulls WHERE y = 3
 ----
 project
  ├── columns: x:1(int) y:2(int!null)
- ├── stats: [rows=9.9, distinct(1)=0, null(1)=9.9]
+ ├── stats: [rows=9.9, distinct(1)=0.99995224, null(1)=9.9]
  ├── fd: ()-->(2)
  └── select
       ├── columns: x:1(int) y:2(int!null) rowid:3(int!null)
-      ├── stats: [rows=9.9, distinct(1)=0, null(1)=9.9, distinct(2)=1, null(2)=0, distinct(3)=9.9, null(3)=0]
+      ├── stats: [rows=9.9, distinct(1)=0.99995224, null(1)=9.9, distinct(2)=1, null(2)=0, distinct(3)=9.9, null(3)=0]
       ├── key: (3)
       ├── fd: ()-->(2), (3)-->(1)
       ├── scan nulls
       │    ├── columns: x:1(int) y:2(int) rowid:3(int!null)
-      │    ├── stats: [rows=1000, distinct(1)=0, null(1)=1000, distinct(2)=100, null(2)=10, distinct(3)=1000, null(3)=0]
+      │    ├── stats: [rows=1000, distinct(1)=1, null(1)=1000, distinct(2)=100, null(2)=10, distinct(3)=1000, null(3)=0]
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
       └── filters
