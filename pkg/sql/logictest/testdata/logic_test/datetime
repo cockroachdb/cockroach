@@ -744,13 +744,13 @@ SELECT '2015-08-25 05:45:45.53453'::timestamp
 statement ok
 SET TIME ZONE 'Europe/Rome'
 
-query error pq: unimplemented: timestamp abbreviations not supported
+query error unimplemented: timestamp abbreviations not supported
 SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
 
 statement ok
 SET TIME ZONE +1
 
-query error pq: unimplemented: timestamp abbreviations not supported
+query error unimplemented: timestamp abbreviations not supported
 SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
 
 query T
@@ -787,7 +787,7 @@ SELECT '2015-08-25 05:45:45-01:00'::timestamptz
 statement ok
 SET TIMEZONE = +2
 
-query error pq: unimplemented: timestamp abbreviations not supported
+query error unimplemented: timestamp abbreviations not supported
 SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
 
 query T

@@ -4295,7 +4295,7 @@ col_qualification_elem:
  }
 | AS error
  {
-    sqllex.Error("syntax error: use AS ( <expr> ) STORED")
+    sqllex.Error("use AS ( <expr> ) STORED")
     return 1
  }
 
