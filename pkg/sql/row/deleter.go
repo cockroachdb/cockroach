@@ -144,7 +144,8 @@ func (rd *Deleter) DeleteRow(
 	}
 
 	// Delete the row from any secondary indices.
-	for i, secondaryIndexEntry := range secondaryIndexEntries {
+	for i := range secondaryIndexEntries {
+		secondaryIndexEntry := &secondaryIndexEntries[i]
 		if traceKV {
 			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.secIndexValDirs[i], secondaryIndexEntry.Key))
 		}
