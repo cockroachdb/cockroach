@@ -186,11 +186,13 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 			// error checks everywhere throughout the code. This is only possible
 			// because the code does not update shared state and does not manipulate
 			// locks.
-			if pgErr, ok := r.(*pgerror.Error); ok {
-				err = pgErr
-			} else {
-				panic(r)
+			if e, ok := r.(error); ok {
+				err = e
+				return
 			}
+			// Other panic objects can't be considered "safe" and thus are
+			// propagated as crashes that terminate the session.
+			panic(r)
 		}
 	}()
 
