@@ -89,31 +89,35 @@ EXPLAIN (VERBOSE) SELECT max(v) OVER (), min(v) FROM kv ORDER BY 1
 query TTT
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-sort                 ·      ·
- │                   order  +variance,+k
- └── window          ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  kv@primary
-·                    spans  ALL
+render                    ·      ·
+ └── sort                 ·      ·
+      │                   order  +variance,+k
+      └── render          ·      ·
+           └── window     ·      ·
+                └── scan  ·      ·
+·                         table  kv@primary
+·                         spans  ALL
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-sort                 ·         ·                                         (k int, stddev decimal)                                                                          ·
- │                   order     +variance,+k                              ·                                                                                                ·
- └── window          ·         ·                                         (k int, stddev decimal, variance decimal)                                                        ·
-      │              window 0  (stddev((d)[decimal]) OVER w)[decimal]    ·                                                                                                ·
-      │              window 1  (variance((d)[decimal]) OVER w)[decimal]  ·                                                                                                ·
-      │              render 1  (stddev((d)[decimal]) OVER w)[decimal]    ·                                                                                                ·
-      │              render 2  (variance((d)[decimal]) OVER w)[decimal]  ·                                                                                                ·
-      └── render     ·         ·                                         (k int, v int, d decimal)                                                                        k!=NULL; key(k)
-           │         render 0  (k)[int]                                  ·                                                                                                ·
-           │         render 1  (v)[int]                                  ·                                                                                                ·
-           │         render 2  (d)[decimal]                              ·                                                                                                ·
-           └── scan  ·         ·                                         (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  k!=NULL; key(k)
-·                    table     kv@primary                                ·                                                                                                ·
-·                    spans     ALL                                       ·                                                                                                ·
+render                    ·         ·                                                                                                                   (k int, stddev decimal)                                      ·
+ │                        render 0  (k)[int]                                                                                                            ·                                                            ·
+ │                        render 1  (stddev)[decimal]                                                                                                   ·                                                            ·
+ └── sort                 ·         ·                                                                                                                   (k int, stddev decimal, variance decimal)                    +variance,+k
+      │                   order     +variance,+k                                                                                                        ·                                                            ·
+      └── render          ·         ·                                                                                                                   (k int, stddev decimal, variance decimal)                    ·
+           │              render 0  (k)[int]                                                                                                            ·                                                            ·
+           │              render 1  (stddev)[decimal]                                                                                                   ·                                                            ·
+           │              render 2  (variance)[decimal]                                                                                                 ·                                                            ·
+           └── window     ·         ·                                                                                                                   (k int, v int, d decimal, stddev decimal, variance decimal)  ·
+                │         window 0  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
+                │         window 1  (variance((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
+                │         render 3  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
+                │         render 4  (variance((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
+                └── scan  ·         ·                                                                                                                   (k int, v int, d decimal)                                    ·
+·                         table     kv@primary                                                                                                          ·                                                            ·
+·                         spans     ALL                                                                                                                 ·                                                            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
