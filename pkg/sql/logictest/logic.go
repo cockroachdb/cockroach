@@ -1052,6 +1052,26 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
+	} else {
+		// Background stats collection is enabled by default, but we've seen tests
+		// flake with it on. When the issue manifests, it seems to be around a
+		// schema change transaction getting pushed, which causes it to increment a
+		// table ID twice instead of once, causing non-determinism.
+		//
+		// In the short term, we disable auto stats by default to avoid the flakes.
+		//
+		// In the long run, these tests should be running with default settings as
+		// much as possible, so we likely want to address this. Two options are
+		// either making schema changes more resilient to being pushed or possibly
+		// making auto stats avoid pushing schema change transactions. There might
+		// be other better alternatives than these.
+		//
+		// See #37751 for details.
+		if _, err := t.cluster.ServerConn(0).Exec(
+			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// db may change over the lifetime of this function, with intermediate
