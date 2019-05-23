@@ -700,7 +700,9 @@ func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props
 
 	// Statistics
 	// ----------
-	// Zero value for Stats is ok for Explain.
+	if !b.disableStats {
+		b.sb.buildExplain(rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildShowTraceForSessionProps(
@@ -732,7 +734,10 @@ func (b *logicalPropsBuilder) buildShowTraceForSessionProps(
 
 	// Statistics
 	// ----------
-	// Zero value for Stats is ok for ShowTrace.
+	if !b.disableStats {
+		b.sb.buildShowTrace(rel)
+	}
+
 }
 
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
