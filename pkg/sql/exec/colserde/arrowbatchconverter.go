@@ -262,7 +262,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data) (coldata.Batch, e
 		}
 		arrowBitmap := arr.NullBitmapBytes()
 		if len(arrowBitmap) != 0 {
-			vec.Nulls().SetNullBitmap(arrowBitmap)
+			vec.Nulls().SetNullBitmap(arrowBitmap, n)
 		}
 	}
 	c.scratch.batch.SetLength(uint16(n))

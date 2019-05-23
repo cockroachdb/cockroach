@@ -50,6 +50,16 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	b := exec.RandomBatch(rng, typs, rng.Intn(coldata.BatchSize)+1, rng.Float64())
 	c := NewArrowBatchConverter(typs)
 
+	// Make a copy of the original batch because the converter modifies and casts
+	// data without copying for performance reasons.
+	expectedLength := b.Length()
+	expectedWidth := b.Width()
+	expectedColVecs := make([]coldata.Vec, len(b.ColVecs()))
+	for i := range typs {
+		expectedColVecs[i] = coldata.NewMemColumn(typs[i], int(b.Length()))
+		expectedColVecs[i].Copy(b.ColVec(i), 0, uint64(b.Length()), typs[i])
+	}
+
 	arrowData, err := c.BatchToArrow(b)
 	require.NoError(t, err)
 	result, err := c.ArrowToBatch(arrowData)
@@ -57,8 +67,8 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	if result.Selection() != nil {
 		t.Fatal("violated invariant that batches have no selection vectors")
 	}
-	require.Equal(t, b.Length(), result.Length())
-	require.Equal(t, b.Width(), result.Width())
+	require.Equal(t, expectedLength, result.Length())
+	require.Equal(t, expectedWidth, result.Width())
 	for i, typ := range typs {
 		// Verify equality of ColVecs (this includes nulls). Since the coldata.Vec
 		// backing array is always of coldata.BatchSize due to the scratch batch
@@ -67,7 +77,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 		// fail.
 		require.Equal(
 			t,
-			b.ColVec(i).Slice(typ, 0, uint64(b.Length())),
+			expectedColVecs[i].Slice(typ, 0, uint64(b.Length())),
 			result.ColVec(i).Slice(typ, 0, uint64(result.Length())),
 		)
 	}

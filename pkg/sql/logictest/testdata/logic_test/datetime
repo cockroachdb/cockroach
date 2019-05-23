@@ -1350,3 +1350,31 @@ SELECT '-239852040018-04-28':::DATE
 
 statement error out of range
 SELECT(7133080445639580613::INT8 + '1977-11-03'::DATE) = '-239852040018-04-28':::DATE
+
+subtest interval_math
+
+query TTTTTTT
+SELECT
+    i,
+    i / 2::INT8,
+    i * 2::INT8,
+    i / 2::FLOAT8,
+    i * 2::FLOAT8,
+    i / .2362::FLOAT8,
+    i * .2362::FLOAT8
+FROM
+    (
+        VALUES
+            ('1 day'::INTERVAL),
+            ('1 month'::INTERVAL),
+            ('1 hour'::INTERVAL),
+            ('1 month 2 days 4 hours'::INTERVAL)
+    )
+        AS v (i)
+ORDER BY
+    i
+----
+01:00:00               00:30:00          02:00:00                00:30:00          02:00:00                04:14:01.320914                 00:14:10.32
+1 day                  12:00:00          2 days                  12:00:00          2 days                  4 days 05:36:31.701948          05:40:07.68
+1 mon                  15 days           2 mons                  15 days           2 mons                  4 mons 7 days 00:15:51.058425   7 days 02:03:50.4
+1 mon 2 days 04:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  16 days 02:00:00  2 mons 4 days 08:00:00  4 mons 15 days 28:24:59.745978  7 days 14:20:47.04
