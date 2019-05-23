@@ -153,8 +153,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			col := fetchedCols[idx]
-
+			col := &fetchedCols[idx]
 			if lastColID > col.ID {
 				return nil, pgerror.AssertionFailedf("cannot write column id %d after %d", col.ID, lastColID)
 			}

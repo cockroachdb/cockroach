@@ -531,7 +531,7 @@ func TestMarshalColumnValue(t *testing.T) {
 		typ := testCase.typ
 		col := ColumnDescriptor{ID: ColumnID(typ.Family() + 1), Type: *typ}
 
-		if actual, err := MarshalColumnValue(col, testCase.datum); err != nil {
+		if actual, err := MarshalColumnValue(&col, testCase.datum); err != nil {
 			t.Errorf("%d: unexpected error with column type %v: %v", i, typ, err)
 		} else if !reflect.DeepEqual(actual, testCase.exp) {
 			t.Errorf("%d: MarshalColumnValue() got %v, expected %v", i, actual, testCase.exp)
