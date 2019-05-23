@@ -71,6 +71,7 @@ const (
 	VersionStart19_2
 	VersionQueryTxnTimestamp
 	VersionStickyBit
+	VersionParallelCommits
 
 	// Add new versions here (step one of two).
 
@@ -469,9 +470,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 2},
 	},
 	{
-		// VersionStickyBit is https://github.com/cockroachdb/cockroach/pull/37506
+		// VersionStickyBit is https://github.com/cockroachdb/cockroach/pull/37506.
 		Key:     VersionStickyBit,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 3},
+	},
+	{
+		// VersionParallelCommits is https://github.com/cockroachdb/cockroach/pull/37777.
+		Key:     VersionParallelCommits,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 4},
 	},
 
 	// Add new versions here (step two of two).
