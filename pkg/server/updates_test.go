@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -711,21 +711,20 @@ func TestReportUsage(t *testing.T) {
 		"unimplemented.syntax.#28751":                   10,
 		"unimplemented.syntax.#32564":                   10,
 		"unimplemented.#9148":                           10,
-		"othererror.builtins.go":                        10,
 		"othererror." +
-			pgerror.CodeDataExceptionError +
+			pgcode.Uncategorized +
 			".crdb_internal.set_vmodule()": 10,
-		"errorcodes.blah": 10,
-		"errorcodes." + pgerror.CodeDataExceptionError:       10,
-		"errorcodes." + pgerror.CodeInternalError:            10,
-		"errorcodes." + pgerror.CodeSyntaxError:              10,
-		"errorcodes." + pgerror.CodeFeatureNotSupportedError: 10,
-		"errorcodes." + pgerror.CodeDivisionByZeroError:      10,
+		"errorcodes.blah":                          10,
+		"errorcodes." + pgcode.Internal:            10,
+		"errorcodes." + pgcode.Syntax:              10,
+		"errorcodes." + pgcode.FeatureNotSupported: 10,
+		"errorcodes." + pgcode.DivisionByZero:      10,
 	}
 
 	if expected, actual := len(expectedFeatureUsage), len(r.last.FeatureUsage); actual < expected {
 		t.Fatalf("expected at least %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
 	}
+	t.Logf("%# v", pretty.Formatter(r.last.FeatureUsage))
 	for key, expected := range expectedFeatureUsage {
 		if got, ok := r.last.FeatureUsage[key]; !ok {
 			t.Fatalf("expected report of feature %q", key)

@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
 )
 
 func TestPGError(t *testing.T) {
@@ -33,7 +32,7 @@ func TestPGError(t *testing.T) {
 		if pErr.Message != errMsg {
 			t.Fatalf("got: %q\nwant: %q", pErr.Message, errMsg)
 		}
-		const want = `.*sql/pgwire/pgerror.*`
+		const want = `errors_test.go`
 		match, err := regexp.MatchString(want, pErr.Source.File)
 		if err != nil {
 			t.Fatal(err)
@@ -44,26 +43,16 @@ func TestPGError(t *testing.T) {
 	}
 
 	// Test NewError.
-	pErr := pgerror.New(code, msg)
+	pErr := pgerror.Flatten(pgerror.New(code, msg))
 	checkErr(pErr, msg)
 
-	pErr = pgerror.New(code, "bad%format")
+	pErr = pgerror.Flatten(pgerror.New(code, "bad%format"))
 	checkErr(pErr, "bad%format")
 
 	// Test NewErrorf.
 	const prefix = "prefix"
-	pErr = pgerror.Newf(code, "%s: %s", prefix, msg)
+	pErr = pgerror.Flatten(pgerror.Newf(code, "%s: %s", prefix, msg))
 	expected := fmt.Sprintf("%s: %s", prefix, msg)
-	checkErr(pErr, expected)
-
-	// Test GetPGCause.
-	err := errors.Wrap(pErr, "wrap")
-	err = errors.Wrap(err, "wrap")
-	var ok bool
-	pErr, ok = pgerror.GetPGCause(err)
-	if !ok {
-		t.Fatal("cannot find pgerror")
-	}
 	checkErr(pErr, expected)
 }
 
