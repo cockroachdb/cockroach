@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
 	"github.com/pkg/errors"
@@ -389,9 +390,11 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	// divisible by the number of zones, then the extra machines will be allocated one per zone until there are
 	// no more extra machines left.
 	for i < len(names) {
-		argsWithZone := append(args[:len(args):len(args)], "--zone", p.opts.Zones[ct])
+		zone := p.opts.Zones[ct]
+		argsWithZone := append(args[:len(args):len(args)], "--zone", zone)
 		ct++
-		argsWithZone = append(argsWithZone, names[i:i+nodesPerZone]...)
+		namesInZone := names[i : i+nodesPerZone]
+		argsWithZone = append(argsWithZone, namesInZone...)
 		i += nodesPerZone
 
 		totalNodes -= float64(nodesPerZone)
@@ -403,9 +406,12 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 
 			output, err := cmd.CombinedOutput()
 			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+				err = errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
 			}
-			return nil
+			for _, name := range namesInZone {
+				telemetry.CreateVM(name, ProviderName, zone, p.opts.MachineType, err)
+			}
+			return err
 		})
 
 	}
