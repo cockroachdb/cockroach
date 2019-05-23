@@ -32,8 +32,6 @@ type boolVecToSelOp struct {
 
 var _ Operator = &boolVecToSelOp{}
 
-var zeroBoolVec = make([]bool, coldata.BatchSize)
-
 func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 	// Loop until we have non-zero amount of output to return, or our input's been
 	// exhausted.
