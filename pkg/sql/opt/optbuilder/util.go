@@ -15,8 +15,6 @@
 package optbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -108,7 +106,7 @@ func (b *Builder) expandStar(
 		}
 
 	default:
-		panic(fmt.Sprintf("unhandled type: %T", expr))
+		panic(pgerror.AssertionFailedf("unhandled type: %T", expr))
 	}
 
 	return aliases, exprs

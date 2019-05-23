@@ -447,7 +447,7 @@ select
 build
 UPDATE unknown SET x=1
 ----
-error: no data source matches prefix: "unknown"
+error (42P01): no data source matches prefix: "unknown"
 
 # Unknown target column.
 build
