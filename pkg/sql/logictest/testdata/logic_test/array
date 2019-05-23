@@ -1280,3 +1280,20 @@ query TT
 SELECT ARRAY[]::int[], ARRAY[]:::int[]
 ----
 {}  {}
+
+subtest 37544
+
+query T
+SELECT
+    col_1
+FROM
+    (
+        VALUES
+            (ARRAY[]::INT8[]),
+            (ARRAY[]::INT8[])
+    )
+        AS tab_1 (col_1)
+GROUP BY
+    tab_1.col_1
+----
+{}
