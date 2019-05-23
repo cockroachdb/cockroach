@@ -71,6 +71,16 @@ eval
 NULL
 
 eval
+1 = ANY(NULL::int[])
+----
+NULL
+
+eval
+NULL = ANY(ARRAY[1,2])
+----
+NULL
+
+eval
 1 = ALL (ARRAY[1, 2, NULL])
 ----
 false
