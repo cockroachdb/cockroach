@@ -46,13 +46,13 @@ SELECT * FROM kv
 statement error pgcode 42703 column "m" does not exist
 UPDATE kv SET m = 9 WHERE k IN (1, 3)
 
-statement error unimplemented at or near "k"
+statement error at or near "k": syntax error: unimplemented
 UPDATE kv SET kv.k = 9
 
-statement error unimplemented at or near "*"
+statement error at or near "\*": syntax error: unimplemented
 UPDATE kv SET k.* = 9
 
-statement error unimplemented at or near "v"
+statement error at or near "v": syntax error: unimplemented
 UPDATE kv SET k.v = 9
 
 statement ok
