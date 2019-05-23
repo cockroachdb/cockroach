@@ -16,6 +16,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -24,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 )
 
 //
@@ -208,9 +209,10 @@ type virtualDefEntry struct {
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
 
-var errInvalidDbPrefix = pgerror.New(pgerror.CodeUndefinedObjectError,
-	"cannot access virtual schema in anonymous database",
-).SetHintf("verify that the current database is set")
+var errInvalidDbPrefix = errors.WithHint(
+	pgerror.New(pgcode.UndefinedObject,
+		"cannot access virtual schema in anonymous database"),
+	"verify that the current database is set")
 
 func newInvalidVirtualSchemaError() error {
 	return pgerror.AssertionFailedf("virtualSchema cannot have both the populate and generator functions defined")

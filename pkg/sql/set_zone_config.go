@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v2"
@@ -475,9 +477,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// LeasePreferences cannot be set unless Constraints are explicitly set
 	// Per-replica constraints cannot be set unless num_replicas is explicitly set
 	if err := zoneToWrite.ValidateTandemFields(); err != nil {
-		return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
-			"could not validate zone config: %v", err).SetHintf(
+		err = errors.Wrap(err, "could not validate zone config")
+		err = errors.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		err = errors.WithHint(err,
 			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] so populate the field")
+		return err
 	}
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
 		targetID, table, zoneToWrite, execConfig, hasNewSubzones)
