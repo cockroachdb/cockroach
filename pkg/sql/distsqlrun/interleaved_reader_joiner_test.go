@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -540,7 +541,10 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				t.Fatalf("expected an error")
 			}
 
-			if actual := err.Error(); actual != tc.expected {
+			// We flatten the error here since the test asserts that the
+			// "internal error: " prefix was added.
+			pgErr := pgerror.Flatten(err)
+			if actual := pgErr.Error(); actual != tc.expected {
 				t.Errorf("expected error: %s, actual: %s", tc.expected, actual)
 			}
 		})

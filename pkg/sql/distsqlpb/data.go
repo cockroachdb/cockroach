@@ -16,13 +16,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 // ConvertToColumnOrdering converts an Ordering type (as defined in data.proto)
@@ -138,35 +139,26 @@ func (e *Error) String() string {
 // recognize certain errors and marshall them accordingly, and everything
 // unrecognized is turned into a PGError with code "internal".
 func NewError(err error) *Error {
-	// Unwrap the error, to attain the cause.
-	// Otherwise, Wrap() may hide the roachpb error
-	// from the cast attempt below.
-	origErr := err
-	err = errors.Cause(err)
+	resErr := &Error{}
 
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	}
+	// Encode the full error to the best of our ability.
+	// This field is ignored by 19.1 nodes and prior.
+	fullError := errors.EncodeError(err)
+	resErr.FullError = &fullError
 
-	switch e := err.(type) {
+	// Now populate compatibility fields for 19.1 nodes.
+	cause := errors.UnwrapAll(err)
+	switch e := cause.(type) {
 	case *roachpb.UnhandledRetryableError:
-		return &Error{Detail: &Error_RetryableTxnError{RetryableTxnError: e}}
+		resErr.Detail = &Error_RetryableTxnError{RetryableTxnError: e}
 	case *roachpb.NodeUnavailableError:
-		// Node failures are common enough that we shouldn't fail with
-		// assertion errors upon them. Simply signal them in a way that
-		// may make sense to a client.
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.Newf(pgerror.CodeRangeUnavailable, "%v", e),
-			},
-		}
+		err = errors.WithCandidateCode(err, pgcode.RangeUnavailable)
+		resErr.Detail = &Error_PGError{PGError: pgerror.Flatten(err)}
 	default:
-		// Anything unrecognized is an "internal error".
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.AssertionFailedf(
-					"uncaught error: %+v", origErr)}}
+		err = errors.NewAssertionErrorWithWrappedErrf(err, "uncaught error")
+		resErr.Detail = &Error_PGError{PGError: pgerror.Flatten(err)}
 	}
+	return resErr
 }
 
 // ErrorDetail returns the payload as a Go error.
@@ -174,6 +166,14 @@ func (e *Error) ErrorDetail() error {
 	if e == nil {
 		return nil
 	}
+
+	if e.FullError != nil {
+		// If there's a 19.1-forward full error, decode and use that.
+		// This will reveal a fully causable detailed error structure.
+		return errors.DecodeError(*e.FullError)
+	}
+
+	// Fallback to pre-19.1 logic.
 	switch t := e.Detail.(type) {
 	case *Error_PGError:
 		return t.PGError
@@ -183,7 +183,7 @@ func (e *Error) ErrorDetail() error {
 		// We're receiving an error we don't know about. It's all right,
 		// it's still an error, just one we didn't expect. Let it go
 		// through. We'll pick it up in reporting.
-		return pgerror.AssertionFailedf("unknown error detail type: %+v", t)
+		return errors.AssertionFailedf("unknown error detail type: %+v", t)
 	}
 }
 

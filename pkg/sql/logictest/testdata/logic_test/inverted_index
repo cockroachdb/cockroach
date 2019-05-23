@@ -15,10 +15,10 @@ INSERT INTO t VALUES (1,1,1)
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*35730
+statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
 CREATE INVERTED INDEX foo_inv ON t(b)
 
-statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*35730
+statement error column b is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
 CREATE INDEX foo_inv2 ON t USING GIN (b)
 
 statement error pq: inverted indexes can't be unique
@@ -54,7 +54,7 @@ CREATE TABLE d (
   INVERTED INDEX (foo, bar)
 )
 
-statement error column foo is of type int and thus is not indexable with an inverted index.*\nHINT.*35730
+statement error column foo is of type int and thus is not indexable with an inverted index.*\nHINT.*\n.*35730
 CREATE TABLE d (
   id INT PRIMARY KEY,
   foo INT,
