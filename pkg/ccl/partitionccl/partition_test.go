@@ -1161,26 +1161,45 @@ func TestInitialPartitioning(t *testing.T) {
 	}
 
 	rng, _ := randutil.NewPseudoRand()
-	testCases := allPartitioningTests(rng)
+	allTestCases := allPartitioningTests(rng)
 
-	ctx := context.Background()
-	db, sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
-	defer cleanup()
-
-	for _, test := range testCases {
-		if len(test.scans) == 0 {
-			continue
-		}
-		t.Run(test.name, func(t *testing.T) {
-			if err := test.parse(); err != nil {
-				t.Fatalf("%+v", err)
-			}
-			sqlDB.Exec(t, test.parsed.createStmt)
-			sqlDB.Exec(t, test.parsed.zoneConfigStmts)
-
-			testutils.SucceedsSoon(t, test.verifyScansFn(ctx, db))
-		})
+	const parallelism = 8
+	var splitTestCases [parallelism][]partitioningTest
+	for i := range splitTestCases {
+		n := len(allTestCases) / (parallelism - i)
+		splitTestCases[i] = allTestCases[:n]
+		allTestCases = allTestCases[n:]
 	}
+
+	// Group together parallel subtests, so that the main test doesn't run its
+	// defer before the parallel subtests start.
+	t.Run("group", func(t *testing.T) {
+		for instanceIdx := range splitTestCases {
+			testCases := splitTestCases[instanceIdx]
+			t.Run(fmt.Sprintf("%d", instanceIdx), func(t *testing.T) {
+				t.Parallel() // SAFE FOR TESTING
+				ctx := context.Background()
+				db, sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
+				defer cleanup()
+
+				for _, test := range testCases {
+					if len(test.scans) == 0 {
+						continue
+					}
+					t.Run(test.name, func(t *testing.T) {
+						if err := test.parse(); err != nil {
+							t.Fatalf("%+v", err)
+						}
+						sqlDB.Exec(t, test.parsed.createStmt)
+						sqlDB.Exec(t, test.parsed.zoneConfigStmts)
+
+						testutils.SucceedsSoon(t, test.verifyScansFn(ctx, db))
+					})
+				}
+			})
+		}
+
+	})
 }
 
 func TestSelectPartitionExprs(t *testing.T) {
@@ -1268,95 +1287,112 @@ func TestRepartitioning(t *testing.T) {
 	}
 
 	rng, _ := randutil.NewPseudoRand()
-	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
+	allTestCases, err := allRepartitioningTests(allPartitioningTests(rng))
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-
-	ctx := context.Background()
-	db, sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
-	defer cleanup()
-
-	for _, test := range testCases {
-		t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
-			sqlDB.Exec(t, `DROP DATABASE IF EXISTS data`)
-			sqlDB.Exec(t, `CREATE DATABASE data`)
-
-			{
-				if err := test.old.parse(); err != nil {
-					t.Fatalf("%+v", err)
-				}
-				sqlDB.Exec(t, test.old.parsed.createStmt)
-				sqlDB.Exec(t, test.old.parsed.zoneConfigStmts)
-
-				testutils.SucceedsSoon(t, test.old.verifyScansFn(ctx, db))
-			}
-
-			{
-				if err := test.new.parse(); err != nil {
-					t.Fatalf("%+v", err)
-				}
-				sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", test.old.parsed.tableName, test.new.parsed.tableName))
-
-				testIndex, _, err := test.new.parsed.tableDesc.FindIndexByName(test.index)
-				if err != nil {
-					t.Fatalf("%+v", err)
-				}
-
-				var repartition bytes.Buffer
-				if testIndex.ID == test.new.parsed.tableDesc.PrimaryIndex.ID {
-					fmt.Fprintf(&repartition, `ALTER TABLE %s `, test.new.parsed.tableName)
-				} else {
-					fmt.Fprintf(&repartition, `ALTER INDEX %s@%s `, test.new.parsed.tableName, testIndex.Name)
-				}
-				if testIndex.Partitioning.NumColumns == 0 {
-					repartition.WriteString(`PARTITION BY NOTHING`)
-				} else {
-					if err := sql.ShowCreatePartitioning(
-						&sqlbase.DatumAlloc{}, test.new.parsed.tableDesc, testIndex,
-						&testIndex.Partitioning, &repartition, 0 /* indent */, 0, /* colOffset */
-					); err != nil {
-						t.Fatalf("%+v", err)
-					}
-				}
-				sqlDB.Exec(t, repartition.String())
-
-				// Verify that repartitioning removes zone configs for partitions that
-				// have been removed.
-				newPartitionNames := map[string]struct{}{}
-				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
-					newPartitionNames[name] = struct{}{}
-				}
-				rows := sqlDB.QueryStr(t, "SELECT cli_specifier FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
-				for _, row := range rows {
-					zs, err := config.ParseCLIZoneSpecifier(row[0])
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !zs.TargetsTable() {
-						// Ignore zone configs that target databases or system ranges.
-						continue
-					}
-					if zs.TableOrIndex.Table.Table() != test.new.parsed.tableDesc.Name || zs.Partition == "" {
-						// Ignore zone configs that do not target a partition of this table.
-						continue
-					}
-					if _, ok := newPartitionNames[string(zs.Partition)]; !ok {
-						t.Errorf("zone config for removed partition %q exists after repartitioning", zs.Partition)
-					}
-				}
-
-				// NB: Not all old zone configurations are removed. This statement will
-				// overwrite any with the same name and the repartitioning removes any
-				// for partitions that no longer exist, but there could still be some
-				// sitting around (e.g., when a repartitioning preserves a partition but
-				// does not apply a new zone config). This is fine.
-				sqlDB.Exec(t, test.new.parsed.zoneConfigStmts)
-
-				testutils.SucceedsSoon(t, test.new.verifyScansFn(ctx, db))
-			}
-		})
+	const parallelism = 8
+	var splitTestCases [parallelism][]repartitioningTest
+	for i := range splitTestCases {
+		n := len(allTestCases) / (parallelism - i)
+		splitTestCases[i] = allTestCases[:n]
+		allTestCases = allTestCases[n:]
 	}
+
+	// Group together parallel subtests, so that the main test doesn't run its
+	// defer before the parallel subtests start.
+	t.Run("group", func(t *testing.T) {
+		for instanceIdx := range splitTestCases {
+			testCases := splitTestCases[instanceIdx]
+			t.Run(fmt.Sprintf("%d", instanceIdx), func(t *testing.T) {
+				t.Parallel() // SAFE FOR TESTING
+				ctx := context.Background()
+				db, sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
+				defer cleanup()
+
+				for _, test := range testCases {
+					t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
+						sqlDB.Exec(t, `DROP DATABASE IF EXISTS data`)
+						sqlDB.Exec(t, `CREATE DATABASE data`)
+
+						{
+							if err := test.old.parse(); err != nil {
+								t.Fatalf("%+v", err)
+							}
+							sqlDB.Exec(t, test.old.parsed.createStmt)
+							sqlDB.Exec(t, test.old.parsed.zoneConfigStmts)
+
+							testutils.SucceedsSoon(t, test.old.verifyScansFn(ctx, db))
+						}
+
+						{
+							if err := test.new.parse(); err != nil {
+								t.Fatalf("%+v", err)
+							}
+							sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", test.old.parsed.tableName, test.new.parsed.tableName))
+
+							testIndex, _, err := test.new.parsed.tableDesc.FindIndexByName(test.index)
+							if err != nil {
+								t.Fatalf("%+v", err)
+							}
+
+							var repartition bytes.Buffer
+							if testIndex.ID == test.new.parsed.tableDesc.PrimaryIndex.ID {
+								fmt.Fprintf(&repartition, `ALTER TABLE %s `, test.new.parsed.tableName)
+							} else {
+								fmt.Fprintf(&repartition, `ALTER INDEX %s@%s `, test.new.parsed.tableName, testIndex.Name)
+							}
+							if testIndex.Partitioning.NumColumns == 0 {
+								repartition.WriteString(`PARTITION BY NOTHING`)
+							} else {
+								if err := sql.ShowCreatePartitioning(
+									&sqlbase.DatumAlloc{}, test.new.parsed.tableDesc, testIndex,
+									&testIndex.Partitioning, &repartition, 0 /* indent */, 0, /* colOffset */
+								); err != nil {
+									t.Fatalf("%+v", err)
+								}
+							}
+							sqlDB.Exec(t, repartition.String())
+
+							// Verify that repartitioning removes zone configs for partitions that
+							// have been removed.
+							newPartitionNames := map[string]struct{}{}
+							for _, name := range test.new.parsed.tableDesc.PartitionNames() {
+								newPartitionNames[name] = struct{}{}
+							}
+							rows := sqlDB.QueryStr(t, "SELECT cli_specifier FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
+							for _, row := range rows {
+								zs, err := config.ParseCLIZoneSpecifier(row[0])
+								if err != nil {
+									t.Fatal(err)
+								}
+								if !zs.TargetsTable() {
+									// Ignore zone configs that target databases or system ranges.
+									continue
+								}
+								if zs.TableOrIndex.Table.Table() != test.new.parsed.tableDesc.Name || zs.Partition == "" {
+									// Ignore zone configs that do not target a partition of this table.
+									continue
+								}
+								if _, ok := newPartitionNames[string(zs.Partition)]; !ok {
+									t.Errorf("zone config for removed partition %q exists after repartitioning", zs.Partition)
+								}
+							}
+
+							// NB: Not all old zone configurations are removed. This statement will
+							// overwrite any with the same name and the repartitioning removes any
+							// for partitions that no longer exist, but there could still be some
+							// sitting around (e.g., when a repartitioning preserves a partition but
+							// does not apply a new zone config). This is fine.
+							sqlDB.Exec(t, test.new.parsed.zoneConfigStmts)
+
+							testutils.SucceedsSoon(t, test.new.verifyScansFn(ctx, db))
+						}
+					})
+				}
+			})
+		}
+	})
 }
 
 func TestRemovePartitioningExpiredLicense(t *testing.T) {
