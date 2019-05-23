@@ -176,7 +176,7 @@ WITH
     t AS (SELECT false)
 SELECT * FROM t
 ----
-error: WITH query name t specified more than once
+error (42712): WITH query name t specified more than once
 
 # Using a CTE once in another CTE and once otherwise.
 build
@@ -356,7 +356,7 @@ project
 build
 WITH t(b, c) AS (SELECT a FROM x) SELECT b, t.b FROM t
 ----
-error: source "t" has 1 columns available but 2 columns specified
+error (42P10): source "t" has 1 columns available but 2 columns specified
 
 # Ensure you can't reference the original table name
 build

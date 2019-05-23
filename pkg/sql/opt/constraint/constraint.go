@@ -15,7 +15,6 @@
 package constraint
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -264,7 +263,7 @@ func (c *Constraint) Combine(evalCtx *tree.EvalContext, other *Constraint) {
 	if !other.Columns.IsStrictSuffixOf(&c.Columns) {
 		// Note: we don't want to let the c and other pointers escape by passing
 		// them directly to Sprintf.
-		panic(fmt.Sprintf("%s not a suffix of %s", other.String(), c.String()))
+		panic(pgerror.AssertionFailedf("%s not a suffix of %s", other.String(), c.String()))
 	}
 	if c.IsUnconstrained() || c.IsContradiction() || other.IsUnconstrained() {
 		return

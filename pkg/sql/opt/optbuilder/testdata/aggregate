@@ -3044,7 +3044,7 @@ scalar-group-by
 build
 SELECT string_agg('foo', s) FROM kv
 ----
-error: unimplemented: aggregate functions with multiple non-constant expressions are not supported
+error (0A000): unimplemented: aggregate functions with multiple non-constant expressions are not supported
 
 # Regression test for #26419
 build

@@ -105,7 +105,7 @@ TABLE decimals
 build
 INSERT INTO unknown VALUES (1, 2, 3)
 ----
-error: no data source matches prefix: "unknown"
+error (42P01): no data source matches prefix: "unknown"
 
 # ------------------------------------------------------------------------------
 # Tests without target column names.

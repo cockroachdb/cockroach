@@ -455,20 +455,20 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 		name := ctes[i].Name.Alias
 
 		if _, ok := outScope.ctes[name.String()]; ok {
-			panic(builderError{
-				fmt.Errorf("WITH query name %s specified more than once", ctes[i].Name.Alias),
-			})
+			panic(pgerror.Newf(
+				pgerror.CodeDuplicateAliasError,
+				"WITH query name %s specified more than once", ctes[i].Name.Alias),
+			)
 		}
 
 		// Names for the output columns can optionally be specified.
 		if ctes[i].Name.Cols != nil {
 			if len(cteScope.cols) != len(ctes[i].Name.Cols) {
-				panic(builderError{
-					fmt.Errorf(
-						"source %q has %d columns available but %d columns specified",
-						name, len(cteScope.cols), len(ctes[i].Name.Cols),
-					),
-				})
+				panic(pgerror.Newf(
+					pgerror.CodeInvalidColumnReferenceError,
+					"source %q has %d columns available but %d columns specified",
+					name, len(cteScope.cols), len(ctes[i].Name.Cols),
+				))
 			}
 
 			cols = make([]scopeColumn, len(cteScope.cols))

@@ -171,12 +171,10 @@ type builderError struct {
 
 // unimplementedWithIssueDetailf formats according to a format
 // specifier and returns a Postgres error with the
-// pgerror.CodeFeatureNotSupportedError code, wrapped in a
+// pg code FeatureNotSupported, wrapped in a
 // builderError.
-func unimplementedWithIssueDetailf(
-	issue int, detail, format string, args ...interface{},
-) *pgerror.Error {
-	return pgerror.UnimplementedWithIssueDetailf(issue, detail, format, args...)
+func unimplementedWithIssueDetailf(issue int, detail, format string, args ...interface{}) error {
+	return builderError{pgerror.UnimplementedWithIssueDetailf(issue, detail, format, args...)}
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
