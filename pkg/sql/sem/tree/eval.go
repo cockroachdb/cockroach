@@ -1116,7 +1116,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Float,
 			ReturnType: types.Float,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDFloat(*left.(*DFloat) / *right.(*DFloat)), nil
+				r := *right.(*DFloat)
+				if r == 0.0 {
+					return nil, ErrDivByZero
+				}
+				return NewDFloat(*left.(*DFloat) / r), nil
 			},
 		},
 		&BinOp{
