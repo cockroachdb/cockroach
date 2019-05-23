@@ -1,7 +1,7 @@
 build
 SELECT * FROM information_schema.does_not_exist
 ----
-error: no data source matches prefix: "information_schema.public.does_not_exist"
+error (42P01): no data source matches prefix: "information_schema.public.does_not_exist"
 
 build
 SELECT * FROM information_schema.columns

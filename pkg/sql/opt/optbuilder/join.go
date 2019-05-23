@@ -15,8 +15,6 @@
 package optbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -112,7 +110,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		return outScope
 
 	default:
-		panic(fmt.Sprintf("unsupported join condition %#v", cond))
+		panic(pgerror.AssertionFailedf("unsupported join condition %#v", cond))
 	}
 }
 

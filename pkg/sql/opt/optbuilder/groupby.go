@@ -40,8 +40,6 @@ package optbuilder
 //   post-projection: 1 + col3
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -583,13 +581,12 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructJsonbAgg(args[0])
 	case "string_agg":
 		if !memo.CanExtractConstDatum(args[1]) {
-			panic(builderError{
-				fmt.Errorf("unimplemented: aggregate functions with multiple non-constant expressions are not supported"),
-			})
+			panic(unimplementedWithIssueDetailf(28417, "string_agg",
+				"aggregate functions with multiple non-constant expressions are not supported"))
 		}
 		return b.factory.ConstructStringAgg(args[0], args[1])
 	}
-	panic(fmt.Sprintf("unhandled aggregate: %s", name))
+	panic(pgerror.AssertionFailedf("unhandled aggregate: %s", name))
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {

@@ -195,7 +195,7 @@ delete abcde
 build
 DELETE FROM unknown WHERE x=1
 ----
-error: no data source matches prefix: "unknown"
+error (42P01): no data source matches prefix: "unknown"
 
 # Try to use non-returning UPDATE as expression.
 build

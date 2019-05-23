@@ -171,11 +171,9 @@ type builderError struct {
 
 // unimplementedWithIssueDetailf formats according to a format
 // specifier and returns a Postgres error with the
-// pgerror.CodeFeatureNotSupportedError code, wrapped in a
+// pg code FeatureNotSupported, wrapped in a
 // builderError.
-func unimplementedWithIssueDetailf(
-	issue int, detail, format string, args ...interface{},
-) *pgerror.Error {
+func unimplementedWithIssueDetailf(issue int, detail, format string, args ...interface{}) error {
 	return pgerror.UnimplementedWithIssueDetailf(issue, detail, format, args...)
 }
 

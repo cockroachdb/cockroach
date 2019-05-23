@@ -785,7 +785,7 @@ sort
 build
 SELECT a FROM abc ORDER BY PRIMARY KEY a
 ----
-error: no data source matches prefix: "a"
+error (42P01): no data source matches prefix: "a"
 
 build
 SELECT a FROM abcview ORDER BY INDEX abcview@bc
@@ -978,7 +978,7 @@ error (42P01): no data source matches prefix: t.public.abcd
 build
 SELECT a FROM abcd AS foo ORDER BY INDEX foo@abc DESC
 ----
-error: no data source matches prefix: "foo"
+error (42P01): no data source matches prefix: "foo"
 
 build
 SELECT a FROM abcd ORDER BY INDEX abcd@bcd
@@ -1002,7 +1002,7 @@ sort
 build
 SELECT a FROM abcd ORDER BY INDEX abcd@nonexistent
 ----
-error: index "nonexistent" not found
+error (42704): index "nonexistent" not found
 
 build
 SELECT a FROM t.public.abcd ORDER BY INDEX t.public.abcd@bcd
