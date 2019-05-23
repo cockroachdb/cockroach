@@ -31,15 +31,6 @@ func NewReportMessage(msg string) ReportableObject {
 	return &raven.Message{Message: msg}
 }
 
-// NewException constructs an exception object that can be added
-// to calls to SendReport().
-// Note that the message string will be reported unedited;
-// use ReportablesToSafeError().Error() or similar to produce a
-// suitable string.
-func NewException(msg string, st *StackTrace) ReportableObject {
-	return raven.NewException(&safeError{message: msg}, st)
-}
-
 // StackTrace is an object suitable for inclusion in errors that can
 // ultimately be reported with ReportInternalError() or similar.
 type StackTrace = raven.Stacktrace
