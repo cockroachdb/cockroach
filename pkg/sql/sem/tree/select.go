@@ -760,6 +760,30 @@ const (
 	GROUPS
 )
 
+// OverrideWindowDef implements the logic to have a base window definition which
+// then gets augmented by a different window definition.
+func OverrideWindowDef(base *WindowDef, override WindowDef) (WindowDef, error) {
+	// referencedSpec.Partitions is always used.
+	if len(override.Partitions) > 0 {
+		return WindowDef{}, pgerror.Newf(pgerror.CodeWindowingError, "cannot override PARTITION BY clause of window %q", base.Name)
+	}
+	override.Partitions = base.Partitions
+
+	// referencedSpec.OrderBy is used if set.
+	if len(base.OrderBy) > 0 {
+		if len(override.OrderBy) > 0 {
+			return WindowDef{}, pgerror.Newf(pgerror.CodeWindowingError, "cannot override ORDER BY clause of window %q", base.Name)
+		}
+		override.OrderBy = base.OrderBy
+	}
+
+	if base.Frame != nil {
+		return WindowDef{}, pgerror.Newf(pgerror.CodeWindowingError, "cannot copy window %q because it has a frame clause", base.Name)
+	}
+
+	return override, nil
+}
+
 // WindowFrameBoundType indicates which type of boundary is used.
 type WindowFrameBoundType int
 

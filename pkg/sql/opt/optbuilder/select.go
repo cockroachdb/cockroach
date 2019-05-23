@@ -660,10 +660,8 @@ func (b *Builder) buildSelect(
 func (b *Builder) buildSelectClause(
 	sel *tree.SelectClause, orderBy tree.OrderBy, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
-	if len(sel.Window) > 0 {
-		panic(unimplementedWithIssueDetailf(34251, "", "unsupported window function"))
-	}
 	fromScope := b.buildFrom(sel.From, inScope)
+	b.processWindowDefs(sel, fromScope)
 	b.buildWhere(sel.Where, fromScope)
 
 	projectionsScope := fromScope.replace()
@@ -745,6 +743,29 @@ func (b *Builder) buildFrom(from *tree.From, inScope *scope) (outScope *scope) {
 	}
 
 	return outScope
+}
+
+// processWindowDefs validates that any window defs have unique names and adds
+// them to the given scope.
+func (b *Builder) processWindowDefs(sel *tree.SelectClause, fromScope *scope) {
+	// Just do an O(n^2) loop since the number of window defs is likely small.
+	for i := range sel.Window {
+		for j := i + 1; j < len(sel.Window); j++ {
+			if sel.Window[i].Name == sel.Window[j].Name {
+				panic(builderError{
+					pgerror.Newf(
+						pgerror.CodeWindowingError,
+						"window %q is already defined",
+						sel.Window[i].Name,
+					),
+				})
+			}
+		}
+	}
+
+	// Pass down the set of window definitions so that they can be referenced
+	// elsewhere in the SELECT.
+	fromScope.windowDefs = sel.Window
 }
 
 // buildWhere builds a set of memo groups that represent the given WHERE clause.
