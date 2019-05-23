@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClusterNodes(t *testing.T) {
@@ -252,4 +253,76 @@ func TestClusterMachineType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadGroups(t *testing.T) {
+	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
+	logger, err := cfg.newLogger("" /* path */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		numZones, numRoachNodes, numLoadNodes int
+		loadGroups                            loadGroupList
+	}{
+		{
+			3, 9, 3,
+			loadGroupList{
+				{
+					nodeListOption{1, 2, 3},
+					nodeListOption{4},
+				},
+				{
+					nodeListOption{5, 6, 7},
+					nodeListOption{8},
+				},
+				{
+					nodeListOption{9, 10, 11},
+					nodeListOption{12},
+				},
+			},
+		},
+		{
+			3, 9, 1,
+			loadGroupList{
+				{
+					nodeListOption{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					nodeListOption{10},
+				},
+			},
+		},
+		{
+			4, 8, 2,
+			loadGroupList{
+				{
+					nodeListOption{1, 2, 3, 4},
+					nodeListOption{9},
+				},
+				{
+					nodeListOption{5, 6, 7, 8},
+					nodeListOption{10},
+				},
+			},
+		},
+	} {
+		t.Run(fmt.Sprintf("%d/%d/%d", tc.numZones, tc.numRoachNodes, tc.numLoadNodes),
+			func(t *testing.T) {
+				c := &cluster{t: testWrapper{t}, l: logger, nodes: tc.numRoachNodes + tc.numLoadNodes}
+				lg := makeLoadGroups(c, tc.numZones, tc.numRoachNodes, tc.numLoadNodes)
+				require.EqualValues(t, lg, tc.loadGroups)
+			})
+	}
+	t.Run("panics with too many load nodes", func(t *testing.T) {
+		require.Panics(t, func() {
+
+			numZones, numRoachNodes, numLoadNodes := 2, 4, 3
+			makeLoadGroups(nil, numZones, numRoachNodes, numLoadNodes)
+		}, "Failed to panic when number of load nodes exceeded number of zones")
+	})
+	t.Run("panics with unequal zones per load node", func(t *testing.T) {
+		require.Panics(t, func() {
+			numZones, numRoachNodes, numLoadNodes := 4, 4, 3
+			makeLoadGroups(nil, numZones, numRoachNodes, numLoadNodes)
+		}, "Failed to panic when number of zones is not divisible by number of load nodes")
+	})
 }

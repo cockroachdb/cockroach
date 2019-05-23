@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"os/exec"
 	"regexp"
@@ -332,13 +331,6 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		p.opts.Zones = []string{p.opts.Zones[0]}
 	}
 
-	totalNodes := float64(len(names))
-	totalZones := float64(len(p.opts.Zones))
-	nodesPerZone := int(math.Ceil(totalNodes / totalZones))
-
-	ct := int(0)
-	i := 0
-
 	// Fixed args.
 	args := []string{
 		"compute", "instances", "create",
@@ -384,20 +376,15 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 
 	var g errgroup.Group
 
-	// This is calculating the number of machines to allocate per zone by taking the ceiling of the the total number
-	// of machines left divided by the number of zones left. If the the number of machines isn't
-	// divisible by the number of zones, then the extra machines will be allocated one per zone until there are
-	// no more extra machines left.
-	for i < len(names) {
-		argsWithZone := append(args[:len(args):len(args)], "--zone", p.opts.Zones[ct])
-		ct++
-		argsWithZone = append(argsWithZone, names[i:i+nodesPerZone]...)
-		i += nodesPerZone
-
-		totalNodes -= float64(nodesPerZone)
-		totalZones--
-		nodesPerZone = int(math.Ceil(totalNodes / totalZones))
-
+	nodeZones := vm.ZonePlacement(len(p.opts.Zones), len(names))
+	zoneHostNames := make([][]string, len(p.opts.Zones))
+	for i, name := range names {
+		zone := nodeZones[i]
+		zoneHostNames[zone] = append(zoneHostNames[zone], name)
+	}
+	for i, zoneHosts := range zoneHostNames {
+		argsWithZone := append(args[:len(args):len(args)], "--zone", p.opts.Zones[i])
+		argsWithZone = append(argsWithZone, zoneHosts...)
 		g.Go(func() error {
 			cmd := exec.Command("gcloud", argsWithZone...)
 
