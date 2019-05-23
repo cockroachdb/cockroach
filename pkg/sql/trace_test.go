@@ -209,30 +209,6 @@ func TestTrace(t *testing.T) {
 				"noop",
 			},
 		},
-		{
-			name: "ShowTraceForSplitBatch",
-			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
-					t.Fatal(err)
-				}
-
-				// Deleting from a multi-range table will result in a 2PC transaction
-				// and will split the underlying BatchRequest/BatchResponse. Tracing
-				// in the presence of multi-part batches is what we want to test here.
-				if _, err := sqlDB.Exec("SET tracing = on; DELETE FROM test.bar; SET tracing = off"); err != nil {
-					t.Fatal(err)
-				}
-
-				return sqlDB.Query(
-					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SESSION] " +
-						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
-			},
-			expSpans: []string{
-				"dist sender send",
-				"kv.DistSender: sending partial batch",
-				"/cockroach.roachpb.Internal/Batch",
-			},
-		},
 	}
 
 	// Create a cluster. We'll run sub-tests using each node of this cluster.

@@ -243,9 +243,11 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
 DelRange /Table/61/1/5 - /Table/61/1/7/NULL
 querying next range at /Table/61/1/5
-r20: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+r20: sending batch 1 DelRng to (n1,s1):1
 fast path completed
 rows affected: 3
+querying next range at /Table/61/1/5
+r20: sending batch 1 EndTxn to (n1,s1):1
 
 query II colnames
 select * from b order by a_id, b_id
@@ -285,9 +287,11 @@ select message FROM [SHOW KV TRACE FOR SESSION]
 ----
 DelRange /Table/61/1 - /Table/61/3
 querying next range at /Table/61/1
-r20: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+r20: sending batch 1 DelRng to (n1,s1):1
 fast path completed
 rows affected: 5
+querying next range at /Table/61/1
+r20: sending batch 1 EndTxn to (n1,s1):1
 
 query II colnames
 select * from b order by a_id, b_id
