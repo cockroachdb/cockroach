@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/pkg/errors"
 )
@@ -468,7 +469,7 @@ func (f *DiskBackedRowContainer) UsingDisk() bool {
 // memory error. Returns whether the DiskBackedRowContainer spilled to disk and
 // an error if one occurred while doing so.
 func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
-	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+	if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
 		return false, nil
 	}
 	if spillErr := f.SpillToDisk(ctx); spillErr != nil {

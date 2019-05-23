@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -118,12 +119,8 @@ func TestColumnConversions(t *testing.T) {
 
 				// Verify that we only return cannot-coerce errors.
 				if err != nil {
-					if pgErr, ok := err.(*pgerror.Error); ok {
-						if pgErr.Code != pgerror.CodeCannotCoerceError {
-							t.Errorf("unexpected error code returned: %s", pgErr.Code)
-						}
-					} else {
-						t.Errorf("unexpected error returned: %s", err)
+					if code := pgerror.GetPGCode(err); code != pgcode.CannotCoerce {
+						t.Errorf("unexpected error code returned: %s", code)
 					}
 				}
 

@@ -170,11 +170,10 @@ func IsOutOfMemoryError(err error) bool {
 }
 
 func errHasCode(err error, code ...string) bool {
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		for _, c := range code {
-			if pgErr.Code == c {
-				return true
-			}
+	pgCode := pgerror.GetPGCode(err)
+	for _, c := range code {
+		if pgCode == c {
+			return true
 		}
 	}
 	return false
