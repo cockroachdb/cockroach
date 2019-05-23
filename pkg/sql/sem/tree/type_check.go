@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/text/language"
 )
@@ -227,11 +229,17 @@ func (sc *SemaContext) GetRelativeParseTime() time.Time {
 	return timeutil.Now().In(sc.GetLocation())
 }
 
-type placeholderTypeAmbiguityError struct {
+func placeholderTypeAmbiguityError(idx PlaceholderIdx) error {
+	return errors.WithCandidateCode(
+		placeholderTypeAmbiguityErr{idx},
+		pgcode.InvalidParameterValue)
+}
+
+type placeholderTypeAmbiguityErr struct {
 	idx PlaceholderIdx
 }
 
-func (err placeholderTypeAmbiguityError) Error() string {
+func (err placeholderTypeAmbiguityErr) Error() string {
 	return fmt.Sprintf("could not determine data type of placeholder %s", err.idx)
 }
 
@@ -241,8 +249,8 @@ func unexpectedTypeError(expr Expr, want, got *types.T) error {
 }
 
 func decorateTypeCheckError(err error, format string, a ...interface{}) error {
-	if _, ok := err.(placeholderTypeAmbiguityError); ok {
-		return err
+	if e, ok := errors.UnwrapAll(err).(placeholderTypeAmbiguityErr); ok {
+		return e
 	}
 	return pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError, format, a...)
 }
@@ -1383,7 +1391,7 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExp
 		return expr, nil
 	}
 	if desired.IsAmbiguous() {
-		return nil, placeholderTypeAmbiguityError{expr.Idx}
+		return nil, placeholderTypeAmbiguityError(expr.Idx)
 	}
 	if err := ctx.Placeholders.SetType(expr.Idx, desired); err != nil {
 		return nil, err
@@ -1904,7 +1912,7 @@ func TypeCheckSameTypedExprs(
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 			case len(placeholderIdxs) > 0:
 				p := s.exprs[placeholderIdxs[0]].(*Placeholder)
-				return nil, nil, placeholderTypeAmbiguityError{p.Idx}
+				return nil, nil, placeholderTypeAmbiguityError(p.Idx)
 			default:
 				if desired != types.Any {
 					return typedExprs, desired, nil
