@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+	"github.com/cockroachdb/errors"
 )
 
 // TestParse verifies that we can parse the supplied SQL and regenerate the SQL
@@ -2136,19 +2137,19 @@ func TestParseError(t *testing.T) {
 		sql      string
 		expected string
 	}{
-		{`SELECT2 1`, `syntax error at or near "select2"
+		{`SELECT2 1`, `at or near "select2": syntax error
 SELECT2 1
 ^
 `},
-		{`SELECT 1 FROM (t)`, `syntax error at or near ")"
+		{`SELECT 1 FROM (t)`, `at or near ")": syntax error
 SELECT 1 FROM (t)
                 ^
 HINT: try \h <SOURCE>`},
-		{`SET TIME ZONE INTERVAL 'foobar'`, `syntax error: could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
+		{`SET TIME ZONE INTERVAL 'foobar'`, `at or near "EOF": syntax error: could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar"
 SET TIME ZONE INTERVAL 'foobar'
                                ^
 `},
-		{`SELECT INTERVAL 'foo'`, `syntax error: could not parse "foo" as type interval: interval: missing unit at position 0: "foo" at or near "EOF"
+		{`SELECT INTERVAL 'foo'`, `at or near "EOF": syntax error: could not parse "foo" as type interval: interval: missing unit at position 0: "foo"
 SELECT INTERVAL 'foo'
                      ^
 `},
@@ -2161,28 +2162,28 @@ SELECT '1
        ^
 HINT: try \h SELECT`},
 		{`SELECT * FROM t WHERE k=`,
-			`syntax error at or near "EOF"
+			`at or near "EOF": syntax error
 SELECT * FROM t WHERE k=
                         ^
 HINT: try \h SELECT`,
 		},
 		{`CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
-)`, `syntax error at or near "index"
+)`, `at or near "index": syntax error
 CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
                  ^
 HINT: try \h CREATE TABLE`},
 		{`CREATE TABLE test (
   foo BIT(0)
-)`, `syntax error: length for type bit must be at least 1 at or near ")"
+)`, `at or near ")": syntax error: length for type bit must be at least 1
 CREATE TABLE test (
   foo BIT(0)
            ^
 `},
 		{`CREATE TABLE test (
   foo INT8 DEFAULT 1 DEFAULT 2
-)`, `syntax error: multiple default values specified for column "foo" at or near ")"
+)`, `at or near ")": syntax error: multiple default values specified for column "foo"
 CREATE TABLE test (
   foo INT8 DEFAULT 1 DEFAULT 2
 )
@@ -2190,7 +2191,7 @@ CREATE TABLE test (
 `},
 		{`CREATE TABLE test (
   foo INT8 REFERENCES t1 REFERENCES t2
-)`, `syntax error: multiple foreign key constraints specified for column "foo" at or near ")"
+)`, `at or near ")": syntax error: multiple foreign key constraints specified for column "foo"
 CREATE TABLE test (
   foo INT8 REFERENCES t1 REFERENCES t2
 )
@@ -2198,19 +2199,19 @@ CREATE TABLE test (
 `},
 		{`CREATE TABLE test (
   foo INT8 FAMILY a FAMILY b
-)`, `syntax error: multiple column families specified for column "foo" at or near ")"
+)`, `at or near ")": syntax error: multiple column families specified for column "foo"
 CREATE TABLE test (
   foo INT8 FAMILY a FAMILY b
 )
 ^
 `},
-		{`SELECT family FROM test`, `syntax error at or near "from"
+		{`SELECT family FROM test`, `at or near "from": syntax error
 SELECT family FROM test
               ^
 HINT: try \h SELECT`},
 		{`CREATE TABLE test (
   foo INT8 NOT NULL NULL
-)`, `syntax error: conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
+)`, `at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "foo"
 CREATE TABLE test (
   foo INT8 NOT NULL NULL
 )
@@ -2218,39 +2219,39 @@ CREATE TABLE test (
 `},
 		{`CREATE TABLE test (
   foo INT8 NULL NOT NULL
-)`, `syntax error: conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
+)`, `at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "foo"
 CREATE TABLE test (
   foo INT8 NULL NOT NULL
 )
 ^
 `},
 		{`CREATE DATABASE a b`,
-			`syntax error at or near "b"
+			`at or near "b": syntax error
 CREATE DATABASE a b
                   ^
 `},
 		{`CREATE DATABASE a b c`,
-			`syntax error at or near "b"
+			`at or near "b": syntax error
 CREATE DATABASE a b c
                   ^
 `},
 		{`CREATE INDEX ON a (b) STORING ()`,
-			`syntax error at or near ")"
+			`at or near ")": syntax error
 CREATE INDEX ON a (b) STORING ()
                                ^
 HINT: try \h CREATE INDEX`},
 		{`CREATE VIEW a`,
-			`syntax error at or near "EOF"
+			`at or near "EOF": syntax error
 CREATE VIEW a
              ^
 HINT: try \h CREATE VIEW`},
 		{`CREATE VIEW a () AS select * FROM b`,
-			`syntax error at or near ")"
+			`at or near ")": syntax error
 CREATE VIEW a () AS select * FROM b
                ^
 HINT: try \h CREATE VIEW`},
 		{`SELECT FROM t`,
-			`syntax error at or near "from"
+			`at or near "from": syntax error
 SELECT FROM t
        ^
 HINT: try \h SELECT`},
@@ -2261,7 +2262,7 @@ SELECT 1e-
        ^
 HINT: try \h SELECT`},
 		{"SELECT foo''",
-			`syntax error: type does not exist at or near ""
+			`at or near "": syntax error: type does not exist
 SELECT foo''
           ^
 `},
@@ -2288,161 +2289,161 @@ HINT: try \h SELECT`,
 		},
 		{
 			`SELECT POSITION('high', 'a')`,
-			`syntax error at or near ","
+			`at or near ",": syntax error
 SELECT POSITION('high', 'a')
                       ^
 HINT: try \h SELECT`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX}`,
-			`syntax error at or near "}"
+			`at or near "}": syntax error
 SELECT a FROM foo@{FORCE_INDEX}
                               ^
 HINT: try \h <SOURCE>`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=}`,
-			`syntax error at or near "}"
+			`at or near "}": syntax error
 SELECT a FROM foo@{FORCE_INDEX=}
                                ^
 HINT: try \h <SOURCE>`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}`,
-			`syntax error: FORCE_INDEX specified multiple times at or near "baz"
+			`at or near "baz": syntax error: FORCE_INDEX specified multiple times
 SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
                                                ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}`,
-			`syntax error: FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN at or near "}"
+			`at or near "}": syntax error: FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN
 SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
                                                 ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}`,
-			`syntax error: NO_INDEX_JOIN specified multiple times at or near "no_index_join"
+			`at or near "no_index_join": syntax error: NO_INDEX_JOIN specified multiple times
 SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
                                  ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}`,
-			`syntax error: IGNORE_FOREIGN_KEYS specified multiple times at or near "ignore_foreign_keys"
+			`at or near "ignore_foreign_keys": syntax error: IGNORE_FOREIGN_KEYS specified multiple times
 SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
                                        ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{ASC}`,
-			`syntax error: ASC/DESC must be specified in conjunction with an index at or near "}"
+			`at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
 SELECT a FROM foo@{ASC}
                       ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{DESC}`,
-			`syntax error: ASC/DESC must be specified in conjunction with an index at or near "}"
+			`at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
 SELECT a FROM foo@{DESC}
                        ^
 `,
 		},
 		{
 			`INSERT INTO a@b VALUES (1, 2)`,
-			`syntax error at or near "@"
+			`at or near "@": syntax error
 INSERT INTO a@b VALUES (1, 2)
              ^
 HINT: try \h INSERT`,
 		},
 		{
 			`ALTER TABLE t RENAME COLUMN x TO family`,
-			`syntax error at or near "family"
+			`at or near "family": syntax error
 ALTER TABLE t RENAME COLUMN x TO family
                                  ^
 HINT: try \h ALTER TABLE`,
 		},
 		{
 			`SELECT CAST(1.2+2.3 AS notatype)`,
-			`syntax error: type does not exist at or near "notatype"
+			`at or near "notatype": syntax error: type does not exist
 SELECT CAST(1.2+2.3 AS notatype)
                        ^
 `,
 		},
 		{
 			`SELECT ANNOTATE_TYPE(1.2+2.3, notatype)`,
-			`syntax error: type does not exist at or near "notatype"
+			`at or near "notatype": syntax error: type does not exist
 SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
                               ^
 `,
 		},
 		{
 			`CREATE USER foo WITH PASSWORD`,
-			`syntax error at or near "EOF"
+			`at or near "EOF": syntax error
 CREATE USER foo WITH PASSWORD
                              ^
 HINT: try \h CREATE USER`,
 		},
 		{
 			`ALTER TABLE t RENAME TO t[TRUE]`,
-			`syntax error at or near "["
+			`at or near "[": syntax error
 ALTER TABLE t RENAME TO t[TRUE]
                          ^
 `,
 		},
 		{
 			`TABLE abc[TRUE]`,
-			`syntax error at or near "["
+			`at or near "[": syntax error
 TABLE abc[TRUE]
          ^
 `,
 		},
 		{
 			`UPDATE kv SET k[0] = 9`,
-			`syntax error at or near "["
+			`at or near "[": syntax error
 UPDATE kv SET k[0] = 9
                ^
 HINT: try \h UPDATE`,
 		},
 		{
 			`SELECT (0) FROM y[array[]]`,
-			`syntax error at or near "["
+			`at or near "[": syntax error
 SELECT (0) FROM y[array[]]
                  ^
 `,
 		},
 		{
 			`INSERT INTO kv (k[0]) VALUES ('hello')`,
-			`syntax error at or near "["
+			`at or near "[": syntax error
 INSERT INTO kv (k[0]) VALUES ('hello')
                  ^
 HINT: try \h <SELECTCLAUSE>`,
 		},
 		{
 			`SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]`,
-			`syntax error at or near "["
+			`at or near "[": syntax error
 SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
                                                                  ^
 `,
 		},
 		{
 			`SELECT EXISTS(SELECT 1)[1]`,
-			`syntax error at or near "["
+			`at or near "[": syntax error
 SELECT EXISTS(SELECT 1)[1]
                        ^
 `,
 		},
 		{
 			`SELECT 1 + ANY ARRAY[1, 2, 3]`,
-			`syntax error: + ANY <array> is invalid because "+" is not a boolean operator at or near "EOF"
+			`at or near "EOF": syntax error: + ANY <array> is invalid because "+" is not a boolean operator
 SELECT 1 + ANY ARRAY[1, 2, 3]
                              ^
 `,
 		},
 		{
 			`SELECT 'f'::"blah"`,
-			`syntax error: type does not exist at or near "blah"
+			`at or near "blah": syntax error: type does not exist
 SELECT 'f'::"blah"
             ^
 `,
@@ -2451,84 +2452,84 @@ SELECT 'f'::"blah"
 		// where it should not be recognized.
 		{
 			`GRANT SELECT ON ROLE foo, bar TO blix`,
-			`syntax error at or near "foo"
+			`at or near "foo": syntax error
 GRANT SELECT ON ROLE foo, bar TO blix
                      ^
 HINT: try \h GRANT`,
 		},
 		{
 			`REVOKE SELECT ON ROLE foo, bar FROM blix`,
-			`syntax error at or near "foo"
+			`at or near "foo": syntax error
 REVOKE SELECT ON ROLE foo, bar FROM blix
                       ^
 HINT: try \h REVOKE`,
 		},
 		{
 			`BACKUP ROLE foo, bar TO 'baz'`,
-			`syntax error at or near "foo"
+			`at or near "foo": syntax error
 BACKUP ROLE foo, bar TO 'baz'
             ^
 HINT: try \h BACKUP`,
 		},
 		{
 			`RESTORE ROLE foo, bar FROM 'baz'`,
-			`syntax error at or near "foo"
+			`at or near "foo": syntax error
 RESTORE ROLE foo, bar FROM 'baz'
              ^
 HINT: try \h RESTORE`,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t`,
-			`syntax error: frame start cannot be UNBOUNDED FOLLOWING at or near "following"
+			`at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
 SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t
                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t`,
-			`syntax error: frame starting from following row cannot end with current row at or near "following"
+			`at or near "following": syntax error: frame starting from following row cannot end with current row
 SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t
                            ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t`,
-			`syntax error: frame start cannot be UNBOUNDED FOLLOWING at or near "following"
+			`at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
                                                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t`,
-			`syntax error: frame end cannot be UNBOUNDED PRECEDING at or near "preceding"
+			`at or near "preceding": syntax error: frame end cannot be UNBOUNDED PRECEDING
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t
                                                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t`,
-			`syntax error: frame starting from current row cannot have preceding rows at or near "preceding"
+			`at or near "preceding": syntax error: frame starting from current row cannot have preceding rows
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t
                                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t`,
-			`syntax error: frame starting from following row cannot have preceding rows at or near "preceding"
+			`at or near "preceding": syntax error: frame starting from following row cannot have preceding rows
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
                                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t`,
-			`syntax error: frame starting from following row cannot have preceding rows at or near "row"
+			`at or near "row": syntax error: frame starting from following row cannot have preceding rows
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
                                                          ^
 `,
 		},
 		{
 			`CREATE TABLE foo(a CHAR(0))`,
-			`syntax error: length for type CHAR must be at least 1 at or near ")"
+			`at or near ")": syntax error: length for type CHAR must be at least 1
 CREATE TABLE foo(a CHAR(0))
                          ^
 `,
@@ -2542,7 +2543,7 @@ e'\xad'::string
 		},
 		{
 			`EXPLAIN EXECUTE a`,
-			`syntax error at or near "execute"
+			`at or near "execute": syntax error
 EXPLAIN EXECUTE a
         ^
 HINT: try \h EXPLAIN`,
@@ -2556,7 +2557,7 @@ HINT: try \h SELECT`,
 		},
 		{
 			`SELECT $-1`,
-			`syntax error at or near "$"
+			`at or near "$": syntax error
 SELECT $-1
        ^
 HINT: try \h SELECT`,
@@ -2571,21 +2572,21 @@ HINT: try \h SELECT`,
 
 		{
 			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0`,
-			`syntax error: THROTTLING fraction must be between 0 and 1 at or near "2.0"
+			`at or near "2.0": syntax error: THROTTLING fraction must be between 0 and 1
 CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0
                                                            ^
 `,
 		},
 		{
 			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5`,
-			`syntax error: THROTTLING specified multiple times at or near "0.5"
+			`at or near "0.5": syntax error: THROTTLING specified multiple times
 CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5
                                                                           ^
 `,
 		},
 		{
 			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'`,
-			`syntax error: AS OF specified multiple times at or near "EOF"
+			`at or near "EOF": syntax error: AS OF specified multiple times
 CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
                                                                                                               ^
 `,
@@ -2598,12 +2599,11 @@ CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLI
 				t.Errorf("expected error, got nil for:\n%s", d.sql)
 				return
 			}
-			msg := err.Error()
-			if pgerr, ok := pgerror.GetPGCause(err); ok {
-				msg += strings.TrimPrefix(pgerr.Detail, "source SQL:") + "\n"
-				if pgerr.Hint != "" {
-					msg += "HINT: " + pgerr.Hint
-				}
+			pgerr := pgerror.Flatten(err)
+			msg := pgerr.Message
+			msg += strings.TrimPrefix(pgerr.Detail, "source SQL:") + "\n"
+			if pgerr.Hint != "" {
+				msg += "HINT: " + pgerr.Hint
 			}
 			if msg != d.expected {
 				t.Errorf("%s: expected\n%s, but found\n%v", d.sql, d.expected, msg)
@@ -2631,7 +2631,7 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
 	_, err := parser.Parse(s)
-	expected := `syntax error at or near "EOF"`
+	expected := `at or near "EOF": syntax error`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -3014,32 +3014,48 @@ func TestUnimplementedSyntax(t *testing.T) {
 				t.Errorf("%s: expected error, got nil", d.sql)
 				return
 			}
-			pgerr, ok := pgerror.GetPGCause(err)
-			if !ok {
-				t.Errorf("%s: unknown err type: %T", d.sql, err)
-				return
+			if errMsg := err.Error(); !strings.Contains(errMsg, "unimplemented: this syntax") {
+				t.Errorf("%s: expected unimplemented in message, got %q", d.sql, errMsg)
 			}
-			if !strings.HasPrefix(pgerr.Message, "syntax error: unimplemented") {
-				t.Errorf("%s: expected unimplemented at start of message, got %q", d.sql, pgerr.Message)
-			}
-			if pgerr.TelemetryKey == "" {
-				t.Errorf("%s: expected internal command set", d.sql)
+			tkeys := errors.GetTelemetryKeys(err)
+			if len(tkeys) == 0 {
+				t.Errorf("%s: expected telemetry key set", d.sql)
 			} else {
-				if !strings.HasPrefix(pgerr.TelemetryKey, "syntax.") {
-					t.Errorf("%s: expected 'syntax.' at start of internal command, got %q", d.sql, pgerr.TelemetryKey)
+				found := false
+				for _, tk := range tkeys {
+					if strings.Contains(tk, d.expected) {
+						found = true
+						break
+					}
 				}
-				if !strings.Contains(pgerr.TelemetryKey, d.expected) {
-					t.Errorf("%s: expected %q in internal command, got %q", d.sql, d.expected, pgerr.TelemetryKey)
+				if !found {
+					t.Errorf("%s: expected %q in telemetry keys, got %+v", d.sql, d.expected, tkeys)
 				}
 			}
 			if d.issue != 0 {
 				exp := fmt.Sprintf("syntax.#%d", d.issue)
-				if !strings.HasPrefix(pgerr.TelemetryKey, exp) {
-					t.Errorf("%s: expected %q at start of internal command, got %q", d.sql, exp, pgerr.TelemetryKey)
+				found := false
+				for _, tk := range tkeys {
+					if strings.HasPrefix(tk, exp) {
+						found = true
+						break
+					}
 				}
+				if !found {
+					t.Errorf("%s: expected %q in telemetry keys, got %+v", d.sql, exp, tkeys)
+				}
+
 				exp2 := fmt.Sprintf("issues/%d", d.issue)
-				if !strings.HasSuffix(pgerr.Hint, exp2) {
-					t.Errorf("%s: expected %q at end of hint, got %q", d.sql, exp2, pgerr.Hint)
+				found = false
+				hints := errors.GetAllHints(err)
+				for _, h := range hints {
+					if strings.HasSuffix(h, exp2) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("%s: expected %q at end of hint, got %+v", d.sql, exp2, hints)
 				}
 			}
 		})

@@ -34,13 +34,10 @@ func TestHelpFunctions(t *testing.T) {
 				t.Errorf("parser didn't trigger error")
 				return
 			}
-			if err.Error() != "help token in input" {
+			if !strings.HasPrefix(err.Error(), "help token in input") {
 				t.Fatal(err)
 			}
-			pgerr, ok := pgerror.GetPGCause(err)
-			if !ok {
-				t.Fatalf("expected pg error, got %v", err)
-			}
+			pgerr := pgerror.Flatten(err)
 			if !strings.HasPrefix(pgerr.Hint, "help:\n") {
 				t.Errorf("expected 'help: ' prefix, got %q", pgerr.Hint)
 				return
