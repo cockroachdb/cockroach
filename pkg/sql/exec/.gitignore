@@ -7,6 +7,7 @@ distinct.eg.go
 hashjoiner.eg.go
 like_ops.eg.go
 mergejoiner.eg.go
+min_max_agg.eg.go
 projection_ops.eg.go
 quicksort.eg.go
 rowstovec.eg.go
@@ -15,3 +16,4 @@ sort.eg.go
 sum_agg.eg.go
 tuples_differ.eg.go
 vec_comparators.eg.go
+zerocolumns.eg.go

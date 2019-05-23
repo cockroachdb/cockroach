@@ -399,7 +399,7 @@ func (o *mergeJoinOp) completeGroup(
 		}
 
 		// Zero out the distinct output for the next pass.
-		copy(input.distinctOutput, zeroBoolVec)
+		copy(input.distinctOutput, zeroBoolColumn)
 		loopStartIndex = 0
 
 		// Save the group to state.
