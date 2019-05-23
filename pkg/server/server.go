@@ -1657,7 +1657,7 @@ func (s *Server) Start(ctx context.Context) error {
 			// Avoid turning an early shutdown into a fatal error. See #19579.
 			return errors.New("server is shutting down")
 		default:
-			log.Fatal(ctx, err)
+			log.Fatalf(ctx, "%+v", err)
 		}
 	}
 	log.Infof(ctx, "done ensuring all necessary migrations have run")
