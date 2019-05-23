@@ -197,7 +197,7 @@ func TestMarshalColumnValueRoundtrip(t *testing.T) {
 				desc := ColumnDescriptor{
 					Type: *typ,
 				}
-				value, err := MarshalColumnValue(desc, datum)
+				value, err := MarshalColumnValue(&desc, datum)
 				if err != nil {
 					return "error marshaling: " + err.Error()
 				}
