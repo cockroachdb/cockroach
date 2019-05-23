@@ -87,7 +87,8 @@ func prepareInsertOrUpdateBatch(
 	putFn func(ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool),
 	overwrite, traceKV bool,
 ) ([]byte, error) {
-	for i, family := range helper.TableDesc.Families {
+	for i := range helper.TableDesc.Families {
+		family := &helper.TableDesc.Families[i]
 		update := false
 		for _, colID := range family.ColumnIDs {
 			if _, ok := marshaledColIDMapping[colID]; ok {
@@ -152,8 +153,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			col := fetchedCols[idx]
-
+			col := &fetchedCols[idx]
 			if lastColID > col.ID {
 				return nil, pgerror.AssertionFailedf("cannot write column id %d after %d", col.ID, lastColID)
 			}

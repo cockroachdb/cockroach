@@ -153,14 +153,15 @@ func (rd *Deleter) DeleteRow(
 	}
 
 	// Delete the row.
-	for i, family := range rd.Helper.TableDesc.Families {
+	for i := range rd.Helper.TableDesc.Families {
 		if i > 0 {
 			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
 			// after the first, trim primaryIndexKey so nothing gets overwritten.
 			// TODO(dan): Instead of this, use something like engine.ChunkAllocator.
 			primaryIndexKey = primaryIndexKey[:len(primaryIndexKey):len(primaryIndexKey)]
 		}
-		rd.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+		familyID := rd.Helper.TableDesc.Families[i].ID
+		rd.key = keys.MakeFamilyKey(primaryIndexKey, uint32(familyID))
 		if traceKV {
 			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.primIndexValDirs, rd.key))
 		}
