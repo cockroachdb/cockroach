@@ -1091,9 +1091,15 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 	// Find a live node to run against, if one exists.
 	var db *gosql.DB
 	for i := 1; i <= c.nodes; i++ {
-		db = c.Conn(ctx, i)
-		_, err := db.Exec(`SELECT 1`)
-		if err != nil {
+		// Don't hang forever.
+		if err := contextutil.RunWithTimeout(
+			ctx, "find live node", 5*time.Second,
+			func(ctx context.Context) error {
+				db = c.Conn(ctx, i)
+				_, err := db.ExecContext(ctx, `SELECT 1`)
+				return err
+			},
+		); err != nil {
 			_ = db.Close()
 			db = nil
 			continue

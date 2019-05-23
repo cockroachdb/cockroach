@@ -57,15 +57,14 @@ func (f *fkExistenceBatchChecker) addCheck(
 	if err != nil {
 		return err
 	}
-	r := roachpb.RequestUnion{}
 	scan := roachpb.ScanRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(span),
 	}
 	if traceKV {
 		log.VEventf(ctx, 2, "FKScan %s", span)
 	}
-	r.MustSetInner(&scan)
-	f.batch.Requests = append(f.batch.Requests, r)
+	f.batch.Requests = append(f.batch.Requests, roachpb.RequestUnion{})
+	f.batch.Requests[len(f.batch.Requests)-1].MustSetInner(&scan)
 	f.batchIdxToFk = append(f.batchIdxToFk, source)
 	return nil
 }
