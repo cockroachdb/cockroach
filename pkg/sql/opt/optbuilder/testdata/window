@@ -416,7 +416,14 @@ sort
 build
 SELECT k, v, rank() OVER w FROM kv WINDOW w AS ()
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: k:1(int!null) v:2(int) rank:8(int)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── rank [type=undefined]
 
 build
 SELECT k, v, first_value(v) OVER () FROM kv
@@ -1394,3 +1401,137 @@ project
                 ├── count [type=int]
                 │    └── variable: count_1_arg1 [type=bool]
                 └── variable: count_2_filter [type=bool]
+
+# Named windows.
+
+build
+SELECT
+  rank() OVER (w)
+FROM kv WINDOW w as (ORDER BY v)
+----
+project
+ ├── columns: rank:8(int)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── rank [type=undefined]
+
+build
+SELECT
+  rank() OVER (w)
+FROM kv WINDOW w as (ORDER BY v)
+----
+project
+ ├── columns: rank:8(int)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── rank [type=undefined]
+
+build
+SELECT
+  rank() OVER (w),
+  rank() OVER w,
+  row_number() OVER (w2),
+  row_number() OVER (w2 ORDER BY f),
+  row_number() OVER w2
+FROM kv WINDOW w as (ORDER BY v), w2 as (PARTITION BY v)
+----
+project
+ ├── columns: rank:8(int) rank:9(int) row_number:10(int) row_number:11(int) row_number:12(int)
+ └── window partition=(2) ordering=+4
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) rank:9(int) row_number:10(int) row_number:11(int) row_number:12(int)
+      ├── window partition=(2)
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) rank:9(int) row_number:10(int) row_number:12(int)
+      │    ├── window partition=() ordering=+2
+      │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) rank:9(int)
+      │    │    ├── scan kv
+      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    └── windows
+      │    │         ├── rank [type=undefined]
+      │    │         └── rank [type=undefined]
+      │    └── windows
+      │         ├── row-number [type=undefined]
+      │         └── row-number [type=undefined]
+      └── windows
+           └── row-number [type=undefined]
+
+build
+SELECT
+  rank() OVER w
+FROM kv WINDOW w as (ORDER BY v), w2 as (PARTITION BY v)
+----
+project
+ ├── columns: rank:8(int)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── rank [type=undefined]
+
+build
+SELECT
+  rank() OVER w
+FROM kv WINDOW w as (ORDER BY v)
+ORDER BY rank() OVER w
+----
+sort
+ ├── columns: rank:8(int)
+ ├── ordering: +8
+ └── project
+      ├── columns: rank:8(int)
+      └── window partition=() ordering=+2
+           ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+           ├── scan kv
+           │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+           └── windows
+                └── rank [type=undefined]
+
+build
+SELECT
+  rank() OVER w
+FROM kv
+WHERE rank() OVER w < 4
+WINDOW w as (ORDER BY v)
+----
+error (42P20): rank(): window functions are not allowed in WHERE
+
+# Window names don't descend through scopes.
+
+build
+SELECT
+  (SELECT rank() OVER w)
+FROM kv WINDOW w as (ORDER BY v)
+----
+error (42704): window "w" does not exist
+
+# Window names may only be used a single time.
+
+build
+SELECT
+  rank() OVER (w)
+FROM kv WINDOW w as (ORDER BY v), w as (PARTITION BY v)
+----
+error (42P20): window "w" is already defined
+
+# Rules for overriding a window definition.
+
+build
+SELECT rank() OVER (w ORDER BY f) FROM kv WINDOW w as (ORDER BY v)
+----
+error (42P20): cannot override ORDER BY clause of window "w"
+
+build
+SELECT rank() OVER (w PARTITION BY f) FROM kv WINDOW w as (ORDER BY v)
+----
+error (42P20): cannot override PARTITION BY clause of window "w"
+
+build
+SELECT rank() OVER (w) FROM kv WINDOW w as (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+----
+error (42P20): cannot copy window "w" because it has a frame clause
