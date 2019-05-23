@@ -16,7 +16,6 @@ package testcat
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -173,19 +173,19 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	switch t := o.(type) {
 	case *Schema:
 		if t.Revoked {
-			return fmt.Errorf("user does not have privilege to access %v", t.SchemaName)
+			return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError, "user does not have privilege to access %v", t.SchemaName)
 		}
 	case *Table:
 		if t.Revoked {
-			return fmt.Errorf("user does not have privilege to access %v", t.TabName)
+			return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError, "user does not have privilege to access %v", t.TabName)
 		}
 	case *View:
 		if t.Revoked {
-			return fmt.Errorf("user does not have privilege to access %v", t.ViewName)
+			return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError, "user does not have privilege to access %v", t.ViewName)
 		}
 	case *Sequence:
 		if t.Revoked {
-			return fmt.Errorf("user does not have privilege to access %v", t.SeqName)
+			return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError, "user does not have privilege to access %v", t.SeqName)
 		}
 	default:
 		panic("invalid Object")
@@ -219,7 +219,8 @@ func (tc *Catalog) resolveDataSource(toResolve *cat.DataSourceName) (cat.DataSou
 	if table, ok := tc.testSchema.dataSources[toResolve.FQString()]; ok {
 		return table, nil
 	}
-	return nil, fmt.Errorf("no data source matches prefix: %q", tree.ErrString(toResolve))
+	return nil, pgerror.Newf(pgerror.CodeUndefinedTableError,
+		"no data source matches prefix: %q", tree.ErrString(toResolve))
 }
 
 // Schema returns the singleton test schema.
@@ -236,14 +237,16 @@ func (tc *Catalog) Table(name *tree.TableName) *Table {
 	if tab, ok := ds.(*Table); ok {
 		return tab
 	}
-	panic(fmt.Errorf("\"%q\" is not a table", tree.ErrString(name)))
+	panic(pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+		"\"%q\" is not a table", tree.ErrString(name)))
 }
 
 // AddTable adds the given test table to the catalog.
 func (tc *Catalog) AddTable(tab *Table) {
 	fq := tab.TabName.FQString()
 	if _, ok := tc.testSchema.dataSources[fq]; ok {
-		panic(fmt.Errorf("table %q already exists", tree.ErrString(&tab.TabName)))
+		panic(pgerror.Newf(pgerror.CodeDuplicateObjectError,
+			"table %q already exists", tree.ErrString(&tab.TabName)))
 	}
 	tc.testSchema.dataSources[fq] = tab
 }
@@ -257,14 +260,16 @@ func (tc *Catalog) View(name *cat.DataSourceName) *View {
 	if vw, ok := ds.(*View); ok {
 		return vw
 	}
-	panic(fmt.Errorf("\"%q\" is not a view", tree.ErrString(name)))
+	panic(pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+		"\"%q\" is not a view", tree.ErrString(name)))
 }
 
 // AddView adds the given test view to the catalog.
 func (tc *Catalog) AddView(view *View) {
 	fq := view.ViewName.FQString()
 	if _, ok := tc.testSchema.dataSources[fq]; ok {
-		panic(fmt.Errorf("view %q already exists", tree.ErrString(&view.ViewName)))
+		panic(pgerror.Newf(pgerror.CodeDuplicateObjectError,
+			"view %q already exists", tree.ErrString(&view.ViewName)))
 	}
 	tc.testSchema.dataSources[fq] = view
 }
@@ -273,7 +278,8 @@ func (tc *Catalog) AddView(view *View) {
 func (tc *Catalog) AddSequence(seq *Sequence) {
 	fq := seq.SeqName.FQString()
 	if _, ok := tc.testSchema.dataSources[fq]; ok {
-		panic(fmt.Errorf("sequence %q already exists", tree.ErrString(&seq.SeqName)))
+		panic(pgerror.Newf(pgerror.CodeDuplicateObjectError,
+			"sequence %q already exists", tree.ErrString(&seq.SeqName)))
 	}
 	tc.testSchema.dataSources[fq] = seq
 }
@@ -307,7 +313,7 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 	switch stmt.AST.StatementType() {
 	case tree.DDL, tree.RowsAffected:
 	default:
-		return "", fmt.Errorf("statement type is not DDL or RowsAffected: %v", stmt.AST.StatementType())
+		return "", pgerror.AssertionFailedf("statement type is not DDL or RowsAffected: %v", log.Safe(stmt.AST.StatementType()))
 	}
 
 	switch stmt := stmt.AST.(type) {
@@ -338,7 +344,7 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return tp.String(), nil
 
 	default:
-		return "", fmt.Errorf("unsupported statement: %v", stmt)
+		return "", pgerror.AssertionFailedf("unsupported statement: %v", stmt)
 	}
 }
 
@@ -629,7 +635,7 @@ func (tt *Table) FindOrdinal(name string) int {
 			return i
 		}
 	}
-	panic(fmt.Sprintf(
+	panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
 		"cannot find column %q in table %q",
 		tree.ErrString((*tree.Name)(&name)),
 		tree.ErrString(&tt.TabName),
