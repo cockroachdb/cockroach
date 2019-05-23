@@ -241,12 +241,31 @@ func (n *Nulls) NullBitmap() []byte {
 	return n.nulls
 }
 
-// SetNullBitmap sets the null bitmap.
-func (n *Nulls) SetNullBitmap(bm []byte) {
+// SetNullBitmap sets the null bitmap. size corresponds to how many elements
+// this bitmap represents. The bits past the end of this size will be set to
+// valid.
+func (n *Nulls) SetNullBitmap(bm []byte, size int) {
 	n.nulls = bm
 	n.hasNulls = false
-	for _, i := range bm {
-		if i != 0 {
+	// Set all indices as valid past the last element.
+	if len(bm) > 0 && size != 0 {
+		// Set the last bits in the last element in which we want to preserve null
+		// information. mod, if non-zero, is the number of bits we don't want to
+		// overwrite (otherwise all bits are important). Note that we cast size to a
+		// uint64 to avoid extra instructions when modding.
+		mod := uint64(size) % 8
+		endIdx := size - 1
+		if mod != 0 {
+			bm[endIdx/8] |= onesMask << mod
+		}
+		// Fill the rest of the bitmap.
+		for i := (endIdx / 8) + 1; i < len(bm); {
+			i += copy(bm[i:], filledNulls[:])
+		}
+	}
+
+	for i := 0; i < len(bm); i++ {
+		if bm[i] != onesMask {
 			n.hasNulls = true
 			return
 		}

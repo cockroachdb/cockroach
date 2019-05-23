@@ -344,50 +344,65 @@ func TestAddMicros(t *testing.T) {
 	}
 }
 
-func TestMulFloat(t *testing.T) {
+func TestFloatMath(t *testing.T) {
 	const nanosInMinute = nanosInSecond * 60
 	const nanosInHour = nanosInMinute * 60
 
 	tests := []struct {
 		d   Duration
 		f   float64
-		res Duration
+		mul Duration
+		div Duration
 	}{
 		{
 			Duration{Months: 1, Days: 2, nanos: nanosInHour * 2},
 			0.15,
 			Duration{Days: 4, nanos: nanosInHour*19 + nanosInMinute*30},
+			Duration{Months: 6, Days: 33, nanos: nanosInHour*21 + nanosInMinute*20},
 		},
 		{
 			Duration{Months: 1, Days: 2, nanos: nanosInHour * 2},
 			0.3,
 			Duration{Days: 9, nanos: nanosInHour * 15},
+			Duration{Months: 3, Days: 16, nanos: nanosInHour*22 + nanosInMinute*40},
 		},
 		{
 			Duration{Months: 1, Days: 2, nanos: nanosInHour * 2},
 			0.5,
 			Duration{Days: 16, nanos: nanosInHour * 1},
+			Duration{Months: 2, Days: 4, nanos: nanosInHour * 4},
 		},
 		{
 			Duration{Months: 1, Days: 2, nanos: nanosInHour * 2},
 			0.8,
 			Duration{Days: 25, nanos: nanosInHour * 16},
+			Duration{Months: 1, Days: 10, nanos: nanosInHour*2 + nanosInMinute*30},
 		},
 		{
 			Duration{Months: 1, Days: 17, nanos: nanosInHour * 2},
 			2.0,
 			Duration{Months: 2, Days: 34, nanos: nanosInHour * 4},
+			Duration{Days: 23, nanos: nanosInHour * 13},
 		},
 	}
 
 	for i, test := range tests {
-		if res := test.d.MulFloat(test.f); test.res != res {
+		if res := test.d.MulFloat(test.f); test.mul != res {
 			t.Errorf(
 				"%d: expected %v.MulFloat(%f) = %v, found %v",
 				i,
 				test.d,
 				test.f,
-				test.res,
+				test.mul,
+				res)
+		}
+		if res := test.d.DivFloat(test.f); test.div != res {
+			t.Errorf(
+				"%d: expected %v.DivFloat(%f) = %v, found %v",
+				i,
+				test.d,
+				test.f,
+				test.div,
 				res)
 		}
 	}
