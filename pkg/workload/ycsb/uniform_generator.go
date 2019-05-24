@@ -42,14 +42,6 @@ func NewUniformGenerator(rng *rand.Rand, minInsertRow uint64) (*UniformGenerator
 	return &z, nil
 }
 
-// IMaxHead returns the current value of IMaxHead, without incrementing.
-func (z *UniformGenerator) IMaxHead() uint64 {
-	z.mu.Lock()
-	max := z.mu.sequence
-	z.mu.Unlock()
-	return max
-}
-
 // IncrementIMax increments the sequence number.
 func (z *UniformGenerator) IncrementIMax() error {
 	z.mu.Lock()

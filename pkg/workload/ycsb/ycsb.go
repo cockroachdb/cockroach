@@ -280,6 +280,8 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 	zipfRng := rand.New(rand.NewSource(g.seed))
 	var randGen randGenerator
+	var rowIndex = new(uint64)
+	*rowIndex = uint64(g.initialRows)
 
 	switch strings.ToLower(g.distribution) {
 	case "zipfian":
@@ -291,6 +293,7 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		return workload.QueryLoad{}, errors.Errorf("Unknown distribution: %s", g.distribution)
 	}
 
+	rowCounter := NewAcknowledgedCounter((uint64)(g.initialRows))
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))
@@ -304,6 +307,8 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			readStmt:    readStmt,
 			insertStmt:  insertStmt,
 			updateStmts: updateStmts,
+			rowIndex:    rowIndex,
+			rowCounter:  rowCounter,
 			randGen:     randGen,
 			rng:         rng,
 			hashFunc:    fnv.New64(),
@@ -315,7 +320,6 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 type randGenerator interface {
 	Uint64() uint64
-	IMaxHead() uint64
 	IncrementIMax() error
 }
 
@@ -328,6 +332,11 @@ type ycsbWorker struct {
 	// In normal mode this is one statement per field, since the field name cannot
 	// be parametrized. In JSON mode it's a single statement.
 	updateStmts []*gosql.Stmt
+
+	// The next row index to insert.
+	rowIndex *uint64
+	// Counter to keep track of which rows have been inserted.
+	rowCounter *AcknowledgedCounter
 
 	randGen  randGenerator // used to generate random keys
 	rng      *rand.Rand    // used to generate random strings for the values
@@ -346,7 +355,7 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 	case readOp:
 		err = yw.readRow(ctx)
 	case insertOp:
-		err = yw.insertRow(ctx, yw.nextInsertKey(), true)
+		err = yw.insertRow(ctx, yw.nextInsertKeyIndex(), true)
 	case scanOp:
 		err = yw.scanRows(ctx)
 	default:
@@ -392,22 +401,13 @@ func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
 // close together.
 // See YCSB paper section 5.3 for a complete description of how keys are chosen.
 func (yw *ycsbWorker) nextReadKey() string {
-	// TODO: In order to support workloads with INSERT, this would need to account
-	// for the number of rows growing over time. See the YCSB paper/code for how
-	// this should work. (Basically repeatedly drawing from the distribution until
-	// a sufficiently low value is chosen, but with some complications.)
-
-	// TODO(arjun): Look into why this was being hashed twice before.
-	rownum := yw.randGen.Uint64() % uint64(yw.config.initialRows)
-	return yw.buildKeyName(rownum)
+	rowCount := yw.rowCounter.Last()
+	rowIndex := yw.hashKey(yw.randGen.Uint64()) % rowCount
+	return yw.buildKeyName(rowIndex)
 }
 
-func (yw *ycsbWorker) nextInsertKey() string {
-	// TODO: This logic is no longer valid now that we are using a large YCSB
-	// distribution and modding the samples. To properly support INSERTS, we need
-	// to maintain a separate rownum counter.
-	rownum := yw.randGen.IMaxHead()
-	return yw.buildKeyName(rownum)
+func (yw *ycsbWorker) nextInsertKeyIndex() uint64 {
+	return atomic.AddUint64(yw.rowIndex, 1) - 1
 }
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -421,9 +421,9 @@ func (yw *ycsbWorker) randString(length int) string {
 	return string(str)
 }
 
-func (yw *ycsbWorker) insertRow(ctx context.Context, key string, increment bool) error {
+func (yw *ycsbWorker) insertRow(ctx context.Context, keyIndex uint64, increment bool) error {
 	args := make([]interface{}, numTableFields+1)
-	args[0] = key
+	args[0] = yw.buildKeyName(keyIndex)
 	for i := 1; i <= numTableFields; i++ {
 		args[i] = yw.randString(fieldLength)
 	}
@@ -432,8 +432,16 @@ func (yw *ycsbWorker) insertRow(ctx context.Context, key string, increment bool)
 	}
 
 	if increment {
-		if err := yw.randGen.IncrementIMax(); err != nil {
+		prevRowCount := yw.rowCounter.Last()
+		if err := yw.rowCounter.Acknowledge(keyIndex); err != nil {
 			return err
+		}
+		currRowCount := yw.rowCounter.Last()
+		for prevRowCount < currRowCount {
+			if err := yw.randGen.IncrementIMax(); err != nil {
+				return err
+			}
+			prevRowCount++
 		}
 	}
 	return nil

@@ -54,12 +54,11 @@ type ZipfGenerator struct {
 
 // ZipfGeneratorMu holds variables which must be globally synced.
 type ZipfGeneratorMu struct {
-	mu       syncutil.Mutex
-	r        *rand.Rand
-	iMax     uint64
-	iMaxHead uint64
-	eta      float64
-	zetaN    float64
+	mu    syncutil.Mutex
+	r     *rand.Rand
+	iMax  uint64
+	eta   float64
+	zetaN float64
 }
 
 // NewZipfGenerator constructs a new ZipfGenerator with the given parameters.
@@ -168,16 +167,4 @@ func (z *ZipfGenerator) IncrementIMax() error {
 	z.zipfGenMu.iMax++
 	z.zipfGenMu.mu.Unlock()
 	return nil
-}
-
-// IMaxHead returns the current value of IMaxHead, and increments it after.
-func (z *ZipfGenerator) IMaxHead() uint64 {
-	z.zipfGenMu.mu.Lock()
-	if z.zipfGenMu.iMaxHead < z.zipfGenMu.iMax {
-		z.zipfGenMu.iMaxHead = z.zipfGenMu.iMax
-	}
-	iMaxHead := z.zipfGenMu.iMaxHead
-	z.zipfGenMu.iMaxHead++
-	z.zipfGenMu.mu.Unlock()
-	return iMaxHead
 }
