@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // Send fetches a range based on the header's replica, assembles method, args &
@@ -108,6 +109,8 @@ func (s *Store) Send(
 		}
 	}
 
+	ctx, csp := tracing.StartComponentSpan(ctx, s.cfg.AmbientCtx.Tracer, "storage.store.send", "send")
+	csp.SetTag("batch", &ba)
 	defer func() {
 		if r := recover(); r != nil {
 			// On panic, don't run the defer. It's probably just going to panic
@@ -149,6 +152,13 @@ func (s *Store) Send(
 		} else {
 			br.Now = now
 		}
+		if br != nil {
+			csp.SetTag("response", br)
+			if br.Txn != nil {
+				csp.SetTag("txn", br.Txn)
+			}
+		}
+		csp.FinishWithError(pErr.GoError())
 	}()
 
 	if ba.Txn != nil {

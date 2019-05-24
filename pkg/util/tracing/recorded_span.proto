@@ -84,16 +84,14 @@ message ComponentActivity {
 message ComponentSamples {
   message Sample {
     string error = 1;
-    // Attributes such as component inputs, outputs and errors.
-    map<string, string> attributes = 2;
     // Pending is true if the sample is not complete when the
     // recording period ended.
-    bool pending = 3;
+    bool pending = 2;
     // Stuck is true if the component entered a retry loop or exceeded
     // a preset duration threshold.
-    bool stuck = 4;
+    bool stuck = 3;
     // Component-level span (first span in slice) and all sub-spans.
-    repeated RecordedSpan spans = 5 [(gogoproto.nullable) = false];
+    repeated RecordedSpan spans = 4 [(gogoproto.nullable) = false];
   }
 
   // The sampled spans starting at this component during the

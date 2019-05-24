@@ -26,14 +26,13 @@ namespace protobuf_google_2fprotobuf_2ftimestamp_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_google_2fprotobuf_2ftimestamp_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Timestamp;
 }  // namespace protobuf_google_2fprotobuf_2ftimestamp_2eproto
 namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto {
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ComponentSamples_Sample_AttributesEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ComponentTraces_Event;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RecordedSpan_BaggageEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RecordedSpan_LogRecord_Field;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RecordedSpan_TagsEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComponentSamples;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComponentSamples_Sample;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComponentTraces_EventsEntry_DoNotUse;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ComponentSamples_Sample;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecordedSpan_LogRecord;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_RecordedSpan;
 }  // namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto
@@ -70,11 +69,6 @@ class ComponentActivityDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<ComponentActivity>
       _instance;
 } _ComponentActivity_default_instance_;
-class ComponentSamples_Sample_AttributesEntry_DoNotUseDefaultTypeInternal {
- public:
-  ::google::protobuf::internal::ExplicitlyConstructed<ComponentSamples_Sample_AttributesEntry_DoNotUse>
-      _instance;
-} _ComponentSamples_Sample_AttributesEntry_DoNotUse_default_instance_;
 class ComponentSamples_SampleDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<ComponentSamples_Sample>
@@ -195,19 +189,6 @@ static void InitDefaultsComponentActivity() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsComponentActivity}, {
       &protobuf_google_2fprotobuf_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
-static void InitDefaultsComponentSamples_Sample_AttributesEntry_DoNotUse() {
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-  {
-    void* ptr = &::cockroach::util::tracing::_ComponentSamples_Sample_AttributesEntry_DoNotUse_default_instance_;
-    new (ptr) ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse();
-  }
-  ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse::InitAsDefaultInstance();
-}
-
-::google::protobuf::internal::SCCInfo<0> scc_info_ComponentSamples_Sample_AttributesEntry_DoNotUse =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsComponentSamples_Sample_AttributesEntry_DoNotUse}, {}};
-
 static void InitDefaultsComponentSamples_Sample() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -219,9 +200,8 @@ static void InitDefaultsComponentSamples_Sample() {
   ::cockroach::util::tracing::ComponentSamples_Sample::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<2> scc_info_ComponentSamples_Sample =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsComponentSamples_Sample}, {
-      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentSamples_Sample_AttributesEntry_DoNotUse.base,
+::google::protobuf::internal::SCCInfo<1> scc_info_ComponentSamples_Sample =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsComponentSamples_Sample}, {
       &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_RecordedSpan.base,}};
 
 static void InitDefaultsComponentSamples() {
@@ -291,7 +271,6 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan_LogRecord.base);
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ComponentActivity.base);
-  ::google::protobuf::internal::InitSCC(&scc_info_ComponentSamples_Sample_AttributesEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ComponentSamples_Sample.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ComponentSamples.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ComponentTraces_Event.base);
@@ -1772,19 +1751,10 @@ void ComponentActivity::InternalSwap(ComponentActivity* other) {
 
 // ===================================================================
 
-ComponentSamples_Sample_AttributesEntry_DoNotUse::ComponentSamples_Sample_AttributesEntry_DoNotUse() {}
-ComponentSamples_Sample_AttributesEntry_DoNotUse::ComponentSamples_Sample_AttributesEntry_DoNotUse(::google::protobuf::Arena* arena) : SuperType(arena) {}
-void ComponentSamples_Sample_AttributesEntry_DoNotUse::MergeFrom(const ComponentSamples_Sample_AttributesEntry_DoNotUse& other) {
-  MergeFromInternal(other);
-}
-
-// ===================================================================
-
 void ComponentSamples_Sample::InitAsDefaultInstance() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ComponentSamples_Sample::kErrorFieldNumber;
-const int ComponentSamples_Sample::kAttributesFieldNumber;
 const int ComponentSamples_Sample::kPendingFieldNumber;
 const int ComponentSamples_Sample::kStuckFieldNumber;
 const int ComponentSamples_Sample::kSpansFieldNumber;
@@ -1802,7 +1772,6 @@ ComponentSamples_Sample::ComponentSamples_Sample(const ComponentSamples_Sample& 
       _internal_metadata_(NULL),
       spans_(from.spans_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  attributes_.MergeFrom(from.attributes_);
   error_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.error().size() > 0) {
     error_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.error_);
@@ -1844,7 +1813,6 @@ void ComponentSamples_Sample::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  attributes_.Clear();
   spans_.Clear();
   error_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&pending_, 0, static_cast<size_t>(
@@ -1885,37 +1853,10 @@ bool ComponentSamples_Sample::MergePartialFromCodedStream(
         break;
       }
 
-      // map<string, string> attributes = 2;
+      // bool pending = 2;
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
-          ComponentSamples_Sample_AttributesEntry_DoNotUse::Parser< ::google::protobuf::internal::MapFieldLite<
-              ComponentSamples_Sample_AttributesEntry_DoNotUse,
-              ::std::string, ::std::string,
-              ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-              ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-              0 >,
-            ::google::protobuf::Map< ::std::string, ::std::string > > parser(&attributes_);
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-              input, &parser));
-          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            parser.key().data(), static_cast<int>(parser.key().length()),
-            ::google::protobuf::internal::WireFormatLite::PARSE,
-            "cockroach.util.tracing.ComponentSamples.Sample.AttributesEntry.key"));
-          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            parser.value().data(), static_cast<int>(parser.value().length()),
-            ::google::protobuf::internal::WireFormatLite::PARSE,
-            "cockroach.util.tracing.ComponentSamples.Sample.AttributesEntry.value"));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      // bool pending = 3;
-      case 3: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
+            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
@@ -1926,10 +1867,10 @@ bool ComponentSamples_Sample::MergePartialFromCodedStream(
         break;
       }
 
-      // bool stuck = 4;
-      case 4: {
+      // bool stuck = 3;
+      case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
+            static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
@@ -1940,9 +1881,9 @@ bool ComponentSamples_Sample::MergePartialFromCodedStream(
         break;
       }
 
-      case 5: {
+      case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+            static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                 input, add_spans()));
         } else {
@@ -1987,73 +1928,20 @@ void ComponentSamples_Sample::SerializeWithCachedSizes(
       1, this->error(), output);
   }
 
-  // map<string, string> attributes = 2;
-  if (!this->attributes().empty()) {
-    typedef ::google::protobuf::Map< ::std::string, ::std::string >::const_pointer
-        ConstPtr;
-    typedef ConstPtr SortItem;
-    typedef ::google::protobuf::internal::CompareByDerefFirst<SortItem> Less;
-    struct Utf8Check {
-      static void Check(ConstPtr p) {
-        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          p->first.data(), static_cast<int>(p->first.length()),
-          ::google::protobuf::internal::WireFormatLite::SERIALIZE,
-          "cockroach.util.tracing.ComponentSamples.Sample.AttributesEntry.key");
-        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          p->second.data(), static_cast<int>(p->second.length()),
-          ::google::protobuf::internal::WireFormatLite::SERIALIZE,
-          "cockroach.util.tracing.ComponentSamples.Sample.AttributesEntry.value");
-      }
-    };
-
-    if (output->IsSerializationDeterministic() &&
-        this->attributes().size() > 1) {
-      ::std::unique_ptr<SortItem[]> items(
-          new SortItem[this->attributes().size()]);
-      typedef ::google::protobuf::Map< ::std::string, ::std::string >::size_type size_type;
-      size_type n = 0;
-      for (::google::protobuf::Map< ::std::string, ::std::string >::const_iterator
-          it = this->attributes().begin();
-          it != this->attributes().end(); ++it, ++n) {
-        items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);
-      }
-      ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());
-      ::std::unique_ptr<ComponentSamples_Sample_AttributesEntry_DoNotUse> entry;
-      for (size_type i = 0; i < n; i++) {
-        entry.reset(attributes_.NewEntryWrapper(
-            items[static_cast<ptrdiff_t>(i)]->first, items[static_cast<ptrdiff_t>(i)]->second));
-        ::google::protobuf::internal::WireFormatLite::WriteMessage(
-            2, *entry, output);
-        Utf8Check::Check(items[static_cast<ptrdiff_t>(i)]);
-      }
-    } else {
-      ::std::unique_ptr<ComponentSamples_Sample_AttributesEntry_DoNotUse> entry;
-      for (::google::protobuf::Map< ::std::string, ::std::string >::const_iterator
-          it = this->attributes().begin();
-          it != this->attributes().end(); ++it) {
-        entry.reset(attributes_.NewEntryWrapper(
-            it->first, it->second));
-        ::google::protobuf::internal::WireFormatLite::WriteMessage(
-            2, *entry, output);
-        Utf8Check::Check(&*it);
-      }
-    }
-  }
-
-  // bool pending = 3;
+  // bool pending = 2;
   if (this->pending() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(3, this->pending(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->pending(), output);
   }
 
-  // bool stuck = 4;
+  // bool stuck = 3;
   if (this->stuck() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(4, this->stuck(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteBool(3, this->stuck(), output);
   }
 
   for (unsigned int i = 0,
       n = static_cast<unsigned int>(this->spans_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      5,
+      4,
       this->spans(static_cast<int>(i)),
       output);
   }
@@ -2068,20 +1956,6 @@ size_t ComponentSamples_Sample::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
-
-  // map<string, string> attributes = 2;
-  total_size += 1 *
-      ::google::protobuf::internal::FromIntSize(this->attributes_size());
-  {
-    ::std::unique_ptr<ComponentSamples_Sample_AttributesEntry_DoNotUse> entry;
-    for (::google::protobuf::Map< ::std::string, ::std::string >::const_iterator
-        it = this->attributes().begin();
-        it != this->attributes().end(); ++it) {
-      entry.reset(attributes_.NewEntryWrapper(it->first, it->second));
-      total_size += ::google::protobuf::internal::WireFormatLite::
-          MessageSizeNoVirtual(*entry);
-    }
-  }
 
   {
     unsigned int count = static_cast<unsigned int>(this->spans_size());
@@ -2100,12 +1974,12 @@ size_t ComponentSamples_Sample::ByteSizeLong() const {
         this->error());
   }
 
-  // bool pending = 3;
+  // bool pending = 2;
   if (this->pending() != 0) {
     total_size += 1 + 1;
   }
 
-  // bool stuck = 4;
+  // bool stuck = 3;
   if (this->stuck() != 0) {
     total_size += 1 + 1;
   }
@@ -2127,7 +2001,6 @@ void ComponentSamples_Sample::MergeFrom(const ComponentSamples_Sample& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  attributes_.MergeFrom(from.attributes_);
   spans_.MergeFrom(from.spans_);
   if (from.error().size() > 0) {
 
@@ -2158,7 +2031,6 @@ void ComponentSamples_Sample::Swap(ComponentSamples_Sample* other) {
 }
 void ComponentSamples_Sample::InternalSwap(ComponentSamples_Sample* other) {
   using std::swap;
-  attributes_.Swap(&other->attributes_);
   CastToBase(&spans_)->InternalSwap(CastToBase(&other->spans_));
   error_.Swap(&other->error_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
@@ -2937,9 +2809,6 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::Record
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentActivity* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentActivity >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::util::tracing::ComponentActivity >(arena);
-}
-template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentSamples_Sample* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentSamples_Sample >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::util::tracing::ComponentSamples_Sample >(arena);

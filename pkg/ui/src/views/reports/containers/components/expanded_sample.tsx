@@ -28,7 +28,16 @@ function getColor(node_id: number) {
 }
 
 function isSpanPending(sp: protos.cockroach.util.tracing.IRecordedSpan) {
-  return !sp.duration || !sp.duration.seconds || !sp.duration.nanos;
+  return !sp.duration || (sp.duration.seconds.eq(Long.fromNumber(0)) && sp.duration.nanos == 0);
+}
+
+function findCompSpan(s: protos.cockroach.util.tracing.ComponentSamples.ISample) {
+  for (var idx in s.spans) {
+    if (s.spans[idx].tags["syscomponent"]) {
+      return s.spans[idx];
+    }
+  }
+  return s.spans[0];
 }
 
 export class TraceLine {
@@ -59,9 +68,9 @@ export class TraceLine {
 
   formatMessage = () => {
     if (this.sample) {
-      return this.span.tags["component"] + ": " + this.span.operation + (isSpanPending(this.span) ? " [pending]" : "");
+      return this.span.tags["syscomponent"] + ": " + this.span.operation + (this.span.pending ? " [pending]" : "");
     } else if (this.span) {
-      return this.span.operation + (isSpanPending(this.span) ? " [pending]" : "");
+      return this.span.operation + (this.span.pending ? " [pending]" : "");
     } else if (this.log.fields.length == 1) {
       return this.log.fields[0].value;
     }
@@ -78,7 +87,8 @@ export class TraceLine {
       if (expanded) {
         return this.formatMessage();
       }
-      var attrs: string[] = _.map(this.sample.attributes, (v, k) => { return "\n" + k + ": " + v });
+      const span: protos.cockroach.util.tracing.RecordedSpan = findCompSpan(this.sample);
+      var attrs: string[] = _.map(span.tags, (v, k) => { return "\n" + k + ": " + v });
       return "Node: " + this.node_id +
         "\nTimestamp: " + formatDateTime(this.span.start_time, false) +
         "\nDuration: " + formatDuration(this.span.duration, false) +
@@ -87,8 +97,11 @@ export class TraceLine {
         (this.sample.error ? ("\nError: " + this.sample.error) : "") +
         attrs.join("");
     } else if (this.span) {
-      return this.span.operation + " " + formatDuration(this.span.duration, false) +
-        " @" + formatDateTime(this.span.start_time, false);
+      var attrs: string[] = _.map(this.span.tags, (v, k) => { return "\n" + k + ": " + v });
+      return this.span.operation +
+        "\nTimestamp: " + formatDateTime(this.span.start_time, false) +
+        "\nDuration: " + formatDuration(this.span.duration, false) +
+        attrs.join("");
     }
     return this.formatMessage() + " @" + formatDateTime(this.log.time, false);
   }
@@ -105,7 +118,7 @@ export class TraceLine {
            <div><span className="tag">Error</span>: {this.sample.error}</div>
           }
           {
-            _.map(this.sample.attributes, (v, k) => (
+            _.map(findCompSpan(this.sample).tags, (v, k) => (
                 <div><span className="tag">{k}</span>: {v}</div>
             ));
         </div>
@@ -184,22 +197,18 @@ export class ExpandedSpan {
 
   // Returns whether the supplied span's trace lines overlap any of
   // this expanded span's trace lines.
-  overlaps = (span: protos.cockroach.util.tracing.IRecordedSpan) => {
-    // If the span is still pending, assume overlap.
-    if (isSpanPending(span) && this.lines.length > 1) {
+  overlaps = (esp: ExpandedSpan) => {
+    // If the spans cross node boundaries, consider them overlapping.
+    if (this.node_id != esp.node_id) {
       return true;
     }
     // If the child span extends beyond the parent, consider it an overlap.
-    if (!isSpanPending(this.span) &&
-        compareTimestamps(addDuration(span.start_time, span.duration),
+    if (compareTimestamps(addDuration(esp.span.start_time, esp.span.duration),
                           addDuration(this.span.start_time, this.span.duration)) > 0) {
       return true;
     }
-    if (span.logs.length == 0) {
-      return false;
-    }
-    const start: number = this.getLineIndex(span.start_time);
-    const end: number = this.getLineIndex(addDuration(span.start_time, span.duration));
+    const start: number = this.getLineIndex(esp.span.start_time);
+    var end: number = this.getLineIndex(addDuration(esp.span.start_time, esp.span.duration));
     return start != end;
   }
 
@@ -207,12 +216,14 @@ export class ExpandedSpan {
   // children. Otherwise, embed the span's trace lines in the parent.
   addOrEmbedChild = (es: ExpandedSpan) => {
     // If the span overlaps, add it to the children array.
-    if (this.overlaps(es.span)) {
+    if (this.overlaps(es)) {
+      //console.log("adding child " + es.span.span_id + " to parent " + this.span.span_id);
       this.children.push(es);
-      return es;
+      return;
     }
     // Otherwise, embed the span's trace lines at the appropriate index.
     const idx: number = this.getLineIndex(es.span.start_time);
+    //console.log("embedding child " + es.span.span_id + " to parent " + this.span.span_id + " at index " + idx);
     const baseDepth: number = (idx >= this.lines.length) ? this.lines[this.lines.length-1].depth : this.lines[idx].depth;
     // Augment depth of embedded lines.
     es.lines.forEach((l) => {
@@ -222,8 +233,6 @@ export class ExpandedSpan {
     this.lines.splice(idx + 1, 0, ...es.lines);
     // Concat child spans from embedded span.
     this.children = this.children.concat(es.children);
-    // Return this, to replace child with parent, as child has been embedded.
-    return this;
   }
 
   // Recursively increase the column number for this span and children.
@@ -339,14 +348,14 @@ export class ExpandedSpan {
       return (
           <svg width="100%" height="20" display="block" preserveAspectRatio="none">
             <line x1="0" y1="12" x2="100%" y2="12" className="connector" />
-            <line x1="12" y1="12" x2="12" y2="20" className="connector" />
+            <line x1="12" y1="12" x2="12" y2="100%" className="connector" />
           </svg>
       );
     case "angle":
       return (
           <svg width="100%" height="20" display="block" preserveAspectRatio="none">
             <line x1="0" y1="12" x2="12" y2="12" className="connector" />
-            <line x1="12" y1="12" x2="12" y2="20" className="connector" />
+            <line x1="12" y1="12" x2="12" y2="100%" className="connector" />
           </svg>
       );
     }
@@ -463,9 +472,9 @@ export class ExpandedSample {
       _.map(n.samples, (ca, name) => {
         ca.samples.forEach((s) => {
           s.spans.forEach((sp) => {
-            spans[sp.span_id] = new ExpandedSpan(n.node_id, sp, sp.tags["component"] == name ? s : null);
-            if (sp.parent_span_id && sp.parent_span_id.toNumber() != 0) {
-              if (!(sp.parent_span_id.toString() in children)) {
+            spans[sp.span_id] = new ExpandedSpan(n.node_id, sp, sp.tags["syscomponent"] == name ? s : null);
+            if (sp.parent_span_id && sp.parent_span_id.toString() != "0") {
+              if (!(sp.parent_span_id in children)) {
                 children[sp.parent_span_id] = [];
               }
               children[sp.parent_span_id].push(sp.span_id);
@@ -481,9 +490,11 @@ export class ExpandedSample {
     // span placeholder and add to roots slice..
     _.map(children, (l, parent_id) => {
       l.sort(function(a, b) {
-        return compareTimestamps(spans[a].span.start_time, spans[b].span.start_time);
+        const comp: number = compareTimestamps(spans[a].span.start_time, spans[b].span.start_time);
+        if (comp == 0) return spans[a].span.span_id.comp(spans[b].span.span_id);
+        return comp;
       });
-      if (!(parent_id.toString() in spans)) {
+      if (!(parent_id in spans)) {
         // Create a parent span placeholder for orphaned child list.
         const firstChild: ExpandedSpan = spans[l[0]]; 
         const placeSpan= protos.cockroach.util.tracing.RecordedSpan.create({
@@ -491,7 +502,6 @@ export class ExpandedSample {
           span_id: parent_id,
           operation: "[missing parent span]",
           start_time: firstChild.span.start_time,
-          duration: firstChild.span.duration,
           logs: [],
         });
         const placeholder: ExpandedSpan = new ExpandedSpan(firstChild.node_id, placeSpan, null);
@@ -506,28 +516,58 @@ export class ExpandedSample {
     roots.sort(function(a, b) {
       return compareTimestamps(spans[a].span.start_time, spans[b].span.start_time);
     });
-    const root: Long = roots[0];
-    if (!(root in children)) {
-      children[root] = [];
+    const root_id: Long = roots[0];
+    if (!(root_id in children)) {
+      children[root_id] = [];
     }
     roots.slice(1).forEach((r) => {
-      children[root].push(r);
+      children[root_id].push(r);
     });
 
-    // Add all children to parents. Note that when adding a child, it can be
-    // subsumed by the parent span if it's embedded. In this case, we must
-    // replace the child in the spans map.
-    _.map(children, (l, parent_id) => {
-      l.forEach((c) => {
-        spans[c] = spans[parent_id].addOrEmbedChild(spans[c]);
+    // Estimate duration for any pending spans.
+    function recursiveEstimateDurations(parent_id: Long) {
+      const parent: ExpandedSpan = spans[parent_id];
+      var max_end_time: protos.google.protobuf.ITimestamp =
+        new protos.google.protobuf.Timestamp(addDuration(parent.span.start_time, parent.span.duration));
+      if (parent.span.logs.length > 0) {
+        if (compareTimestamps(parent.span.logs[parent.span.logs.length-1].time, max_end_time) > 0) {
+          max_end_time = new protos.google.protobuf.Timestamp(parent.span.logs[parent.span.logs.length-1].time);
+        }
+      }
+      if (parent_id in children) {
+        _.map(children[parent_id], (child_id) => {
+          recursiveEstimateDurations(child_id);
+          const child: ExpandedSpan = spans[child_id];
+          const child_end_time: protos.google.protobuf.ITimestamp = addDuration(child.span.start_time, child.span.duration);
+          if (compareTimestamps(child_end_time, max_end_time) > 0) {
+            max_end_time = child_end_time;
+          }
+        });
+      }
+      if (isSpanPending(parent.span)) {
+        parent.span.pending = true;
+        parent.span.duration = subtractTimestamps(max_end_time, parent.span.start_time);
+      }
+    }
+    recursiveEstimateDurations(root_id);
+
+    // Add all children to parents in a depth first recursive descent.
+    function recursiveAddOrEmbed(parent_id: Long) {
+      if (!(parent_id in children)) {
+        return;
+      }
+      _.map(children[parent_id], (child_id) => {
+        recursiveAddOrEmbed(child_id);
+        spans[parent_id].addOrEmbedChild(spans[child_id]);
       });
-    });
+    }
+    recursiveAddOrEmbed(root_id);
 
     // Organize all children by setting their column and line numbers
     // such that they won't overlap when rendered.
-    spans[root].organizeChildren(0, 0);
+    spans[root_id].organizeChildren(0, 0);
 
-    this.root = spans[root];
+    this.root = spans[root_id];
   }
 
   // Render the component trace.

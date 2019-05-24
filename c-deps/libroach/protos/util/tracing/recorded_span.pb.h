@@ -43,7 +43,7 @@ namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[12];
+  static const ::google::protobuf::internal::ParseTable schema[11];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -61,9 +61,6 @@ extern ComponentSamplesDefaultTypeInternal _ComponentSamples_default_instance_;
 class ComponentSamples_Sample;
 class ComponentSamples_SampleDefaultTypeInternal;
 extern ComponentSamples_SampleDefaultTypeInternal _ComponentSamples_Sample_default_instance_;
-class ComponentSamples_Sample_AttributesEntry_DoNotUse;
-class ComponentSamples_Sample_AttributesEntry_DoNotUseDefaultTypeInternal;
-extern ComponentSamples_Sample_AttributesEntry_DoNotUseDefaultTypeInternal _ComponentSamples_Sample_AttributesEntry_DoNotUse_default_instance_;
 class ComponentTraces;
 class ComponentTracesDefaultTypeInternal;
 extern ComponentTracesDefaultTypeInternal _ComponentTraces_default_instance_;
@@ -96,7 +93,6 @@ namespace protobuf {
 template<> ::cockroach::util::tracing::ComponentActivity* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentActivity>(Arena*);
 template<> ::cockroach::util::tracing::ComponentSamples* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentSamples>(Arena*);
 template<> ::cockroach::util::tracing::ComponentSamples_Sample* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentSamples_Sample>(Arena*);
-template<> ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse>(Arena*);
 template<> ::cockroach::util::tracing::ComponentTraces* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentTraces>(Arena*);
 template<> ::cockroach::util::tracing::ComponentTraces_Event* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentTraces_Event>(Arena*);
 template<> ::cockroach::util::tracing::ComponentTraces_EventsEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentTraces_EventsEntry_DoNotUse>(Arena*);
@@ -737,25 +733,6 @@ class ComponentActivity : public ::google::protobuf::MessageLite /* @@protoc_ins
 };
 // -------------------------------------------------------------------
 
-class ComponentSamples_Sample_AttributesEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<ComponentSamples_Sample_AttributesEntry_DoNotUse, 
-    ::std::string, ::std::string,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    0 > {
-public:
-  typedef ::google::protobuf::internal::MapEntryLite<ComponentSamples_Sample_AttributesEntry_DoNotUse, 
-    ::std::string, ::std::string,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-    0 > SuperType;
-  ComponentSamples_Sample_AttributesEntry_DoNotUse();
-  ComponentSamples_Sample_AttributesEntry_DoNotUse(::google::protobuf::Arena* arena);
-  void MergeFrom(const ComponentSamples_Sample_AttributesEntry_DoNotUse& other);
-  static const ComponentSamples_Sample_AttributesEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const ComponentSamples_Sample_AttributesEntry_DoNotUse*>(&_ComponentSamples_Sample_AttributesEntry_DoNotUse_default_instance_); }
-};
-
-// -------------------------------------------------------------------
-
 class ComponentSamples_Sample : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.tracing.ComponentSamples.Sample) */ {
  public:
   ComponentSamples_Sample();
@@ -790,7 +767,7 @@ class ComponentSamples_Sample : public ::google::protobuf::MessageLite /* @@prot
                &_ComponentSamples_Sample_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    7;
+    6;
 
   void Swap(ComponentSamples_Sample* other);
   friend void swap(ComponentSamples_Sample& a, ComponentSamples_Sample& b) {
@@ -839,21 +816,11 @@ class ComponentSamples_Sample : public ::google::protobuf::MessageLite /* @@prot
 
   // nested types ----------------------------------------------------
 
-
   // accessors -------------------------------------------------------
-
-  // map<string, string> attributes = 2;
-  int attributes_size() const;
-  void clear_attributes();
-  static const int kAttributesFieldNumber = 2;
-  const ::google::protobuf::Map< ::std::string, ::std::string >&
-      attributes() const;
-  ::google::protobuf::Map< ::std::string, ::std::string >*
-      mutable_attributes();
 
   int spans_size() const;
   void clear_spans();
-  static const int kSpansFieldNumber = 5;
+  static const int kSpansFieldNumber = 4;
   ::cockroach::util::tracing::RecordedSpan* mutable_spans(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan >*
       mutable_spans();
@@ -876,15 +843,15 @@ class ComponentSamples_Sample : public ::google::protobuf::MessageLite /* @@prot
   ::std::string* release_error();
   void set_allocated_error(::std::string* error);
 
-  // bool pending = 3;
+  // bool pending = 2;
   void clear_pending();
-  static const int kPendingFieldNumber = 3;
+  static const int kPendingFieldNumber = 2;
   bool pending() const;
   void set_pending(bool value);
 
-  // bool stuck = 4;
+  // bool stuck = 3;
   void clear_stuck();
-  static const int kStuckFieldNumber = 4;
+  static const int kStuckFieldNumber = 3;
   bool stuck() const;
   void set_stuck(bool value);
 
@@ -892,12 +859,6 @@ class ComponentSamples_Sample : public ::google::protobuf::MessageLite /* @@prot
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::MapFieldLite<
-      ComponentSamples_Sample_AttributesEntry_DoNotUse,
-      ::std::string, ::std::string,
-      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
-      0 > attributes_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::util::tracing::RecordedSpan > spans_;
   ::google::protobuf::internal::ArenaStringPtr error_;
   bool pending_;
@@ -941,7 +902,7 @@ class ComponentSamples : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_ComponentSamples_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    8;
+    7;
 
   void Swap(ComponentSamples* other);
   friend void swap(ComponentSamples& a, ComponentSamples& b) {
@@ -1049,7 +1010,7 @@ class ComponentTraces_Event : public ::google::protobuf::MessageLite /* @@protoc
                &_ComponentTraces_Event_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    9;
+    8;
 
   void Swap(ComponentTraces_Event* other);
   friend void swap(ComponentTraces_Event& a, ComponentTraces_Event& b) {
@@ -1184,7 +1145,7 @@ class ComponentTraces : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_ComponentTraces_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    11;
+    10;
 
   void Swap(ComponentTraces* other);
   friend void swap(ComponentTraces& a, ComponentTraces& b) {
@@ -1900,8 +1861,6 @@ inline void ComponentActivity::set_allocated_timestamp(::google::protobuf::Times
 
 // -------------------------------------------------------------------
 
-// -------------------------------------------------------------------
-
 // ComponentSamples_Sample
 
 // string error = 1;
@@ -1957,25 +1916,7 @@ inline void ComponentSamples_Sample::set_allocated_error(::std::string* error) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.ComponentSamples.Sample.error)
 }
 
-// map<string, string> attributes = 2;
-inline int ComponentSamples_Sample::attributes_size() const {
-  return attributes_.size();
-}
-inline void ComponentSamples_Sample::clear_attributes() {
-  attributes_.Clear();
-}
-inline const ::google::protobuf::Map< ::std::string, ::std::string >&
-ComponentSamples_Sample::attributes() const {
-  // @@protoc_insertion_point(field_map:cockroach.util.tracing.ComponentSamples.Sample.attributes)
-  return attributes_.GetMap();
-}
-inline ::google::protobuf::Map< ::std::string, ::std::string >*
-ComponentSamples_Sample::mutable_attributes() {
-  // @@protoc_insertion_point(field_mutable_map:cockroach.util.tracing.ComponentSamples.Sample.attributes)
-  return attributes_.MutableMap();
-}
-
-// bool pending = 3;
+// bool pending = 2;
 inline void ComponentSamples_Sample::clear_pending() {
   pending_ = false;
 }
@@ -1989,7 +1930,7 @@ inline void ComponentSamples_Sample::set_pending(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.util.tracing.ComponentSamples.Sample.pending)
 }
 
-// bool stuck = 4;
+// bool stuck = 3;
 inline void ComponentSamples_Sample::clear_stuck() {
   stuck_ = false;
 }
@@ -2264,8 +2205,6 @@ inline void ComponentTraces::set_allocated_timestamp(::google::protobuf::Timesta
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
-// -------------------------------------------------------------------
-
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

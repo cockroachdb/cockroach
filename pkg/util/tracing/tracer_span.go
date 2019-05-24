@@ -519,26 +519,37 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 }
 
 func (s *span) getTags() map[string]string {
-	result := make(map[string]string)
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getTagsLocked()
+}
+
+func (s *span) getTagsLocked() map[string]string {
+	result := make(map[string]string)
+	for _, tag := range s.startTags.Get() {
+		result[tag.Key()] = stringifyTagValue(tag.Value())
+	}
 	for k, v := range s.mu.tags {
-		switch v := v.(type) {
-		case bool, string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, float32, float64, complex64, complex128:
-			result[k] = fmt.Sprint(v)
-		default:
-			if _, ok := v.(fmt.Stringer); ok {
-				result[k] = fmt.Sprint(v)
+		result[k] = stringifyTagValue(v)
+	}
+	return result
+}
+
+func stringifyTagValue(v interface{}) string {
+	switch v := v.(type) {
+	case bool, string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, float32, float64, complex64, complex128:
+		return fmt.Sprint(v)
+	default:
+		if _, ok := v.(fmt.Stringer); ok {
+			return fmt.Sprint(v)
+		} else {
+			if bytes, err := json.MarshalIndent(v, "", "    "); err != nil {
+				return fmt.Sprintf("%+v [%s]", v, err)
 			} else {
-				if bytes, err := json.MarshalIndent(v, "", "    "); err != nil {
-					result[k] = fmt.Sprintf("%+v", v)
-				} else {
-					result[k] = string(bytes)
-				}
+				return string(bytes)
 			}
 		}
 	}
-	s.mu.Unlock()
-	return result
 }
 
 // LogFields is part of the opentracing.Span interface.
@@ -685,13 +696,7 @@ func (s *span) getRecording() RecordedSpan {
 		}
 	}
 	if len(s.mu.tags) > 0 {
-		if rs.Tags == nil {
-			rs.Tags = make(map[string]string)
-		}
-		for k, v := range s.mu.tags {
-			// We encode the tag values as strings.
-			rs.Tags[k] = fmt.Sprint(v)
-		}
+		rs.Tags = s.getTagsLocked()
 	}
 	rs.Logs = make([]RecordedSpan_LogRecord, len(s.mu.recordedLogs))
 	for i, r := range s.mu.recordedLogs {
