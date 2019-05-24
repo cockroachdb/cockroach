@@ -245,7 +245,7 @@ TABLE wxyz
  │    ├── w string not null
  │    ├── x uuid not null
  │    └── y uuid not null
- └── FOREIGN KEY (w, x, y) REFERENCES t.public.abcde (a, b, c)
+ └── CONSTRAINT foreign FOREIGN KEY (w, x, y) REFERENCES t.public.abcde (a, b, c)
 
 exec-ddl
 ALTER TABLE wxyz INJECT STATISTICS '[

@@ -58,7 +58,7 @@ TABLE district
  ├── INDEX primary
  │    ├── d_w_id int not null
  │    └── d_id int not null
- └── FOREIGN KEY (d_w_id) REFERENCES t.public.warehouse (w_id)
+ └── CONSTRAINT fk_d_w_id_ref_warehouse FOREIGN KEY (d_w_id) REFERENCES t.public.warehouse (w_id)
 
 exec-ddl
 CREATE TABLE customer
@@ -121,7 +121,7 @@ TABLE customer
  │    ├── c_last varchar
  │    ├── c_first varchar
  │    └── c_id int not null
- └── FOREIGN KEY (c_w_id, c_d_id) REFERENCES t.public.district (d_w_id, d_id)
+ └── CONSTRAINT fk_c_w_id_ref_district FOREIGN KEY (c_w_id, c_d_id) REFERENCES t.public.district (d_w_id, d_id)
 
 exec-ddl
 CREATE TABLE history
@@ -165,8 +165,8 @@ TABLE history
  │    ├── h_w_id int not null
  │    ├── h_d_id int not null
  │    └── rowid uuid not null
- ├── FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
- └── FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
+ ├── CONSTRAINT fk_h_c_w_id_ref_customer FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
+ └── CONSTRAINT fk_h_w_id_ref_district FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
 
 exec-ddl
 CREATE TABLE "order"
@@ -202,7 +202,7 @@ TABLE order
  │    ├── o_d_id int not null
  │    ├── o_c_id int
  │    └── o_id int not null desc
- └── FOREIGN KEY (o_w_id, o_d_id, o_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
+ └── CONSTRAINT fk_o_w_id_ref_customer FOREIGN KEY (o_w_id, o_d_id, o_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
 
 exec-ddl
 CREATE TABLE new_order
@@ -222,7 +222,7 @@ TABLE new_order
  │    ├── no_w_id int not null
  │    ├── no_d_id int not null
  │    └── no_o_id int not null
- └── FOREIGN KEY (no_w_id, no_d_id, no_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
+ └── CONSTRAINT fk_no_w_id_ref_order FOREIGN KEY (no_w_id, no_d_id, no_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
 
 exec-ddl
 CREATE TABLE item
@@ -294,8 +294,8 @@ TABLE stock
  ├── INDEX stock_item_fk_idx
  │    ├── s_i_id int not null
  │    └── s_w_id int not null
- ├── FOREIGN KEY (s_w_id) REFERENCES t.public.warehouse (w_id)
- └── FOREIGN KEY (s_i_id) REFERENCES t.public.item (i_id)
+ ├── CONSTRAINT fk_s_w_id_ref_warehouse FOREIGN KEY (s_w_id) REFERENCES t.public.warehouse (w_id)
+ └── CONSTRAINT fk_s_i_id_ref_item FOREIGN KEY (s_i_id) REFERENCES t.public.item (i_id)
 
 exec-ddl
 CREATE TABLE order_line
@@ -339,8 +339,8 @@ TABLE order_line
  │    ├── ol_d_id int not null
  │    ├── ol_o_id int not null
  │    └── ol_number int not null
- ├── FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
- └── FOREIGN KEY (ol_supply_w_id, ol_i_id) REFERENCES t.public.stock (s_w_id, s_i_id)
+ ├── CONSTRAINT fk_ol_w_id_ref_order FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
+ └── CONSTRAINT fk_ol_supply_w_id_ref_stock FOREIGN KEY (ol_supply_w_id, ol_i_id) REFERENCES t.public.stock (s_w_id, s_i_id)
 
 # --------------------------------------------------
 # 2.4 The New Order Transaction
