@@ -168,6 +168,51 @@ func BenchmarkCount(b *testing.B) {
 	})
 }
 
+func BenchmarkCountTwoCF(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		defer func() {
+			if _, err := db.Exec(`DROP TABLE IF EXISTS bench.count`); err != nil {
+				b.Fatal(err)
+			}
+		}()
+
+		if _, err := db.Exec(
+			`CREATE TABLE bench.count (k INT PRIMARY KEY, v TEXT, FAMILY (k), FAMILY (v))`); err != nil {
+			b.Fatal(err)
+		}
+
+		var buf bytes.Buffer
+		val := 0
+		for i := 0; i < 100; i++ {
+			buf.Reset()
+			buf.WriteString(`INSERT INTO bench.count VALUES `)
+			for j := 0; j < 1000; j++ {
+				if j > 0 {
+					buf.WriteString(", ")
+				}
+				fmt.Fprintf(&buf, "(%d, '%s')", val, strconv.Itoa(val))
+				val++
+			}
+			if _, err := db.Exec(buf.String()); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := db.Exec("SELECT count(*) FROM bench.count"); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
+}
+
 func BenchmarkSort(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
