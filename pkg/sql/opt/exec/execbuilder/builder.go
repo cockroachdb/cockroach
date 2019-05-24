@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -93,7 +94,7 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 func (b *Builder) build(e opt.Expr) (exec.Node, error) {
 	rel, ok := e.(memo.RelExpr)
 	if !ok {
-		return nil, errors.Errorf("building execution for non-relational operator %s", e.Op())
+		return nil, pgerror.AssertionFailedf("building execution for non-relational operator %s", log.Safe(e.Op()))
 	}
 	plan, err := b.buildRelational(rel)
 	if err != nil {
@@ -108,7 +109,7 @@ func (b *Builder) build(e opt.Expr) (exec.Node, error) {
 func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
 	scalar, ok := b.e.(opt.ScalarExpr)
 	if !ok {
-		return nil, errors.Errorf("BuildScalar cannot be called for non-scalar operator %s", b.e.Op())
+		return nil, pgerror.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", log.Safe(b.e.Op()))
 	}
 	ctx := buildScalarCtx{ivh: *ivh}
 	for i := 0; i < ivh.NumVars(); i++ {
