@@ -116,13 +116,6 @@ type Index interface {
 	// i < ColumnCount.
 	Column(i int) IndexColumn
 
-	// ForeignKey returns a ForeignKeyReference if this index is part
-	// of an outbound foreign key relation. Returns false for the second
-	// return value if there is no foreign key reference on this index.
-	// TODO(radu): this does not belong here: foreign key references should not be
-	// tied to specific indexes.
-	ForeignKey() (ForeignKeyReference, bool)
-
 	// Zone returns the zone which constrains placement of the index's range
 	// replicas. If the index was not explicitly assigned to a zone, then it
 	// inherits the zone of its owning table (which in turn inherits from its
