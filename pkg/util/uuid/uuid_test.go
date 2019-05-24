@@ -9,6 +9,7 @@ package uuid
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 )
@@ -164,5 +165,27 @@ func TestTimestampFromV1(t *testing.T) {
 		} else if tt.want != got {
 			t.Errorf("TimestampFromV1(%v) got %v, want %v", tt.u, got, tt.want)
 		}
+	}
+}
+
+func TestDeterministicV4(t *testing.T) {
+	// Test sortedness by enumerating everything in a small `n`.
+	var previous, current UUID
+	for i := 0; i < 10; i++ {
+		current.DeterministicV4(uint64(i), uint64(10))
+		if bytes.Compare(previous[:], current[:]) >= 0 {
+			t.Errorf(`%s should be less than %s`, previous, current)
+		}
+		copy(previous[:], current[:])
+	}
+
+	// Test uniqueness by enumerating adjacent `i`s in a big `n`.
+	previous, current = UUID{}, UUID{}
+	for i := 0; i < 10; i++ {
+		current.DeterministicV4(uint64(i), math.MaxUint64)
+		if bytes.Compare(previous[:], current[:]) >= 0 {
+			t.Errorf(`%s should be less than %s`, previous, current)
+		}
+		copy(previous[:], current[:])
 	}
 }
