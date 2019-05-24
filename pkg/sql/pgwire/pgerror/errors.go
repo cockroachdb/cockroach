@@ -268,6 +268,8 @@ func (pg *Error) Format(s fmt.State, verb rune) {
 // ambiguous result errors ("connection reset/refused" are needed for
 // the pgwire connection, but anything RPC-related should be handled
 // within the cluster).
+// TODO(knz): This should really use the errors library. Investigate
+// how to get rid of the error message comparison.
 func IsSQLRetryableError(err error) bool {
 	// Don't forget to update the corresponding test when making adjustments
 	// here.
