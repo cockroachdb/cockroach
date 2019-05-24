@@ -15,10 +15,13 @@
 package cat
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/pkg/errors"
 )
 
@@ -116,4 +119,158 @@ func ResolveTableIndex(
 		)
 	}
 	return found, nil
+}
+
+// FindTableColumnByName returns the ordinal of the non-mutation column having
+// the given name, if one exists in the given table. Otherwise, it returns -1.
+func FindTableColumnByName(tab Table, name tree.Name) int {
+	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
+		if tab.Column(ord).ColName() == name {
+			return ord
+		}
+	}
+	return -1
+}
+
+// FormatTable nicely formats a catalog table using a treeprinter for debugging
+// and testing.
+func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
+	child := tp.Childf("TABLE %s", tab.Name().TableName)
+
+	var buf bytes.Buffer
+	for i := 0; i < tab.DeletableColumnCount(); i++ {
+		buf.Reset()
+		formatColumn(tab.Column(i), IsMutationColumn(tab, i), &buf)
+		child.Child(buf.String())
+	}
+
+	for i := 0; i < tab.DeletableIndexCount(); i++ {
+		formatCatalogIndex(tab, i, child)
+	}
+
+	for i := 0; i < tab.IndexCount(); i++ {
+		fkRef, ok := tab.Index(i).ForeignKey()
+
+		if ok {
+			formatCatalogFKRef(cat, tab.Index(i), fkRef, child)
+		}
+	}
+
+	for i := 0; i < tab.CheckCount(); i++ {
+		child.Childf("CHECK (%s)", tab.Check(i))
+	}
+
+	// Don't print the primary family, since it's implied.
+	if tab.FamilyCount() > 1 || tab.Family(0).Name() != "primary" {
+		for i := 0; i < tab.FamilyCount(); i++ {
+			buf.Reset()
+			formatFamily(tab.Family(i), &buf)
+			child.Child(buf.String())
+		}
+	}
+}
+
+// formatCatalogIndex nicely formats a catalog index using a treeprinter for
+// debugging and testing.
+func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
+	idx := tab.Index(ord)
+	inverted := ""
+	if idx.IsInverted() {
+		inverted = "INVERTED "
+	}
+	mutation := ""
+	if IsMutationIndex(tab, ord) {
+		mutation = " (mutation)"
+	}
+	child := tp.Childf("%sINDEX %s%s", inverted, idx.Name(), mutation)
+
+	var buf bytes.Buffer
+	colCount := idx.ColumnCount()
+	if ord == PrimaryIndex {
+		// Omit the "stored" columns from the primary index.
+		colCount = idx.KeyColumnCount()
+	}
+
+	for i := 0; i < colCount; i++ {
+		buf.Reset()
+
+		idxCol := idx.Column(i)
+		formatColumn(idxCol.Column, false /* isMutationCol */, &buf)
+		if idxCol.Descending {
+			fmt.Fprintf(&buf, " desc")
+		}
+
+		if i >= idx.LaxKeyColumnCount() {
+			fmt.Fprintf(&buf, " (storing)")
+		}
+
+		child.Child(buf.String())
+	}
+}
+
+// formatColPrefix returns a string representation of the first prefixLen columns of idx.
+func formatColPrefix(idx Index, prefixLen int) string {
+	var buf bytes.Buffer
+	buf.WriteByte('(')
+	for i := 0; i < prefixLen; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		colName := idx.Column(i).ColName()
+		buf.WriteString(colName.String())
+	}
+	buf.WriteByte(')')
+
+	return buf.String()
+}
+
+// formatCatalogFKRef nicely formats a catalog foreign key reference using a
+// treeprinter for debugging and testing.
+func formatCatalogFKRef(cat Catalog, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node) {
+	ds, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.TableID)
+	if err != nil {
+		panic(err)
+	}
+
+	fkTable := ds.(Table)
+
+	var fkIndex Index
+	for j, cnt := 0, fkTable.IndexCount(); j < cnt; j++ {
+		if fkTable.Index(j).ID() == fkRef.IndexID {
+			fkIndex = fkTable.Index(j)
+			break
+		}
+	}
+
+	tp.Childf(
+		"FOREIGN KEY %s REFERENCES %v %s",
+		formatColPrefix(idx, int(fkRef.PrefixLen)),
+		ds.Name(),
+		formatColPrefix(fkIndex, int(fkRef.PrefixLen)),
+	)
+}
+
+func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
+	fmt.Fprintf(buf, "%s %s", col.ColName(), col.DatumType())
+	if !col.IsNullable() {
+		fmt.Fprintf(buf, " not null")
+	}
+	if col.IsHidden() {
+		fmt.Fprintf(buf, " (hidden)")
+	}
+	if isMutationCol {
+		fmt.Fprintf(buf, " (mutation)")
+	}
+}
+
+func formatFamily(family Family, buf *bytes.Buffer) {
+	fmt.Fprintf(buf, "FAMILY %s (", family.Name())
+	for i, n := 0, family.ColumnCount(); i < n; i++ {
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+		col := family.Column(i)
+		buf.WriteString(string(col.ColName()))
+	}
+	buf.WriteString(")")
 }
