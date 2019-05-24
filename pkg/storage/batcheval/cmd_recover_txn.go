@@ -104,15 +104,20 @@ func RecoverTxn(
 		// changed its epoch or timestamp, and the only other valid status
 		// for it to have is COMMITTED.
 		switch reply.RecoveredTxn.Status {
-		case roachpb.ABORTED:
-			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-				"programming error: found ABORTED record for implicitly committed transaction: %v", reply.RecoveredTxn,
-			))
-		case roachpb.PENDING:
+		case roachpb.PENDING, roachpb.ABORTED:
 			// Once implicitly committed, the transaction should never move back
-			// to the PENDING status.
+			// to the PENDING status and it should never be ABORTED.
+			//
+			// In order for the second statement to be true, we need to ensure
+			// that transaction records that are GCed after being COMMITTED are
+			// never re-written as ABORTED. We used to allow this to happen when
+			// PushTxn requests found missing transaction records because it was
+			// harmless, but we now use to write timestamp cache to avoid
+			// needing to ever do so. If this ever becomes possible again, we'll
+			// need to relax this check.
 			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-				"programming error: found PENDING record for implicitly committed transaction: %v", reply.RecoveredTxn,
+				"programming error: found %s record for implicitly committed transaction: %v",
+				reply.RecoveredTxn.Status, reply.RecoveredTxn,
 			))
 		case roachpb.STAGING, roachpb.COMMITTED:
 			if was, is := args.Txn.Epoch, reply.RecoveredTxn.Epoch; was != is {
