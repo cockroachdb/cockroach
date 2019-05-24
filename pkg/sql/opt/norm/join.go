@@ -16,7 +16,6 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -432,43 +431,23 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		return false
 	}
 	rightTabMeta := md.TableMeta(rightTab)
-	for i, cnt := 0, leftTabMeta.Table.IndexCount(); i < cnt; i++ {
-		index := leftTabMeta.Table.Index(i)
-		fkRef, ok := index.ForeignKey()
 
-		if !ok || !fkRef.Validated {
-			// No validated foreign key reference on this index.
+	// Search for validated foreign key references from the left table to the
+	// right table.
+	for i, cnt := 0, leftTabMeta.Table.OutboundForeignKeyCount(); i < cnt; i++ {
+		fkRef := leftTabMeta.Table.OutboundForeignKey(i)
+		if fkRef.ReferencedTableID() != rightTabMeta.Table.ID() || !fkRef.Validated() {
 			continue
 		}
-
-		fkTable := md.TableByStableID(fkRef.TableID)
-		fkPrefix := int(fkRef.PrefixLen)
-		if fkPrefix <= 0 {
-			panic(pgerror.AssertionFailedf("fkPrefix should always be positive"))
-		}
-		if fkTable == nil || fkTable.ID() != rightTabMeta.Table.ID() {
+		fkTable := md.TableByStableID(fkRef.ReferencedTableID())
+		if fkTable == nil {
 			continue
-		}
-
-		// Find the index corresponding to fkRef.IndexID - the index
-		// on the right table that forms the destination end of
-		// the fk relation.
-		var fkIndex cat.Index
-		found := false
-		for j, cnt2 := 0, fkTable.IndexCount(); j < cnt2; j++ {
-			if fkTable.Index(j).ID() == fkRef.IndexID {
-				found = true
-				fkIndex = fkTable.Index(j)
-				break
-			}
-		}
-		if !found {
-			panic(pgerror.AssertionFailedf("Foreign key referenced index not found in table"))
 		}
 
 		var leftIndexCols opt.ColSet
-		for j := 0; j < fkPrefix; j++ {
-			ord := index.Column(j).Ordinal
+		numCols := fkRef.ColumnCount()
+		for j := 0; j < numCols; j++ {
+			ord := fkRef.OriginColumnOrdinal(leftTabMeta.Table, j)
 			leftIndexCols.Add(int(leftTab.ColumnID(ord)))
 		}
 
@@ -490,15 +469,15 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		// in the foreign key index matches that of the RHS column (in the index being
 		// referenced) that it's being equated to.
 		fkMatch := true
-		for j := 0; j < fkPrefix; j++ {
-			indexLeftCol := leftTab.ColumnID(index.Column(j).Ordinal)
+		for j := 0; j < numCols; j++ {
+			indexLeftCol := leftTab.ColumnID(fkRef.OriginColumnOrdinal(leftTabMeta.Table, j))
 
 			// Not every fk column needs to be in the equality conditions.
 			if !remainingLeftColIDs.Contains(int(indexLeftCol)) {
 				continue
 			}
 
-			indexRightCol := rightTab.ColumnID(fkIndex.Column(j).Ordinal)
+			indexRightCol := rightTab.ColumnID(fkRef.ReferencedColumnOrdinal(fkTable, j))
 
 			if rightCol, ok := leftRightColMap[indexLeftCol]; !ok || rightCol != indexRightCol {
 				fkMatch = false

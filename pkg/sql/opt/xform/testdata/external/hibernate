@@ -53,8 +53,8 @@ TABLE phone_register
  ├── INDEX secondary
  │    ├── person_id int not null
  │    └── phone_id int not null (storing)
- ├── FOREIGN KEY (phone_id) REFERENCES t.public.person (id)
- └── FOREIGN KEY (person_id) REFERENCES t.public.phone (id)
+ ├── FOREIGN KEY (person_id) REFERENCES t.public.phone (id)
+ └── FOREIGN KEY (phone_id) REFERENCES t.public.person (id)
 
 opt
 select

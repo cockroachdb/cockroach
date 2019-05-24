@@ -49,10 +49,6 @@ type Table interface {
 	// with index(es) from other table(s).
 	IsInterleaved() bool
 
-	// IsReferenced returns true if this table is referenced by at least one
-	// foreign key defined on another table (or this one if self-referential).
-	IsReferenced() bool
-
 	// ColumnCount returns the number of public columns in the table. Public
 	// columns are not currently being added or dropped from the table. This
 	// method should be used when mutation columns can be ignored (the common
@@ -129,6 +125,20 @@ type Table interface {
 	// Family returns the interface for the ith column family, where
 	// i < FamilyCount.
 	Family(i int) Family
+
+	// OutboundForeignKeyCount returns the number of outbound foreign key
+	// references (where this is the origin table).
+	OutboundForeignKeyCount() int
+
+	// OutboundForeignKeyCount returns the ith outbound foreign key reference.
+	OutboundForeignKey(i int) ForeignKeyReference
+
+	// InboundForeignKeyCount returns the number of inbound foreign key references
+	// (where this is the referenced table).
+	InboundForeignKeyCount() int
+
+	// InboundForeignKey returns the ith inbound foreign key reference.
+	InboundForeignKey(i int) ForeignKeyReference
 }
 
 // CheckConstraint is the SQL text for a check constraint on a table. Check
@@ -169,26 +179,39 @@ type TableStatistic interface {
 	// TODO(radu): add Histogram().
 }
 
-// ForeignKeyReference is a struct representing an outbound foreign key reference.
-// It has accessors for table and index IDs, as well as the prefix length.
-type ForeignKeyReference struct {
-	// Table contains the referenced table's stable identifier.
-	TableID StableID
+// ForeignKeyReference represents a foreign key reference. A foreign key
+// reference has an origin (or referencing) side and a referenced side. For
+// example:
+//   ALTER TABLE o ADD CONSTRAINT fk FOREIGN KEY (a,b) REFERENCES r(a,b)
+// Here o is the origin table, r is the referenced table, and we have two pairs
+// of columns: (o.a,r.a) and (o.b,r.b).
+type ForeignKeyReference interface {
+	// OriginTableID returns the referencing table's stable identifier.
+	OriginTableID() StableID
 
-	// Index contains the stable identifier of the index that represents the
-	// destination table's side of the foreign key relation.
-	IndexID StableID
+	// ReferencedTableID returns the referenced table's stable identifier.
+	ReferencedTableID() StableID
 
-	// PrefixLen contains the length of columns that form the foreign key
-	// relation in the current and destination indexes.
-	PrefixLen int32
+	// ColumnCount returns the number of column pairs in this FK reference.
+	ColumnCount() int
+
+	// OriginColumnOrdinal returns the ith column ordinal (see Table.Column) in
+	// the origin (referencing) table. The ID() of originTable must equal
+	// OriginTable().
+	OriginColumnOrdinal(originTable Table, i int) int
+
+	// ReferencedColumnOrdinal returns the ith column ordinal (see Table.Column)
+	// in the referenced table. The ID() of referencedTable must equal
+	// ReferencedTable().
+	ReferencedColumnOrdinal(referencedTable Table, i int) int
 
 	// Validated is true if the reference is validated (i.e. we know that the
 	// existing data satisfies the constraint). It is possible to set up a foreign
 	// key constraint on existing tables without validating it, in which case we
-	// cannot make any assumptions about the data.
-	Validated bool
+	// cannot make any assumptions about the data. An unvalidated constraint still
+	// needs to be enforced on new mutations.
+	Validated() bool
 
-	// Match contains the method used for comparing composite foreign keys.
-	Match tree.CompositeKeyMatchMethod
+	// MatchMethod returns the method used for comparing composite foreign keys.
+	MatchMethod() tree.CompositeKeyMatchMethod
 }

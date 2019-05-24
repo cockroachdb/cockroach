@@ -464,8 +464,8 @@ TABLE history
  │    ├── h_c_d_id int
  │    ├── h_c_id int
  │    └── rowid uuid not null
- ├── FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
- └── FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
+ ├── FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
+ └── FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
 
 exec-ddl
 ALTER TABLE history INJECT STATISTICS '[
