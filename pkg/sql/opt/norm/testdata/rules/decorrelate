@@ -720,6 +720,35 @@ project
                      ├── row-number [type=undefined]
                      └── u::FLOAT8 [type=float]
 
+norm expect=TryDecorrelateWindow
+SELECT * FROM uv, LATERAL (SELECT avg(f) FILTER (WHERE u = 3) OVER (), i FROM a)
+----
+project
+ ├── columns: u:1(int!null) v:2(int) avg:8(float) i:4(int)
+ ├── fd: (1)-->(2)
+ └── window partition=(1)
+      ├── columns: u:1(int!null) v:2(int) i:4(int) f:5(float) avg:8(float) avg_1_filter:9(bool)
+      ├── fd: (1)-->(2,9)
+      ├── project
+      │    ├── columns: avg_1_filter:9(bool) u:1(int!null) v:2(int) i:4(int) f:5(float)
+      │    ├── fd: (1)-->(2,9)
+      │    ├── inner-join
+      │    │    ├── columns: u:1(int!null) v:2(int) i:4(int) f:5(float)
+      │    │    ├── fd: (1)-->(2)
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:1(int!null) v:2(int)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── scan a
+      │    │    │    └── columns: i:4(int) f:5(float)
+      │    │    └── filters (true)
+      │    └── projections
+      │         └── u = 3 [type=bool, outer=(1)]
+      └── windows
+           └── agg-filter [type=float, outer=(5,9)]
+                ├── avg [type=float]
+                │    └── variable: f [type=float]
+                └── variable: avg_1_filter [type=bool]
 
 # --------------------------------------------------
 # TryDecorrelateSelect

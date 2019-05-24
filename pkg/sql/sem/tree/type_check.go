@@ -744,13 +744,13 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 	}
 
 	if expr.IsWindowFunctionApplication() {
+		if sc.Properties.required.rejectFlags&RejectWindowApplications != 0 {
+			return NewInvalidFunctionUsageError(WindowClass, sc.Properties.required.context)
+		}
+
 		if sc.Properties.Derived.inWindowFunc &&
 			sc.Properties.required.rejectFlags&RejectNestedWindowFunctions != 0 {
 			return pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
-		}
-
-		if sc.Properties.required.rejectFlags&RejectWindowApplications != 0 {
-			return NewInvalidFunctionUsageError(WindowClass, sc.Properties.required.context)
 		}
 		sc.Properties.Derived.SeenWindowApplication = true
 	} else {
