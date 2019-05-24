@@ -38,7 +38,7 @@ import (
 const (
 	numTableFields = 10
 	fieldLength    = 100 // In characters
-	zipfIMin       = 1
+	zipfIMin       = 0
 
 	usertableSchemaRelational = `(
 		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
@@ -120,7 +120,7 @@ var ycsbMeta = workload.Meta{
 		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
-		g.flags.StringVar(&g.distribution, `request-distribution`, `zipfian`, `Distribution for random number generator [zipfian, uniform].`)
+		g.flags.StringVar(&g.distribution, `request-distribution`, `zipfian`, `Distribution for random number generator [zipfian, uniform, latest].`)
 
 		// TODO(dan): g.flags.Uint64Var(&g.maxWrites, `max-writes`,
 		//     7*24*3600*1500,  // 7 days at 5% writes and 30k ops/s
@@ -152,10 +152,7 @@ func (g *ycsb) Hooks() workload.Hooks {
 				g.readFreq = 1.0
 			case "D", "d":
 				g.readFreq = 0.95
-				g.insertFreq = 0.95
-				return errors.New("Workload D (read latest) not implemented yet")
-				// TODO(arjun): workload D (read latest) requires modifying the
-				// RNG to skew to the latest keys, so not done yet.
+				g.insertFreq = 0.05
 			case "E", "e":
 				g.scanFreq = 0.95
 				g.insertFreq = 0.05
@@ -288,9 +285,12 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	switch strings.ToLower(g.distribution) {
 	case "zipfian":
 		randGen, err = NewZipfGenerator(
-			zipfRng, zipfIMin, defaultIMax, defaultTheta, false /* verbose */)
+			zipfRng, zipfIMin, defaultIMax-1, defaultTheta, false /* verbose */)
 	case "uniform":
 		randGen, err = NewUniformGenerator(zipfRng, uint64(g.initialRows))
+	case "latest":
+		randGen, err = NewLatestGenerator(
+			zipfRng, zipfIMin, uint64(g.initialRows)-1, defaultTheta, false /* verbose */)
 	default:
 		return workload.QueryLoad{}, errors.Errorf("Unknown distribution: %s", g.distribution)
 	}
