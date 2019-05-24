@@ -29,6 +29,8 @@ func registerNIndexes(r *registry, secondaryIndexes int) {
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
 		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(geoZonesStr)),
+		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
+		MinVersion: `v19.1.0`,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			firstAZ := geoZones[0]
 			roachNodes := c.Range(1, nodes)
