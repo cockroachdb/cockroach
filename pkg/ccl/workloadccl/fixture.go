@@ -190,7 +190,7 @@ func csvServerPaths(
 	}
 
 	var paths []string
-	for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; {
+	for rowIdx := 0; ; {
 		chunkRowStart, chunkRowEnd := rowIdx, rowIdx+rowStep
 		if chunkRowEnd > table.InitialRows.NumBatches {
 			chunkRowEnd = table.InitialRows.NumBatches
@@ -215,6 +215,9 @@ func csvServerPaths(
 		paths = append(paths, path)
 
 		rowIdx = chunkRowEnd
+		if rowIdx >= table.InitialRows.NumBatches {
+			break
+		}
 	}
 	return paths
 }
