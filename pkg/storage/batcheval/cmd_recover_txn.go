@@ -104,15 +104,20 @@ func RecoverTxn(
 		// changed its epoch or timestamp, and the only other valid status
 		// for it to have is COMMITTED.
 		switch reply.RecoveredTxn.Status {
-		case roachpb.ABORTED:
-			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-				"programming error: found ABORTED record for implicitly committed transaction: %v", reply.RecoveredTxn,
-			))
-		case roachpb.PENDING:
+		case roachpb.PENDING, roachpb.ABORTED:
 			// Once implicitly committed, the transaction should never move back
-			// to the PENDING status.
+			// to the PENDING status and it should never be ABORTED.
+			//
+			// In order for the second statement to be true, we need to ensure
+			// that transaction records that are GCed after being COMMITTED are
+			// never re-written as ABORTED. We used to allow this to happen when
+			// PushTxn requests found missing transaction records because it was
+			// harmless, but we now use to write timestamp cache to avoid
+			// needing to ever do so. If this ever becomes possible again, we'll
+			// need to relax this check.
 			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-				"programming error: found PENDING record for implicitly committed transaction: %v", reply.RecoveredTxn,
+				"programming error: found %s record for implicitly committed transaction: %v",
+				reply.RecoveredTxn.Status, reply.RecoveredTxn,
 			))
 		case roachpb.STAGING, roachpb.COMMITTED:
 			if was, is := args.Txn.Epoch, reply.RecoveredTxn.Epoch; was != is {
@@ -145,6 +150,24 @@ func RecoverTxn(
 		case roachpb.ABORTED:
 			// The transaction was aborted by some other process.
 			return result.Result{}, nil
+		case roachpb.COMMITTED:
+			// If we believe we successfully prevented a write that was in-flight
+			// while a transaction was performing a parallel commit then we would
+			// expect that the transaction record could only be committed if it has
+			// a higher epoch or timestamp (see legalChange). This is true if we did
+			// actually prevent the in-flight write.
+			//
+			// However, due to QueryIntent's implementation, a successful intent
+			// write that was already resolved after the parallel commit finished
+			// can be mistaken for a missing in-flight write by a recovery process.
+			// This ambiguity is harmless, as the transaction stays committed either
+			// way, but it means that we can't be quite as strict about what we
+			// assert here as we would like to be.
+			//
+			// If QueryIntent could detect that a resolved intent satisfied its
+			// query then we could assert that the transaction record can only be
+			// COMMITTED if legalChange=true.
+			return result.Result{}, nil
 		case roachpb.PENDING:
 			if args.Txn.Epoch < reply.RecoveredTxn.Epoch {
 				// Recovery not immediately needed because the transaction is
@@ -158,18 +181,6 @@ func RecoverTxn(
 			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
 				"programming error: cannot recover PENDING transaction in same epoch: %s", reply.RecoveredTxn,
 			))
-		case roachpb.COMMITTED:
-			// If we successfully prevented a write that was in-flight while a
-			// transaction was performing a parallel commit when we should never
-			// find that transaction committed without having bumped either its
-			// epoch or timestamp.
-			if !legalChange {
-				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-					"programming error: found COMMITTED record for prevented implicit commit: %v", reply.RecoveredTxn,
-				))
-			}
-			// The transaction was committed with a higher epoch or timestamp.
-			return result.Result{}, nil
 		case roachpb.STAGING:
 			if legalChange {
 				// Recovery not immediately needed because the transaction is

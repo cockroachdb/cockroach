@@ -158,7 +158,6 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 		{
 			name:                "transaction commit after write prevented",
 			implicitlyCommitted: false,
-			expError:            "found COMMITTED record for prevented implicit commit",
 			changedTxn: func() roachpb.Transaction {
 				txnCopy := txn
 				txnCopy.Status = roachpb.COMMITTED
