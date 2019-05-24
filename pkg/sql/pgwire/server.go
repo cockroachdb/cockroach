@@ -86,6 +86,12 @@ var (
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaNewConns = metric.Metadata{
+		Name:        "sql.new_conns",
+		Help:        "Counter of the number of sql connections created",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaBytesIn = metric.Metadata{
 		Name:        "sql.bytesin",
 		Help:        "Number of sql bytes received",
@@ -162,6 +168,7 @@ type ServerMetrics struct {
 	BytesInCount   *metric.Counter
 	BytesOutCount  *metric.Counter
 	Conns          *metric.Gauge
+	NewConns       *metric.Counter
 	ConnMemMetrics sql.MemoryMetrics
 	SQLMemMetrics  sql.MemoryMetrics
 }
@@ -173,6 +180,7 @@ func makeServerMetrics(
 		BytesInCount:   metric.NewCounter(MetaBytesIn),
 		BytesOutCount:  metric.NewCounter(MetaBytesOut),
 		Conns:          metric.NewGauge(MetaConns),
+		NewConns:       metric.NewCounter(MetaNewConns),
 		ConnMemMetrics: sql.MakeMemMetrics("conns", histogramWindow),
 		SQLMemMetrics:  sqlMemMetrics,
 	}
@@ -429,6 +437,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	// DrainClient() waits for that number to drop to zero,
 	// so we don't want it to oscillate unnecessarily.
 	if !draining {
+		s.metrics.NewConns.Inc(1)
 		s.metrics.Conns.Inc(1)
 		defer s.metrics.Conns.Dec(1)
 	}
