@@ -21,6 +21,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 // AutoStatsClusterSettingName is the name of the automatic stats collection
@@ -422,8 +422,7 @@ func (r *Refresher) maybeRefreshStats(
 	}
 
 	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
-		pgerr, ok := errors.Cause(err).(*pgerror.Error)
-		if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
+		if errors.Is(err, ConcurrentCreateStatsError) {
 			// Another stats job was already running. Attempt to reschedule this
 			// refresh.
 			if mustRefresh {
@@ -548,3 +547,15 @@ func (r autoStatsRand) randInt(n int64) int64 {
 	defer r.Unlock()
 	return r.Int63n(n)
 }
+
+type concurrentCreateStatisticsError struct{}
+
+var _ error = concurrentCreateStatisticsError{}
+
+func (concurrentCreateStatisticsError) Error() string {
+	return "another CREATE STATISTICS job is already running"
+}
+
+// ConcurrentCreateStatsError is reported when two CREATE STATISTICS jobs
+// are issued concurrently. This is a sentinel error.
+var ConcurrentCreateStatsError error = concurrentCreateStatisticsError{}
