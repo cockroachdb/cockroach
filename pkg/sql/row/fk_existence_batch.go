@@ -162,5 +162,5 @@ func (f *SpanKVFetcher) nextBatch(
 
 // getRangesInfo implements the kvBatchFetcher interface.
 func (f *SpanKVFetcher) getRangesInfo() []roachpb.RangeInfo {
-	panic("getRangesInfo() called on SpanKVFetcher")
+	panic(pgerror.AssertionFailedf("getRangesInfo() called on SpanKVFetcher"))
 }

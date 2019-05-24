@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -233,7 +234,7 @@ func (rf *CFetcher) Init(
 	returnRangeInfo bool, isCheck bool, tables ...FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
-		panic("no tables to fetch from")
+		return pgerror.AssertionFailedf("no tables to fetch from")
 	}
 
 	rf.reverse = reverse
@@ -330,7 +331,7 @@ func (rf *CFetcher) Init(
 		} else {
 			table.indexColOrdinals[i] = -1
 			if neededCols.Contains(int(id)) {
-				panic(fmt.Sprintf("needed column %d not in colIdxMap", id))
+				return pgerror.AssertionFailedf("needed column %d not in colIdxMap", id)
 			}
 		}
 
@@ -411,7 +412,7 @@ func (rf *CFetcher) StartScan(
 	traceKV bool,
 ) error {
 	if len(spans) == 0 {
-		panic("no spans")
+		return pgerror.AssertionFailedf("no spans")
 	}
 
 	rf.traceKV = traceKV
