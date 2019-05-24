@@ -39,7 +39,7 @@ enum ColType {
 
 function findCompSpan(s: protos.cockroach.util.tracing.ComponentSamples.ISample) {
   for (var idx in s.spans) {
-    if (s.spans[idx].tags["component"]) {
+    if (s.spans[idx].tags["syscomponent"]) {
       return s.spans[idx];
     }
   }
@@ -70,12 +70,12 @@ class Column {
     case ColType.Stuck: return s.stuck ? "Yes" : "No";
     case ColType.Error: return s.error ? s.error : "";
     case ColType.Attribute:
-      if (this.name in s.attributes) {
+      if (this.name in compSp.tags) {
         if (sort) {
-          const num: number = Number(s.attributes[this.name]);
-          return (isNaN(num)) ? s.attributes[this.name] : num;
+          const num: number = Number(compSp.tags[this.name]);
+          return (isNaN(num)) ? compSp.tags[this.name] : num;
         }
-        return s.attributes[this.name];
+        return compSp.tags[this.name];
       }
       return "";
     }
@@ -205,7 +205,7 @@ export class SampleTable extends React.Component<SampleTableProps> {
 
     const attrKeys: {[k: string]: boolean} = {};
     _.map(samples, (s) => {
-      _.map(s.attributes, (v, k) => {
+      _.map(findCompSpan(s).tags, (v, k) => {
         attrKeys[k] = true;
       });
     });

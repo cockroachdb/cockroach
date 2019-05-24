@@ -167,9 +167,9 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		Settings:                    st,
-		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
-		Clock:                       clock,
+		Settings:   st,
+		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+		Clock:      clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
@@ -2848,6 +2848,8 @@ func (s *Store) Send(
 		}
 	}
 
+	ctx, csp := tracing.StartComponentSpan(ctx, s.cfg.AmbientCtx.Tracer, "storage.store.send", "send")
+	csp.SetTag("batch", &ba)
 	defer func() {
 		if r := recover(); r != nil {
 			// On panic, don't run the defer. It's probably just going to panic
@@ -2889,6 +2891,13 @@ func (s *Store) Send(
 		} else {
 			br.Now = now
 		}
+		if br != nil {
+			csp.SetTag("response", br)
+			if br.Txn != nil {
+				csp.SetTag("txn", br.Txn)
+			}
+		}
+		csp.FinishWithError(pErr.GoError())
 	}()
 
 	if ba.Txn != nil {

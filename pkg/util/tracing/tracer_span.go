@@ -413,8 +413,13 @@ func (s *span) setTagInner(key string, value interface{}, locked bool) opentraci
 }
 
 func (s *span) getTags() map[string]string {
-	result := make(map[string]string)
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getTagsLocked()
+}
+
+func (s *span) getTagsLocked() map[string]string {
+	result := make(map[string]string)
 	for k, v := range s.mu.tags {
 		switch v := v.(type) {
 		case bool, string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, float32, float64, complex64, complex128:
@@ -424,14 +429,13 @@ func (s *span) getTags() map[string]string {
 				result[k] = fmt.Sprint(v)
 			} else {
 				if bytes, err := json.MarshalIndent(v, "", "    "); err != nil {
-					result[k] = fmt.Sprintf("%+v", v)
+					result[k] = fmt.Sprintf("%+v [%s]", v, err)
 				} else {
 					result[k] = string(bytes)
 				}
 			}
 		}
 	}
-	s.mu.Unlock()
 	return result
 }
 
@@ -607,11 +611,7 @@ func (ss *spanGroup) getSpans() []RecordedSpan {
 			}
 		}
 		if len(s.mu.tags) > 0 {
-			rs.Tags = make(map[string]string)
-			for k, v := range s.mu.tags {
-				// We encode the tag values as strings.
-				rs.Tags[k] = fmt.Sprint(v)
-			}
+			rs.Tags = s.getTagsLocked()
 		}
 		rs.Logs = make([]RecordedSpan_LogRecord, len(s.mu.recordedLogs))
 		for i, r := range s.mu.recordedLogs {

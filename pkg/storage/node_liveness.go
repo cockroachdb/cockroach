@@ -456,7 +456,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
 
-		var cspIsOpen bool
+		var cspIsStarted bool
 		var ctx context.Context
 		var csp tracing.ComponentSpan
 
@@ -464,14 +464,15 @@ func (nl *NodeLiveness) StartHeartbeat(
 			select {
 			case <-nl.heartbeatToken:
 			case <-stopper.ShouldStop():
-				if cspIsOpen {
+				if cspIsStarted {
 					csp.Finish()
 				}
 				return
 			}
-			if !cspIsOpen {
+			if !cspIsStarted {
 				ctx, csp = tracing.StartComponentSpan(rootCtx, nl.ambientCtx.Tracer, "storage.liveness", "heartbeat liveness loop")
 				ctx = ambient.AnnotateCtx(ctx)
+				cspIsStarted = true
 			}
 			// Give the context a timeout approximately as long as the time we
 			// have left before our liveness entry expires.
@@ -503,14 +504,14 @@ func (nl *NodeLiveness) StartHeartbeat(
 				liveness, _ := nl.Self()
 				csp.SetTag("after heartbeat", liveness)
 				csp.Finish()
-				cspIsOpen = false
+				cspIsStarted = false
 			}
 
 			nl.heartbeatToken <- struct{}{}
 			select {
 			case <-ticker.C:
 			case <-stopper.ShouldStop():
-				if cspIsOpen {
+				if cspIsStarted {
 					csp.Finish()
 				}
 				return

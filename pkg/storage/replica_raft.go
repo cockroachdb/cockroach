@@ -1789,7 +1789,6 @@ func (r *Replica) processRaftCommand(
 		csp.SetTag("logical_ops", raftCmd.LogicalOpLog)
 	}
 	defer func() {
-		csp.SetTag("reply", response.Reply)
 		if len(response.Intents) > 0 {
 			csp.SetTag("intents", response.Intents)
 		}

@@ -169,6 +169,12 @@ function genSpans(addSample: function,
     duration: duration,
     operation: component ? component + ": op" : "op";
     logs: createRandomLogLines(start_time, duration),
+    tags: {
+      replica_id: Math.floor(Math.random() * 1000000),
+      store_id: Math.floor(Math.random() * 20),
+      input: "Random input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value",
+      output: "Random output value"
+    },
   });
   var spans: protos.cockroach.util.tracing.RecordedSpan[] = [root_span];
   spans.push(...genChildSpans(depth, addSample, root_span));
@@ -184,12 +190,6 @@ function genSample(node_id: number, component: string, addSample: function,
     error: Math.random() < 0.10 ? "Random error message" : null,
     pending: Math.random() < 0.05 ? true : false,
     stuck: Math.random() < 0.0001 ? true : false,
-    attributes: {
-      replica_id: Math.floor(Math.random() * 1000000),
-      store_id: Math.floor(Math.random() * 20),
-      input: "Random input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value\nRandom input value",
-      output: "Random output value"
-    },
     spans: genSpans(addSample, component, depth, trace_id, parent_span_id, start_time, duration),
   }));
 }

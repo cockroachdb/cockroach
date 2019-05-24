@@ -28,7 +28,7 @@ import (
 	"github.com/rcrowley/go-metrics"
 )
 
-const ComponentTagName string = "component"
+const ComponentTagName string = "syscomponent"
 
 // componentTraces wraps a ComponentTraces protobuf message with a
 // mutex for concurrency, sample & target counts for reservoir
@@ -42,10 +42,24 @@ type componentTraces struct {
 	pendingSpans map[uint64]*ComponentSpan
 }
 
-func (ca *componentTraces) addPendingSpan(c *ComponentSpan) {
-	ca.Lock()
-	ca.pendingSpans[c.Span.(*span).SpanID] = c
-	ca.Unlock()
+func (ct *componentTraces) addPendingSpan(c *ComponentSpan) {
+	ct.Lock()
+	ct.pendingSpans[c.Span.(*span).SpanID] = c
+	ct.Unlock()
+}
+
+func (ct *componentTraces) removePendingSpanAndAddSample(
+	c *ComponentSpan, sample ComponentSamples_Sample) {
+	ct.Lock()
+	delete(ct.pendingSpans, c.Span.(*span).SpanID)
+	ct.Samples = append(ct.Samples, sample)
+	ct.Unlock()
+}
+
+func (ct *componentTraces) removePendingSpan(c *ComponentSpan) {
+	ct.Lock()
+	delete(ct.pendingSpans, c.Span.(*span).SpanID)
+	ct.Unlock()
 }
 
 // recording wraps a map of componentTraces objects with a mutex for
@@ -184,10 +198,9 @@ func Record(stop <-chan time.Time, targetCount int64) map[string]ComponentTraces
 		for _, ps := range pendingSpans {
 			sp := ps.Span.(*span)
 			sample := ComponentSamples_Sample{
-				Attributes: sp.getTags(),
-				Stuck:      stuck,
-				Pending:    true,
-				Spans:      GetRecording(sp),
+				Stuck:   stuck,
+				Pending: true,
+				Spans:   GetRecording(sp),
 			}
 			ct.Samples = append(ct.Samples, sample)
 		}
@@ -287,19 +300,12 @@ func startRecordingComponent(csp *ComponentSpan) {
 func finishRecordingComponent(csp *ComponentSpan, sample ComponentSamples_Sample) {
 	activeRecordings.RLock()
 	for _, r := range activeRecordings.values {
-		ct := r.getTraces(csp.component)
-		ct.Lock()
-		ct.Samples = append(ct.Samples, sample)
-		delete(ct.pendingSpans, csp.Span.(*span).SpanID)
-		ct.Unlock()
+		r.getTraces(csp.component).removePendingSpanAndAddSample(csp, sample)
 	}
 	activeRecordings.RUnlock()
 
 	if csp.stuck {
-		ct := stuckRecording.getTraces(csp.component)
-		ct.Lock()
-		delete(ct.pendingSpans, csp.Span.(*span).SpanID)
-		ct.Unlock()
+		stuckRecording.getTraces(csp.component).removePendingSpan(csp)
 	}
 }
 
@@ -384,10 +390,9 @@ func (c *ComponentSpan) Finish() {
 	errStr := strings.Join(errStrs, "\n")
 
 	sample := ComponentSamples_Sample{
-		Attributes: c.Span.(*span).getTags(),
-		Error:      errStr,
-		Stuck:      c.stuck,
-		Spans:      spans,
+		Error: errStr,
+		Stuck: c.stuck,
+		Spans: spans,
 	}
 	finishRecordingComponent(c, sample)
 
@@ -396,7 +401,7 @@ func (c *ComponentSpan) Finish() {
 		// If stuck, then this ComponentSpan is a child of the original
 		// ComponentSpan (which is now c.pSpan) and that original ComponentSpan was
 		// orphaned when MarkAsStuck() was called - and so it's up to us to finish
-		// it. !!! explain better
+		// it.
 		c.pSpan.Finish()
 	}
 }
@@ -412,9 +417,9 @@ func (c *ComponentSpan) MarkAsStuck(ctx context.Context) context.Context {
 	if c.stuck {
 		return ctx
 	}
+	incStuckCount(c.component, 1)
 	if c.sampled {
 		c.stuck = true
-		incStuckCount(c.component, 1)
 		stuckRecording.getTraces(c.component).addPendingSpan(c)
 		return ctx
 	}
@@ -506,9 +511,6 @@ func startComponentSpanInner(
 		cSpan = t.StartSpan(operation, Recordable, LogTagsFromCtx(ctx))
 	} else {
 		// Otherwise, start a child span which uses its own recording group.
-		if !separateRecording {
-			fmt.Printf("using parent %+v recording for %s\n", pSpan, component)
-		}
 		cSpan = StartChildSpan(operation, pSpan, logtags.FromContext(ctx), separateRecording)
 	}
 	cSpan.SetTag(ComponentTagName, component)
@@ -542,7 +544,7 @@ func parentRecordingHasComponentSpan(osp opentracing.Span) bool {
 	defer rg.Unlock()
 	for _, s := range rg.spans {
 		s.mu.Lock()
-		_, ok := s.mu.tags["component"]
+		_, ok := s.mu.tags[ComponentTagName]
 		s.mu.Unlock()
 		if ok {
 			return true
