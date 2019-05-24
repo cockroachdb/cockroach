@@ -1012,9 +1012,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 }
 
 func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
-	if f.Filter != nil ||
-		f.Type == tree.DistinctFuncType ||
-		f.WindowDef.RefName != "" {
+	if f.WindowDef.RefName != "" {
 		panic(unimplementedWithIssueDetailf(34251, "", "unsupported window function"))
 	}
 

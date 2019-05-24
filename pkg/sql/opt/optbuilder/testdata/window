@@ -374,7 +374,23 @@ error (0A000): DISTINCT is not implemented for window functions
 build
 SELECT avg(k) FILTER (WHERE k > 5) OVER () FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: avg:8(decimal)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg_1_filter:9(bool)
+      ├── project
+      │    ├── columns: avg_1_filter:9(bool) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         └── gt [type=bool]
+      │              ├── variable: k [type=int]
+      │              └── const: 5 [type=int]
+      └── windows
+           └── agg-filter [type=decimal]
+                ├── avg [type=decimal]
+                │    └── variable: k [type=int]
+                └── variable: avg_1_filter [type=bool]
 
 build
 SELECT avg(k), max(v) OVER () FROM kv ORDER BY 1
@@ -1326,3 +1342,55 @@ project
       └── plus [type=decimal]
            ├── const: 1 [type=decimal]
            └── variable: avg [type=decimal]
+
+# Filter.
+
+build
+SELECT rank() FILTER (WHERE k = 1) OVER () FROM kv
+----
+error (42809): FILTER specified but rank() is not an aggregate function
+
+build
+SELECT avg(f) FILTER (WHERE k = 1) OVER () FROM kv
+----
+project
+ ├── columns: avg:8(float)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(float) avg_1_filter:9(bool)
+      ├── project
+      │    ├── columns: avg_1_filter:9(bool) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         └── eq [type=bool]
+      │              ├── variable: k [type=int]
+      │              └── const: 1 [type=int]
+      └── windows
+           └── agg-filter [type=float]
+                ├── avg [type=float]
+                │    └── variable: f [type=float]
+                └── variable: avg_1_filter [type=bool]
+
+build
+SELECT count(*) FILTER (WHERE true) OVER (), count(*) FILTER (WHERE false) OVER () FROM kv
+----
+project
+ ├── columns: count:8(int) count:9(int)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) count:8(int) count:9(int) count_1_arg1:10(bool!null) count_2_filter:11(bool!null)
+      ├── project
+      │    ├── columns: count_1_arg1:10(bool!null) count_2_filter:11(bool!null) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         ├── true [type=bool]
+      │         └── false [type=bool]
+      └── windows
+           ├── agg-filter [type=int]
+           │    ├── count [type=int]
+           │    │    └── variable: count_1_arg1 [type=bool]
+           │    └── variable: count_1_arg1 [type=bool]
+           └── agg-filter [type=int]
+                ├── count [type=int]
+                │    └── variable: count_1_arg1 [type=bool]
+                └── variable: count_2_filter [type=bool]

@@ -76,6 +76,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	argLists := make([][]opt.ScalarExpr, len(inScope.windows))
 	partitions := make([]opt.ColSet, len(inScope.windows))
 	orderings := make([]physical.OrderingChoice, len(inScope.windows))
+	filterCols := make([]opt.ColumnID, len(inScope.windows))
 	windowFrames := make([]tree.WindowFrame, len(inScope.windows))
 	argScope := outScope.push()
 	argScope.appendColumnsFromScope(outScope)
@@ -144,6 +145,25 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 
 		if w.frame != nil {
 			windowFrames[i] = *w.frame
+		}
+
+		if w.Filter != nil {
+			defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+			b.semaCtx.Properties.Require("FILTER", tree.RejectSpecial)
+
+			te := inScope.resolveAndRequireType(w.Filter, types.Bool)
+
+			col := argScope.findExistingCol(te)
+			if col == nil {
+				col = b.synthesizeColumn(
+					argScope,
+					fmt.Sprintf("%s_%d_filter", w.def.Name, i+1),
+					te.ResolvedType(),
+					te,
+					b.buildScalar(te, inScope, nil, nil, nil),
+				)
+			}
+			filterCols[i] = col.id
 		}
 
 		// Fill this in with the default so that we don't need nil checks
@@ -219,6 +239,13 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 					inScope,
 					nil, nil, nil,
 				),
+			)
+		}
+
+		if filterCols[i] != 0 {
+			fn = b.factory.ConstructAggFilter(
+				fn,
+				b.factory.ConstructVariable(filterCols[i]),
 			)
 		}
 
