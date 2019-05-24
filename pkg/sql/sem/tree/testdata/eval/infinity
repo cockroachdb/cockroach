@@ -1,14 +1,4 @@
 eval
-1.0:::float / 0.0
-----
-+Inf
-
-eval
--1.0:::float * (1.0:::float / 0.0)
-----
--Inf
-
-eval
 power(0::decimal, -1)
 ----
 Infinity
