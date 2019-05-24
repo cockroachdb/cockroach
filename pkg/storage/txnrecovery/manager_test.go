@@ -50,27 +50,57 @@ func makeStagingTransaction(clock *hlc.Clock) roachpb.Transaction {
 	return txn
 }
 
+type metricVals struct {
+	attemptsPending      int64
+	attempts             int64
+	successesAsCommitted int64
+	successesAsAborted   int64
+	successesAsPending   int64
+	failures             int64
+}
+
+func (v metricVals) merge(o metricVals) metricVals {
+	v.attemptsPending += o.attemptsPending
+	v.attempts += o.attempts
+	v.successesAsCommitted += o.successesAsCommitted
+	v.successesAsAborted += o.successesAsAborted
+	v.successesAsPending += o.successesAsPending
+	v.failures += o.failures
+	return v
+}
+
+func assertMetrics(t *testing.T, m Manager, v metricVals) {
+	assert.Equal(t, v.attemptsPending, m.Metrics().AttemptsPending.Value())
+	assert.Equal(t, v.attempts, m.Metrics().Attempts.Count())
+	assert.Equal(t, v.successesAsCommitted, m.Metrics().SuccessesAsCommitted.Count())
+	assert.Equal(t, v.successesAsAborted, m.Metrics().SuccessesAsAborted.Count())
+	assert.Equal(t, v.successesAsPending, m.Metrics().SuccessesAsPending.Count())
+	assert.Equal(t, v.failures, m.Metrics().Failures.Count())
+}
+
 // TestResolveIndeterminateCommit tests successful indeterminate commit
 // resolution attempts. It tests the case where an intent is prevented
 // and the case where an intent is not prevented.
 func TestResolveIndeterminateCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var mockSender client.Sender
-	m, clock, stopper := makeManager(&mockSender)
-	defer stopper.Stop(context.Background())
-
-	txn := makeStagingTransaction(clock)
-	txn.InFlightWrites = []roachpb.SequencedWrite{
-		{Key: roachpb.Key("a"), Sequence: 1},
-		{Key: roachpb.Key("b"), Sequence: 2},
-	}
-
 	testutils.RunTrueAndFalse(t, "prevent", func(t *testing.T, prevent bool) {
+		var mockSender client.Sender
+		m, clock, stopper := makeManager(&mockSender)
+		defer stopper.Stop(context.Background())
+
+		txn := makeStagingTransaction(clock)
+		txn.InFlightWrites = []roachpb.SequencedWrite{
+			{Key: roachpb.Key("a"), Sequence: 1},
+			{Key: roachpb.Key("b"), Sequence: 2},
+		}
+
 		mockSender = client.SenderFunc(func(
 			_ context.Context, ba roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			// Probing Phase.
+			assertMetrics(t, m, metricVals{attemptsPending: 1, attempts: 1})
+
 			assert.Equal(t, 3, len(ba.Requests))
 			assert.IsType(t, &roachpb.QueryTxnRequest{}, ba.Requests[0].GetInner())
 			assert.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
@@ -89,6 +119,8 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 				_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				// Recovery Phase.
+				assertMetrics(t, m, metricVals{attemptsPending: 1, attempts: 1})
+
 				assert.Equal(t, 1, len(ba.Requests))
 				assert.IsType(t, &roachpb.RecoverTxnRequest{}, ba.Requests[0].GetInner())
 
@@ -110,6 +142,7 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 			return br, nil
 		})
 
+		assertMetrics(t, m, metricVals{})
 		iceErr := roachpb.NewIndeterminateCommitError(txn)
 		resTxn, err := m.ResolveIndeterminateCommit(context.Background(), iceErr)
 		assert.NotNil(t, resTxn)
@@ -117,8 +150,10 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 
 		if !prevent {
 			assert.Equal(t, roachpb.COMMITTED, resTxn.Status)
+			assertMetrics(t, m, metricVals{attempts: 1, successesAsCommitted: 1})
 		} else {
 			assert.Equal(t, roachpb.ABORTED, resTxn.Status)
+			assertMetrics(t, m, metricVals{attempts: 1, successesAsAborted: 1})
 		}
 	})
 }
@@ -140,10 +175,15 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 		{Key: roachpb.Key("b"), Sequence: 2},
 	}
 
+	// Maintain an expected aggregation of metric updates.
+	var expMetrics metricVals
+	assertMetrics(t, m, expMetrics)
+
 	testCases := []struct {
 		name          string
 		duringProbing bool
 		changedTxn    roachpb.Transaction
+		metricImpact  metricVals
 	}{
 		{
 			name:          "transaction commit during probe",
@@ -154,6 +194,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				txnCopy.InFlightWrites = nil
 				return txnCopy
 			}(),
+			metricImpact: metricVals{attempts: 1, successesAsCommitted: 1},
 		},
 		{
 			name:          "transaction abort during probe",
@@ -164,6 +205,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				txnCopy.InFlightWrites = nil
 				return txnCopy
 			}(),
+			metricImpact: metricVals{attempts: 1, successesAsAborted: 1},
 		},
 		{
 			name:          "transaction restart during probe",
@@ -173,6 +215,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				txnCopy.BumpEpoch()
 				return txnCopy
 			}(),
+			metricImpact: metricVals{attempts: 1, successesAsPending: 1},
 		},
 		{
 			name:          "transaction timestamp increase during probe",
@@ -182,6 +225,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				txnCopy.Timestamp = txnCopy.Timestamp.Add(1, 0)
 				return txnCopy
 			}(),
+			metricImpact: metricVals{attempts: 1, successesAsPending: 1},
 		},
 		{
 			name:          "transaction commit during recovery",
@@ -192,6 +236,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				txnCopy.InFlightWrites = nil
 				return txnCopy
 			}(),
+			metricImpact: metricVals{attempts: 1, successesAsCommitted: 1},
 		},
 		{
 			name:          "transaction abort during recovery",
@@ -202,6 +247,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				txnCopy.InFlightWrites = nil
 				return txnCopy
 			}(),
+			metricImpact: metricVals{attempts: 1, successesAsAborted: 1},
 		},
 		{
 			name:          "transaction restart during recovery",
@@ -211,6 +257,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				txnCopy.BumpEpoch()
 				return txnCopy
 			}(),
+			metricImpact: metricVals{attempts: 1, successesAsPending: 1},
 		},
 		{
 			name:          "transaction timestamp increase during recovery",
@@ -220,6 +267,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				txnCopy.Timestamp = txnCopy.Timestamp.Add(1, 0)
 				return txnCopy
 			}(),
+			metricImpact: metricVals{attempts: 1, successesAsPending: 1},
 		},
 	}
 	for _, c := range testCases {
@@ -228,6 +276,8 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				// Probing Phase.
+				assertMetrics(t, m, expMetrics.merge(metricVals{attemptsPending: 1, attempts: 1}))
+
 				assert.Equal(t, 3, len(ba.Requests))
 				assert.IsType(t, &roachpb.QueryTxnRequest{}, ba.Requests[0].GetInner())
 				assert.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
@@ -251,6 +301,7 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 				) (*roachpb.BatchResponse, *roachpb.Error) {
 					// Recovery Phase.
 					assert.False(t, c.duringProbing, "the recovery phase should not be run")
+					assertMetrics(t, m, expMetrics.merge(metricVals{attemptsPending: 1, attempts: 1}))
 
 					assert.Equal(t, 1, len(ba.Requests))
 					assert.IsType(t, &roachpb.RecoverTxnRequest{}, ba.Requests[0].GetInner())
@@ -272,6 +323,9 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 			assert.NotNil(t, resTxn)
 			assert.Equal(t, c.changedTxn, *resTxn)
 			assert.Nil(t, err)
+
+			expMetrics = expMetrics.merge(c.metricImpact)
+			assertMetrics(t, m, expMetrics)
 		})
 	}
 }
