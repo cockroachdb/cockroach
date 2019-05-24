@@ -221,12 +221,12 @@ func AsDBool(e Expr) (DBool, bool) {
 // optional error can be provided, which will be appended to the end of the
 // error string.
 func makeParseError(s string, typ *types.T, err error) error {
-	var suffix string
 	if err != nil {
-		suffix = fmt.Sprintf(": %v", err)
+		return pgerror.Wrapf(err, pgerror.CodeInvalidTextRepresentationError,
+			"could not parse %q as type %s", s, typ)
 	}
-	return pgerror.Newf(
-		pgerror.CodeInvalidTextRepresentationError, "could not parse %q as type %s%s", s, typ, suffix)
+	return pgerror.Newf(pgerror.CodeInvalidTextRepresentationError,
+		"could not parse %q as type %s", s, typ)
 }
 
 func makeUnsupportedComparisonMessage(d1, d2 Datum) error {
