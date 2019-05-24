@@ -253,7 +253,7 @@ func (rf *Fetcher) Init(
 	tables ...FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
-		panic("no tables to fetch from")
+		return pgerror.AssertionFailedf("no tables to fetch from")
 	}
 
 	rf.reverse = reverse
@@ -359,7 +359,7 @@ func (rf *Fetcher) Init(
 			} else {
 				table.indexColIdx[i] = -1
 				if table.neededCols.Contains(int(id)) {
-					panic(fmt.Sprintf("needed column %d not in colIdxMap", id))
+					return pgerror.AssertionFailedf("needed column %d not in colIdxMap", id)
 				}
 			}
 		}
@@ -1233,7 +1233,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 		familyID := table.desc.Families[i].ID
 		familySortedColumnIDs, ok := rh.sortedColumnFamily(familyID)
 		if !ok {
-			panic("invalid family sorted column id map")
+			return pgerror.AssertionFailedf("invalid family sorted column id map for family %d", familyID)
 		}
 
 		for _, colID := range familySortedColumnIDs {
@@ -1244,24 +1244,26 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 			}
 
 			if skip, err := rh.skipColumnInPK(colID, familyID, rowVal.Datum); err != nil {
-				log.Errorf(ctx, "unexpected error: %s", err)
-				continue
+				return pgerror.NewAssertionErrorWithWrappedErrf(err, "unable to determine skip")
 			} else if skip {
 				continue
 			}
 
 			col := colIDToColumn[colID]
+			if col == nil {
+				return pgerror.AssertionFailedf("column mapping not found for column %d", colID)
+			}
 
 			if lastColID > col.ID {
-				panic(fmt.Errorf("cannot write column id %d after %d", col.ID, lastColID))
+				return pgerror.AssertionFailedf("cannot write column id %d after %d", col.ID, lastColID)
 			}
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID
 
 			if result, err := sqlbase.EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
 				scratch); err != nil {
-				log.Errorf(ctx, "Could not re-encode column %s, value was %#v. Got error %s",
-					col.Name, rowVal.Datum, err)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err, "could not re-encode column %s, value was %#v",
+					col.Name, rowVal.Datum)
 			} else if !rowVal.BytesEqual(result) {
 				return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
 					"value failed to round-trip encode. Column=%s colIDDiff=%d Key=%s expected %#v, got: %#v",
