@@ -221,7 +221,7 @@ func isPermanentSchemaChangeError(err error) bool {
 		case pgerror.CodeSerializationFailureError, pgerror.CodeConnectionFailureError:
 			return false
 
-		case pgerror.CodeInternalError:
+		case pgerror.CodeInternalError, pgerror.CodeRangeUnavailable:
 			if strings.Contains(err.Message, context.DeadlineExceeded.Error()) {
 				return false
 			}
