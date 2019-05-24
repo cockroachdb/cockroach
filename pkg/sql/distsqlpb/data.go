@@ -146,12 +146,21 @@ func NewError(err error) *Error {
 
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	} else if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
+	}
+
+	switch e := err.(type) {
+	case *roachpb.UnhandledRetryableError:
+		return &Error{Detail: &Error_RetryableTxnError{RetryableTxnError: e}}
+	case *roachpb.NodeUnavailableError:
+		// Node failures are common enough that we shouldn't fail with
+		// assertion errors upon them. Simply signal them in a way that
+		// may make sense to a client.
 		return &Error{
-			Detail: &Error_RetryableTxnError{
-				RetryableTxnError: retryErr,
-			}}
-	} else {
+			Detail: &Error_PGError{
+				PGError: pgerror.Newf(pgerror.CodeRangeUnavailable, "%v", e),
+			},
+		}
+	default:
 		// Anything unrecognized is an "internal error".
 		return &Error{
 			Detail: &Error_PGError{
@@ -171,6 +180,9 @@ func (e *Error) ErrorDetail() error {
 	case *Error_RetryableTxnError:
 		return t.RetryableTxnError
 	default:
-		panic(fmt.Sprintf("bad error detail: %+v", t))
+		// We're receiving an error we don't know about. It's all right,
+		// it's still an error, just one we didn't expect. Let it go
+		// through. We'll pick it up in reporting.
+		return pgerror.AssertionFailedf("unknown error detail type: %+v", t)
 	}
 }
