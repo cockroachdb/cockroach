@@ -145,6 +145,24 @@ func RecoverTxn(
 		case roachpb.ABORTED:
 			// The transaction was aborted by some other process.
 			return result.Result{}, nil
+		case roachpb.COMMITTED:
+			// If we believe we successfully prevented a write that was in-flight
+			// while a transaction was performing a parallel commit then we would
+			// expect that the transaction record could only be committed if it has
+			// a higher epoch or timestamp (see legalChange). This is true if we did
+			// actually prevent the in-flight write.
+			//
+			// However, due to QueryIntent's implementation, a successful intent
+			// write that was already resolved after the parallel commit finished
+			// can be mistaken for a missing in-flight write by a recovery process.
+			// This ambiguity is harmless, as the transaction stays committed either
+			// way, but it means that we can't be quite as strict about what we
+			// assert here as we would like to be.
+			//
+			// If QueryIntent could detect that a resolved intent satisfied its
+			// query then we could assert that the transaction record can only be
+			// COMMITTED if legalChange=true.
+			return result.Result{}, nil
 		case roachpb.PENDING:
 			if args.Txn.Epoch < reply.RecoveredTxn.Epoch {
 				// Recovery not immediately needed because the transaction is
@@ -158,18 +176,6 @@ func RecoverTxn(
 			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
 				"programming error: cannot recover PENDING transaction in same epoch: %s", reply.RecoveredTxn,
 			))
-		case roachpb.COMMITTED:
-			// If we successfully prevented a write that was in-flight while a
-			// transaction was performing a parallel commit when we should never
-			// find that transaction committed without having bumped either its
-			// epoch or timestamp.
-			if !legalChange {
-				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-					"programming error: found COMMITTED record for prevented implicit commit: %v", reply.RecoveredTxn,
-				))
-			}
-			// The transaction was committed with a higher epoch or timestamp.
-			return result.Result{}, nil
 		case roachpb.STAGING:
 			if legalChange {
 				// Recovery not immediately needed because the transaction is
