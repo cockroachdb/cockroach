@@ -70,6 +70,69 @@ eval
 ----
 NULL
 
+# Regression test for #37547 - ensure that null RHS of comparisons with
+# suboperators are correctly handled. A null RHS always results in null.
+eval
+1 = ANY(NULL::int[])
+----
+NULL
+
+eval
+1 = SOME(NULL::int[])
+----
+NULL
+
+eval
+1 = ALL(NULL::int[])
+----
+NULL
+
+eval
+NULL::int = ANY(NULL::int[])
+----
+NULL
+
+eval
+NULL::int = SOME(NULL::int[])
+----
+NULL
+
+eval
+NULL::int = ALL(NULL::int[])
+----
+NULL
+
+# A null LHS has different behavior if the array is empty or not
+eval
+NULL::int = ANY(ARRAY[1,2])
+----
+NULL
+
+eval
+NULL::int = SOME(ARRAY[1,2])
+----
+NULL
+
+eval
+NULL::int = ALL(ARRAY[1,2])
+----
+NULL
+
+eval
+NULL::int = ANY(ARRAY[]::int[])
+----
+false
+
+eval
+NULL::int = SOME(ARRAY[]::int[])
+----
+false
+
+eval
+NULL::int = ALL(ARRAY[]::int[])
+----
+true
+
 eval
 1 = ALL (ARRAY[1, 2, NULL])
 ----

@@ -3674,7 +3674,9 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if op.hasSubOperator() {
 		var datums Datums
 		// Right is either a tuple or an array of Datums.
-		if tuple, ok := AsDTuple(right); ok {
+		if !expr.fn.NullableArgs && right == DNull {
+			return DNull, nil
+		} else if tuple, ok := AsDTuple(right); ok {
 			datums = tuple.D
 		} else if array, ok := AsDArray(right); ok {
 			datums = array.Array
