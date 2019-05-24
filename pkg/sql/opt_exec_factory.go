@@ -837,7 +837,7 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 			args:           wi.Exprs[i].Exprs,
 			argsIdxs:       argsIdxs,
 			window:         p,
-			filterColIdx:   noFilterIdx,
+			filterColIdx:   wi.FilterIdxs[i],
 			outputColIdx:   wi.OutputIdxs[i],
 			partitionIdxs:  partitionIdxs,
 			columnOrdering: wi.Ordering,

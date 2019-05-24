@@ -1373,6 +1373,18 @@ func (b *Builder) extractToOffset(e opt.ScalarExpr) (_ opt.ScalarExpr, _ bool) {
 	return b.extractToOffset(e.Child(0).(opt.ScalarExpr))
 }
 
+// extractFilter extracts a FILTER expression from a window function tower.
+// Returns the expression and true if there was a filter, and false otherwise.
+func (b *Builder) extractFilter(e opt.ScalarExpr) (opt.ScalarExpr, bool) {
+	if opt.IsWindowOp(e) || opt.IsAggregateOp(e) {
+		return nil, false
+	}
+	if filter, ok := e.(*memo.AggFilterExpr); ok {
+		return filter.Filter, true
+	}
+	return b.extractFilter(e.Child(0).(opt.ScalarExpr))
+}
+
 // extractWindowFunction extracts the window function being computed from a
 // potential tower of modifiers attached to the Function field of a
 // WindowsItem.
@@ -1476,6 +1488,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	})
 
 	argIdxs := make([][]exec.ColumnOrdinal, len(w.Windows))
+	filterIdxs := make([]int, len(w.Windows))
 	exprs := make([]*tree.FuncExpr, len(w.Windows))
 
 	for i := range w.Windows {
@@ -1497,13 +1510,29 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		if err != nil {
 			return execPlan{}, err
 		}
+
+		var builtFilter tree.TypedExpr
+		filter, ok := b.extractFilter(item.Function)
+		if ok {
+			f, ok := filter.(*memo.VariableExpr)
+			if !ok {
+				panic(pgerror.AssertionFailedf("expected FILTER expression to be a VariableExpr"))
+			}
+			filterIdxs[i], _ = input.outputCols.Get(int(f.Col))
+
+			builtFilter, err = b.buildScalar(&ctx, filter)
+			if err != nil {
+				return execPlan{}, err
+			}
+		} else {
+			filterIdxs[i] = -1
+		}
+
 		exprs[i] = tree.NewTypedFuncExpr(
 			tree.WrapFunction(name),
 			0,
 			args,
-			// TODO(justin): support filters (only apply to aggregates, not window
-			// functions in general).
-			nil,
+			builtFilter,
 			&tree.WindowDef{
 				Partitions: partitionExprs,
 				OrderBy:    orderingExprs,
@@ -1547,6 +1576,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		Exprs:      exprs,
 		OutputIdxs: outputIdxs,
 		ArgIdxs:    argIdxs,
+		FilterIdxs: filterIdxs,
 		Partition:  partitionIdxs,
 		Ordering:   input.sqlOrdering(ord),
 	})

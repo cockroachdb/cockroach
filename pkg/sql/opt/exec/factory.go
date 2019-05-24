@@ -467,6 +467,8 @@ type WindowInfo struct {
 	// Cols is the set of columns that are returned from the windowing operator.
 	Cols sqlbase.ResultColumns
 
+	// TODO(justin): refactor this to be a single array of structs.
+
 	// Exprs is the list of window function expressions.
 	Exprs []*tree.FuncExpr
 
@@ -477,6 +479,9 @@ type WindowInfo struct {
 	// ArgIdxs is the list of column ordinals each function takes as arguments,
 	// in the same order as Exprs.
 	ArgIdxs [][]ColumnOrdinal
+
+	// FilterIdxs is the list of column indices to use as filters.
+	FilterIdxs []int
 
 	// Partition is the set of input columns to partition on.
 	Partition []ColumnOrdinal
