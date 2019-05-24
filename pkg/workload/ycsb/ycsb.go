@@ -280,6 +280,10 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 	zipfRng := rand.New(rand.NewSource(g.seed))
 	var randGen randGenerator
+	var rowIndex = new(uint64)
+	var rowCount = new(uint64)
+	*rowIndex = uint64(g.initialRows)
+	*rowCount = uint64(g.initialRows)
 
 	switch strings.ToLower(g.distribution) {
 	case "zipfian":
@@ -304,6 +308,8 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			readStmt:    readStmt,
 			insertStmt:  insertStmt,
 			updateStmts: updateStmts,
+			rowIndex:    rowIndex,
+			rowCount:    rowCount,
 			randGen:     randGen,
 			rng:         rng,
 			hashFunc:    fnv.New64(),
@@ -328,6 +334,11 @@ type ycsbWorker struct {
 	// In normal mode this is one statement per field, since the field name cannot
 	// be parametrized. In JSON mode it's a single statement.
 	updateStmts []*gosql.Stmt
+
+	// The next row index to insert.
+	rowIndex *uint64
+	// The total number of rows inserted.
+	rowCount *uint64
 
 	randGen  randGenerator // used to generate random keys
 	rng      *rand.Rand    // used to generate random strings for the values
@@ -392,22 +403,14 @@ func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
 // close together.
 // See YCSB paper section 5.3 for a complete description of how keys are chosen.
 func (yw *ycsbWorker) nextReadKey() string {
-	// TODO: In order to support workloads with INSERT, this would need to account
-	// for the number of rows growing over time. See the YCSB paper/code for how
-	// this should work. (Basically repeatedly drawing from the distribution until
-	// a sufficiently low value is chosen, but with some complications.)
-
-	// TODO(arjun): Look into why this was being hashed twice before.
-	rownum := yw.randGen.Uint64() % uint64(yw.config.initialRows)
-	return yw.buildKeyName(rownum)
+	rowCount := atomic.LoadUint64(yw.rowCount)
+	rowIndex := yw.hashKey(yw.randGen.Uint64()) % rowCount
+	return yw.buildKeyName(rowIndex)
 }
 
 func (yw *ycsbWorker) nextInsertKey() string {
-	// TODO: This logic is no longer valid now that we are using a large YCSB
-	// distribution and modding the samples. To properly support INSERTS, we need
-	// to maintain a separate rownum counter.
-	rownum := yw.randGen.IMaxHead()
-	return yw.buildKeyName(rownum)
+	rowIndex := atomic.AddUint64(yw.rowIndex, 1)
+	return yw.buildKeyName(rowIndex - 1)
 }
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -435,6 +438,7 @@ func (yw *ycsbWorker) insertRow(ctx context.Context, key string, increment bool)
 		if err := yw.randGen.IncrementIMax(); err != nil {
 			return err
 		}
+		atomic.AddUint64(yw.rowCount, 1)
 	}
 	return nil
 }
