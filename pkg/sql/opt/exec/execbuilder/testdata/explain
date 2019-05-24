@@ -777,7 +777,3 @@ sort
            └── mult [type=int, outer=(1,2)]
                 ├── variable: a [type=int]
                 └── variable: b [type=int]
-
-# Test with an unsupported statement.
-statement error unsupported window function
-EXPLAIN (OPT) SELECT avg(x) FILTER (WHERE x > 2) OVER (ORDER BY x) FROM (VALUES (1)) AS t(x)

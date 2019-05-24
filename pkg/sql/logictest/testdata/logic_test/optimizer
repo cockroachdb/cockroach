@@ -72,16 +72,6 @@ SELECT * FROM test.t WHERE 2*v > (SELECT max(v) FROM test.t)
 3  30
 4  40
 
-# Fall back to heuristic planner when feature is not support in cost-based
-# optimizer.
-query T
-SELECT avg(k) OVER () FROM t ORDER BY 1
-----
-2.5
-2.5
-2.5
-2.5
-
 query II rowsort
 SELECT * FROM tview
 ----
@@ -95,10 +85,6 @@ SET OPTIMIZER = ALWAYS
 
 query error pq: unimplemented: unsupported statement: \*tree\.AlterTable
 ALTER TABLE test DROP COLUMN v;
-
-# Don't fall back to heuristic planner in ALWAYS mode.
-query error unsupported window function
-SELECT avg(k) FILTER (WHERE k > 3) OVER (ORDER BY k) FROM t ORDER BY 1
 
 statement ok
 SET OPTIMIZER = LOCAL

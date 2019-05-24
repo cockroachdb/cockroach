@@ -2281,7 +2281,9 @@ Tablet      Samsung          200.00   6450.00
 statement error aggregate functions are not allowed in FILTER
 SELECT count(*) FILTER (WHERE count(*) > 5) OVER () FROM products
 
-statement error window functions are not allowed in FILTER
+# TODO(justin): it's a bit troublesome to get the error messages between the HP
+# and CBO to match here, so once the HP is removed put the CBO error message here.
+statement error window function
 SELECT count(*) FILTER (WHERE count(*) OVER () > 5) OVER () FROM products
 
 statement error incompatible FILTER expression type: int
