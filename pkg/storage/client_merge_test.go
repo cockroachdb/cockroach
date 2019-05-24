@@ -3277,18 +3277,24 @@ func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
+	manualClock := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manualClock.UnixNano, time.Nanosecond)
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableScanner = true
 	sv := &storeCfg.Settings.SV
 	storagebase.MergeQueueEnabled.Override(sv, true)
 	storage.MergeQueueInterval.Override(sv, 0) // process greedily
+	manualSplitTTL := time.Millisecond * 200
+	storage.ManualSplitTTL.Override(sv, manualSplitTTL)
 	var mtc multiTestContext
 	// This test was written before the multiTestContext started creating many
 	// system ranges at startup, and hasn't been update to take that into account.
 	mtc.startWithSingleRange = true
 
 	mtc.storeConfig = &storeCfg
+	// Inject clock for manipulation in tests
+	mtc.clock = clock
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 	mtc.initGossipNetwork() // needed for the non-collocated case's rebalancing to work
@@ -3440,6 +3446,28 @@ func TestMergeQueue(t *testing.T) {
 		if _, err := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), unsplitArgs); err != nil {
 			t.Fatal(err)
 		}
+		store.MustForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	t.Run("sticky bit ttl", func(t *testing.T) {
+		reset(t)
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// Perform manual merge and verify that no merge occurred.
+		split(t, rhsStartKey.AsRawKey(), true /* manual */)
+		clearRange(t, lhsStartKey, rhsEndKey)
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// Sticky bit is not expired yet.
+		manualClock.Set(manualSplitTTL.Nanoseconds())
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// Sticky bit is expired.
+		manualClock.Set(manualSplitTTL.Nanoseconds() * 2)
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
