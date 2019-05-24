@@ -269,7 +269,7 @@ render          ·            ·            (min)     ·
  └── group      ·            ·            (y, min)  ·
       │         aggregate 0  y            ·         ·
       │         aggregate 1  min(x)       ·         ·
-      │         group by     @2           ·         ·
+      │         group by     y            ·         ·
       └── scan  ·            ·            (x, y)    ·
 ·               table        xyz@primary  ·         ·
 ·               spans        ALL          ·         ·
@@ -286,7 +286,7 @@ render                    ·            ·            (min)     ·
            └── group      ·            ·            (y, min)  ·
                 │         aggregate 0  y            ·         ·
                 │         aggregate 1  min(x)       ·         ·
-                │         group by     @2           ·         ·
+                │         group by     y            ·         ·
                 └── scan  ·            ·            (x, y)    ·
 ·                         table        xyz@primary  ·         ·
 ·                         spans        ALL          ·         ·

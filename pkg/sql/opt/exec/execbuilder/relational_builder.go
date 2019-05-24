@@ -860,12 +860,12 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		ep.root, err = b.factory.ConstructScalarGroupBy(input.root, aggInfos)
 	} else {
 		groupBy := groupBy.(*memo.GroupByExpr)
-		orderedInputCols := input.getColumnOrdinalSet(
-			ordering.StreamingGroupingCols(&groupBy.GroupingPrivate, &groupBy.RequiredPhysical().Ordering),
-		)
+		groupingColOrder := input.sqlOrdering(ordering.StreamingGroupingColOrdering(
+			&groupBy.GroupingPrivate, &groupBy.RequiredPhysical().Ordering,
+		))
 		reqOrdering := ep.reqOrdering(groupBy)
 		ep.root, err = b.factory.ConstructGroupBy(
-			input.root, groupingColIdx, orderedInputCols, aggInfos, reqOrdering,
+			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrdering,
 		)
 	}
 	if err != nil {
@@ -897,9 +897,13 @@ func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error)
 	}
 
 	distinctCols := input.getColumnOrdinalSet(distinct.GroupingCols)
-	orderedCols := input.getColumnOrdinalSet(
-		ordering.StreamingGroupingCols(&distinct.GroupingPrivate, &distinct.RequiredPhysical().Ordering),
+	var orderedCols exec.ColumnOrdinalSet
+	ordering := ordering.StreamingGroupingColOrdering(
+		&distinct.GroupingPrivate, &distinct.RequiredPhysical().Ordering,
 	)
+	for i := range ordering {
+		orderedCols.Add(int(input.getColumnOrdinal(ordering[i].ID())))
+	}
 	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)
 	if err != nil {
 		return execPlan{}, err

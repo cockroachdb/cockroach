@@ -105,7 +105,7 @@ func (f *stubFactory) ConstructMergeJoin(
 func (f *stubFactory) ConstructGroupBy(
 	input exec.Node,
 	groupCols []exec.ColumnOrdinal,
-	orderedGroupCols exec.ColumnOrdinalSet,
+	groupColOrdering sqlbase.ColumnOrdering,
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {

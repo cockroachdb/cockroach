@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -298,11 +299,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				for i := range eqCols {
 					eqCols[i].Name = fmt.Sprintf("(%s=%s)", n.pred.leftColNames[i], n.pred.rightColNames[i])
 				}
-				var order physicalProps
-				for _, o := range n.mergeJoinOrdering {
-					order.addOrderColumn(o.ColIdx, o.Direction)
-				}
-				v.observer.attr(name, "mergeJoinOrder", order.AsString(eqCols))
+				v.observer.attr(name, "mergeJoinOrder", formatOrdering(n.mergeJoinOrdering, eqCols))
 			}
 		}
 		if v.observer.expr != nil {
@@ -362,11 +359,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			// We use n.ordering and not plan.Ordering() because
 			// plan.Ordering() does not include the added sort columns not
 			// present in the output.
-			var order physicalProps
-			for _, o := range n.ordering {
-				order.addOrderColumn(o.ColIdx, o.Direction)
-			}
-			v.observer.attr(name, "order", order.AsString(columns))
+			v.observer.attr(name, "order", formatOrdering(n.ordering, columns))
 		}
 		n.plan = v.visit(n.plan)
 
@@ -393,10 +386,14 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 				v.observer.attr(name, fmt.Sprintf("aggregate %d", i), buf.String())
 			}
 			if len(n.groupCols) > 0 {
-				v.observer.attr(name, "group by", colListStr(n.groupCols))
+				var cols []string
+				for _, c := range n.groupCols {
+					cols = append(cols, inputCols[c].Name)
+				}
+				v.observer.attr(name, "group by", strings.Join(cols, ", "))
 			}
-			if len(n.orderedGroupCols) > 0 {
-				v.observer.attr(name, "ordered", colListStr(n.orderedGroupCols))
+			if len(n.groupColOrdering) > 0 {
+				v.observer.attr(name, "ordered", formatOrdering(n.groupColOrdering, inputCols))
 			}
 			if n.isScalar {
 				v.observer.attr(name, "scalar", "")
@@ -648,6 +645,14 @@ func (v *planVisitor) metadataExpr(nodeName string, fieldName string, n int, exp
 	v.observer.expr(observeMetadata, nodeName, fieldName, n, expr)
 }
 
+func formatOrdering(ordering sqlbase.ColumnOrdering, cols sqlbase.ResultColumns) string {
+	var order physicalProps
+	for _, o := range ordering {
+		order.addOrderColumn(o.ColIdx, o.Direction)
+	}
+	return order.AsString(cols)
+}
+
 // nodeName returns the name of the given planNode as string.  The
 // node's current state is taken into account, e.g. sortNode has
 // either name "sort" or "nosort" depending on whether sorting is
@@ -699,29 +704,6 @@ func joinTypeStr(t sqlbase.JoinType) string {
 		return "anti"
 	}
 	panic(fmt.Sprintf("unknown join type %s", t))
-}
-
-func colListStr(cols []int) string {
-	// Display the columns as @1-@x if possible.
-	shorthand := true
-	for i, idx := range cols {
-		if idx != i {
-			shorthand = false
-			break
-		}
-	}
-	if shorthand && len(cols) > 1 {
-		return fmt.Sprintf("@1-@%d", len(cols))
-	}
-
-	var buf bytes.Buffer
-	for i, idx := range cols {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		fmt.Fprintf(&buf, "@%d", idx+1)
-	}
-	return buf.String()
 }
 
 // planNodeNames is the mapping from node type to strings.  The
