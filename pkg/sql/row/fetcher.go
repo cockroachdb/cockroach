@@ -584,9 +584,38 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 			return true, nil
 		}
 
+		// unchangedPrefix will be set to true if we can skip decoding the index key
+		// completely, because the last key we saw has identical prefix to the
+		// current key.
+		unchangedPrefix := rf.indexKey != nil && bytes.HasPrefix(rf.kv.Key, rf.indexKey)
+		if unchangedPrefix {
+			keySuffix := rf.kv.Key[len(rf.indexKey):]
+			if _, foundSentinel := encoding.DecodeIfInterleavedSentinel(keySuffix); foundSentinel {
+				// We found an interleaved sentinel, which means that the key we just
+				// found belongs to a different interleave. That means we have to go
+				// through with index key decoding.
+				unchangedPrefix = false
+			} else {
+				rf.keyRemainingBytes = keySuffix
+			}
+		}
 		// See Init() for a detailed description of when we can get away with not
 		// reading the index key.
-		if rf.mustDecodeIndexKey || rf.traceKV {
+		if unchangedPrefix {
+			// Skip decoding!
+			// We must set the rowReadyTable to the currentTable like ReadIndexKey
+			// would do. This will happen when we see 2 rows in a row with the same
+			// prefix. If the previous prefix was from a different table, then we must
+			// update the ready table to the current table, updating the fetcher state
+			// machine to recognize that the next row that it outputs will be from
+			// rf.currentTable, which will be set to the table of the key that was
+			// last sent to ReadIndexKey.
+			//
+			// TODO(jordan): this is a major (but correct) mess. The fetcher is past
+			// due for a refactor, now that it's (more) clear what the state machine
+			// it's trying to model is.
+			rf.rowReadyTable = rf.currentTable
+		} else if rf.mustDecodeIndexKey || rf.traceKV {
 			rf.keyRemainingBytes, ok, err = rf.ReadIndexKey(rf.kv.Key)
 			if err != nil {
 				return false, err
@@ -627,7 +656,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		case rf.currentTable.isSecondaryIndex:
 			// Secondary indexes have only one key per row.
 			rowDone = true
-		case !bytes.HasPrefix(rf.kv.Key, rf.indexKey):
+		case !unchangedPrefix:
 			// If the prefix of the key has changed, current key is from a different
 			// row than the previous one.
 			rowDone = true
