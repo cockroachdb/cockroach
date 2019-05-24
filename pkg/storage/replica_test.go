@@ -11499,7 +11499,13 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			disableTxnAutoGC: true,
 		},
 		{
-			// Should not be possible.
+			// A transaction committed while a recovery process was running
+			// concurrently. The recovery process attempted to prevent an intent
+			// write after the intent write already succeeded (allowing the
+			// transaction to commit) and was resolved. The recovery process
+			// thinks that it prevented an intent write because the intent has
+			// already been resolved, but later find that the transaction record
+			// is committed, so it does nothing.
 			name: "recover transaction (not implicitly committed) after end transaction (commit) without eager gc",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
@@ -11509,7 +11515,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
 				return sendWrappedWithErr(roachpb.Header{}, &rt)
 			},
-			expError:         "found COMMITTED record for prevented implicit commit",
 			expTxn:           txnWithStatus(roachpb.COMMITTED),
 			disableTxnAutoGC: true,
 		},
