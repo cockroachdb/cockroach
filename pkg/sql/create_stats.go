@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -125,8 +125,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	}
 
 	if err = <-errCh; err != nil {
-		pgerr, ok := errors.Cause(err).(*pgerror.Error)
-		if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
+		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
 			if _ /* cols */, delErr := n.p.ExecCfg().InternalExecutor.Exec(
@@ -379,7 +378,7 @@ func (r *createStatsResumer) Resume(
 			ctx, r.evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
-			if s, ok := status.FromError(errors.Cause(err)); ok {
+			if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
 				if s.Code() == codes.Canceled && s.Message() == context.Canceled.Error() {
 					return jobs.NewRetryJobError("node failure")
 				}
@@ -446,9 +445,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 
 			// This is not the first CreateStats job running. This job should fail
 			// so that the earlier job can succeed.
-			return pgerror.New(
-				pgerror.CodeLockNotAvailableError, "another CREATE STATISTICS job is already running",
-			)
+			return stats.ConcurrentCreateStatsError
 		}
 	}
 	return nil
