@@ -715,13 +715,8 @@ func (c *conn) handleSimpleQuery(
 func (c *conn) handleParse(
 	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *types.T,
 ) error {
-	// protocolErr is set if a protocol error has to be sent to the client. A
-	// stanza at the bottom of the function pushes instructions for sending this
-	// error.
-	var protocolErr *pgerror.Error
-
 	name, err := buf.GetString()
-	if protocolErr != nil {
+	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	query, err := buf.GetString()
