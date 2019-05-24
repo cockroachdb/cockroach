@@ -88,8 +88,8 @@ render                    ·            ·                (sum)                 
                 │         aggregate 0  k                ·                       ·
                 │         aggregate 1  sum(w)           ·                       ·
                 │         aggregate 2  any_not_null(v)  ·                       ·
-                │         group by     @1               ·                       ·
-                │         ordered      @1               ·                       ·
+                │         group by     k                ·                       ·
+                │         ordered      +k               ·                       ·
                 └── scan  ·            ·                (k, v, w)               +k
 ·                         table        t@primary        ·                       ·
 ·                         spans        ALL              ·                       ·

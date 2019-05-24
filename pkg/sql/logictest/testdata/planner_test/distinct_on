@@ -313,7 +313,7 @@ render                    ·            ·                  (min)               
       └── group           ·            ·                  (min, y)                                        weak-key(y)
            │              aggregate 0  min(x)             ·                                               ·
            │              aggregate 1  y                  ·                                               ·
-           │              group by     @1                 ·                                               ·
+           │              group by     y                  ·                                               ·
            └── render     ·            ·                  (y, x)                                          ·
                 │         render 0     test.public.xyz.y  ·                                               ·
                 │         render 1     test.public.xyz.x  ·                                               ·
@@ -330,7 +330,7 @@ distinct                  ·            ·                  (min)               
       │                   filter       agg0 = 1           ·                                               ·
       └── group           ·            ·                  (min)                                           ·
            │              aggregate 0  min(x)             ·                                               ·
-           │              group by     @1                 ·                                               ·
+           │              group by     y                  ·                                               ·
            └── render     ·            ·                  (y, x)                                          ·
                 │         render 0     test.public.xyz.y  ·                                               ·
                 │         render 1     test.public.xyz.x  ·                                               ·

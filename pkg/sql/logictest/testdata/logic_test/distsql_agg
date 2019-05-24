@@ -564,3 +564,19 @@ query R
 SELECT sum(a) FROM data WHERE FALSE
 ----
 NULL
+
+# Regression test for #37211 (incorrect ordering between aggregator stages).
+statement ok
+CREATE TABLE uv (u INT PRIMARY KEY, v INT);
+INSERT INTO uv SELECT x, x*10 FROM generate_series(2, 8) AS g(x);
+
+query R
+SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u
+----
+20000
+30000
+40000
+50000
+60000
+70000
+80000

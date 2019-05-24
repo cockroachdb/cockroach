@@ -113,8 +113,8 @@ render          ·            ·                  (count int, k int)       ·
  └── group      ·            ·                  (k int, count_rows int)  ·
       │         aggregate 0  k                  ·                        ·
       │         aggregate 1  count_rows()       ·                        ·
-      │         group by     @1                 ·                        ·
-      │         ordered      @1                 ·                        ·
+      │         group by     k                  ·                        ·
+      │         ordered      +k                 ·                        ·
       └── scan  ·            ·                  (k int)                  +k
 ·               table        kv@primary         ·                        ·
 ·               spans        ALL                ·                        ·
@@ -129,7 +129,7 @@ render               ·            ·                           (count int, r in
  └── group           ·            ·                           (column6 int, count_rows int)  ·
       │              aggregate 0  column6                     ·                              ·
       │              aggregate 1  count_rows()                ·                              ·
-      │              group by     @1                          ·                              ·
+      │              group by     column6                     ·                              ·
       └── render     ·            ·                           (column6 int)                  ·
            │         render 0     ((k)[int] + (v)[int])[int]  ·                              ·
            └── scan  ·            ·                           (k int, v int)                 ·
@@ -147,8 +147,8 @@ render          ·            ·                                      (count int
       │         aggregate 0  k                                      ·                                          ·
       │         aggregate 1  count_rows()                           ·                                          ·
       │         aggregate 2  any_not_null(v)                        ·                                          ·
-      │         group by     @1                                     ·                                          ·
-      │         ordered      @1                                     ·                                          ·
+      │         group by     k                                      ·                                          ·
+      │         ordered      +k                                     ·                                          ·
       └── scan  ·            ·                                      (k int, v int)                             +k
 ·               table        kv@primary                             ·                                          ·
 ·               spans        ALL                                    ·                                          ·
@@ -217,7 +217,7 @@ render               ·            ·
  └── group           ·            ·
       │              aggregate 0  k
       │              aggregate 1  min(k)
-      │              group by     @1
+      │              group by     k
       └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
@@ -237,7 +237,7 @@ render               ·            ·
  └── group           ·            ·
       │              aggregate 0  k
       │              aggregate 1  min(k)
-      │              group by     @1
+      │              group by     k
       └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
@@ -258,7 +258,7 @@ render               ·            ·
  └── group           ·            ·
       │              aggregate 0  k
       │              aggregate 1  min(k)
-      │              group by     @1
+      │              group by     k
       └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
@@ -534,7 +534,7 @@ sort            ·            ·           (v int, count int)  +count
  └── group      ·            ·           (v int, count int)  ·
       │         aggregate 0  v           ·                   ·
       │         aggregate 1  count(k)    ·                   ·
-      │         group by     @2          ·                   ·
+      │         group by     v           ·                   ·
       └── scan  ·            ·           (k int, v int)      ·
 ·               table        kv@primary  ·                   ·
 ·               spans        ALL         ·                   ·
@@ -547,7 +547,7 @@ sort            ·            ·             (v int, count int)  +count
  └── group      ·            ·             (v int, count int)  ·
       │         aggregate 0  v             ·                   ·
       │         aggregate 1  count_rows()  ·                   ·
-      │         group by     @1            ·                   ·
+      │         group by     v             ·                   ·
       └── scan  ·            ·             (v int)             ·
 ·               table        kv@primary    ·                   ·
 ·               spans        ALL           ·                   ·
@@ -560,7 +560,7 @@ sort                 ·            ·               (v int, count int)    +count
  └── group           ·            ·               (v int, count int)    ·
       │              aggregate 0  v               ·                     ·
       │              aggregate 1  count(column5)  ·                     ·
-      │              group by     @2              ·                     ·
+      │              group by     v               ·                     ·
       └── render     ·            ·               (column5 int, v int)  ·
            │         render 0     (1)[int]        ·                     ·
            │         render 1     (v)[int]        ·                     ·
@@ -575,7 +575,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v 
 group           ·            ·               (v, count)    ·
  │              aggregate 0  v               ·             ·
  │              aggregate 1  count(column5)  ·             ·
- │              group by     @2              ·             ·
+ │              group by     v               ·             ·
  └── render     ·            ·               (column5, v)  ·
       │         render 0     1               ·             ·
       │         render 1     v               ·             ·
@@ -604,7 +604,7 @@ render               ·            ·                                      (coun
       │              aggregate 0  v                                      ·                      ·
       │              aggregate 1  count(column5) FILTER (WHERE column6)  ·                      ·
       │              aggregate 2  max(column6) FILTER (WHERE column6)    ·                      ·
-      │              group by     @3                                     ·                      ·
+      │              group by     v                                      ·                      ·
       └── render     ·            ·                                      (column5, column6, v)  ·
            │         render 0     true                                   ·                      ·
            │         render 1     k > 5                                  ·                      ·
@@ -621,7 +621,7 @@ render               ·            ·                                      (coun
  └── group           ·            ·                                      (v, count)             ·
       │              aggregate 0  v                                      ·                      ·
       │              aggregate 1  count(column5) FILTER (WHERE column6)  ·                      ·
-      │              group by     @3                                     ·                      ·
+      │              group by     v                                      ·                      ·
       └── render     ·            ·                                      (column5, column6, v)  ·
            │         render 0     true                                   ·                      ·
            │         render 1     k > 5                                  ·                      ·
@@ -648,7 +648,7 @@ render               ·            ·                                 (sum decim
  └── group           ·            ·                                 (k int, sum decimal)  ·
       │              aggregate 0  k                                 ·                     ·
       │              aggregate 1  sum(d)                            ·                     ·
-      │              group by     @1                                ·                     ·
+      │              group by     k                                 ·                     ·
       └── hash-join  ·            ·                                 (k int, d decimal)    ·
            │         type         inner                             ·                     ·
            │         pred         ((k)[int] >= (d)[decimal])[bool]  ·                     ·
@@ -713,8 +713,8 @@ render          ·            ·                 (min int)         ·
  └── group      ·            ·                 (k int, min int)  ·
       │         aggregate 0  k                 ·                 ·
       │         aggregate 1  min(v)            ·                 ·
-      │         group by     @1                ·                 ·
-      │         ordered      @1                ·                 ·
+      │         group by     k                 ·                 ·
+      │         ordered      +k                ·                 ·
       └── scan  ·            ·                 (k int, v int)    +k
 ·               table        opt_test@primary  ·                 ·
 ·               spans        ALL               ·                 ·
@@ -742,7 +742,7 @@ render               ·            ·                                           
       │              aggregate 1  x                                                   ·                                                ·
       │              aggregate 2  min(y)                                              ·                                                ·
       │              aggregate 3  any_not_null(b)                                     ·                                                ·
-      │              group by     @1,@3                                               ·                                                ·
+      │              group by     a, x                                                ·                                                ·
       └── hash-join  ·            ·                                                   (a int, b int, x string, y string)               ·
            │         type         cross                                               ·                                                ·
            ├── scan  ·            ·                                                   (a int, b int)                                   ·
@@ -895,7 +895,7 @@ render               ·            ·            (m)             ·
  └── group           ·            ·            (column5, min)  ·
       │              aggregate 0  column5      ·               ·
       │              aggregate 1  min(a)       ·               ·
-      │              group by     @1           ·               ·
+      │              group by     column5      ·               ·
       └── render     ·            ·            (column5, a)    ·
            │         render 0     a            ·               ·
            │         render 1     a            ·               ·
@@ -911,7 +911,7 @@ render               ·            ·            (m)             ·
  └── group           ·            ·            (column5, min)  ·
       │              aggregate 0  column5      ·               ·
       │              aggregate 1  min(a)       ·               ·
-      │              group by     @1           ·               ·
+      │              group by     column5      ·               ·
       └── render     ·            ·            (column5, a)    ·
            │         render 0     b            ·               ·
            │         render 1     a            ·               ·
@@ -1008,8 +1008,8 @@ group      ·            ·             (u, v, s)  ·
  │         aggregate 0  u             ·          ·
  │         aggregate 1  v             ·          ·
  │         aggregate 2  array_agg(w)  ·          ·
- │         group by     @1-@2         ·          ·
- │         ordered      @1-@2         ·          ·
+ │         group by     u, v          ·          ·
+ │         ordered      +u,+v         ·          ·
  └── scan  ·            ·             (u, v, w)  +u,+v,+w
 ·          table        uvw@uvw       ·          ·
 ·          spans        ALL           ·          ·
@@ -1049,7 +1049,7 @@ sort            ·            ·                        (company_id, string_agg)
  └── group      ·            ·                        (company_id, string_agg)  ·
       │         aggregate 0  company_id               ·                         ·
       │         aggregate 1  string_agg(employee)     ·                         ·
-      │         group by     @1                       ·                         ·
+      │         group by     company_id               ·                         ·
       └── scan  ·            ·                        (company_id, employee)    ·
 ·               table        string_agg_test@primary  ·                         ·
 ·               spans        ALL                      ·                         ·
@@ -1070,7 +1070,7 @@ sort                 ·            ·                        (company_id, string
  └── group           ·            ·                        (company_id, string_agg)  ·
       │              aggregate 0  company_id               ·                         ·
       │              aggregate 1  string_agg(column4)      ·                         ·
-      │              group by     @2                       ·                         ·
+      │              group by     company_id               ·                         ·
       └── render     ·            ·                        (column4, company_id)     ·
            │         render 0     employee::BYTES          ·                         ·
            │         render 1     company_id               ·                         ·
@@ -1094,7 +1094,7 @@ sort            ·            ·                        (company_id, string_agg)
  └── group      ·            ·                        (company_id, string_agg)  ·
       │         aggregate 0  company_id               ·                         ·
       │         aggregate 1  string_agg(employee)     ·                         ·
-      │         group by     @1                       ·                         ·
+      │         group by     company_id               ·                         ·
       └── scan  ·            ·                        (company_id, employee)    ·
 ·               table        string_agg_test@primary  ·                         ·
 ·               spans        ALL                      ·                         ·
@@ -1115,7 +1115,7 @@ sort                 ·            ·                        (company_id, string
  └── group           ·            ·                        (company_id, string_agg)  ·
       │              aggregate 0  company_id               ·                         ·
       │              aggregate 1  string_agg(column4)      ·                         ·
-      │              group by     @2                       ·                         ·
+      │              group by     company_id               ·                         ·
       └── render     ·            ·                        (column4, company_id)     ·
            │         render 0     employee::BYTES          ·                         ·
            │         render 1     company_id               ·                         ·
