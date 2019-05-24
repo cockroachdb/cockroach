@@ -25,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/errors"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -46,12 +47,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 	"golang.org/x/net/trace"
 )
 
@@ -1676,7 +1677,7 @@ func isCommit(stmt tree.Statement) bool {
 }
 
 func errIsRetriable(err error) bool {
-	err = errors.Cause(err)
+	err = errors.UnwrapAll(err)
 	_, retriable := err.(*roachpb.TransactionRetryWithProtoRefreshError)
 	return retriable
 }
@@ -1959,17 +1960,34 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if schemaChangeErr := scc.execSchemaChanges(
 				ex.Ctx(), ex.server.cfg, &ex.sessionTracing, ieFactory,
 			); schemaChangeErr != nil {
-				// We got a schema change error. We'll return it to the client as the
-				// result of the current statement - which is either the DDL statement or
-				// a COMMIT statement if the DDL was part of an explicit transaction. In
-				// the explicit transaction case, we return a funky error code to the
-				// client to seed fear about what happened to the transaction. The reality
-				// is that the transaction committed, but at least some of the staged
-				// schema changes failed. We don't have a good way to indicate this.
 				if implicitTxn {
+					// The schema change failed but it was also the only
+					// operation in the transaction. In this case, the
+					// transaction's error is the schema change error.
 					res.SetError(schemaChangeErr)
 				} else {
-					res.SetError(sqlbase.NewStatementCompletionUnknownError(schemaChangeErr))
+					// The schema change failed but everything else in the transaction
+					// was actually committed successfully already. At this point,
+					// it is too late to cancel the transaction. In effect, we have
+					// violated the "A" of ACID.
+					//
+					// This situation is sufficiently serious that we cannot let
+					// the error that caused the schema change to fail flow back
+					// to the client as-is. We replace it by a custom code
+					// dedicated to this situation. Replacement occurs
+					// because this error code is a "serious error" and the code
+					// computation logic will give it a higher priority.
+					//
+					// We also print out the original error code as prefix of
+					// the error message, in case it was a serious error.
+					newErr := pgerror.Wrapf(schemaChangeErr,
+						pgcode.TransactionCommittedWithSchemaChangeFailure,
+						"transaction committed but schema change aborted with error: (%s)",
+						pgerror.GetPGCode(schemaChangeErr))
+					newErr = errors.WithHint(newErr,
+						"Some of the non-DDL statements may have committed successfully, but some of the DDL statement(s) failed.\n"+
+							"Manual inspection may be required to determine the actual state of the database.")
+					res.SetError(newErr)
 				}
 			}
 		}

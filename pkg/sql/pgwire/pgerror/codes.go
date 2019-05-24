@@ -262,4 +262,5 @@ const (
 	CodeRangeUnavailable                                       = pgcode.RangeUnavailable
 	CodeCCLRequired                                            = pgcode.CCLRequired
 	CodeCCLValidLicenseRequired                                = pgcode.CCLValidLicenseRequired
+	CodeTransactionCommittedWithSchemaChangeFailure            = pgcode.TransactionCommittedWithSchemaChangeFailure
 )
