@@ -516,6 +516,9 @@ type optTable struct {
 	// one family.
 	families []optFamily
 
+	outboundFKs []optForeignKeyConstraint
+	inboundFKs  []optForeignKeyConstraint
+
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
 	colMap map[sqlbase.ColumnID]int
@@ -575,6 +578,31 @@ func newOptTable(
 			}
 
 			ot.indexes[i].init(ot, idxDesc, idxZone)
+			if fk := &idxDesc.ForeignKey; fk.IsSet() {
+				ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
+					name:            idxDesc.ForeignKey.Name,
+					originTable:     ot.id,
+					originIndex:     idxDesc.ID,
+					referencedTable: cat.StableID(fk.Table),
+					referencedIndex: fk.Index,
+					numCols:         int(fk.SharedPrefixLen),
+					validity:        fk.Validity,
+					match:           fk.Match,
+				})
+			}
+			for j := range idxDesc.ReferencedBy {
+				fk := &idxDesc.ReferencedBy[j]
+				ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
+					name:            idxDesc.ForeignKey.Name,
+					originTable:     cat.StableID(fk.Table),
+					originIndex:     fk.Index,
+					referencedTable: ot.id,
+					referencedIndex: idxDesc.ID,
+					numCols:         int(fk.SharedPrefixLen),
+					validity:        fk.Validity,
+					match:           fk.Match,
+				})
+			}
 		}
 	}
 
@@ -693,16 +721,6 @@ func (ot *optTable) IsInterleaved() bool {
 	return ot.desc.IsInterleaved()
 }
 
-// IsReferenced is part of the cat.Table interface.
-func (ot *optTable) IsReferenced() bool {
-	for i, n := 0, ot.DeletableIndexCount(); i < n; i++ {
-		if len(ot.Index(i).(*optIndex).desc.ReferencedBy) != 0 {
-			return true
-		}
-	}
-	return false
-}
-
 // ColumnCount is part of the cat.Table interface.
 func (ot *optTable) ColumnCount() int {
 	return len(ot.desc.Columns)
@@ -789,6 +807,26 @@ func (ot *optTable) Family(i int) cat.Family {
 	return &ot.families[i-1]
 }
 
+// OutboundForeignKeyCount is part of the cat.Table interface.
+func (ot *optTable) OutboundForeignKeyCount() int {
+	return len(ot.outboundFKs)
+}
+
+// OutboundForeignKeyCount is part of the cat.Table interface.
+func (ot *optTable) OutboundForeignKey(i int) cat.ForeignKeyConstraint {
+	return &ot.outboundFKs[i]
+}
+
+// InboundForeignKeyCount is part of the cat.Table interface.
+func (ot *optTable) InboundForeignKeyCount() int {
+	return len(ot.inboundFKs)
+}
+
+// InboundForeignKey is part of the cat.Table interface.
+func (ot *optTable) InboundForeignKey(i int) cat.ForeignKeyConstraint {
+	return &ot.inboundFKs[i]
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
@@ -814,10 +852,6 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
-
-	// foreignKey stores IDs of another table and one of its indexes,
-	// if this index is part of an outbound foreign key relation.
-	foreignKey cat.ForeignKeyReference
 }
 
 var _ cat.Index = &optIndex{}
@@ -878,14 +912,6 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor, zone *con
 		oi.numLaxKeyCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs)
 		oi.numKeyCols = oi.numLaxKeyCols
 	}
-
-	if desc.ForeignKey.IsSet() {
-		oi.foreignKey.TableID = cat.StableID(desc.ForeignKey.Table)
-		oi.foreignKey.IndexID = cat.StableID(desc.ForeignKey.Index)
-		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
-		oi.foreignKey.Validated = (desc.ForeignKey.Validity == sqlbase.ConstraintValidity_Validated)
-		oi.foreignKey.Match = sqlbase.ForeignKeyReferenceMatchValue[desc.ForeignKey.Match]
-	}
 }
 
 // ID is part of the cat.Index interface.
@@ -945,11 +971,6 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
-}
-
-// ForeignKey is part of the cat.Index interface.
-func (oi *optIndex) ForeignKey() (cat.ForeignKeyReference, bool) {
-	return oi.foreignKey, oi.foreignKey.TableID != 0
 }
 
 // Zone is part of the cat.Index interface.
@@ -1085,4 +1106,91 @@ func (oi *optFamily) Column(i int) cat.FamilyColumn {
 // Table is part of the cat.Family interface.
 func (oi *optFamily) Table() cat.Table {
 	return oi.tab
+}
+
+// optForeignKeyConstraint implements cat.ForeignKeyConstraint and represents a
+// foreign key relationship. Both the origin and the referenced table store the
+// same optForeignKeyConstraint (as an outbound and inbound reference,
+// respectively).
+type optForeignKeyConstraint struct {
+	name string
+
+	originTable cat.StableID
+	originIndex sqlbase.IndexID
+
+	referencedTable cat.StableID
+	referencedIndex sqlbase.IndexID
+
+	numCols  int
+	validity sqlbase.ConstraintValidity
+	match    sqlbase.ForeignKeyReference_Match
+}
+
+var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
+
+// Name is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) Name() string {
+	return fk.name
+}
+
+// OriginTableID is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) OriginTableID() cat.StableID {
+	return fk.originTable
+}
+
+// ReferencedTableID is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) ReferencedTableID() cat.StableID {
+	return fk.referencedTable
+}
+
+// ColumnCount is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) ColumnCount() int {
+	return fk.numCols
+}
+
+// OriginColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i int) int {
+	if originTable.ID() != fk.originTable {
+		panic(pgerror.AssertionFailedf(
+			"invalid table %d passed to OriginColumnOrdinal (expected %d)",
+			originTable.ID(), fk.originTable,
+		))
+	}
+
+	tab := originTable.(*optTable)
+	index, err := tab.desc.FindIndexByID(fk.originIndex)
+	if err != nil {
+		panic(pgerror.AssertionFailedf("%v", err))
+	}
+
+	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
+	return ord
+}
+
+// ReferencedColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.Table, i int) int {
+	if referencedTable.ID() != fk.referencedTable {
+		panic(pgerror.AssertionFailedf(
+			"invalid table %d passed to ReferencedColumnOrdinal (expected %d)",
+			referencedTable.ID(), fk.referencedTable,
+		))
+	}
+	tab := referencedTable.(*optTable)
+	index, err := tab.desc.FindIndexByID(fk.referencedIndex)
+	if err != nil {
+		panic(pgerror.AssertionFailedf("%v", err))
+	}
+
+	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
+	return ord
+}
+
+// Validated is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) Validated() bool {
+	return fk.validity == sqlbase.ConstraintValidity_Validated
+}
+
+// MatchMethod is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
+	return sqlbase.ForeignKeyReferenceMatchValue[fk.match]
 }

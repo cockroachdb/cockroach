@@ -148,12 +148,8 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 		formatCatalogIndex(tab, i, child)
 	}
 
-	for i := 0; i < tab.IndexCount(); i++ {
-		fkRef, ok := tab.Index(i).ForeignKey()
-
-		if ok {
-			formatCatalogFKRef(cat, tab.Index(i), fkRef, child)
-		}
+	for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
+		formatCatalogFKRef(cat, tab, tab.OutboundForeignKey(i), child)
 	}
 
 	for i := 0; i < tab.CheckCount(); i++ {
@@ -208,15 +204,16 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 	}
 }
 
-// formatColPrefix returns a string representation of the first prefixLen columns of idx.
-func formatColPrefix(idx Index, prefixLen int) string {
+// formatColPrefix returns a string representation of a list of columns. The
+// columns are provided through a function.
+func formatCols(tab Table, numCols int, colOrdinal func(tab Table, i int) int) string {
 	var buf bytes.Buffer
 	buf.WriteByte('(')
-	for i := 0; i < prefixLen; i++ {
+	for i := 0; i < numCols; i++ {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		colName := idx.Column(i).ColName()
+		colName := tab.Column(colOrdinal(tab, i)).ColName()
 		buf.WriteString(colName.String())
 	}
 	buf.WriteByte(')')
@@ -226,27 +223,20 @@ func formatColPrefix(idx Index, prefixLen int) string {
 
 // formatCatalogFKRef nicely formats a catalog foreign key reference using a
 // treeprinter for debugging and testing.
-func formatCatalogFKRef(cat Catalog, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node) {
-	ds, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.TableID)
+func formatCatalogFKRef(cat Catalog, tab Table, fkRef ForeignKeyConstraint, tp treeprinter.Node) {
+	ds, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.ReferencedTableID())
 	if err != nil {
 		panic(err)
 	}
 
 	fkTable := ds.(Table)
 
-	var fkIndex Index
-	for j, cnt := 0, fkTable.IndexCount(); j < cnt; j++ {
-		if fkTable.Index(j).ID() == fkRef.IndexID {
-			fkIndex = fkTable.Index(j)
-			break
-		}
-	}
-
 	tp.Childf(
-		"FOREIGN KEY %s REFERENCES %v %s",
-		formatColPrefix(idx, int(fkRef.PrefixLen)),
+		"CONSTRAINT %s FOREIGN KEY %s REFERENCES %v %s",
+		fkRef.Name(),
+		formatCols(tab, fkRef.ColumnCount(), fkRef.OriginColumnOrdinal),
 		ds.Name(),
-		formatColPrefix(fkIndex, int(fkRef.PrefixLen)),
+		formatCols(fkTable, fkRef.ColumnCount(), fkRef.ReferencedColumnOrdinal),
 	)
 }
 
