@@ -114,7 +114,7 @@ func (tsdb *DB) findTimeSeries(
 func (tsdb *DB) pruneTimeSeries(
 	ctx context.Context, db *client.DB, timeSeriesList []timeSeriesResolutionInfo, now hlc.Timestamp,
 ) error {
-	ctx, csp := tracing.StartComponentSpan(ctx, tsdb.st.Tracer, "TSDB.prune", "time series pruning")
+	ctx, csp := tracing.StartComponentSpan(ctx, tsdb.st.Tracer, "timeseries.prune", "time series pruning")
 	defer csp.Finish()
 
 	thresholds := tsdb.computeThresholds(now.WallTime)

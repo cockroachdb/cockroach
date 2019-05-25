@@ -141,7 +141,7 @@ func (db *DB) rollupTimeSeries(
 	now hlc.Timestamp,
 	qmc QueryMemoryContext,
 ) error {
-	ctx, csp := tracing.StartComponentSpan(ctx, db.st.Tracer, "TSDB.rollup", "time series rollup")
+	ctx, csp := tracing.StartComponentSpan(ctx, db.st.Tracer, "timeseries.rollup", "time series rollup")
 	defer csp.Finish()
 
 	thresholds := db.computeThresholds(now.WallTime)

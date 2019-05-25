@@ -638,7 +638,13 @@ func (r *Replica) requestLeaseLocked(
 // blocks until the transfer is done. If a transfer is already in progress,
 // this method joins in waiting for it to complete if it's transferring to the
 // same replica. Otherwise, a NotLeaseHolderError is returned.
-func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID) error {
+func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID) (err error) {
+	ctx, csp := tracing.StartComponentSpan(ctx, r.AmbientContext.Tracer, "storage.replica.lease.transfer", "admin lease transfer")
+	defer func() {
+		csp.FinishWithError(err)
+	}()
+	csp.SetTag("target store", target)
+
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
@@ -702,9 +708,9 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 	for {
 		// See if there's an extension in progress that we have to wait for.
 		// If there isn't, request a transfer.
-		extension, transfer, err := initTransferHelper()
-		if err != nil {
-			return err
+		extension, transfer, initErr := initTransferHelper()
+		if initErr != nil {
+			return initErr
 		}
 		if extension == nil {
 			if transfer == nil {
@@ -845,15 +851,34 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (storagepb.LeaseStatus, boo
 //  Reads, however, must wait.
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
-) (storagepb.LeaseStatus, *roachpb.Error) {
+) (retStatus storagepb.LeaseStatus, retErr *roachpb.Error) {
 	if status, ok := r.leaseGoodToGo(ctx); ok {
 		return status, nil
 	}
+
+	var cspIsStarted bool
+	var csp tracing.ComponentSpan
+	startComponentSpan := func() {
+		if cspIsStarted {
+			return
+		}
+		ctx, csp = tracing.StartComponentSpan(ctx, r.AmbientContext.Tracer, "storage.replica.lease.acquire", "acquire lease")
+		cspIsStarted = true
+	}
+	defer func() {
+		if cspIsStarted {
+			csp.SetTag("lease status", &retStatus)
+			csp.FinishWithError(retErr.GoError())
+		}
+	}()
 
 	// Loop until the lease is held or the replica ascertains the actual
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
 	var status storagepb.LeaseStatus
 	for attempt := 1; ; attempt++ {
+		if attempt > 1 && cspIsStarted {
+			ctx = csp.MarkAsStuck(ctx)
+		}
 		timestamp := r.store.Clock().Now()
 		llHandle, pErr := func() (*leaseRequestHandle, *roachpb.Error) {
 			r.mu.Lock()
@@ -933,6 +958,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 				// Otherwise, we don't need to wait for the extension and simply
 				// ignore the returned handle (whose channel is buffered) and continue.
 				if status.State == storagepb.LeaseState_STASIS {
+					startComponentSpan()
 					return r.requestLeaseLocked(ctx, status), nil
 				}
 
@@ -949,12 +975,14 @@ func (r *Replica) redirectOnOrAcquireLease(
 						// We had an active lease to begin with, but we want to trigger
 						// a lease extension. We explicitly ignore the returned handle
 						// as we won't block on it.
+						startComponentSpan()
 						_ = r.requestLeaseLocked(ctx, status)
 					}
 				}
 
 			case storagepb.LeaseState_EXPIRED:
 				// No active lease: Request renewal if a renewal is not already pending.
+				startComponentSpan()
 				log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
 				return r.requestLeaseLocked(ctx, status), nil
 
@@ -963,6 +991,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 				// timestamp limit this replica must observe. If this store
 				// owns the lease, re-request. Otherwise, redirect.
 				if status.Lease.OwnedBy(r.store.StoreID()) {
+					startComponentSpan()
 					log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
 					return r.requestLeaseLocked(ctx, status), nil
 				}
@@ -1029,6 +1058,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 					return nil
 				case <-slowTimer.C:
 					slowTimer.Read = true
+					ctx = csp.MarkAsStuck(ctx)
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
 						base.SlowRequestThreshold)
 					r.store.metrics.SlowLeaseRequests.Inc(1)

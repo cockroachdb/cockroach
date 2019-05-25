@@ -188,7 +188,7 @@ func (p *poller) poll() {
 			return
 		}
 
-		ctx, csp := tracing.StartComponentSpan(bgCtx, p.Tracer, "TSDB.poll", "time series poll loop")
+		ctx, csp := tracing.StartComponentSpan(bgCtx, p.Tracer, "timeseries.poll", "time series poll loop")
 		defer csp.Finish()
 		csp.SetTag("metrics data", data)
 
