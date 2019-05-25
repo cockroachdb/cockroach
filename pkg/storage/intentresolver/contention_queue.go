@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type pusher struct {
@@ -92,8 +93,9 @@ func (ck *contendedKey) setLastTxnMeta(txnMeta *enginepb.TxnMeta) {
 // with a non-nil key) must send a PushTxn RPC. This is necessary in
 // order to properly detect dependency cycles.
 type contentionQueue struct {
-	clock *hlc.Clock
-	db    *client.DB
+	clock      *hlc.Clock
+	db         *client.DB
+	ambientCtx log.AmbientContext
 
 	// keys is a map from key to a linked list of pusher instances,
 	// ordered as a FIFO queue.
@@ -113,10 +115,13 @@ func (cq *contentionQueue) numContended(key roachpb.Key) int {
 	return ck.ll.Len()
 }
 
-func newContentionQueue(clock *hlc.Clock, db *client.DB) *contentionQueue {
+func newContentionQueue(
+	clock *hlc.Clock, db *client.DB, ambientCtx log.AmbientContext,
+) *contentionQueue {
 	cq := &contentionQueue{
-		clock: clock,
-		db:    db,
+		clock:      clock,
+		db:         db,
+		ambientCtx: ambientCtx,
 	}
 	cq.mu.keys = map[string]*contendedKey{}
 	return cq
@@ -158,6 +163,10 @@ func (cq *contentionQueue) add(
 		// Never queue maximum or minimum priority transactions.
 		return nil, wiErr, false, nil
 	}
+
+	ctx, csp := tracing.StartComponentSpan(ctx, cq.ambientCtx.Tracer, "storage.contention.queue", "wait for intent resolve")
+	csp.SetTag("intent error", wiErr)
+
 	intent := wiErr.Intents[0]
 	key := string(intent.Span.Key)
 	curPusher := newPusher(h.Txn)
@@ -343,6 +352,9 @@ func (cq *contentionQueue) add(
 			curPusher.waitCh <- newIntentTxn
 			close(curPusher.waitCh)
 		}
+
+		csp.SetTag("new intent txn", newIntentTxn)
+		csp.FinishWithError(newWIErr)
 	}, wiErr, done, pErr
 }
 

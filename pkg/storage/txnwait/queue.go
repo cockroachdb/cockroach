@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -154,6 +156,7 @@ type StoreInterface interface {
 	Clock() *hlc.Clock
 	Stopper() *stop.Stopper
 	DB() *client.DB
+	ClusterSettings() *cluster.Settings
 	GetTxnWaitKnobs() TestingKnobs
 	GetTxnWaitMetrics() *Metrics
 }
@@ -402,7 +405,7 @@ func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID
 // the first return value is a non-nil PushTxnResponse object.
 func (q *Queue) MaybeWaitForPush(
 	ctx context.Context, req *roachpb.PushTxnRequest,
-) (*roachpb.PushTxnResponse, *roachpb.Error) {
+) (resp *roachpb.PushTxnResponse, retErr *roachpb.Error) {
 	if ShouldPushImmediately(req) {
 		return nil, nil
 	}
@@ -429,6 +432,13 @@ func (q *Queue) MaybeWaitForPush(
 		q.mu.Unlock()
 		return createPushTxnResponse(txn), nil
 	}
+
+	ctx, csp := tracing.StartComponentSpan(ctx, q.store.ClusterSettings().Tracer, "storage.txnwait.push", "wait for push")
+	csp.SetTag("req", req)
+	defer func() {
+		csp.SetTag("resp", resp)
+		csp.FinishWithError(retErr.GoError())
+	}()
 
 	push := &waitingPush{
 		req:     req,
@@ -505,6 +515,7 @@ func (q *Queue) MaybeWaitForPush(
 	for {
 		select {
 		case <-slowTimer.C:
+			ctx = csp.MarkAsStuck(ctx)
 			slowTimer.Read = true
 			metrics.PusherSlow.Inc(1)
 			log.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
@@ -671,7 +682,7 @@ func (q *Queue) MaybeWaitForPush(
 // select loop waiting for any updates to the target transaction.
 func (q *Queue) MaybeWaitForQuery(
 	ctx context.Context, req *roachpb.QueryTxnRequest,
-) *roachpb.Error {
+) (retErr *roachpb.Error) {
 	if !req.WaitForUpdate {
 		return nil
 	}
@@ -686,6 +697,12 @@ func (q *Queue) MaybeWaitForQuery(
 		q.mu.Unlock()
 		return nil
 	}
+
+	ctx, csp := tracing.StartComponentSpan(ctx, q.store.ClusterSettings().Tracer, "storage.txnwait.query", "wait for query")
+	csp.SetTag("req", req)
+	defer func() {
+		csp.FinishWithError(retErr.GoError())
+	}()
 
 	var maxWaitCh <-chan time.Time
 	// If the transaction we're waiting to query has a queue of txns

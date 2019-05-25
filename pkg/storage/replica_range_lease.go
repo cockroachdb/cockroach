@@ -876,9 +876,6 @@ func (r *Replica) redirectOnOrAcquireLease(
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
 	var status storagepb.LeaseStatus
 	for attempt := 1; ; attempt++ {
-		if attempt > 1 && cspIsStarted {
-			ctx = csp.MarkAsStuck(ctx)
-		}
 		timestamp := r.store.Clock().Now()
 		llHandle, pErr := func() (*leaseRequestHandle, *roachpb.Error) {
 			r.mu.Lock()
@@ -1058,7 +1055,9 @@ func (r *Replica) redirectOnOrAcquireLease(
 					return nil
 				case <-slowTimer.C:
 					slowTimer.Read = true
-					ctx = csp.MarkAsStuck(ctx)
+					if cspIsStarted {
+						ctx = csp.MarkAsStuck(ctx)
+					}
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
 						base.SlowRequestThreshold)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
