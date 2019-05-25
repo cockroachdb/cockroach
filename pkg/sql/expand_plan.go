@@ -280,10 +280,7 @@ func doExpandPlan(
 
 		groupColProps := planPhysicalProps(n.plan)
 		groupColProps = groupColProps.project(n.groupCols)
-		n.orderedGroupCols = make([]int, len(groupColProps.ordering))
-		for i, o := range groupColProps.ordering {
-			n.orderedGroupCols[i] = o.ColIdx
-		}
+		n.groupColOrdering = groupColProps.ordering
 
 	case *windowNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)

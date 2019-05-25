@@ -360,8 +360,8 @@ EXPLAIN (verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
 group           ·            ·              (b, count)  ·
  │              aggregate 0  b              ·           ·
  │              aggregate 1  count_rows()   ·           ·
- │              group by     @1             ·           ·
- │              ordered      @1             ·           ·
+ │              group by     b              ·           ·
+ │              ordered      +b             ·           ·
  └── render     ·            ·              (b)         +b
       │         render 0     b              ·           ·
       └── scan  ·            ·              (a, b)      +b

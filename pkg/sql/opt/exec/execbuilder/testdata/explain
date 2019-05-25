@@ -229,7 +229,7 @@ sort                                       ·            ·
            │                               aggregate 5  ordinal_position
            │                               aggregate 6  is_hidden
            │                               aggregate 7  array_agg(index_name)
-           │                               group by     @1-@7
+           │                               group by     column_name, crdb_sql_type, is_nullable, column_default, generation_expression, ordinal_position, is_hidden
            └── render                      ·            ·
                 └── hash-join              ·            ·
                      │                     type         left outer
