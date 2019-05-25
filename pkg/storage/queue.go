@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -834,8 +835,14 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 							// Release semaphore when finished processing.
 							defer func() { <-bq.processSem }()
 
+							ctx, csp := tracing.StartComponentSpan(
+								ctx, bq.AmbientContext.Tracer, "storage.queue."+bq.name, "process replica")
+							csp.SetTag("replica", repl)
+
 							start := timeutil.Now()
 							err := bq.processReplica(ctx, repl)
+
+							csp.FinishWithError(err)
 
 							duration := timeutil.Since(start)
 							bq.recordProcessDuration(ctx, duration)
