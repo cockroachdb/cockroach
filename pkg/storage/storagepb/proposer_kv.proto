@@ -76,6 +76,10 @@ message ComputeChecksum {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
 
+  // The version used to pick the checksum method. Only when the version matches
+  // that hardcoded in the binary will a computation be carried out.
+  uint32 version = 5;
+
   // SaveSnapshot indicates that the snapshot used to compute the checksum
   // should be saved so that a diff of divergent replicas can later be computed.
   bool save_snapshot = 2;
