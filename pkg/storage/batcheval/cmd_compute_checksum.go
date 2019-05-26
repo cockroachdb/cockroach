@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -54,17 +53,12 @@ func ComputeChecksum(
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ComputeChecksumRequest)
 
-	if args.Version != ReplicaChecksumVersion {
-		log.Infof(ctx, "incompatible ComputeChecksum versions (server: %d, requested: %d)",
-			ReplicaChecksumVersion, args.Version)
-		return result.Result{}, nil
-	}
-
 	reply := resp.(*roachpb.ComputeChecksumResponse)
 	reply.ChecksumID = uuid.MakeV4()
 
 	var pd result.Result
 	pd.Replicated.ComputeChecksum = &storagepb.ComputeChecksum{
+		Version:      args.Version,
 		ChecksumID:   reply.ChecksumID,
 		SaveSnapshot: args.Snapshot,
 		Mode:         args.Mode,

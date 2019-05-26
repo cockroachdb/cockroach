@@ -7012,32 +7012,6 @@ func TestReplicaTryAbandon(t *testing.T) {
 	})
 }
 
-// TestComputeChecksumVersioning checks that the ComputeChecksum post-commit
-// trigger is called if and only if the checksum version is right.
-func TestComputeChecksumVersioning(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-
-	if pct, _ := batcheval.ComputeChecksum(context.TODO(), nil,
-		batcheval.CommandArgs{Args: &roachpb.ComputeChecksumRequest{
-			Version: batcheval.ReplicaChecksumVersion,
-		}}, &roachpb.ComputeChecksumResponse{},
-	); pct.Replicated.ComputeChecksum == nil {
-		t.Error("right checksum version: expected post-commit trigger")
-	}
-
-	if pct, _ := batcheval.ComputeChecksum(context.TODO(), nil,
-		batcheval.CommandArgs{Args: &roachpb.ComputeChecksumRequest{
-			Version: batcheval.ReplicaChecksumVersion + 1,
-		}}, &roachpb.ComputeChecksumResponse{},
-	); pct.Replicated.ComputeChecksum != nil {
-		t.Errorf("wrong checksum version: expected no post-commit trigger: %s", pct.Replicated.ComputeChecksum)
-	}
-}
-
 func TestNewReplicaCorruptionError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for i, tc := range []struct {
