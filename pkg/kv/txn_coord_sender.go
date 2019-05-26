@@ -908,9 +908,8 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
 			abortedErr.Message, tc.mu.txn.ID, newTxn))
 	}
-
 	if tc.mu.txn.Status != roachpb.PENDING {
-		log.Fatalf(ctx, "unexpected txn state: %s", tc.mu.txn)
+		return roachpb.NewErrorf("(see issue #37866) unexpected txn state: %s", tc.mu.txn)
 	}
 	return nil
 }
