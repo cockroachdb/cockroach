@@ -2983,6 +2983,11 @@ func TestReplicaGCRace(t *testing.T) {
 // decommission, the ReplicateQueue will notice and move any replicas on it.
 func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if testutils.NightlyStress() && util.RaceEnabled {
+		t.Skip("can't handle nightly stress: #37811")
+	}
+
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{storeConfig: &sc}
