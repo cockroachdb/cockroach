@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
@@ -105,9 +106,16 @@ func registerVersion(r *registry) {
 					if err := rows.Close(); err != nil {
 						return err
 					}
-					// Regression test for #37425.
-					if err := c.CheckReplicaDivergenceOnDB(ctx, db); err != nil {
-						return errors.Wrapf(err, "node %d", i)
+					// Regression test for #37425. We can't run this in 2.1 because
+					// 19.1 changed downstream-of-raft semantics for consistency
+					// checks but unfortunately our versioning story for these
+					// checks had been broken for a long time. See:
+					//
+					// https://github.com/cockroachdb/cockroach/issues/37737#issuecomment-496026918
+					if !strings.HasPrefix(version, "2.") {
+						if err := c.CheckReplicaDivergenceOnDB(ctx, db); err != nil {
+							return errors.Wrapf(err, "node %d", i)
+						}
 					}
 				}
 				return nil
