@@ -44,6 +44,9 @@ type Manager interface {
 	ResolveIndeterminateCommit(
 		context.Context, *roachpb.IndeterminateCommitError,
 	) (*roachpb.Transaction, error)
+
+	// Metrics returns the Manager's metrics struct.
+	Metrics() Metrics
 }
 
 const (
@@ -64,14 +67,13 @@ const (
 )
 
 // manager implements the Manager interface.
-//
-// TODO(nvanbenschoten): Add metrics to give visibility into transaction recovery.
 type manager struct {
 	log.AmbientContext
 
 	clock   *hlc.Clock
 	db      *client.DB
 	stopper *stop.Stopper
+	metrics Metrics
 	txns    singleflight.Group
 	sem     chan struct{}
 }
@@ -86,6 +88,7 @@ func NewManager(
 		clock:          clock,
 		db:             db,
 		stopper:        stopper,
+		metrics:        makeMetrics(),
 		sem:            make(chan struct{}, defaultTaskLimit),
 	}
 }
@@ -128,12 +131,16 @@ func (m *manager) ResolveIndeterminateCommit(
 // outcome.
 func (m *manager) resolveIndeterminateCommitForTxn(
 	txn *roachpb.Transaction,
-) (*roachpb.Transaction, error) {
+) (resTxn *roachpb.Transaction, resErr error) {
+	// Record the recovery attempt in the Manager's metrics.
+	onComplete := m.updateMetrics()
+	defer func() { onComplete(resTxn, resErr) }()
+
 	// TODO(nvanbenschoten): Set up tracing.
 	ctx := m.AnnotateCtx(context.Background())
 
-	var resTxn *roachpb.Transaction
-	err := m.stopper.RunTaskWithErr(ctx,
+	// Launch the recovery task.
+	resErr = m.stopper.RunTaskWithErr(ctx,
 		"recovery.manager: resolving indeterminate commit",
 		func(ctx context.Context) error {
 			// Grab semaphore with defaultTaskLimit.
@@ -164,7 +171,7 @@ func (m *manager) resolveIndeterminateCommitForTxn(
 			return err
 		},
 	)
-	return resTxn, err
+	return resTxn, resErr
 }
 
 // resolveIndeterminateCommitForTxnProbe performs the "probing phase" of the
@@ -317,4 +324,34 @@ func (m *manager) resolveIndeterminateCommitForTxnRecover(
 	resps := b.RawResponse().Responses
 	recTxnResp := resps[0].GetInner().(*roachpb.RecoverTxnResponse)
 	return &recTxnResp.RecoveredTxn, nil
+}
+
+// Metrics implements the Manager interface.
+func (m *manager) Metrics() Metrics {
+	return m.metrics
+}
+
+// updateMetrics updates the Manager's metrics to account for a new
+// transaction recovery attempt. It returns a function that should
+// be called when the recovery attempt completes.
+func (m *manager) updateMetrics() func(*roachpb.Transaction, error) {
+	m.metrics.AttemptsPending.Inc(1)
+	m.metrics.Attempts.Inc(1)
+	return func(txn *roachpb.Transaction, err error) {
+		m.metrics.AttemptsPending.Dec(1)
+		if err != nil {
+			m.metrics.Failures.Inc(1)
+		} else {
+			switch txn.Status {
+			case roachpb.COMMITTED:
+				m.metrics.SuccessesAsCommitted.Inc(1)
+			case roachpb.ABORTED:
+				m.metrics.SuccessesAsAborted.Inc(1)
+			case roachpb.PENDING, roachpb.STAGING:
+				m.metrics.SuccessesAsPending.Inc(1)
+			default:
+				panic("unexpected")
+			}
+		}
+	}
 }
