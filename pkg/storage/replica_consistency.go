@@ -401,12 +401,11 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 	r.mu.RLock()
 	c, ok = r.mu.checksums[id]
 	r.mu.RUnlock()
-	if !ok {
-		return ReplicaChecksum{}, errors.Errorf("no map entry for checksum (ID = %s)", id)
-	}
-	if c.Checksum == nil {
-		return ReplicaChecksum{}, errors.Errorf(
-			"checksum is nil, most likely because the async computation could not be run (ID = %s)", id)
+	// If the checksum wasn't found or the checksum could not be computed, error out.
+	// The latter case can occur when there's a version mismatch or, more generally,
+	// when the (async) checksum computation fails.
+	if !ok || c.Checksum == nil {
+		return ReplicaChecksum{}, errors.Errorf("no checksum found (ID = %s)", id)
 	}
 	return c, nil
 }
