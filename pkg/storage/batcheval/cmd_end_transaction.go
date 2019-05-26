@@ -68,7 +68,7 @@ func declareKeysEndTransaction(
 
 	// If the request is intending to finalize the transaction record then it
 	// needs to declare a few extra keys.
-	if !needsStaging(et) {
+	if !et.IsParallelCommit() {
 		// All requests that intent on resolving local intents need to depend on
 		// the range descriptor because they need to determine which intents are
 		// within the local range.
@@ -281,7 +281,7 @@ func evalEndTransaction(
 		// before being explicitly committed, write the staged transaction
 		// record and return without running commit triggers or resolving local
 		// intents.
-		if needsStaging(args) {
+		if args.IsParallelCommit() {
 			// It's not clear how to combine transaction recovery with commit
 			// triggers, so for now we don't allow them to mix. This shouldn't
 			// cause any issues and the txn coordinator knows not to mix them.
@@ -438,13 +438,6 @@ func IsEndTransactionTriggeringRetryError(
 // retry is required.
 func canForwardSerializableTimestamp(txn *roachpb.Transaction, noRefreshSpans bool) bool {
 	return !txn.OrigTimestampWasObserved && noRefreshSpans
-}
-
-// needsStaging determines whether the EndTransaction request requires
-// that a transaction move to the STAGING state before committing or
-// not.
-func needsStaging(args *roachpb.EndTransactionRequest) bool {
-	return args.IsParallelCommit()
 }
 
 const intentResolutionBatchSize = 500
