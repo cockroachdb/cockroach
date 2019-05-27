@@ -825,6 +825,9 @@ func formatProgress(p float64) string {
 	if i > len(progressDone) {
 		i = len(progressDone)
 	}
+	if i < 0 {
+		i = 0
+	}
 	return fmt.Sprintf("[%s%s] %.0f%%", progressDone[i:], progressTodo[:i], 100*p)
 }
 
