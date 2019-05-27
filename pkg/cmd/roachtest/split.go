@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/split"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	humanize "github.com/dustin/go-humanize"
 	_ "github.com/lib/pq"
@@ -76,8 +75,15 @@ func registerLoadSplits(r *registry) {
 				// even with the expected number of splits. This puts a bound on how high the
 				// `expSplits` value can go.
 				// Add 1s for each split for the overhead of the splitting process.
-				waitDuration: time.Duration(int64(math.Ceil(math.Ceil(math.Log2(float64(expSplits)))*
-					float64((split.RecordDurationThreshold/time.Second))))+int64(expSplits)) * time.Second,
+				// waitDuration: time.Duration(int64(math.Ceil(math.Ceil(math.Log2(float64(expSplits)))*
+				// 	float64((split.RecordDurationThreshold/time.Second))))+int64(expSplits)) * time.Second,
+				//
+				// NB: the above has proven flaky. Just use a fixed duration
+				// that we think should be good enough. For example, for five
+				// expected splits we get ~35s, for ten ~50s, and for 20 ~1m10s.
+				// These are all pretty short, so any random abnormality will mess
+				// things up.
+				waitDuration: 10 * time.Minute,
 			})
 		},
 	})
