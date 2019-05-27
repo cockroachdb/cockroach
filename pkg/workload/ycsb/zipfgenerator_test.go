@@ -152,7 +152,7 @@ func runZipfGenerators(t *testing.T, withIncrements bool) {
 	for i := 0; i < max; i += step {
 		count = 0
 		for {
-			if x[index] >= i {
+			if x[index] >= i+step {
 				break
 			}
 			index++
