@@ -32,6 +32,7 @@
 #include "iterator.h"
 #include "merge.h"
 #include "options.h"
+#include "row_counter.h"
 #include "snapshot.h"
 #include "status.h"
 #include "table_props.h"
@@ -915,18 +916,18 @@ DBStatus DBUnlockFile(DBFileLock lock) {
 }
 
 DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIterOptions iter_opts,
-                       DBEngine* engine, DBString* data, int64_t* entries, int64_t* data_size,
-                       DBString* write_intent) {
+                       DBEngine* engine, DBString* data, DBString* write_intent,
+                       DBString* summary) {
   DBSstFileWriter* writer = DBSstFileWriterNew();
   DBStatus status = DBSstFileWriterOpen(writer);
   if (status.data != NULL) {
     return status;
   }
 
-  *entries = 0;
-  *data_size = 0;
-
   DBIncrementalIterator iter(engine, iter_opts, start, end, write_intent);
+
+  roachpb::BulkOpSummary bulkop_summary;
+  RowCounter row_counter;
 
   bool skip_current_key_versions = !export_all_revisions;
   DBIterState state;
@@ -961,11 +962,16 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIter
       DBSstFileWriterClose(writer);
       return status;
     }
-    (*entries)++;
-    (*data_size) += iter.key().size() + iter.value().size();
-  }
 
-  if (*entries == 0) {
+    if (!row_counter.Count((iter.key()), &bulkop_summary)) {
+      return ToDBString("Error in row counter");
+    }
+    bulkop_summary.set_data_size(bulkop_summary.data_size() + decoded_key.size() +
+                                 iter.value().size());
+  }
+  *summary = ToDBString(bulkop_summary.SerializeAsString());
+
+  if (bulkop_summary.data_size() == 0) {
     DBSstFileWriterClose(writer);
     return kSuccess;
   }
