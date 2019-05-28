@@ -3196,7 +3196,7 @@ func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byt
 // SSTable containing the exported keys, the size of exported data, or an error.
 func ExportToSst(
 	ctx context.Context, e Reader, start, end MVCCKey, exportAllRevisions bool, io IterOptions,
-) ([]byte, int64, error) {
+) ([]byte, roachpb.BulkOpSummary, error) {
 
 	var cdbEngine *C.DBEngine
 	switch v := e.(type) {
@@ -3209,26 +3209,30 @@ func ExportToSst(
 	}
 
 	var data C.DBString
-	var entries C.int64_t
-	var dataSize C.int64_t
 	var intentErr C.DBString
+	var bulkopSummary C.DBString
 
 	err := statusToError(C.DBExportToSst(goToCKey(start), goToCKey(end), C.bool(exportAllRevisions),
-		goToCIterOptions(io), cdbEngine, &data, &entries, &dataSize, &intentErr))
+		goToCIterOptions(io), cdbEngine, &data, &intentErr, &bulkopSummary))
 
 	if err != nil {
 		if err.Error() == "WriteIntentError" {
 			var e roachpb.WriteIntentError
 			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
-				return nil, 0, errors.Wrap(err, "failed to decode write intent error")
+				return nil, roachpb.BulkOpSummary{}, errors.Wrap(err, "failed to decode write intent error")
 			}
 
-			return nil, 0, &e
+			return nil, roachpb.BulkOpSummary{}, &e
 		}
-		return nil, 0, err
+		return nil, roachpb.BulkOpSummary{}, err
 	}
 
-	return cStringToGoBytes(data), int64(dataSize), nil
+	var summary roachpb.BulkOpSummary
+	if err := protoutil.Unmarshal(cStringToGoBytes(bulkopSummary), &summary); err != nil {
+		return nil, roachpb.BulkOpSummary{}, errors.Wrap(err, "failed to decode BulkopSummary")
+	}
+
+	return cStringToGoBytes(data), summary, nil
 }
 
 func notFoundErrOrDefault(err error) error {
