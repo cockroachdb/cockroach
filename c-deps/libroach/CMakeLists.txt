@@ -34,6 +34,7 @@ add_library(roach
   getter.cc
   godefs.cc
   incremental_iterator.cc
+  row_counter.cc
   iterator.cc
   ldb.cc
   merge.cc
@@ -55,6 +56,8 @@ add_library(roach
   protos/util/hlc/timestamp.pb.cc
   protos/util/log/log.pb.cc
   protos/util/unresolved_addr.pb.cc
+  protos/roachpb/api.pb.cc
+  protos/util/tracing/recorded_span.pb.cc
   rocksdbutils/env_encryption.cc
 )
 target_include_directories(roach

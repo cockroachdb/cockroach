@@ -518,8 +518,7 @@ DBStatus DBUnlockFile(DBFileLock lock);
 // DBExportToSst exports changes over the keyrange and time interval between the
 // start and end DBKeys to an SSTable using an IncrementalIterator.
 DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIterOptions iter_opts,
-                       DBEngine* engine, DBString* data, int64_t* entries, int64_t* data_size,
-                       DBString* write_intent);
+                       DBEngine* engine, DBString* data, DBString* write_intent, DBString* summary);
 
 #ifdef __cplusplus
 }  // extern "C"
