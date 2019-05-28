@@ -109,6 +109,8 @@ func TestStopperIsStopped(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("stopper should have finished stopping")
 	}
+
+	s.Stop(context.Background())
 }
 
 func TestStopperMultipleStopees(t *testing.T) {
