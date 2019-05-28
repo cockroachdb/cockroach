@@ -218,12 +218,12 @@ project
  ├── fd: (1)-->(2,3), (2)-->(3)
  ├── prune: (1-3)
  └── insert abc
-      ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int) abc.rowid:4(int!null)
+      ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
       ├── insert-mapping:
-      │    ├──  x:5 => abc.a:1
-      │    ├──  y:6 => abc.b:2
-      │    ├──  column9:9 => abc.c:3
-      │    └──  column8:8 => abc.rowid:4
+      │    ├──  x:5 => a:1
+      │    ├──  y:6 => b:2
+      │    ├──  column9:9 => c:3
+      │    └──  column8:8 => rowid:4
       ├── side-effects, mutations
       ├── key: (1)
       ├── fd: (1)-->(2-4), (2)-->(3)
@@ -235,14 +235,14 @@ project
            ├── prune: (5,6,8,9)
            ├── interesting orderings: (+5) (+6)
            └── select
-                ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) abc_3.a:18(int) abc_3.b:19(int) abc_3.c:20(int) abc_3.rowid:21(int)
+                ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:18(int) b:19(int) c:20(int) rowid:21(int)
                 ├── side-effects
                 ├── key: (5)
                 ├── fd: ()-->(18-21), (5)-->(6,8), (6)-->(9)
                 ├── prune: (5,8,18)
                 ├── interesting orderings: (+5) (+6) (+21) (+18) (+19,+20,+21)
                 ├── left-join
-                │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) abc_3.a:18(int) abc_3.b:19(int) abc_3.c:20(int) abc_3.rowid:21(int)
+                │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:18(int) b:19(int) c:20(int) rowid:21(int)
                 │    ├── side-effects
                 │    ├── key: (5,21)
                 │    ├── fd: (5)-->(6,8), (6)-->(9), (21)-->(18-20), (18)-->(19-21), (19,20)~~>(18,21)
@@ -257,14 +257,14 @@ project
                 │    │    ├── prune: (5,6,8,9)
                 │    │    ├── interesting orderings: (+5) (+6)
                 │    │    └── select
-                │    │         ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) abc_2.a:14(int) abc_2.b:15(int) abc_2.c:16(int) abc_2.rowid:17(int)
+                │    │         ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:14(int) b:15(int) c:16(int) rowid:17(int)
                 │    │         ├── side-effects
                 │    │         ├── key: (5)
                 │    │         ├── fd: ()-->(14-17), (5)-->(6,8), (6)-->(9)
                 │    │         ├── prune: (6,8,9,15-17)
                 │    │         ├── interesting orderings: (+5) (+6) (+17) (+14) (+15,+16,+17)
                 │    │         ├── left-join
-                │    │         │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) abc_2.a:14(int) abc_2.b:15(int) abc_2.c:16(int) abc_2.rowid:17(int)
+                │    │         │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:14(int) b:15(int) c:16(int) rowid:17(int)
                 │    │         │    ├── side-effects
                 │    │         │    ├── key: (5,17)
                 │    │         │    ├── fd: (5)-->(6,8), (6)-->(9), (17)-->(14-16), (14)-->(15-17), (15,16)~~>(14,17)
@@ -279,14 +279,14 @@ project
                 │    │         │    │    ├── prune: (5,6,8,9)
                 │    │         │    │    ├── interesting orderings: (+5) (+6)
                 │    │         │    │    └── select
-                │    │         │    │         ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) abc_1.a:10(int) abc_1.b:11(int) abc_1.c:12(int) abc_1.rowid:13(int)
+                │    │         │    │         ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
                 │    │         │    │         ├── side-effects
                 │    │         │    │         ├── key: (5)
                 │    │         │    │         ├── fd: ()-->(10-13), (5)-->(6,8), (6)-->(9)
                 │    │         │    │         ├── prune: (5,6,9-12)
                 │    │         │    │         ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
                 │    │         │    │         ├── left-join
-                │    │         │    │         │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) abc_1.a:10(int) abc_1.b:11(int) abc_1.c:12(int) abc_1.rowid:13(int)
+                │    │         │    │         │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
                 │    │         │    │         │    ├── side-effects
                 │    │         │    │         │    ├── key: (5,13)
                 │    │         │    │         │    ├── fd: (5)-->(6,8), (6)-->(9), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
@@ -325,8 +325,8 @@ project
                 │    │         │    │         │    │         └── plus [type=int, outer=(6)]
                 │    │         │    │         │    │              ├── variable: y [type=int]
                 │    │         │    │         │    │              └── const: 1 [type=int]
-                │    │         │    │         │    ├── scan abc_1
-                │    │         │    │         │    │    ├── columns: abc_1.a:10(int!null) abc_1.b:11(int) abc_1.c:12(int) abc_1.rowid:13(int!null)
+                │    │         │    │         │    ├── scan abc
+                │    │         │    │         │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
                 │    │         │    │         │    │    ├── key: (13)
                 │    │         │    │         │    │    ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
                 │    │         │    │         │    │    ├── prune: (10-13)
@@ -334,13 +334,13 @@ project
                 │    │         │    │         │    └── filters
                 │    │         │    │         │         └── eq [type=bool, outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
                 │    │         │    │         │              ├── variable: column8 [type=int]
-                │    │         │    │         │              └── variable: abc_1.rowid [type=int]
+                │    │         │    │         │              └── variable: rowid [type=int]
                 │    │         │    │         └── filters
                 │    │         │    │              └── is [type=bool, outer=(13), constraints=(/13: [/NULL - /NULL]; tight), fd=()-->(13)]
-                │    │         │    │                   ├── variable: abc_1.rowid [type=int]
+                │    │         │    │                   ├── variable: rowid [type=int]
                 │    │         │    │                   └── null [type=unknown]
-                │    │         │    ├── scan abc_2
-                │    │         │    │    ├── columns: abc_2.a:14(int!null) abc_2.b:15(int) abc_2.c:16(int) abc_2.rowid:17(int!null)
+                │    │         │    ├── scan abc
+                │    │         │    │    ├── columns: a:14(int!null) b:15(int) c:16(int) rowid:17(int!null)
                 │    │         │    │    ├── key: (17)
                 │    │         │    │    ├── fd: (17)-->(14-16), (14)-->(15-17), (15,16)~~>(14,17)
                 │    │         │    │    ├── prune: (14-17)
@@ -348,13 +348,13 @@ project
                 │    │         │    └── filters
                 │    │         │         └── eq [type=bool, outer=(5,14), constraints=(/5: (/NULL - ]; /14: (/NULL - ]), fd=(5)==(14), (14)==(5)]
                 │    │         │              ├── variable: x [type=int]
-                │    │         │              └── variable: abc_2.a [type=int]
+                │    │         │              └── variable: a [type=int]
                 │    │         └── filters
                 │    │              └── is [type=bool, outer=(14), constraints=(/14: [/NULL - /NULL]; tight), fd=()-->(14)]
-                │    │                   ├── variable: abc_2.a [type=int]
+                │    │                   ├── variable: a [type=int]
                 │    │                   └── null [type=unknown]
-                │    ├── scan abc_3
-                │    │    ├── columns: abc_3.a:18(int!null) abc_3.b:19(int) abc_3.c:20(int) abc_3.rowid:21(int!null)
+                │    ├── scan abc
+                │    │    ├── columns: a:18(int!null) b:19(int) c:20(int) rowid:21(int!null)
                 │    │    ├── key: (21)
                 │    │    ├── fd: (21)-->(18-20), (18)-->(19-21), (19,20)~~>(18,21)
                 │    │    ├── prune: (18-21)
@@ -362,13 +362,13 @@ project
                 │    └── filters
                 │         ├── eq [type=bool, outer=(6,19), constraints=(/6: (/NULL - ]; /19: (/NULL - ]), fd=(6)==(19), (19)==(6)]
                 │         │    ├── variable: y [type=int]
-                │         │    └── variable: abc_3.b [type=int]
+                │         │    └── variable: b [type=int]
                 │         └── eq [type=bool, outer=(9,20), constraints=(/9: (/NULL - ]; /20: (/NULL - ]), fd=(9)==(20), (20)==(9)]
                 │              ├── variable: column9 [type=int]
-                │              └── variable: abc_3.c [type=int]
+                │              └── variable: c [type=int]
                 └── filters
                      └── is [type=bool, outer=(21), constraints=(/21: [/NULL - /NULL]; tight), fd=()-->(21)]
-                          ├── variable: abc_3.rowid [type=int]
+                          ├── variable: rowid [type=int]
                           └── null [type=unknown]
 
 # UPSERT case.

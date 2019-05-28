@@ -650,27 +650,27 @@ ON CONFLICT DO NOTHING
 insert xyz
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  column1:4 => xyz.x:1
- │    ├──  column2:5 => xyz.y:2
- │    └──  column3:6 => xyz.z:3
+ │    ├──  column1:4 => x:1
+ │    ├──  column2:5 => y:2
+ │    └──  column3:6 => z:3
  └── project
       ├── columns: column1:4(int) column2:5(int) column3:6(int)
       └── select
-           ├── columns: column1:4(int) column2:5(int) column3:6(int) xyz_3.x:13(int) xyz_3.y:14(int) xyz_3.z:15(int)
+           ├── columns: column1:4(int) column2:5(int) column3:6(int) x:13(int) y:14(int) z:15(int)
            ├── left-join
-           │    ├── columns: column1:4(int) column2:5(int) column3:6(int) xyz_3.x:13(int) xyz_3.y:14(int) xyz_3.z:15(int)
+           │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:13(int) y:14(int) z:15(int)
            │    ├── project
            │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
            │    │    └── select
-           │    │         ├── columns: column1:4(int) column2:5(int) column3:6(int) xyz_2.x:10(int) xyz_2.y:11(int) xyz_2.z:12(int)
+           │    │         ├── columns: column1:4(int) column2:5(int) column3:6(int) x:10(int) y:11(int) z:12(int)
            │    │         ├── left-join
-           │    │         │    ├── columns: column1:4(int) column2:5(int) column3:6(int) xyz_2.x:10(int) xyz_2.y:11(int) xyz_2.z:12(int)
+           │    │         │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:10(int) y:11(int) z:12(int)
            │    │         │    ├── project
            │    │         │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
            │    │         │    │    └── select
-           │    │         │    │         ├── columns: column1:4(int) column2:5(int) column3:6(int) xyz_1.x:7(int) xyz_1.y:8(int) xyz_1.z:9(int)
+           │    │         │    │         ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
            │    │         │    │         ├── left-join
-           │    │         │    │         │    ├── columns: column1:4(int) column2:5(int) column3:6(int) xyz_1.x:7(int) xyz_1.y:8(int) xyz_1.z:9(int)
+           │    │         │    │         │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
            │    │         │    │         │    ├── values
            │    │         │    │         │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
            │    │         │    │         │    │    ├── tuple [type=tuple{int, int, int}]
@@ -681,41 +681,41 @@ insert xyz
            │    │         │    │         │    │         ├── const: 4 [type=int]
            │    │         │    │         │    │         ├── const: 5 [type=int]
            │    │         │    │         │    │         └── const: 6 [type=int]
-           │    │         │    │         │    ├── scan xyz_1
-           │    │         │    │         │    │    └── columns: xyz_1.x:7(int!null) xyz_1.y:8(int) xyz_1.z:9(int)
+           │    │         │    │         │    ├── scan xyz
+           │    │         │    │         │    │    └── columns: x:7(int!null) y:8(int) z:9(int)
            │    │         │    │         │    └── filters
            │    │         │    │         │         └── eq [type=bool]
            │    │         │    │         │              ├── variable: column1 [type=int]
-           │    │         │    │         │              └── variable: xyz_1.x [type=int]
+           │    │         │    │         │              └── variable: x [type=int]
            │    │         │    │         └── filters
            │    │         │    │              └── is [type=bool]
-           │    │         │    │                   ├── variable: xyz_1.x [type=int]
+           │    │         │    │                   ├── variable: x [type=int]
            │    │         │    │                   └── null [type=unknown]
-           │    │         │    ├── scan xyz_2
-           │    │         │    │    └── columns: xyz_2.x:10(int!null) xyz_2.y:11(int) xyz_2.z:12(int)
+           │    │         │    ├── scan xyz
+           │    │         │    │    └── columns: x:10(int!null) y:11(int) z:12(int)
            │    │         │    └── filters
            │    │         │         ├── eq [type=bool]
            │    │         │         │    ├── variable: column2 [type=int]
-           │    │         │         │    └── variable: xyz_2.y [type=int]
+           │    │         │         │    └── variable: y [type=int]
            │    │         │         └── eq [type=bool]
            │    │         │              ├── variable: column3 [type=int]
-           │    │         │              └── variable: xyz_2.z [type=int]
+           │    │         │              └── variable: z [type=int]
            │    │         └── filters
            │    │              └── is [type=bool]
-           │    │                   ├── variable: xyz_2.x [type=int]
+           │    │                   ├── variable: x [type=int]
            │    │                   └── null [type=unknown]
-           │    ├── scan xyz_3
-           │    │    └── columns: xyz_3.x:13(int!null) xyz_3.y:14(int) xyz_3.z:15(int)
+           │    ├── scan xyz
+           │    │    └── columns: x:13(int!null) y:14(int) z:15(int)
            │    └── filters
            │         ├── eq [type=bool]
            │         │    ├── variable: column3 [type=int]
-           │         │    └── variable: xyz_3.z [type=int]
+           │         │    └── variable: z [type=int]
            │         └── eq [type=bool]
            │              ├── variable: column2 [type=int]
-           │              └── variable: xyz_3.y [type=int]
+           │              └── variable: y [type=int]
            └── filters
                 └── is [type=bool]
-                     ├── variable: xyz_3.x [type=int]
+                     ├── variable: x [type=int]
                      └── null [type=unknown]
 
 # Conflict columns are explicitly specified.
@@ -727,15 +727,15 @@ ON CONFLICT (y, z) DO NOTHING
 insert xyz
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  column1:4 => xyz.x:1
- │    ├──  column2:5 => xyz.y:2
- │    └──  column3:6 => xyz.z:3
+ │    ├──  column1:4 => x:1
+ │    ├──  column2:5 => y:2
+ │    └──  column3:6 => z:3
  └── project
       ├── columns: column1:4(int) column2:5(int) column3:6(int)
       └── select
-           ├── columns: column1:4(int) column2:5(int) column3:6(int) xyz_2.x:7(int) xyz_2.y:8(int) xyz_2.z:9(int)
+           ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
            ├── left-join
-           │    ├── columns: column1:4(int) column2:5(int) column3:6(int) xyz_2.x:7(int) xyz_2.y:8(int) xyz_2.z:9(int)
+           │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
            │    ├── values
            │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
            │    │    ├── tuple [type=tuple{int, int, int}]
@@ -746,18 +746,18 @@ insert xyz
            │    │         ├── const: 4 [type=int]
            │    │         ├── const: 5 [type=int]
            │    │         └── const: 6 [type=int]
-           │    ├── scan xyz_2
-           │    │    └── columns: xyz_2.x:7(int!null) xyz_2.y:8(int) xyz_2.z:9(int)
+           │    ├── scan xyz
+           │    │    └── columns: x:7(int!null) y:8(int) z:9(int)
            │    └── filters
            │         ├── eq [type=bool]
            │         │    ├── variable: column2 [type=int]
-           │         │    └── variable: xyz_2.y [type=int]
+           │         │    └── variable: y [type=int]
            │         └── eq [type=bool]
            │              ├── variable: column3 [type=int]
-           │              └── variable: xyz_2.z [type=int]
+           │              └── variable: z [type=int]
            └── filters
                 └── is [type=bool]
-                     ├── variable: xyz_2.x [type=int]
+                     ├── variable: x [type=int]
                      └── null [type=unknown]
 
 # ------------------------------------------------------------------------------
@@ -1706,19 +1706,19 @@ INSERT INTO checks (a, b) VALUES (1, 2) ON CONFLICT (a) DO NOTHING
 insert checks
  ├── columns: <none>
  ├── insert-mapping:
- │    ├──  column1:5 => checks.a:1
- │    ├──  column2:6 => checks.b:2
- │    ├──  column7:7 => checks.c:3
- │    └──  column8:8 => checks.d:4
+ │    ├──  column1:5 => a:1
+ │    ├──  column2:6 => b:2
+ │    ├──  column7:7 => c:3
+ │    └──  column8:8 => d:4
  ├── check columns: check1:13(bool) check2:14(bool)
  └── project
       ├── columns: check1:13(bool) check2:14(bool) column1:5(int) column2:6(int) column7:7(int) column8:8(int)
       ├── project
       │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int)
       │    └── select
-      │         ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) checks_1.a:9(int) checks_1.b:10(int) checks_1.c:11(int) checks_1.d:12(int)
+      │         ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │         ├── left-join
-      │         │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) checks_1.a:9(int) checks_1.b:10(int) checks_1.c:11(int) checks_1.d:12(int)
+      │         │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │         │    ├── project
       │         │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
       │         │    │    ├── project
@@ -1735,15 +1735,15 @@ insert checks
       │         │    │         └── plus [type=int]
       │         │    │              ├── variable: column7 [type=int]
       │         │    │              └── const: 1 [type=int]
-      │         │    ├── scan checks_1
-      │         │    │    └── columns: checks_1.a:9(int!null) checks_1.b:10(int) checks_1.c:11(int) checks_1.d:12(int)
+      │         │    ├── scan checks
+      │         │    │    └── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
       │         │    └── filters
       │         │         └── eq [type=bool]
       │         │              ├── variable: column1 [type=int]
-      │         │              └── variable: checks_1.a [type=int]
+      │         │              └── variable: a [type=int]
       │         └── filters
       │              └── is [type=bool]
-      │                   ├── variable: checks_1.a [type=int]
+      │                   ├── variable: a [type=int]
       │                   └── null [type=unknown]
       └── projections
            ├── lt [type=bool]

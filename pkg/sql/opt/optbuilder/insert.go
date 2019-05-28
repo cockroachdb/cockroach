@@ -641,11 +641,9 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 		// Build the right side of the left outer join. Use a new metadata instance
 		// of the mutation table so that a different set of column IDs are used for
 		// the two tables in the self-join.
-		tn := mb.tab.Name().TableName
-		alias := tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s_%d", tn, idx+1)))
 		scanScope := mb.b.buildScan(
 			mb.tab,
-			&alias,
+			&mb.alias,
 			nil, /* ordinals */
 			nil, /* indexFlags */
 			excludeMutations,
