@@ -23,6 +23,7 @@ namespace cockroach {
 const int kIntZero = 136;
 const int kIntSmall = 109;
 const int kIntMax = 253;
+const int kIntMin = 128;
 
 // EncodeUint32 encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer.
@@ -81,7 +82,6 @@ WARN_UNUSED_RESULT inline bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
   return true;
 }
 
-
 // DecodeTimestamp an MVCC encoded timestamp. Returns true on success
 // and false on any decoding error.
 WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice* timestamp, int64_t* wall_time,
@@ -115,5 +115,14 @@ WARN_UNUSED_RESULT bool DecodeRangeIDKey(rocksdb::Slice buf, int64_t* range_id,
 // a slice that is still MVCC encoded. This is used by the prefix
 // extractor used to build bloom filters on the prefix.
 rocksdb::Slice KeyPrefix(const rocksdb::Slice& src);
+
+// IsInt peeks at the type of the value encoded at the start of buf and checks
+// if it is of type int.
+WARN_UNUSED_RESULT bool IsInt(rocksdb::Slice* buf);
+
+// DecodeTablePrefix validates that the given key has a table prefix. On
+// completion, buf holds the remainder of the key (with the prefix removed) and
+// tbl stores the decoded descriptor ID of the table.
+WARN_UNUSED_RESULT bool DecodeTablePrefix(rocksdb::Slice* buf, uint64_t* tbl);
 
 }  // namespace cockroach
