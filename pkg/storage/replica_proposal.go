@@ -698,7 +698,7 @@ func (r *Replica) evaluateProposal(
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
-	ctx, csp := tracing.StartComponentSpan(ctx, r.AmbientContext.Tracer, "storage.replica.write.eval", "write batch evaluation")
+	ctx, csp := tracing.StartComponentSpan(ctx, r.AmbientContext.Tracer, "storage.replica.raft.eval", "write batch evaluation")
 	defer csp.Finish()
 	csp.SetTag("batch", &ba)
 

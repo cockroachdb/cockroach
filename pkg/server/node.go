@@ -816,7 +816,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) {
 // writeNodeStatus retrieves status summaries from the supplied
 // NodeStatusRecorder and persists them to the cockroach data store.
 func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration) error {
-	ctx, csp := tracing.StartComponentSpan(ctx, n.storeCfg.AmbientCtx.Tracer, "node.status", "node status loop")
+	ctx, csp := tracing.StartComponentSpan(ctx, n.storeCfg.AmbientCtx.Tracer, "server.node.status", "node status loop")
 	var err error
 	if runErr := n.stopper.RunTask(ctx, "node.Node: writing summary", func(ctx context.Context) {
 		nodeStatus := n.recorder.GenerateNodeStatus(ctx)

@@ -18,6 +18,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -110,6 +111,29 @@ func spanInclusionFuncForClient(
 	parentSpanCtx opentracing.SpanContext, method string, req, resp interface{},
 ) bool {
 	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
+}
+
+// serviceIsSystemComponent identifies whether the full method for
+// the RPC is a server endpoint which defines a system component. If
+// so, the service prefix and the method name are returned with
+// sysComp = true. Otherwise, service and method are empty and sysComp
+// is false.
+func serviceIsSystemComponent(fullMethod string) (service, method string, sysComp bool) {
+	for _, sysComp := range []struct {
+		prefix  string
+		service string
+	}{
+		{prefix: "/cockroach.server.serverpb.Admin/", service: "server.endpoint.admin"},
+		{prefix: "/cockroach.server.serverpb.Status/", service: "server.endpoint.status"},
+		{prefix: "/cockroach.server.serverpb.LogIn/", service: "server.endpoint.authentication"},
+		{prefix: "/cockroach.server.serverpb.LogOut/", service: "server.endpoint.authentication"},
+		{prefix: "/cockroach.ts.tspb.TimeSeries/", service: "server.endpoint.timeseries"},
+	} {
+		if strings.HasPrefix(fullMethod, sysComp.prefix) {
+			return sysComp.service, fullMethod[len(sysComp.prefix):], true
+		}
+	}
+	return "", "", false
 }
 
 func requireSuperUser(ctx context.Context) error {
@@ -205,6 +229,23 @@ func NewServerWithInterceptor(
 		// well. The otgrpc package has no such facility, but there's also this:
 		//
 		// https://github.com/grpc-ecosystem/go-grpc-middleware/tree/master/tracing/opentracing
+
+		// Install a chained interceptor which creates system component spans.
+		prevUnaryInterceptor := unaryInterceptor
+		unaryInterceptor = func(
+			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+		) (interface{}, error) {
+			service, method, sysComp := serviceIsSystemComponent(info.FullMethod)
+			if !sysComp {
+				return prevUnaryInterceptor(ctx, req, info, handler)
+			}
+			ctx, csp := tracing.StartComponentSpan(ctx, tracer, service, method)
+			csp.SetTag("req", req)
+			resp, err := prevUnaryInterceptor(ctx, req, info, handler)
+			csp.SetTag("resp", resp)
+			csp.FinishWithError(err)
+			return resp, err
+		}
 	}
 
 	// TODO(tschottdorf): when setting up the interceptors below, could make the
