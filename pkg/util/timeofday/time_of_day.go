@@ -31,8 +31,12 @@ type TimeOfDay int64
 const (
 	// Min is the minimum TimeOfDay value (midnight).
 	Min = TimeOfDay(0)
-	// Max is the maximum TimeOfDay value (1 microsecond before midnight).
+
+	// Max is the maximum TimeOfDay value (1 second before midnight)
 	Max = TimeOfDay(microsecondsPerDay - 1)
+
+	// Time2400 is a special value to represent the 24:00 input time
+	Time2400 = TimeOfDay(microsecondsPerDay)
 
 	microsecondsPerSecond = 1e6
 	microsecondsPerMinute = 60 * microsecondsPerSecond
@@ -107,8 +111,11 @@ func Difference(t1 TimeOfDay, t2 TimeOfDay) duration.Duration {
 	return duration.MakeDuration(int64(t1-t2)*nanosPerMicro, 0, 0)
 }
 
-// Hour returns the hour specified by t, in the range [0, 23].
+// Hour returns the hour specified by t, in the range [0, 24].
 func (t TimeOfDay) Hour() int {
+	if t == Time2400 {
+		return 24
+	}
 	return int(int64(t)%microsecondsPerDay) / microsecondsPerHour
 }
 

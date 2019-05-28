@@ -105,6 +105,8 @@ func TestDatumOrdering(t *testing.T) {
 			`'00:00:00'`, `'23:59:59.999999'`},
 		{`'23:59:59.999999':::time`, `'23:59:59.999998'`, valIsMax,
 			`'00:00:00'`, `'23:59:59.999999'`},
+		{`'24:00':::time`, `'23:59:59.999999'`, `'00:00:00.000001'`,
+			`'00:00:00'`, `'23:59:59.999999'`},
 
 		// Intervals
 		{`'1 day':::interval`, noPrev, noNext,
@@ -484,6 +486,9 @@ func TestParseDTime(t *testing.T) {
 		{"04:05:06.000001", timeofday.New(4, 5, 6, 1)},
 		{"04:05:06-07", timeofday.New(4, 5, 6, 0)},
 		{"4:5:6", timeofday.New(4, 5, 6, 0)},
+		{"24:00:00", timeofday.Time2400},
+		{"24:00:00.000", timeofday.Time2400},
+		{"24:00:00.000000", timeofday.Time2400},
 	}
 	for _, td := range testData {
 		actual, err := tree.ParseDTime(nil, td.str)
@@ -502,7 +507,6 @@ func TestParseDTimeError(t *testing.T) {
 		"",
 		"foo",
 		"01",
-		"24:00:00",
 	}
 	for _, s := range testData {
 		actual, _ := tree.ParseDTime(nil, s)
