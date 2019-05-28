@@ -43,6 +43,7 @@ func (r *RowCounter) Count(key roachpb.Key) error {
 	if bytes.Equal(row, r.prev) {
 		return nil
 	}
+
 	r.prev = append(r.prev[:0], row...)
 
 	rest, tbl, err := keys.DecodeTablePrefix(row)
