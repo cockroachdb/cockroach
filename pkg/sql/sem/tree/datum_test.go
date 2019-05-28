@@ -504,7 +504,6 @@ func TestParseDTimeError(t *testing.T) {
 		"",
 		"foo",
 		"01",
-		"24:00:00",
 	}
 	for _, s := range testData {
 		actual, _ := tree.ParseDTime(nil, s)
