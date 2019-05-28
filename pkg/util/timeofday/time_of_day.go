@@ -31,8 +31,11 @@ type TimeOfDay int64
 const (
 	// Min is the minimum TimeOfDay value (midnight).
 	Min = TimeOfDay(0)
-	// Max is the maximum TimeOfDay value (1 microsecond before midnight).
-	Max = TimeOfDay(microsecondsPerDay - 1)
+
+	// Max is the maximum TimeOfDay value
+	// Because 24:00:00 is a valid time according to Postgres, the
+	// max time can be microsecondsPerDay
+	Max = TimeOfDay(microsecondsPerDay)
 
 	microsecondsPerSecond = 1e6
 	microsecondsPerMinute = 60 * microsecondsPerSecond
@@ -61,9 +64,13 @@ func (t TimeOfDay) String() string {
 }
 
 // FromInt constructs a TimeOfDay from an int64, representing microseconds since
-// midnight. Inputs outside the range [0, microsecondsPerDay) are modded as
+// midnight. Inputs outside the range [0, microsecondsPerDay] are modded as
 // appropriate.
 func FromInt(i int64) TimeOfDay {
+	// 24:00 is a valid time, so differentiate it from 00:00
+	if i == microsecondsPerDay {
+		return TimeOfDay(i)
+	}
 	return TimeOfDay(positiveMod(i, microsecondsPerDay))
 }
 
@@ -107,8 +114,11 @@ func Difference(t1 TimeOfDay, t2 TimeOfDay) duration.Duration {
 	return duration.MakeDuration(int64(t1-t2)*nanosPerMicro, 0, 0)
 }
 
-// Hour returns the hour specified by t, in the range [0, 23].
+// Hour returns the hour specified by t, in the range [0, 24].
 func (t TimeOfDay) Hour() int {
+	if int64(t) == microsecondsPerDay {
+		return int(int64(t) / microsecondsPerHour)
+	}
 	return int(int64(t)%microsecondsPerDay) / microsecondsPerHour
 }
 

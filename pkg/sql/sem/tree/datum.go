@@ -1817,6 +1817,13 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 // provided string, or an error if parsing is unsuccessful.
 func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
 	now := relativeParseTime(ctx)
+
+	// special case on 24:00 and 24:00:00 as the parser
+	// does not handle these correctly.
+	if s == "24:00" || s == "24:00:00" {
+		return MakeDTime(timeofday.New(24, 0, 0, 0)), nil
+	}
+
 	t, err := pgdate.ParseTime(now, 0 /* mode */, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
