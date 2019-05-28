@@ -20,6 +20,7 @@ import (
 	"math"
 	"math/big"
 	"net"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -64,6 +65,9 @@ var (
 
 	// DZero is the zero-valued integer Datum.
 	DZero = NewDInt(0)
+
+	// DTimeRegex is a compiled regex for parsing the 24:00 time value
+	DTimeRegex = regexp.MustCompile("^24:00($|(:00$)|(:00.0+$))")
 )
 
 // Datum represents a SQL value.
@@ -1817,6 +1821,13 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 // provided string, or an error if parsing is unsuccessful.
 func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
 	now := relativeParseTime(ctx)
+
+	// special case on 24:00 and 24:00:00 as the parser
+	// does not handle these correctly.
+	if DTimeRegex.MatchString(s) {
+		return MakeDTime(timeofday.Time2400), nil
+	}
+
 	t, err := pgdate.ParseTime(now, 0 /* mode */, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
