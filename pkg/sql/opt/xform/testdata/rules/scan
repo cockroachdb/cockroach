@@ -792,8 +792,77 @@ TABLE check_constraint_validity
  └── CHECK (a < 20)
 
 opt
-SELECT * from check_constraint_validity WHERE a > 7
+SELECT * FROM check_constraint_validity WHERE a > 7
 ----
 scan check_constraint_validity@secondary
  ├── columns: a:1(int!null)
  └── constraint: /1/2: [/8 - /19]
+
+exec-ddl
+CREATE TABLE check_test.alias_test (
+  a INT PRIMARY KEY,
+  CHECK (a > 0),
+  CHECK (alias_test.a > 2),
+  CHECK (check_test.alias_test.a > 4)
+)
+----
+TABLE alias_test
+ ├── a int not null
+ ├── INDEX primary
+ │    └── a int not null
+ ├── CHECK (a > 0)
+ ├── CHECK (alias_test.a > 2)
+ └── CHECK (check_test.alias_test.a > 4)
+
+opt
+SELECT * FROM check_test.alias_test WHERE a < 10
+----
+scan check_test.public.alias_test
+ ├── columns: a:1(int!null)
+ ├── constraint: /1: [/5 - /9]
+ └── key: (1)
+
+opt
+INSERT INTO check_test.alias_test VALUES (6) ON CONFLICT DO NOTHING
+----
+insert check_test.public.alias_test
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    └──  column1:2 => a:1
+ ├── check columns: check1:4(bool) check2:5(bool) check3:6(bool)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: check1:4(bool) check2:5(bool) check3:6(bool) column1:2(int)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2,4-6)
+      ├── select
+      │    ├── columns: column1:2(int) a:3(int)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(2,3)
+      │    ├── left-join
+      │    │    ├── columns: column1:2(int) a:3(int)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(2,3)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:2(int)
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(2)
+      │    │    │    └── (6,) [type=tuple{int}]
+      │    │    ├── scan check_test.public.alias_test
+      │    │    │    ├── columns: a:3(int!null)
+      │    │    │    ├── constraint: /3: [/6 - /6]
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    └── fd: ()-->(3)
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── a IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+      └── projections
+           ├── column1 > 0 [type=bool, outer=(2)]
+           ├── column1 > 2 [type=bool, outer=(2)]
+           └── column1 > 4 [type=bool, outer=(2)]
