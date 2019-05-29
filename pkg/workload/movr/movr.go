@@ -14,13 +14,13 @@ package movr
 
 import (
 	gosql "database/sql"
-	"fmt"
 	"math"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/faker"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
@@ -128,6 +128,8 @@ type movr struct {
 	numPromoCodes                     int
 
 	creationTime time.Time
+
+	faker faker.Faker
 }
 
 func init() {
@@ -215,6 +217,7 @@ func (g *movr) Hooks() workload.Hooks {
 
 // Tables implements the Generator interface.
 func (g *movr) Tables() []workload.Table {
+	g.faker = faker.GetFaker()
 	tables := make([]workload.Table, 6)
 	tables[TablesUsersIdx] = workload.Table{
 		Name:   `users`,
@@ -315,11 +318,11 @@ func (g *movr) movrUsersInitialRow(rowIdx int) []interface{} {
 	id.DeterministicV4(uint64(rowIdx), uint64(g.users.numRows))
 
 	return []interface{}{
-		id.String(),         // id
-		city.city,           // city
-		randName(rng),       // name
-		randAddress(rng),    // address
-		randCreditCard(rng), // credit_card
+		id.String(),                // id
+		city.city,                  // city
+		g.faker.Name(rng),          // name
+		g.faker.StreetAddress(rng), // address
+		randCreditCard(rng),        // credit_card
 	}
 }
 
@@ -343,7 +346,7 @@ func (g *movr) movrVehiclesInitialRow(rowIdx int) []interface{} {
 		ownerID,                                // owner_id
 		g.creationTime.Format(timestampFormat), // creation_time
 		randVehicleStatus(rng),                 // status
-		randAddress(rng),                       // current_location
+		g.faker.StreetAddress(rng),             // current_location
 		randVehicleMetadata(rng, vehicleType),  // ext
 	}
 }
@@ -361,8 +364,8 @@ func (g *movr) movrRidesInitialRow(rowIdx int) []interface{} {
 	riderID := g.movrUsersInitialRow(riderRowIdx)[0]
 	vehicleRowIdx := g.vehicles.randRowInCity(rng, cityIdx)
 	vehicleID := g.movrVehiclesInitialRow(vehicleRowIdx)[0]
-	startTime := g.creationTime.Add(time.Duration(rng.Intn(30)) * time.Hour)
-	endTime := startTime.Add(time.Duration(rng.Intn(30)) * time.Hour)
+	startTime := g.creationTime.Add(-time.Duration(rng.Intn(30)) * 24 * time.Hour)
+	endTime := startTime.Add(time.Duration(rng.Intn(60)) * time.Hour)
 
 	return []interface{}{
 		id.String(),                       // id
@@ -370,8 +373,8 @@ func (g *movr) movrRidesInitialRow(rowIdx int) []interface{} {
 		city.city,                         // vehicle_city
 		riderID,                           // rider_id
 		vehicleID,                         // vehicle_id
-		randAddress(rng),                  // start_address
-		randAddress(rng),                  // end_address
+		g.faker.StreetAddress(rng),        // start_address
+		g.faker.StreetAddress(rng),        // end_address
 		startTime.Format(timestampFormat), // start_time
 		endTime.Format(timestampFormat),   // end_time
 		rng.Intn(100),                     // revenue
@@ -399,13 +402,9 @@ func (g *movr) movrVehicleLocationHistoriesInitialRow(rowIdx int) []interface{} 
 
 func (g *movr) movrPromoCodesInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
-	codeParts := make([]string, 3)
-	for i := range codeParts {
-		codeParts[i] = randWord(rng)
-	}
-	code := fmt.Sprintf(`%s_%d`, strings.Join(codeParts, `_`), rowIdx)
-	description := randParagraph(rng)
-	expirationTime := g.creationTime.Add(-time.Duration(rng.Intn(30)) * 24 * time.Hour)
+	code := strings.ToLower(strings.Join(g.faker.Words(rng, 3), `_`))
+	description := g.faker.Paragraph(rng)
+	expirationTime := g.creationTime.Add(time.Duration(rng.Intn(30)) * 24 * time.Hour)
 	// TODO(dan): This is nil in the reference impl, is that intentional?
 	creationTime := expirationTime.Add(-time.Duration(rng.Intn(30)) * 24 * time.Hour)
 	const rulesJSON = `{"type": "percent_discount", "value": "10%"}`
