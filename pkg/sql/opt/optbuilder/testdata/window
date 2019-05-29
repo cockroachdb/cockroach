@@ -79,6 +79,11 @@ SELECT k FROM kv WHERE avg(k) OVER () > 1
 error (42P20): avg(): window functions are not allowed in WHERE
 
 build
+SELECT avg(DISTINCT k) OVER () FROM kv
+----
+error (0A000): DISTINCT is not implemented for window functions
+
+build
 SELECT 1 FROM kv GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
 ----
 error (42P20): sum(): window functions are not allowed in HAVING
@@ -364,7 +369,7 @@ project
 build
 SELECT avg(DISTINCT k) OVER () FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+error (0A000): DISTINCT is not implemented for window functions
 
 build
 SELECT avg(k) FILTER (WHERE k > 5) OVER () FROM kv
