@@ -66,6 +66,7 @@ var (
 	// DZero is the zero-valued integer Datum.
 	DZero = NewDInt(0)
 
+	// DTimeRegex is a compiled regex for parsing the 24:00 time value
 	DTimeRegex = regexp.MustCompile("^24:00($|(:00$)|(:00.0+$))")
 )
 
