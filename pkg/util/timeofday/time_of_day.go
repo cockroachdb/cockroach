@@ -52,8 +52,7 @@ func New(hour, min, sec, micro int) TimeOfDay {
 	minutes := time.Duration(min) * time.Minute
 	seconds := time.Duration(sec) * time.Second
 	micros := time.Duration(micro) * time.Microsecond
-	sum := int64((hours + minutes + seconds + micros) / time.Microsecond)
-	return FromInt(sum)
+	return FromInt(int64((hours + minutes + seconds + micros) / time.Microsecond))
 }
 
 func (t TimeOfDay) String() string {

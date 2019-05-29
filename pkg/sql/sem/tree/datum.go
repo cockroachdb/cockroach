@@ -65,6 +65,8 @@ var (
 
 	// DZero is the zero-valued integer Datum.
 	DZero = NewDInt(0)
+
+	DTimeRegex = regexp.MustCompile("^24:00($|(:00$)|(:00.0+$))")
 )
 
 // Datum represents a SQL value.
@@ -1821,7 +1823,7 @@ func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
 
 	// special case on 24:00 and 24:00:00 as the parser
 	// does not handle these correctly.
-	if ok, _ := regexp.MatchString("24:00((:00$)|(:00.0{0,6}$))", s); ok {
+	if DTimeRegex.MatchString(s) {
 		return MakeDTime(timeofday.Time2400), nil
 	}
 
