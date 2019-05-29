@@ -44,6 +44,8 @@ message CollectChecksumRequest {
 }
 
 message CollectChecksumResponse {
+  // The checksum is the sha512 hash of the requested computation. It is empty
+  // if the computation failed.
   bytes checksum = 1;
   // snapshot is set if the roachpb.ComputeChecksumRequest had snapshot = true
   // and the response checksum is different from the request checksum.
