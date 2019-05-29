@@ -2450,6 +2450,13 @@ func (sb *statisticsBuilder) updateNullCountsFromProps(
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		}
+		if colStat.DistinctCount == 0 {
+			// Transfer the null count to the distinct count since we now know that
+			// the column is not null. We want to make sure that either the null
+			// count or the distinct count is non-zero, since we always ensure that
+			// the row count is non-zero to avoid creating inefficient plans.
+			colStat.DistinctCount = min(colStat.NullCount, 1)
+		}
 		colStat.NullCount = 0
 	})
 }
