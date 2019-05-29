@@ -1911,7 +1911,7 @@ const (
 	TimestampOutputFormat = "2006-01-02 15:04:05.999999-07:00"
 )
 
-// ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
+// ParseDTimestamp parses and returns the *DTimestamp Datum valuql.go represented by
 // the provided string in UTC, or an error if parsing is unsuccessful.
 func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*DTimestamp, error) {
 	now := relativeParseTime(ctx)

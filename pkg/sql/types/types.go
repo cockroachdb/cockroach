@@ -649,7 +649,10 @@ func MakeTime(precision int32) *T {
 // the given number of fractional second digits.
 func MakeTimestamp(precision int32) *T {
 	if precision == 0 {
-		return Timestamp
+		// TODO: we want to explicitly support precision 0 here,
+		// not have microsecond precision
+		return &T{InternalType: InternalType{
+			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: precision, Locale: &emptyLocale}}
 	}
 	if precision != 6 {
 		panic(pgerror.AssertionFailedf("precision %d is not currently supported", precision))
@@ -1093,7 +1096,7 @@ func (t *T) SQLString() string {
 		// Only binary JSON is currently supported.
 		return "JSONB"
 	case TimeFamily, TimestampFamily, TimestampTZFamily:
-		if t.Precision() > 0 {
+		if t.Precision() >= 0 {
 			return fmt.Sprintf("%s(%d)", strings.ToUpper(t.Name()), t.Precision())
 		}
 	case OidFamily:

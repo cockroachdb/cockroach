@@ -48,6 +48,7 @@ func TestParseColumnType(t *testing.T) {
 		{"JSONB", types.Jsonb},
 		{"TIME", types.Time},
 		{"TIMESTAMP", types.Timestamp},
+		{"TIMESTAMP(0)", types.MakeTimestamp(0)},
 		{"TIMESTAMPTZ", types.TimestampTZ},
 		{"INTERVAL", types.Interval},
 		{"STRING", types.String},
