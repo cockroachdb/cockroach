@@ -479,7 +479,9 @@ func DecodeOidDatum(
 						alloc.i16 /= 10
 					}
 				}
-				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+				if alloc.i16 > 0 {
+					decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+				}
 				decString := string(decDigits)
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
 					return nil, pgerror.Newf(pgerror.CodeSyntaxError, "could not parse string %q as decimal", decString)
