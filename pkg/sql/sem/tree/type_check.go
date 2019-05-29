@@ -888,6 +888,10 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 			return nil, err
 		}
 
+		if expr.Type == DistinctFuncType {
+			return nil, pgerror.Newf(pgerror.CodeFeatureNotSupportedError, "DISTINCT is not implemented for window functions")
+		}
+
 		for i, partition := range expr.WindowDef.Partitions {
 			typedPartition, err := partition.TypeCheck(ctx, types.Any)
 			if err != nil {
