@@ -749,6 +749,7 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/hashjoiner.eg.go \
   pkg/sql/exec/like_ops.eg.go \
   pkg/sql/exec/mergejoiner.eg.go \
+  pkg/sql/exec/min_max_agg.eg.go \
   pkg/sql/exec/projection_ops.eg.go \
   pkg/sql/exec/quicksort.eg.go \
   pkg/sql/exec/rowstovec.eg.go \
@@ -756,7 +757,8 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/sort.eg.go \
   pkg/sql/exec/sum_agg.eg.go \
   pkg/sql/exec/tuples_differ.eg.go \
-  pkg/sql/exec/vec_comparators.eg.go
+  pkg/sql/exec/vec_comparators.eg.go \
+  pkg/sql/exec/zerocolumns.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1407,12 +1409,14 @@ pkg/sql/exec/const.eg.go: pkg/sql/exec/const_tmpl.go
 pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go
 pkg/sql/exec/hashjoiner.eg.go: pkg/sql/exec/hashjoiner_tmpl.go
 pkg/sql/exec/mergejoiner.eg.go: pkg/sql/exec/mergejoiner_tmpl.go
+pkg/sql/exec/min_max_agg.eg.go: pkg/sql/exec/min_max_agg_tmpl.go
 pkg/sql/exec/quicksort.eg.go: pkg/sql/exec/quicksort_tmpl.go
 pkg/sql/exec/rowstovec.eg.go: pkg/sql/exec/rowstovec_tmpl.go
 pkg/sql/exec/sort.eg.go: pkg/sql/exec/sort_tmpl.go
 pkg/sql/exec/sum_agg.eg.go: pkg/sql/exec/sum_agg_tmpl.go
 pkg/sql/exec/tuples_differ.eg.go: pkg/sql/exec/tuples_differ_tmpl.go
 pkg/sql/exec/vec_comparators.eg.go: pkg/sql/exec/vec_comparators_tmpl.go
+pkg/sql/exec/zerocolumns.eg.go: pkg/sql/exec/zerocolumns_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen
 	@# Remove generated files with the old suffix to avoid conflicts.

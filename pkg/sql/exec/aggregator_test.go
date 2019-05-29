@@ -388,8 +388,10 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				distsqlpb.AggregatorSpec_AVG,
 				distsqlpb.AggregatorSpec_COUNT_ROWS,
 				distsqlpb.AggregatorSpec_SUM,
+				distsqlpb.AggregatorSpec_MIN,
+				distsqlpb.AggregatorSpec_MAX,
 			},
-			aggCols:  [][]uint32{{0}, {1}, {}, {2}},
+			aggCols:  [][]uint32{{0}, {1}, {}, {2}, {2}, {2}},
 			colTypes: []types.T{types.Int64, types.Decimal, types.Int64},
 			input: tuples{
 				{0, 3.1, 2},
@@ -401,10 +403,10 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				{3, 5.1, 0},
 			},
 			expected: tuples{
-				{0, 2.1, 2, 5},
-				{1, 2.6, 2, 1},
-				{2, 1.1, 1, 1},
-				{3, 4.6, 2, 0},
+				{0, 2.1, 2, 5, 2, 3},
+				{1, 2.6, 2, 1, 0, 1},
+				{2, 1.1, 1, 1, 1, 1},
+				{3, 4.6, 2, 0, 0, 0},
 			},
 			convToDecimal: true,
 		},
@@ -421,7 +423,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					out := newOpTestOutput(a, []int{0, 1, 2, 3}, tc.expected)
+					out := newOpTestOutput(a, []int{0, 1, 2, 3, 4, 5}, tc.expected)
 					if err := out.Verify(); err != nil {
 						t.Fatal(err)
 					}
@@ -516,6 +518,8 @@ func BenchmarkAggregator(b *testing.B) {
 		distsqlpb.AggregatorSpec_AVG,
 		distsqlpb.AggregatorSpec_COUNT_ROWS,
 		distsqlpb.AggregatorSpec_SUM,
+		distsqlpb.AggregatorSpec_MIN,
+		distsqlpb.AggregatorSpec_MAX,
 	} {
 		fName := distsqlpb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {

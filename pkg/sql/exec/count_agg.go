@@ -37,7 +37,7 @@ func (a *countAgg) Init(groups []bool, vec coldata.Vec) {
 func (a *countAgg) Reset() {
 	a.curIdx = -1
 	a.done = false
-	copy(a.vec, zeroInt64Batch)
+	copy(a.vec, zeroInt64Column)
 }
 
 func (a *countAgg) CurrentOutputIndex() int {
@@ -47,7 +47,7 @@ func (a *countAgg) CurrentOutputIndex() int {
 func (a *countAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		copy(a.vec[idx+1:], zeroInt64Batch)
+		copy(a.vec[idx+1:], zeroInt64Column)
 	}
 }
 
