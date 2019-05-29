@@ -6,7 +6,7 @@
 <intAttribute key="dfidDepth" value="100"/>
 <booleanAttribute key="dfidMode" value="false"/>
 <intAttribute key="distributedFPSetCount" value="0"/>
-<stringAttribute key="distributedNetworkInterface" value="10.0.0.104"/>
+<stringAttribute key="distributedNetworkInterface" value="192.168.13.240"/>
 <intAttribute key="distributedNodesCount" value="1"/>
 <stringAttribute key="distributedTLC" value="off"/>
 <stringAttribute key="distributedTLCVMArgs" value=""/>
@@ -19,7 +19,7 @@
 <stringAttribute key="modelBehaviorNext" value=""/>
 <stringAttribute key="modelBehaviorSpec" value="Spec"/>
 <intAttribute key="modelBehaviorSpecType" value="1"/>
-<stringAttribute key="modelBehaviorVars" value="intent_writes, to_write, txn_epoch, txn_ts, prevent_epoch, pc, commit_ack, record, have_staged_record, found_writes, prevent_ts, tscache, attempt"/>
+<stringAttribute key="modelBehaviorVars" value="intent_writes, to_write, txn_epoch, txn_ts, pipelined_keys, to_check, prevent_epoch, pc, commit_ack, to_resolve, record, have_staged_record, found_writes, prevent_ts, parallel_keys, tscache, attempt"/>
 <stringAttribute key="modelComments" value=""/>
 <booleanAttribute key="modelCorrectnessCheckDeadlock" value="true"/>
 <listAttribute key="modelCorrectnessInvariants">
@@ -50,6 +50,9 @@
 <intAttribute key="simuDepth" value="100"/>
 <intAttribute key="simuSeed" value="-1"/>
 <stringAttribute key="specName" value="ParallelCommits"/>
+<listAttribute key="traceExploreExpressions">
+<listEntry value="1ImplicitCommit"/>
+</listAttribute>
 <stringAttribute key="view" value=""/>
 <booleanAttribute key="visualizeStateGraph" value="false"/>
 </launchConfiguration>
