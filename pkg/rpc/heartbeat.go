@@ -81,6 +81,7 @@ func checkVersion(
 func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
 	// Check that cluster IDs match.
 	clusterID := hs.clusterID.Get()
+	
 	if clusterID = uuid.Nil {
 		return nil, errors.Errorf("cluster not ready")
 	}
