@@ -83,7 +83,11 @@ func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 	case types.TimeFamily:
 		return ParseDTime(ctx, s)
 	case types.TimestampFamily:
-		return ParseDTimestamp(ctx, s, time.Microsecond)
+		if t.Precision() == 0 {
+			return ParseDTimestamp(ctx, s, time.Second)
+		} else {
+			return ParseDTimestamp(ctx, s, time.Microsecond)
+		}
 	case types.TimestampTZFamily:
 		return ParseDTimestampTZ(ctx, s, time.Microsecond)
 	case types.UuidFamily:

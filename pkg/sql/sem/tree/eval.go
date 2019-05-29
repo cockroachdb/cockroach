@@ -3365,7 +3365,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		// TODO(knz): Timestamp from float, decimal.
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimestamp(ctx, string(*d), time.Microsecond)
+			if t.Precision() == 0 {
+				return ParseDTimestamp(ctx, string(*d), time.Second)
+			} else {
+				return ParseDTimestamp(ctx, string(*d), time.Microsecond)
+			}
 		case *DCollatedString:
 			return ParseDTimestamp(ctx, d.Contents, time.Microsecond)
 		case *DDate:

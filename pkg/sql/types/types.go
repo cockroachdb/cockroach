@@ -257,8 +257,9 @@ var (
 	//
 	//   YYYY-MM-DD HH:MM:SS.ssssss
 	//
+	// 6 is the default precision for timestamps in cockroach
 	Timestamp = &T{InternalType: InternalType{
-		Family: TimestampFamily, Oid: oid.T_timestamp, Locale: &emptyLocale}}
+		Family: TimestampFamily, Precision: 6, Oid: oid.T_timestamp, Locale: &emptyLocale}}
 
 	// TimestampTZ is the type of a value specifying year, month, day, hour,
 	// minute, and second, as well as an associated timezone. By default, it has
@@ -1095,8 +1096,17 @@ func (t *T) SQLString() string {
 	case JsonFamily:
 		// Only binary JSON is currently supported.
 		return "JSONB"
-	case TimeFamily, TimestampFamily, TimestampTZFamily:
-		if t.Precision() >= 0 {
+	// For now, we support timestampfamily differently.
+	case TimestampFamily:
+		if t.Precision() == 0 {
+			return fmt.Sprintf("TIMESTAMP(0)")
+		} else if t.Precision() == 6 {
+			return "TIMESTAMP"
+		} else {
+			return fmt.Sprintf("TIMESTAMP(%d)", t.Precision())
+		}
+	case TimeFamily, TimestampTZFamily:
+		if t.Precision() > 0 {
 			return fmt.Sprintf("%s(%d)", strings.ToUpper(t.Name()), t.Precision())
 		}
 	case OidFamily:
