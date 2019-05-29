@@ -650,10 +650,8 @@ func MakeTime(precision int32) *T {
 // the given number of fractional second digits.
 func MakeTimestamp(precision int32) *T {
 	if precision == 0 {
-		// TODO: we want to explicitly support precision 0 here,
-		// not have microsecond precision
 		return &T{InternalType: InternalType{
-			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: precision, Locale: &emptyLocale}}
+			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: 0, Locale: &emptyLocale}}
 	}
 	if precision != 6 {
 		panic(pgerror.AssertionFailedf("precision %d is not currently supported", precision))
