@@ -1260,7 +1260,8 @@ ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
 pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
 pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
 pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/styl -type f) | bin/.bootstrap
-	find pkg/ui/dist$* -mindepth 1 -not -name dist$*.go -delete
+	rm -rf pkg/ui/dist$*
+	mkdir -p pkg/ui/dist$*
 	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
 	  ln -s ../dist/$$dll pkg/ui/dist$*/$${dll/@(.ccl|.oss)}; \
 	done
