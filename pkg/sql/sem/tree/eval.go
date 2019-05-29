@@ -20,6 +20,7 @@ import (
 	"math"
 	"math/big"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -3259,7 +3260,10 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DUuid:
 			s = t.UUID.String()
 		case *DIPAddr:
-			s = t.String()
+			fmt.Println("weija")
+			s = string(t.String())
+			debug.PrintStack()
+			fmt.Printf("result of string call %s\n", s)
 		case *DString:
 			s = string(*t)
 		case *DCollatedString:
@@ -3320,6 +3324,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 	case types.INetFamily:
 		switch t := d.(type) {
 		case *DString:
+			fmt.Printf("are we in here???? %s\n", string(*t))
 			return ParseDIPAddrFromINetString(string(*t))
 		case *DCollatedString:
 			return ParseDIPAddrFromINetString(t.Contents)
