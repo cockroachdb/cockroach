@@ -20,6 +20,7 @@ import (
 	"math"
 	"math/big"
 	"net"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1820,8 +1821,8 @@ func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
 
 	// special case on 24:00 and 24:00:00 as the parser
 	// does not handle these correctly.
-	if s == "24:00" || s == "24:00:00" {
-		return MakeDTime(timeofday.New(24, 0, 0, 0)), nil
+	if ok, _ := regexp.MatchString("24:00((:00$)|(:00.0{0,6}$))", s); ok {
+		return MakeDTime(timeofday.Time2400), nil
 	}
 
 	t, err := pgdate.ParseTime(now, 0 /* mode */, s)
