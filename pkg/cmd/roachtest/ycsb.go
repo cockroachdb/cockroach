@@ -45,11 +45,6 @@ func registerYCSB(r *registry) {
 	}
 
 	for _, wl := range []string{"A", "B", "C", "D", "E", "F"} {
-		if wl == "D" || wl == "E" {
-			// These workloads are currently unsupported by workload.
-			// See TODOs in workload/ycsb/ycsb.go.
-			continue
-		}
 		for _, cpus := range []int{8, 32} {
 			var name string
 			if cpus == 8 { // support legacy test name which didn't include cpu
