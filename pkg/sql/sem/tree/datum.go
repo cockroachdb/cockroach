@@ -1816,6 +1816,7 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 // ParseDTime parses and returns the *DTime Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
+	fmt.Printf("Input time string: %s\n", s)
 	now := relativeParseTime(ctx)
 	t, err := pgdate.ParseTime(now, 0 /* mode */, s)
 	if err != nil {
