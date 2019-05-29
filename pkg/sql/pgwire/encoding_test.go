@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -187,6 +188,45 @@ func TestEncodings(t *testing.T) {
 					})
 				}
 			})
+		})
+	}
+}
+
+// TestExoticNumericEncodings goes through specific, legal pgwire encodings
+// that Postgres itself would usually choose to not produce, which therefore
+// would not be covered by TestEncodings. Of course, being valid encodings
+// they'd still be accepted and correctly parsed by Postgres.
+func TestExoticNumericEncodings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		Value    *apd.Decimal
+		Encoding []byte
+	}{
+		{apd.New(0, 0), []byte{0, 0, 0, 0, 0, 0, 0, 0}},
+		{apd.New(0, 0), []byte{0, 1, 0, 0, 0, 0, 0, 0, 0, 0}},
+		{apd.New(10000, 0), []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0}},
+		{apd.New(10001, 0), []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1}},
+		{apd.New(1000000, 0), []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 100, 0, 0}},
+		{apd.New(1000001, 0), []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 100, 0, 1}},
+		{apd.New(100000000, 0), []byte{0, 1, 0, 2, 0, 0, 0, 0, 0, 1}},
+		{apd.New(100000000, 0), []byte{0, 2, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0}},
+		{apd.New(100000000, 0), []byte{0, 3, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0}},
+		{apd.New(100000001, 0), []byte{0, 3, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1}},
+	}
+
+	evalCtx := tree.MakeTestingEvalContext(nil)
+	for i, c := range testCases {
+		t.Run(fmt.Sprintf("%d_%s", i, c.Value), func(t *testing.T) {
+			d, err := pgwirebase.DecodeOidDatum(nil, oid.T_numeric, pgwirebase.FormatBinary, c.Encoding)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			expected := &tree.DDecimal{Decimal: *c.Value}
+			if d.Compare(&evalCtx, expected) != 0 {
+				t.Fatalf("%v != %v", d, expected)
+			}
 		})
 	}
 }
