@@ -1360,3 +1360,51 @@ select
  │    └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=20, null(2)=5]
  └── filters
       └── b = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# Regression test for #37754.
+norm
+SELECT
+    1
+FROM
+    (
+        VALUES
+            (true, NULL, B'001000101101110'),
+            (true, e'19\x1e':::STRING, NULL)
+    )
+        AS t (_bool, _string, _bit)
+GROUP BY
+    _string, _bit
+HAVING
+    min(_bool)
+----
+project
+ ├── columns: "?column?":5(int!null)
+ ├── cardinality: [0 - 2]
+ ├── stats: [rows=1]
+ ├── fd: ()-->(5)
+ ├── select
+ │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool!null)
+ │    ├── cardinality: [0 - 2]
+ │    ├── stats: [rows=1, distinct(4)=1, null(4)=0]
+ │    ├── key: (2,3)
+ │    ├── fd: ()-->(4)
+ │    ├── group-by
+ │    │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool)
+ │    │    ├── grouping columns: column2:2(string) column3:3(varbit)
+ │    │    ├── cardinality: [1 - 2]
+ │    │    ├── stats: [rows=1, distinct(4)=0, null(4)=1, distinct(2,3)=0, null(2,3)=1]
+ │    │    ├── key: (2,3)
+ │    │    ├── fd: (2,3)-->(4)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:1(bool) column2:2(string) column3:3(varbit)
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── stats: [rows=2, distinct(2,3)=0, null(2,3)=2]
+ │    │    │    ├── (true, NULL, B'001000101101110') [type=tuple{bool, string, varbit}]
+ │    │    │    └── (true, e'19\x1e', NULL) [type=tuple{bool, string, varbit}]
+ │    │    └── aggregations
+ │    │         └── min [type=bool, outer=(1)]
+ │    │              └── variable: column1 [type=bool]
+ │    └── filters
+ │         └── variable: min [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+ └── projections
+      └── const: 1 [type=int]
