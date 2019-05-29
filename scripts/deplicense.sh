@@ -18,7 +18,7 @@ function isApache2() {
 
 function isBSD2Clause() {
   grep -q 'Redistributions of source code must retain the above copyright' "$1" && \
-  grep -q 'this list of conditions and the following disclaimer' "$1" &&
+  grep -q 'list of conditions and the following disclaimer' "$1" &&
   grep -q 'Redistributions in binary form must reproduce the above' "$1"
 }
 
@@ -48,8 +48,13 @@ function isCC0() {
 }
 
 function isMPL2() {
-  grep -q '^Mozilla Public License Version 2.0' "$1"
+  grep -q '^Mozilla Public License Version 2.0' "$1" || \
+      grep -q 'http://mozilla.org/MPL/2.0/' "$1"
 
+}
+
+function isISC() {
+  grep -q '^ISC License$' "$1"
 }
 
 function inspect() {
@@ -85,6 +90,9 @@ function inspect() {
       elif isMPL2 "${file}"; then
         echo "Mozilla Public License 2.0"
         return
+      elif isISC "${file}"; then
+        echo "ISC license"
+        return
       fi
       # TODO(pmattis): This is incomplete. Add other license
       # detectors as necessary.
@@ -95,7 +103,7 @@ function inspect() {
   echo "unable to determine license"
 }
 
-pkgs=$(grep '^- name: ' Gopkg.lock | cut -d' ' -f3)
+pkgs=$(grep '^  name = ' Gopkg.lock | cut -d'"' -f2)
 
 for pkg in ${pkgs}; do
   info=$(inspect "vendor/${pkg}")
