@@ -194,6 +194,10 @@ func makeAggregateFuncs(
 			funcs[i], err = newSumAgg(aggTyps[i][0])
 		case distsqlpb.AggregatorSpec_COUNT_ROWS:
 			funcs[i] = newCountAgg()
+		case distsqlpb.AggregatorSpec_MIN:
+			funcs[i], err = newMinAgg(aggTyps[i][0])
+		case distsqlpb.AggregatorSpec_MAX:
+			funcs[i], err = newMaxAgg(aggTyps[i][0])
 		default:
 			return nil, nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
 		}
@@ -271,7 +275,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		// zero out a.groupCol. This is necessary because distinct ors the
 		// uniqueness of a value with the groupCol, allowing the operators to be
 		// linked.
-		copy(a.groupCol, zeroBoolVec)
+		copy(a.groupCol, zeroBoolColumn)
 	}
 
 	if a.scratch.resumeIdx > a.scratch.outputSize {

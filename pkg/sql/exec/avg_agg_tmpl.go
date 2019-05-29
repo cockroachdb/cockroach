@@ -90,9 +90,9 @@ func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 }
 
 func (a *avg_TYPEAgg) Reset() {
-	copy(a.scratch.groupSums, zero_TYPEBatch)
-	copy(a.scratch.groupCounts, zeroInt64Batch)
-	copy(a.scratch.vec, zero_TYPEBatch)
+	copy(a.scratch.groupSums, zero_TYPEColumn)
+	copy(a.scratch.groupCounts, zeroInt64Column)
+	copy(a.scratch.vec, zero_TYPEColumn)
 	a.scratch.curIdx = -1
 	a.done = false
 }
@@ -104,11 +104,11 @@ func (a *avg_TYPEAgg) CurrentOutputIndex() int {
 func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
 	if a.scratch.curIdx != -1 {
 		a.scratch.curIdx = idx
-		copy(a.scratch.groupSums[idx+1:], zero_TYPEBatch)
-		copy(a.scratch.groupCounts[idx+1:], zeroInt64Batch)
+		copy(a.scratch.groupSums[idx+1:], zero_TYPEColumn)
+		copy(a.scratch.groupCounts[idx+1:], zeroInt64Column)
 		// TODO(asubiotto): We might not have to zero a.scratch.vec since we
 		// overwrite with an independent value.
-		copy(a.scratch.vec[idx+1:], zero_TYPEBatch)
+		copy(a.scratch.vec[idx+1:], zero_TYPEColumn)
 	}
 }
 

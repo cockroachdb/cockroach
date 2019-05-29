@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for sum_agg.eg.go. It's formatted in a
+// This file is the execgen template for min_agg.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
 // permits editing this file with editor support.
 //
@@ -24,6 +24,8 @@
 package exec
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -34,77 +36,82 @@ import (
 // {{/*
 // Declarations to make the template compile properly
 
+// Dummy import to pull in "bytes" package.
+var _ bytes.Buffer
+
 // Dummy import to pull in "apd" package.
 var _ apd.Decimal
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
 
-// _ASSIGN_ADD is the template addition function for assigning the first input
-// to the result of the second input + the third input.
-func _ASSIGN_ADD(_, _, _ string) {
+// _ASSIGN_LT is the template equality function for assigning the first input
+// to the result of the second input < the third input.
+func _ASSIGN_LT(_, _, _ string) bool {
 	panic("")
 }
 
 // */}}
 
-func newSumAgg(t types.T) (aggregateFunc, error) {
+// {{range .}} {{/* for each aggregation (min and max) */}}
+
+// {{/* Capture the aggregation name so we can use it in the inner loop. */}}
+// {{$agg := .AggNameLower}}
+
+func new_AGG_TITLEAgg(t types.T) (aggregateFunc, error) {
 	switch t {
-	// {{range .}}
+	// {{range .Overloads}}
 	case _TYPES_T:
-		return &sum_TYPEAgg{}, nil
+		return &_AGG_TYPEAgg{}, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unsupported sum agg type %s", t)
+		return nil, errors.Errorf("unsupported min agg type %s", t)
 	}
 }
 
-// {{range .}}
+// {{range .Overloads}}
 
-type sum_TYPEAgg struct {
-	done bool
-
-	groups  []bool
-	scratch struct {
-		curIdx int
-		// vec points to the output vector we are updating.
-		vec []_GOTYPE
-	}
+type _AGG_TYPEAgg struct {
+	done   bool
+	groups []bool
+	curIdx int
+	// vec points to the output vector we are updating.
+	vec []_GOTYPE
 }
 
-var _ aggregateFunc = &sum_TYPEAgg{}
+var _ aggregateFunc = &_AGG_TYPEAgg{}
 
-func (a *sum_TYPEAgg) Init(groups []bool, v coldata.Vec) {
+func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
-	a.scratch.vec = v._TemplateType()
+	a.vec = v._TYPE()
 	a.Reset()
 }
 
-func (a *sum_TYPEAgg) Reset() {
-	copy(a.scratch.vec, zero_TYPEColumn)
-	a.scratch.curIdx = -1
+func (a *_AGG_TYPEAgg) Reset() {
+	copy(a.vec, zero_TYPEColumn)
+	a.curIdx = -1
 	a.done = false
 }
 
-func (a *sum_TYPEAgg) CurrentOutputIndex() int {
-	return a.scratch.curIdx
+func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
+	return a.curIdx
 }
 
-func (a *sum_TYPEAgg) SetOutputIndex(idx int) {
-	if a.scratch.curIdx != -1 {
-		a.scratch.curIdx = idx
-		copy(a.scratch.vec[idx+1:], zero_TYPEColumn)
+func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
+	if a.curIdx != -1 {
+		a.curIdx = idx
+		copy(a.vec[idx+1:], zero_TYPEColumn)
 	}
 }
 
-func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
 		// The aggregation is finished. Flush the last value.
-		a.scratch.curIdx++
+		a.curIdx++
 		a.done = true
 		return
 	}
@@ -112,24 +119,33 @@ func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if sel != nil {
 		sel = sel[:inputLen]
 		for _, i := range sel {
-			x := 0
 			if a.groups[i] {
-				x = 1
+				a.curIdx++
+				a.vec[a.curIdx] = col[i]
+			} else {
+				var cmp bool
+				_ASSIGN_CMP("cmp", "col[i]", "a.vec[a.curIdx]")
+				if cmp {
+					a.vec[a.curIdx] = col[i]
+				}
 			}
-			a.scratch.curIdx += x
-			_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
 		}
 	} else {
 		col = col[:inputLen]
 		for i := range col {
-			x := 0
 			if a.groups[i] {
-				x = 1
+				a.curIdx++
+				a.vec[a.curIdx] = col[i]
+			} else {
+				var cmp bool
+				_ASSIGN_CMP("cmp", "col[i]", "a.vec[a.curIdx]")
+				if cmp {
+					a.vec[a.curIdx] = col[i]
+				}
 			}
-			a.scratch.curIdx += x
-			_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
 		}
 	}
 }
 
+// {{end}}
 // {{end}}
