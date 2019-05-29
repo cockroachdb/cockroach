@@ -30,7 +30,7 @@ TABLE c
  ├── INDEX c_auto_index_fk_x_ref_a
  │    ├── x int
  │    └── rowid int not null (hidden)
- └── FOREIGN KEY (x) REFERENCES t.public.a (x)
+ └── CONSTRAINT fk_x_ref_a FOREIGN KEY (x) REFERENCES t.public.a (x)
 
 build
 SELECT * FROM a, b

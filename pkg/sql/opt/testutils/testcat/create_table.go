@@ -223,7 +223,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []*Column) *Table 
 	return tab
 }
 
-// resolveFK processes a foreign key constraint
+// resolveFK processes a foreign key constraint.
 func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	fromCols := make([]int, len(d.FromCols))
 	for i, c := range d.FromCols {
@@ -231,11 +231,17 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	}
 
 	targetTable := tc.Table(&d.Table)
-	targetTable.referenced = true
 
 	toCols := make([]int, len(d.ToCols))
 	for i, c := range d.ToCols {
 		toCols[i] = targetTable.FindOrdinal(string(c))
+	}
+
+	constraintName := string(d.Name)
+	if constraintName == "" {
+		constraintName = fmt.Sprintf(
+			"fk_%s_ref_%s", string(d.FromCols[0]), targetTable.TabName.Table(),
+		)
 	}
 
 	// Foreign keys require indexes in both tables:
@@ -289,22 +295,11 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	for _, idx := range tab.Indexes {
 		if matches(idx, fromCols, false /* strict */) {
 			found = true
-			idx.foreignKey.TableID = targetTable.ID()
-			idx.foreignKey.IndexID = targetIndex.ID()
-			idx.foreignKey.PrefixLen = int32(len(fromCols))
-			idx.foreignKey.Validated = true
-			idx.fkSet = true
 			break
 		}
 	}
 	if !found {
 		// Add a non-unique index on fromCols.
-		constraintName := string(d.Name)
-		if constraintName == "" {
-			constraintName = fmt.Sprintf(
-				"fk_%s_ref_%s", string(d.FromCols[0]), targetTable.TabName.Table(),
-			)
-		}
 		idx := tree.IndexTableDef{
 			Name:    tree.Name(fmt.Sprintf("%s_auto_index_%s", tab.TabName.Table(), constraintName)),
 			Columns: make(tree.IndexElemList, len(fromCols)),
@@ -313,13 +308,20 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 			idx.Columns[i].Column = tab.Columns[c].ColName()
 			idx.Columns[i].Direction = tree.Ascending
 		}
-		index := tab.addIndex(&idx, nonUniqueIndex)
-		index.foreignKey.TableID = targetTable.ID()
-		index.foreignKey.IndexID = targetIndex.ID()
-		index.foreignKey.PrefixLen = int32(len(fromCols))
-		index.foreignKey.Validated = true
-		index.fkSet = true
+		tab.addIndex(&idx, nonUniqueIndex)
 	}
+
+	fk := ForeignKeyConstraint{
+		name:                     constraintName,
+		originTableID:            tab.ID(),
+		referencedTableID:        targetTable.ID(),
+		originColumnOrdinals:     fromCols,
+		referencedColumnOrdinals: toCols,
+		validated:                true,
+		matchMethod:              tree.MatchSimple,
+	}
+	tab.outboundFKs = append(tab.outboundFKs, fk)
+	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)
 }
 
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {

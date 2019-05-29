@@ -410,37 +410,35 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 // specified in the INSERT statement. Either the state column must be specified
 // as well, or else neither column can be specified.
 func (mb *mutationBuilder) checkForeignKeysForInsert() {
-	for i, n := 0, mb.tab.IndexCount(); i < n; i++ {
-		idx := mb.tab.Index(i)
-		fkey, ok := idx.ForeignKey()
-		if !ok {
-			continue
-		}
+	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
+		fk := mb.tab.OutboundForeignKey(i)
+		numCols := fk.ColumnCount()
 
 		// This check should only be performed on composite foreign keys that use
 		// the MATCH FULL method.
-		if fkey.Match != tree.MatchFull {
+		if numCols < 2 || fk.MatchMethod() != tree.MatchFull {
 			continue
 		}
 
 		var missingCols []string
 		allMissing := true
-		for j := 0; j < int(fkey.PrefixLen); j++ {
-			indexCol := idx.Column(j)
-			if indexCol.HasDefault() || indexCol.IsComputed() {
+		for j := 0; j < numCols; j++ {
+			ord := fk.OriginColumnOrdinal(mb.tab, j)
+			col := mb.tab.Column(ord)
+			if col.HasDefault() || col.IsComputed() {
 				// The column has a default value.
 				allMissing = false
 				continue
 			}
 
-			colID := mb.tabID.ColumnID(indexCol.Ordinal)
+			colID := mb.tabID.ColumnID(ord)
 			if mb.targetColSet.Contains(int(colID)) {
 				// The column is explicitly specified in the target name list.
 				allMissing = false
 				continue
 			}
 
-			missingCols = append(missingCols, string(indexCol.ColName()))
+			missingCols = append(missingCols, string(col.ColName()))
 		}
 		if allMissing {
 			continue

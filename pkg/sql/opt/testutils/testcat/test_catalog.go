@@ -511,9 +511,8 @@ type Table struct {
 	// other table(s).
 	interleaved bool
 
-	// referenced is set to true when another table has referenced this table
-	// via a foreign key.
-	referenced bool
+	outboundFKs []ForeignKeyConstraint
+	inboundFKs  []ForeignKeyConstraint
 }
 
 var _ cat.Table = &Table{}
@@ -551,11 +550,6 @@ func (tt *Table) IsVirtualTable() bool {
 // IsInterleaved is part of the cat.Table interface.
 func (tt *Table) IsInterleaved() bool {
 	return false
-}
-
-// IsReferenced is part of the cat.Table interface.
-func (tt *Table) IsReferenced() bool {
-	return tt.referenced
 }
 
 // ColumnCount is part of the cat.Table interface.
@@ -628,6 +622,26 @@ func (tt *Table) Family(i int) cat.Family {
 	return tt.Families[i]
 }
 
+// OutboundForeignKeyCount is part of the cat.Table interface.
+func (tt *Table) OutboundForeignKeyCount() int {
+	return len(tt.outboundFKs)
+}
+
+// OutboundForeignKey is part of the cat.Table interface.
+func (tt *Table) OutboundForeignKey(i int) cat.ForeignKeyConstraint {
+	return &tt.outboundFKs[i]
+}
+
+// InboundForeignKeyCount is part of the cat.Table interface.
+func (tt *Table) InboundForeignKeyCount() int {
+	return len(tt.inboundFKs)
+}
+
+// InboundForeignKey is part of the cat.Table interface.
+func (tt *Table) InboundForeignKey(i int) cat.ForeignKeyConstraint {
+	return &tt.inboundFKs[i]
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {
@@ -672,12 +686,6 @@ type Index struct {
 
 	// table is a back reference to the table this index is on.
 	table *Table
-
-	// foreignKey is a struct representing an outgoing foreign key
-	// reference. If fkSet is true, then foreignKey is a valid
-	// index reference.
-	foreignKey cat.ForeignKeyReference
-	fkSet      bool
 }
 
 // ID is part of the cat.Index interface.
@@ -723,11 +731,6 @@ func (ti *Index) LaxKeyColumnCount() int {
 // Column is part of the cat.Index interface.
 func (ti *Index) Column(i int) cat.IndexColumn {
 	return ti.Columns[i]
-}
-
-// ForeignKey is part of the cat.Index interface.
-func (ti *Index) ForeignKey() (cat.ForeignKeyReference, bool) {
-	return ti.foreignKey, ti.fkSet
 }
 
 // Zone is part of the cat.Index interface.
@@ -883,6 +886,75 @@ func (ts TableStats) Less(i, j int) bool {
 // Swap is part of the Sorter interface.
 func (ts TableStats) Swap(i, j int) {
 	ts[i], ts[j] = ts[j], ts[i]
+}
+
+// ForeignKeyConstraint implements cat.ForeignKeyConstraint. See that interface
+// for more information on the fields.
+type ForeignKeyConstraint struct {
+	name              string
+	originTableID     cat.StableID
+	referencedTableID cat.StableID
+
+	originColumnOrdinals     []int
+	referencedColumnOrdinals []int
+
+	validated   bool
+	matchMethod tree.CompositeKeyMatchMethod
+}
+
+var _ cat.ForeignKeyConstraint = &ForeignKeyConstraint{}
+
+// Name is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) Name() string {
+	return fk.name
+}
+
+// OriginTableID is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) OriginTableID() cat.StableID {
+	return fk.originTableID
+}
+
+// ReferencedTableID is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) ReferencedTableID() cat.StableID {
+	return fk.referencedTableID
+}
+
+// ColumnCount is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) ColumnCount() int {
+	return len(fk.originColumnOrdinals)
+}
+
+// OriginColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i int) int {
+	if originTable.ID() != fk.originTableID {
+		panic(pgerror.AssertionFailedf(
+			"invalid table %d passed to OriginColumnOrdinal (expected %d)",
+			originTable.ID(), fk.originTableID,
+		))
+	}
+
+	return fk.originColumnOrdinals[i]
+}
+
+// ReferencedColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.Table, i int) int {
+	if referencedTable.ID() != fk.referencedTableID {
+		panic(pgerror.AssertionFailedf(
+			"invalid table %d passed to ReferencedColumnOrdinal (expected %d)",
+			referencedTable.ID(), fk.referencedTableID,
+		))
+	}
+	return fk.referencedColumnOrdinals[i]
+}
+
+// Validated is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) Validated() bool {
+	return fk.validated
+}
+
+// MatchMethod is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
+	return fk.matchMethod
 }
 
 // Sequence implements the cat.Sequence interface for testing purposes.

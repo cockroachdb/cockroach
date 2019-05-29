@@ -15,13 +15,9 @@
 package cat
 
 import (
-	"bytes"
-	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 // Table is an interface to a database table, exposing only the information
@@ -52,10 +48,6 @@ type Table interface {
 	// IsInterleaved returns true if any of this table's indexes are interleaved
 	// with index(es) from other table(s).
 	IsInterleaved() bool
-
-	// IsReferenced returns true if this table is referenced by at least one
-	// foreign key defined on another table (or this one if self-referential).
-	IsReferenced() bool
 
 	// ColumnCount returns the number of public columns in the table. Public
 	// columns are not currently being added or dropped from the table. This
@@ -133,6 +125,20 @@ type Table interface {
 	// Family returns the interface for the ith column family, where
 	// i < FamilyCount.
 	Family(i int) Family
+
+	// OutboundForeignKeyCount returns the number of outbound foreign key
+	// references (where this is the origin table).
+	OutboundForeignKeyCount() int
+
+	// OutboundForeignKeyCount returns the ith outbound foreign key reference.
+	OutboundForeignKey(i int) ForeignKeyConstraint
+
+	// InboundForeignKeyCount returns the number of inbound foreign key references
+	// (where this is the referenced table).
+	InboundForeignKeyCount() int
+
+	// InboundForeignKey returns the ith inbound foreign key reference.
+	InboundForeignKey(i int) ForeignKeyConstraint
 }
 
 // CheckConstraint is the SQL text for a check constraint on a table. Check
@@ -173,180 +179,42 @@ type TableStatistic interface {
 	// TODO(radu): add Histogram().
 }
 
-// ForeignKeyReference is a struct representing an outbound foreign key reference.
-// It has accessors for table and index IDs, as well as the prefix length.
-type ForeignKeyReference struct {
-	// Table contains the referenced table's stable identifier.
-	TableID StableID
+// ForeignKeyConstraint represents a foreign key constraint. A foreign key
+// constraint has an origin (or referencing) side and a referenced side. For
+// example:
+//   ALTER TABLE o ADD CONSTRAINT fk FOREIGN KEY (a,b) REFERENCES r(a,b)
+// Here o is the origin table, r is the referenced table, and we have two pairs
+// of columns: (o.a,r.a) and (o.b,r.b).
+type ForeignKeyConstraint interface {
+	// Name of the foreign key constraint.
+	Name() string
 
-	// Index contains the stable identifier of the index that represents the
-	// destination table's side of the foreign key relation.
-	IndexID StableID
+	// OriginTableID returns the referencing table's stable identifier.
+	OriginTableID() StableID
 
-	// PrefixLen contains the length of columns that form the foreign key
-	// relation in the current and destination indexes.
-	PrefixLen int32
+	// ReferencedTableID returns the referenced table's stable identifier.
+	ReferencedTableID() StableID
+
+	// ColumnCount returns the number of column pairs in this FK reference.
+	ColumnCount() int
+
+	// OriginColumnOrdinal returns the ith column ordinal (see Table.Column) in
+	// the origin (referencing) table. The ID() of originTable must equal
+	// OriginTable().
+	OriginColumnOrdinal(originTable Table, i int) int
+
+	// ReferencedColumnOrdinal returns the ith column ordinal (see Table.Column)
+	// in the referenced table. The ID() of referencedTable must equal
+	// ReferencedTable().
+	ReferencedColumnOrdinal(referencedTable Table, i int) int
 
 	// Validated is true if the reference is validated (i.e. we know that the
 	// existing data satisfies the constraint). It is possible to set up a foreign
 	// key constraint on existing tables without validating it, in which case we
-	// cannot make any assumptions about the data.
-	Validated bool
+	// cannot make any assumptions about the data. An unvalidated constraint still
+	// needs to be enforced on new mutations.
+	Validated() bool
 
-	// Match contains the method used for comparing composite foreign keys.
-	Match tree.CompositeKeyMatchMethod
-}
-
-// FindTableColumnByName returns the ordinal of the non-mutation column having
-// the given name, if one exists in the given table. Otherwise, it returns -1.
-func FindTableColumnByName(tab Table, name tree.Name) int {
-	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
-		if tab.Column(ord).ColName() == name {
-			return ord
-		}
-	}
-	return -1
-}
-
-// FormatTable nicely formats a catalog table using a treeprinter for debugging
-// and testing.
-func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
-	child := tp.Childf("TABLE %s", tab.Name().TableName)
-
-	var buf bytes.Buffer
-	for i := 0; i < tab.DeletableColumnCount(); i++ {
-		buf.Reset()
-		formatColumn(tab.Column(i), IsMutationColumn(tab, i), &buf)
-		child.Child(buf.String())
-	}
-
-	for i := 0; i < tab.DeletableIndexCount(); i++ {
-		formatCatalogIndex(tab, i, child)
-	}
-
-	for i := 0; i < tab.IndexCount(); i++ {
-		fkRef, ok := tab.Index(i).ForeignKey()
-
-		if ok {
-			formatCatalogFKRef(cat, tab.Index(i), fkRef, child)
-		}
-	}
-
-	for i := 0; i < tab.CheckCount(); i++ {
-		child.Childf("CHECK (%s)", tab.Check(i))
-	}
-
-	// Don't print the primary family, since it's implied.
-	if tab.FamilyCount() > 1 || tab.Family(0).Name() != "primary" {
-		for i := 0; i < tab.FamilyCount(); i++ {
-			buf.Reset()
-			formatFamily(tab.Family(i), &buf)
-			child.Child(buf.String())
-		}
-	}
-}
-
-// formatCatalogIndex nicely formats a catalog index using a treeprinter for
-// debugging and testing.
-func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
-	idx := tab.Index(ord)
-	inverted := ""
-	if idx.IsInverted() {
-		inverted = "INVERTED "
-	}
-	mutation := ""
-	if IsMutationIndex(tab, ord) {
-		mutation = " (mutation)"
-	}
-	child := tp.Childf("%sINDEX %s%s", inverted, idx.Name(), mutation)
-
-	var buf bytes.Buffer
-	colCount := idx.ColumnCount()
-	if ord == PrimaryIndex {
-		// Omit the "stored" columns from the primary index.
-		colCount = idx.KeyColumnCount()
-	}
-
-	for i := 0; i < colCount; i++ {
-		buf.Reset()
-
-		idxCol := idx.Column(i)
-		formatColumn(idxCol.Column, false /* isMutationCol */, &buf)
-		if idxCol.Descending {
-			fmt.Fprintf(&buf, " desc")
-		}
-
-		if i >= idx.LaxKeyColumnCount() {
-			fmt.Fprintf(&buf, " (storing)")
-		}
-
-		child.Child(buf.String())
-	}
-}
-
-// formatColPrefix returns a string representation of the first prefixLen columns of idx.
-func formatColPrefix(idx Index, prefixLen int) string {
-	var buf bytes.Buffer
-	buf.WriteByte('(')
-	for i := 0; i < prefixLen; i++ {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		colName := idx.Column(i).ColName()
-		buf.WriteString(colName.String())
-	}
-	buf.WriteByte(')')
-
-	return buf.String()
-}
-
-// formatCatalogFKRef nicely formats a catalog foreign key reference using a
-// treeprinter for debugging and testing.
-func formatCatalogFKRef(cat Catalog, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node) {
-	ds, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.TableID)
-	if err != nil {
-		panic(err)
-	}
-
-	fkTable := ds.(Table)
-
-	var fkIndex Index
-	for j, cnt := 0, fkTable.IndexCount(); j < cnt; j++ {
-		if fkTable.Index(j).ID() == fkRef.IndexID {
-			fkIndex = fkTable.Index(j)
-			break
-		}
-	}
-
-	tp.Childf(
-		"FOREIGN KEY %s REFERENCES %v %s",
-		formatColPrefix(idx, int(fkRef.PrefixLen)),
-		ds.Name(),
-		formatColPrefix(fkIndex, int(fkRef.PrefixLen)),
-	)
-}
-
-func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
-	fmt.Fprintf(buf, "%s %s", col.ColName(), col.DatumType())
-	if !col.IsNullable() {
-		fmt.Fprintf(buf, " not null")
-	}
-	if col.IsHidden() {
-		fmt.Fprintf(buf, " (hidden)")
-	}
-	if isMutationCol {
-		fmt.Fprintf(buf, " (mutation)")
-	}
-}
-
-func formatFamily(family Family, buf *bytes.Buffer) {
-	fmt.Fprintf(buf, "FAMILY %s (", family.Name())
-	for i, n := 0, family.ColumnCount(); i < n; i++ {
-		if i != 0 {
-			buf.WriteString(", ")
-		}
-		col := family.Column(i)
-		buf.WriteString(string(col.ColName()))
-	}
-	buf.WriteString(")")
+	// MatchMethod returns the method used for comparing composite foreign keys.
+	MatchMethod() tree.CompositeKeyMatchMethod
 }
