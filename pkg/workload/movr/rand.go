@@ -14,12 +14,10 @@ package movr
 
 import (
 	"encoding/json"
-	"strings"
 
 	"golang.org/x/exp/rand"
 )
 
-const alpha = `abcdefghijklmnopqrstuvwxyz`
 const numerals = `1234567890`
 
 var vehicleTypes = [...]string{`skateboard`, `bike`, `scooter`}
@@ -33,26 +31,6 @@ func randString(rng *rand.Rand, length int, alphabet string) string {
 		buf[i] = alphabet[rng.Intn(len(alphabet))]
 	}
 	return string(buf)
-}
-
-func randWord(rng *rand.Rand) string {
-	return randString(rng, 7, alpha)
-}
-
-func randParagraph(rng *rand.Rand) string {
-	words := make([]string, rng.Intn(100))
-	for i := range words {
-		words[i] = randWord(rng)
-	}
-	return strings.Join(words, ` `)
-}
-
-func randName(rng *rand.Rand) string {
-	return randString(rng, 7, alpha) + ` ` + randString(rng, 10, alpha)
-}
-
-func randAddress(rng *rand.Rand) string {
-	return randString(rng, 20, alpha)
 }
 
 func randCreditCard(rng *rand.Rand) string {
