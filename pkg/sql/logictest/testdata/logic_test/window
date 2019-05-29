@@ -2320,6 +2320,9 @@ NULL                   200.00   200.00                 200.00
 737.50                 NULL     575.00                 150.00
 737.50                 NULL     500.00                 175.00
 
+statement error DISTINCT is not implemented for window functions
+SELECT count(DISTINCT group_name) OVER (), count(DISTINCT product_name) OVER () FROM products
+
 statement error RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column
 SELECT sum(price) OVER (RANGE 100 PRECEDING) FROM products
 
