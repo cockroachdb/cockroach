@@ -205,9 +205,23 @@ begin
                 to_check := to_check \union {key}
               else
                 \* Intent missing. Pipelined write failed.
-                \* Perform a transaction restart at new epoch.
-                attempt := attempt + 1;
-                goto BeginTxnEpoch;
+                \* Check the transaction record to see whether it has already
+                \* been finalized using a QueryTxn request. This would indicate
+                \* that the missing intent is due to intent resolution.
+                if record.status \in {"pending", "staging"} then
+                  \* Unambiguously not finalized. Perform a transaction restart
+                  \* at new epoch.
+                  attempt := attempt + 1;
+                  goto BeginTxnEpoch;
+                elsif record.status = "aborted" then
+                  \* Unambiguously aborted here, but in the implementation this is
+                  \* ambiguous because "aborted" may indicate an aborted record or
+                  \* a committed record that was GCed.
+                  goto EndCommitter;
+                elsif record.status = "committed" then
+                  \* Unambiguously committed.
+                  goto AckClient;
+                end if;
               end if;
             end with;
         or
@@ -582,8 +596,15 @@ QueryPipelinedWrite == /\ pc["committer"] = "QueryPipelinedWrite"
                                THEN /\ to_check' = (to_check \union {key})
                                     /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                                     /\ UNCHANGED attempt
-                               ELSE /\ attempt' = attempt + 1
-                                    /\ pc' = [pc EXCEPT !["committer"] = "BeginTxnEpoch"]
+                               ELSE /\ IF record.status \in {"pending", "staging"}
+                                          THEN /\ attempt' = attempt + 1
+                                               /\ pc' = [pc EXCEPT !["committer"] = "BeginTxnEpoch"]
+                                          ELSE /\ IF record.status = "aborted"
+                                                     THEN /\ pc' = [pc EXCEPT !["committer"] = "EndCommitter"]
+                                                     ELSE /\ IF record.status = "committed"
+                                                                THEN /\ pc' = [pc EXCEPT !["committer"] = "AckClient"]
+                                                                ELSE /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
+                                               /\ UNCHANGED attempt
                                     /\ UNCHANGED to_check
                        /\ UNCHANGED << record, intent_writes, tscache, 
                                        commit_ack, pipelined_keys, 
@@ -628,14 +649,14 @@ StageRecord == /\ pc["committer"] = "StageRecord"
                           /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                      ELSE /\ IF record.status = "staging"
                                 THEN /\ Assert(record.epoch <= txn_epoch /\ record.ts < txn_ts, 
-                                               "Failure of assertion at line 257, column 15.")
+                                               "Failure of assertion at line 271, column 15.")
                                      /\ record' = [status |-> "staging", epoch |-> txn_epoch, ts |-> txn_ts]
                                      /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                                 ELSE /\ IF record.status = "aborted"
                                            THEN /\ pc' = [pc EXCEPT !["committer"] = "EndCommitter"]
                                            ELSE /\ IF record.status = "committed"
                                                       THEN /\ Assert(FALSE, 
-                                                                     "Failure of assertion at line 264, column 15.")
+                                                                     "Failure of assertion at line 278, column 15.")
                                                       ELSE /\ TRUE
                                                 /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                                      /\ UNCHANGED record
@@ -647,7 +668,7 @@ StageRecord == /\ pc["committer"] = "StageRecord"
 
 AckClient == /\ pc["committer"] = "AckClient"
              /\ Assert(ImplicitCommit \/ ExplicitCommit, 
-                       "Failure of assertion at line 272, column 5.")
+                       "Failure of assertion at line 286, column 5.")
              /\ commit_ack' = TRUE
              /\ pc' = [pc EXCEPT !["committer"] = "AsyncExplicitCommit"]
              /\ UNCHANGED << record, intent_writes, tscache, pipelined_keys, 
@@ -659,12 +680,12 @@ AckClient == /\ pc["committer"] = "AckClient"
 AsyncExplicitCommit == /\ pc["committer"] = "AsyncExplicitCommit"
                        /\ IF record.status = "staging"
                              THEN /\ Assert(ImplicitCommit, 
-                                            "Failure of assertion at line 279, column 7.")
+                                            "Failure of assertion at line 293, column 7.")
                                   /\ record' = [record EXCEPT !.status = "committed"]
                              ELSE /\ IF record.status = "committed"
                                         THEN /\ TRUE
                                         ELSE /\ Assert(FALSE, 
-                                                       "Failure of assertion at line 287, column 7.")
+                                                       "Failure of assertion at line 301, column 7.")
                                   /\ UNCHANGED record
                        /\ to_write' = KEYS
                        /\ pc' = [pc EXCEPT !["committer"] = "AsyncResolveIntents"]
@@ -772,7 +793,7 @@ RecoverRecord(self) == /\ pc[self] = "RecoverRecord"
                                                             /\ UNCHANGED record
                                                        ELSE /\ IF record.status = "pending"
                                                                   THEN /\ Assert(FALSE, 
-                                                                                 "Failure of assertion at line 367, column 15.")
+                                                                                 "Failure of assertion at line 381, column 15.")
                                                                        /\ pc' = [pc EXCEPT ![self] = "ResolveIntents"]
                                                                        /\ UNCHANGED record
                                                                   ELSE /\ IF record.status = "staging"
@@ -785,16 +806,16 @@ RecoverRecord(self) == /\ pc[self] = "RecoverRecord"
                                                                                   /\ UNCHANGED record
                                ELSE /\ IF record.status \in {"pending", "aborted"}
                                           THEN /\ Assert(FALSE, 
-                                                         "Failure of assertion at line 382, column 13.")
+                                                         "Failure of assertion at line 396, column 13.")
                                                /\ UNCHANGED record
                                           ELSE /\ IF record.status \in {"staging", "committed"}
                                                      THEN /\ Assert(record.epoch = prevent_epoch[self], 
-                                                                    "Failure of assertion at line 385, column 13.")
+                                                                    "Failure of assertion at line 399, column 13.")
                                                           /\ Assert(record.ts    = prevent_ts[self], 
-                                                                    "Failure of assertion at line 386, column 13.")
+                                                                    "Failure of assertion at line 400, column 13.")
                                                           /\ IF record.status = "staging"
                                                                 THEN /\ Assert(ImplicitCommit, 
-                                                                               "Failure of assertion at line 390, column 15.")
+                                                                               "Failure of assertion at line 404, column 15.")
                                                                      /\ record' = [record EXCEPT !.status = "committed"]
                                                                 ELSE /\ TRUE
                                                                      /\ UNCHANGED record
@@ -844,5 +865,5 @@ Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
 =============================================================================
 \* Modification History
-\* Last modified Wed May 29 00:09:05 EDT 2019 by nathan
+\* Last modified Wed May 29 00:31:23 EDT 2019 by nathan
 \* Created Mon May 13 10:03:40 EDT 2019 by nathan
