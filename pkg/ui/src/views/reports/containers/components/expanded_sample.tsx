@@ -90,6 +90,8 @@ export class TraceLine {
       const span: protos.cockroach.util.tracing.RecordedSpan = findCompSpan(this.sample);
       var attrs: string[] = _.map(span.tags, (v, k) => { return "\n" + k + ": " + v });
       return "Node: " + this.node_id +
+        "\nParent ID: " + this.span.parent_span_id +
+        "\nSpan ID: " + this.span.span_id +
         "\nTimestamp: " + formatDateTime(this.span.start_time, false) +
         "\nDuration: " + formatDuration(this.span.duration, false) +
         "\nPending: " + (this.sample.pending ? "Yes" : "No") +
@@ -99,6 +101,8 @@ export class TraceLine {
     } else if (this.span) {
       var attrs: string[] = _.map(this.span.tags, (v, k) => { return "\n" + k + ": " + v });
       return this.span.operation +
+        "\nParent ID: " + this.span.parent_span_id +
+        "\nSpan ID: " + this.span.span_id +
         "\nTimestamp: " + formatDateTime(this.span.start_time, false) +
         "\nDuration: " + formatDuration(this.span.duration, false) +
         attrs.join("");
@@ -224,10 +228,9 @@ export class ExpandedSpan {
     // Otherwise, embed the span's trace lines at the appropriate index.
     const idx: number = this.getLineIndex(es.span.start_time);
     //console.log("embedding child " + es.span.span_id + " to parent " + this.span.span_id + " at index " + idx);
-    const baseDepth: number = (idx >= this.lines.length) ? this.lines[this.lines.length-1].depth : this.lines[idx].depth;
     // Augment depth of embedded lines.
     es.lines.forEach((l) => {
-      l.depth += baseDepth;
+      l.depth += (this.lines[0].depth + 1);
     });
     // Embed lines.
     this.lines.splice(idx + 1, 0, ...es.lines);
@@ -326,7 +329,7 @@ export class ExpandedSpan {
     );
     const last_line: TraceLine = (props.line_no - this.line_no) == 0 ? null : this.lines[props.line_no - this.line_no - 1];
     const last_node_id: number = last_line ? last_line.node_id : null;
-    const last_time: protos.google.protobuf.ITimestamp = last_line ? last_line.timestamp() : null;
+    const last_time: protos.google.protobuf.ITimestamp = last_line ? last_line.timestamp() : line.timestamp();
     const time: string = line.formatTime(last_node_id, last_time);
     const time_title: string = line.formatTimeTitle();
     columns.push(<td className={time_class} style={time_style} title={time_title}>{time}</td>);
@@ -472,6 +475,9 @@ export class ExpandedSample {
       _.map(n.samples, (ca, name) => {
         ca.samples.forEach((s) => {
           s.spans.forEach((sp) => {
+            if (sp.span_id in spans) {
+              return;
+            }
             spans[sp.span_id] = new ExpandedSpan(n.node_id, sp, sp.tags["syscomponent"] == name ? s : null);
             if (sp.parent_span_id && sp.parent_span_id.toString() != "0") {
               if (!(sp.parent_span_id in children)) {
@@ -552,7 +558,13 @@ export class ExpandedSample {
     recursiveEstimateDurations(root_id);
 
     // Add all children to parents in a depth first recursive descent.
+    var seen = {};
     function recursiveAddOrEmbed(parent_id: Long) {
+      if (parent_id in seen) {
+        console.log("already seen parent id: " + parent_id);
+        return;
+      }
+      seen[parent_id] = true;
       if (!(parent_id in children)) {
         return;
       }

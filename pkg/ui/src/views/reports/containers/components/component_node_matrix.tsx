@@ -20,7 +20,6 @@ import * as protos from  "src/js/protos";
 
 import Loading from "src/views/shared/components/loading";
 import { ComponentActivity, ComponentActivityRates, IComponentActivityMetrics, ComponentActivityMetrics } from "./component_activity";
-import { SampleOptions, SampleState } from "./sample";
 import { Legend } from "./legend";
 import { SortProps, SampleTable } from "./sample_table";
 import * as time_util from "./time_util";
@@ -41,7 +40,7 @@ interface ISystemComponentRow {
   collapsed: boolean;
   // Child components as a map from child part name to system component.
   childMap: {[name: string]: ISystemComponentRow};
-  // Children ordered by dependency graph.
+  // Children ordered by name (TODO(spencer): order instead by dependency graph).
   children: ISystemComponentRow[];
   // Map from node id to a map from component name (full) to component
   // activities. If there are no collapsed children, the map will have
@@ -140,11 +139,11 @@ export class CombinedTraces {
 }
 
 function childCount(sc: SystemComponentRow, expanded: Cell) {
-  if (Object.keys(sc.childMap).length == 0) {
+  if (sc.children.length == 0) {
     return (expanded && expanded.name == sc.name) ? 2 : 1;
   }
   var sum: number = 0;
-  _.map(sc.childMap, (c) => {
+  _.map(sc.children, (c) => {
     sum += childCount(c, expanded);
   });
   return sum;
@@ -175,12 +174,7 @@ function MatrixHeader(props) {
 }
 
 function ExpandedCellGuts(props) {
-  const { expanded, componentTraces } = props;
-  if (!componentTraces) {
-    return (
-        <span id="title">Start cluster-wide sampling to inspect traces through system components</span>
-    );
-  }
+  const { componentTraces, expanded } = props;
   const { traces } = componentTraces;
   if (!traces || traces.samples.samples.length == 0) {
     return (
@@ -211,12 +205,23 @@ function ExpandedCellGuts(props) {
 }
 
 function ExpandedCell(props) {
-  const { sc, componentTraces } = props;
+  const { sc, componentTraces, expanded } = props;
+  if (!componentTraces) {
+    return (
+        <span id="title">Start cluster-wide sampling to inspect traces through system components</span>
+    );
+  }
+  const loading: boolean = componentTraces && componentTraces.active;
   return (
       <td className="matrix-cell-expanded" colspan={props.colspan}>
-        <SampleOptions state={props.sampleState} onChange={props.onSampleChange} />
+        {loading &&
+          <span id="title">
+            Loading traces for <span className="component-name">{expanded.name}</span> on
+            <span className="component-node"> node {expanded.node_id}</span>
+          </span>
+        }
         <Loading
-          loading={componentTraces && componentTraces.active}
+          loading={loading}
           error={componentTraces && componentTraces.error}
           render={() => (
             <ExpandedCellGuts {...props} />
@@ -309,7 +314,7 @@ function RecursiveMatrixBody(props) {
   var newNameParts = nameParts;
   var idx: number = 0;
   return (
-    _.map(parent.childMap, (sc, key) => {
+    _.map(parent.children, (sc) => {
       if (idx == 0) {
         newNameParts = newNameParts.concat([{name:sc.partName, depth: sc.depth, rowspan: childCount(sc, expandedCell)}]);
       } else {
@@ -411,9 +416,12 @@ export class ComponentNodeMatrix extends React.Component<ComponentNodeMatrixProp
           metrics.addComponentActivity(sc.getNodeActivity(node_id));
         });
       }
+      sc.children = [];
       _.map(sc.childMap, (child) {
+        sc.children.push(child)
         computeMetrics(child);
       });
+      sc.children.sort(function(a, b) { return a.name.localeCompare(b.name); });
     }
     computeMetrics(root);
 

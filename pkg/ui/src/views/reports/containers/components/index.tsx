@@ -31,7 +31,7 @@ import { nodeIDAttr } from "src/util/constants";
 import { ExpandedSample } from "./expanded_sample";
 import { ComponentNodeMatrix, CombinedTraces, Cell } from "./component_node_matrix";
 import { ComponentActivityRates } from "./component_activity";
-import { SampleState } from "./sample";
+import { SampleOptions, SampleState } from "./sample";
 import { genActivityResponses, genSampleMap, genComponentTraces, genComponentTrace } from "./testing";
 
 function isTesting() {
@@ -155,6 +155,8 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
     }
 
     return (
+      <React.Fragment>
+        <SampleOptions state={this.state.sampleState} onChange={this.onSampleChange} />
         <ComponentNodeMatrix
           activityResponses={this.state.activityResponses}
           componentTraces={this.state.componentTraces}
@@ -164,9 +166,8 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
           onToggleCell={this.onToggleCell}
           expandedSample={this.state.expandedSample}
           onToggleSample={this.onToggleSample}
-          sampleState={this.state.sampleState}
-          onSampleChange={this.onSampleChange}
         />
+      </React.Fragment>
     );
   }
 

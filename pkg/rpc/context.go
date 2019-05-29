@@ -118,19 +118,20 @@ func spanInclusionFuncForClient(
 // so, the service prefix and the method name are returned with
 // sysComp = true. Otherwise, service and method are empty and sysComp
 // is false.
-func serviceIsSystemComponent(fullMethod string) (service, method string, sysComp bool) {
+func serviceIsSystemComponent(fullMethod string) (component, operation string, isSysComp bool) {
 	for _, sysComp := range []struct {
-		prefix  string
-		service string
+		prefix          string
+		componentPrefix string
 	}{
-		{prefix: "/cockroach.server.serverpb.Admin/", service: "server.endpoint.admin"},
-		{prefix: "/cockroach.server.serverpb.Status/", service: "server.endpoint.status"},
-		{prefix: "/cockroach.server.serverpb.LogIn/", service: "server.endpoint.authentication"},
-		{prefix: "/cockroach.server.serverpb.LogOut/", service: "server.endpoint.authentication"},
-		{prefix: "/cockroach.ts.tspb.TimeSeries/", service: "server.endpoint.timeseries"},
+		{prefix: "/cockroach.server.serverpb.Admin/", componentPrefix: "server.api.admin"},
+		{prefix: "/cockroach.server.serverpb.Status/", componentPrefix: "server.api.status"},
+		{prefix: "/cockroach.server.serverpb.LogIn/", componentPrefix: "server.api.authentication"},
+		{prefix: "/cockroach.server.serverpb.LogOut/", componentPrefix: "server.api.authentication"},
+		{prefix: "/cockroach.ts.tspb.TimeSeries/", componentPrefix: "server.api.timeseries"},
 	} {
 		if strings.HasPrefix(fullMethod, sysComp.prefix) {
-			return sysComp.service, fullMethod[len(sysComp.prefix):], true
+			component := sysComp.componentPrefix + "." + fullMethod[len(sysComp.prefix):]
+			return component, fullMethod, true
 		}
 	}
 	return "", "", false
@@ -235,11 +236,11 @@ func NewServerWithInterceptor(
 		unaryInterceptor = func(
 			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 		) (interface{}, error) {
-			service, method, sysComp := serviceIsSystemComponent(info.FullMethod)
-			if !sysComp {
+			component, operation, isSysComp := serviceIsSystemComponent(info.FullMethod)
+			if !isSysComp {
 				return prevUnaryInterceptor(ctx, req, info, handler)
 			}
-			ctx, csp := tracing.StartComponentSpan(ctx, tracer, service, method)
+			ctx, csp := tracing.StartComponentSpan(ctx, tracer, component, operation)
 			csp.SetTag("req", req)
 			resp, err := prevUnaryInterceptor(ctx, req, info, handler)
 			csp.SetTag("resp", resp)
