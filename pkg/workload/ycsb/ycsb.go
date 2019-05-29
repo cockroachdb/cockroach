@@ -38,7 +38,7 @@ import (
 const (
 	numTableFields = 10
 	fieldLength    = 100 // In characters
-	zipfIMin       = 1
+	zipfIMin       = 0
 
 	usertableSchemaRelational = `(
 		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
@@ -94,7 +94,9 @@ type ycsb struct {
 	splits      int
 
 	workload                                   string
-	distribution                               string
+	requestDistribution                        string
+	scanLengthDistribution                     string
+	minScanLength, maxScanLength               uint64
 	readFreq, insertFreq, updateFreq, scanFreq float32
 }
 
@@ -120,7 +122,10 @@ var ycsbMeta = workload.Meta{
 		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
-		g.flags.StringVar(&g.distribution, `request-distribution`, `zipfian`, `Distribution for random number generator [zipfian, uniform].`)
+		g.flags.StringVar(&g.requestDistribution, `request-distribution`, ``, `Distribution for request key generation [zipfian, uniform, latest]. The default for workloads A, B, C, E, and F is zipfian, and the default for workload D is latest.`)
+		g.flags.StringVar(&g.scanLengthDistribution, `scan-length-distribution`, `uniform`, `Distribution for scan length generation [zipfian, uniform]. Primarily used for workload E.`)
+		g.flags.Uint64Var(&g.minScanLength, `min-scan-length`, 1, `The minimum length for scan operations. Primarily used for workload E.`)
+		g.flags.Uint64Var(&g.maxScanLength, `max-scan-length`, 1000, `The maximum length for scan operations. Primarily used for workload E.`)
 
 		// TODO(dan): g.flags.Uint64Var(&g.maxWrites, `max-writes`,
 		//     7*24*3600*1500,  // 7 days at 5% writes and 30k ops/s
@@ -145,23 +150,25 @@ func (g *ycsb) Hooks() workload.Hooks {
 			case "A", "a":
 				g.readFreq = 0.5
 				g.updateFreq = 0.5
+				g.requestDistribution = "zipfian"
 			case "B", "b":
 				g.readFreq = 0.95
 				g.updateFreq = 0.05
+				g.requestDistribution = "zipfian"
 			case "C", "c":
 				g.readFreq = 1.0
+				g.requestDistribution = "zipfian"
 			case "D", "d":
 				g.readFreq = 0.95
-				g.insertFreq = 0.95
-				return errors.New("Workload D (read latest) not implemented yet")
-				// TODO(arjun): workload D (read latest) requires modifying the
-				// RNG to skew to the latest keys, so not done yet.
+				g.insertFreq = 0.05
+				g.requestDistribution = "latest"
 			case "E", "e":
 				g.scanFreq = 0.95
 				g.insertFreq = 0.05
-				return errors.New("Workload E (scans) not implemented yet")
+				g.requestDistribution = "zipfian"
 			case "F", "f":
 				g.insertFreq = 1.0
+				g.requestDistribution = "zipfian"
 			default:
 				return errors.Errorf("Unknown workload: %q", g.workload)
 			}
@@ -237,6 +244,11 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		return workload.QueryLoad{}, err
 	}
 
+	scanStmt, err := db.Prepare(`SELECT * FROM ycsb.usertable WHERE ycsb_key >= $1 LIMIT $2`)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
 	var insertStmt *gosql.Stmt
 	if g.json {
 		insertStmt, err = db.Prepare(`INSERT INTO ycsb.usertable VALUES ($1, json_build_object(
@@ -279,34 +291,57 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	}
 
 	zipfRng := rand.New(rand.NewSource(g.seed))
-	var randGen randGenerator
+	var requestGen randGenerator
+	var scanLengthGen randGenerator
+	var rowIndex = new(uint64)
+	*rowIndex = uint64(g.initialRows)
 
-	switch strings.ToLower(g.distribution) {
+	switch strings.ToLower(g.requestDistribution) {
 	case "zipfian":
-		randGen, err = NewZipfGenerator(
-			zipfRng, zipfIMin, defaultIMax, defaultTheta, false /* verbose */)
+		requestGen, err = NewZipfGenerator(
+			zipfRng, zipfIMin, defaultIMax-1, defaultTheta, false /* verbose */)
 	case "uniform":
-		randGen, err = NewUniformGenerator(zipfRng, uint64(g.initialRows))
+		requestGen, err = NewUniformGenerator(zipfRng, 0, uint64(g.initialRows)-1)
+	case "latest":
+		requestGen, err = NewSkewedLatestGenerator(
+			zipfRng, zipfIMin, uint64(g.initialRows)-1, defaultTheta, false /* verbose */)
 	default:
-		return workload.QueryLoad{}, errors.Errorf("Unknown distribution: %s", g.distribution)
+		return workload.QueryLoad{}, errors.Errorf("Unknown request distribution: %s", g.requestDistribution)
+	}
+	if err != nil {
+		return workload.QueryLoad{}, err
 	}
 
+	switch strings.ToLower(g.scanLengthDistribution) {
+	case "zipfian":
+		scanLengthGen, err = NewZipfGenerator(zipfRng, g.minScanLength, g.maxScanLength, defaultTheta, false /* verbose */)
+	case "uniform":
+		scanLengthGen, err = NewUniformGenerator(zipfRng, g.minScanLength, g.maxScanLength)
+	default:
+		return workload.QueryLoad{}, errors.Errorf("Unknown scan length distribution: %s", g.scanLengthDistribution)
+	}
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
+	rowCounter := NewAcknowledgedCounter((uint64)(g.initialRows))
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
 		w := &ycsbWorker{
-			config:      g,
-			hists:       reg.GetHandle(),
-			db:          db,
-			readStmt:    readStmt,
-			insertStmt:  insertStmt,
-			updateStmts: updateStmts,
-			randGen:     randGen,
-			rng:         rng,
-			hashFunc:    fnv.New64(),
+			config:        g,
+			hists:         reg.GetHandle(),
+			db:            db,
+			readStmt:      readStmt,
+			scanStmt:      scanStmt,
+			insertStmt:    insertStmt,
+			updateStmts:   updateStmts,
+			rowIndex:      rowIndex,
+			rowCounter:    rowCounter,
+			requestGen:    requestGen,
+			scanLengthGen: scanLengthGen,
+			rng:           rng,
+			hashFunc:      fnv.New64(),
 		}
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
@@ -315,24 +350,29 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 type randGenerator interface {
 	Uint64() uint64
-	IMaxHead() uint64
 	IncrementIMax() error
 }
 
 type ycsbWorker struct {
-	config               *ycsb
-	hists                *histogram.Histograms
-	db                   *gosql.DB
-	readStmt, insertStmt *gosql.Stmt
+	config                         *ycsb
+	hists                          *histogram.Histograms
+	db                             *gosql.DB
+	readStmt, scanStmt, insertStmt *gosql.Stmt
 
 	// In normal mode this is one statement per field, since the field name cannot
 	// be parametrized. In JSON mode it's a single statement.
 	updateStmts []*gosql.Stmt
 
-	randGen  randGenerator // used to generate random keys
-	rng      *rand.Rand    // used to generate random strings for the values
-	hashFunc hash.Hash64
-	hashBuf  [8]byte
+	// The next row index to insert.
+	rowIndex *uint64
+	// Counter to keep track of which rows have been inserted.
+	rowCounter *AcknowledgedCounter
+
+	requestGen    randGenerator // used to generate random keys for requests
+	scanLengthGen randGenerator // used to generate length of scan operations
+	rng           *rand.Rand    // used to generate random strings for the values
+	hashFunc      hash.Hash64
+	hashBuf       [8]byte
 }
 
 func (yw *ycsbWorker) run(ctx context.Context) error {
@@ -346,7 +386,7 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 	case readOp:
 		err = yw.readRow(ctx)
 	case insertOp:
-		err = yw.insertRow(ctx, yw.nextInsertKey(), true)
+		err = yw.insertRow(ctx, yw.nextInsertKeyIndex(), true)
 	case scanOp:
 		err = yw.scanRows(ctx)
 	default:
@@ -392,22 +432,13 @@ func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
 // close together.
 // See YCSB paper section 5.3 for a complete description of how keys are chosen.
 func (yw *ycsbWorker) nextReadKey() string {
-	// TODO: In order to support workloads with INSERT, this would need to account
-	// for the number of rows growing over time. See the YCSB paper/code for how
-	// this should work. (Basically repeatedly drawing from the distribution until
-	// a sufficiently low value is chosen, but with some complications.)
-
-	// TODO(arjun): Look into why this was being hashed twice before.
-	rownum := yw.randGen.Uint64() % uint64(yw.config.initialRows)
-	return yw.buildKeyName(rownum)
+	rowCount := yw.rowCounter.Last()
+	rowIndex := yw.hashKey(yw.requestGen.Uint64()) % rowCount
+	return yw.buildKeyName(rowIndex)
 }
 
-func (yw *ycsbWorker) nextInsertKey() string {
-	// TODO: This logic is no longer valid now that we are using a large YCSB
-	// distribution and modding the samples. To properly support INSERTS, we need
-	// to maintain a separate rownum counter.
-	rownum := yw.randGen.IMaxHead()
-	return yw.buildKeyName(rownum)
+func (yw *ycsbWorker) nextInsertKeyIndex() uint64 {
+	return atomic.AddUint64(yw.rowIndex, 1) - 1
 }
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -421,9 +452,9 @@ func (yw *ycsbWorker) randString(length int) string {
 	return string(str)
 }
 
-func (yw *ycsbWorker) insertRow(ctx context.Context, key string, increment bool) error {
+func (yw *ycsbWorker) insertRow(ctx context.Context, keyIndex uint64, increment bool) error {
 	args := make([]interface{}, numTableFields+1)
-	args[0] = key
+	args[0] = yw.buildKeyName(keyIndex)
 	for i := 1; i <= numTableFields; i++ {
 		args[i] = yw.randString(fieldLength)
 	}
@@ -432,8 +463,16 @@ func (yw *ycsbWorker) insertRow(ctx context.Context, key string, increment bool)
 	}
 
 	if increment {
-		if err := yw.randGen.IncrementIMax(); err != nil {
+		prevRowCount := yw.rowCounter.Last()
+		if err := yw.rowCounter.Acknowledge(keyIndex); err != nil {
 			return err
+		}
+		currRowCount := yw.rowCounter.Last()
+		for prevRowCount < currRowCount {
+			if err := yw.requestGen.IncrementIMax(); err != nil {
+				return err
+			}
+			prevRowCount++
 		}
 	}
 	return nil
@@ -471,7 +510,16 @@ func (yw *ycsbWorker) readRow(ctx context.Context) error {
 }
 
 func (yw *ycsbWorker) scanRows(ctx context.Context) error {
-	return errors.New("not implemented yet")
+	key := yw.nextReadKey()
+	scanLength := yw.scanLengthGen.Uint64()
+	res, err := yw.scanStmt.QueryContext(ctx, key, scanLength)
+	if err != nil {
+		return err
+	}
+	defer res.Close()
+	for res.Next() {
+	}
+	return res.Err()
 }
 
 // Choose an operation in proportion to the frequencies.
