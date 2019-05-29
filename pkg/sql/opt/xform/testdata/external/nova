@@ -72,7 +72,7 @@ TABLE flavor_projects
  │    ├── flavor_id int not null
  │    ├── project_id string not null
  │    └── id int not null (storing)
- └── FOREIGN KEY (flavor_id) REFERENCES t.public.flavors (id)
+ └── CONSTRAINT fk_flavor_id_ref_flavors FOREIGN KEY (flavor_id) REFERENCES t.public.flavors (id)
 
 exec-ddl
 create table flavor_extra_specs
@@ -100,7 +100,7 @@ TABLE flavor_extra_specs
  │    ├── flavor_id int not null
  │    ├── key string not null
  │    └── id int not null (storing)
- └── FOREIGN KEY (flavor_id) REFERENCES t.public.flavors (id)
+ └── CONSTRAINT fk_flavor_id_ref_flavors FOREIGN KEY (flavor_id) REFERENCES t.public.flavors (id)
 
 exec-ddl
 create table instance_types
@@ -182,7 +182,7 @@ TABLE instance_type_projects
  │    ├── project_id string
  │    ├── deleted bool
  │    └── id int not null (storing)
- └── FOREIGN KEY (instance_type_id) REFERENCES t.public.instance_types (id)
+ └── CONSTRAINT fk_instance_type_id_ref_instance_types FOREIGN KEY (instance_type_id) REFERENCES t.public.instance_types (id)
 
 exec-ddl
 create table instance_type_extra_specs
@@ -220,7 +220,7 @@ TABLE instance_type_extra_specs
  │    ├── key string
  │    ├── deleted bool
  │    └── id int not null (storing)
- └── FOREIGN KEY (instance_type_id) REFERENCES t.public.instance_types (id)
+ └── CONSTRAINT fk_instance_type_id_ref_instance_types FOREIGN KEY (instance_type_id) REFERENCES t.public.instance_types (id)
 
 opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,

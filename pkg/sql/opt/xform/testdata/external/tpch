@@ -45,7 +45,7 @@ TABLE nation
  ├── INDEX n_rk
  │    ├── n_regionkey int not null
  │    └── n_nationkey int not null
- └── FOREIGN KEY (n_regionkey) REFERENCES t.public.region (r_regionkey)
+ └── CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) REFERENCES t.public.region (r_regionkey)
 
 exec-ddl
 ALTER TABLE nation INJECT STATISTICS '[
@@ -91,7 +91,7 @@ TABLE supplier
  ├── INDEX s_nk
  │    ├── s_nationkey int not null
  │    └── s_suppkey int not null
- └── FOREIGN KEY (s_nationkey) REFERENCES t.public.nation (n_nationkey)
+ └── CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) REFERENCES t.public.nation (n_nationkey)
 
 exec-ddl
 ALTER TABLE supplier INJECT STATISTICS '[
@@ -174,8 +174,8 @@ TABLE partsupp
  ├── INDEX ps_sk
  │    ├── ps_suppkey int not null
  │    └── ps_partkey int not null
- ├── FOREIGN KEY (ps_partkey) REFERENCES t.public.part (p_partkey)
- └── FOREIGN KEY (ps_suppkey) REFERENCES t.public.supplier (s_suppkey)
+ ├── CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) REFERENCES t.public.part (p_partkey)
+ └── CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) REFERENCES t.public.supplier (s_suppkey)
 
 exec-ddl
 ALTER TABLE partsupp INJECT STATISTICS '[
@@ -223,7 +223,7 @@ TABLE customer
  ├── INDEX c_nk
  │    ├── c_nationkey int not null
  │    └── c_custkey int not null
- └── FOREIGN KEY (c_nationkey) REFERENCES t.public.nation (n_nationkey)
+ └── CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) REFERENCES t.public.nation (n_nationkey)
 
 exec-ddl
 ALTER TABLE customer INJECT STATISTICS '[
@@ -277,7 +277,7 @@ TABLE orders
  ├── INDEX o_od
  │    ├── o_orderdate date not null
  │    └── o_orderkey int not null
- └── FOREIGN KEY (o_custkey) REFERENCES t.public.customer (c_custkey)
+ └── CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) REFERENCES t.public.customer (c_custkey)
 
 exec-ddl
 ALTER TABLE orders INJECT STATISTICS '[
@@ -389,10 +389,10 @@ TABLE lineitem
  │    ├── l_partkey int not null
  │    ├── l_orderkey int not null
  │    └── l_linenumber int not null
- ├── FOREIGN KEY (l_orderkey) REFERENCES t.public.orders (o_orderkey)
- ├── FOREIGN KEY (l_partkey) REFERENCES t.public.part (p_partkey)
- ├── FOREIGN KEY (l_suppkey) REFERENCES t.public.supplier (s_suppkey)
- └── FOREIGN KEY (l_partkey, l_suppkey) REFERENCES t.public.partsupp (ps_partkey, ps_suppkey)
+ ├── CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) REFERENCES t.public.orders (o_orderkey)
+ ├── CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) REFERENCES t.public.part (p_partkey)
+ ├── CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) REFERENCES t.public.supplier (s_suppkey)
+ └── CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) REFERENCES t.public.partsupp (ps_partkey, ps_suppkey)
 
 exec-ddl
 ALTER TABLE lineitem INJECT STATISTICS '[

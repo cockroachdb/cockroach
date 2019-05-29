@@ -1712,7 +1712,7 @@ func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
 		// There is a separate fast path for interleaved tables in sql/delete.go.
 		return false
 	}
-	if tab.IsReferenced() {
+	if tab.InboundForeignKeyCount() > 0 {
 		// If the table is referenced by other tables' foreign keys, no fast path
 		// is possible, because the integrity of those references must be checked.
 		return false

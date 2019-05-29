@@ -34,7 +34,7 @@ TABLE c
  ├── INDEX c_auto_index_fk_y_ref_a
  │    ├── y int not null
  │    └── x int not null
- └── FOREIGN KEY (y) REFERENCES t.public.a (k)
+ └── CONSTRAINT fk_y_ref_a FOREIGN KEY (y) REFERENCES t.public.a (k)
 
 exec-ddl
 CREATE TABLE d (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FOREIGN KEY (y,z) REFERENCES c(x,z))
@@ -49,7 +49,7 @@ TABLE d
  │    ├── y int not null
  │    ├── z int not null
  │    └── x int not null
- └── FOREIGN KEY (y, z) REFERENCES t.public.c (x, z)
+ └── CONSTRAINT fk_y_ref_c FOREIGN KEY (y, z) REFERENCES t.public.c (x, z)
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
