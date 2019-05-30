@@ -721,6 +721,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_create_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
+%type <tree.Statement> show_db_indexes_stmt
 %type <tree.Statement> show_fingerprints_stmt
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
@@ -3153,7 +3154,7 @@ zone_value:
 // %Category: Group
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
-// SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW
+// SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW 
 // JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW
 // SESSION, SHOW SESSIONS, SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES,
 // SHOW TRACE SHOW TRANSACTION, SHOW USERS
@@ -3164,6 +3165,7 @@ show_stmt:
 | show_create_stmt          // EXTEND WITH HELP: SHOW CREATE
 | show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
+| show_db_indexes_stmt      // EXTEND WITH HELP: SHOW INDEXES FROM DATABASE
 | show_fingerprints_stmt
 | show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
@@ -3344,6 +3346,23 @@ show_grants_stmt:
     }
   }
 | SHOW GRANTS error // SHOW HELP: SHOW GRANTS
+
+// %Help: SHOW INDEXES FROM DATABASE - list indexes for all tables
+// %Category: DDL
+// %Text: SHOW INDEXES FROM DATABASE <dbname>
+// %SeeAlso: WEBDOCS/show-index.html 
+// TODO: FIX ABOVE
+show_db_indexes_stmt:
+  SHOW INDEX FROM DATABASE database_name
+  {
+    fmt.Println("got into case 1")
+  }
+| SHOW INDEX FROM DATABASE error // SHOW HELP: SHOW INDEXES FROM DB
+| SHOW INDEXES FROM DATABASE database_name 
+  {
+    fmt.Println("got into case 2")
+  }
+| SHOW INDEXES FROM DATABASE error // SHOW HELP: SHOW INDEXES FROM DB
 
 // %Help: SHOW INDEXES - list indexes
 // %Category: DDL
