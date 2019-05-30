@@ -83,6 +83,8 @@ var baseNodeColumnHeaders = []string{
 	"updated_at",
 	"is_available",
 	"is_live",
+	"locality",
+	"attrs",
 }
 
 var statusNodesColumnHeadersForRanges = []string{
@@ -158,8 +160,11 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
                  THEN true
                  ELSE false
                  END AS is_available,
-            ifnull(is_live, false)
-     FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`,
+            ifnull(is_live, false),
+            locality,
+            attrs
+     FROM crdb_internal.gossip_liveness
+     LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`,
 	)
 
 	const rangesQuery = `
