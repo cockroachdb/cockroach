@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // rlimit is a replacement struct for `unix.Rlimit` which abstracts
@@ -66,12 +67,20 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 		}
 		rLimit.Cur = newCurrent
 		if err := setRlimitNoFile(&rLimit); err != nil {
-			return 0, err
+			// It is surprising if setrlimit fails, because we were careful to check
+			// getrlimit first to construct a valid limit. However, the validation
+			// rules for setrlimit have been known to change between Go versions (for
+			// an example, see https://github.com/golang/go/issues/30401), so we don't
+			// want to fail hard if setrlimit fails. Instead we log a warning and
+			// carry on. If the rlimit is really too low, we'll bail out later in this
+			// function.
+			log.Warningf(context.TODO(), "adjusting the limit for open file descriptors failed: %s", err)
 		}
-		// Sadly, the current limit is not always set as expected, (e.g. OSX)
-		// so fetch the limit again to see the new current limit.
+		// Sadly, even when setrlimit returns successfully, the new limit is not
+		// always set as expected (e.g. on macOS), so fetch the limit again to see
+		// the actual current limit.
 		if err := getRlimitNoFile(&rLimit); err != nil {
-			return 0, err
+			return 0, errors.Wrap(err, "getting updated soft limit for open file descriptors")
 		}
 		if log.V(1) {
 			log.Infof(context.TODO(), "soft open file descriptor limit is now %d", rLimit.Cur)
