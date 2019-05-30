@@ -88,10 +88,10 @@ var (
 		{1, makeUpdateReturning},
 	}
 	nonMutatingTableExprs = tableExprWeights{
-		{2, makeJoinExpr},
-		{3, makeSchemaTable},
+		{20, makeJoinExpr},
+		{10, makeSchemaTable},
 		{1, makeValuesTable},
-		{1, makeSelectTable},
+		{2, makeSelectTable},
 	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
 
