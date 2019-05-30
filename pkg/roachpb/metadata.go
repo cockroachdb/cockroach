@@ -220,7 +220,7 @@ func (r RangeDescriptor) Validate() error {
 		return errors.Errorf("NextReplicaID must be non-zero")
 	}
 	seen := map[ReplicaID]struct{}{}
-	for i, rep := range r.Replicas().Unwrap() {
+	for i, rep := range r.Replicas().All() {
 		if err := rep.Validate(); err != nil {
 			return errors.Errorf("replica %d is invalid: %s", i, err)
 		}
@@ -247,8 +247,8 @@ func (r RangeDescriptor) String() string {
 	}
 	buf.WriteString(" [")
 
-	if len(r.Replicas().Unwrap()) > 0 {
-		for i, rep := range r.Replicas().Unwrap() {
+	if allReplicas := r.Replicas().All(); len(allReplicas) > 0 {
+		for i, rep := range allReplicas {
 			if i > 0 {
 				buf.WriteString(", ")
 			}

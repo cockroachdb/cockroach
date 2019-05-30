@@ -37,7 +37,7 @@ func (d ReplicaDescriptors) Unwrap() []ReplicaDescriptor {
 }
 
 // All returns every replica in the set, including both voter replicas and
-// learner replicas.
+// learner replicas. Voter replicas are ordered first in the returned slice.
 func (d ReplicaDescriptors) All() []ReplicaDescriptor {
 	return d.wrapped
 }
