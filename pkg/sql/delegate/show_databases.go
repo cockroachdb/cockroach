@@ -17,9 +17,27 @@ package delegate
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 func (d *delegator) delegateShowDatabases(stmt *tree.ShowDatabases) (tree.Statement, error) {
-	return parse(
-		`SELECT DISTINCT catalog_name AS database_name
-     FROM "".information_schema.schemata
-     ORDER BY 1`,
-	)
+	query := `SELECT
+  DISTINCT
+  catalog_name AS database_name`
+
+	if stmt.WithComment {
+		query += `,
+  shobj_description(oid, 'pg_database') AS comment`
+	}
+
+	query += `
+FROM
+  "".information_schema.schemata`
+
+	if stmt.WithComment {
+		query += `
+  JOIN pg_database ON
+    schemata.catalog_name = pg_database.datname`
+	}
+
+	query += `
+  ORDER BY 1`
+
+	return parse(query)
 }
