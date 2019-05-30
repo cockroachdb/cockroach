@@ -246,17 +246,15 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			d.seen = make(map[string]struct{})
 		}
 
-		if len(encoding) > 0 {
-			if _, ok := d.seen[string(encoding)]; ok {
-				continue
-			}
-			s, err := d.arena.AllocBytes(d.Ctx, encoding)
-			if err != nil {
-				d.MoveToDraining(err)
-				break
-			}
-			d.seen[s] = struct{}{}
+		if _, ok := d.seen[string(encoding)]; ok {
+			continue
 		}
+		s, err := d.arena.AllocBytes(d.Ctx, encoding)
+		if err != nil {
+			d.MoveToDraining(err)
+			break
+		}
+		d.seen[s] = struct{}{}
 
 		if outRow := d.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
