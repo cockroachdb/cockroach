@@ -3259,7 +3259,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DUuid:
 			s = t.UUID.String()
 		case *DIPAddr:
-			s = t.String()
+			s = AsStringWithFlags(d, FmtBareStrings)
 		case *DString:
 			s = string(*t)
 		case *DCollatedString:

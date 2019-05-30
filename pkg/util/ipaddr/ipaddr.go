@@ -21,7 +21,6 @@ import (
 	"math"
 	"math/rand"
 	"net"
-	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -133,7 +132,6 @@ func (ipAddr IPAddr) String() string {
 		// mask during net.IPNet.String, so we need to add the mask manually.
 		return "::ffff:" + ip.String() + "/" + strconv.Itoa(int(ipAddr.Mask))
 	}
-	debug.PrintStack()
 	return ip.String() + "/" + strconv.Itoa(int(ipAddr.Mask))
 }
 
@@ -179,7 +177,6 @@ func getFamily(addr string) IPFamily {
 // examples.
 func ParseINet(s string, dest *IPAddr) error {
 	var maskSize byte
-
 	i := strings.IndexByte(s, '/')
 	family := getFamily(s)
 
