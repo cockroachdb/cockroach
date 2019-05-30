@@ -425,6 +425,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 
 	// Iterate over the lookup results, map them to the input rows, and emit the
 	// rendered rows.
+	isJoinTypeLeftSemiJoin := jr.joinType == sqlbase.LeftSemiJoin
 	for _, lookupRow := range jr.lookupRows {
 		if jr.indexFilter.expr != nil {
 			// Apply index filter.
@@ -438,15 +439,18 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 			}
 		}
 		for _, inputRowIdx := range jr.keyToInputRowIndices[lookupRow.key] {
-			renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
-			if err != nil {
-				jr.MoveToDraining(err)
-				return jrStateUnknown, jr.DrainHelper()
-			}
-			if renderedRow != nil {
-				rowCopy := jr.out.rowAlloc.CopyRow(renderedRow)
-				jr.inputRowIdxToOutputRows[inputRowIdx] = append(
-					jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
+			// Only add to output if joinType is not LeftSemiJoin or if we have not gotten the match
+			if !isJoinTypeLeftSemiJoin || len(jr.inputRowIdxToOutputRows[inputRowIdx]) == 0 {
+				renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
+				if err != nil {
+					jr.MoveToDraining(err)
+					return jrStateUnknown, jr.DrainHelper()
+				}
+				if renderedRow != nil {
+					rowCopy := jr.out.rowAlloc.CopyRow(renderedRow)
+					jr.inputRowIdxToOutputRows[inputRowIdx] = append(
+						jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
+				}
 			}
 		}
 	}
@@ -460,17 +464,19 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 
 // collectOutputRows iterates over jr.inputRowIdxToOutputRows and adds output
 // rows to jr.Emit, rendering rows for unmatched inputs if the join is a left
-// outer join, while preserving the input order.
+// outer join or left anti join, while preserving the input order.
 func (jr *joinReader) collectOutputRows() joinReaderState {
 	for i, outputRows := range jr.inputRowIdxToOutputRows {
 		if len(outputRows) == 0 {
-			if jr.joinType == sqlbase.LeftOuterJoin {
+			if jr.joinType == sqlbase.LeftOuterJoin || jr.joinType == sqlbase.LeftAntiJoin {
 				if row := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); row != nil {
 					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
 				}
 			}
 		} else {
-			jr.toEmit = append(jr.toEmit, outputRows...)
+			if jr.joinType != sqlbase.LeftAntiJoin {
+				jr.toEmit = append(jr.toEmit, outputRows...)
+			}
 		}
 	}
 	return jrEmittingRows
