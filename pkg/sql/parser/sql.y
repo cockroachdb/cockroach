@@ -490,7 +490,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
+%token <str> DATA DATABASE DATABASES DATE DAY DBINDEXES DEC DECIMAL DEFAULT
 %token <str> DEALLOCATE DEFERRABLE DEFERRED DELETE DESC
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
@@ -3155,8 +3155,8 @@ zone_value:
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
 // SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW 
-// INDEXES FROM DATABASE, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW
-// SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS, SHOW STATISTICS,
+// DBINDEXES, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS
+// SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS, SHOW STATISTICS,
 // SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION, SHOW USERS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
@@ -3165,7 +3165,7 @@ show_stmt:
 | show_create_stmt          // EXTEND WITH HELP: SHOW CREATE
 | show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
-| show_db_indexes_stmt      // EXTEND WITH HELP: SHOW INDEXES FROM DATABASE
+| show_db_indexes_stmt      // EXTEND WITH HELP: SHOW DBINDEXES
 | show_fingerprints_stmt
 | show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
@@ -3347,22 +3347,17 @@ show_grants_stmt:
   }
 | SHOW GRANTS error // SHOW HELP: SHOW GRANTS
 
-// %Help: SHOW INDEXES FROM DATABASE - list indexes for all tables
+// %Help: SHOW DBINDEXES - list indexes for all tables in DB
 // %Category: DDL
-// %Text: SHOW INDEXES FROM DATABASE <dbname>
+// %Text: SHOW DBINDEXES FROM <dbname>
 // %SeeAlso: WEBDOCS/show-index.html 
 // [TODO]: add docs about show index from database once created
 show_db_indexes_stmt:
-  SHOW INDEX FROM DATABASE database_name
+  SHOW DBINDEXES FROM database_name 
   {
     $$.val = &tree.ShowDbIndexes{Database: $5}
   }
-| SHOW INDEX FROM DATABASE error // SHOW HELP: SHOW INDEXES FROM DATABASE
-| SHOW INDEXES FROM DATABASE database_name 
-  {
-    return unimplementedWithIssue(sqllex, 37270)
-  }
-| SHOW INDEXES FROM DATABASE error // SHOW HELP: SHOW INDEXES FROM DATABASE
+| SHOW DBINDEXES error // SHOW HELP: SHOW DBINDEXES
 
 // %Help: SHOW INDEXES - list indexes
 // %Category: DDL
@@ -8910,6 +8905,7 @@ unreserved_keyword:
 | DATABASES
 | DATE
 | DAY
+| DBINDEXES
 | DEALLOCATE
 | DELETE
 | DEFERRED
