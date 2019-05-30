@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -169,6 +170,14 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 	r.mu.checksums[cc.ChecksumID] = ReplicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
+
+	if cc.Version != batcheval.ReplicaChecksumVersion {
+		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
+		log.Infof(ctx, "incompatible ComputeChecksum versions (requested: %d, have: %d)",
+			cc.Version, batcheval.ReplicaChecksumVersion)
+		return
+	}
+
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
 	snap := r.store.engine.NewSnapshot()
