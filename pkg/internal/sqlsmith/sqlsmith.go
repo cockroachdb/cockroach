@@ -16,6 +16,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -69,7 +70,12 @@ type Smither struct {
 	statements                    statementWeights
 	tableExprs                    tableExprWeights
 
-	disableWith bool
+	disableWith      bool
+	disableImpureFns bool
+	disableLimits    bool
+	simpleDatums     bool
+	avoidConsts      bool
+	ignoreFNs        []*regexp.Regexp
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -155,4 +161,98 @@ type disableWith struct{}
 
 func (d disableWith) Apply(s *Smither) {
 	s.disableWith = true
+}
+
+// DisableImpureFns causes the Smither to disable impure functions.
+func DisableImpureFns() SmitherOption {
+	return disableImpureFns{}
+}
+
+type disableImpureFns struct{}
+
+func (d disableImpureFns) Apply(s *Smither) {
+	s.disableImpureFns = true
+}
+
+// DisableCRDBFns causes the Smither to disable crdb_internal functions.
+func DisableCRDBFns() SmitherOption {
+	return IgnoreFNs("^crdb_internal")
+}
+
+// SimpleDatums causes the Smither to emit simpler constant datums.
+func SimpleDatums() SmitherOption {
+	return simpleDatums{}
+}
+
+type simpleDatums struct{}
+
+func (d simpleDatums) Apply(s *Smither) {
+	s.simpleDatums = true
+}
+
+// IgnoreFNs causes the Smither to ignore functions that match the regex.
+func IgnoreFNs(regex string) SmitherOption {
+	return ignoreFNs{r: regexp.MustCompile(regex)}
+}
+
+type ignoreFNs struct {
+	r *regexp.Regexp
+}
+
+func (d ignoreFNs) Apply(s *Smither) {
+	s.ignoreFNs = append(s.ignoreFNs, d.r)
+}
+
+// DisableLimits causes the Smither to disable LIMIT clauses.
+func DisableLimits() SmitherOption {
+	return disableLimits{}
+}
+
+type disableLimits struct{}
+
+func (d disableLimits) Apply(s *Smither) {
+	s.disableLimits = true
+}
+
+// AvoidConsts causes the Smither to prefer column references over generating
+// constants.
+func AvoidConsts() SmitherOption {
+	return avoidConsts{}
+}
+
+type avoidConsts struct{}
+
+func (d avoidConsts) Apply(s *Smither) {
+	s.avoidConsts = true
+}
+
+type multiOption []SmitherOption
+
+func (d multiOption) Apply(s *Smither) {
+	for _, opt := range d {
+		opt.Apply(s)
+	}
+}
+
+// CompareMode causes the Smither to generate statements that have
+// deterministic output.
+func CompareMode() SmitherOption {
+	return multiOption{
+		DisableMutations(),
+		DisableImpureFns(),
+		DisableLimits(),
+	}
+}
+
+// PostgresMode causes the Smither to generate statements that work identically
+// in Postgres and Cockroach.
+func PostgresMode() SmitherOption {
+	return multiOption{
+		CompareMode(),
+		DisableWith(),
+		DisableCRDBFns(),
+		SimpleDatums(),
+		IgnoreFNs("^current_"),
+		IgnoreFNs("^version"),
+	}
 }
