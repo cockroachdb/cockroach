@@ -16,12 +16,52 @@ SELECT '2000-05-05 10:00:00+03':::TIMESTAMP FROM a
 ----
 2000-05-05 10:00:00 +0000 +0000
 
-
 statement ok
-CREATE table timestamp_test (x TIMESTAMP(0)); INSERT INTO timestamp_test VALUES ('1-1-18 1:00:00.001'), ('1-1-18 1:00:00.00');
+CREATE TABLE timestamp_test (x TIMESTAMP(0)); INSERT INTO timestamp_test VALUES ('1-1-18 1:00:00.001'), ('1-1-18 1:00:00.00');
 
 query T
 SELECT * FROM timestamp_test WHERE x = '1-1-18 1:00:00'
 ----
 2001-01-18 01:00:00 +0000 +0000
 2001-01-18 01:00:00 +0000 +0000
+
+statement ok
+DROP TABLE timestamp_test; CREATE TABLE timestamp_test (x TIMESTAMP); INSERT INTO timestamp_test VALUES ('1-1-18 1:00:00.001'), ('1-1-18 1:00:00.00');
+
+query T
+SELECT * FROM timestamp_test WHERE x = '1-1-18 1:00:00'
+----
+2001-01-18 01:00:00 +0000 +0000
+
+statement ok
+DROP TABLE timestamp_test; CREATE TABLE timestamp_test (x TIMESTAMP(6)); INSERT INTO timestamp_test VALUES ('1-1-18 1:00:00.001'), ('1-1-18 1:00:00.00');
+
+query T
+SELECT * FROM timestamp_test WHERE x = '1-1-18 1:00:00'
+----
+2001-01-18 01:00:00 +0000 +0000
+
+statement ok
+DROP TABLE timestamp_test; CREATE TABLE timestamp_test (x TIMESTAMPTZ(0)); INSERT INTO timestamp_test VALUES ('1-1-18 1:00:00.001-8'), ('1-1-18 1:00:00.00-8');
+
+query T
+SELECT * FROM timestamp_test WHERE x = '1-1-18 1:00:00-8'
+----
+2001-01-18 09:00:00 +0000 UTC
+2001-01-18 09:00:00 +0000 UTC
+
+statement ok
+DROP TABLE timestamp_test; CREATE TABLE timestamp_test (x TIMESTAMPTZ); INSERT INTO timestamp_test VALUES ('1-1-18 1:00:00.001-8'), ('1-1-18 1:00:00.00-8');
+
+query T
+SELECT * FROM timestamp_test WHERE x = '1-1-18 1:00:00-8'
+----
+2001-01-18 09:00:00 +0000 UTC
+
+statement ok
+DROP TABLE timestamp_test; CREATE TABLE timestamp_test (x TIMESTAMPTZ(6)); INSERT INTO timestamp_test VALUES ('1-1-18 1:00:00.001-8'), ('1-1-18 1:00:00.00-8');
+
+query T
+SELECT * FROM timestamp_test WHERE x = '1-1-18 1:00:00-8'
+----
+2001-01-18 09:00:00 +0000 UTC
