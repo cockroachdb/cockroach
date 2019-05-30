@@ -17,11 +17,11 @@ package ipaddr
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 	"math/rand"
 	"net"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -119,28 +119,22 @@ func (ipAddr IPAddr) String() string {
 	isIPv4MappedIPv6 := ipAddr.Family == IPv6family && ip.Equal(ip.To4())
 	var maskSize byte
 
-	fmt.Printf("%s ipstring\n", ip.String())
-
 	if ipAddr.Family == IPv4family {
 		maskSize = 32
 	} else {
 		maskSize = 128
 	}
 	if ipAddr.Mask == maskSize && isIPv4MappedIPv6 {
-		fmt.Println("return 1")
 		return "::ffff:" + ip.String()
 	} else if ipAddr.Mask == maskSize {
-		fmt.Println("return 2")
 		return ip.String()
 	} else if isIPv4MappedIPv6 {
-		fmt.Println("return 3")
 		// Due to an issue with IPv4-mapped IPv6 the mask is also reduced to an IPv4
 		// mask during net.IPNet.String, so we need to add the mask manually.
 		return "::ffff:" + ip.String() + "/" + strconv.Itoa(int(ipAddr.Mask))
 	}
-	result := ip.String() + "/" + strconv.Itoa(int(ipAddr.Mask))
-	fmt.Printf("please %s\n", result)
-	return result
+	debug.PrintStack()
+	return ip.String() + "/" + strconv.Itoa(int(ipAddr.Mask))
 }
 
 // Compare two IPAddrs. IPv4-mapped IPv6 addresses are not equal to their IPv4
@@ -186,14 +180,6 @@ func getFamily(addr string) IPFamily {
 func ParseINet(s string, dest *IPAddr) error {
 	var maskSize byte
 
-	fmt.Printf("Full string %s\n", s)
-	// debug.PrintStack()
-
-	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
-		fmt.Println("we in here!")
-		s = s[1 : len(s)-1]
-	}
-
 	i := strings.IndexByte(s, '/')
 	family := getFamily(s)
 
@@ -232,8 +218,6 @@ func ParseINet(s string, dest *IPAddr) error {
 		// TODO(knz): SQL clients will want to receive pg code
 		// pgerror.CodeInvalidTextRepresentationError. Needs to wait for
 		// followups on #36987 until this can be achieved.
-		fmt.Printf("%q %q\n", addr, maskStr)
-		fmt.Println(err)
 		return errors.Errorf("could not parse %q as inet. invalid mask", s)
 	} else if maskOnes < 0 || (family == IPv4family && maskOnes > 32) || (family == IPv6family && maskOnes > 128) {
 		// TODO(knz): SQL clients will want to receive pg code

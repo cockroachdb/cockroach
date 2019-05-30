@@ -387,7 +387,7 @@ func AsStringWithFQNames(n NodeFormatter, ann *Annotations) string {
 
 // AsString pretty prints a node to a string.
 func AsString(n NodeFormatter) string {
-	return AsStringWithFlags(n, FmtSimple)
+	return AsStringWithFlags(n, FmtSimple|FmtBareStrings)
 }
 
 // ErrString pretty prints a node to a string. Identifiers are not quoted.
