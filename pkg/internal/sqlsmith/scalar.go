@@ -30,7 +30,7 @@ func init() {
 		{10, scalarNoContext(makeAnd)},
 		{1, scalarNoContext(makeCaseExpr)},
 		{1, scalarNoContext(makeCoalesceExpr)},
-		{20, scalarNoContext(makeColRef)},
+		{50, scalarNoContext(makeColRef)},
 		{10, scalarNoContext(makeBinOp)},
 		{2, scalarNoContext(makeScalarSubquery)},
 		{2, scalarNoContext(makeExists)},
