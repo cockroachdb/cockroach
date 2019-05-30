@@ -328,13 +328,11 @@ func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	op := ops[n]
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
-	return typedParen(
-		&tree.BinaryExpr{
-			Operator: op.Operator,
-			// Cast both of these to prevent ambiguity in execution choice.
-			Left:  castType(left, op.LeftType),
-			Right: castType(right, op.RightType),
-		},
+	return castType(
+		typedParen(
+			tree.NewTypedBinaryExpr(op.Operator, castType(left, op.LeftType), castType(right, op.RightType), typ),
+			typ,
+		),
 		typ,
 	), true
 }
