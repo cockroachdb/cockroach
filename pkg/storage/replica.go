@@ -740,7 +740,7 @@ func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 		return 0
 	}
 	var maxID roachpb.ReplicaID
-	for _, repl := range desc.Replicas().Unwrap() {
+	for _, repl := range desc.Replicas().All() {
 		if repl.ReplicaID > maxID {
 			maxID = repl.ReplicaID
 		}
@@ -911,7 +911,7 @@ func (r *Replica) State() storagepb.RangeInfo {
 	}
 	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	if desc := ri.ReplicaState.Desc; desc != nil {
-		for _, replDesc := range desc.Replicas().Unwrap() {
+		for _, replDesc := range desc.Replicas().Voters() {
 			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
 				mlai, found := e.MLAI[r.RangeID]
 				if !found {

@@ -1133,7 +1133,7 @@ func (s *statusServer) RaftDebug(
 			desc := node.Range.State.Desc
 			// Check for whether replica should be GCed.
 			containsNode := false
-			for _, replica := range desc.Replicas().Unwrap() {
+			for _, replica := range desc.Replicas().All() {
 				if replica.NodeID == node.NodeID {
 					containsNode = true
 				}

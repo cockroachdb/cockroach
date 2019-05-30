@@ -226,7 +226,7 @@ func (ds *DistSender) singleRangeFeed(
 	if ds.rpcContext != nil {
 		latencyFn = ds.rpcContext.RemoteClocks.Latency
 	}
-	replicas := NewReplicaSlice(ds.gossip, desc)
+	replicas := NewReplicaSlice(ds.gossip, desc.Replicas().Voters())
 	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
 
 	transport, err := ds.transportFactory(SendOptions{}, ds.nodeDialer, replicas)

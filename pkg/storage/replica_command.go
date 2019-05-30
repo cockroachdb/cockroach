@@ -801,7 +801,7 @@ func (r *Replica) changeReplicas(
 	}
 	repDescIdx := -1  // tracks NodeID && StoreID
 	nodeUsed := false // tracks NodeID only
-	for i, existingRep := range desc.Replicas().Unwrap() {
+	for i, existingRep := range desc.Replicas().All() {
 		nodeUsedByExistingRep := existingRep.NodeID == repDesc.NodeID
 		nodeUsed = nodeUsed || nodeUsedByExistingRep
 
@@ -925,7 +925,7 @@ func (r *Replica) changeReplicas(
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
 					ChangeType:      changeType,
 					Replica:         repDesc,
-					UpdatedReplicas: updatedDesc.Replicas().Unwrap(),
+					UpdatedReplicas: updatedDesc.Replicas().All(),
 					NextReplicaID:   updatedDesc.NextReplicaID,
 				},
 			},
@@ -1151,7 +1151,7 @@ func (s *Store) AdminRelocateRange(
 	var addTargets []roachpb.ReplicaDescriptor
 	for _, t := range targets {
 		found := false
-		for _, replicaDesc := range rangeDesc.Replicas().Unwrap() {
+		for _, replicaDesc := range rangeDesc.Replicas().All() {
 			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
 				found = true
 				break
@@ -1166,7 +1166,7 @@ func (s *Store) AdminRelocateRange(
 	}
 
 	var removeTargets []roachpb.ReplicaDescriptor
-	for _, replicaDesc := range rangeDesc.Replicas().Unwrap() {
+	for _, replicaDesc := range rangeDesc.Replicas().All() {
 		found := false
 		for _, t := range targets {
 			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
@@ -1222,7 +1222,7 @@ func (s *Store) AdminRelocateRange(
 			})
 			desc.NextReplicaID++
 		case roachpb.REMOVE_REPLICA:
-			newReplicas := removeTargetFromSlice(desc.Replicas().Unwrap(), target)
+			newReplicas := removeTargetFromSlice(desc.Replicas().All(), target)
 			desc.SetReplicas(roachpb.MakeReplicaDescriptors(newReplicas))
 		default:
 			panic(errors.Errorf("unknown ReplicaChangeType %v", changeType))
@@ -1282,7 +1282,7 @@ func (s *Store) AdminRelocateRange(
 				ctx,
 				storeList,
 				zone,
-				rangeInfo.Desc.Replicas().Unwrap(),
+				rangeInfo.Desc.Replicas().All(),
 				rangeInfo,
 				s.allocator.scorerOptions())
 			if targetStore == nil {
@@ -1420,8 +1420,9 @@ func (r *Replica) adminScatter(
 	// probability 1/N of choosing each.
 	if args.RandomizeLeases && r.OwnsValidLease(r.store.Clock().Now()) {
 		desc := r.Desc()
-		newLeaseholderIdx := rand.Intn(len(desc.Replicas().Unwrap()))
-		targetStoreID := desc.Replicas().Unwrap()[newLeaseholderIdx].StoreID
+		voterReplicas := desc.Replicas().Voters()
+		newLeaseholderIdx := rand.Intn(len(voterReplicas))
+		targetStoreID := voterReplicas[newLeaseholderIdx].StoreID
 		if targetStoreID != r.store.StoreID() {
 			if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
 				log.Warningf(ctx, "failed to scatter lease to s%d: %s", targetStoreID, err)

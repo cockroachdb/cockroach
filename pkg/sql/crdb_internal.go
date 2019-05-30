@@ -1765,7 +1765,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			var replicas []int
-			for _, rd := range desc.Replicas().Unwrap() {
+			for _, rd := range desc.Replicas().Voters() {
 				replicas = append(replicas, int(rd.StoreID))
 			}
 			sort.Ints(replicas)

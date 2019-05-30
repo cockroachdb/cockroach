@@ -160,7 +160,7 @@ func calcRangeCounter(
 	numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
-	for _, rd := range desc.Replicas().Unwrap() {
+	for _, rd := range desc.Replicas().Voters() {
 		if livenessMap[rd.NodeID].IsLive {
 			rangeCounter = rd.StoreID == storeID
 			break
@@ -187,7 +187,7 @@ func calcRangeCounter(
 // determined by checking its node in the provided liveness map.
 func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap) int {
 	var live int
-	for _, rd := range desc.Replicas().Unwrap() {
+	for _, rd := range desc.Replicas().Voters() {
 		if livenessMap[rd.NodeID].IsLive {
 			live++
 		}

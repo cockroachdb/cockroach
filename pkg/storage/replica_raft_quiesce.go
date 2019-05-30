@@ -258,7 +258,7 @@ func shouldReplicaQuiesce(
 	}
 
 	var foundSelf bool
-	for _, rep := range q.descRLocked().Replicas().Unwrap() {
+	for _, rep := range q.descRLocked().Replicas().All() {
 		if uint64(rep.ReplicaID) == status.ID {
 			foundSelf = true
 		}

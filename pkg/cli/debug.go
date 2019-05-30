@@ -1168,8 +1168,9 @@ func removeDeadReplicas(
 	err = storage.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) (bool, error) {
 		hasSelf := false
 		numDeadPeers := 0
-		numReplicas := len(desc.Replicas().Unwrap())
-		for _, rep := range desc.Replicas().Unwrap() {
+		allReplicas := desc.Replicas().All()
+		numReplicas := len(allReplicas)
+		for _, rep := range allReplicas {
 			if rep.StoreID == storeIdent.StoreID {
 				hasSelf = true
 			}

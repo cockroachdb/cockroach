@@ -483,7 +483,7 @@ func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor, withCommit bool,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Try to send the call.
-	replicas := NewReplicaSlice(ds.gossip, desc)
+	replicas := NewReplicaSlice(ds.gossip, desc.Replicas().Voters())
 
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
