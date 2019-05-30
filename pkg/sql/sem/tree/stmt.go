@@ -921,6 +921,7 @@ func (n *ShowColumns) String() string               { return AsString(n) }
 func (n *ShowConstraints) String() string           { return AsString(n) }
 func (n *ShowCreate) String() string                { return AsString(n) }
 func (n *ShowDatabases) String() string             { return AsString(n) }
+func (n *ShowDbIndexes) String() string             { return AsString(n) }
 func (n *ShowGrants) String() string                { return AsString(n) }
 func (n *ShowHistogram) String() string             { return AsString(n) }
 func (n *ShowIndexes) String() string               { return AsString(n) }

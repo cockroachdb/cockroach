@@ -3355,7 +3355,7 @@ show_grants_stmt:
 show_db_indexes_stmt:
   SHOW DBINDEXES FROM database_name 
   {
-    $$.val = &tree.ShowDbIndexes{Database: $5}
+    $$.val = &tree.ShowDbIndexes{Database: $4}
   }
 | SHOW DBINDEXES error // SHOW HELP: SHOW DBINDEXES
 
