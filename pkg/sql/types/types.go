@@ -256,10 +256,8 @@ var (
 	// precision. For example:
 	//
 	//   YYYY-MM-DD HH:MM:SS.ssssss
-	//
-	// 6 is the default precision for timestamps in cockroach
 	Timestamp = &T{InternalType: InternalType{
-		Family: TimestampFamily, Precision: 6, Oid: oid.T_timestamp, Locale: &emptyLocale}}
+		Family: TimestampFamily, Precision: -1, Oid: oid.T_timestamp, Locale: &emptyLocale}}
 
 	// TimestampTZ is the type of a value specifying year, month, day, hour,
 	// minute, and second, as well as an associated timezone. By default, it has
@@ -268,7 +266,7 @@ var (
 	//   YYYY-MM-DD HH:MM:SS.ssssss+-ZZ:ZZ
 	//
 	TimestampTZ = &T{InternalType: InternalType{
-		Family: TimestampTZFamily, Oid: oid.T_timestamptz, Locale: &emptyLocale}}
+		Family: TimestampTZFamily, Precision: -1, Oid: oid.T_timestamptz, Locale: &emptyLocale}}
 
 	// Interval is the type of a value describing a duration of time. By default,
 	// it has microsecond precision.
@@ -649,28 +647,21 @@ func MakeTime(precision int32) *T {
 // MakeTimestamp constructs a new instance of a TIMESTAMP type that has at most
 // the given number of fractional second digits.
 func MakeTimestamp(precision int32) *T {
-	if precision == 0 {
+	if precision == 0 || precision == 6 {
 		return &T{InternalType: InternalType{
-			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: 0, Locale: &emptyLocale}}
+			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: precision, Locale: &emptyLocale}}
 	}
-	if precision != 6 {
-		panic(pgerror.AssertionFailedf("precision %d is not currently supported", precision))
-	}
-	return &T{InternalType: InternalType{
-		Family: TimestampFamily, Oid: oid.T_timestamp, Precision: precision, Locale: &emptyLocale}}
+	panic(pgerror.AssertionFailedf("precision %d is not currently supported", precision))
 }
 
 // MakeTimestampTZ constructs a new instance of a TIMESTAMPTZ type that has at
 // most the given number of fractional second digits.
 func MakeTimestampTZ(precision int32) *T {
-	if precision == 0 {
-		return TimestampTZ
+	if precision == 0 || precision == 6 {
+		return &T{InternalType: InternalType{
+			Family: TimestampTZFamily, Oid: oid.T_timestamptz, Precision: precision, Locale: &emptyLocale}}
 	}
-	if precision != 6 {
-		panic(pgerror.AssertionFailedf("precision %d is not currently supported", precision))
-	}
-	return &T{InternalType: InternalType{
-		Family: TimestampTZFamily, Oid: oid.T_timestamptz, Precision: precision, Locale: &emptyLocale}}
+	panic(pgerror.AssertionFailedf("precision %d is not currently supported", precision))
 }
 
 // MakeArray constructs a new instance of an ArrayFamily type with the given
@@ -777,6 +768,7 @@ func (t *T) Width() int32 {
 //   TIMESTAMP  : max # fractional second digits
 //   TIMESTAMPTZ: max # fractional second digits
 //
+// For TIMESTAMP and TIMESTAMP TZ, the precision field is -1 for a default precision value of 6.
 // Precision is always 0 for other types.
 func (t *T) Precision() int32 {
 	return t.InternalType.Precision
@@ -1094,18 +1086,15 @@ func (t *T) SQLString() string {
 	case JsonFamily:
 		// Only binary JSON is currently supported.
 		return "JSONB"
-	// For now, we support timestampfamily differently.
-	case TimestampFamily:
-		if t.Precision() == 0 {
-			return fmt.Sprintf("TIMESTAMP(0)")
-		} else if t.Precision() == 6 {
-			return "TIMESTAMP"
-		} else {
-			return fmt.Sprintf("TIMESTAMP(%d)", t.Precision())
+	case TimestampFamily, TimestampTZFamily:
+		// This is default timestamp
+		if t.Precision() == -1 {
+			return fmt.Sprintf("%s", strings.ToUpper(t.Name()))
 		}
-	case TimeFamily, TimestampTZFamily:
+		return fmt.Sprintf("%s(%d)", strings.ToUpper(t.Name()), t.Precision())
+	case TimeFamily:
 		if t.Precision() > 0 {
-			return fmt.Sprintf("%s(%d)", strings.ToUpper(t.Name()), t.Precision())
+			return fmt.Sprintf("TIME(%d)", t.Precision())
 		}
 	case OidFamily:
 		if name, ok := oid.TypeName[t.Oid()]; ok {
