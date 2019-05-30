@@ -380,6 +380,105 @@ func (c *CustomFuncs) EmptyOrdering() physical.OrderingChoice {
 	return physical.OrderingChoice{}
 }
 
+// ImpliesOrdering returns true if every ordering valid for the left ordering
+// is also valid for the right ordering.
+func (c *CustomFuncs) ImpliesOrdering(left, right physical.OrderingChoice) bool {
+	return left.Implies(&right)
+}
+
+// PrependColsToOrdering returns an ordering choice with the given ColSet as a
+// prefix to the given ordering choice, in an arbitrary ordering, with arbitrary
+// directions. referenceOrdering is used to pick an order to prepend the
+// columns from the ColSet in which is likely to work well.
+// TODO(justin): this is overly restrictive, since the columns in the colset
+// should be allowed to occur in any order, and it doesn't matter if they're
+// ascending or descending. We could use an interesting ordering to attempt to
+// find a good choice here.
+func (c *CustomFuncs) PrependColsToOrdering(
+	cols opt.ColSet, ordering physical.OrderingChoice, referenceOrdering physical.OrderingChoice,
+) physical.OrderingChoice {
+	if cols.Empty() {
+		return ordering
+	}
+	var oc physical.OrderingChoice
+	oc.Optional = ordering.Optional.Copy()
+
+	cpy := cols.Copy()
+	// We're allowed to prepend the columns from the set in any order, but we're
+	// more likely to be successful in making the ordering "work" if we try to
+	// prepend them in the order and direction they occur in the reference
+	// ordering.
+	//
+	// We do this by first adding in any columns that occur in both the set and
+	// the reference ordering in the order they occur in the reference ordering,
+	// and then after we add any from the set that didn't get added in that way.
+	for _, col := range referenceOrdering.Columns {
+		id := col.AnyID()
+		// If this column is one of the ones we're going to be prepending, do it
+		// now, so that the ordering is more likely to agree with the reference
+		// ordering.
+		if cpy.Contains(int(id)) {
+			cpy.Remove(int(id))
+			oc.AppendCol(id, col.Descending)
+		}
+	}
+
+	// Add any remaining columns.
+	for col, ok := cpy.Next(0); ok; col, ok = cpy.Next(col + 1) {
+		oc.AppendCol(opt.ColumnID(col), false /* descending */)
+	}
+	oc.Columns = append(oc.Columns, ordering.Columns...)
+
+	return oc
+}
+
+// AllArePrefixSafe returns whether every window function in the list satisfies
+// the "prefix-safe" property.
+//
+// Being prefix-safe means that the computation of a window function on a given
+// row does not depend on any of the rows that come after it. It's also
+// precisely the property that lets us push limit operators below window
+// functions:
+//
+//		(Limit (Window $input) n) = (Window (Limit $input n))
+//
+// Note that the frame affects whether a given window function is prefix-safe or not.
+// rank() is prefix-safe under any frame, but avg():
+//  * is not prefix-safe under RANGE BETWEEN UNBOUNDED PRECEDING TO CURRENT ROW
+//    (the default), because we might cut off mid-peer group. If we can
+//    guarantee that the ordering is over a key, then this becomes safe.
+//  * is not prefix-safe under ROWS BETWEEN UNBOUNDED PRECEDING TO UNBOUNDED
+//    FOLLOWING, because it needs to look at the entire partition.
+//  * is prefix-safe under ROWS BETWEEN UNBOUNDED PRECEDING TO CURRENT ROW,
+//    because it only needs to look at the rows up to any given row.
+// (We don't currently handle this case).
+//
+// This function is best-effort. It's OK to report a function not as
+// prefix-safe, even if it is.
+func (c *CustomFuncs) AllArePrefixSafe(fns memo.WindowsExpr) bool {
+	for i := range fns {
+		if !c.isPrefixSafe(&fns[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isPrefixSafe returns whether or not the given window function satisfies the
+// "prefix-safe" property. See the comment above AllArePrefixSafe for more
+// details.
+func (c *CustomFuncs) isPrefixSafe(fn *memo.WindowsItem) bool {
+	switch fn.Function.Op() {
+	case opt.RankOp, opt.RowNumberOp, opt.DenseRankOp:
+		return true
+	}
+	// TODO(justin): Add other cases. I think aggregates are valid here if the
+	// upper bound is CURRENT ROW, and either:
+	// * the mode is ROWS, or
+	// * the mode is RANGE and the ordering is over a key.
+	return false
+}
+
 // -----------------------------------------------------------------------
 //
 // Filter functions
@@ -1160,6 +1259,11 @@ func (c *CustomFuncs) ReduceWindowPartitionCols(
 // partition.
 func (c *CustomFuncs) WindowPartition(priv *memo.WindowPrivate) opt.ColSet {
 	return priv.Partition
+}
+
+// WindowOrdering returns the ordering used by the window function.
+func (c *CustomFuncs) WindowOrdering(private *memo.WindowPrivate) physical.OrderingChoice {
+	return private.Ordering
 }
 
 // ----------------------------------------------------------------------

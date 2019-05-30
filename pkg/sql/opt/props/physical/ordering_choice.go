@@ -475,6 +475,7 @@ func (oc *OrderingChoice) MatchesAt(index int, col opt.OrderingColumn) bool {
 func (oc *OrderingChoice) AppendCol(id opt.ColumnID, descending bool) {
 	ordCol := OrderingColumnChoice{Descending: descending}
 	ordCol.Group.Add(int(id))
+	oc.Optional.Remove(int(id))
 	oc.Columns = append(oc.Columns, ordCol)
 }
 
