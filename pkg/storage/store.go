@@ -1044,7 +1044,9 @@ func (s *Store) SetDraining(drain bool) {
 						break
 					}
 
-					needsLeaseTransfer := len(r.Desc().Replicas().Unwrap()) > 1 &&
+					// Learner replicas aren't allowed to become the leaseholder or raft
+					// leader, so only consider the `Voters` replicas.
+					needsLeaseTransfer := len(r.Desc().Replicas().Voters()) > 1 &&
 						drainingLease.OwnedBy(s.StoreID()) &&
 						r.IsLeaseValid(drainingLease, s.Clock().Now())
 
@@ -2196,7 +2198,7 @@ func splitPostApply(
 	r.store.replicateQueue.MaybeAddAsync(ctx, r, now)
 	r.store.replicateQueue.MaybeAddAsync(ctx, rightRng, now)
 
-	if len(split.RightDesc.Replicas().Unwrap()) == 1 {
+	if len(split.RightDesc.Replicas().All()) == 1 {
 		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
 		// the split (the new range) for Raft processing so that the corresponding
 		// Raft group is created. This shouldn't be necessary for correctness, but
@@ -3661,7 +3663,7 @@ func (s *Store) nodeIsLiveCallback(nodeID roachpb.NodeID) {
 
 	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
 		r := (*Replica)(v)
-		for _, rep := range r.Desc().Replicas().Unwrap() {
+		for _, rep := range r.Desc().Replicas().All() {
 			if rep.NodeID == nodeID {
 				r.unquiesce()
 			}
