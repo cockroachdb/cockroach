@@ -23,8 +23,25 @@ SELECT '23:59:59.999999':::TIME;
 ----
 0000-01-01 23:59:59.999999 +0000 UTC
 
+query T
+select ('24:00'::TIME)::STRING
+----
+24:00:00
+
+query T
+SELECT ('24:00:00'::TIME)::STRING
+----
+24:00:00
+
 statement error could not parse
-SELECT '24:00:00':::TIME;
+SELECT '124:00'::TIME;
+
+statement error could not parse
+SELECT '24:00:01'::TIME;
+
+statement error could not parse
+SELECT '24:00:00.001'::TIME;
+
 
 # Timezone should be ignored.
 query T
