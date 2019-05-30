@@ -213,9 +213,11 @@ func (rq *replicateQueue) shouldQueue(
 
 	// If the lease is valid, check to see if we should transfer it.
 	if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, now) {
+		// Learner replicas aren't allowed to become the leaseholder or raft leader,
+		// so only consider the `Voters` replicas.
 		if rq.canTransferLease() &&
 			rq.allocator.ShouldTransferLease(
-				ctx, zone, desc.Replicas().Unwrap(), lease.Replica.StoreID, desc.RangeID, repl.leaseholderStats) {
+				ctx, zone, desc.Replicas().Voters(), lease.Replica.StoreID, desc.RangeID, repl.leaseholderStats) {
 			log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 			return true, 0
 		}
@@ -346,7 +348,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 		rq.metrics.AddReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "adding replica %+v due to under-replication: %s",
-			newReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
+			newReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas()))
 		if err := rq.addReplica(
 			ctx,
 			repl,
@@ -387,7 +389,7 @@ func (rq *replicateQueue) processOneChange(
 			}
 			candidates = filterUnremovableReplicas(raftStatus, desc.Replicas().Unwrap(), lastReplAdded)
 			log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
-				desc.Replicas(), candidates, rangeRaftProgress(raftStatus, desc.Replicas().Unwrap()))
+				desc.Replicas(), candidates, rangeRaftProgress(raftStatus, desc.Replicas()))
 			if len(candidates) > 0 {
 				break
 			}
@@ -415,7 +417,7 @@ func (rq *replicateQueue) processOneChange(
 		if len(candidates) == 0 {
 			// If we timed out and still don't have any valid candidates, give up.
 			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
-				rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
+				rangeRaftProgress(repl.RaftStatus(), desc.Replicas()))
 		}
 
 		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo)
@@ -452,7 +454,7 @@ func (rq *replicateQueue) processOneChange(
 		} else {
 			rq.metrics.RemoveReplicaCount.Inc(1)
 			log.VEventf(ctx, 1, "removing replica %+v due to over-replication: %s",
-				removeReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
+				removeReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas()))
 			target := roachpb.ReplicationTarget{
 				NodeID:  removeReplica.NodeID,
 				StoreID: removeReplica.StoreID,
@@ -539,7 +541,7 @@ func (rq *replicateQueue) processOneChange(
 				}
 				rq.metrics.RebalanceReplicaCount.Inc(1)
 				log.VEventf(ctx, 1, "rebalancing to %+v: %s",
-					rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
+					rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas()))
 				if err := rq.addReplica(
 					ctx,
 					repl,
@@ -600,7 +602,9 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 	zone *config.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
-	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas().Unwrap())
+	// Learner replicas aren't allowed to become the leaseholder or raft leader,
+	// so only consider the `Voters` replicas.
+	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas().Voters())
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone,
@@ -702,7 +706,7 @@ func (rq *replicateQueue) purgatoryChan() <-chan time.Time {
 
 // rangeRaftStatus pretty-prints the Raft progress (i.e. Raft log position) of
 // the replicas.
-func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor) string {
+func rangeRaftProgress(raftStatus *raft.Status, replicas roachpb.ReplicaDescriptors) string {
 	if raftStatus == nil {
 		return "[no raft status]"
 	} else if len(raftStatus.Progress) == 0 {
@@ -710,7 +714,7 @@ func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescri
 	}
 	var buf bytes.Buffer
 	buf.WriteString("[")
-	for i, r := range replicas {
+	for i, r := range replicas.All() {
 		if i > 0 {
 			buf.WriteString(", ")
 		}

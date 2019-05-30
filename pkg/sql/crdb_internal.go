@@ -1714,7 +1714,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   database_name        STRING NOT NULL,
   table_name           STRING NOT NULL,
   index_name           STRING NOT NULL,
-  replicas             INT[] NOT NULL,
+	replicas             INT[] NOT NULL,
   split_enforced_until TIMESTAMP
 )
 `,
@@ -1768,8 +1768,11 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				return nil, err
 			}
 
+			// TODO(dan): We're trying to treat learners as a far-behind replica as
+			// much as possible, so just include them in the list of replicas. We can
+			// add a separate column for them if we get feedback about it.
 			var replicas []int
-			for _, rd := range desc.Replicas().Unwrap() {
+			for _, rd := range desc.Replicas().All() {
 				replicas = append(replicas, int(rd.StoreID))
 			}
 			sort.Ints(replicas)
