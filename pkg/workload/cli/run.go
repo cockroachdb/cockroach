@@ -56,6 +56,10 @@ var pprofport = sharedFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
 var dataLoader = sharedFlags.String("data-loader", `INSERT`,
 	"How to load initial table data. Options are INSERT and IMPORT")
 
+var displayEvery = runFlags.Duration("display-every", time.Second, "How much time between every one-line activity reports.")
+
+var displayFormat = runFlags.String("display-format", "simple", "Output display format (simple, incremental-json)")
+
 var histograms = runFlags.String(
 	"histograms", "",
 	"File to write per-op incremental and cumulative histogram data.")
@@ -306,6 +310,16 @@ func startPProfEndPoint(ctx context.Context) {
 func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 
+	var formatter outputFormat
+	switch *displayFormat {
+	case "simple":
+		formatter = &textFormatter{}
+	case "incremental-json":
+		formatter = &jsonFormatter{w: os.Stdout}
+	default:
+		return errors.Errorf("unknown display format: %s", *displayFormat)
+	}
+
 	startPProfEndPoint(ctx)
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
@@ -394,8 +408,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		}
 	}()
 
-	var numErr int
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(*displayEvery)
 	defer ticker.Stop()
 	done := make(chan os.Signal, 3)
 	signal.Notify(done, exitSignals...)
@@ -422,11 +435,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		jsonEnc = json.NewEncoder(jsonF)
 	}
 
-	everySecond := log.Every(time.Second)
-	for i := 0; ; {
+	everySecond := log.Every(*displayEvery)
+	for {
 		select {
 		case err := <-errCh:
-			numErr++
+			formatter.outputError(err)
 			if *tolerateErrors {
 				if everySecond.ShouldLog() {
 					log.Error(ctx, err)
@@ -438,21 +451,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		case <-ticker.C:
 			startElapsed := timeutil.Since(start)
 			reg.Tick(func(t histogram.Tick) {
-				if i%20 == 0 {
-					fmt.Println("_elapsed___errors__ops/sec(inst)___ops/sec(cum)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)")
-				}
-				i++
-				fmt.Printf("%8s %8d %14.1f %14.1f %8.1f %8.1f %8.1f %8.1f %s\n",
-					time.Duration(startElapsed.Seconds()+0.5)*time.Second,
-					numErr,
-					float64(t.Hist.TotalCount())/t.Elapsed.Seconds(),
-					float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
-					time.Duration(t.Hist.ValueAtQuantile(50)).Seconds()*1000,
-					time.Duration(t.Hist.ValueAtQuantile(95)).Seconds()*1000,
-					time.Duration(t.Hist.ValueAtQuantile(99)).Seconds()*1000,
-					time.Duration(t.Hist.ValueAtQuantile(100)).Seconds()*1000,
-					t.Name,
-				)
+				formatter.outputTick(startElapsed, t)
 				if jsonEnc != nil && rampDone == nil {
 					_ = jsonEnc.Encode(t.Snapshot())
 				}
@@ -463,7 +462,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		case <-rampDone:
 			rampDone = nil
 			start = timeutil.Now()
-			i = 0
+			formatter.rampDone()
 			reg.Tick(func(t histogram.Tick) {
 				t.Cumulative.Reset()
 				t.Hist.Reset()
@@ -474,32 +473,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			if ops.Close != nil {
 				ops.Close(ctx)
 			}
-			const totalHeader = "\n_elapsed___errors_____ops(total)___ops/sec(cum)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)"
-			fmt.Println(totalHeader + `__total`)
-			startElapsed := timeutil.Since(start)
-			printTotalHist := func(t histogram.Tick) {
-				if t.Cumulative == nil {
-					return
-				}
-				if t.Cumulative.TotalCount() == 0 {
-					return
-				}
-				fmt.Printf("%7.1fs %8d %14d %14.1f %8.1f %8.1f %8.1f %8.1f %8.1f  %s\n",
-					startElapsed.Seconds(), numErr,
-					t.Cumulative.TotalCount(),
-					float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
-					time.Duration(t.Cumulative.Mean()).Seconds()*1000,
-					time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
-					time.Duration(t.Cumulative.ValueAtQuantile(95)).Seconds()*1000,
-					time.Duration(t.Cumulative.ValueAtQuantile(99)).Seconds()*1000,
-					time.Duration(t.Cumulative.ValueAtQuantile(100)).Seconds()*1000,
-					t.Name,
-				)
-			}
 
+			startElapsed := timeutil.Since(start)
 			resultTick := histogram.Tick{Name: ops.ResultHist}
 			reg.Tick(func(t histogram.Tick) {
-				printTotalHist(t)
+				formatter.outputTotal(startElapsed, t)
 				if jsonEnc != nil {
 					// Note that we're outputting the delta from the last tick. The
 					// cumulative histogram can be computed by merging all of the
@@ -515,9 +493,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					}
 				}
 			})
-
-			fmt.Println(totalHeader + `__result`)
-			printTotalHist(resultTick)
+			formatter.outputResult(startElapsed, resultTick)
 
 			if h, ok := gen.(workload.Hookser); ok {
 				if h.Hooks().PostRun != nil {
