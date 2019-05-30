@@ -3347,7 +3347,7 @@ show_grants_stmt:
 
 // %Help: SHOW INDEXES - list indexes
 // %Category: DDL
-// %Text: SHOW INDEXES FROM <tablename>
+// %Text: SHOW INDEXES FROM { <tablename> | DATABASE <database_name> }
 // %SeeAlso: WEBDOCS/show-index.html
 show_indexes_stmt:
   SHOW INDEX FROM table_name
@@ -3355,14 +3355,26 @@ show_indexes_stmt:
     $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
   }
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
+| SHOW INDEX FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
+  }
 | SHOW INDEXES FROM table_name
   {
     $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+  }
+| SHOW INDEXES FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM table_name
   {
     $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+  }
+| SHOW KEYS FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 

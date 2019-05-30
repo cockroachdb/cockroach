@@ -472,8 +472,11 @@ show_grants_stmt ::=
 
 show_indexes_stmt ::=
 	'SHOW' 'INDEX' 'FROM' table_name
+	| 'SHOW' 'INDEX' 'FROM' 'DATABASE' database_name
 	| 'SHOW' 'INDEXES' 'FROM' table_name
+	| 'SHOW' 'INDEXES' 'FROM' 'DATABASE' database_name
 	| 'SHOW' 'KEYS' 'FROM' table_name
+	| 'SHOW' 'KEYS' 'FROM' 'DATABASE' database_name
 
 show_jobs_stmt ::=
 	'SHOW' opt_automatic 'JOBS'
