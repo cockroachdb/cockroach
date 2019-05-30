@@ -34,6 +34,11 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 	return d.showTableDetails(n.Name, showCreateQuery)
 }
 
+func (d *delegator) delegateShowDbIndexes(n *tree.ShowDbIndexes) (tree.Statement, error) {
+	fmt.Println("in here!")
+	return nil, nil
+}
+
 func (d *delegator) delegateShowIndexes(n *tree.ShowIndexes) (tree.Statement, error) {
 	const getIndexesQuery = `
     SELECT table_name,

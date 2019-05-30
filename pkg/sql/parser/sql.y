@@ -3355,7 +3355,7 @@ show_grants_stmt:
 show_db_indexes_stmt:
   SHOW INDEX FROM DATABASE database_name
   {
-    return unimplementedWithIssue(sqllex, 37270)
+    $$.val = &tree.ShowDbIndexes{Database: $5}
   }
 | SHOW INDEX FROM DATABASE error // SHOW HELP: SHOW INDEXES FROM DATABASE
 | SHOW INDEXES FROM DATABASE database_name 

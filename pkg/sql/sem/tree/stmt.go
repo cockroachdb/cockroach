@@ -685,6 +685,12 @@ func (*ShowGrants) StatementType() StatementType { return Rows }
 func (*ShowGrants) StatementTag() string { return "SHOW GRANTS" }
 
 // StatementType implements the Statement interface.
+func (*ShowDbIndexes) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowDbIndexes) StatementTag() string { return "SHOW INDEXES FROM DATABASE" }
+
+// StatementType implements the Statement interface.
 func (*ShowIndexes) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
