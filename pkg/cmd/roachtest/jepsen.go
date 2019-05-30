@@ -80,10 +80,12 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	// depending on whether the test passed or not.
 	c.Run(ctx, c.All(), "mkdir", "-p", "logs")
 
-	// TODO(bdarnell): Does this blanket apt update matter? I just
-	// copied it from the old jepsen scripts. It's slow, so we should
-	// probably either remove it or use a new base image with more of
-	// these preinstalled.
+	// `apt-get update` is slow but necessary: the base image has
+	// outdated information and refers to package versions that are no
+	// longer retrievable.
+	//
+	// TODO(bdarnell): Create a new base image with the packages we need
+	// instead of installing them on every run.
 	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y update > logs/apt-upgrade.log 2>&1"`)
 	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y upgrade -o Dpkg::Options::='--force-confold' > logs/apt-upgrade.log 2>&1"`)
 
