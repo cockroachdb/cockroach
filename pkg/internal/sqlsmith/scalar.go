@@ -15,9 +15,13 @@
 package sqlsmith
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 var (
@@ -171,9 +175,50 @@ func makeCoalesceExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, boo
 func makeConstExpr(s *scope, typ *types.T, refs colRefs) tree.TypedExpr {
 	typ = pickAnyType(s, typ)
 
+	if s.schema.avoidConsts {
+		if expr, ok := makeColRef(s, typ, refs); ok {
+			return expr
+		}
+	}
+
 	var datum tree.Datum
 	s.schema.lock.Lock()
 	datum = sqlbase.RandDatumWithNullChance(s.schema.rnd, typ, 6)
+	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.schema.simpleDatums {
+		switch f {
+		case types.TupleFamily:
+			// TODO(mjibson): improve
+			datum = tree.DNull
+		case types.StringFamily:
+			p := make([]byte, s.schema.rnd.Intn(5))
+			for i := range p {
+				p[i] = byte('A' + s.schema.rnd.Intn(26))
+			}
+			datum = tree.NewDString(string(p))
+		case types.BytesFamily:
+			p := make([]byte, s.schema.rnd.Intn(5))
+			for i := range p {
+				p[i] = byte('A' + s.schema.rnd.Intn(26))
+			}
+			datum = tree.NewDBytes(tree.DBytes(p))
+		case types.IntervalFamily:
+			datum = &tree.DInterval{Duration: duration.MakeDuration(
+				s.schema.rnd.Int63n(3),
+				s.schema.rnd.Int63n(3),
+				s.schema.rnd.Int63n(3),
+			)}
+		case types.JsonFamily:
+			p := make([]byte, s.schema.rnd.Intn(5))
+			for i := range p {
+				p[i] = byte('A' + s.schema.rnd.Intn(26))
+			}
+			datum = tree.NewDJSON(json.FromString(string(p)))
+		case types.TimestampFamily:
+			datum = tree.MakeDTimestamp(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Microsecond)
+		case types.TimestampTZFamily:
+			datum = tree.MakeDTimestampTZ(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Microsecond)
+		}
+	}
 	s.schema.lock.Unlock()
 
 	return datum
@@ -309,6 +354,14 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 		return nil, false
 	}
 	fn := fns[s.schema.rnd.Intn(len(fns))]
+	if s.schema.disableImpureFns && fn.def.Impure {
+		return nil, false
+	}
+	for _, ignore := range s.schema.ignoreFNs {
+		if ignore.MatchString(fn.def.Name) {
+			return nil, false
+		}
+	}
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
@@ -532,7 +585,12 @@ func makeStringComparison(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr,
 }
 
 func makeTuple(s *scope, typ *types.T, refs colRefs) *tree.Tuple {
-	exprs := make(tree.Exprs, s.schema.rnd.Intn(5))
+	n := s.schema.rnd.Intn(5)
+	// Don't allow empty tuples in simple/postgres mode.
+	if s.schema.simpleDatums && n == 0 {
+		n++
+	}
+	exprs := make(tree.Exprs, n)
 	for i := range exprs {
 		exprs[i] = makeScalar(s, typ, refs)
 	}
@@ -540,6 +598,10 @@ func makeTuple(s *scope, typ *types.T, refs colRefs) *tree.Tuple {
 }
 
 func makeScalarSubquery(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.disableLimits {
+		// This query must use a LIMIT, so bail if they are disabled.
+		return nil, false
+	}
 	selectStmt, _, ok := s.makeSelect([]*types.T{typ}, refs)
 	if !ok {
 		return nil, false
