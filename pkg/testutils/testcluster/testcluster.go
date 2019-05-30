@@ -451,8 +451,8 @@ func (tc *TestCluster) FindRangeLease(
 		}
 	} else {
 		hint = &roachpb.ReplicationTarget{
-			NodeID:  rangeDesc.Replicas().Unwrap()[0].NodeID,
-			StoreID: rangeDesc.Replicas().Unwrap()[0].StoreID}
+			NodeID:  rangeDesc.Replicas().All()[0].NodeID,
+			StoreID: rangeDesc.Replicas().All()[0].StoreID}
 	}
 
 	// Find the server indicated by the hint and send a LeaseInfoRequest through
@@ -509,8 +509,14 @@ func (tc *TestCluster) WaitForSplitAndReplication(startKey roachpb.Key) error {
 			return errors.Errorf("expected range start key %s; got %s",
 				startKey, desc.StartKey)
 		}
-		// Once we've verified the split, make sure that replicas exist.
-		for _, rDesc := range desc.Replicas().Unwrap() {
+		// A learner replicas is still up-replicating, so if we have any, we're not
+		// replicated yet.
+		if learnerReplicas := desc.Replicas().Learners(); len(learnerReplicas) > 0 {
+			return errors.Errorf("have %d learners, still replicating %s", len(learnerReplicas), desc)
+		}
+		// Once we've verified the split and that there aren't any learners, make
+		// sure that the voter replicas exist.
+		for _, rDesc := range desc.Replicas().Voters() {
 			store, err := tc.findMemberStore(rDesc.StoreID)
 			if err != nil {
 				return err

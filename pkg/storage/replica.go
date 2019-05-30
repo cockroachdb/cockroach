@@ -735,12 +735,14 @@ func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
 	return *r.mu.state.TxnSpanGCThreshold
 }
 
+// maxReplicaID returns the maximum ReplicaID of any replica, including voters
+// and learners.
 func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 	if desc == nil || !desc.IsInitialized() {
 		return 0
 	}
 	var maxID roachpb.ReplicaID
-	for _, repl := range desc.Replicas().Unwrap() {
+	for _, repl := range desc.Replicas().All() {
 		if repl.ReplicaID > maxID {
 			maxID = repl.ReplicaID
 		}
@@ -911,7 +913,9 @@ func (r *Replica) State() storagepb.RangeInfo {
 	}
 	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	if desc := ri.ReplicaState.Desc; desc != nil {
-		for _, replDesc := range desc.Replicas().Unwrap() {
+		// Learner replicas don't serve follower reads, but they still receive
+		// closed timestamp updates, so include them here.
+		for _, replDesc := range desc.Replicas().All() {
 			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
 				mlai, found := e.MLAI[r.RangeID]
 				if !found {
