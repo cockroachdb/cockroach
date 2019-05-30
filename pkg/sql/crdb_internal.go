@@ -1954,7 +1954,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
   address         		STRING NOT NULL,
   advertise_address   STRING NOT NULL,
   attrs           		JSON NOT NULL,
-  locality        		JSON NOT NULL,
+  locality        		STRING NOT NULL,
   server_version  		STRING NOT NULL,
   build_tag       		STRING NOT NULL,
   started_at     	 		TIMESTAMP NOT NULL,
@@ -2038,11 +2038,6 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				attrs.Add(json.FromString(a))
 			}
 
-			locality := json.NewObjectBuilder(len(d.Locality.Tiers))
-			for _, t := range d.Locality.Tiers {
-				locality.Add(t.Key, json.FromString(t.Value))
-			}
-
 			addr, err := g.GetNodeIDAddress(d.NodeID)
 			if err != nil {
 				return err
@@ -2054,7 +2049,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				tree.NewDString(d.Address.AddressField),
 				tree.NewDString(addr.String()),
 				tree.NewDJSON(attrs.Build()),
-				tree.NewDJSON(locality.Build()),
+				tree.NewDString(d.Locality.String()),
 				tree.NewDString(d.ServerVersion.String()),
 				tree.NewDString(d.BuildTag),
 				tree.MakeDTimestamp(timeutil.Unix(0, d.StartedAt), time.Microsecond),
@@ -2322,7 +2317,7 @@ CREATE TABLE crdb_internal.kv_node_status (
   network        STRING NOT NULL,
   address        STRING NOT NULL,
   attrs          JSON NOT NULL,
-  locality       JSON NOT NULL,
+  locality       STRING NOT NULL,
   server_version STRING NOT NULL,
   go_version     STRING NOT NULL,
   tag            STRING NOT NULL,
@@ -2355,11 +2350,6 @@ CREATE TABLE crdb_internal.kv_node_status (
 			attrs := json.NewArrayBuilder(len(n.Desc.Attrs.Attrs))
 			for _, a := range n.Desc.Attrs.Attrs {
 				attrs.Add(json.FromString(a))
-			}
-
-			locality := json.NewObjectBuilder(len(n.Desc.Locality.Tiers))
-			for _, t := range n.Desc.Locality.Tiers {
-				locality.Add(t.Key, json.FromString(t.Value))
 			}
 
 			var dependencies string
@@ -2402,7 +2392,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 				tree.NewDString(n.Desc.Address.NetworkField),
 				tree.NewDString(n.Desc.Address.AddressField),
 				tree.NewDJSON(attrs.Build()),
-				tree.NewDJSON(locality.Build()),
+				tree.NewDString(n.Desc.Locality.String()),
 				tree.NewDString(n.Desc.ServerVersion.String()),
 				tree.NewDString(n.BuildInfo.GoVersion),
 				tree.NewDString(n.BuildInfo.Tag),
