@@ -15,6 +15,7 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -376,15 +377,23 @@ func newColOperator(
 		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		if core.Sorter.OrderingMatchLen > 0 {
-			op, err = exec.NewSortChunks(inputs[0],
-				conv.FromColumnTypes(spec.Input[0].ColumnTypes),
-				core.Sorter.OutputOrdering.Columns,
-				int(core.Sorter.OrderingMatchLen))
+		input := inputs[0]
+		inputTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		orderingCols := core.Sorter.OutputOrdering.Columns
+		matchLen := core.Sorter.OrderingMatchLen
+		if matchLen > 0 {
+			// The input is already partially ordered. Use a chunks sorter to avoid
+			// loading all the rows into memory.
+			op, err = exec.NewSortChunks(input, inputTypes, orderingCols, int(matchLen))
+		} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
+			// There is a limit specified with no post-process filter, so we know
+			// exactly how many rows the sorter should output. Choose a top K sorter,
+			// which uses a heap to avoid storing more rows than necessary.
+			k := uint16(post.Limit + post.Offset)
+			op = exec.NewTopKSorter(input, inputTypes, orderingCols, k)
 		} else {
-			op, err = exec.NewSorter(inputs[0],
-				conv.FromColumnTypes(spec.Input[0].ColumnTypes),
-				core.Sorter.OutputOrdering.Columns)
+			// No optimations possible. Default to the standard sort operator.
+			op, err = exec.NewSorter(input, inputTypes, orderingCols)
 		}
 		columnTypes = spec.Input[0].ColumnTypes
 

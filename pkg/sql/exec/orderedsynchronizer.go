@@ -124,7 +124,7 @@ func (o *orderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 			case encoding.Ascending:
 				return res
 			case encoding.Descending:
-				return res * -1
+				return -res
 			default:
 				panic(fmt.Sprintf("unexpected direction value %d", d))
 			}
@@ -138,6 +138,7 @@ func (o *orderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 func (o *orderedSynchronizer) updateComparators(batchIdx int) {
 	batch := o.inputBatches[batchIdx]
 	for i := range o.ordering {
-		o.comparators[i].setVec(batchIdx, batch.ColVecs()[o.ordering[i].ColIdx])
+		vec := batch.ColVec(o.ordering[i].ColIdx)
+		o.comparators[i].setVec(batchIdx, vec)
 	}
 }
