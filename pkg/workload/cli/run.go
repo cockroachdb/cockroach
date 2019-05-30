@@ -58,6 +58,12 @@ var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exis
 var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
 var pprofport = initFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
 
+var disp = runFlags.Duration("display-every", time.Second, "How much time between every one-line activity reports.")
+
+var absTime = runFlags.Bool("abstime", false, "Print absolute time instead of relative time on each line of output.")
+
+var skipFinal = runFlags.Bool("skip-final-report", false, "Avoid printing the metric line with cumulative counts at the end of execution.")
+
 var histograms = runFlags.String(
 	"histograms", "",
 	"File to write per-op incremental and cumulative histogram data.")
@@ -391,7 +397,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}()
 
 	var numErr int
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(*disp)
 	defer ticker.Stop()
 	done := make(chan os.Signal, 3)
 	signal.Notify(done, exitSignals...)
@@ -418,7 +424,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		jsonEnc = json.NewEncoder(jsonF)
 	}
 
-	everySecond := log.Every(time.Second)
+	everySecond := log.Every(*disp)
 	for i := 0; ; {
 		select {
 		case err := <-errCh:
@@ -438,8 +444,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					fmt.Println("_elapsed___errors__ops/sec(inst)___ops/sec(cum)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)")
 				}
 				i++
-				fmt.Printf("%8s %8d %14.1f %14.1f %8.1f %8.1f %8.1f %8.1f %s\n",
-					time.Duration(startElapsed.Seconds()+0.5)*time.Second,
+				if *absTime {
+					fmt.Printf("%s ", t.Now.UTC().Format(time.RFC3339Nano))
+				} else {
+					fmt.Printf("%7.2fs ", startElapsed.Seconds())
+				}
+				fmt.Printf("%8d %14.1f %14.1f %8.1f %8.1f %8.1f %8.1f %s\n",
 					numErr,
 					float64(t.Hist.TotalCount())/t.Elapsed.Seconds(),
 					float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
@@ -470,50 +480,58 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			if ops.Close != nil {
 				ops.Close(ctx)
 			}
-			const totalHeader = "\n_elapsed___errors_____ops(total)___ops/sec(cum)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)"
-			fmt.Println(totalHeader + `__total`)
+
 			startElapsed := timeutil.Since(start)
-			printTotalHist := func(t histogram.Tick) {
-				if t.Cumulative == nil {
-					return
-				}
-				if t.Cumulative.TotalCount() == 0 {
-					return
-				}
-				fmt.Printf("%7.1fs %8d %14d %14.1f %8.1f %8.1f %8.1f %8.1f %8.1f  %s\n",
-					startElapsed.Seconds(), numErr,
-					t.Cumulative.TotalCount(),
-					float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
-					time.Duration(t.Cumulative.Mean()).Seconds()*1000,
-					time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
-					time.Duration(t.Cumulative.ValueAtQuantile(95)).Seconds()*1000,
-					time.Duration(t.Cumulative.ValueAtQuantile(99)).Seconds()*1000,
-					time.Duration(t.Cumulative.ValueAtQuantile(100)).Seconds()*1000,
-					t.Name,
-				)
-			}
-
-			resultTick := histogram.Tick{Name: ops.ResultHist}
-			reg.Tick(func(t histogram.Tick) {
-				printTotalHist(t)
-				if jsonEnc != nil {
-					// Note that we're outputting the delta from the last tick. The
-					// cumulative histogram can be computed by merging all of the
-					// per-tick histograms.
-					_ = jsonEnc.Encode(t.Snapshot())
-				}
-				if ops.ResultHist == `` || ops.ResultHist == t.Name {
-					if resultTick.Cumulative == nil {
-						resultTick.Now = t.Now
-						resultTick.Cumulative = t.Cumulative
-					} else {
-						resultTick.Cumulative.Merge(t.Cumulative)
+			if !*skipFinal {
+				const totalHeader = "\n_elapsed___errors_____ops(total)___ops/sec(cum)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)"
+				fmt.Println(totalHeader + `__total`)
+				printTotalHist := func(t histogram.Tick) {
+					if t.Cumulative == nil {
+						return
 					}
+					if t.Cumulative.TotalCount() == 0 {
+						return
+					}
+					if *absTime {
+						fmt.Printf("%s ", t.Now.UTC().Format(time.RFC3339Nano))
+					} else {
+						fmt.Printf("%7.2fs ", startElapsed.Seconds())
+					}
+					fmt.Printf("%8d %14d %14.1f %8.1f %8.1f %8.1f %8.1f %8.1f  %s\n",
+						numErr,
+						t.Cumulative.TotalCount(),
+						float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
+						time.Duration(t.Cumulative.Mean()).Seconds()*1000,
+						time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
+						time.Duration(t.Cumulative.ValueAtQuantile(95)).Seconds()*1000,
+						time.Duration(t.Cumulative.ValueAtQuantile(99)).Seconds()*1000,
+						time.Duration(t.Cumulative.ValueAtQuantile(100)).Seconds()*1000,
+						t.Name,
+					)
 				}
-			})
 
-			fmt.Println(totalHeader + `__result`)
-			printTotalHist(resultTick)
+				resultTick := histogram.Tick{Name: ops.ResultHist}
+				reg.Tick(func(t histogram.Tick) {
+					printTotalHist(t)
+					if jsonEnc != nil {
+						// Note that we're outputting the delta from the last tick. The
+						// cumulative histogram can be computed by merging all of the
+						// per-tick histograms.
+						_ = jsonEnc.Encode(t.Snapshot())
+					}
+					if ops.ResultHist == `` || ops.ResultHist == t.Name {
+						if resultTick.Cumulative == nil {
+							resultTick.Now = t.Now
+							resultTick.Cumulative = t.Cumulative
+						} else {
+							resultTick.Cumulative.Merge(t.Cumulative)
+						}
+					}
+				})
+
+				fmt.Println(totalHeader + `__result`)
+				printTotalHist(resultTick)
+			}
 
 			if h, ok := gen.(workload.Hookser); ok {
 				if h.Hooks().PostRun != nil {
