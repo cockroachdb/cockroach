@@ -382,6 +382,71 @@ func (c *CustomFuncs) EmptyOrdering() physical.OrderingChoice {
 	return physical.OrderingChoice{}
 }
 
+// ImpliesOrdering returns true if every ordering valid for the left ordering
+// is also valid for the right ordering.
+func (c *CustomFuncs) ImpliesOrdering(left, right physical.OrderingChoice) bool {
+	return left.Implies(&right)
+}
+
+// PrependColsToOrdering returns an ordering choice with the given ColSet as a
+// prefix to the given ordering choice.
+// TODO(justin): this is overly restrictive, since the columns in the colset
+// should be allowed to occur in any order, and it doesn't matter if they're
+// ascending or descending.
+func (c *CustomFuncs) PrependColsToOrdering(
+	cols opt.ColSet, ordering physical.OrderingChoice,
+) physical.OrderingChoice {
+	if cols.Empty() {
+		return ordering
+	}
+	var oc physical.OrderingChoice
+	oc.Optional = ordering.Optional.Copy()
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		oc.AppendCol(opt.ColumnID(col), false)
+		oc.Optional.Remove(col)
+	}
+	oc.Columns = append(oc.Columns, ordering.Columns...)
+
+	return oc
+}
+
+// AllArePrefixSafe returns whether every window function in the list satisfies
+// the "prefix-safe" property.
+func (c *CustomFuncs) AllArePrefixSafe(fns memo.WindowsExpr) bool {
+	for i := range fns {
+		if !c.isPrefixSafe(&fns[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsPrefixSafe returns whether or not the given window function satisfies the
+// "prefix-safe" property. Roughly, it means that the computation of a window
+// function on a given row does not depend on any of the rows that come after
+// it. It's also precisely the property that lets us push limit operators below
+// window functions:
+//
+//		(Limit (Window $input) n) = (Window (Limit $input n))
+//
+// Note that the frame affects whether a given window function is prefix-safe or not.
+// rank() is prefix-safe under any frame, but avg():
+// * Is _not_ prefix-safe under ROWS BETWEEN UNBOUNDED PRECEDING TO UNBOUNDED
+//   FOLLOWING, because it needs to look at the entire partition.
+// * _Is_ prefix-safe under ROWS BETWEEN UNBOUNDED PRECEDING TO CURRENT ROW,
+//   because it only needs to look at the rows up to any given row.
+func (c *CustomFuncs) isPrefixSafe(fn *memo.WindowsItem) bool {
+	switch fn.Function.Op() {
+	case opt.RankOp, opt.RowNumberOp, opt.DenseRankOp:
+		return true
+	}
+	// TODO(justin): Add other cases. I think aggregates are valid here if the
+	// upper bound is CURRENT ROW, and either:
+	// * the mode is ROWS, or
+	// * the mode is RANGE and the ordering is over a key.
+	return false
+}
+
 // -----------------------------------------------------------------------
 //
 // Filter functions
@@ -1162,6 +1227,11 @@ func (c *CustomFuncs) ReduceWindowPartitionCols(
 // partition.
 func (c *CustomFuncs) WindowPartition(priv *memo.WindowPrivate) opt.ColSet {
 	return priv.Partition
+}
+
+// WindowOrdering returns the ordering used by the window function.
+func (c *CustomFuncs) WindowOrdering(private *memo.WindowPrivate) physical.OrderingChoice {
+	return private.Ordering
 }
 
 // ----------------------------------------------------------------------
