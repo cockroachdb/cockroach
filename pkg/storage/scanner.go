@@ -288,24 +288,25 @@ func (rs *replicaScanner) scanLoop(stopper *stop.Stopper) {
 				shouldStop = rs.waitAndProcess(ctx, stopper, start, nil)
 			}
 
-			shouldStop = shouldStop || nil != stopper.RunTask(
-				ctx, "storage.replicaScanner: scan loop",
-				func(ctx context.Context) {
-					// Increment iteration count.
-					rs.mu.Lock()
-					defer rs.mu.Unlock()
-					rs.mu.scanCount++
-					rs.mu.total += timeutil.Since(start)
-					if log.V(6) {
-						log.Infof(ctx, "reset replica scan iteration")
-					}
-
-					// Reset iteration and start time.
-					start = timeutil.Now()
-				})
+			// waitAndProcess returns true when the system is stopping. Note that this
+			// means we don't have to check the stopper as well.
 			if shouldStop {
 				return
 			}
+
+			// Increment iteration count.
+			func() {
+				rs.mu.Lock()
+				defer rs.mu.Unlock()
+				rs.mu.scanCount++
+				rs.mu.total += timeutil.Since(start)
+			}()
+			if log.V(6) {
+				log.Infof(ctx, "reset replica scan iteration")
+			}
+
+			// Reset iteration and start time.
+			start = timeutil.Now()
 		}
 	})
 }
