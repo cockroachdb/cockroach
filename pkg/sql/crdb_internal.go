@@ -1679,6 +1679,7 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	table_name,
 	index_name,
 	replicas,
+	learner_replicas,
 	split_enforced_until,
 	crdb_internal.lease_holder(start_key) AS lease_holder
 FROM crdb_internal.ranges_no_leases
@@ -1693,6 +1694,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "table_name", Typ: types.String},
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
+		{Name: "learner_replicas", Typ: types.Int2Vector},
 		{Name: "split_enforced_until", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
 	},
@@ -1714,7 +1716,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   database_name        STRING NOT NULL,
   table_name           STRING NOT NULL,
   index_name           STRING NOT NULL,
-  replicas             INT[] NOT NULL,
+	replicas             INT[] NOT NULL,
+	learner_replicas     INT[] NOT NULL,
   split_enforced_until TIMESTAMP
 )
 `,
@@ -1768,14 +1771,24 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				return nil, err
 			}
 
-			var replicas []int
-			for _, rd := range desc.Replicas().Unwrap() {
-				replicas = append(replicas, int(rd.StoreID))
+			var voterReplicas, learnerReplicas []int
+			for _, rd := range desc.Replicas().Voters() {
+				voterReplicas = append(voterReplicas, int(rd.StoreID))
 			}
-			sort.Ints(replicas)
-			arr := tree.NewDArray(types.Int)
-			for _, replica := range replicas {
-				if err := arr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
+			for _, rd := range desc.Replicas().Learners() {
+				learnerReplicas = append(learnerReplicas, int(rd.StoreID))
+			}
+			sort.Ints(voterReplicas)
+			sort.Ints(learnerReplicas)
+			votersArr := tree.NewDArray(types.Int)
+			for _, replica := range voterReplicas {
+				if err := votersArr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
+					return nil, err
+				}
+			}
+			learnersArr := tree.NewDArray(types.Int)
+			for _, replica := range learnerReplicas {
+				if err := learnersArr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
 					return nil, err
 				}
 			}
@@ -1808,7 +1821,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(dbName),
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
-				arr,
+				votersArr,
+				learnersArr,
 				splitEnforcedUntil,
 			}, nil
 		}, nil

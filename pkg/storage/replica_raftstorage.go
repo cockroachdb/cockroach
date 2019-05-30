@@ -66,7 +66,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
 	var cs raftpb.ConfState
-	for _, rep := range r.mu.state.Desc.Replicas().Unwrap() {
+	for _, rep := range r.mu.state.Desc.Replicas().All() {
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
@@ -536,7 +536,7 @@ func snapshot(
 
 	// Synthesize our raftpb.ConfState from desc.
 	var cs raftpb.ConfState
-	for _, rep := range desc.Replicas().Unwrap() {
+	for _, rep := range desc.Replicas().All() {
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
