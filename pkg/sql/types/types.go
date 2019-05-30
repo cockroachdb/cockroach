@@ -1089,7 +1089,7 @@ func (t *T) SQLString() string {
 	case TimestampFamily, TimestampTZFamily:
 		// This is default timestamp
 		if t.Precision() == -1 {
-			return fmt.Sprintf("%s", strings.ToUpper(t.Name()))
+			return strings.ToUpper(t.Name())
 		}
 		return fmt.Sprintf("%s(%d)", strings.ToUpper(t.Name()), t.Precision())
 	case TimeFamily:
