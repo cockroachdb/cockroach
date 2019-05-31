@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -25,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
+
+const _ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
 
 func init() {
 	RegisterCommand(roachpb.AddSSTable, DefaultDeclareKeys, EvalAddSSTable)
@@ -94,7 +97,8 @@ func EvalAddSSTable(
 	// Callers can trigger such a re-computation to fixup any discrepancies (and
 	// remove the ContainsEstimates flag) after they are done ingesting files by
 	// sending an explicit recompute.
-	stats.ContainsEstimates = true
+
+	stats.ContainsEstimates += 2
 	ms.Add(stats)
 
 	return result.Result{
