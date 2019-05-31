@@ -332,19 +332,18 @@ func (s *Smither) randStringComparison() tree.ComparisonOperator {
 // makeSelectTable returns a TableExpr of the form `(SELECT ...)`, which
 // would end up looking like `SELECT ... FROM (SELECT ...)`.
 func makeSelectTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	desiredTypes := makeDesiredTypes(s)
-	stmt, _, ok := s.makeSelect(desiredTypes, refs)
+	stmt, stmtRefs, ok := s.makeSelect(nil /* desiredTypes */, refs)
 	if !ok {
 		return nil, nil, false
 	}
 
 	table := s.schema.name("tab")
-	names := make(tree.NameList, len(desiredTypes))
-	clauseRefs := make(colRefs, len(desiredTypes))
-	for i, typ := range desiredTypes {
+	names := make(tree.NameList, len(stmtRefs))
+	clauseRefs := make(colRefs, len(stmtRefs))
+	for i, ref := range stmtRefs {
 		names[i] = s.schema.name("col")
 		clauseRefs[i] = &colRef{
-			typ: typ,
+			typ: ref.typ,
 			item: tree.NewColumnItem(
 				tree.NewUnqualifiedTableName(table),
 				names[i],
@@ -487,11 +486,27 @@ func (s *scope) makeSelect(desiredTypes []*types.T, refs colRefs) (*tree.Select,
 	return &stmt, selectRefs, true
 }
 
+// makeSelectList generates SelectExprs corresponding to
+// desiredTypes. desiredTypes can be nil which causes types to be randomly
+// selected from refs, improving the chance they are chosen during
+// makeScalar. Especially useful with the AvoidConsts option.
 func (s *scope) makeSelectList(
 	ctx Context, desiredTypes []*types.T, refs colRefs,
 ) (tree.SelectExprs, colRefs, bool) {
+	// If we don't have any desired types, generate some from the given refs.
 	if len(desiredTypes) == 0 {
-		panic("expected desiredTypes")
+		typeRefs := refs.extend()
+		s.schema.rnd.Shuffle(len(typeRefs), func(i, j int) {
+			typeRefs[i], typeRefs[j] = typeRefs[j], typeRefs[i]
+		})
+		for len(typeRefs) > 0 && s.d6() >= 2 {
+			desiredTypes = append(desiredTypes, typeRefs[0].typ)
+			typeRefs = typeRefs[1:]
+		}
+	}
+	// If we still don't have any then there weren't any refs.
+	if len(desiredTypes) == 0 {
+		desiredTypes = makeDesiredTypes(s)
 	}
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
