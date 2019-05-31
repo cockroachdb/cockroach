@@ -79,38 +79,8 @@ func (se *StreamEncoder) init(types []types.T) {
 // that the StreamDecoder will return them first, before the data rows, thus
 // ensuring that rows produced _after_ an error are not received _before_ the
 // error.
-func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
-	var enc distsqlpb.RemoteProducerMetadata
-	if meta.Ranges != nil {
-		enc.Value = &distsqlpb.RemoteProducerMetadata_RangeInfo{
-			RangeInfo: &distsqlpb.RemoteProducerMetadata_RangeInfos{
-				RangeInfo: meta.Ranges,
-			},
-		}
-	} else if meta.TraceData != nil {
-		enc.Value = &distsqlpb.RemoteProducerMetadata_TraceData_{
-			TraceData: &distsqlpb.RemoteProducerMetadata_TraceData{
-				CollectedSpans: meta.TraceData,
-			},
-		}
-	} else if meta.TxnCoordMeta != nil {
-		enc.Value = &distsqlpb.RemoteProducerMetadata_TxnCoordMeta{
-			TxnCoordMeta: meta.TxnCoordMeta,
-		}
-	} else if meta.RowNum != nil {
-		enc.Value = &distsqlpb.RemoteProducerMetadata_RowNum_{
-			RowNum: meta.RowNum,
-		}
-	} else if meta.SamplerProgress != nil {
-		enc.Value = &distsqlpb.RemoteProducerMetadata_SamplerProgress_{
-			SamplerProgress: meta.SamplerProgress,
-		}
-	} else {
-		enc.Value = &distsqlpb.RemoteProducerMetadata_Error{
-			Error: distsqlpb.NewError(meta.Err),
-		}
-	}
-	se.metadata = append(se.metadata, enc)
+func (se *StreamEncoder) AddMetadata(meta distsqlpb.ProducerMetadata) {
+	se.metadata = append(se.metadata, distsqlpb.LocalMetaToRemoteProducerMeta(meta))
 }
 
 // AddRow encodes a message.

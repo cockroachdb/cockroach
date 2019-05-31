@@ -65,7 +65,7 @@ func (n *noopProcessor) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for n.State == StateRunning {
 		row, meta := n.input.Next()
 

@@ -622,12 +622,12 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	fr := makeFlowRegistry(0)
 	// pushChan is used to be able to tell when a Push on the RowBuffer has
 	// occurred.
-	pushChan := make(chan *ProducerMetadata)
+	pushChan := make(chan *distsqlpb.ProducerMetadata)
 	rc := NewRowBuffer(
 		sqlbase.OneIntCol,
 		nil, /* rows */
 		RowBufferArgs{
-			OnPush: func(_ sqlbase.EncDatumRow, meta *ProducerMetadata) {
+			OnPush: func(_ sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata) {
 				pushChan <- meta
 				<-pushChan
 			},
@@ -696,7 +696,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	}
 
 	// Fill up the left, so pushes to it block.
-	left.Push(nil, &ProducerMetadata{})
+	left.Push(nil, &distsqlpb.ProducerMetadata{})
 
 	// RegisterFlow with an immediate timeout.
 	flow := &Flow{

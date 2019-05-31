@@ -79,7 +79,7 @@ func (ag *countAggregator) Start(ctx context.Context) context.Context {
 	return ag.StartInternal(ctx, countRowsProcName)
 }
 
-func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for ag.State == StateRunning {
 		row, meta := ag.input.Next()
 		if meta != nil {

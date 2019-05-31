@@ -63,7 +63,7 @@ func processInboundStreamHelper(
 
 	sendErrToConsumer := func(err error) {
 		if err != nil {
-			dst.Push(nil, &ProducerMetadata{Err: err})
+			dst.Push(nil, &distsqlpb.ProducerMetadata{Err: err})
 		}
 		dst.ProducerDone()
 	}

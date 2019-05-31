@@ -488,61 +488,10 @@ func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
 	return nil
 }
 
-// repeatableBatchSource is an Operator that returns the same batch forever.
-type repeatableBatchSource struct {
-	internalBatch coldata.Batch
-	batchLen      uint16
-	// sel specifies the desired selection vector for the batch.
-	sel []uint16
-
-	batchesToReturn int
-	batchesReturned int
-}
-
-var _ Operator = &repeatableBatchSource{}
-
-// newRepeatableBatchSource returns a new Operator initialized to return its
-// input batch forever (including the selection vector if batch comes with it).
-func newRepeatableBatchSource(batch coldata.Batch) *repeatableBatchSource {
-	src := &repeatableBatchSource{
-		internalBatch: batch,
-		batchLen:      batch.Length(),
-	}
-	if batch.Selection() != nil {
-		src.sel = make([]uint16, batch.Length())
-		copy(src.sel, batch.Selection())
-	}
-	return src
-}
-
-func (s *repeatableBatchSource) Next(context.Context) coldata.Batch {
-	s.internalBatch.SetSelection(s.sel != nil)
-	s.batchesReturned++
-	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
-		s.internalBatch.SetLength(0)
-	} else {
-		s.internalBatch.SetLength(s.batchLen)
-	}
-	if s.sel != nil {
-		// Since selection vectors are mutable, to make sure that we return the
-		// batch with the given selection vector, we need to reset
-		// s.internalBatch.Selection() to s.sel on every iteration.
-		copy(s.internalBatch.Selection(), s.sel)
-	}
-	return s.internalBatch
-}
-
-func (s *repeatableBatchSource) Init() {}
-
-func (s *repeatableBatchSource) resetBatchesToReturn(b int) {
-	s.batchesToReturn = b
-	s.batchesReturned = 0
-}
-
 // finiteBatchSource is an Operator that returns the same batch a specified
 // number of times.
 type finiteBatchSource struct {
-	repeatableBatch *repeatableBatchSource
+	repeatableBatch *RepeatableBatchSource
 
 	usableCount int
 }
@@ -555,7 +504,7 @@ var emptyBatch = coldata.NewMemBatchWithSize([]types.T{}, 0)
 // batch a specified number of times.
 func newFiniteBatchSource(batch coldata.Batch, usableCount int) *finiteBatchSource {
 	return &finiteBatchSource{
-		repeatableBatch: newRepeatableBatchSource(batch),
+		repeatableBatch: NewRepeatableBatchSource(batch),
 		usableCount:     usableCount,
 	}
 }
@@ -603,7 +552,7 @@ func (r *randomLengthBatchSource) Next(context.Context) coldata.Batch {
 // (except for the first) the batch is returned to emulate source that is
 // already ordered on matchLen columns.
 type finiteChunksSource struct {
-	repeatableBatch *repeatableBatchSource
+	repeatableBatch *RepeatableBatchSource
 
 	usableCount int
 	matchLen    int
@@ -614,7 +563,7 @@ var _ Operator = &finiteChunksSource{}
 
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
-		repeatableBatch: newRepeatableBatchSource(batch),
+		repeatableBatch: NewRepeatableBatchSource(batch),
 		usableCount:     usableCount,
 		matchLen:        matchLen,
 	}
@@ -674,7 +623,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 	batch := coldata.NewMemBatch([]types.T{types.Int64})
 	batchLen := uint16(10)
 	batch.SetLength(batchLen)
-	input := newRepeatableBatchSource(batch)
+	input := NewRepeatableBatchSource(batch)
 
 	b := input.Next(context.Background())
 	b.SetLength(0)
@@ -682,10 +631,10 @@ func TestRepeatableBatchSource(t *testing.T) {
 
 	b = input.Next(context.Background())
 	if b.Length() != batchLen {
-		t.Fatalf("expected repeatableBatchSource to reset batch length to %d, found %d", batchLen, b.Length())
+		t.Fatalf("expected RepeatableBatchSource to reset batch length to %d, found %d", batchLen, b.Length())
 	}
 	if b.Selection() != nil {
-		t.Fatalf("expected repeatableBatchSource to reset selection vector, found %+v", b.Selection())
+		t.Fatalf("expected RepeatableBatchSource to reset selection vector, found %+v", b.Selection())
 	}
 }
 
@@ -697,21 +646,21 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)
 	copy(batch.Selection(), sel)
-	input := newRepeatableBatchSource(batch)
+	input := NewRepeatableBatchSource(batch)
 	b := input.Next(context.Background())
 
 	b.SetLength(0)
 	b.SetSelection(false)
 	b = input.Next(context.Background())
 	if b.Length() != batchLen {
-		t.Fatalf("expected repeatableBatchSource to reset batch length to %d, found %d", batchLen, b.Length())
+		t.Fatalf("expected RepeatableBatchSource to reset batch length to %d, found %d", batchLen, b.Length())
 	}
 	if b.Selection() == nil {
-		t.Fatalf("expected repeatableBatchSource to reset selection vector, expected %v but found %+v", sel, b.Selection())
+		t.Fatalf("expected RepeatableBatchSource to reset selection vector, expected %v but found %+v", sel, b.Selection())
 	} else {
 		for i := uint16(0); i < batchLen; i++ {
 			if b.Selection()[i] != sel[i] {
-				t.Fatalf("expected repeatableBatchSource to reset selection vector, expected %v but found %+v", sel, b.Selection())
+				t.Fatalf("expected RepeatableBatchSource to reset selection vector, expected %v but found %+v", sel, b.Selection())
 			}
 		}
 	}
@@ -723,14 +672,14 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	copy(b.Selection(), newSel)
 	b = input.Next(context.Background())
 	if b.Length() != batchLen {
-		t.Fatalf("expected repeatableBatchSource to reset batch length to %d, found %d", batchLen, b.Length())
+		t.Fatalf("expected RepeatableBatchSource to reset batch length to %d, found %d", batchLen, b.Length())
 	}
 	if b.Selection() == nil {
-		t.Fatalf("expected repeatableBatchSource to reset selection vector, expected %v but found %+v", sel, b.Selection())
+		t.Fatalf("expected RepeatableBatchSource to reset selection vector, expected %v but found %+v", sel, b.Selection())
 	} else {
 		for i := uint16(0); i < batchLen; i++ {
 			if b.Selection()[i] != sel[i] {
-				t.Fatalf("expected repeatableBatchSource to reset selection vector, expected %v but found %+v", sel, b.Selection())
+				t.Fatalf("expected RepeatableBatchSource to reset selection vector, expected %v but found %+v", sel, b.Selection())
 			}
 		}
 	}

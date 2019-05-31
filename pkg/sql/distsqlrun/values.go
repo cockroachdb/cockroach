@@ -87,7 +87,7 @@ func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for v.State == StateRunning {
 		row, meta, err := v.sd.GetRow(v.rowBuf)
 		if err != nil {

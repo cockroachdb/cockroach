@@ -31,7 +31,7 @@ type metadataTestReceiver struct {
 	// do not return this metadata immediately because metadata propagation errors
 	// are prioritized over query errors, which ensures that tests which expect a
 	// query error can still fail if they do not properly propagate metadata.
-	trailingErrMeta []ProducerMetadata
+	trailingErrMeta []distsqlpb.ProducerMetadata
 
 	senders   []string
 	rowCounts map[string]rowNumCounter
@@ -71,8 +71,8 @@ func newMetadataTestReceiver(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
-				var trailingMeta []ProducerMetadata
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+				var trailingMeta []distsqlpb.ProducerMetadata
 				if mtr.rowCounts != nil {
 					if meta := mtr.checkRowNumMetadata(); meta != nil {
 						trailingMeta = append(trailingMeta, *meta)
@@ -92,7 +92,7 @@ func newMetadataTestReceiver(
 // that it has received exactly one of each expected RowNum. If the check
 // detects dropped or repeated metadata, it returns error metadata. Otherwise,
 // it returns nil.
-func (mtr *metadataTestReceiver) checkRowNumMetadata() *ProducerMetadata {
+func (mtr *metadataTestReceiver) checkRowNumMetadata() *distsqlpb.ProducerMetadata {
 	defer func() { mtr.rowCounts = nil }()
 
 	if len(mtr.rowCounts) != len(mtr.senders) {
@@ -106,7 +106,7 @@ func (mtr *metadataTestReceiver) checkRowNumMetadata() *ProducerMetadata {
 				}
 			}
 		}
-		return &ProducerMetadata{
+		return &distsqlpb.ProducerMetadata{
 			Err: fmt.Errorf(
 				"expected %d metadata senders but found %d; missing %s",
 				len(mtr.senders), len(mtr.rowCounts), missingSenders,
@@ -115,10 +115,10 @@ func (mtr *metadataTestReceiver) checkRowNumMetadata() *ProducerMetadata {
 	}
 	for id, cnt := range mtr.rowCounts {
 		if cnt.err != nil {
-			return &ProducerMetadata{Err: cnt.err}
+			return &distsqlpb.ProducerMetadata{Err: cnt.err}
 		}
 		if cnt.expected != cnt.actual {
-			return &ProducerMetadata{
+			return &distsqlpb.ProducerMetadata{
 				Err: fmt.Errorf(
 					"dropped metadata from sender %s: expected %d RowNum messages but got %d",
 					id, cnt.expected, cnt.actual),
@@ -126,7 +126,7 @@ func (mtr *metadataTestReceiver) checkRowNumMetadata() *ProducerMetadata {
 		}
 		for i := 0; i < int(cnt.expected); i++ {
 			if !cnt.seen.Contains(i) {
-				return &ProducerMetadata{
+				return &distsqlpb.ProducerMetadata{
 					Err: fmt.Errorf(
 						"dropped and repeated metadata from sender %s: have %d messages but missing RowNum #%d",
 						id, cnt.expected, i+1),
@@ -149,7 +149,7 @@ func (mtr *metadataTestReceiver) Start(ctx context.Context) context.Context {
 // This implementation doesn't follow the usual patterns of other processors; it
 // makes more limited use of the ProcessorBase's facilities because it needs to
 // inspect metadata while draining.
-func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for {
 		if mtr.State == stateTrailingMeta {
 			if meta := mtr.popTrailingMeta(); meta != nil {
@@ -214,7 +214,7 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 		// it to be as unintrusive as possible.
 		outRow, ok, err := mtr.out.ProcessRow(mtr.Ctx, row)
 		if err != nil {
-			mtr.trailingMeta = append(mtr.trailingMeta, ProducerMetadata{Err: err})
+			mtr.trailingMeta = append(mtr.trailingMeta, distsqlpb.ProducerMetadata{Err: err})
 			continue
 		}
 		if outRow == nil {

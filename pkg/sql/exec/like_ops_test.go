@@ -98,7 +98,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	}
 
 	batch.SetLength(coldata.BatchSize)
-	source := newRepeatableBatchSource(batch)
+	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
 	prefixOp := &selPrefixBytesBytesConstOp{

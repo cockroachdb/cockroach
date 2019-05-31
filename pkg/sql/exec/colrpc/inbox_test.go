@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -58,14 +59,13 @@ func TestInboxCancellation(t *testing.T) {
 		// Cancel the context.
 		cancelFn()
 		// Next should not block if the context is canceled.
-		require.True(t, inbox.Next(ctx).Length() == 0)
+		err = exec.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+		require.True(t, testutils.IsError(err, "context canceled"), err)
 		// Now, the remote stream arrives.
 		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
 		require.True(t, testutils.IsError(err, "while waiting for stream"), err)
 	})
 
-	// TODO(asubiotto): This is testing interaction with the RPC layer, which
-	// might be better off as a test with an actual RPC layer.
 	t.Run("DuringRecv", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
 		inbox, err := NewInbox(typs)

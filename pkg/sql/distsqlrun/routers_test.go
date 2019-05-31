@@ -397,7 +397,7 @@ func TestConsumerStatus(t *testing.T) {
 			// that everything's closed now.
 			testutils.SucceedsSoon(t, func() error {
 				consumerStatus := router.Push(
-					nil /* row */, &ProducerMetadata{Err: errors.Errorf("test error")},
+					nil /* row */, &distsqlpb.ProducerMetadata{Err: errors.Errorf("test error")},
 				)
 				if consumerStatus != ConsumerClosed {
 					return fmt.Errorf("expected status %d, got: %d", ConsumerClosed, consumerStatus)
@@ -474,7 +474,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 
 			// Push metadata; it should go to stream 0.
 			for i := 0; i < 10; i++ {
-				consumerStatus := router.Push(nil /* row */, &ProducerMetadata{Err: err1})
+				consumerStatus := router.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err1})
 				if consumerStatus != NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 				}
@@ -487,7 +487,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 			chans[0].ConsumerDone()
 			// Push metadata; it should still go to stream 0.
 			for i := 0; i < 10; i++ {
-				consumerStatus := router.Push(nil /* row */, &ProducerMetadata{Err: err2})
+				consumerStatus := router.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err2})
 				if consumerStatus != NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 				}
@@ -502,7 +502,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 			// Metadata should switch to going to stream 1 once the new status is
 			// observed.
 			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(nil /* row */, &ProducerMetadata{Err: err3})
+				consumerStatus := router.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err3})
 				if consumerStatus != NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 				}
@@ -527,7 +527,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 			}
 
 			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(nil /* row */, &ProducerMetadata{Err: err4})
+				consumerStatus := router.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err4})
 				if consumerStatus != ConsumerClosed {
 					return fmt.Errorf("expected status %d, got: %d", ConsumerClosed, consumerStatus)
 				}
