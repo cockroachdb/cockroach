@@ -115,8 +115,17 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	// pre-addition state.
 	ms.Forward(oms.LastUpdateNanos)
 	oms.Forward(ms.LastUpdateNanos) // on local copy
+
 	// If either stats object contains estimates, their sum does too.
-	ms.ContainsEstimates = ms.ContainsEstimates || oms.ContainsEstimates
+	if ms.ContainsEstimates == 1 || oms.ContainsEstimates == 1 {
+		// If ContainsEstimates==1, the cluster may be running the old version
+		// (ContainsEstimates being a bool instead of int64) so we should not emit
+		// values greater than 1.
+		ms.ContainsEstimates = 1
+	} else {
+		ms.ContainsEstimates += oms.ContainsEstimates
+	}
+
 	// Now that we've done that, we may just add them.
 	ms.IntentAge += oms.IntentAge
 	ms.GCBytesAge += oms.GCBytesAge
@@ -139,8 +148,17 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	// pre-subtraction state.
 	ms.Forward(oms.LastUpdateNanos)
 	oms.Forward(ms.LastUpdateNanos)
+
 	// If either stats object contains estimates, their difference does too.
-	ms.ContainsEstimates = ms.ContainsEstimates || oms.ContainsEstimates
+	if ms.ContainsEstimates == 1 || oms.ContainsEstimates == 1 {
+		// If ContainsEstimates==1, the cluster may be running the old version
+		// (ContainsEstimates being a bool instead of int64) so we should only emit
+		// 0 or 1.
+		ms.ContainsEstimates = 1
+	} else {
+		ms.ContainsEstimates -= oms.ContainsEstimates
+	}
+
 	// Now that we've done that, we may subtract.
 	ms.IntentAge -= oms.IntentAge
 	ms.GCBytesAge -= oms.GCBytesAge
