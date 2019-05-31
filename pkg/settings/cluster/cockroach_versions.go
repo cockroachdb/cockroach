@@ -39,6 +39,7 @@ const (
 	VersionQueryTxnTimestamp
 	VersionStickyBit
 	VersionParallelCommits
+	VersionContainsEstimatesCounter
 
 	// Add new versions here (step one of two).
 
@@ -476,6 +477,17 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionParallelCommits is https://github.com/cockroachdb/cockroach/pull/37777.
 		Key:     VersionParallelCommits,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 4},
+	},
+	{
+		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
+		// MVCCStats.ContainsEstimates has been migrated from bool to int64 so that the
+		// consistency checker and splits can reset it without race conditions, by returning
+		// -ContainsEstimates.
+		// The commands that set ContainsEstimates must set/increase it by 2 instead of 1.
+		// During command application, commands proposed under truncation are detected and
+		// the replicas' ContainsEstimates are truncated to {0,1} accordingly.
+		Key:     VersionContainsEstimatesCounter,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 5},
 	},
 
 	// Add new versions here (step two of two).
