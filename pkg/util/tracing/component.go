@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
+	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -70,6 +71,8 @@ type recording struct {
 
 	targetCount int64
 	traces      map[string]*componentTraces
+	// eventLogs are stopped when this recording goes away
+	eventLogs []*EventLog
 }
 
 // getTraces returns an existing componentTraces for the specified
@@ -171,6 +174,7 @@ func IsComponentRecordingActive() bool {
 // each active system component. Returns a map from component name to
 // traces.
 func Record(stop <-chan time.Time, targetCount int64) map[string]ComponentTraces {
+	fmt.Printf("!!! Record\n")
 	activeRecordings.Lock()
 	rec := &recording{
 		targetCount: targetCount,
@@ -180,7 +184,15 @@ func Record(stop <-chan time.Time, targetCount int64) map[string]ComponentTraces
 	activeRecordings.Unlock()
 
 	// Sleep until the stop channel receives.
+	fmt.Printf("!!! Record about sleep\n")
 	<-stop
+	fmt.Printf("!!! Record sleep... done\n")
+
+	// Finish all the EventLogs
+	// !!! check locking here
+	for _, el := range rec.eventLogs {
+		el.Finish()
+	}
 
 	// Remove the recording from the active recordings slice.
 	activeRecordings.Lock()
@@ -231,6 +243,7 @@ func Record(stop <-chan time.Time, targetCount int64) map[string]ComponentTraces
 	}
 	stuckRecording.Unlock()
 
+	fmt.Printf("!!! Record done\n")
 	return result
 }
 
@@ -373,12 +386,11 @@ func (c *ComponentSpan) FinishWithError(err error) {
 }
 
 func (c *ComponentSpan) Finish() {
+	c.Span.Finish()
 	if !c.sampled {
-		c.Span.Finish()
 		return
 	}
 
-	c.Span.Finish()
 	// If the parent span was recording using a recording type other than
 	// ComponentRecording, combine recorded spans collected as part of this
 	// componentSpan with the parent span.
@@ -407,6 +419,7 @@ func (c *ComponentSpan) Finish() {
 		// ComponentSpan (which is now c.pSpan) and that original ComponentSpan was
 		// orphaned when MarkAsStuck() was called - and so it's up to us to finish
 		// it.
+		// !!! fail here if there's no pSpan
 		c.pSpan.Finish()
 	}
 }
@@ -537,6 +550,68 @@ func startComponentSpanInner(
 	startRecordingComponent(&compSpan)
 
 	return opentracing.ContextWithSpan(ctx, cSpan), compSpan
+}
+
+type EventLog struct {
+	mu struct {
+		syncutil.Mutex
+		sp       ComponentSpan
+		finished bool
+	}
+}
+
+func (c *EventLog) Finish() {
+	c.mu.Lock()
+	if c.mu.finished {
+		return
+	}
+	c.mu.finished = true
+	c.mu.sp.Finish()
+	c.mu.Unlock()
+}
+
+func (c *EventLog) Log(msg string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.mu.finished {
+		return
+	}
+	c.mu.sp.LogFields(otlog.String("event", msg))
+}
+
+func (c *EventLog) Finished() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.finished
+}
+
+func StartEventLog(
+	ctx context.Context, tracer opentracing.Tracer, component string, operation string,
+) *EventLog {
+	isRecording := shouldRecordComponent(component)
+	// !!! the locking here is broken
+	activeRecordings.Lock()
+	var rec *recording
+	if len(activeRecordings.values) == 0 {
+		isRecording = false
+	} else {
+		rec = activeRecordings.values[0]
+	}
+	activeRecordings.Unlock()
+
+	if !isRecording {
+		ev := &EventLog{}
+		ev.mu.finished = true
+		return ev
+	}
+	_, sp := startComponentSpanInner(ctx, tracer, component, operation, false /* stuck */)
+	ev := &EventLog{}
+	ev.mu.sp = sp
+
+	activeRecordings.Lock()
+	rec.eventLogs = append(rec.eventLogs, ev)
+	activeRecordings.Unlock()
+	return ev
 }
 
 func parentRecordingHasComponentSpan(osp opentracing.Span) bool {

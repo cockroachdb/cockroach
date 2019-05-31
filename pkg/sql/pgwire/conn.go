@@ -91,6 +91,8 @@ type conn struct {
 	msgBuilder writeBuffer
 	tracer     opentracing.Tracer
 
+	ev *tracing.EventLog
+
 	sv *settings.Values
 }
 
@@ -296,8 +298,9 @@ func (c *conn) serveImpl(
 	var terminateSeen bool
 	var doingExtendedQueryMessage bool
 
-	var csp tracing.ComponentSpan
-	var finished bool
+	// !!!
+	// var csp tracing.ComponentSpan
+	// var finished bool
 
 	connCtx := ctx
 
@@ -310,13 +313,15 @@ func (c *conn) serveImpl(
 	// progress in order to react to the connection closing).
 	var intSizer unqualifiedIntSizer = fixedIntSizer{size: types.Int}
 	var authDone bool
+	var el *tracing.EventLog
 Loop:
 	for {
-		// finish the previous pkt's span.
-		if finished {
-			csp.Finish()
-			finished = false
-		}
+		// !!!
+		//// finish the previous pkt's span.
+		//if finished {
+		//	csp.Finish()
+		//	finished = false
+		//}
 		ctx = connCtx
 
 		var typ pgwirebase.ClientMessageType
@@ -353,8 +358,13 @@ Loop:
 				authDone = true
 			}
 		}
-		ctx, csp = tracing.StartComponentSpan(ctx, c.tracer, "pgwire", typ.String() /* operation */)
-		finished = true
+		// !!!
+		//ctx, csp = tracing.StartComponentSpan(ctx, c.tracer, "pgwire", typ.String() /* operation */)
+		//finished = true
+		if el == nil || el.Finished() {
+			el = tracing.StartEventLog(connCtx, c.tracer, "pgwire.conn", "event log")
+		}
+		el.Log(typ.String())
 
 		switch typ {
 		case pgwirebase.ClientMsgPassword:
@@ -377,7 +387,7 @@ Loop:
 				}
 			}
 			if err = c.handleSimpleQuery(
-				ctx, &c.readBuf, timeReceived, intSizer.GetUnqualifiedIntSize(),
+				ctx, &c.readBuf, timeReceived, intSizer.GetUnqualifiedIntSize(), el,
 			); err != nil {
 				break
 			}
@@ -389,7 +399,7 @@ Loop:
 
 		case pgwirebase.ClientMsgParse:
 			doingExtendedQueryMessage = true
-			err = c.handleParse(ctx, &c.readBuf, intSizer.GetUnqualifiedIntSize())
+			err = c.handleParse(ctx, &c.readBuf, intSizer.GetUnqualifiedIntSize(), el)
 
 		case pgwirebase.ClientMsgDescribe:
 			doingExtendedQueryMessage = true
@@ -436,9 +446,10 @@ Loop:
 			break Loop
 		}
 	}
-	if finished {
-		csp.Finish()
-	}
+	// !!!
+	//if finished {
+	//	csp.Finish()
+	//}
 
 	// We're done reading data from the client, so make the communication
 	// goroutine stop. Depending on what that goroutine is currently doing (or
@@ -677,6 +688,7 @@ func (c *conn) handleSimpleQuery(
 	buf *pgwirebase.ReadBuffer,
 	timeReceived time.Time,
 	unqualifiedIntSize *types.T,
+	el *tracing.EventLog,
 ) error {
 	query, err := buf.GetString()
 	if err != nil {
@@ -701,8 +713,9 @@ func (c *conn) handleSimpleQuery(
 				ParseEnd:     endParse,
 			})
 	}
-	sp := opentracing.SpanFromContext(ctx)
-	sp.SetTag("statements", stmts)
+	el.Log(fmt.Sprintf("executing %s", stmts))
+	//sp := opentracing.SpanFromContext(ctx)
+	//sp.SetTag("statements", stmts)
 
 	for i := range stmts {
 		// The CopyFrom statement is special. We need to detect it so we can hand
@@ -747,7 +760,7 @@ func (c *conn) handleSimpleQuery(
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleParse(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *types.T,
+	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *types.T, el *tracing.EventLog,
 ) error {
 	name, err := buf.GetString()
 	if err != nil {
@@ -757,8 +770,10 @@ func (c *conn) handleParse(
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	sp := opentracing.SpanFromContext(ctx)
-	sp.SetTag("statement", query)
+	// !!!
+	//sp := opentracing.SpanFromContext(ctx)
+	//sp.SetTag("statement", query)
+	el.Log(fmt.Sprintf("parsing %s", query))
 	// The client may provide type information for (some of) the placeholders.
 	numQArgTypes, err := buf.GetUint16()
 	if err != nil {

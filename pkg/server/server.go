@@ -1994,6 +1994,10 @@ func (s *Server) startServeSQL(
 			}))
 		})
 	}
+	// !!! I'm create these components early, otherwise the UI doesn't seem to reflect them
+	_, sp := tracing.StartComponentSpan(ctx, s.cfg.AmbientCtx.Tracer, "pgwire.conn", "event log")
+	sp.Finish()
+
 	return nil
 }
 
