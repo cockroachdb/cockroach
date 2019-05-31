@@ -255,7 +255,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		}
 
 		var res sqlbase.EncDatumRows
-		var metas []*ProducerMetadata
+		var metas []*distsqlpb.ProducerMetadata
 		for {
 			row, meta := results.Next()
 			if meta != nil {

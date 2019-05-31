@@ -249,7 +249,7 @@ type zigzagJoiner struct {
 	started bool
 
 	// returnedMeta contains all the metadata that zigzag joiner has emitted.
-	returnedMeta []ProducerMetadata
+	returnedMeta []distsqlpb.ProducerMetadata
 }
 
 // Batch size is a parameter which determines how many rows should be fetched
@@ -260,7 +260,7 @@ const zigzagJoinerBatchSize = 5
 
 var _ Processor = &zigzagJoiner{}
 var _ RowSource = &zigzagJoiner{}
-var _ MetadataSource = &zigzagJoiner{}
+var _ distsqlpb.MetadataSource = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
 
@@ -301,7 +301,7 @@ func newZigzagJoiner(
 
 	z.numTables = len(spec.Tables)
 	z.infos = make([]*zigzagJoinerInfo, z.numTables)
-	z.returnedMeta = make([]ProducerMetadata, 0, 1)
+	z.returnedMeta = make([]distsqlpb.ProducerMetadata, 0, 1)
 
 	for i := range z.infos {
 		z.infos[i] = &zigzagJoinerInfo{}
@@ -471,13 +471,13 @@ func (z *zigzagJoiner) close() {
 // terminated, either due to being indicated by the consumer, or because the
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
-func (z *zigzagJoiner) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
+func (z *zigzagJoiner) producerMeta(err error) *distsqlpb.ProducerMetadata {
+	var meta *distsqlpb.ProducerMetadata
 	if !z.closed {
 		if err != nil {
-			meta = &ProducerMetadata{Err: err}
+			meta = &distsqlpb.ProducerMetadata{Err: err}
 		} else if trace := getTraceData(z.Ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
+			meta = &distsqlpb.ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
@@ -728,10 +728,10 @@ func (z *zigzagJoiner) emitFromContainers() (sqlbase.EncDatumRow, error) {
 // at a time.
 func (z *zigzagJoiner) nextRow(
 	ctx context.Context, txn *client.Txn,
-) (sqlbase.EncDatumRow, *ProducerMetadata) {
+) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for {
 		if err := z.cancelChecker.Check(); err != nil {
-			return nil, &ProducerMetadata{Err: err}
+			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 
 		// Check if there are any rows built up in the containers that need to be
@@ -897,7 +897,7 @@ func (z *zigzagJoiner) collectAllMatches(
 }
 
 // Next is part of the RowSource interface.
-func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	txn := z.flowCtx.txn
 
 	if !z.started {
@@ -964,6 +964,6 @@ func (z *zigzagJoiner) ConsumerClosed() {
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (z *zigzagJoiner) DrainMeta(_ context.Context) []ProducerMetadata {
+func (z *zigzagJoiner) DrainMeta(_ context.Context) []distsqlpb.ProducerMetadata {
 	return z.returnedMeta
 }

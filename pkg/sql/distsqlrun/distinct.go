@@ -119,7 +119,7 @@ func NewDistinct(
 		d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{d.input},
-			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				d.close()
 				return nil
 			},
@@ -199,7 +199,7 @@ func (d *Distinct) close() {
 }
 
 // Next is part of the RowSource interface.
-func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (d *Distinct) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for d.State == StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
@@ -267,7 +267,7 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 //
 // sortedDistinct is simpler than distinct. All it has to do is keep track
 // of the last row it saw, emitting if the new row is different.
-func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for d.State == StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {

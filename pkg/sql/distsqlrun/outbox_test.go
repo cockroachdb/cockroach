@@ -117,8 +117,8 @@ func TestOutbox(t *testing.T) {
 			}
 
 			// Send some metadata.
-			outbox.Push(nil /* row */, &ProducerMetadata{Err: errors.Errorf("meta 0")})
-			outbox.Push(nil /* row */, &ProducerMetadata{Err: errors.Errorf("meta 1")})
+			outbox.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: errors.Errorf("meta 0")})
+			outbox.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: errors.Errorf("meta 1")})
 			// Send the termination signal.
 			outbox.ProducerDone()
 
@@ -133,7 +133,7 @@ func TestOutbox(t *testing.T) {
 	// Consume everything that the outbox sends on the stream.
 	var decoder StreamDecoder
 	var rows sqlbase.EncDatumRows
-	var metas []ProducerMetadata
+	var metas []distsqlpb.ProducerMetadata
 	drainSignalSent := false
 	for {
 		msg, err := serverStream.Recv()
@@ -491,7 +491,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 
 	// Fill up the outbox.
 	for i := 0; i < outboxBufRows; i++ {
-		outbox.Push(nil, &ProducerMetadata{})
+		outbox.Push(nil, &distsqlpb.ProducerMetadata{})
 	}
 
 	var blockedPusherWg sync.WaitGroup
@@ -499,7 +499,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	go func() {
 		// Push to the outbox one last time, which will block since the channel
 		// is full.
-		outbox.Push(nil, &ProducerMetadata{})
+		outbox.Push(nil, &distsqlpb.ProducerMetadata{})
 		// We should become unblocked once outbox.start fails.
 		blockedPusherWg.Done()
 	}()
@@ -510,7 +510,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	wg.Wait()
 	// Also, make sure that pushing to the outbox after its failed shows that
 	// it's been correctly ConsumerClosed.
-	status := outbox.RowChannel.Push(nil, &ProducerMetadata{})
+	status := outbox.RowChannel.Push(nil, &distsqlpb.ProducerMetadata{})
 	if status != ConsumerClosed {
 		t.Fatalf("expected status=ConsumerClosed, got %s", status)
 	}

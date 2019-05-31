@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -149,7 +149,7 @@ func (ag *aggregatorBase) init(
 	input RowSource,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
-	trailingMetaCallback func(context.Context) []ProducerMetadata,
+	trailingMetaCallback func(context.Context) []distsqlpb.ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
@@ -351,7 +351,7 @@ func newAggregator(
 		input,
 		post,
 		output,
-		func(context.Context) []ProducerMetadata {
+		func(context.Context) []distsqlpb.ProducerMetadata {
 			ag.close()
 			return nil
 		},
@@ -380,7 +380,7 @@ func newOrderedAggregator(
 		input,
 		post,
 		output,
-		func(context.Context) []ProducerMetadata {
+		func(context.Context) []distsqlpb.ProducerMetadata {
 			ag.close()
 			return nil
 		},
@@ -462,7 +462,7 @@ func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, 
 func (ag *hashAggregator) accumulateRows() (
 	aggregatorState,
 	sqlbase.EncDatumRow,
-	*ProducerMetadata,
+	*distsqlpb.ProducerMetadata,
 ) {
 	for {
 		row, meta := ag.input.Next()
@@ -525,7 +525,7 @@ func (ag *hashAggregator) accumulateRows() (
 func (ag *orderedAggregator) accumulateRows() (
 	aggregatorState,
 	sqlbase.EncDatumRow,
-	*ProducerMetadata,
+	*distsqlpb.ProducerMetadata,
 ) {
 	for {
 		row, meta := ag.input.Next()
@@ -578,7 +578,7 @@ func (ag *orderedAggregator) accumulateRows() (
 
 func (ag *aggregatorBase) getAggResults(
 	bucket aggregateFuncs,
-) (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+) (aggregatorState, sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for i, b := range bucket {
 		result, err := b.Result()
 		if err != nil {
@@ -606,7 +606,11 @@ func (ag *aggregatorBase) getAggResults(
 //
 // emitRow() might move to stateDraining. It might also not return a row if the
 // ProcOutputHelper filtered the current row out.
-func (ag *hashAggregator) emitRow() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ag *hashAggregator) emitRow() (
+	aggregatorState,
+	sqlbase.EncDatumRow,
+	*distsqlpb.ProducerMetadata,
+) {
 	if len(ag.bucketsIter) == 0 {
 		// We've exhausted all of the aggregation buckets.
 		if ag.inputDone {
@@ -650,7 +654,11 @@ func (ag *hashAggregator) emitRow() (aggregatorState, sqlbase.EncDatumRow, *Prod
 //
 // emitRow() might move to stateDraining. It might also not return a row if the
 // ProcOutputHelper filtered a the current row out.
-func (ag *orderedAggregator) emitRow() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ag *orderedAggregator) emitRow() (
+	aggregatorState,
+	sqlbase.EncDatumRow,
+	*distsqlpb.ProducerMetadata,
+) {
 	if ag.bucket == nil {
 		// We've exhausted all of the aggregation buckets.
 		if ag.inputDone {
@@ -688,10 +696,10 @@ func (ag *orderedAggregator) emitRow() (aggregatorState, sqlbase.EncDatumRow, *P
 }
 
 // Next is part of the RowSource interface.
-func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for ag.State == StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *ProducerMetadata
+		var meta *distsqlpb.ProducerMetadata
 		switch ag.runningState {
 		case aggAccumulating:
 			ag.runningState, row, meta = ag.accumulateRows()
@@ -710,10 +718,10 @@ func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 }
 
 // Next is part of the RowSource interface.
-func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for ag.State == StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *ProducerMetadata
+		var meta *distsqlpb.ProducerMetadata
 		switch ag.runningState {
 		case aggAccumulating:
 			ag.runningState, row, meta = ag.accumulateRows()

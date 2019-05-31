@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 func TestClusterFlow(t *testing.T) {
@@ -241,7 +241,7 @@ func TestClusterFlow(t *testing.T) {
 
 	var decoder StreamDecoder
 	var rows sqlbase.EncDatumRows
-	var metas []ProducerMetadata
+	var metas []distsqlpb.ProducerMetadata
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -280,8 +280,8 @@ func TestClusterFlow(t *testing.T) {
 
 // ignoreMisplannedRanges takes a slice of metadata and returns the entries that
 // are not about range info from mis-planned ranges.
-func ignoreMisplannedRanges(metas []ProducerMetadata) []ProducerMetadata {
-	res := make([]ProducerMetadata, 0)
+func ignoreMisplannedRanges(metas []distsqlpb.ProducerMetadata) []distsqlpb.ProducerMetadata {
+	res := make([]distsqlpb.ProducerMetadata, 0)
 	for _, m := range metas {
 		if len(m.Ranges) == 0 {
 			res = append(res, m)
@@ -292,8 +292,8 @@ func ignoreMisplannedRanges(metas []ProducerMetadata) []ProducerMetadata {
 
 // ignoreTxnCoordMeta takes a slice of metadata and returns the entries excluding
 // the transaction coordinator metadata.
-func ignoreTxnCoordMeta(metas []ProducerMetadata) []ProducerMetadata {
-	res := make([]ProducerMetadata, 0)
+func ignoreTxnCoordMeta(metas []distsqlpb.ProducerMetadata) []distsqlpb.ProducerMetadata {
+	res := make([]distsqlpb.ProducerMetadata, 0)
 	for _, m := range metas {
 		if m.TxnCoordMeta == nil {
 			res = append(res, m)
@@ -493,7 +493,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 
 	var decoder StreamDecoder
 	var rows sqlbase.EncDatumRows
-	var metas []ProducerMetadata
+	var metas []distsqlpb.ProducerMetadata
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
@@ -737,7 +737,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 
 						var decoder StreamDecoder
 						var rows sqlbase.EncDatumRows
-						var metas []ProducerMetadata
+						var metas []distsqlpb.ProducerMetadata
 						for {
 							msg, err := stream.Recv()
 							if err != nil {

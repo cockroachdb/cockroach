@@ -797,7 +797,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
 										leftSource := newFiniteBatchSource(batch, nBatches)
-										rightSource := newRepeatableBatchSource(batch)
+										rightSource := NewRepeatableBatchSource(batch)
 
 										spec := hashJoinerSpec{
 											left: hashJoinerSourceSpec{

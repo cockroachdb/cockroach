@@ -64,7 +64,7 @@ func (r *RepeatableRowSource) OutputTypes() []types.T {
 func (r *RepeatableRowSource) Start(ctx context.Context) context.Context { return ctx }
 
 // Next is part of the RowSource interface.
-func (r *RepeatableRowSource) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (r *RepeatableRowSource) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	// If we've emitted all rows, signal that we have reached the end.
 	if r.nextRowIdx >= len(r.rows) {
 		return nil, nil
@@ -92,7 +92,9 @@ type RowDisposer struct{}
 var _ RowReceiver = &RowDisposer{}
 
 // Push is part of the RowReceiver interface.
-func (r *RowDisposer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+func (r *RowDisposer) Push(
+	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+) ConsumerStatus {
 	return NeedMoreRows
 }
 

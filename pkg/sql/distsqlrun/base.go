@@ -77,7 +77,7 @@ type RowReceiver interface {
 	// and they might not all be aware of the last status returned).
 	//
 	// Implementations of Push() must be thread-safe.
-	Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus
+	Push(row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata) ConsumerStatus
 
 	// Types returns the types of the EncDatumRow that this RowReceiver expects
 	// to be pushed.
@@ -136,7 +136,7 @@ type RowSource interface {
 	// RowSource to drain, and separately discard any future data rows. A consumer
 	// receiving an error should also call ConsumerDone() on any other input it
 	// has.
-	Next() (sqlbase.EncDatumRow, *ProducerMetadata)
+	Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 
 	// ConsumerDone lets the source know that we will not need any more data
 	// rows. The source is expected to start draining and only send metadata
@@ -247,7 +247,7 @@ func getTraceData(ctx context.Context) []tracing.RecordedSpan {
 // each one gets its own trace "recording group".
 func sendTraceData(ctx context.Context, dst RowReceiver) {
 	if rec := getTraceData(ctx); rec != nil {
-		dst.Push(nil /* row */, &ProducerMetadata{TraceData: rec})
+		dst.Push(nil /* row */, &distsqlpb.ProducerMetadata{TraceData: rec})
 	}
 }
 
@@ -295,7 +295,7 @@ func DrainAndClose(
 	if cause != nil {
 		// We ignore the returned ConsumerStatus and rely on the
 		// DrainAndForwardMetadata() calls below to close srcs in all cases.
-		_ = dst.Push(nil /* row */, &ProducerMetadata{Err: cause})
+		_ = dst.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: cause})
 	}
 	if len(srcs) > 0 {
 		var wg sync.WaitGroup
@@ -357,30 +357,7 @@ func (rs *NoMetadataRowSource) NextRow() (sqlbase.EncDatumRow, error) {
 type RowChannelMsg struct {
 	// Only one of these fields will be set.
 	Row  sqlbase.EncDatumRow
-	Meta *ProducerMetadata
-}
-
-// ProducerMetadata represents a metadata record flowing through a DistSQL flow.
-type ProducerMetadata struct {
-	// Only one of these fields will be set. If this ever changes, note that
-	// there're consumers out there that extract the error and, if there is one,
-	// forward it in isolation and drop the rest of the record.
-	Ranges []roachpb.RangeInfo
-	// TODO(vivek): change to type Error
-	Err error
-	// TraceData is sent if snowball tracing is enabled.
-	TraceData []tracing.RecordedSpan
-	// TxnCoordMeta contains the updated transaction coordinator metadata,
-	// to be sent from leaf transactions to augment the root transaction,
-	// held by the flow's ultimate receiver.
-	TxnCoordMeta *roachpb.TxnCoordMeta
-	// RowNum corresponds to a row produced by a "source" processor that takes no
-	// inputs. It is used in tests to verify that all metadata is forwarded
-	// exactly once to the receiver on the gateway node.
-	RowNum *distsqlpb.RemoteProducerMetadata_RowNum
-	// SamplerProgress contains incremental progress information from the sampler
-	// processor.
-	SamplerProgress *distsqlpb.RemoteProducerMetadata_SamplerProgress
+	Meta *distsqlpb.ProducerMetadata
 }
 
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to
@@ -422,7 +399,9 @@ func (rc *RowChannel) initWithBufSizeAndNumSenders(types []types.T, chanBufSize,
 }
 
 // Push is part of the RowReceiver interface.
-func (rc *RowChannel) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+func (rc *RowChannel) Push(
+	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+) ConsumerStatus {
 	consumerStatus := ConsumerStatus(
 		atomic.LoadUint32((*uint32)(&rc.consumerStatus)))
 	switch consumerStatus {
@@ -459,7 +438,7 @@ func (rc *RowChannel) OutputTypes() []types.T {
 func (rc *RowChannel) Start(ctx context.Context) context.Context { return ctx }
 
 // Next is part of the RowSource interface.
-func (rc *RowChannel) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (rc *RowChannel) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	d, ok := <-rc.C
 	if !ok {
 		// No more rows.
@@ -499,7 +478,7 @@ func (rc *RowChannel) Types() []types.T {
 // inside a RowBuffer.
 type BufferedRecord struct {
 	Row  sqlbase.EncDatumRow
-	Meta *ProducerMetadata
+	Meta *distsqlpb.ProducerMetadata
 }
 
 // RowBuffer is an implementation of RowReceiver that buffers (accumulates)
@@ -549,9 +528,9 @@ type RowBufferArgs struct {
 	// OnNext, if specified, is called as the first thing in the Next() method.
 	// If it returns an empty row and metadata, then RowBuffer.Next() is allowed
 	// to run normally. Otherwise, the values are returned from RowBuffer.Next().
-	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, *ProducerMetadata)
+	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 	// OnPush, if specified, is called as the first thing in the Push() method.
-	OnPush func(sqlbase.EncDatumRow, *ProducerMetadata)
+	OnPush func(sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 }
 
 // NewRowBuffer creates a RowBuffer with the given schema and initial rows.
@@ -569,7 +548,9 @@ func NewRowBuffer(types []types.T, rows sqlbase.EncDatumRows, hooks RowBufferArg
 }
 
 // Push is part of the RowReceiver interface.
-func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+func (rb *RowBuffer) Push(
+	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+) ConsumerStatus {
 	if rb.args.OnPush != nil {
 		rb.args.OnPush(row, meta)
 	}
@@ -639,7 +620,7 @@ func (rb *RowBuffer) Start(ctx context.Context) context.Context { return ctx }
 //
 // There's no synchronization here with Push(). The assumption is that these
 // two methods are not called concurrently.
-func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	if rb.args.OnNext != nil {
 		row, meta := rb.args.OnNext(rb)
 		if row != nil || meta != nil {
@@ -682,7 +663,9 @@ type copyingRowReceiver struct {
 	alloc sqlbase.EncDatumRowAlloc
 }
 
-func (r *copyingRowReceiver) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+func (r *copyingRowReceiver) Push(
+	row sqlbase.EncDatumRow, meta *distsqlpb.ProducerMetadata,
+) ConsumerStatus {
 	if row != nil {
 		row = r.alloc.CopyRow(row)
 	}

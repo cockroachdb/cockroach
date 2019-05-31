@@ -21,6 +21,7 @@ import (
 	"container/heap"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -92,7 +93,7 @@ type orderedSynchronizer struct {
 
 	// metadata is accumulated from all the sources and is passed on as soon as
 	// possible.
-	metadata []*ProducerMetadata
+	metadata []*distsqlpb.ProducerMetadata
 }
 
 var _ RowSource = &orderedSynchronizer{}
@@ -279,11 +280,11 @@ func (s *orderedSynchronizer) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	if s.state == notInitialized {
 		if err := s.initHeap(); err != nil {
 			s.ConsumerDone()
-			return nil, &ProducerMetadata{Err: err}
+			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 		s.state = returningRows
 	} else if s.state == returningRows && s.needsAdvance {
@@ -291,7 +292,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		// the next row for that source.
 		if err := s.advanceRoot(); err != nil {
 			s.ConsumerDone()
-			return nil, &ProducerMetadata{Err: err}
+			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 	}
 
@@ -306,7 +307,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if len(s.metadata) != 0 {
 		// TODO(andrei): We return the metadata records one by one. The interface
 		// should support returning all of them at once.
-		var meta *ProducerMetadata
+		var meta *distsqlpb.ProducerMetadata
 		meta, s.metadata = s.metadata[0], s.metadata[1:]
 		s.needsAdvance = false
 		return nil, meta

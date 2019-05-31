@@ -89,7 +89,7 @@ func TestServer(t *testing.T) {
 
 	var decoder StreamDecoder
 	var rows sqlbase.EncDatumRows
-	var metas []ProducerMetadata
+	var metas []distsqlpb.ProducerMetadata
 	for {
 		msg, err := stream.Recv()
 		if err != nil {

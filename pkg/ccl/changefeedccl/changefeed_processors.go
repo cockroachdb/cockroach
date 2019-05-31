@@ -93,7 +93,7 @@ func newChangeAggregatorProcessor(
 		output,
 		memMonitor,
 		distsqlrun.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []distsqlrun.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				ca.close()
 				return nil
 			},
@@ -242,7 +242,7 @@ func (ca *changeAggregator) close() {
 }
 
 // Next is part of the RowSource interface.
-func (ca *changeAggregator) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerMetadata) {
+func (ca *changeAggregator) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for ca.State == distsqlrun.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
 			return ca.changedRowBuf.Pop(), nil
@@ -382,7 +382,7 @@ func newChangeFrontierProcessor(
 		output,
 		memMonitor,
 		distsqlrun.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []distsqlrun.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
 				cf.close()
 				return nil
 			},
@@ -506,7 +506,7 @@ func (cf *changeFrontier) closeMetrics() {
 }
 
 // Next is part of the RowSource interface.
-func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerMetadata) {
+func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for cf.State == distsqlrun.StateRunning {
 		if !cf.passthroughBuf.IsEmpty() {
 			return cf.passthroughBuf.Pop(), nil

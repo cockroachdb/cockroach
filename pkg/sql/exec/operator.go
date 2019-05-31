@@ -33,6 +33,8 @@ type Operator interface {
 	//
 	// Calling Next may invalidate the contents of the last Batch returned by
 	// Next.
+	// Canceling the provided context results in forceful termination of
+	// execution.
 	Next(context.Context) coldata.Batch
 }
 

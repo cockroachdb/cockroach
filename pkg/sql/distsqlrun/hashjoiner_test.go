@@ -421,11 +421,11 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		rightInputDrainNotification <- nil
 	}
 	rightErrorReturned := false
-	rightInputNext := func(rb *RowBuffer) (sqlbase.EncDatumRow, *ProducerMetadata) {
+	rightInputNext := func(rb *RowBuffer) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 		if !rightErrorReturned {
 			rightErrorReturned = true
 			// The right input is going to return an error as the first thing.
-			return nil, &ProducerMetadata{Err: errors.Errorf("Test error. Please drain.")}
+			return nil, &distsqlpb.ProducerMetadata{Err: errors.Errorf("Test error. Please drain.")}
 		}
 		// Let RowBuffer.Next() do its usual thing.
 		return nil, nil
