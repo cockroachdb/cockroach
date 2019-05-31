@@ -614,6 +614,8 @@ func StartEventLog(
 	return ev
 }
 
+// !!! this method seems funky because it looks at a collection of spans which
+// can change at any moment. That's probably not what we want. Rething.
 func parentRecordingHasComponentSpan(osp opentracing.Span) bool {
 	sp := osp.(*span)
 	sp.mu.Lock()
@@ -621,8 +623,9 @@ func parentRecordingHasComponentSpan(osp opentracing.Span) bool {
 	sp.mu.Unlock()
 
 	rg.Lock()
-	defer rg.Unlock()
-	for _, s := range rg.spans {
+	spans := rg.spans
+	rg.Unlock()
+	for _, s := range spans {
 		s.mu.Lock()
 		_, ok := s.mu.tags[ComponentTagName]
 		s.mu.Unlock()
