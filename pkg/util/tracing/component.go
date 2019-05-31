@@ -313,7 +313,7 @@ func finishRecordingComponent(csp *ComponentSpan, sample ComponentSamples_Sample
 // RecordComponentEvent records an event on behalf of a component. The component
 // maintains a counter for each event.
 func RecordComponentEvent(component string, event string) {
-	RecordComponentErr(component, event, "" /* err */)
+	recordComponentErrInner(component, event, "" /* err */)
 }
 
 // RecordComponentErr records an error event on behalf of a component. The
@@ -368,9 +368,7 @@ type ComponentSpan struct {
 // FinishWithError is like Finish() and it additionally records an error on the
 // span if err is not nil.
 func (c *ComponentSpan) FinishWithError(err error) {
-	if err != nil {
-		c.SetError(err)
-	}
+	c.SetError(err)
 	c.Finish()
 }
 
