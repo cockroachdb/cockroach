@@ -990,6 +990,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowJobs(ctx, n)
 	case *tree.ShowRoleGrants:
 		return p.ShowRoleGrants(ctx, n)
+	case *tree.ShowHistogram:
+		return p.ShowHistogram(ctx, n)
 	case *tree.ShowRoles:
 		return p.ShowRoles(ctx, n)
 	case *tree.ShowSessions:
@@ -998,6 +1000,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowTables(ctx, n)
 	case *tree.ShowSchemas:
 		return p.ShowSchemas(ctx, n)
+	case *tree.ShowTableStats:
+		return p.ShowTableStats(ctx, n)
 	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowUsers:
@@ -1006,6 +1010,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowTransactionStatus(ctx)
 	case *tree.ShowRanges:
 		return p.ShowRanges(ctx, n)
+	case *tree.ShowZoneConfig:
+		return p.ShowZoneConfig(ctx, n)
 	case *tree.Split:
 		return p.Split(ctx, n)
 	case *tree.Truncate:
