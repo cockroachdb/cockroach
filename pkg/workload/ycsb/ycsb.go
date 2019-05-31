@@ -338,6 +338,7 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			updateStmts:   updateStmts,
 			rowIndex:      rowIndex,
 			rowCounter:    rowCounter,
+			lastRowIndex:  nil,
 			requestGen:    requestGen,
 			scanLengthGen: scanLengthGen,
 			rng:           rng,
@@ -367,6 +368,8 @@ type ycsbWorker struct {
 	rowIndex *uint64
 	// Counter to keep track of which rows have been inserted.
 	rowCounter *AcknowledgedCounter
+	// Last row index that the worker attempted to insert.
+	lastRowIndex *uint64
 
 	requestGen    randGenerator // used to generate random keys for requests
 	scanLengthGen randGenerator // used to generate length of scan operations
@@ -438,7 +441,13 @@ func (yw *ycsbWorker) nextReadKey() string {
 }
 
 func (yw *ycsbWorker) nextInsertKeyIndex() uint64 {
-	return atomic.AddUint64(yw.rowIndex, 1) - 1
+	if yw.lastRowIndex == nil {
+		yw.lastRowIndex = new(uint64)
+		*yw.lastRowIndex = atomic.AddUint64(yw.rowIndex, 1) - 1
+	} else if yw.rowCounter.IsAcknowledged(*yw.lastRowIndex) {
+		*yw.lastRowIndex = atomic.AddUint64(yw.rowIndex, 1) - 1
+	}
+	return *yw.lastRowIndex
 }
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -463,16 +472,15 @@ func (yw *ycsbWorker) insertRow(ctx context.Context, keyIndex uint64, increment 
 	}
 
 	if increment {
-		prevRowCount := yw.rowCounter.Last()
-		if err := yw.rowCounter.Acknowledge(keyIndex); err != nil {
+		count, err := yw.rowCounter.Acknowledge(keyIndex)
+		if err != nil {
 			return err
 		}
-		currRowCount := yw.rowCounter.Last()
-		for prevRowCount < currRowCount {
+		for count > 0 {
 			if err := yw.requestGen.IncrementIMax(); err != nil {
 				return err
 			}
-			prevRowCount++
+			count--
 		}
 	}
 	return nil
