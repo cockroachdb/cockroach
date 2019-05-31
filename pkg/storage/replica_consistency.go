@@ -146,7 +146,7 @@ func (r *Replica) CheckConsistency(
 	if inconsistencyCount != 0 {
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT
 	} else if args.Mode != roachpb.ChecksumMode_CHECK_STATS && delta != (enginepb.MVCCStats{}) {
-		if delta.ContainsEstimates {
+		if delta.ContainsEstimates > 0 {
 			// When ContainsEstimates is set, it's generally expected that we'll get a different
 			// result when we recompute from scratch.
 			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED
@@ -183,10 +183,11 @@ func (r *Replica) CheckConsistency(
 			return resp, nil
 		}
 
-		if !delta.ContainsEstimates && testingFatalOnStatsMismatch {
-			// ContainsEstimates is true if the replica's persisted MVCCStats had ContainsEstimates set.
-			// If this was *not* the case, the replica believed it had accurate stats. But we just found
-			// out that this isn't true.
+		if delta.ContainsEstimates <= 0 && testingFatalOnStatsMismatch {
+			// ContainsEstimates should never be negative normally. It is a positive number
+			// if the replica's persisted MVCCStats had ContainsEstimates set. If this was *not* the case,
+			// i.e ContainsEstimates is zero, the replica believed it had accurate stats.
+			// But we just found out that this isn't true.
 			log.Fatalf(ctx, "found a delta of %+v", log.Safe(delta))
 		}
 

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -96,7 +97,14 @@ func EvalAddSSTable(
 	// Callers can trigger such a re-computation to fixup any discrepancies (and
 	// remove the ContainsEstimates flag) after they are done ingesting files by
 	// sending an explicit recompute.
-	stats.ContainsEstimates = true
+	//
+	// If we are running the old ContainsEstimates version (boolean), we just set it to 1.
+	// Otherwise we make it bigger than one to indicate that we are running the newer version.
+	if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionContainsEstimatesCounter) {
+		stats.ContainsEstimates = 1
+	} else {
+		stats.ContainsEstimates += 2
+	}
 	ms.Add(stats)
 
 	return result.Result{

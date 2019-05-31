@@ -621,10 +621,10 @@ func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) erro
 
 			if !ms.Equal(claimedMS) {
 				var prefix string
-				if !claimedMS.ContainsEstimates {
+				if claimedMS.ContainsEstimates == 0 {
 					failed = true
 				} else {
-					ms.ContainsEstimates = true
+					ms.ContainsEstimates = 1
 					prefix = "(ignored) "
 				}
 				fmt.Printf("\n%s%+v: diff(actual, claimed): %s\n", prefix, desc, strings.Join(pretty.Diff(ms, claimedMS), "\n"))
