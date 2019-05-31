@@ -1033,6 +1033,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, withCommit bool, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	ctx, csp := tracing.StartComponentSpan(ctx, ds.Tracer, "client.dist.divider", "split")
+	csp.SetTag("batch", &ba)
 	defer func() { csp.FinishWithError(pErr.GoError()) }()
 
 	// Clone the BatchRequest's transaction so that future mutations to the
@@ -1315,6 +1316,7 @@ func (ds *DistSender) sendPartialBatch(
 ) (_r response) {
 	var csp tracing.ComponentSpan
 	ctx, csp = tracing.StartComponentSpan(ctx, ds.Tracer, "client.dist.sender", "send")
+	csp.SetTag("batch", &ba)
 	defer func() { csp.FinishWithError(_r.pErr.GoError()) }()
 
 	if batchIdx == 1 {
