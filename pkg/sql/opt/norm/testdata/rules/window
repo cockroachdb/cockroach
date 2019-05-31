@@ -212,3 +212,72 @@ project
       │         └── rank [type=undefined]
       └── filters
            └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Can push down filters on columns in the closure of the partition columns.
+norm expect=PushSelectIntoWindow
+SELECT * FROM (SELECT i, rank() OVER (PARTITION BY k ORDER BY f) FROM a) WHERE i = 3
+----
+project
+ ├── columns: i:2(int!null) rank:6(int)
+ ├── fd: ()-->(2)
+ └── window partition=(1)
+      ├── columns: k:1(int!null) i:2(int!null) rank:6(int)
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── select
+      │    ├── columns: k:1(int!null) i:2(int!null)
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── filters
+      │         └── i = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+      └── windows
+           └── rank [type=undefined]
+
+norm expect=PushSelectIntoWindow
+SELECT * FROM (SELECT i, f, rank() OVER (PARTITION BY k ORDER BY f) FROM a) WHERE i*f::int = 3
+----
+project
+ ├── columns: i:2(int) f:3(float) rank:6(int)
+ └── window partition=(1)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) rank:6(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── select
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── filters
+      │         └── (i * f::INT8) = 3 [type=bool, outer=(2,3)]
+      └── windows
+           └── rank [type=undefined]
+
+norm expect-not=PushSelectIntoWindow
+SELECT * FROM (SELECT i, f, rank() OVER (PARTITION BY k ORDER BY f) AS rnk FROM a) WHERE rnk = 3
+----
+project
+ ├── columns: i:2(int) f:3(float) rnk:6(int!null)
+ ├── fd: ()-->(6)
+ └── select
+      ├── columns: k:1(int!null) i:2(int) f:3(float) rank:6(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(6), (1)-->(2,3)
+      ├── window partition=(1)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) rank:6(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── windows
+      │         └── rank [type=undefined]
+      └── filters
+           └── rank = 3 [type=bool, outer=(6), constraints=(/6: [/3 - /3]; tight), fd=()-->(6)]

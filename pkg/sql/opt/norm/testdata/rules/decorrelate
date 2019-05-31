@@ -296,34 +296,34 @@ WHERE i = 3
 ----
 project
  ├── columns: u:1(int!null) v:2(int) rank:8(int) i:4(int!null)
- ├── key: (1)
- ├── fd: ()-->(4), (1)-->(2,8)
- └── select
+ ├── key: (1,8)
+ ├── fd: ()-->(4), (1)-->(2)
+ └── window partition=(1)
       ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int!null) rank:8(int)
       ├── key: (3)
-      ├── fd: ()-->(4), (1)-->(2), (1)==(3), (3)==(1), (3)-->(8)
-      ├── window partition=(1)
-      │    ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int) rank:8(int)
+      ├── fd: ()-->(4), (1)-->(2), (1)==(3), (3)==(1)
+      ├── inner-join
+      │    ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int!null)
       │    ├── key: (3)
-      │    ├── fd: (1)-->(2), (3)-->(4), (1)==(3), (3)==(1)
-      │    ├── inner-join
-      │    │    ├── columns: u:1(int!null) v:2(int) k:3(int!null) i:4(int)
+      │    ├── fd: ()-->(4), (1)-->(2), (1)==(3), (3)==(1)
+      │    ├── scan uv
+      │    │    ├── columns: u:1(int!null) v:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── select
+      │    │    ├── columns: k:3(int!null) i:4(int!null)
       │    │    ├── key: (3)
-      │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(3), (3)==(1)
-      │    │    ├── scan uv
-      │    │    │    ├── columns: u:1(int!null) v:2(int)
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── fd: ()-->(4)
       │    │    ├── scan a
       │    │    │    ├── columns: k:3(int!null) i:4(int)
       │    │    │    ├── key: (3)
       │    │    │    └── fd: (3)-->(4)
       │    │    └── filters
-      │    │         └── k = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      │    └── windows
-      │         └── rank [type=undefined]
-      └── filters
-           └── i = 3 [type=bool, outer=(4), constraints=(/4: [/3 - /3]; tight), fd=()-->(4)]
+      │    │         └── i = 3 [type=bool, outer=(4), constraints=(/4: [/3 - /3]; tight), fd=()-->(4)]
+      │    └── filters
+      │         └── k = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+      └── windows
+           └── rank [type=undefined]
 
 # TryDecorrelateWindow will trigger twice here: first to pull the window above
 # the non-apply join, and then again the pull it above the apply join.

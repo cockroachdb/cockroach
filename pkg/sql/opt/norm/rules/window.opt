@@ -46,8 +46,9 @@ $input
 )
 
 # PushSelectIntoWindow pushes down a Select which can be satisfied by only the
-# columns being partitioned over. This is valid because it's "all-or-nothing" -
-# we only entirely eliminate a partition or don't eliminate it at all.
+# functional closure of the columns being partitioned over. This is valid
+# because it's "all-or-nothing" - we only entirely eliminate a partition or
+# don't eliminate it at all.
 [PushSelectIntoWindow, Normalize]
 (Select
     (Window
@@ -57,7 +58,7 @@ $input
     )
     $filters:[
         ...
-        $item:* & (IsBoundBy $item $partitionCols:(WindowPartition $private))
+        $item:* & (IsDeterminedBy $item $partitionCols:(WindowPartition $private) $input)
         ...
     ]
 )
@@ -66,10 +67,10 @@ $input
     (Window
         (Select
             $input
-            (ExtractBoundConditions $filters $partitionCols)
+            (ExtractDeterminedConditions $filters $partitionCols $input)
         )
         $fn
         $private
     )
-    (ExtractUnboundConditions $filters $partitionCols)
+    (ExtractUndeterminedConditions $filters $partitionCols $input)
 )
