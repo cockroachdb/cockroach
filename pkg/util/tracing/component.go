@@ -49,7 +49,8 @@ func (ct *componentTraces) addPendingSpan(c *ComponentSpan) {
 }
 
 func (ct *componentTraces) removePendingSpanAndAddSample(
-	c *ComponentSpan, sample ComponentSamples_Sample) {
+	c *ComponentSpan, sample ComponentSamples_Sample,
+) {
 	ct.Lock()
 	delete(ct.pendingSpans, c.Span.(*span).SpanID)
 	ct.Samples = append(ct.Samples, sample)
@@ -344,7 +345,9 @@ func recordComponentErrInner(component string, event string, err string) {
 		ct.Unlock()
 	}
 }
+
 func SetComponentErr(osp opentracing.Span, err error) {
+	panic("!!! unimplemented")
 }
 
 type ComponentSpan struct {
@@ -362,8 +365,12 @@ type ComponentSpan struct {
 	// !!! t opentracing.Tracer
 }
 
+// FinishWithError is like Finish() and it additionally records an error on the
+// span if err is not nil.
 func (c *ComponentSpan) FinishWithError(err error) {
-	c.SetError(err)
+	if err != nil {
+		c.SetError(err)
+	}
 	c.Finish()
 }
 
