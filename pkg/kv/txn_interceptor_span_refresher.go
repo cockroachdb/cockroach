@@ -12,6 +12,7 @@ package kv
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -333,13 +334,15 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
 ) (_res bool) {
 	ctx, csp := tracing.StartComponentSpan(ctx, sr.tracer, "client.txncoord.span_refresher", "refresh")
-	defer csp.FinishWithError(nil)
 	defer func() {
+		var err error
 		event := "refresh success"
 		if !_res {
 			event = "refresh failed"
+			err = fmt.Errorf(event)
 		}
 		tracing.RecordComponentEvent("client.txncoord.span_refresher", event)
+		csp.FinishWithError(err)
 	}()
 
 	if sr.refreshInvalid {
@@ -385,6 +388,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 				req.Header().Span(), sr.refreshedTimestamp, refreshTxn.WriteTimestamp)
 		}
 	}
+	csp.SetTag("refresh spans", sr.refreshSpans)
 	addRefreshes(sr.refreshSpans)
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
