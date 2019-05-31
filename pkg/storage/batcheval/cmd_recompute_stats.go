@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -96,15 +97,13 @@ func RecomputeStats(
 	delta := actualMS
 	delta.Subtract(currentStats)
 
+	if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionContainsEstimatesCounter) {
+		// We are running the with the older version of MVCCStats.ContainsEstimates
+		// which was a boolean, so we shouldn't change it (see #37120 for rationale)
+		delta.ContainsEstimates = currentStats.ContainsEstimates
+	}
+
 	if !dryRun {
-		// NB: this will never clear the ContainsEstimates flag. To be able to do this,
-		// we would need to guarantee that no command that sets it is in-flight in
-		// parallel with this command. This can be achieved by blocking all of the range
-		// or by using our inside knowledge that dictates that ranges which contain no
-		// timeseries writes never have the flag reset, or by making ContainsEstimates
-		// a counter (and ensuring that we're the only one subtracting at any given
-		// time).
-		//
 		// TODO(tschottdorf): do we not want to run at all if we have estimates in
 		// this range? I think we want to as this would give us much more realistic
 		// stats for timeseries ranges (which go cold and the approximate stats are
