@@ -203,7 +203,7 @@ type CFetcher struct {
 		// curSpan is the current span that the kv fetcher just returned data from.
 		curSpan roachpb.Span
 		// nextKV is the kv to process next.
-		nextKV *roachpb.KeyValue
+		nextKV roachpb.KeyValue
 		// seekPrefix is the prefix to seek to in stateSeekPrefix.
 		seekPrefix roachpb.Key
 
@@ -571,7 +571,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				*/
 			}
 
-			rf.machine.nextKV = &kv
+			rf.machine.nextKV = kv
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
@@ -641,7 +641,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// TODO(jordan): if nextKV returns newSpan = true, set the new span
 				// prefix and indicate that it needs decoding.
 				if bytes.Compare(kv.Key, rf.machine.seekPrefix) >= 0 {
-					rf.machine.nextKV = &kv
+					rf.machine.nextKV = kv
 					break
 				}
 			}
@@ -660,7 +660,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			// TODO(jordan): if nextKV returns newSpan = true, set the new span
 			// prefix and indicate that it needs decoding.
-			rf.machine.nextKV = &kv
+			rf.machine.nextKV = kv
 
 			// TODO(jordan): optimize this prefix check by skipping span prefix.
 			if !bytes.HasPrefix(kv.Key, rf.machine.lastRowPrefix) {
