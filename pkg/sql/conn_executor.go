@@ -1273,6 +1273,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	ctx, csp := tracing.StartComponentSpan(
 		ctx, ex.server.cfg.AmbientCtx.Tracer, "sql.executor", "execCmd" /* operation */)
 	csp.SetTag("command", cmd.String())
+	// !!! now errors are captured in a child component span (sql.executor.statements) in a different way.
+	// !!! perhaps we don't need this interceptor any more
 	interceptor := &resultInterceptor{csp: &csp}
 	defer csp.FinishWithError(nil) // !!! The error is provided by interceptor. Figure out how that will work.
 
@@ -1524,7 +1526,8 @@ type resultInterceptor struct {
 
 func (r *resultInterceptor) AddRow(row tree.Datums) {
 	r.rowCounter++
-	r.csp.SetTag(fmt.Sprintf("row %d", r.rowCounter), row)
+	// !!! Spencer, I took this out... Let's figure out another option.
+	// !!! r.csp.SetTag(fmt.Sprintf("row %d", r.rowCounter), row)
 }
 
 func (r *resultInterceptor) Close(err error) {

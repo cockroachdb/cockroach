@@ -54,7 +54,21 @@ import (
 // 	 then the statement cannot have any placeholder.
 func (ex *connExecutor) execStmt(
 	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
-) (fsm.Event, fsm.EventPayload, error) {
+) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	ctx, csp := tracing.StartComponentSpan(
+		ctx, ex.server.cfg.AmbientCtx.Tracer, "sql.executor.statements", "execStmt" /* operation */)
+	csp.SetTag("command", stmt.String())
+	defer func() {
+		if retErr != nil {
+			csp.FinishWithError(retErr)
+			return
+		}
+		if perr, ok := retPayload.(payloadWithError); ok {
+			csp.FinishWithError(perr.errorCause())
+			return
+		}
+		csp.Finish()
+	}()
 	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
 		log.HasSpanOrEvent(ctx) {
 		log.VEventf(ctx, 2, "executing: %s in state: %s", stmt, ex.machine.CurState())
