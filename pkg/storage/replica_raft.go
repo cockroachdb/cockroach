@@ -43,6 +43,8 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
+const _ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+
 func makeIDKey() storagebase.CmdIDKey {
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
@@ -2181,17 +2183,20 @@ func (r *Replica) applyRaftCommand(
 
 	// Exploit the fact that a split will result in a full stats
 	// recomputation to reset the ContainsEstimates flag.
+	// If we were running the new VersionContainsEstimatesCounter cluster version,
+	// the consistency checker will be able to reset the stats itself, and splits
+	// will as a side effect also remove estimates from both the resulting left and right hand sides.
 	//
-	// TODO(tschottdorf): We want to let the usual MVCCStats-delta
-	// machinery update our stats for the left-hand side. But there is no
-	// way to pass up an MVCCStats object that will clear out the
-	// ContainsEstimates flag. We should introduce one, but the migration
-	// makes this worth a separate effort (ContainsEstimates would need to
-	// have three possible values, 'UNCHANGED', 'NO', and 'YES').
-	// Until then, we're left with this rather crude hack.
+	// TODO(tbg): this can be removed in v20.2 and not earlier.
+	// Consider the following scenario:
+	// - all nodes are running 19.2
+	// - all nodes rebooted into 20.1
+	// - cluster version bumped, but node1 doesn't receive the gossip update for that
+	// node1 runs a split that should emit ContainsEstimates=-1, but it clamps it to 0/1 because it doesn't know that 20.1 is active
 	if rResult.Split != nil {
-		r.mu.state.Stats.ContainsEstimates = false
+		r.mu.state.Stats.ContainsEstimates = 0
 	}
+
 	ms := *r.mu.state.Stats
 	r.mu.Unlock()
 
@@ -2241,12 +2246,32 @@ func (r *Replica) applyRaftCommand(
 		usingAppliedStateKey = true
 	}
 
-	if usingAppliedStateKey {
-		// Note that calling ms.Add will never result in ms.LastUpdateNanos
-		// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
-		// across all deltaStats).
-		ms.Add(deltaStats)
+	// Detect whether the incoming stats contain estimates that resulted from the
+	// evaluation of a command under the 19.1 cluster version. These were either
+	// evaluated on a 19.1 node (where ContainsEstimates is a bool, which maps
+	// to 0 and 1 in 19.2+) or on a 19.2 node which hadn't yet had its cluster
+	// version bumped.
+	//
+	// 19.2 nodes will never emit a ContainsEstimates outside of 0 or 1 until
+	// the cluster version is active (during command evaluation). When the
+	// version is active, they will never emit odd positive numbers (1, 3, ...).
+	//
+	// As a result, we can pinpoint exactly when the proposer of this command
+	// has used the old cluster version: it's when the incoming
+	// ContainsEstimates is 1. If so, we need to assume that an old node is processing
+	// the same commands (as `true + true = true`), so make sure that `1 + 1 = 1`.
+	//
+	// See below for details:
+	_ = cluster.VersionContainsEstimatesCounter
+	if deltaStats.ContainsEstimates == 1 && ms.ContainsEstimates == 1 {
+		deltaStats.ContainsEstimates = 0
+	}
+	// Note that calling ms.Add will never result in ms.LastUpdateNanos
+	// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
+	// across all deltaStats).
+	ms.Add(*deltaStats)
 
+	if usingAppliedStateKey {
 		// Set the range applied state, which includes the last applied raft and
 		// lease index along with the mvcc stats, all in one key.
 		if err := r.raftMu.stateLoader.SetRangeAppliedState(ctx, writer,
@@ -2265,10 +2290,6 @@ func (r *Replica) applyRaftCommand(
 		deltaStats.SysBytes += appliedIndexNewMS.SysBytes -
 			r.raftMu.stateLoader.CalcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
 
-		// Note that calling ms.Add will never result in ms.LastUpdateNanos
-		// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
-		// across all deltaStats).
-		ms.Add(deltaStats)
 		if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
 			return storagepb.ReplicatedEvalResult{}, errors.Wrap(err, "unable to update MVCCStats")
 		}

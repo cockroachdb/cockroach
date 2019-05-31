@@ -1012,6 +1012,15 @@ func (r *Replica) requestToProposal(
 ) (*ProposalData, *roachpb.Error) {
 	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, spans)
 
+	if !r.ClusterSettings().Version.IsActive(cluster.VersionContainsEstimatesCounter) {
+		_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+		if res.Replicated.Delta.ContainsEstimates > 0 {
+			res.Replicated.Delta.ContainsEstimates = 1
+		} else if res.Replicated.Delta.ContainsEstimates < 0 {
+			res.Replicated.Delta.ContainsEstimates = 0
+		}
+	}
+
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{
 		ctx:     ctx,
