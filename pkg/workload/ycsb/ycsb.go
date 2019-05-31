@@ -329,19 +329,20 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))
 		w := &ycsbWorker{
-			config:        g,
-			hists:         reg.GetHandle(),
-			db:            db,
-			readStmt:      readStmt,
-			scanStmt:      scanStmt,
-			insertStmt:    insertStmt,
-			updateStmts:   updateStmts,
-			rowIndex:      rowIndex,
-			rowCounter:    rowCounter,
-			requestGen:    requestGen,
-			scanLengthGen: scanLengthGen,
-			rng:           rng,
-			hashFunc:      fnv.New64(),
+			config:          g,
+			hists:           reg.GetHandle(),
+			db:              db,
+			readStmt:        readStmt,
+			scanStmt:        scanStmt,
+			insertStmt:      insertStmt,
+			updateStmts:     updateStmts,
+			rowIndex:        rowIndex,
+			rowCounter:      rowCounter,
+			nextInsertIndex: nil,
+			requestGen:      requestGen,
+			scanLengthGen:   scanLengthGen,
+			rng:             rng,
+			hashFunc:        fnv.New64(),
 		}
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
@@ -350,7 +351,7 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 type randGenerator interface {
 	Uint64() uint64
-	IncrementIMax() error
+	IncrementIMax(count uint64) error
 }
 
 type ycsbWorker struct {
@@ -367,6 +368,8 @@ type ycsbWorker struct {
 	rowIndex *uint64
 	// Counter to keep track of which rows have been inserted.
 	rowCounter *AcknowledgedCounter
+	// Next insert index to use if non-nil.
+	nextInsertIndex *uint64
 
 	requestGen    randGenerator // used to generate random keys for requests
 	scanLengthGen randGenerator // used to generate length of scan operations
@@ -438,6 +441,11 @@ func (yw *ycsbWorker) nextReadKey() string {
 }
 
 func (yw *ycsbWorker) nextInsertKeyIndex() uint64 {
+	if yw.nextInsertIndex != nil {
+		result := *yw.nextInsertIndex
+		yw.nextInsertIndex = nil
+		return result
+	}
 	return atomic.AddUint64(yw.rowIndex, 1) - 1
 }
 
@@ -459,20 +467,18 @@ func (yw *ycsbWorker) insertRow(ctx context.Context, keyIndex uint64, increment 
 		args[i] = yw.randString(fieldLength)
 	}
 	if _, err := yw.insertStmt.ExecContext(ctx, args...); err != nil {
+		yw.nextInsertIndex = new(uint64)
+		*yw.nextInsertIndex = keyIndex
 		return err
 	}
 
 	if increment {
-		prevRowCount := yw.rowCounter.Last()
-		if err := yw.rowCounter.Acknowledge(keyIndex); err != nil {
+		count, err := yw.rowCounter.Acknowledge(keyIndex)
+		if err != nil {
 			return err
 		}
-		currRowCount := yw.rowCounter.Last()
-		for prevRowCount < currRowCount {
-			if err := yw.requestGen.IncrementIMax(); err != nil {
-				return err
-			}
-			prevRowCount++
+		if err := yw.requestGen.IncrementIMax(count); err != nil {
+			return err
 		}
 	}
 	return nil
