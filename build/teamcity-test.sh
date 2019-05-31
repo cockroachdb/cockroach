@@ -26,6 +26,12 @@ run build/builder.sh \
 	| go-test-teamcity
 tc_end_block "Run Go tests"
 
+echo "Slow test packages:"
+grep "ok  " artifacts/test.log | sort -n -k3 | tail -n25
+
+echo "Slow individual tests:"
+grep "^--- PASS" artifacts/test.log | sed 's/(//; s/)//' | sort -n -k4 | tail -n25
+
 tc_start_block "Run C++ tests"
 run build/builder.sh make check-libroach
 tc_end_block "Run C++ tests"
