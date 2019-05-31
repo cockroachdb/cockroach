@@ -1316,8 +1316,9 @@ func (ds *DistSender) sendPartialBatch(
 ) (_r response) {
 	var csp tracing.ComponentSpan
 	ctx, csp = tracing.StartComponentSpan(ctx, ds.Tracer, "client.dist.sender", "send")
-	csp.SetTag("batch", &ba)
 	defer func() { csp.FinishWithError(_r.pErr.GoError()) }()
+	csp.SetTag("batch", &ba)
+	csp.SetTag("txn", ba.Txn)
 
 	if batchIdx == 1 {
 		ds.metrics.PartialBatchCount.Inc(2) // account for first batch
