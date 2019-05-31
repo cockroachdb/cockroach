@@ -344,6 +344,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	}()
 
 	cArgs := batcheval.CommandArgs{
+		EvalCtx: mockEvalCtx{},
 		Header: roachpb.Header{
 			Timestamp: hlc.Timestamp{WallTime: 7},
 		},
@@ -378,7 +379,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		return afterStats
 	}()
 	evaledStats.Add(delta)
-	evaledStats.ContainsEstimates = false
+	evaledStats.ContainsEstimates = 0
 	if !afterStats.Equal(evaledStats) {
 		t.Errorf("mvcc stats mismatch: diff(expected, actual): %s", pretty.Diff(afterStats, evaledStats))
 	}

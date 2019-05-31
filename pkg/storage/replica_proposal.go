@@ -42,6 +42,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const _ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+
 // ProposalData is data about a command which allows it to be
 // evaluated, proposed to raft, and for the result of the command to
 // be returned to the caller.
@@ -1011,6 +1013,14 @@ func (r *Replica) requestToProposal(
 	spans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
 	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, spans)
+
+	if !r.ClusterSettings().Version.IsActive(cluster.VersionContainsEstimatesCounter) {
+		if res.Replicated.Delta.ContainsEstimates > 0 {
+			res.Replicated.Delta.ContainsEstimates = 1
+		} else if res.Replicated.Delta.ContainsEstimates < 0 {
+			res.Replicated.Delta.ContainsEstimates = 0
+		}
+	}
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{

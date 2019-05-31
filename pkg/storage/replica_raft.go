@@ -43,6 +43,9 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
+const _ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+
+
 func makeIDKey() storagebase.CmdIDKey {
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
@@ -2181,17 +2184,14 @@ func (r *Replica) applyRaftCommand(
 
 	// Exploit the fact that a split will result in a full stats
 	// recomputation to reset the ContainsEstimates flag.
-	//
-	// TODO(tschottdorf): We want to let the usual MVCCStats-delta
-	// machinery update our stats for the left-hand side. But there is no
-	// way to pass up an MVCCStats object that will clear out the
-	// ContainsEstimates flag. We should introduce one, but the migration
-	// makes this worth a separate effort (ContainsEstimates would need to
-	// have three possible values, 'UNCHANGED', 'NO', and 'YES').
-	// Until then, we're left with this rather crude hack.
+	// If we were running the new VersionContainsEstimatesCounter cluster version,
+	// the consistency checker will be able to reset the stats itself, and splits
+	// will as a side effect also remove estimates from both the resulting left and right hand sides.
+	// TODO(tbg): this can be removed in v20.1.
 	if rResult.Split != nil {
-		r.mu.state.Stats.ContainsEstimates = false
+		r.mu.state.Stats.ContainsEstimates = 0
 	}
+
 	ms := *r.mu.state.Stats
 	r.mu.Unlock()
 
@@ -2242,10 +2242,7 @@ func (r *Replica) applyRaftCommand(
 	}
 
 	if usingAppliedStateKey {
-		// Note that calling ms.Add will never result in ms.LastUpdateNanos
-		// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
-		// across all deltaStats).
-		ms.Add(deltaStats)
+		addMvccStats(&ms, &deltaStats)
 
 		// Set the range applied state, which includes the last applied raft and
 		// lease index along with the mvcc stats, all in one key.
@@ -2265,10 +2262,8 @@ func (r *Replica) applyRaftCommand(
 		deltaStats.SysBytes += appliedIndexNewMS.SysBytes -
 			r.raftMu.stateLoader.CalcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
 
-		// Note that calling ms.Add will never result in ms.LastUpdateNanos
-		// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
-		// across all deltaStats).
-		ms.Add(deltaStats)
+		addMvccStats(&ms, &deltaStats)
+
 		if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
 			return storagepb.ReplicatedEvalResult{}, errors.Wrap(err, "unable to update MVCCStats")
 		}
@@ -2336,6 +2331,26 @@ func (r *Replica) applyRaftCommand(
 	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
 	rResult.Delta = deltaStats.ToStatsDelta()
 	return rResult, nil
+}
+
+// addMvccStats is used by applyRaftCommand in order to prevent ContainsEstimates
+// from becoming greater than 1 if the new VersionContainsEstimatesCounter is not active.
+func addMvccStats(ms *enginepb.MVCCStats, deltaStats *enginepb.MVCCStats) {
+	// If this is true then it's proof that the new cluster version was not active yet at proposal time.
+	// This is because commands always emit an even number of estimates but we
+	// are seeing `1` here so it got clamped in requestToProposal. We never emit
+	// negative deltas under the old cluster version, so this condition characterizes
+	// exactly those commands that wanted to change ContainsEstimates and got
+	// clamped due to the old version. All we have to do is make sure that 1+1=1.
+	if deltaStats.ContainsEstimates == 1 {
+		if ms.ContainsEstimates > 0 { // actually we know it's either 1 or 0, could assert that
+			deltaStats.ContainsEstimates = 0
+		}
+	}
+	// Note that calling ms.Add will never result in ms.LastUpdateNanos
+	// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
+	// across all deltaStats).
+	ms.Add(*deltaStats)
 }
 
 // handleTruncatedStateBelowRaft is called when a Raft command updates the truncated

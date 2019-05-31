@@ -108,7 +108,7 @@ func (m *TxnMeta) Reset()         { *m = TxnMeta{} }
 func (m *TxnMeta) String() string { return proto.CompactTextString(m) }
 func (*TxnMeta) ProtoMessage()    {}
 func (*TxnMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{0}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{0}
 }
 func (m *TxnMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -137,10 +137,7 @@ var xxx_messageInfo_TxnMeta proto.InternalMessageInfo
 // encodings for most fields that make it more efficient to store negative
 // values. This makes the encodings incompatible.
 type MVCCStatsDelta struct {
-	// TODO(nvanbenschoten): now that we've split MVCCPersistentStats
-	// from this MVCCStatsDelta type, we can turn contains_estimates
-	// into a three-valued type ('UNCHANGED', 'NO', and 'YES').
-	ContainsEstimates bool  `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
+	ContainsEstimates int64 `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
 	LastUpdateNanos   int64 `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos,proto3" json:"last_update_nanos,omitempty"`
 	IntentAge         int64 `protobuf:"fixed64,2,opt,name=intent_age,json=intentAge,proto3" json:"intent_age,omitempty"`
 	GCBytesAge        int64 `protobuf:"fixed64,3,opt,name=gc_bytes_age,json=gcBytesAge,proto3" json:"gc_bytes_age,omitempty"`
@@ -160,7 +157,7 @@ func (m *MVCCStatsDelta) Reset()         { *m = MVCCStatsDelta{} }
 func (m *MVCCStatsDelta) String() string { return proto.CompactTextString(m) }
 func (*MVCCStatsDelta) ProtoMessage()    {}
 func (*MVCCStatsDelta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{1}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{1}
 }
 func (m *MVCCStatsDelta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -190,7 +187,7 @@ var xxx_messageInfo_MVCCStatsDelta proto.InternalMessageInfo
 // values but inefficient to store negative values. This makes the encodings
 // incompatible.
 type MVCCPersistentStats struct {
-	ContainsEstimates bool  `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
+	ContainsEstimates int64 `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
 	LastUpdateNanos   int64 `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos,proto3" json:"last_update_nanos,omitempty"`
 	IntentAge         int64 `protobuf:"fixed64,2,opt,name=intent_age,json=intentAge,proto3" json:"intent_age,omitempty"`
 	GCBytesAge        int64 `protobuf:"fixed64,3,opt,name=gc_bytes_age,json=gcBytesAge,proto3" json:"gc_bytes_age,omitempty"`
@@ -210,7 +207,7 @@ func (m *MVCCPersistentStats) Reset()         { *m = MVCCPersistentStats{} }
 func (m *MVCCPersistentStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCPersistentStats) ProtoMessage()    {}
 func (*MVCCPersistentStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{2}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{2}
 }
 func (m *MVCCPersistentStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -255,7 +252,7 @@ func (m *RangeAppliedState) Reset()         { *m = RangeAppliedState{} }
 func (m *RangeAppliedState) String() string { return proto.CompactTextString(m) }
 func (*RangeAppliedState) ProtoMessage()    {}
 func (*RangeAppliedState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{3}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{3}
 }
 func (m *RangeAppliedState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -292,7 +289,7 @@ func (m *MVCCWriteValueOp) Reset()         { *m = MVCCWriteValueOp{} }
 func (m *MVCCWriteValueOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCWriteValueOp) ProtoMessage()    {}
 func (*MVCCWriteValueOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{4}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{4}
 }
 func (m *MVCCWriteValueOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -329,7 +326,7 @@ func (m *MVCCWriteIntentOp) Reset()         { *m = MVCCWriteIntentOp{} }
 func (m *MVCCWriteIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCWriteIntentOp) ProtoMessage()    {}
 func (*MVCCWriteIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{5}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{5}
 }
 func (m *MVCCWriteIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -365,7 +362,7 @@ func (m *MVCCUpdateIntentOp) Reset()         { *m = MVCCUpdateIntentOp{} }
 func (m *MVCCUpdateIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCUpdateIntentOp) ProtoMessage()    {}
 func (*MVCCUpdateIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{6}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{6}
 }
 func (m *MVCCUpdateIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -403,7 +400,7 @@ func (m *MVCCCommitIntentOp) Reset()         { *m = MVCCCommitIntentOp{} }
 func (m *MVCCCommitIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCCommitIntentOp) ProtoMessage()    {}
 func (*MVCCCommitIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{7}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{7}
 }
 func (m *MVCCCommitIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -443,7 +440,7 @@ func (m *MVCCAbortIntentOp) Reset()         { *m = MVCCAbortIntentOp{} }
 func (m *MVCCAbortIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCAbortIntentOp) ProtoMessage()    {}
 func (*MVCCAbortIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{8}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{8}
 }
 func (m *MVCCAbortIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -479,7 +476,7 @@ func (m *MVCCAbortTxnOp) Reset()         { *m = MVCCAbortTxnOp{} }
 func (m *MVCCAbortTxnOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCAbortTxnOp) ProtoMessage()    {}
 func (*MVCCAbortTxnOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{9}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{9}
 }
 func (m *MVCCAbortTxnOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -518,7 +515,7 @@ func (m *MVCCLogicalOp) Reset()         { *m = MVCCLogicalOp{} }
 func (m *MVCCLogicalOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCLogicalOp) ProtoMessage()    {}
 func (*MVCCLogicalOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_96f6fe38ea4bd42e, []int{10}
+	return fileDescriptor_mvcc3_22a232626c9621ce, []int{10}
 }
 func (m *MVCCLogicalOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -889,15 +886,10 @@ func (m *MVCCStatsDelta) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintMvcc3(dAtA, i, uint64((uint64(m.SysCount)<<1)^uint64((m.SysCount>>63))))
 	}
-	if m.ContainsEstimates {
+	if m.ContainsEstimates != 0 {
 		dAtA[i] = 0x70
 		i++
-		if m.ContainsEstimates {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.ContainsEstimates))
 	}
 	return i, nil
 }
@@ -985,15 +977,10 @@ func (m *MVCCPersistentStats) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintMvcc3(dAtA, i, uint64(m.SysCount))
 	}
-	if m.ContainsEstimates {
+	if m.ContainsEstimates != 0 {
 		dAtA[i] = 0x70
 		i++
-		if m.ContainsEstimates {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.ContainsEstimates))
 	}
 	return i, nil
 }
@@ -1413,7 +1400,10 @@ func NewPopulatedMVCCPersistentStats(r randyMvcc3, easy bool) *MVCCPersistentSta
 	if r.Intn(2) == 0 {
 		this.SysCount *= -1
 	}
-	this.ContainsEstimates = bool(bool(r.Intn(2) == 0))
+	this.ContainsEstimates = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.ContainsEstimates *= -1
+	}
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
@@ -1573,8 +1563,8 @@ func (m *MVCCStatsDelta) Size() (n int) {
 	if m.SysCount != 0 {
 		n += 1 + sozMvcc3(uint64(m.SysCount))
 	}
-	if m.ContainsEstimates {
-		n += 2
+	if m.ContainsEstimates != 0 {
+		n += 1 + sovMvcc3(uint64(m.ContainsEstimates))
 	}
 	return n
 }
@@ -1624,8 +1614,8 @@ func (m *MVCCPersistentStats) Size() (n int) {
 	if m.SysCount != 0 {
 		n += 1 + sovMvcc3(uint64(m.SysCount))
 	}
-	if m.ContainsEstimates {
-		n += 2
+	if m.ContainsEstimates != 0 {
+		n += 1 + sovMvcc3(uint64(m.ContainsEstimates))
 	}
 	return n
 }
@@ -2297,7 +2287,7 @@ func (m *MVCCStatsDelta) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ContainsEstimates", wireType)
 			}
-			var v int
+			m.ContainsEstimates = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMvcc3
@@ -2307,12 +2297,11 @@ func (m *MVCCStatsDelta) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				m.ContainsEstimates |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.ContainsEstimates = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMvcc3(dAtA[iNdEx:])
@@ -2587,7 +2576,7 @@ func (m *MVCCPersistentStats) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ContainsEstimates", wireType)
 			}
-			var v int
+			m.ContainsEstimates = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMvcc3
@@ -2597,12 +2586,11 @@ func (m *MVCCPersistentStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				m.ContainsEstimates |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.ContainsEstimates = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMvcc3(dAtA[iNdEx:])
@@ -3821,10 +3809,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptor_mvcc3_96f6fe38ea4bd42e)
+	proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptor_mvcc3_22a232626c9621ce)
 }
 
-var fileDescriptor_mvcc3_96f6fe38ea4bd42e = []byte{
+var fileDescriptor_mvcc3_22a232626c9621ce = []byte{
 	// 1069 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x57, 0x4d, 0x6f, 0xdb, 0x46,
 	0x13, 0x36, 0x3f, 0x64, 0x53, 0x2b, 0xd9, 0x91, 0x37, 0x01, 0x5e, 0x21, 0x2f, 0x22, 0x3a, 0x2a,
@@ -3862,7 +3850,7 @@ var fileDescriptor_mvcc3_96f6fe38ea4bd42e = []byte{
 	0x40, 0x11, 0x79, 0x17, 0x14, 0x93, 0x12, 0x88, 0x60, 0xc0, 0xf1, 0x82, 0xb0, 0x89, 0xf8, 0xb9,
 	0x8b, 0xa0, 0x28, 0x2c, 0xba, 0x64, 0xf9, 0xa3, 0x49, 0x94, 0x50, 0x14, 0x45, 0x8a, 0x68, 0x12,
 	0x65, 0xf9, 0x19, 0x28, 0x82, 0x37, 0x33, 0x50, 0x44, 0xbe, 0x0f, 0xa0, 0xed, 0x13, 0x8a, 0x5c,
-	0x12, 0x59, 0x38, 0xa2, 0xee, 0x10, 0x31, 0x8a, 0xad, 0x1d, 0x69, 0x57, 0x33, 0xb7, 0x53, 0xe4,
+	0x12, 0x59, 0x38, 0xa2, 0xee, 0x10, 0x31, 0x8a, 0xad, 0x1d, 0x69, 0x57, 0x31, 0xb7, 0x53, 0xe4,
 	0x5e, 0x0a, 0x1c, 0xa8, 0xac, 0x05, 0xaa, 0x7f, 0x2a, 0xe0, 0x26, 0x93, 0xfd, 0x11, 0x0e, 0x23,
 	0x37, 0x62, 0xc7, 0xe0, 0x0d, 0xf0, 0x5f, 0xd3, 0x5e, 0x59, 0xad, 0xbd, 0xb2, 0x52, 0x7b, 0x65,
 	0x95, 0xf6, 0xca, 0x2a, 0xed, 0x95, 0x55, 0xda, 0x2b, 0xe7, 0x68, 0xaf, 0x9c, 0xaf, 0xbd, 0x72,
@@ -3892,5 +3880,5 @@ var fileDescriptor_mvcc3_96f6fe38ea4bd42e = []byte{
 	0xa6, 0x86, 0x92, 0xf5, 0x81, 0x7a, 0x72, 0xac, 0x4b, 0x8d, 0x9d, 0x93, 0xdf, 0x2a, 0x6b, 0x27,
 	0xb3, 0x8a, 0xf4, 0x62, 0x56, 0x91, 0x5e, 0xce, 0x2a, 0xd2, 0xaf, 0xb3, 0x8a, 0xf4, 0xdd, 0x69,
 	0x65, 0xed, 0xc5, 0x69, 0x65, 0xed, 0xe5, 0x69, 0x65, 0xad, 0xbb, 0xce, 0x7f, 0x2c, 0xec, 0xff,
-	0x15, 0x00, 0x00, 0xff, 0xff, 0x8c, 0xb8, 0x2b, 0x82, 0xa6, 0x0c, 0x00, 0x00,
+	0x15, 0x00, 0x00, 0xff, 0xff, 0xf8, 0x2a, 0xc7, 0x48, 0xa6, 0x0c, 0x00, 0x00,
 }

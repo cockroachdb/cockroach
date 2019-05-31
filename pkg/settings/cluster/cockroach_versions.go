@@ -39,6 +39,7 @@ const (
 	VersionQueryTxnTimestamp
 	VersionStickyBit
 	VersionParallelCommits
+	VersionContainsEstimatesCounter
 
 	// Add new versions here (step one of two).
 
@@ -476,6 +477,19 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionParallelCommits is https://github.com/cockroachdb/cockroach/pull/37777.
 		Key:     VersionParallelCommits,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 4},
+	},
+	{
+		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
+		// MVCCStats.ContainsEstimates has been migrated from bool to int64 so that the
+		// consistency checker can reset it without race conditions, by returning
+		// -ContainsEstimates.
+		// The commands that set ContainsEstimates should set/increase it by 2 instead of 1.
+		// Before entering raft (in requestToProposal), ContainsEstimates is truncated
+		// to 1 if this cluster version is not active. When exiting raft, if
+		// deltastats.ContainsEstimates is 1, it means that the new version is not active and
+		// we should not store ContainsEstimates bigger than 1 in each replica.
+		Key:     VersionContainsEstimatesCounter,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 5},
 	},
 
 	// Add new versions here (step two of two).
