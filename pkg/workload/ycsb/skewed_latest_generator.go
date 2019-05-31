@@ -50,12 +50,12 @@ func NewSkewedLatestGenerator(
 	return &z, nil
 }
 
-// IncrementIMax increments iMax.
-func (z *SkewedLatestGenerator) IncrementIMax() error {
+// IncrementIMax increments iMax by count.
+func (z *SkewedLatestGenerator) IncrementIMax(count uint64) error {
 	z.mu.Lock()
 	defer z.mu.Unlock()
-	z.mu.iMax++
-	return z.mu.zipfGen.IncrementIMax()
+	z.mu.iMax += count
+	return z.mu.zipfGen.IncrementIMax(count)
 }
 
 // Uint64 returns a random Uint64 between iMin and iMax, where keys near iMax

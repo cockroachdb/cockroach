@@ -151,12 +151,12 @@ func (z *ZipfGenerator) Uint64() uint64 {
 	return result
 }
 
-// IncrementIMax increments, iMax, and recompute the internal values that depend
-// on it. It throws an error if the recomputation failed.
-func (z *ZipfGenerator) IncrementIMax() error {
+// IncrementIMax increments iMax by count and recomputes the internal values
+// that depend on it. It throws an error if the recomputation failed.
+func (z *ZipfGenerator) IncrementIMax(count uint64) error {
 	z.zipfGenMu.mu.Lock()
 	zetaN, err := computeZetaIncrementally(
-		z.zipfGenMu.iMax, z.zipfGenMu.iMax+1, z.theta, z.zipfGenMu.zetaN)
+		z.zipfGenMu.iMax, z.zipfGenMu.iMax+count, z.theta, z.zipfGenMu.zetaN)
 	if err != nil {
 		z.zipfGenMu.mu.Unlock()
 		return errors.Errorf("Could not incrementally compute zeta: %s", err)
@@ -164,7 +164,7 @@ func (z *ZipfGenerator) IncrementIMax() error {
 	eta := (1 - math.Pow(2.0/float64(z.zipfGenMu.iMax+1-z.iMin), 1.0-z.theta)) / (1.0 - z.zeta2/zetaN)
 	z.zipfGenMu.eta = eta
 	z.zipfGenMu.zetaN = zetaN
-	z.zipfGenMu.iMax++
+	z.zipfGenMu.iMax += count
 	z.zipfGenMu.mu.Unlock()
 	return nil
 }
