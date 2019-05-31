@@ -16,6 +16,7 @@ package enginepb
 
 import "fmt"
 
+// TODO(giorgosp): Add code to these wrappers to handle ContainsEstimates migration
 // ToStats converts the receiver to an MVCCStats.
 func (ms *MVCCStatsDelta) ToStats() MVCCStats {
 	return MVCCStats(*ms)
