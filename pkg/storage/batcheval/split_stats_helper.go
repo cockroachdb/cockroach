@@ -131,8 +131,8 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 		in: input,
 	}
 
-	if !h.in.AbsPreSplitBothEstimated.ContainsEstimates &&
-		!h.in.DeltaBatchEstimated.ContainsEstimates {
+	if h.in.AbsPreSplitBothEstimated.ContainsEstimates <= 0 &&
+		h.in.DeltaBatchEstimated.ContainsEstimates <= 0 {
 		// We have CombinedErrorDelta zero, so use arithmetic to compute
 		// AbsPostSplitRight().
 		ms := h.in.AbsPreSplitBothEstimated
