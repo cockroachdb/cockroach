@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -936,7 +937,7 @@ func (n *Node) batchInternal(
 func (n *Node) Batch(
 	ctx context.Context, args *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	growStack()
+	growstack.Grow()
 
 	// NB: Node.Batch is called directly for "local" calls. We don't want to
 	// carry the associated log tags forward as doing so makes adding additional
@@ -1023,6 +1024,8 @@ func (n *Node) setupSpanForIncomingRPC(
 func (n *Node) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
+	growstack.Grow()
+
 	pErr := n.stores.RangeFeed(args, stream)
 	if pErr != nil {
 		var event roachpb.RangeFeedEvent
@@ -1032,24 +1035,4 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
-}
-
-var growStackGlobal = false
-
-//go:noinline
-func growStack() {
-	// Goroutine stacks currently start at 2 KB in size. The code paths through
-	// the storage package often need a stack that is 32 KB in size. The stack
-	// growth is mildly expensive making it useful to trick the runtime into
-	// growing the stack early. Since goroutine stacks grow in multiples of 2 and
-	// start at 2 KB in size, by placing a 16 KB object on the stack early in the
-	// lifetime of a goroutine we force the runtime to use a 32 KB stack for the
-	// goroutine.
-	var buf [16 << 10] /* 16 KB */ byte
-	if growStackGlobal {
-		// Make sure the compiler doesn't optimize away buf.
-		for i := range buf {
-			buf[i] = byte(i)
-		}
-	}
 }
