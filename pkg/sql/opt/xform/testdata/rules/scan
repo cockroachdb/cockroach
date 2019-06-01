@@ -554,3 +554,315 @@ select
  │    └── key: (1)
  └── filters
       └── s COLLATE en = 'hello' COLLATE en [type=bool, outer=(1)]
+
+# Realistic example where using constraints as filters help.
+exec-ddl
+CREATE TABLE "orders" (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  total DECIMAL NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  PRIMARY KEY (region, id),
+  UNIQUE INDEX orders_by_created_at (region, created_at, id) STORING (total),
+  CHECK (region IN ('us-east1', 'us-west1', 'europe-west2'))
+)
+----
+TABLE orders
+ ├── region string not null
+ ├── id int not null
+ ├── total decimal not null
+ ├── created_at timestamp not null
+ ├── INDEX primary
+ │    ├── region string not null
+ │    └── id int not null
+ ├── INDEX orders_by_created_at
+ │    ├── region string not null
+ │    ├── created_at timestamp not null
+ │    ├── id int not null
+ │    └── total decimal not null (storing)
+ └── CHECK (region IN ('us-east1', 'us-west1', 'europe-west2'))
+
+exec-ddl
+ALTER TABLE "orders" INJECT STATISTICS '[
+  {
+    "columns": ["region"],
+    "distinct_count": 3,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["id"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["total"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["created_at"],
+    "distinct_count": 50,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]'
+----
+
+opt
+SELECT sum(total) FROM "orders" WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
+----
+scalar-group-by
+ ├── columns: sum:5(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── scan orders@orders_by_created_at
+ │    ├── columns: total:3(decimal!null) created_at:4(timestamp!null)
+ │    └── constraint: /1/4/2: [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00']
+ └── aggregations
+      └── sum [type=decimal, outer=(3)]
+           └── variable: total [type=decimal]
+
+exec-ddl
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT NOT NULL,
+  z STRING NOT NULL,
+  CHECK (x < 10 AND x > 1),
+  CHECK (y < 10 AND y > 1),
+  CHECK (z in ('first', 'second')),
+  INDEX secondary (y, x),
+  INDEX tertiary (z, y, x))
+----
+TABLE xyz
+ ├── x int not null
+ ├── y int not null
+ ├── z string not null
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX secondary
+ │    ├── y int not null
+ │    └── x int not null
+ ├── INDEX tertiary
+ │    ├── z string not null
+ │    ├── y int not null
+ │    └── x int not null
+ ├── CHECK ((x < 10) AND (x > 1))
+ ├── CHECK ((y < 10) AND (y > 1))
+ └── CHECK (z IN ('first', 'second'))
+
+opt
+SELECT x, y  FROM xyz WHERE x > 5
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan xyz@tertiary
+ │    ├── columns: x:1(int!null) y:2(int!null)
+ │    ├── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── x > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+# TODO(ridwanmsharif): Confirm if this makes sense. I would've expected that the primary index
+#  would be used here. But it isn't the plan being picked. Curious.
+opt
+SELECT * FROM xyz WHERE x > 5
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null) z:3(string!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan xyz@tertiary
+ │    ├── columns: x:1(int!null) y:2(int!null) z:3(string!null)
+ │    ├── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── x > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+# Check constraint used only for the non nullable column. Constraints on x are ignored.
+exec-ddl
+CREATE TABLE xy (
+  x INT,
+  y INT NOT NULL,
+  CHECK (x < 10 AND x > 1),
+  CHECK (y < 10 AND y > 1),
+  INDEX secondary (y, x))
+----
+TABLE xy
+ ├── x int
+ ├── y int not null
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX secondary
+ │    ├── y int not null
+ │    ├── x int
+ │    └── rowid int not null (hidden)
+ ├── CHECK ((x < 10) AND (x > 1))
+ └── CHECK ((y < 10) AND (y > 1))
+
+opt
+SELECT x, y FROM xy WHERE x > 5
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── scan xy@secondary
+ │    ├── columns: x:1(int) y:2(int!null)
+ │    └── constraint: /2/1/3: [/2/6 - /9]
+ └── filters
+      └── x > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+
+# Check constraints that can evaluate to NULL are ignored.
+exec-ddl
+CREATE TABLE null_constraint (
+  y INT NOT NULL,
+  CHECK (y IN (1, 2, NULL)),
+  INDEX index_1 (y))
+----
+TABLE null_constraint
+ ├── y int not null
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX index_1
+ │    ├── y int not null
+ │    └── rowid int not null (hidden)
+ └── CHECK (y IN (1, 2, NULL))
+
+opt
+SELECT y FROM null_constraint WHERE y > 0
+----
+scan null_constraint@index_1
+ ├── columns: y:1(int!null)
+ └── constraint: /1/2: [/1 - ]
+
+exec-ddl
+CREATE TABLE null_constraint_2 (
+  y INT NOT NULL,
+  CHECK ((y IN (1, 2, NULL)) AND (y > 10)),
+  CHECK (y < 15),
+  INDEX index_1 (y))
+----
+TABLE null_constraint_2
+ ├── y int not null
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX index_1
+ │    ├── y int not null
+ │    └── rowid int not null (hidden)
+ ├── CHECK ((y IN (1, 2, NULL)) AND (y > 10))
+ └── CHECK (y < 15)
+
+opt
+SELECT y FROM null_constraint_2 WHERE y > 0
+----
+scan null_constraint_2@index_1
+ ├── columns: y:1(int!null)
+ └── constraint: /1/2: [/1 - /14]
+
+# Unvalidated constraints are ignored.
+exec-ddl
+CREATE TABLE check_constraint_validity (
+ a int NOT NULL,
+ INDEX secondary (a),
+ CONSTRAINT "check:unvalidated" CHECK (a < 10),
+ CONSTRAINT "check:validated" CHECK (a < 20))
+----
+TABLE check_constraint_validity
+ ├── a int not null
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ ├── INDEX secondary
+ │    ├── a int not null
+ │    └── rowid int not null (hidden)
+ ├── CHECK (a < 10)
+ └── CHECK (a < 20)
+
+opt
+SELECT * FROM check_constraint_validity WHERE a > 6
+----
+scan check_constraint_validity@secondary
+ ├── columns: a:1(int!null)
+ └── constraint: /1/2: [/7 - /19]
+
+exec-ddl
+CREATE TABLE check_test.alias_test (
+  a INT PRIMARY KEY,
+  CHECK (a > 0),
+  CHECK (alias_test.a > 2),
+  CHECK (check_test.alias_test.a > 4)
+)
+----
+TABLE alias_test
+ ├── a int not null
+ ├── INDEX primary
+ │    └── a int not null
+ ├── CHECK (a > 0)
+ ├── CHECK (alias_test.a > 2)
+ └── CHECK (check_test.alias_test.a > 4)
+
+opt
+SELECT * FROM check_test.alias_test WHERE a < 10
+----
+scan check_test.public.alias_test
+ ├── columns: a:1(int!null)
+ ├── constraint: /1: [/5 - /9]
+ └── key: (1)
+
+opt
+INSERT INTO check_test.alias_test VALUES (6) ON CONFLICT DO NOTHING
+----
+insert check_test.public.alias_test
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    └──  column1:2 => a:1
+ ├── check columns: check1:4(bool) check2:5(bool) check3:6(bool)
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: check1:4(bool) check2:5(bool) check3:6(bool) column1:2(int)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2,4-6)
+      ├── select
+      │    ├── columns: column1:2(int) a:3(int)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(2,3)
+      │    ├── left-join
+      │    │    ├── columns: column1:2(int) a:3(int)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(2,3)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:2(int)
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(2)
+      │    │    │    └── (6,) [type=tuple{int}]
+      │    │    ├── scan check_test.public.alias_test
+      │    │    │    ├── columns: a:3(int!null)
+      │    │    │    ├── constraint: /3: [/6 - /6]
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    └── fd: ()-->(3)
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── a IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+      └── projections
+           ├── column1 > 0 [type=bool, outer=(2)]
+           ├── column1 > 2 [type=bool, outer=(2)]
+           └── column1 > 4 [type=bool, outer=(2)]

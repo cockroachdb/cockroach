@@ -387,10 +387,39 @@ func (b *Builder) buildScan(
 				private.Flags.Direction = indexFlags.Direction
 			}
 		}
-
 		outScope.expr = b.factory.ConstructScan(&private)
+		b.addCheckConstraintsToScan(outScope, tabID)
 	}
 	return outScope
+}
+
+// addCheckConstraintsToScan finds all the check constraints that apply to the
+// table and adds them to the table metadata. To do this, the scalar expression
+// of the check constraints are built here.
+func (b *Builder) addCheckConstraintsToScan(scope *scope, tabID opt.TableID) {
+	md := b.factory.Metadata()
+	tabMeta := md.TableMeta(tabID)
+	tab := tabMeta.Table
+
+	// Find all the check constraints that apply to the table and add them
+	// to the table meta data. To do this, we must build them into scalar
+	// expressions.
+	for i, n := 0, tab.CheckCount(); i < n; i++ {
+		checkConstraint := tab.Check(i)
+
+		// Only add validated check constraints to the table's metadata.
+		if !checkConstraint.Validated {
+			continue
+		}
+		expr, err := parser.ParseExpr(string(checkConstraint.Constraint))
+		if err != nil {
+			panic(builderError{err})
+		}
+
+		texpr := scope.resolveAndRequireType(expr, types.Bool)
+		tm := b.factory.Metadata().TableMeta(tabID)
+		tm.AddConstraint(b.buildScalar(texpr, scope, nil, nil, nil))
+	}
 }
 
 func (b *Builder) buildSequenceSelect(seq cat.Sequence, inScope *scope) (outScope *scope) {
