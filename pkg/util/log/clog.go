@@ -361,7 +361,7 @@ type EntryDecoder struct {
 
 // NewEntryDecoder creates a new instance of EntryDecoder.
 func NewEntryDecoder(in io.Reader) *EntryDecoder {
-	d := &EntryDecoder{scanner: bufio.NewScanner(in), re: entryRE.Copy()}
+	d := &EntryDecoder{scanner: bufio.NewScanner(in), re: entryRE}
 	d.scanner.Split(d.split)
 	return d
 }
