@@ -276,8 +276,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	}
 
 	if saveTableName != "" {
-		name := tree.NewTableName(tree.Name(opt.SaveTablesDatabase), tree.Name(saveTableName))
-		ep.root, err = b.factory.ConstructSaveTable(ep.root, name)
+		ep, err = b.applySaveTable(ep, e, saveTableName)
 		if err != nil {
 			return execPlan{}, err
 		}
@@ -1784,6 +1783,29 @@ func (b *Builder) buildSequenceSelect(seqSel *memo.SequenceSelectExpr) (execPlan
 	}
 
 	return ep, nil
+}
+
+func (b *Builder) applySaveTable(
+	input execPlan, e memo.RelExpr, saveTableName string,
+) (execPlan, error) {
+	name := tree.NewTableName(tree.Name(opt.SaveTablesDatabase), tree.Name(saveTableName))
+
+	// Ensure that the column names are unique and match the names used by the
+	// opttester.
+	outputCols := e.Relational().OutputCols
+	colNames := make([]string, outputCols.Len())
+	colNameGen := memo.NewColumnNameGenerator(e)
+	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
+		ord, _ := input.outputCols.Get(col)
+		colNames[ord] = colNameGen.GenerateName(opt.ColumnID(col))
+	}
+
+	var err error
+	input.root, err = b.factory.ConstructSaveTable(input.root, name, colNames)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return input, err
 }
 
 // needProjection figures out what projection is needed on top of the input plan
