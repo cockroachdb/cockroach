@@ -1128,9 +1128,13 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 	// Constraints
 	// -----------
 	cb := constraintsBuilder{md: b.mem.Metadata(), evalCtx: b.evalCtx}
-	scalar.Constraints, scalar.TightConstraints = cb.buildConstraints(item.Condition)
-	if scalar.Constraints.IsUnconstrained() {
+	// TODO(rytaft): Using local variables here to avoid a data race. It would be
+	// better to avoid lazy building of props altogether.
+	constraints, tightConstraints := cb.buildConstraints(item.Condition)
+	if constraints.IsUnconstrained() {
 		scalar.Constraints, scalar.TightConstraints = nil, false
+	} else {
+		scalar.Constraints, scalar.TightConstraints = constraints, tightConstraints
 	}
 
 	// Functional Dependencies
