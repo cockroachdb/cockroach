@@ -72,6 +72,7 @@ type cliTestParams struct {
 	noServer   bool
 	storeSpecs []base.StoreSpec
 	locality   roachpb.Locality
+	addr       string
 }
 
 func (c *cliTest) fail(err interface{}) {
@@ -135,6 +136,7 @@ func newCLITest(params cliTestParams) cliTest {
 			SSLCertsDir: c.certsDir,
 			StoreSpecs:  params.storeSpecs,
 			Locality:    params.locality,
+			Addr:        params.addr,
 		})
 		if err != nil {
 			c.fail(err)
@@ -370,7 +372,7 @@ func (c cliTest) runWithArgsUnredirected(origArgs []string) {
 				args = append(args, "--insecure=false")
 				args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
 			}
-			args = append(args, fmt.Sprintf("--host=%s:%s", h, p))
+			args = append(args, fmt.Sprintf("--host=%s", net.JoinHostPort(h, p)))
 		}
 		args = append(args, origArgs[1:]...)
 
@@ -422,6 +424,22 @@ func TestQuit(t *testing.T) {
 	c.Run("quit")
 	// Wait until this async command cleanups the server.
 	<-c.Stopper().IsStopped()
+}
+
+func Example_ipv6_client() {
+	c := newCLITest(cliTestParams{addr: "[::1]:0"})
+	defer c.cleanup()
+
+	// Regression test for #33008: without the fix, the following
+	// command would fail with error "address [[::1]]:26257: missing
+	// port in address".
+	// If/when the address parsing is correct, the client will
+	// successfully connect, to determine that 'init' is not needed.
+	c.Run("init")
+
+	// Output:
+	// init
+	// rpc error: code = Unknown desc = cluster has already been initialized
 }
 
 func Example_logging() {
