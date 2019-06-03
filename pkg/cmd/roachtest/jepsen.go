@@ -70,9 +70,6 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	}
 	t.l.Printf("initializing cluster\n")
 	t.Status("initializing cluster")
-	defer func() {
-		c.Run(ctx, c.Node(1), "touch jepsen_initialized")
-	}()
 
 	// Roachprod collects this directory by default. If we fail early,
 	// this is the only log collection that is done. Otherwise, we
@@ -132,6 +129,9 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	for _, ip := range c.InternalIP(ctx, workers) {
 		c.Run(ctx, controller, "sh", "-c", fmt.Sprintf(`"ssh-keyscan -t rsa %s >> .ssh/known_hosts"`, ip))
 	}
+
+	t.l.Printf("cluster initialization complete\n")
+	c.Run(ctx, c.Node(1), "touch jepsen_initialized")
 }
 
 func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis string) {
