@@ -48,8 +48,8 @@ type ZipfGenerator struct {
 	theta float64
 	iMin  uint64
 	// internally computed values
-	alpha, zeta2 float64
-	verbose      bool
+	alpha, zeta2, halfPowTheta float64
+	verbose                    bool
 }
 
 // ZipfGeneratorMu holds variables which must be globally synced.
@@ -99,6 +99,7 @@ func NewZipfGenerator(
 	z.zipfGenMu.eta = (1 - math.Pow(2.0/float64(z.zipfGenMu.iMax+1-z.iMin), 1.0-theta)) / (1.0 - zeta2/zetaN)
 	z.zipfGenMu.zetaN = zetaN
 	z.zeta2 = zeta2
+	z.halfPowTheta = 1.0 + math.Pow(0.5, z.theta)
 	return &z, nil
 }
 
@@ -138,7 +139,7 @@ func (z *ZipfGenerator) Uint64() uint64 {
 	var result uint64
 	if uz < 1.0 {
 		result = z.iMin
-	} else if uz < 1.0+math.Pow(0.5, z.theta) {
+	} else if uz < z.halfPowTheta {
 		result = z.iMin + 1
 	} else {
 		spread := float64(z.zipfGenMu.iMax + 1 - z.iMin)
