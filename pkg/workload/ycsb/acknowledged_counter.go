@@ -54,18 +54,20 @@ func (c *AcknowledgedCounter) Last() uint64 {
 }
 
 // Acknowledge marks v as being acknowledged.
-func (c *AcknowledgedCounter) Acknowledge(v uint64) error {
+func (c *AcknowledgedCounter) Acknowledge(v uint64) (uint64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.mu.window[v&windowMask] {
-		return errors.Errorf("Number of pending acknowledgements exceeded window size: %d has been acknowledged, but %d is not acknowledged", v, c.mu.count)
+		return 0, errors.Errorf("Number of pending acknowledgements exceeded window size: %d has been acknowledged, but %d is not acknowledged", v, c.mu.count)
 	}
 
 	c.mu.window[v&windowMask] = true
+	count := uint64(0)
 	for c.mu.window[c.mu.count&windowMask] {
 		c.mu.window[c.mu.count&windowMask] = false
 		c.mu.count++
+		count++
 	}
-	return nil
+	return count, nil
 }
