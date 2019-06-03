@@ -3275,6 +3275,8 @@ func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
+	manualClock := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manualClock.UnixNano, time.Nanosecond)
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableScanner = true
@@ -3287,16 +3289,18 @@ func TestMergeQueue(t *testing.T) {
 	mtc.startWithSingleRange = true
 
 	mtc.storeConfig = &storeCfg
+	// Inject clock for manipulation in tests.
+	mtc.clock = clock
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 	mtc.initGossipNetwork() // needed for the non-collocated case's rebalancing to work
 	store := mtc.Store(0)
 	store.SetMergeQueueActive(true)
 
-	split := func(t *testing.T, key roachpb.Key, manual bool) {
+	split := func(t *testing.T, key roachpb.Key, expirationTime hlc.Timestamp) {
 		t.Helper()
 		args := adminSplitArgs(key)
-		args.Manual = manual
+		args.ExpirationTime = expirationTime
 		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -3315,7 +3319,7 @@ func TestMergeQueue(t *testing.T) {
 	rhsStartKey := roachpb.RKey("b")
 	rhsEndKey := roachpb.RKey("c")
 	for _, k := range []roachpb.RKey{lhsStartKey, rhsStartKey, rhsEndKey} {
-		split(t, k.AsRawKey(), false /* manual */)
+		split(t, k.AsRawKey(), hlc.Timestamp{} /* expirationTime */)
 	}
 	lhs := func() *storage.Replica { return store.LookupReplica(lhsStartKey) }
 	rhs := func() *storage.Replica { return store.LookupReplica(rhsStartKey) }
@@ -3340,7 +3344,7 @@ func TestMergeQueue(t *testing.T) {
 		}
 		setZones(*storeCfg.DefaultZoneConfig)
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
-		split(t, roachpb.Key("b"), false /* manual */)
+		split(t, roachpb.Key("b"), hlc.Timestamp{} /* expirationTime */)
 	}
 
 	verifyMerged := func(t *testing.T) {
@@ -3418,13 +3422,13 @@ func TestMergeQueue(t *testing.T) {
 	// TODO(jeffreyxiao): Add subtest to consider load when making merging
 	// decisions.
 
-	t.Run("sticky bit", func(t *testing.T) {
+	t.Run("sticky-bit", func(t *testing.T) {
 		reset(t)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
 		// Perform manual merge and verify that no merge occurred.
-		split(t, rhsStartKey.AsRawKey(), true /* manual */)
+		split(t, rhsStartKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */)
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
@@ -3438,6 +3442,29 @@ func TestMergeQueue(t *testing.T) {
 		if _, err := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), unsplitArgs); err != nil {
 			t.Fatal(err)
 		}
+		store.MustForceMergeScanAndProcess()
+		verifyMerged(t)
+	})
+
+	t.Run("sticky-bit-expiration", func(t *testing.T) {
+		manualSplitTTL := time.Millisecond * 200
+		reset(t)
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// Perform manual merge and verify that no merge occurred.
+		split(t, rhsStartKey.AsRawKey(), clock.Now().Add(manualSplitTTL.Nanoseconds(), 0) /* expirationTime */)
+		clearRange(t, lhsStartKey, rhsEndKey)
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// Sticky bit is not expired yet.
+		manualClock.Set(manualSplitTTL.Nanoseconds())
+		store.MustForceMergeScanAndProcess()
+		verifyUnmerged(t)
+
+		// Sticky bit is expired.
+		manualClock.Set(manualSplitTTL.Nanoseconds() * 2)
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})

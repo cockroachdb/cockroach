@@ -1251,7 +1251,6 @@ class StickyBitTrigger : public ::google::protobuf::MessageLite /* @@protoc_inse
 
   // accessors -------------------------------------------------------
 
-  // .cockroach.util.hlc.Timestamp sticky_bit = 1;
   bool has_sticky_bit() const;
   void clear_sticky_bit();
   static const int kStickyBitFieldNumber = 1;
@@ -3516,7 +3515,6 @@ inline void ModifiedSpanTrigger::set_allocated_node_liveness_span(::cockroach::r
 
 // StickyBitTrigger
 
-// .cockroach.util.hlc.Timestamp sticky_bit = 1;
 inline bool StickyBitTrigger::has_sticky_bit() const {
   return this != internal_default_instance() && sticky_bit_ != NULL;
 }
