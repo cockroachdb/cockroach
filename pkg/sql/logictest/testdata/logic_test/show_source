@@ -331,3 +331,35 @@ code      42601
 file      sql/parser/show_syntax.go
 function  RunShowSyntax
 detail    source SQL: foo ^
+
+
+# Test the SHOW INDEXES FROM DATABSE COMMAND
+statement ok
+CREATE DATABASE showdbindexestest;
+
+statement ok
+CREATE TABLE showdbindexestest.table1 (key1 INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
+
+query TTBITTBB
+SHOW INDEXES FROM DATABASE showdbindexestest;
+----
+table1 primary false 1 key1 ASC false false
+table2 primary false 1 key2 ASC false false
+
+statement ok
+CREATE DATABASE "$peci@l";
+
+statement ok
+CREATE TABLE "$peci@l".table1 (key1 INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE "$peci@l".table2 (key2 INT PRIMARY KEY);
+
+query TTBITTBB
+SHOW INDEXES FROM DATABASE "$peci@l";
+----
+table1 primary false 1 key1 ASC false false
+table2 primary false 1 key2 ASC false false
