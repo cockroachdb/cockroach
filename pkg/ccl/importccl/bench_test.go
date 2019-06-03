@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
@@ -125,7 +126,7 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 		}}
 		s, _, kvDB := serverutils.StartServer(b, args)
 		for _, t := range tables {
-			if err := kvDB.AdminSplit(ctx, t.span.Key, t.span.Key, false /* manual */); err != nil {
+			if err := kvDB.AdminSplit(ctx, t.span.Key, t.span.Key, hlc.Timestamp{} /* expirationTime */); err != nil {
 				b.Fatal(err)
 			}
 		}
