@@ -3357,7 +3357,11 @@ show_indexes_stmt:
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
 | SHOW INDEX FROM DATABASE database_name
   {
+<<<<<<< HEAD
     $$.val = &tree.ShowDbIndexes{Database: $5}
+=======
+    return unimplementedWithIssue(sqllex, 37270)
+>>>>>>> 994247876b0f3a354cf5ed85fc94ac6f6a35125a
   }
 | SHOW INDEXES FROM table_name
   {
@@ -3365,7 +3369,11 @@ show_indexes_stmt:
   }
 | SHOW INDEXES FROM DATABASE database_name
   {
+<<<<<<< HEAD
     $$.val = &tree.ShowDbIndexes{Database: $5}
+=======
+    return unimplementedWithIssue(sqllex, 37270)
+>>>>>>> 994247876b0f3a354cf5ed85fc94ac6f6a35125a
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM table_name
@@ -3374,7 +3382,11 @@ show_indexes_stmt:
   }
 | SHOW KEYS FROM DATABASE database_name
   {
+<<<<<<< HEAD
     $$.val = &tree.ShowDbIndexes{Database: $5}
+=======
+    return unimplementedWithIssue(sqllex, 37270)
+>>>>>>> 994247876b0f3a354cf5ed85fc94ac6f6a35125a
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 
