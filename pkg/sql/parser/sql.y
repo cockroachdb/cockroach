@@ -3345,21 +3345,6 @@ show_grants_stmt:
   }
 | SHOW GRANTS error // SHOW HELP: SHOW GRANTS
 
-<<<<<<< HEAD
-// %Help: SHOW DBINDEXES - list indexes for all tables in DB
-// %Category: DDL
-// %Text: SHOW DBINDEXES FROM <dbname>
-// %SeeAlso: WEBDOCS/show-index.html 
-// [TODO]: add docs about show index from database once created
-show_db_indexes_stmt:
-  SHOW DBINDEXES FROM database_name 
-  {
-    $$.val = &tree.ShowDbIndexes{Database: $4}
-  }
-| SHOW DBINDEXES error // SHOW HELP: SHOW DBINDEXES
-
-=======
->>>>>>> 363f3127554ca1ef1baee745031e62446e5e6461
 // %Help: SHOW INDEXES - list indexes
 // %Category: DDL
 // %Text: SHOW INDEXES FROM { <tablename> | DATABASE <database_name> }
@@ -3372,7 +3357,7 @@ show_indexes_stmt:
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
 | SHOW INDEX FROM DATABASE database_name
   {
-    return unimplementedWithIssue(sqllex, 37270)
+    $$.val = &tree.ShowDbIndexes{Database: $5}
   }
 | SHOW INDEXES FROM table_name
   {
@@ -3380,7 +3365,7 @@ show_indexes_stmt:
   }
 | SHOW INDEXES FROM DATABASE database_name
   {
-    return unimplementedWithIssue(sqllex, 37270)
+    $$.val = &tree.ShowDbIndexes{Database: $5}
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM table_name
@@ -3389,7 +3374,7 @@ show_indexes_stmt:
   }
 | SHOW KEYS FROM DATABASE database_name
   {
-    return unimplementedWithIssue(sqllex, 37270)
+    $$.val = &tree.ShowDbIndexes{Database: $5}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 

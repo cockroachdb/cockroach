@@ -171,7 +171,6 @@ show_stmt ::=
 	| show_create_stmt
 	| show_csettings_stmt
 	| show_databases_stmt
-	| show_db_indexes_stmt
 	| show_grants_stmt
 	| show_indexes_stmt
 	| show_jobs_stmt
@@ -468,16 +467,16 @@ show_csettings_stmt ::=
 show_databases_stmt ::=
 	'SHOW' 'DATABASES'
 
-show_db_indexes_stmt ::=
-	'SHOW' 'DBINDEXES' 'FROM' database_name
-
 show_grants_stmt ::=
 	'SHOW' 'GRANTS' opt_on_targets_roles for_grantee_clause
 
 show_indexes_stmt ::=
 	'SHOW' 'INDEX' 'FROM' table_name
+	| 'SHOW' 'INDEX' 'FROM' 'DATABASE' database_name
 	| 'SHOW' 'INDEXES' 'FROM' table_name
+	| 'SHOW' 'INDEXES' 'FROM' 'DATABASE' database_name
 	| 'SHOW' 'KEYS' 'FROM' table_name
+	| 'SHOW' 'KEYS' 'FROM' 'DATABASE' database_name
 
 show_jobs_stmt ::=
 	'SHOW' opt_automatic 'JOBS'

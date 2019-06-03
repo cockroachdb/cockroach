@@ -333,7 +333,7 @@ function  RunShowSyntax
 detail    source SQL: foo ^
 
 
-# Test the SHOW DBINDEXES COMMAND
+# Test the SHOW INDEXES FROM DATABSE COMMAND
 statement ok
 CREATE DATABASE showdbindexestest;
 
@@ -344,7 +344,7 @@ statement ok
 CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
 
 query TTBITTBB
-SHOW DBINDEXES FROM showdbindexestest;
+SHOW INDEXES FROM DATABASE showdbindexestest;
 ----
 table1 primary false 1 key1 ASC false false
 table2 primary false 1 key2 ASC false false
