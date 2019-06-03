@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	_ "github.com/lib/pq"
 )
@@ -55,7 +56,7 @@ func TestLogSplits(t *testing.T) {
 	initialSplits := countSplits()
 
 	// Generate an explicit split event.
-	if err := kvDB.AdminSplit(ctx, "splitkey", "splitkey", true /* manual */); err != nil {
+	if err := kvDB.AdminSplit(ctx, "splitkey", "splitkey", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -176,10 +177,10 @@ func TestLogMerges(t *testing.T) {
 	}
 
 	// Create two ranges, then merge them.
-	if err := kvDB.AdminSplit(ctx, "a", "a", true /* manual */); err != nil {
+	if err := kvDB.AdminSplit(ctx, "a", "a", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
-	if err := kvDB.AdminSplit(ctx, "b", "b", true /* manual */); err != nil {
+	if err := kvDB.AdminSplit(ctx, "b", "b", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.AdminMerge(ctx, "a"); err != nil {

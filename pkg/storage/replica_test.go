@@ -1194,7 +1194,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	key := keys.MakeTablePrefix(keys.MaxSystemConfigDescID)
 	var val roachpb.Value
 	val.SetInt(42)
-	if err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.MinTimestamp, val, nil); err != nil {
+	if err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -5840,7 +5840,7 @@ func TestConditionFailedError(t *testing.T) {
 		ExpValue: &val,
 	}
 
-	_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: hlc.MinTimestamp}, &args)
+	_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: hlc.Timestamp{}}, &args)
 
 	if cErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); pErr == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
@@ -8752,7 +8752,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	splitKey := roachpb.Key("b")
-	if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey, true /* manual */); err != nil {
+	if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 

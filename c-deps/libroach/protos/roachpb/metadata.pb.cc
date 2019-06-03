@@ -1426,7 +1426,6 @@ bool RangeDescriptor::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
       case 7: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(58u /* 58 & 0xFF */)) {
@@ -1496,7 +1495,6 @@ void RangeDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(6, this->generation(), output);
   }
 
-  // optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
   if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       7, this->_internal_sticky_bit(), output);
@@ -1536,7 +1534,6 @@ size_t RangeDescriptor::ByteSizeLong() const {
           this->end_key());
     }
 
-    // optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
     if (has_sticky_bit()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
