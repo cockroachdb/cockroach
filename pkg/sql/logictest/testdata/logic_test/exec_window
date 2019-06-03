@@ -78,7 +78,6 @@ SELECT a, b, dense_rank() OVER () FROM t ORDER BY b, a
 0 b 1
 1 b 1
 
-
 query ITI
 SELECT a, b, dense_rank() OVER (ORDER BY a) FROM t ORDER BY b, a
 ----
