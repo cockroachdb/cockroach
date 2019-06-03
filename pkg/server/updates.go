@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -213,6 +214,8 @@ func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
 	if l, err := load.AvgWithContext(ctx); err == nil {
 		n.Hardware.Loadavg15 = float32(l.Load15)
 	}
+
+	n.Hardware.Provider, n.Hardware.InstanceClass = cloudinfo.GetProviderInfo()
 }
 
 // checkForUpdates calls home to check for new versions for the current platform
