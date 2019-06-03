@@ -3357,7 +3357,7 @@ show_indexes_stmt:
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
 | SHOW INDEX FROM DATABASE database_name
   {
-    $$.val = &tree.ShowDbIndexes{Database: $5}
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
   }
 | SHOW INDEXES FROM table_name
   {
@@ -3365,7 +3365,7 @@ show_indexes_stmt:
   }
 | SHOW INDEXES FROM DATABASE database_name
   {
-    $$.val = &tree.ShowDbIndexes{Database: $5}
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM table_name
@@ -3374,7 +3374,7 @@ show_indexes_stmt:
   }
 | SHOW KEYS FROM DATABASE database_name
   {
-    $$.val = &tree.ShowDbIndexes{Database: $5}
+    $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5)}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 

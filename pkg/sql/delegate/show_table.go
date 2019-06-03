@@ -34,7 +34,7 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 	return d.showTableDetails(n.Name, showCreateQuery)
 }
 
-func (d *delegator) delegateShowDbIndexes(n *tree.ShowDbIndexes) (tree.Statement, error) {
+func (d *delegator) delegateShowDatabaseIndexes(n *tree.ShowDatabaseIndexes) (tree.Statement, error) {
 	const getAllIndexesQuery = `
     SELECT table_name,
            index_name,
@@ -45,7 +45,7 @@ func (d *delegator) delegateShowDbIndexes(n *tree.ShowDbIndexes) (tree.Statement
            storing::BOOL,
            implicit::BOOL
     FROM %s.information_schema.statistics`
-	return parse(fmt.Sprintf(getAllIndexesQuery, n.Database))
+	return parse(fmt.Sprintf(getAllIndexesQuery, n.Database.String()))
 }
 
 func (d *delegator) delegateShowIndexes(n *tree.ShowIndexes) (tree.Statement, error) {

@@ -411,6 +411,7 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN SHOW INDEXES FROM a`},
 		{`SHOW INDEXES FROM a.b.c`},
 		{`SHOW INDEXES FROM DATABASE a`},
+		{`SHOW INDEXES FROM DATABASE "$speci@ltest"`},
 		{`SHOW CONSTRAINTS FROM a`},
 		{`SHOW CONSTRAINTS FROM a.b.c`},
 		{`EXPLAIN SHOW CONSTRAINTS FROM a.b.c`},
