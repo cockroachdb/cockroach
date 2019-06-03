@@ -52,6 +52,9 @@ type tpchBenchSpec struct {
 	ScaleFactor     int
 	benchType       tpchBench
 	numRunsPerQuery int
+	// minVersion specifies the minimum version of CRDB nodes. If omitted, it
+	// will default to maybeMinVersionForFixturesImport.
+	minVersion string
 }
 
 // runTPCHBench runs sets of queries against CockroachDB clusters in different
@@ -226,11 +229,15 @@ func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
 
 	// Add a load generator node.
 	numNodes := b.Nodes + 1
+	minVersion := b.minVersion
+	if minVersion == `` {
+		minVersion = maybeMinVersionForFixturesImport(cloud)
+	}
 
 	r.Add(testSpec{
 		Name:       strings.Join(nameParts, "/"),
 		Cluster:    makeClusterSpec(numNodes),
-		MinVersion: maybeMinVersionForFixturesImport(cloud),
+		MinVersion: minVersion,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
@@ -259,6 +266,7 @@ func registerTPCHBench(r *registry) {
 			ScaleFactor:     1,
 			benchType:       tpchVec,
 			numRunsPerQuery: 3,
+			minVersion:      `v19.1.0`,
 		},
 	}
 
