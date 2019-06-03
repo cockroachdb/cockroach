@@ -498,7 +498,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> EXISTS EXECUTE EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
-%token <str> EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
+%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
 
 %token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
@@ -1108,7 +1108,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... RENAME TO <newname>
 //   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
 //   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
-//   ALTER TABLE ... SPLIT AT <selectclause>
+//   ALTER TABLE ... SPLIT AT <selectclause> [WITH EXPIRATION <expr>]
 //   ALTER TABLE ... UNSPLIT AT <selectclause>
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER TABLE ... INJECT STATISTICS ...  (experimental)
@@ -1228,7 +1228,7 @@ alter_range_stmt:
 //
 // Commands:
 //   ALTER INDEX ... RENAME TO <newname>
-//   ALTER INDEX ... SPLIT AT <selectclause>
+//   ALTER INDEX ... SPLIT AT <selectclause> [WITH EXPIRATION <expr>]
 //   ALTER INDEX ... UNSPLIT AT <selectclause>
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER PARTITION ... OF INDEX ... CONFIGURE ZONE <zoneconfig>
@@ -1280,13 +1280,27 @@ alter_split_stmt:
     $$.val = &tree.Split{
       TableOrIndex: tree.TableIndexName{Table: name},
       Rows: $6.slct(),
+      ExpireExpr: tree.Expr(nil),
+    }
+  }
+| ALTER TABLE table_name SPLIT AT select_stmt WITH EXPIRATION a_expr
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Split{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $6.slct(),
+      ExpireExpr: $9.expr(),
     }
   }
 
 alter_split_index_stmt:
   ALTER INDEX table_index_name SPLIT AT select_stmt
   {
-    $$.val = &tree.Split{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
+    $$.val = &tree.Split{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), ExpireExpr: tree.Expr(nil)}
+  }
+| ALTER INDEX table_index_name SPLIT AT select_stmt WITH EXPIRATION a_expr
+  {
+    $$.val = &tree.Split{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), ExpireExpr: $9.expr()}
   }
 
 alter_unsplit_stmt:
@@ -8908,6 +8922,7 @@ unreserved_keyword:
 | EXPERIMENTAL_RANGES
 | EXPERIMENTAL_RELOCATE
 | EXPERIMENTAL_REPLICA
+| EXPIRATION
 | EXPLAIN
 | EXPORT
 | EXTENSION

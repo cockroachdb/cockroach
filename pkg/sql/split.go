@@ -16,7 +16,9 @@ package sql
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -31,11 +34,12 @@ import (
 type splitNode struct {
 	optColumnsSlot
 
-	force     bool
-	tableDesc *sqlbase.TableDescriptor
-	index     *sqlbase.IndexDescriptor
-	rows      planNode
-	run       splitRun
+	force          bool
+	tableDesc      *sqlbase.TableDescriptor
+	index          *sqlbase.IndexDescriptor
+	rows           planNode
+	run            splitRun
+	expirationTime hlc.Timestamp
 }
 
 // Split executes a KV split.
@@ -78,11 +82,17 @@ func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 		}
 	}
 
+	expirationTime, err := parseExpirationTime(n.ExpireExpr, &p.semaCtx, p.EvalContext())
+	if err != nil {
+		return nil, err
+	}
+
 	return &splitNode{
-		force:     p.SessionData().ForceSplitAt,
-		tableDesc: tableDesc.TableDesc(),
-		index:     index,
-		rows:      rows,
+		force:          p.SessionData().ForceSplitAt,
+		tableDesc:      tableDesc.TableDesc(),
+		index:          index,
+		rows:           rows,
+		expirationTime: expirationTime,
 	}, nil
 }
 
@@ -134,7 +144,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 	stickyBitEnabled := params.EvalContext().Settings.Version.IsActive(cluster.VersionStickyBit)
 	expirationTime := hlc.Timestamp{}
 	if stickyBitEnabled {
-		expirationTime = hlc.MaxTimestamp
+		expirationTime = n.expirationTime
 	}
 	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey, expirationTime); err != nil {
 		return false, err
@@ -173,4 +183,65 @@ func getRowKey(
 		return nil, err
 	}
 	return key, nil
+}
+
+// parseExpriationTime parses an expression into a hlc.Timestamp representing
+// the expiration time of the split.
+func parseExpirationTime(
+	expireExpr tree.Expr, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+) (hlc.Timestamp, error) {
+	if expireExpr == nil {
+		return hlc.MaxTimestamp, nil
+	}
+	expirationTime := hlc.Timestamp{}
+	stmtTimestamp := evalCtx.GetStmtTimestamp()
+	typedExpireExpr, err := expireExpr.TypeCheck(semaCtx, types.String)
+	if err != nil {
+		return expirationTime, err
+	}
+	d, err := typedExpireExpr.Eval(evalCtx)
+	if err != nil {
+		return expirationTime, err
+	}
+	var convErr error
+	switch d := d.(type) {
+	case *tree.DString:
+		s := string(*d)
+		// Attempt to parse as timestamp.
+		// The expiration time can be seen by the user, so use precision of microseconds.
+		if dt, err := tree.ParseDTimestamp(evalCtx, s, time.Microsecond); err == nil {
+			expirationTime.WallTime = dt.Time.UnixNano()
+			break
+		}
+		// Attempt to parse as a decimal.
+		if dec, _, err := apd.NewFromString(s); err == nil {
+			expirationTime, convErr = tree.DecimalToHLC(dec)
+			break
+		}
+		// Attempt to parse as an interval.
+		if iv, err := tree.ParseDInterval(s); err == nil {
+			expirationTime.WallTime = duration.Add(evalCtx, stmtTimestamp, iv.Duration).UnixNano()
+			break
+		}
+		convErr = errors.Errorf("SPLIT AT: value is neither timestamp, decimal, nor interval")
+	case *tree.DTimestamp:
+		expirationTime.WallTime = d.UnixNano()
+	case *tree.DTimestampTZ:
+		expirationTime.WallTime = d.UnixNano()
+	case *tree.DInt:
+		expirationTime.WallTime = int64(*d)
+	case *tree.DDecimal:
+		expirationTime, convErr = tree.DecimalToHLC(&d.Decimal)
+	case *tree.DInterval:
+		expirationTime.WallTime = duration.Add(evalCtx, stmtTimestamp, d.Duration).UnixNano()
+	default:
+		convErr = errors.Errorf("SPLIT AT: expected timestamp, decimal, or interval, got %s (%T)", d.ResolvedType(), d)
+	}
+	if convErr != nil {
+		return expirationTime, convErr
+	}
+	if expirationTime.Less(hlc.Timestamp{}) {
+		return expirationTime, errors.Errorf("SPLIT AT: timestamp before 1970-01-01T00:00:00Z is invalid")
+	}
+	return expirationTime, nil
 }
