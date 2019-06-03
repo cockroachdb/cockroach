@@ -4720,60 +4720,52 @@ limit
  ├── key: (1)
  ├── fd: (1)-->(2-9)
  ├── ordering: +8
- ├── offset
+ ├── sort
  │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
- │    ├── internal-ordering: +8
  │    ├── side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-9)
  │    ├── ordering: +8
- │    ├── sort
- │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
- │    │    ├── side-effects
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-9)
- │    │    ├── ordering: +8
- │    │    └── group-by
- │    │         ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
- │    │         ├── grouping columns: id:1(int!null)
- │    │         ├── side-effects
- │    │         ├── key: (1)
- │    │         ├── fd: (1)-->(2-9)
- │    │         ├── select
- │    │         │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) unnest:10(string!null)
- │    │         │    ├── side-effects
- │    │         │    ├── fd: ()-->(10), (1)-->(2-9)
- │    │         │    ├── project-set
- │    │         │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) unnest:10(string)
- │    │         │    │    ├── side-effects
- │    │         │    │    ├── fd: (1)-->(2-9)
- │    │         │    │    ├── scan a0
- │    │         │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
- │    │         │    │    │    ├── key: (1)
- │    │         │    │    │    └── fd: (1)-->(2-9)
- │    │         │    │    └── zip
- │    │         │    │         └── function: unnest [type=string, outer=(6), side-effects]
- │    │         │    │              └── variable: tag_list [type=string[]]
- │    │         │    └── filters
- │    │         │         └── unnest = 'dragons' [type=bool, outer=(10), constraints=(/10: [/'dragons' - /'dragons']; tight), fd=()-->(10)]
- │    │         └── aggregations
- │    │              ├── const-agg [type=string, outer=(2)]
- │    │              │    └── variable: body [type=string]
- │    │              ├── const-agg [type=string, outer=(3)]
- │    │              │    └── variable: description [type=string]
- │    │              ├── const-agg [type=string, outer=(4)]
- │    │              │    └── variable: title [type=string]
- │    │              ├── const-agg [type=string, outer=(5)]
- │    │              │    └── variable: slug [type=string]
- │    │              ├── const-agg [type=string[], outer=(6)]
- │    │              │    └── variable: tag_list [type=string[]]
- │    │              ├── const-agg [type=string, outer=(7)]
- │    │              │    └── variable: user_id [type=string]
- │    │              ├── const-agg [type=timestamp, outer=(8)]
- │    │              │    └── variable: created_at [type=timestamp]
- │    │              └── const-agg [type=timestamp, outer=(9)]
- │    │                   └── variable: updated_at [type=timestamp]
- │    └── const: 0 [type=int]
+ │    └── group-by
+ │         ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │         ├── grouping columns: id:1(int!null)
+ │         ├── side-effects
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-9)
+ │         ├── select
+ │         │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) unnest:10(string!null)
+ │         │    ├── side-effects
+ │         │    ├── fd: ()-->(10), (1)-->(2-9)
+ │         │    ├── project-set
+ │         │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) unnest:10(string)
+ │         │    │    ├── side-effects
+ │         │    │    ├── fd: (1)-->(2-9)
+ │         │    │    ├── scan a0
+ │         │    │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │         │    │    │    ├── key: (1)
+ │         │    │    │    └── fd: (1)-->(2-9)
+ │         │    │    └── zip
+ │         │    │         └── function: unnest [type=string, outer=(6), side-effects]
+ │         │    │              └── variable: tag_list [type=string[]]
+ │         │    └── filters
+ │         │         └── unnest = 'dragons' [type=bool, outer=(10), constraints=(/10: [/'dragons' - /'dragons']; tight), fd=()-->(10)]
+ │         └── aggregations
+ │              ├── const-agg [type=string, outer=(2)]
+ │              │    └── variable: body [type=string]
+ │              ├── const-agg [type=string, outer=(3)]
+ │              │    └── variable: description [type=string]
+ │              ├── const-agg [type=string, outer=(4)]
+ │              │    └── variable: title [type=string]
+ │              ├── const-agg [type=string, outer=(5)]
+ │              │    └── variable: slug [type=string]
+ │              ├── const-agg [type=string[], outer=(6)]
+ │              │    └── variable: tag_list [type=string[]]
+ │              ├── const-agg [type=string, outer=(7)]
+ │              │    └── variable: user_id [type=string]
+ │              ├── const-agg [type=timestamp, outer=(8)]
+ │              │    └── variable: created_at [type=timestamp]
+ │              └── const-agg [type=timestamp, outer=(9)]
+ │                   └── variable: updated_at [type=timestamp]
  └── const: 10 [type=int]
 
 # TODO(justin): figure out how to get this to decorrelate again.

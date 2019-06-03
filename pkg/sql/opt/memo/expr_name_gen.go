@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
 // ExprNameGenerator is used to generate a unique name for each relational
@@ -58,4 +59,50 @@ func (g *ExprNameGenerator) GenerateName(op opt.Operator) string {
 	operator := strings.Replace(op.String(), "-", "_", -1)
 	g.exprCount++
 	return fmt.Sprintf("%s_%s_%d", g.prefix, operator, g.exprCount)
+}
+
+// ColumnNameGenerator is used to generate a unique name for each column of a
+// relational expression. See GenerateName for details.
+type ColumnNameGenerator struct {
+	e    RelExpr
+	pres physical.Presentation
+	seen map[string]int
+}
+
+// NewColumnNameGenerator creates a new instance of ColumnNameGenerator,
+// initialized with the given relational expression.
+func NewColumnNameGenerator(e RelExpr) *ColumnNameGenerator {
+	return &ColumnNameGenerator{
+		e:    e,
+		pres: e.RequiredPhysical().Presentation,
+		seen: make(map[string]int, e.Relational().OutputCols.Len()),
+	}
+}
+
+// GenerateName generates a unique name for each column in a relational
+// expression. This function is used to generate consistent, unique names
+// for the columns in the table that will be created if the session
+// variable `save_tables_prefix` is non-empty.
+func (g *ColumnNameGenerator) GenerateName(col opt.ColumnID) string {
+	colMeta := g.e.Memo().Metadata().ColumnMeta(col)
+	colName := colMeta.Alias
+
+	// Check whether the presentation has a different name for this column, and
+	// use it if available.
+	for i := range g.pres {
+		if g.pres[i].ID == col {
+			colName = g.pres[i].Alias
+			break
+		}
+	}
+
+	// Every column name must be unique.
+	if cnt, ok := g.seen[colName]; ok {
+		g.seen[colName]++
+		colName = fmt.Sprintf("%s_%d", colName, cnt)
+	} else {
+		g.seen[colName] = 1
+	}
+
+	return colName
 }

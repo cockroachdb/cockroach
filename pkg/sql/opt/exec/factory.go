@@ -387,7 +387,7 @@ type Factory interface {
 
 	// ConstructSaveTable wraps the input into a node that passes through all the
 	// rows, but also creates a table and inserts all the rows into it.
-	ConstructSaveTable(input Node, table *cat.DataSourceName) (Node, error)
+	ConstructSaveTable(input Node, table *cat.DataSourceName, colNames []string) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

@@ -1037,11 +1037,10 @@ func (ot *OptTester) SaveTables() (opt.Expr, error) {
 			if err != nil {
 				return err
 			}
-
-			for i, n := 0, r.ChildCount(); i < n; i++ {
-				if err := traverse(r.Child(i)); err != nil {
-					return err
-				}
+		}
+		for i, n := 0, e.ChildCount(); i < n; i++ {
+			if err := traverse(e.Child(i)); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -1109,8 +1108,8 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 	}
 
 	relProps := rel.Relational()
-	pres := rel.RequiredPhysical().Presentation
 	outputCols := relProps.OutputCols
+	colNameGen := memo.NewColumnNameGenerator(rel)
 
 	// Create each of the columns and their estimated stats for the test catalog
 	// table.
@@ -1119,16 +1118,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 	i := 0
 	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
 		colMeta := rel.Memo().Metadata().ColumnMeta(opt.ColumnID(col))
-		colName := colMeta.Alias
-
-		// Check whether the presentation has a different name for this column, and
-		// use it if available.
-		for j := range pres {
-			if pres[j].ID == opt.ColumnID(col) {
-				colName = pres[j].Alias
-				break
-			}
-		}
+		colName := colNameGen.GenerateName(opt.ColumnID(col))
 
 		columns[i] = &testcat.Column{
 			Ordinal:  i,

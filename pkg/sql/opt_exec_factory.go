@@ -1559,9 +1559,9 @@ func (ef *execFactory) ConstructSequenceSelect(sequence cat.Sequence) (exec.Node
 
 // ConstructSaveTable is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSaveTable(
-	input exec.Node, table *cat.DataSourceName,
+	input exec.Node, table *cat.DataSourceName, colNames []string,
 ) (exec.Node, error) {
-	return ef.planner.makeSaveTable(input.(planNode), table), nil
+	return ef.planner.makeSaveTable(input.(planNode), table, colNames), nil
 }
 
 // renderBuilder encapsulates the code to build a renderNode.
