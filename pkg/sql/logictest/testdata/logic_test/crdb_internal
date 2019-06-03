@@ -355,6 +355,21 @@ SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE expira
 ----
 start_pretty  end_pretty
 
+statement ok
+ALTER TABLE foo SPLIT AT VALUES(2) WITH EXPIRATION '2200-01-01 00:00:00.0'
+
+query TTT colnames
+SELECT start_pretty, end_pretty, expiration_time FROM crdb_internal.ranges WHERE expiration_time IS NOT NULL AND table_name = 'foo'
+----
+start_pretty   end_pretty  expiration_time
+/Table/56/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
+
+query TTT colnames
+SELECT start_pretty, end_pretty, expiration_time FROM crdb_internal.ranges_no_leases WHERE expiration_time IS NOT NULL AND table_name = 'foo'
+----
+start_pretty   end_pretty  expiration_time
+/Table/56/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
+
 # Make sure that the cluster id isn't unset.
 query B
 select crdb_internal.cluster_id() != '00000000-0000-0000-0000-000000000000' FROM foo
