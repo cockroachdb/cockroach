@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1548,7 +1549,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr)
 
 	// Begin recording runtime statistics.
-	s.startSampleEnvironment(DefaultMetricsSampleInterval)
+	s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval)
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(
@@ -1904,68 +1905,92 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 	return nil
 }
 
-// startSampleEnvironment begins the heap profiler worker and a worker that
-// periodically instructs the runtime stat sampler to sample the environment.
-func (s *Server) startSampleEnvironment(frequency time.Duration) {
+// startSampleEnvironment begins the heap profiler worker.
+func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Duration) {
 	// Immediately record summaries once on server startup.
-	ctx := s.AnnotateCtx(context.Background())
+	ctx = s.AnnotateCtx(ctx)
 	goroutineDumper, err := goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
 	if err != nil {
 		log.Infof(ctx, "Could not start goroutine dumper worker due to: %s", err)
 	}
-	var heapProfiler *heapprofiler.HeapProfiler
 
-	{
-		systemMemory, err := status.GetTotalMemory(ctx)
-		if err != nil {
-			log.Warningf(ctx, "Could not compute system memory due to: %s", err)
-		} else {
-			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, systemMemory)
-			if err != nil {
-				log.Infof(ctx, "Could not start heap profiler worker due to: %s", err)
-			}
+	// We're not going to take heap profiles if running with in-memory stores.
+	// This helps some tests that can't write any files.
+	allStoresInMem := true
+	for _, storeSpec := range s.cfg.Stores.Specs {
+		if !storeSpec.InMemory {
+			allStoresInMem = false
+			break
 		}
 	}
 
-	// We run two separate sampling loops, one for memory stats (via
-	// ReadMemStats) and one for all other runtime stats. This is necessary
-	// because as of go1.11, runtime.ReadMemStats() "stops the world" and
-	// requires waiting for any current GC run to finish. With a large heap, a
-	// single GC run may take longer than the default sampling period (10s).
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
-		timer := timeutil.NewTimer()
-		defer timer.Stop()
-		timer.Reset(frequency)
-		for {
-			select {
-			case <-timer.C:
-				timer.Read = true
-				s.runtime.SampleMemStats(ctx)
-				timer.Reset(frequency)
-			case <-s.stopper.ShouldStop():
-				return
-			}
+	var heapProfiler *heapprofiler.HeapProfiler
+	if s.cfg.HeapProfileDirName != "" && !allStoresInMem {
+		if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
+			log.Fatalf(ctx, "Could not create heap profiles dir: %s", err)
 		}
-	})
+		heapProfiler, err = heapprofiler.NewHeapProfiler(
+			s.cfg.HeapProfileDirName, s.ClusterSettings())
+		if err != nil {
+			log.Fatalf(ctx, "Could not start heap profiler worker due to: %s", err)
+		}
+	}
 
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		var goMemStats atomic.Value // *status.GoMemStats
+		goMemStats.Store(&status.GoMemStats{})
+		var collectingMemStats int32 // atomic, 1 when stats call is ongoing
+
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
 		timer.Reset(frequency)
+
 		for {
 			select {
+			case <-s.stopper.ShouldStop():
+				return
 			case <-timer.C:
 				timer.Read = true
-				s.runtime.SampleEnvironment(ctx)
+				timer.Reset(frequency)
+
+				// We read the heap stats on another goroutine and give up after 1s.
+				// This is necessary because as of Go 1.12, runtime.ReadMemStats()
+				// "stops the world" and that requires first waiting for any current GC
+				// run to finish. With a large heap and under extreme conditions, a
+				// single GC run may take longer than the default sampling period of
+				// 10s. Under normal operations and with more recent versions of Go,
+				// this hasn't been observed to be a problem.
+				statsCollected := make(chan struct{})
+				if atomic.CompareAndSwapInt32(&collectingMemStats, 0, 1) {
+					if err := s.stopper.RunAsyncTask(ctx, "get-mem-stats", func(ctx context.Context) {
+						var ms status.GoMemStats
+						runtime.ReadMemStats(&ms.MemStats)
+						ms.Collected = timeutil.Now()
+						log.VEventf(ctx, 2, "memstats: %+v", ms)
+
+						goMemStats.Store(&ms)
+						atomic.StoreInt32(&collectingMemStats, 0)
+						close(statsCollected)
+					}); err != nil {
+						close(statsCollected)
+					}
+				}
+
+				select {
+				case <-statsCollected:
+					// Good; we managed to read the Go memory stats quickly enough.
+				case <-time.After(time.Second):
+				}
+
+				curStats := goMemStats.Load().(*status.GoMemStats)
+				s.runtime.SampleEnvironment(ctx, *curStats)
 				if goroutineDumper != nil {
 					goroutineDumper.MaybeDump(ctx, s.ClusterSettings(), s.runtime.Goroutines.Value())
 				}
 				if heapProfiler != nil {
-					heapProfiler.MaybeTakeProfile(ctx, s.ClusterSettings(), s.runtime.Rss.Value())
+					heapProfiler.MaybeTakeProfile(ctx, curStats.MemStats)
 				}
-				timer.Reset(frequency)
-			case <-s.stopper.ShouldStop():
-				return
+
 			}
 		}
 	})

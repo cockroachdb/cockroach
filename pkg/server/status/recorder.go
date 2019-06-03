@@ -601,8 +601,8 @@ func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
 	})
 }
 
-// GetTotalMemory returns either the total system memory or if possible the
-// cgroups available memory.
+// GetTotalMemory returns either the total system memory (in bytes) or if
+// possible the cgroups available memory.
 func GetTotalMemory(ctx context.Context) (int64, error) {
 	memory, warning, err := GetTotalMemoryWithoutLogging()
 	if err != nil {

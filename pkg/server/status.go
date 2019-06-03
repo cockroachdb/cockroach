@@ -95,10 +95,6 @@ const (
 	// permitted in responses.
 	omittedKeyStr = "omitted (due to the 'server.remote_debugging.mode' setting)"
 
-	// heapDir is the directory name where the heap profiler stores profiles
-	// when there is a potential OOM situation.
-	heapDir = "heap_profiler"
-
 	// goroutineDir is the directory name where the goroutinedumper stores
 	// goroutine dumps.
 	goroutinesDir = "goroutine_dump"
@@ -681,7 +677,7 @@ func (s *statusServer) GetFiles(
 	//TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
 	// intead of reading indididual entries.
 	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
-		dir = filepath.Join(s.admin.server.cfg.HeapProfileDirName, heapDir)
+		dir = filepath.Join(s.admin.server.cfg.HeapProfileDirName, base.HeapProfileDir)
 	case serverpb.FileType_GOROUTINES: // Requesting for saved Goroutine dumps.
 		dir = filepath.Join(s.admin.server.cfg.GoroutineDumpDirName, goroutinesDir)
 	default:
