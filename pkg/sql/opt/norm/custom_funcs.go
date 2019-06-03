@@ -235,6 +235,13 @@ func (c *CustomFuncs) IsBoundBy(src opt.Expr, cols opt.ColSet) bool {
 	return c.OuterCols(src).SubsetOf(cols)
 }
 
+// IsDeterminedBy returns true if all outer references in the source expression
+// are bound by the closure of the given columns according to the functional
+// dependencies of the input expression.
+func (c *CustomFuncs) IsDeterminedBy(src opt.Expr, cols opt.ColSet, input memo.RelExpr) bool {
+	return input.Relational().FuncDeps.InClosureOf(c.OuterCols(src), cols)
+}
+
 // IsCorrelated returns true if any variable in the source expression references
 // a column from the destination expression. For example:
 //   (InnerJoin
@@ -525,6 +532,35 @@ func (c *CustomFuncs) ExtractUnboundConditions(
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
 	for i := range filters {
 		if !c.IsBoundBy(&filters[i], cols) {
+			newFilters = append(newFilters, filters[i])
+		}
+	}
+	return newFilters
+}
+
+// ExtractDeterminedConditions returns a new list of filters containing only
+// those expressions from the given list which are bound by columns which
+// are functionally determined by the given columns.
+func (c *CustomFuncs) ExtractDeterminedConditions(
+	filters memo.FiltersExpr, cols opt.ColSet, input memo.RelExpr,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, 0, len(filters))
+	for i := range filters {
+		if c.IsDeterminedBy(&filters[i], cols, input) {
+			newFilters = append(newFilters, filters[i])
+		}
+	}
+	return newFilters
+}
+
+// ExtractUndeterminedConditions is the opposite of
+// ExtractDeterminedConditions.
+func (c *CustomFuncs) ExtractUndeterminedConditions(
+	filters memo.FiltersExpr, cols opt.ColSet, input memo.RelExpr,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, 0, len(filters))
+	for i := range filters {
+		if !c.IsDeterminedBy(&filters[i], cols, input) {
 			newFilters = append(newFilters, filters[i])
 		}
 	}
@@ -1120,6 +1156,12 @@ func (c *CustomFuncs) ReduceWindowPartitionCols(
 	p := *private
 	p.Partition = fdset.ReduceCols(private.Partition)
 	return &p
+}
+
+// WindowPartition returns the set of columns that the window function uses to
+// partition.
+func (c *CustomFuncs) WindowPartition(priv *memo.WindowPrivate) opt.ColSet {
+	return priv.Partition
 }
 
 // ----------------------------------------------------------------------
