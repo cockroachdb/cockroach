@@ -49,6 +49,9 @@ func TryDelegate(
 	case *tree.ShowCreate:
 		return d.delegateShowCreate(t)
 
+	case *tree.ShowDatabaseIndexes:
+		return d.delegateShowDatabaseIndexes(t)
+
 	case *tree.ShowIndexes:
 		return d.delegateShowIndexes(t)
 
