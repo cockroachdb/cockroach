@@ -477,14 +477,18 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 // #16008 for details, and #16344 for the tracking issue to clean this mess up
 // properly.
 //
-// When manual is true, the sticky bit associated with the split range is set.
-// Any ranges with the sticky bit set will be skipped by the merge queue when
-// scanning for potential ranges to merge.
+// expirationTime is the timestamp when the split expires and is eligible for
+// automatic merging by the merge queue. To specify that a split should
+// immediately be eligible for automatic merging, set expirationTime to
+// hlc.Timestamp{} (I.E. the zero timestamp). To specify that a split should
+// never be eligible, set expirationTime to hlc.MaxTimestamp.
 //
 // The keys can be either byte slices or a strings.
-func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}, manual bool) error {
+func (db *DB) AdminSplit(
+	ctx context.Context, spanKey, splitKey interface{}, expirationTime hlc.Timestamp,
+) error {
 	b := &Batch{}
-	b.adminSplit(spanKey, splitKey, manual)
+	b.adminSplit(spanKey, splitKey, expirationTime)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

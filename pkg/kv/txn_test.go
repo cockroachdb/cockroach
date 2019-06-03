@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
 )
@@ -408,7 +409,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		}
 		s.Manual.Increment(time.Second.Nanoseconds())
 		// Split range by keyB.
-		if err := s.DB.AdminSplit(context.TODO(), splitKey, splitKey, true /* manual */); err != nil {
+		if err := s.DB.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 		// Wait till split complete.

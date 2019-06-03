@@ -223,11 +223,11 @@ func (r *Replica) adminSplitWithDescriptor(
 			log.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
 		}
 		log.Event(ctx, "range already split")
-		// Even if the range is already split, we should still set the sticky bit
-		if args.Manual {
-			nowTs := r.store.Clock().Now()
+		// Even if the range is already split, we should still update the sticky
+		// bit if it is different.
+		if !args.ExpirationTime.Equal(desc.StickyBit) {
 			newDesc := *desc
-			newDesc.StickyBit = &nowTs
+			newDesc.StickyBit = args.ExpirationTime
 			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
 				descKey := keys.RangeDescriptorKey(desc.StartKey)
@@ -243,7 +243,7 @@ func (r *Replica) adminSplitWithDescriptor(
 					Commit: true,
 					InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 						StickyBitTrigger: &roachpb.StickyBitTrigger{
-							StickyBit: &nowTs,
+							StickyBit: args.ExpirationTime,
 						},
 					},
 				})
@@ -270,11 +270,8 @@ func (r *Replica) adminSplitWithDescriptor(
 		return reply, errors.Errorf("unable to allocate right hand side range descriptor: %s", err)
 	}
 
-	// Add sticky bit.
-	if args.Manual {
-		nowTs := r.store.Clock().Now()
-		rightDesc.StickyBit = &nowTs
-	}
+	// Set the range descriptor's sticky bit.
+	rightDesc.StickyBit = args.ExpirationTime
 
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
@@ -394,16 +391,17 @@ func (r *Replica) AdminUnsplit(
 		return reply, roachpb.NewErrorf("key %s is not the start of a range", args.Header().Key)
 	}
 
-	// If the range's sticky bit is not set, we treat the unsplit command
-	// as a no-op and return success instead of throwing an error.
-	if desc.StickyBit == nil {
+	// If the range's sticky bit is already hlc.Timestamp{}, we treat the
+	// unsplit command as a no-op and return success instead of throwing an
+	// error.
+	if desc.StickyBit.Equal(hlc.Timestamp{}) {
 		return reply, nil
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		newDesc := desc
-		newDesc.StickyBit = nil
+		newDesc.StickyBit = hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
 
 		if err := updateRangeDescriptor(b, descKey, &desc, &newDesc); err != nil {
@@ -417,8 +415,7 @@ func (r *Replica) AdminUnsplit(
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				StickyBitTrigger: &roachpb.StickyBitTrigger{
-					// Setting StickyBit to nil unsets the sticky bit.
-					StickyBit: nil,
+					StickyBit: hlc.Timestamp{},
 				},
 			},
 		})

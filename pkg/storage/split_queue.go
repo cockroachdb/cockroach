@@ -165,7 +165,8 @@ func (sq *splitQueue) processAttempt(
 				RequestHeader: roachpb.RequestHeader{
 					Key: splitKey.AsRawKey(),
 				},
-				SplitKey: splitKey.AsRawKey(),
+				SplitKey:       splitKey.AsRawKey(),
+				ExpirationTime: hlc.Timestamp{},
 			},
 			desc,
 			false, /* delayable */

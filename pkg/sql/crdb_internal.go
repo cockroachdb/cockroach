@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1675,7 +1676,7 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	table_name,
 	index_name,
 	replicas,
-	manual_split_time,
+	expiration_time,
 	crdb_internal.lease_holder(start_key) AS lease_holder
 FROM crdb_internal.ranges_no_leases
 `,
@@ -1689,7 +1690,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "table_name", Typ: types.String},
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
-		{Name: "manual_split_time", Typ: types.Timestamp},
+		{Name: "expiration_time", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
 	},
 }
@@ -1702,16 +1703,16 @@ var crdbInternalRangesNoLeasesTable = virtualSchemaTable{
 	comment: `range metadata without leaseholder details (KV join; expensive!)`,
 	schema: `
 CREATE TABLE crdb_internal.ranges_no_leases (
-  range_id          INT NOT NULL,
-  start_key         BYTES NOT NULL,
-  start_pretty      STRING NOT NULL,
-  end_key           BYTES NOT NULL,
-  end_pretty        STRING NOT NULL,
-  database_name     STRING NOT NULL,
-  table_name        STRING NOT NULL,
-  index_name        STRING NOT NULL,
-  replicas          INT[] NOT NULL,
-  manual_split_time TIMESTAMP
+  range_id        INT NOT NULL,
+  start_key       BYTES NOT NULL,
+  start_pretty    STRING NOT NULL,
+  end_key         BYTES NOT NULL,
+  end_pretty      STRING NOT NULL,
+  database_name   STRING NOT NULL,
+  table_name      STRING NOT NULL,
+  index_name      STRING NOT NULL,
+  replicas        INT[] NOT NULL,
+  expiration_time TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
@@ -1790,9 +1791,9 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			}
 
-			manualSplitTime := tree.DNull
-			if desc.StickyBit != nil {
-				manualSplitTime = tree.TimestampToInexactDTimestamp(*desc.StickyBit)
+			expirationTime := tree.DNull
+			if !desc.StickyBit.Equal(hlc.MaxTimestamp) {
+				expirationTime = tree.TimestampToInexactDTimestamp(desc.StickyBit)
 			}
 
 			return tree.Datums{
@@ -1805,7 +1806,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
 				arr,
-				manualSplitTime,
+				expirationTime,
 			}, nil
 		}, nil
 	},

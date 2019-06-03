@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
 
@@ -588,7 +589,7 @@ func (b *Batch) adminMerge(key interface{}) {
 
 // adminSplit is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, manual bool) {
+func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, expirationTime hlc.Timestamp) {
 	spanKey, err := marshalKey(spanKeyIn)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -603,8 +604,8 @@ func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, manual bool) {
 		RequestHeader: roachpb.RequestHeader{
 			Key: spanKey,
 		},
-		SplitKey: splitKey,
-		Manual:   manual,
+		SplitKey:       splitKey,
+		ExpirationTime: expirationTime,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
