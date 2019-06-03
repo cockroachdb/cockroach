@@ -2360,6 +2360,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *distinctNode:
 		plan, err = dsp.createPlanForDistinct(planCtx, n)
 
+	case *ordinalityNode:
+		plan, err = dsp.createPlanForOrdinality(planCtx, n)
+
 	case *unionNode:
 		plan, err = dsp.createPlanForSetOp(planCtx, n)
 
@@ -2709,6 +2712,29 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 
 	// TODO(arjun): We could distribute this final stage by hash.
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlpb.PostProcessSpec{}, plan.ResultTypes)
+
+	return plan, nil
+}
+
+func (dsp *DistSQLPlanner) createPlanForOrdinality(
+	planCtx *PlanningCtx, n *ordinalityNode,
+) (PhysicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.source)
+	if err != nil {
+		return PhysicalPlan{}, err
+	}
+
+	ordinalitySpec := distsqlpb.ProcessorCoreUnion{
+		Ordinality: &distsqlpb.OrdinalitySpec{},
+	}
+
+	numCols := len(plan.PlanToStreamColMap)
+	plan.ResultTypes = append(plan.ResultTypes, *types.Int)
+	plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, numCols)
+
+	// WITH ORDINALITY never gets distributed so that the gateway node can
+	// always number each row in order
+	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, ordinalitySpec, distsqlpb.PostProcessSpec{}, plan.ResultTypes)
 
 	return plan, nil
 }
