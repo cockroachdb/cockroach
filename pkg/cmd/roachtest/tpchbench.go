@@ -52,6 +52,7 @@ type tpchBenchSpec struct {
 	ScaleFactor     int
 	benchType       tpchBench
 	numRunsPerQuery int
+	minVersion      string
 }
 
 // runTPCHBench runs sets of queries against CockroachDB clusters in different
@@ -230,7 +231,7 @@ func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
 	r.Add(testSpec{
 		Name:       strings.Join(nameParts, "/"),
 		Cluster:    makeClusterSpec(numNodes),
-		MinVersion: maybeMinVersionForFixturesImport(cloud),
+		MinVersion: b.minVersion,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
@@ -245,6 +246,7 @@ func registerTPCHBench(r *registry) {
 			ScaleFactor:     1,
 			benchType:       sql20,
 			numRunsPerQuery: 3,
+			minVersion:      maybeMinVersionForFixturesImport(cloud),
 		},
 		{
 			Nodes:           3,
@@ -252,6 +254,7 @@ func registerTPCHBench(r *registry) {
 			ScaleFactor:     1,
 			benchType:       tpch,
 			numRunsPerQuery: 3,
+			minVersion:      maybeMinVersionForFixturesImport(cloud),
 		},
 		{
 			Nodes:           3,
@@ -259,6 +262,7 @@ func registerTPCHBench(r *registry) {
 			ScaleFactor:     1,
 			benchType:       tpchVec,
 			numRunsPerQuery: 3,
+			minVersion:      `v19.1.0`,
 		},
 	}
 
