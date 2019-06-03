@@ -131,7 +131,7 @@ func runZipfGenerators(t *testing.T, withIncrements bool) {
 			t.Fatalf("zipf(%d,%d,%f) rolled %d at index %d", z.iMin, z.zipfGenMu.iMax, z.theta, x[i], i)
 			z.zipfGenMu.mu.Unlock()
 			if withIncrements {
-				if err := z.IncrementIMax(); err != nil {
+				if err := z.IncrementIMax(1); err != nil {
 					t.Fatalf("could not increment iMax: %s", err)
 				}
 			}

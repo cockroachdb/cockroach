@@ -44,11 +44,11 @@ func NewUniformGenerator(rng *rand.Rand, iMin, iMax uint64) (*UniformGenerator, 
 	return &z, nil
 }
 
-// IncrementIMax increments iMax.
-func (z *UniformGenerator) IncrementIMax() error {
+// IncrementIMax increments iMax by count.
+func (z *UniformGenerator) IncrementIMax(count uint64) error {
 	z.mu.Lock()
 	defer z.mu.Unlock()
-	z.mu.iMax++
+	z.mu.iMax += count
 	return nil
 }
 
