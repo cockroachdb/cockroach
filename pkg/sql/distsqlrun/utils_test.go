@@ -142,7 +142,7 @@ func createDummyStream() (
 ) {
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		return nil, nil, nil, err
 	}

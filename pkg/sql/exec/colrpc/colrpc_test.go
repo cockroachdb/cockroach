@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -127,7 +126,7 @@ func TestOutboxInbox(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	_, mockServer, addr, err := distsqlrun.StartMockDistSQLServer(clock, stopper, staticNodeID)
+	_, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	require.NoError(t, err)
 
 	// Generate a random cancellation scenario.
@@ -356,7 +355,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := distsqlrun.StartMockDistSQLServer(
+	_, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, staticNodeID,
 	)
 	require.NoError(t, err)
@@ -481,7 +480,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := distsqlrun.StartMockDistSQLServer(
+	_, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, staticNodeID,
 	)
 	require.NoError(b, err)
