@@ -72,6 +72,7 @@ type cliTestParams struct {
 	noServer   bool
 	storeSpecs []base.StoreSpec
 	locality   roachpb.Locality
+	addr       string
 }
 
 func (c *cliTest) fail(err interface{}) {
@@ -135,6 +136,7 @@ func newCLITest(params cliTestParams) cliTest {
 			SSLCertsDir: c.certsDir,
 			StoreSpecs:  params.storeSpecs,
 			Locality:    params.locality,
+			Addr:        params.addr,
 		})
 		if err != nil {
 			c.fail(err)
@@ -370,7 +372,7 @@ func (c cliTest) runWithArgsUnredirected(origArgs []string) {
 				args = append(args, "--insecure=false")
 				args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
 			}
-			args = append(args, fmt.Sprintf("--host=%s:%s", h, p))
+			args = append(args, fmt.Sprintf("--host=%s", net.JoinHostPort(h, p)))
 		}
 		args = append(args, origArgs[1:]...)
 
