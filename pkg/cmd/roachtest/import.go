@@ -43,10 +43,8 @@ func registerImportTPCC(r *registry) {
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
 			defer hc.Done()
-			// For fixtures import, use the version built into the cockroach binary so
-			// the tpcc workload-versions match on release branches.
 			cmd := fmt.Sprintf(
-				`./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`,
+				`./workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081'`,
 				warehouses)
 			c.Run(ctx, c.Node(1), cmd)
 			return nil
