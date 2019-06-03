@@ -155,14 +155,14 @@ func (node *ShowIndexes) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Table)
 }
 
-// ShowDbIndexes represents a SHOW INDEXES FROM DATABASE statement.
+// ShowDbIndexes represents a SHOW DBINDEXES FROM DATABASE statement.
 type ShowDbIndexes struct {
 	Database string
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowDbIndexes) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW INDEXES FROM DATABASE ")
+	ctx.WriteString("SHOW DBINDEXES FROM ")
 	ctx.WriteString(node.Database)
 }
 
