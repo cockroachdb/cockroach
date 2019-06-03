@@ -103,7 +103,7 @@ func (ed EncDatum) Size() uintptr {
 // EncDatumFromEncoded initializes an EncDatum with the given encoded
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.
-// SetEncoded wipes the underlying Datum.
+// The underlying Datum is nil.
 func EncDatumFromEncoded(enc DatumEncoding, encoded []byte) EncDatum {
 	if len(encoded) == 0 {
 		panic(fmt.Sprintf("empty encoded value"))
@@ -181,7 +181,7 @@ func (ed *EncDatum) UnsetDatum() {
 	ed.encoding = 0
 }
 
-// IsUnset returns true if SetEncoded or SetDatum were not called.
+// IsUnset returns true if EncDatumFromEncoded or DatumToEncDatum were not called.
 func (ed *EncDatum) IsUnset() bool {
 	return ed.encoded == nil && ed.Datum == nil
 }

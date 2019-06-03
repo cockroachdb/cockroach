@@ -213,6 +213,10 @@ message DistinctSpec {
   repeated uint32 distinct_columns = 2;
 }
 
+message OrdinalitySpec {
+  // Currently empty
+}
+
 // ZigzagJoinerSpec is the specification for a zigzag join processor. The
 // processor's current implementation fetches the rows using internal
 // rowFetchers.

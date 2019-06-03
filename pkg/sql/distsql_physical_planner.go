@@ -335,6 +335,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 // this plan couldn't be distributed.
 // TODO(radu): add tests for this.
 func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendation, error) {
+	// add support for ordinality
 	switch n := node.(type) {
 	case *filterNode:
 		if err := dsp.checkExpr(n.filter); err != nil {
@@ -2362,6 +2363,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *distinctNode:
 		plan, err = dsp.createPlanForDistinct(planCtx, n)
 
+	case *ordinalityNode:
+		plan, err = dsp.createPlanForOrdinality(planCtx, n)
+
 	case *unionNode:
 		plan, err = dsp.createPlanForSetOp(planCtx, n)
 
@@ -2711,6 +2715,26 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 
 	// TODO(arjun): We could distribute this final stage by hash.
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlpb.PostProcessSpec{}, plan.ResultTypes)
+
+	return plan, nil
+}
+
+func (dsp *DistSQLPlanner) createPlanForOrdinality(
+	planCtx *PlanningCtx, n *ordinalityNode,
+) (PhysicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.source)
+	if err != nil {
+		return PhysicalPlan{}, err
+	}
+
+	ordinalitySpec := distsqlpb.ProcessorCoreUnion{
+		Ordinality: &distsqlpb.OrdinalitySpec{},
+	}
+
+	plan.ResultTypes = append(plan.ResultTypes, *types.Int)
+	plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, 0)
+
+	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, ordinalitySpec, distsqlpb.PostProcessSpec{}, plan.ResultTypes)
 
 	return plan, nil
 }

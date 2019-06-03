@@ -105,6 +105,7 @@ message ProcessorCoreUnion {
   optional LocalPlanNodeSpec localPlanNode = 24;
   optional ChangeAggregatorSpec changeAggregator = 25;
   optional ChangeFrontierSpec changeFrontier = 26;
+  optional OrdinalitySpec ordinality = 27;
 
   reserved 6, 12;
 }

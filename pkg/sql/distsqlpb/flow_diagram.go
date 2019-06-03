@@ -319,6 +319,11 @@ func (d *DistinctSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (o *OrdinalitySpec) summary() (string, []string) {
+	return "Ordinality", []string{}
+}
+
+// summary implements the diagramCellType interface.
 func (d *ProjectSetSpec) summary() (string, []string) {
 	var details []string
 	for _, expr := range d.Exprs {
