@@ -964,22 +964,20 @@ func (*PutRequest) flags() int {
 	return isWrite | isTxn | isTxnWrite | consultsTSCache | canBackpressure
 }
 
-// ConditionalPut effectively reads and may not write, so must update
-// the timestamp cache. Note that on ConditionFailedErrors
-// ConditionalPut returns the read data and must update the timestamp
-// cache. ConditionalPuts do not require a refresh because on write-too-old
-// errors, they return an error immediately instead of continuing a
-// serializable transaction to be retried at end transaction.
+// ConditionalPut effectively reads without writing if it hits a
+// ConditionFailedError, so it must update the timestamp cache in this case.
+// ConditionalPuts do not require a refresh because on write-too-old errors,
+// they return an error immediately instead of continuing a serializable
+// transaction to be retried at end transaction.
 func (*ConditionalPutRequest) flags() int {
 	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache | updatesReadTSCache | updatesTSCacheOnErr | canBackpressure
 }
 
-// InitPut, like ConditionalPut, effectively reads and may not write.
-// It also may return the actual data read on ConditionFailedErrors,
-// so must update the timestamp cache on errors. InitPuts do not require
-// a refresh because on write-too-old errors, they return an error
-// immediately instead of continuing a serializable transaction to be
-// retried at end transaction.
+// InitPut, like ConditionalPut, effectively reads without writing if it hits a
+// ConditionFailedError, so it must update the timestamp cache in this case.
+// InitPuts do not require a refresh because on write-too-old errors, they
+// return an error immediately instead of continuing a serializable transaction
+// to be retried at end transaction.
 func (*InitPutRequest) flags() int {
 	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache | updatesReadTSCache | updatesTSCacheOnErr | canBackpressure
 }
