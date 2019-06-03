@@ -380,6 +380,8 @@ func (sb *statisticsBuilder) colStatLeaf(
 				colStat.NullCount = s.RowCount * unknownNullCountRatio
 			} else {
 				colStatLeaf := sb.colStatLeaf(nullableCols, s, fd, notNullCols)
+				// Fetch the colStat again since it may now have a different address.
+				colStat, _ = s.ColStats.Lookup(colSet)
 				colStat.NullCount = colStatLeaf.NullCount
 			}
 		}
@@ -408,6 +410,8 @@ func (sb *statisticsBuilder) colStatLeaf(
 				nullCount += colStatLeaf.NullCount * (1 - nullCount/s.RowCount)
 			}
 		})
+		// Fetch the colStat again since it may now have a different address.
+		colStat, _ = s.ColStats.Lookup(colSet)
 		colStat.DistinctCount = min(distinctCount, s.RowCount)
 		colStat.NullCount = min(nullCount, s.RowCount)
 	}
