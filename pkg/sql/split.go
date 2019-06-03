@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
 
@@ -129,7 +130,11 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 
 	// Don't set the manual flag if the cluster is not up-to-date.
 	stickyBitEnabled := params.EvalContext().Settings.Version.IsActive(cluster.VersionStickyBit)
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey, stickyBitEnabled); err != nil {
+	expirationTime := hlc.Timestamp{}
+	if stickyBitEnabled {
+		expirationTime = hlc.MaxTimestamp
+	}
+	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey, expirationTime); err != nil {
 		return false, err
 	}
 

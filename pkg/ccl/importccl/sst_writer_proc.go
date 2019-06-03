@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -176,7 +177,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 						end = sst.span.EndKey
 					}
 
-					if err := sp.db.AdminSplit(ctx, end, end, false /* manual */); err != nil {
+					if err := sp.db.AdminSplit(ctx, end, end, hlc.Timestamp{} /* expirationTime */); err != nil {
 						return err
 					}
 
