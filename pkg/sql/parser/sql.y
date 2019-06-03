@@ -490,7 +490,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DBINDEXES DEC DECIMAL DEFAULT
+%token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
 %token <str> DEALLOCATE DEFERRABLE DEFERRED DELETE DESC
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
@@ -721,7 +721,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_create_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
-%type <tree.Statement> show_db_indexes_stmt
 %type <tree.Statement> show_fingerprints_stmt
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
@@ -3154,10 +3153,10 @@ zone_value:
 // %Category: Group
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
-// SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW 
-// DBINDEXES, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS
-// SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS, SHOW STATISTICS,
-// SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION, SHOW USERS
+// SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW
+// JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW
+// SESSION, SHOW SESSIONS, SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES,
+// SHOW TRACE SHOW TRANSACTION, SHOW USERS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -3165,7 +3164,6 @@ show_stmt:
 | show_create_stmt          // EXTEND WITH HELP: SHOW CREATE
 | show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
-| show_db_indexes_stmt      // EXTEND WITH HELP: SHOW DBINDEXES
 | show_fingerprints_stmt
 | show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
@@ -3347,21 +3345,9 @@ show_grants_stmt:
   }
 | SHOW GRANTS error // SHOW HELP: SHOW GRANTS
 
-// %Help: SHOW DBINDEXES - list indexes for all tables in DB
-// %Category: DDL
-// %Text: SHOW DBINDEXES FROM <dbname>
-// %SeeAlso: WEBDOCS/show-index.html 
-// [TODO]: add docs about show index from database once created
-show_db_indexes_stmt:
-  SHOW DBINDEXES FROM database_name 
-  {
-    return unimplementedWithIssue(sqllex, 37270)
-  }
-| SHOW DBINDEXES error // SHOW HELP: SHOW DBINDEXES
-
 // %Help: SHOW INDEXES - list indexes
 // %Category: DDL
-// %Text: SHOW INDEXES FROM <tablename>
+// %Text: SHOW INDEXES FROM { <tablename> | DATABASE <database_name> }
 // %SeeAlso: WEBDOCS/show-index.html
 show_indexes_stmt:
   SHOW INDEX FROM table_name
@@ -3369,14 +3355,26 @@ show_indexes_stmt:
     $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
   }
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
+| SHOW INDEX FROM DATABASE database_name
+  {
+    return unimplementedWithIssue(sqllex, 37270)
+  }
 | SHOW INDEXES FROM table_name
   {
     $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+  }
+| SHOW INDEXES FROM DATABASE database_name
+  {
+    return unimplementedWithIssue(sqllex, 37270)
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM table_name
   {
     $$.val = &tree.ShowIndexes{Table: $4.unresolvedObjectName()}
+  }
+| SHOW KEYS FROM DATABASE database_name
+  {
+    return unimplementedWithIssue(sqllex, 37270)
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 
@@ -8905,7 +8903,6 @@ unreserved_keyword:
 | DATABASES
 | DATE
 | DAY
-| DBINDEXES
 | DEALLOCATE
 | DELETE
 | DEFERRED
