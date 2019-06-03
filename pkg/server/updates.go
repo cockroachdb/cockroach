@@ -212,7 +212,8 @@ func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
 		n.Hardware.Loadavg15 = float32(l.Load15)
 	}
 
-	n.Hardware.Provider, n.Hardware.InstanceClass = cloudinfo.GetProviderInfo()
+	n.Hardware.Provider, n.Hardware.InstanceClass = cloudinfo.GetInstanceClass()
+	n.Topology.Provider, n.Topology.Region = cloudinfo.GetInstanceRegion()
 }
 
 // checkForUpdates calls home to check for new versions for the current platform
