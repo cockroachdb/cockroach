@@ -19,10 +19,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 // TODO(yuzefovich): add randomized tests.
+// TODO(yuzefovich): add benchmarks.
 type rowNumberOp struct {
 	input           exec.Operator
 	outputColIdx    int
@@ -50,61 +50,14 @@ func (r *rowNumberOp) Init() {
 }
 
 func (r *rowNumberOp) Next(ctx context.Context) coldata.Batch {
-	b := r.input.Next(ctx)
-	if b.Length() == 0 {
-		return b
+	batch := r.input.Next(ctx)
+	if batch.Length() == 0 {
+		return batch
 	}
-	// TODO(yuzefovich): template partition out.
 	if r.partitionColIdx != -1 {
-		if r.partitionColIdx == b.Width() {
-			b.AppendCol(types.Bool)
-		} else if r.partitionColIdx > b.Width() {
-			panic("unexpected: column partitionColIdx is neither present nor the next to be appended")
-		}
-		if r.outputColIdx == b.Width() {
-			b.AppendCol(types.Int64)
-		} else if r.outputColIdx > b.Width() {
-			panic("unexpected: column outputColIdx is neither present nor the next to be appended")
-		}
-		partitionCol := b.ColVec(r.partitionColIdx).Bool()
-		rowNumberCol := b.ColVec(r.outputColIdx).Int64()
-		sel := b.Selection()
-		if sel != nil {
-			for i := uint16(0); i < b.Length(); i++ {
-				if partitionCol[sel[i]] {
-					r.rowNumber = 1
-				}
-				rowNumberCol[sel[i]] = r.rowNumber
-				r.rowNumber++
-			}
-		} else {
-			for i := uint16(0); i < b.Length(); i++ {
-				if partitionCol[i] {
-					r.rowNumber = 1
-				}
-				rowNumberCol[i] = r.rowNumber
-				r.rowNumber++
-			}
-		}
+		r.nextBodyWithPartition(batch)
 	} else {
-		if r.outputColIdx == b.Width() {
-			b.AppendCol(types.Int64)
-		} else if r.outputColIdx > b.Width() {
-			panic("unexpected: column outputColIdx is neither present nor the next to be appended")
-		}
-		rowNumberCol := b.ColVec(r.outputColIdx).Int64()
-		sel := b.Selection()
-		if sel != nil {
-			for i := uint16(0); i < b.Length(); i++ {
-				rowNumberCol[sel[i]] = r.rowNumber
-				r.rowNumber++
-			}
-		} else {
-			for i := uint16(0); i < b.Length(); i++ {
-				rowNumberCol[i] = r.rowNumber
-				r.rowNumber++
-			}
-		}
+		r.nextBodyNoPartition(batch)
 	}
-	return b
+	return batch
 }

@@ -179,8 +179,9 @@ type Config struct {
 	GoroutineDumpDirName string
 
 	// HeapProfileDirName is the directory name for heap profiles using
-	// heapprofiler.
+	// heapprofiler. If empty, no heap profiles will be collected.
 	HeapProfileDirName string
+
 	// Parsed values.
 
 	// NodeAttributes is the parsed representation of Attrs.

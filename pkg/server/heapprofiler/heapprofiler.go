@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -31,15 +32,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-const minProfileInterval = time.Minute
+// resetHighWaterMarkInterval specifies how often the high-water mark value will
+// be reset. Immediately after it is reset, a new profile will be taken.
+const resetHighWaterMarkInterval = time.Hour
 
 var (
-	systemMemoryThresholdFraction = settings.RegisterFloatSetting(
-		"server.heap_profile.system_memory_threshold_fraction",
-		"fraction of system memory beyond which if Rss increases, "+
-			"then heap profile is triggered",
-		.85,
-	)
 	maxProfiles = settings.RegisterIntSetting(
 		"server.heap_profile.max_profiles",
 		"maximum number of profiles to be kept. "+
@@ -48,99 +45,80 @@ var (
 	)
 )
 
-type stats struct {
-	rss                                  int64
-	systemMemory                         int64
-	lastProfileTime                      time.Time
-	aboveSysMemThresholdSinceLastProfile bool
-	currentTime                          func() time.Time
+type testingKnobs struct {
+	dontWriteProfiles    bool
+	maybeTakeProfileHook func(willTakeProfile bool)
+	now                  func() time.Time
 }
 
-type heuristic struct {
-	name   string
-	isTrue func(s *stats, st *cluster.Settings) (score int64, isTrue bool)
-}
-
-// fractionSystemMemoryHeuristic is true if latest Rss is more than
-// systemMemoryThresholdFraction of system memory. No new profile is
-// taken if Rss has been above threshold since the last time profile was taken,
-// but a new profile will be triggered if Rss has dipped below threshold since
-// the last profile. score is the latest value of Rss.
-// At max one profile will be taken in minProfileInterval.
-var fractionSystemMemoryHeuristic = heuristic{
-	name: "fraction_system_memory",
-	isTrue: func(s *stats, st *cluster.Settings) (score int64, isTrue bool) {
-		currentValue := s.rss
-		if float64(currentValue)/float64(s.systemMemory) > systemMemoryThresholdFraction.Get(&st.SV) {
-			if s.currentTime().Sub(s.lastProfileTime) < minProfileInterval ||
-				s.aboveSysMemThresholdSinceLastProfile {
-				return 0, false
-			}
-			s.aboveSysMemThresholdSinceLastProfile = true
-			return currentValue, true
-		}
-		s.aboveSysMemThresholdSinceLastProfile = false
-		return 0, false
-	},
-}
-
-// HeapProfiler is used to take heap profiles if an OOM situation is
-// detected. It stores relevant functions and stats for heuristics to use.
+// HeapProfiler is used to take heap profiles.
+//
+// MaybeTakeProfile() is supposed to be called periodically. A profile is taken
+// every time Go heap allocated bytes exceeds the previous high-water mark. The
+// recorded high-water mark is also reset periodically, so that we take some
+// profiles periodically.
+// Profiles are also GCed periodically. The latest is always kept, and a couple
+// of the ones with the largest heap are also kept.
 type HeapProfiler struct {
-	*stats
-	heuristics      []heuristic
-	takeHeapProfile func(ctx context.Context, dir string, prefix string, suffix string)
-	gcProfiles      func(ctx context.Context, dir, prefix string, maxCount int64)
-	dir             string
+	dir string
+	st  *cluster.Settings
+	// lastProfileTime marks the time when we took the last profile.
+	lastProfileTime time.Time
+	// highwaterMarkBytes represents the maximum heap size that we've seen since
+	// resetting the filed (which happens periodically).
+	highwaterMarkBytes uint64
+
+	knobs testingKnobs
 }
 
-const memprof = "memprof."
-
-// MaybeTakeProfile takes a heap profile if an OOM situation is detected using
-// heuristics enabled in o. At max one profile is taken in a call of this
-// function. This function is also responsible for updating stats in o.
-func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, st *cluster.Settings, rssValue int64) {
-	o.rss = rssValue
-	profileTaken := false
-	for _, h := range o.heuristics {
-		if score, isTrue := h.isTrue(o.stats, st); isTrue {
-			if !profileTaken {
-				prefix := memprof + h.name + "."
-				const format = "2006-01-02T15_04_05.999"
-				suffix := fmt.Sprintf("%018d_%s", score, o.currentTime().Format(format))
-				o.takeHeapProfile(ctx, o.dir, prefix, suffix)
-				o.lastProfileTime = o.currentTime()
-				profileTaken = true
-				if o.gcProfiles != nil {
-					o.gcProfiles(ctx, o.dir, memprof, maxProfiles.Get(&st.SV))
-				}
-			}
-		}
-	}
-}
-
-// NewHeapProfiler returns a HeapProfiler which has
-// systemMemoryThresholdFraction heuristic enabled. dir is the directory in
-// which profiles are stored.
-func NewHeapProfiler(dir string, systemMemory int64) (*HeapProfiler, error) {
+// NewHeapProfiler creates a HeapProfiler. dir is the directory in which
+// profiles are to be stored.
+func NewHeapProfiler(dir string, st *cluster.Settings) (*HeapProfiler, error) {
 	if dir == "" {
-		return nil, errors.New("directory to store profiles could not be determined")
-	}
-	dir = filepath.Join(dir, "heap_profiler")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, err
+		return nil, errors.Errorf("need to specify dir for NewHeapProfiler")
 	}
 	hp := &HeapProfiler{
-		stats: &stats{
-			systemMemory: systemMemory,
-			currentTime:  timeutil.Now,
-		},
-		heuristics:      []heuristic{fractionSystemMemoryHeuristic},
-		takeHeapProfile: takeHeapProfile,
-		gcProfiles:      gcProfiles,
-		dir:             dir,
+		dir: dir,
+		st:  st,
 	}
 	return hp, nil
+}
+
+// MaybeTakeProfile takes a heap profile if the heap is big enough.
+func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, ms runtime.MemStats) {
+	// If it's been too long since we took a profile, make sure we'll take one now.
+	if o.now().Sub(o.lastProfileTime) > resetHighWaterMarkInterval {
+		o.highwaterMarkBytes = 0
+	}
+
+	curHeap := ms.HeapAlloc
+	takeProfile := curHeap > o.highwaterMarkBytes
+	if hook := o.knobs.maybeTakeProfileHook; hook != nil {
+		hook(takeProfile)
+	}
+	if !takeProfile {
+		return
+	}
+
+	o.highwaterMarkBytes = curHeap
+	o.lastProfileTime = o.now()
+
+	if o.knobs.dontWriteProfiles {
+		return
+	}
+	const format = "2006-01-02T15_04_05.999"
+	filePrefix := "memprof."
+	fileName := fmt.Sprintf("%s%018d_%s", filePrefix, curHeap, o.now().Format(format))
+	path := filepath.Join(o.dir, fileName)
+	takeHeapProfile(ctx, path)
+	o.gcProfiles(ctx, o.dir, filePrefix)
+}
+
+func (o *HeapProfiler) now() time.Time {
+	if o.knobs.now != nil {
+		return o.knobs.now()
+	}
+	return timeutil.Now()
 }
 
 // gcProfiles removes least score profile matching the specified prefix when the
@@ -148,7 +126,8 @@ func NewHeapProfiler(dir string, systemMemory int64) (*HeapProfiler, error) {
 // the profiles indicates score such that sorting the filenames corresponds to
 // ordering the profiles from least to max score.
 // Latest profile in the directory is not considered for GC.
-func gcProfiles(ctx context.Context, dir, prefix string, maxCount int64) {
+func (o *HeapProfiler) gcProfiles(ctx context.Context, dir, prefix string) {
+	maxCount := maxProfiles.Get(&o.st.SV)
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		log.Warning(ctx, err)
@@ -184,8 +163,7 @@ func gcProfiles(ctx context.Context, dir, prefix string, maxCount int64) {
 	}
 }
 
-func takeHeapProfile(ctx context.Context, dir string, prefix string, suffix string) {
-	path := filepath.Join(dir, prefix+suffix)
+func takeHeapProfile(ctx context.Context, path string) {
 	// Try writing a go heap profile.
 	f, err := os.Create(path)
 	if err != nil {

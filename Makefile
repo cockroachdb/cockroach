@@ -758,6 +758,8 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/sum_agg.eg.go \
   pkg/sql/exec/tuples_differ.eg.go \
   pkg/sql/exec/vec_comparators.eg.go \
+  pkg/sql/exec/vecbuiltins/rank.eg.go \
+  pkg/sql/exec/vecbuiltins/row_number.eg.go \
   pkg/sql/exec/zerocolumns.eg.go
 
 OPTGEN_TARGETS = \
@@ -1416,6 +1418,8 @@ pkg/sql/exec/sort.eg.go: pkg/sql/exec/sort_tmpl.go
 pkg/sql/exec/sum_agg.eg.go: pkg/sql/exec/sum_agg_tmpl.go
 pkg/sql/exec/tuples_differ.eg.go: pkg/sql/exec/tuples_differ_tmpl.go
 pkg/sql/exec/vec_comparators.eg.go: pkg/sql/exec/vec_comparators_tmpl.go
+pkg/sql/exec/vecbuiltins/rank.eg.go: pkg/sql/exec/vecbuiltins/rank_tmpl.go
+pkg/sql/exec/vecbuiltins/row_number.eg.go: pkg/sql/exec/vecbuiltins/row_number_tmpl.go
 pkg/sql/exec/zerocolumns.eg.go: pkg/sql/exec/zerocolumns_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen
