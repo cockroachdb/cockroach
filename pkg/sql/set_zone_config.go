@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 type optionValue struct {
@@ -44,7 +44,8 @@ type setZoneConfigNode struct {
 	yamlConfig    tree.TypedExpr
 	options       map[tree.Name]optionValue
 	setDefault    bool
-
+	// enhance create partition feature with locate zone
+	sourcePlan			planNode
 	run setZoneConfigRun
 }
 
@@ -95,6 +96,7 @@ func loadYAML(dst interface{}, yamlString string) {
 }
 
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
+
 	var yamlConfig tree.TypedExpr
 
 	if n.YAMLConfig != nil {

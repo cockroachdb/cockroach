@@ -1506,6 +1506,33 @@ func (ef *execFactory) ConstructCreateTable(
 	if input != nil {
 		nd.sourcePlan = input.(planNode)
 	}
+	// enhance create partition feature with locate zone
+	if ct.PartitionBy != nil {
+		if ct.PartitionHasLocation() {
+			var res *setZoneConfigNode
+			for _, pb := range ct.PartitionBy.List {
+				n := &tree.SetZoneConfig{
+					ZoneSpecifier: tree.ZoneSpecifier{
+						TableOrIndex: tree.TableIndexName{Table: ct.Table},
+						Partition: tree.Name(pb.Name),
+					},
+					Options: pb.Location,
+				}
+				// try to find a ctx
+				planNode, err := ef.planner.SetZoneConfig(ef.planner.extendedEvalCtx.Context, n)
+				if err != nil {
+					return nil, err
+				}
+				if res == nil {
+					planNode.(*setZoneConfigNode).sourcePlan = nd
+				} else {
+					planNode.(*setZoneConfigNode).sourcePlan = res
+				}
+				res = planNode.(*setZoneConfigNode)
+			}
+			return res, nil
+		}
+	}
 	return nd, nil
 }
 
