@@ -18,6 +18,9 @@ type Split struct {
 	// Each row contains values for the columns in the PK or index (or a prefix
 	// of the columns).
 	Rows *Select
+	// Splits can last a specified amount of time before becoming eligible for
+	// automatic merging.
+	ExpireExpr Expr
 }
 
 // Format implements the NodeFormatter interface.
@@ -31,6 +34,10 @@ func (node *Split) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.TableOrIndex)
 	ctx.WriteString(" SPLIT AT ")
 	ctx.FormatNode(node.Rows)
+	if node.ExpireExpr != nil {
+		ctx.WriteString(" WITH EXPIRATION ")
+		ctx.FormatNode(node.ExpireExpr)
+	}
 }
 
 // Unsplit represents an `ALTER TABLE/INDEX .. UNSPLIT AT ..` statement.
