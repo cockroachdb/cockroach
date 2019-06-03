@@ -14,6 +14,15 @@
 =>
 $input
 
+# EliminateOffset discards an Offset operator if its offset value is zero.
+[EliminateOffset, Normalize]
+(Offset
+    $input:*
+    (Const 0)
+)
+=>
+$input
+
 # PushLimitIntoProject pushes the Limit operator into its Project input. It is
 # desirable to push the Limit operator as low in the query as possible, in order
 # to minimize the number of rows that other operators need to process.

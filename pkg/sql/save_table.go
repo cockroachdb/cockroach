@@ -32,6 +32,11 @@ type saveTableNode struct {
 
 	target tree.TableName
 
+	// Column names from the saved table. These could be different than the names
+	// of the columns in the source plan. Note that saveTableNode passes through
+	// the source plan's column names.
+	colNames []string
+
 	run struct {
 		// vals accumulates a ValuesClause with the rows.
 		vals tree.ValuesClause
@@ -41,8 +46,10 @@ type saveTableNode struct {
 // saveTableInsertBatch is the number of rows per issued INSERT statement.
 const saveTableInsertBatch = 100
 
-func (p *planner) makeSaveTable(source planNode, target *tree.TableName) planNode {
-	return &saveTableNode{source: source, target: *target}
+func (p *planner) makeSaveTable(
+	source planNode, target *tree.TableName, colNames []string,
+) planNode {
+	return &saveTableNode{source: source, target: *target, colNames: colNames}
 }
 
 func (n *saveTableNode) startExec(params runParams) error {
@@ -51,10 +58,16 @@ func (n *saveTableNode) startExec(params runParams) error {
 	}
 
 	cols := planColumns(n.source)
-	for _, c := range cols {
+	if len(n.colNames) != len(cols) {
+		return pgerror.AssertionFailedf(
+			"number of column names (%d) does not match number of columns (%d)",
+			len(n.colNames), len(cols),
+		)
+	}
+	for i := 0; i < len(cols); i++ {
 		def := &tree.ColumnTableDef{
-			Name: tree.Name(c.Name),
-			Type: c.Typ,
+			Name: tree.Name(n.colNames[i]),
+			Type: cols[i].Typ,
 		}
 		def.Nullable.Nullability = tree.SilentNull
 		create.Defs = append(create.Defs, def)
