@@ -278,8 +278,6 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW INDEX ??`, `SHOW INDEXES`},
 		{`SHOW INDEXES FROM ??`, `SHOW INDEXES`},
 		{`SHOW INDEXES FROM blah ??`, `SHOW INDEXES`},
-		{`SHOW DBINDEXES ??`, `SHOW DBINDEXES`},
-		{`SHOW DBINDEXES FROM ??`, `SHOW DBINDEXES`},
 
 		{`SHOW ROLES ??`, `SHOW ROLES`},
 

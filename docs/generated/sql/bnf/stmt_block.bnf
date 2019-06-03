@@ -604,7 +604,6 @@ unreserved_keyword ::=
 	| 'DATABASES'
 	| 'DATE'
 	| 'DAY'
-	| 'DBINDEXES'
 	| 'DEALLOCATE'
 	| 'DELETE'
 	| 'DEFERRED'
