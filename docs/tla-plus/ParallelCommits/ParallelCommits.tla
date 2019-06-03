@@ -63,6 +63,21 @@ define
     IN
       /\ intent.epoch = query_epoch
       /\ intent.ts <= query_ts
+      \* The loss of information from intent resolution that is reflected
+      \* here has a few unfortunate effects:
+      \* 1. it is ambiguous whether a QueryIntent issued in parallel with
+      \*    a parallel commit is due to a missing intent or intent resolution
+      \*    after transaction finalization. In order to reduce this ambiguity,
+      \*    we're forced to query the transaction record after we detect this
+      \*    condition (#37866).
+      \* 2. a transaction recovery process that detects a missing intent cannot
+      \*    definitively conclude that the transaction being recovered was not
+      \*    committed without checking the transaction record first (#37784).
+      \*
+      \* We could address part of this by storing transaction IDs in resolved
+      \* values and allowing QueryIntent to correctly identify resolved values
+      \* that correspond to the desired intent (i.e. removing this condition).
+      \* However, there will still be complications with value GC.
       /\ intent.resolved = FALSE
 
   RecordStatuses  == {"pending", "staging", "committed", "aborted"}
@@ -143,11 +158,11 @@ variables
   parallel_keys = KEYS \ pipelined_keys;
 
   \* -- variables --
-  attempt = 1;
+  attempt   = 1;
   txn_epoch = 0;
-  txn_ts = 0;
-  to_write = {};
-  to_check = {};
+  txn_ts    = 0;
+  to_write  = {};
+  to_check  = {};
   have_staged_record = FALSE;
 begin
   \* Begin a new transaction epoch.
@@ -164,24 +179,29 @@ begin
   PipelineWrites:
     while to_write /= {} do
       with key \in to_write do
+        to_write := to_write \ {key};
         if intent_writes[key].resolved then
           \* Can't write over resolved write. In reality, this would result
           \* in laying down an (uncommitable) intent at a higher timestamp
           \* and returning a WriteTooOld error. For the sake of this model,
           \* we don't write anything. The pre-commit QueryIntent sent to
           \* this key during the parallel commit will fail.
-          to_write := to_write \ {key};
         elsif tscache[key] >= txn_ts then
           \* Write prevented. This shouldn't happen.
           assert FALSE;
         else
-          \* Write successful.
-          intent_writes[key] := [
-            epoch    |-> txn_epoch,
-            ts       |-> txn_ts,
-            resolved |-> FALSE
-          ];
-          to_write := to_write \ {key};
+          either
+            \* Async consensus successful.
+            intent_writes[key] := [
+              epoch    |-> txn_epoch,
+              ts       |-> txn_ts,
+              resolved |-> FALSE
+            ];
+          or
+            \* Async consensus unsuccessful. Should be
+            \* discovered by a pre-commit QueryIntent.
+            skip;
+          end either;
         end if;
       end with;
     end while;
@@ -229,12 +249,12 @@ begin
           ParallelWrite:
             with key \in to_write,
                  cur_intent = intent_writes[key] do
+              to_write := to_write \ {key};
               if cur_intent.epoch = txn_epoch then
                 \* Write already succeeded before refresh. Writes should be idempotent,
                 \* so there's nothing to do. In practice, this is not strictly true (e.g.
                 \* after intents are resolved), which is why we currently reject retry
                 \* attempts that would rely on idempotence with MixedSuccessErrors.
-                to_write := to_write \ {key};
               elsif tscache[key] >= txn_ts \/ cur_intent.resolved then
                 \* Write prevented.
                 either
@@ -256,7 +276,6 @@ begin
                   ts       |-> txn_ts,
                   resolved |-> FALSE
                 ];
-                to_write := to_write \ {key};
               end if;
             end with;
         or
@@ -322,9 +341,9 @@ end process;
 fair process preventer \in PREVENTERS
 variable
   prevent_epoch = 0;
-  prevent_ts = 0;
-  found_writes = {};
-  to_resolve = KEYS;
+  prevent_ts    = 0;
+  found_writes  = {};
+  to_resolve    = KEYS;
 begin
   PreventLoop:
     found_writes := {};
@@ -433,6 +452,21 @@ QueryIntent(key, query_epoch, query_ts) ==
   IN
     /\ intent.epoch = query_epoch
     /\ intent.ts <= query_ts
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     /\ intent.resolved = FALSE
 
 RecordStatuses  == {"pending", "staging", "committed", "aborted"}
@@ -538,20 +572,20 @@ BeginTxnEpoch == /\ pc["committer"] = "BeginTxnEpoch"
 PipelineWrites == /\ pc["committer"] = "PipelineWrites"
                   /\ IF to_write /= {}
                         THEN /\ \E key \in to_write:
-                                  IF intent_writes[key].resolved
-                                     THEN /\ to_write' = to_write \ {key}
-                                          /\ UNCHANGED intent_writes
-                                     ELSE /\ IF tscache[key] >= txn_ts
-                                                THEN /\ Assert(FALSE, 
-                                                               "Failure of assertion at line 176, column 11.")
-                                                     /\ UNCHANGED << intent_writes, 
-                                                                     to_write >>
-                                                ELSE /\ intent_writes' = [intent_writes EXCEPT ![key] =                       [
-                                                                                                          epoch    |-> txn_epoch,
-                                                                                                          ts       |-> txn_ts,
-                                                                                                          resolved |-> FALSE
-                                                                                                        ]]
-                                                     /\ to_write' = to_write \ {key}
+                                  /\ to_write' = to_write \ {key}
+                                  /\ IF intent_writes[key].resolved
+                                        THEN /\ UNCHANGED intent_writes
+                                        ELSE /\ IF tscache[key] >= txn_ts
+                                                   THEN /\ Assert(FALSE, 
+                                                                  "Failure of assertion at line 191, column 11.")
+                                                        /\ UNCHANGED intent_writes
+                                                   ELSE /\ \/ /\ intent_writes' = [intent_writes EXCEPT ![key] =                       [
+                                                                                                                   epoch    |-> txn_epoch,
+                                                                                                                   ts       |-> txn_ts,
+                                                                                                                   resolved |-> FALSE
+                                                                                                                 ]]
+                                                           \/ /\ TRUE
+                                                              /\ UNCHANGED intent_writes
                              /\ pc' = [pc EXCEPT !["committer"] = "PipelineWrites"]
                         ELSE /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecord"]
                              /\ UNCHANGED << intent_writes, to_write >>
@@ -616,27 +650,26 @@ QueryPipelinedWrite == /\ pc["committer"] = "QueryPipelinedWrite"
 ParallelWrite == /\ pc["committer"] = "ParallelWrite"
                  /\ \E key \in to_write:
                       LET cur_intent == intent_writes[key] IN
-                        IF cur_intent.epoch = txn_epoch
-                           THEN /\ to_write' = to_write \ {key}
-                                /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
-                                /\ UNCHANGED << intent_writes, attempt, txn_ts >>
-                           ELSE /\ IF tscache[key] >= txn_ts \/ cur_intent.resolved
-                                      THEN /\ \/ /\ txn_ts' = txn_ts + 1
-                                                 /\ attempt' = attempt + 1
-                                                 /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecord"]
-                                              \/ /\ attempt' = attempt + 1
-                                                 /\ pc' = [pc EXCEPT !["committer"] = "BeginTxnEpoch"]
-                                                 /\ UNCHANGED txn_ts
-                                           /\ UNCHANGED << intent_writes, 
-                                                           to_write >>
-                                      ELSE /\ intent_writes' = [intent_writes EXCEPT ![key] =                       [
-                                                                                                epoch    |-> txn_epoch,
-                                                                                                ts       |-> txn_ts,
-                                                                                                resolved |-> FALSE
-                                                                                              ]]
-                                           /\ to_write' = to_write \ {key}
-                                           /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
-                                           /\ UNCHANGED << attempt, txn_ts >>
+                        /\ to_write' = to_write \ {key}
+                        /\ IF cur_intent.epoch = txn_epoch
+                              THEN /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
+                                   /\ UNCHANGED << intent_writes, attempt, 
+                                                   txn_ts >>
+                              ELSE /\ IF tscache[key] >= txn_ts \/ cur_intent.resolved
+                                         THEN /\ \/ /\ txn_ts' = txn_ts + 1
+                                                    /\ attempt' = attempt + 1
+                                                    /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecord"]
+                                                 \/ /\ attempt' = attempt + 1
+                                                    /\ pc' = [pc EXCEPT !["committer"] = "BeginTxnEpoch"]
+                                                    /\ UNCHANGED txn_ts
+                                              /\ UNCHANGED intent_writes
+                                         ELSE /\ intent_writes' = [intent_writes EXCEPT ![key] =                       [
+                                                                                                   epoch    |-> txn_epoch,
+                                                                                                   ts       |-> txn_ts,
+                                                                                                   resolved |-> FALSE
+                                                                                                 ]]
+                                              /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
+                                              /\ UNCHANGED << attempt, txn_ts >>
                  /\ UNCHANGED << record, tscache, commit_ack, pipelined_keys, 
                                  parallel_keys, txn_epoch, to_check, 
                                  have_staged_record, prevent_epoch, prevent_ts, 
@@ -649,14 +682,14 @@ StageRecord == /\ pc["committer"] = "StageRecord"
                           /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                      ELSE /\ IF record.status = "staging"
                                 THEN /\ Assert(record.epoch <= txn_epoch /\ record.ts < txn_ts, 
-                                               "Failure of assertion at line 271, column 15.")
+                                               "Failure of assertion at line 290, column 15.")
                                      /\ record' = [status |-> "staging", epoch |-> txn_epoch, ts |-> txn_ts]
                                      /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                                 ELSE /\ IF record.status = "aborted"
                                            THEN /\ pc' = [pc EXCEPT !["committer"] = "EndCommitter"]
                                            ELSE /\ IF record.status = "committed"
                                                       THEN /\ Assert(FALSE, 
-                                                                     "Failure of assertion at line 278, column 15.")
+                                                                     "Failure of assertion at line 297, column 15.")
                                                       ELSE /\ TRUE
                                                 /\ pc' = [pc EXCEPT !["committer"] = "StageWritesAndRecordLoop"]
                                      /\ UNCHANGED record
@@ -668,7 +701,7 @@ StageRecord == /\ pc["committer"] = "StageRecord"
 
 AckClient == /\ pc["committer"] = "AckClient"
              /\ Assert(ImplicitCommit \/ ExplicitCommit, 
-                       "Failure of assertion at line 286, column 5.")
+                       "Failure of assertion at line 305, column 5.")
              /\ commit_ack' = TRUE
              /\ pc' = [pc EXCEPT !["committer"] = "AsyncExplicitCommit"]
              /\ UNCHANGED << record, intent_writes, tscache, pipelined_keys, 
@@ -680,12 +713,12 @@ AckClient == /\ pc["committer"] = "AckClient"
 AsyncExplicitCommit == /\ pc["committer"] = "AsyncExplicitCommit"
                        /\ IF record.status = "staging"
                              THEN /\ Assert(ImplicitCommit, 
-                                            "Failure of assertion at line 293, column 7.")
+                                            "Failure of assertion at line 312, column 7.")
                                   /\ record' = [record EXCEPT !.status = "committed"]
                              ELSE /\ IF record.status = "committed"
                                         THEN /\ TRUE
                                         ELSE /\ Assert(FALSE, 
-                                                       "Failure of assertion at line 301, column 7.")
+                                                       "Failure of assertion at line 320, column 7.")
                                   /\ UNCHANGED record
                        /\ to_write' = KEYS
                        /\ pc' = [pc EXCEPT !["committer"] = "AsyncResolveIntents"]
@@ -793,7 +826,7 @@ RecoverRecord(self) == /\ pc[self] = "RecoverRecord"
                                                             /\ UNCHANGED record
                                                        ELSE /\ IF record.status = "pending"
                                                                   THEN /\ Assert(FALSE, 
-                                                                                 "Failure of assertion at line 381, column 15.")
+                                                                                 "Failure of assertion at line 400, column 15.")
                                                                        /\ pc' = [pc EXCEPT ![self] = "ResolveIntents"]
                                                                        /\ UNCHANGED record
                                                                   ELSE /\ IF record.status = "staging"
@@ -806,16 +839,16 @@ RecoverRecord(self) == /\ pc[self] = "RecoverRecord"
                                                                                   /\ UNCHANGED record
                                ELSE /\ IF record.status \in {"pending", "aborted"}
                                           THEN /\ Assert(FALSE, 
-                                                         "Failure of assertion at line 396, column 13.")
+                                                         "Failure of assertion at line 415, column 13.")
                                                /\ UNCHANGED record
                                           ELSE /\ IF record.status \in {"staging", "committed"}
                                                      THEN /\ Assert(record.epoch = prevent_epoch[self], 
-                                                                    "Failure of assertion at line 399, column 13.")
+                                                                    "Failure of assertion at line 418, column 13.")
                                                           /\ Assert(record.ts    = prevent_ts[self], 
-                                                                    "Failure of assertion at line 400, column 13.")
+                                                                    "Failure of assertion at line 419, column 13.")
                                                           /\ IF record.status = "staging"
                                                                 THEN /\ Assert(ImplicitCommit, 
-                                                                               "Failure of assertion at line 404, column 15.")
+                                                                               "Failure of assertion at line 423, column 15.")
                                                                      /\ record' = [record EXCEPT !.status = "committed"]
                                                                 ELSE /\ TRUE
                                                                      /\ UNCHANGED record
@@ -865,5 +898,5 @@ Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
 =============================================================================
 \* Modification History
-\* Last modified Wed May 29 00:31:23 EDT 2019 by nathan
+\* Last modified Mon Jun 03 13:36:01 EDT 2019 by nathan
 \* Created Mon May 13 10:03:40 EDT 2019 by nathan
