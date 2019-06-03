@@ -211,6 +211,13 @@ message DistinctSpec {
   repeated uint32 distinct_columns = 2;
 }
 
+// The specification for a WITH ORDINALITY processor. It adds a new column to
+// each resulting row that contains the ordinal number of the row. Since there
+// are no arguments for this operator, the spec is empty.
+message OrdinalitySpec {
+  // Currently empty
+}
+
 // ZigzagJoinerSpec is the specification for a zigzag join processor. The
 // processor's current implementation fetches the rows using internal
 // rowFetchers.

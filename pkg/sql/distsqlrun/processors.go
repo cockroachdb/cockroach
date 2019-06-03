@@ -1020,6 +1020,12 @@ func newProcessor(
 		}
 		return NewDistinct(flowCtx, processorID, core.Distinct, inputs[0], post, outputs[0])
 	}
+	if core.Ordinality != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newOrdinalityProcessor(flowCtx, processorID, core.Ordinality, inputs[0], post, outputs[0])
+	}
 	if core.Aggregator != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
