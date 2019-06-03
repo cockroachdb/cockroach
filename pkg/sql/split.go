@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,11 +30,12 @@ import (
 type splitNode struct {
 	optColumnsSlot
 
-	force     bool
-	tableDesc *sqlbase.TableDescriptor
-	index     *sqlbase.IndexDescriptor
-	rows      planNode
-	run       splitRun
+	force          bool
+	tableDesc      *sqlbase.TableDescriptor
+	index          *sqlbase.IndexDescriptor
+	rows           planNode
+	run            splitRun
+	expirationTime hlc.Timestamp
 }
 
 // Split executes a KV split.
@@ -76,11 +78,17 @@ func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 		}
 	}
 
+	expirationTime, err := parseExpirationTime(&p.semaCtx, p.EvalContext(), n.ExpireExpr)
+	if err != nil {
+		return nil, err
+	}
+
 	return &splitNode{
-		force:     p.SessionData().ForceSplitAt,
-		tableDesc: tableDesc.TableDesc(),
-		index:     index,
-		rows:      rows,
+		force:          p.SessionData().ForceSplitAt,
+		tableDesc:      tableDesc.TableDesc(),
+		index:          index,
+		rows:           rows,
+		expirationTime: expirationTime,
 	}, nil
 }
 
@@ -102,7 +110,8 @@ type splitRun struct {
 
 func (n *splitNode) startExec(params runParams) error {
 	stickyBitEnabled := params.EvalContext().Settings.Version.IsActive(cluster.VersionStickyBit)
-	// TODO(jeffreyxiao): Remove this error in v20.1.
+	// TODO(jeffreyxiao): Remove this error, splitNode.force, and
+	// experimental_force_split_at in v20.1.
 	// This check is not intended to be foolproof. The setting could be outdated
 	// because of gossip inconsistency, or it could change halfway through the
 	// SPLIT AT's execution. It is, however, likely to prevent user error and
@@ -132,7 +141,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 	stickyBitEnabled := params.EvalContext().Settings.Version.IsActive(cluster.VersionStickyBit)
 	expirationTime := hlc.Timestamp{}
 	if stickyBitEnabled {
-		expirationTime = hlc.MaxTimestamp
+		expirationTime = n.expirationTime
 	}
 	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey, expirationTime); err != nil {
 		return false, err
@@ -171,4 +180,34 @@ func getRowKey(
 		return nil, err
 	}
 	return key, nil
+}
+
+// parseExpriationTime parses an expression into a hlc.Timestamp representing
+// the expiration time of the split.
+func parseExpirationTime(
+	semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, expireExpr tree.Expr,
+) (hlc.Timestamp, error) {
+	if expireExpr == nil {
+		return hlc.MaxTimestamp, nil
+	}
+	typedExpireExpr, err := expireExpr.TypeCheck(semaCtx, types.String)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	if !tree.IsConst(evalCtx, typedExpireExpr) {
+		return hlc.Timestamp{}, errors.Errorf("SPLIT AT: only constant expressions are allowed for expiration")
+	}
+	d, err := typedExpireExpr.Eval(evalCtx)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	stmtTimestamp := evalCtx.GetStmtTimestamp()
+	ts, err := tree.DatumToHLC(evalCtx, stmtTimestamp, d)
+	if err != nil {
+		return ts, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "SPLIT AT")
+	}
+	if ts.GoTime().Before(stmtTimestamp) {
+		return ts, errors.Errorf("SPLIT AT: expiration time should be greater than or equal to current time")
+	}
+	return ts, nil
 }

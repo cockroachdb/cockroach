@@ -77,14 +77,19 @@ func EvalAsOfTimestamp(
 		return hlc.Timestamp{}, err
 	}
 
-	var ts hlc.Timestamp
-	var convErr error
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
+	ts, err := DatumToHLC(evalCtx, stmtTimestamp, d)
+	return ts, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "AS OF SYSTEM TIME")
+}
+
+// DatumToHLC performs the conversion from a Datum to an HLC timestamp.
+func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Timestamp, error) {
+	ts := hlc.Timestamp{}
+	var convErr error
 	switch d := d.(type) {
 	case *DString:
 		s := string(*d)
-		// Allow nanosecond precision because the timestamp is only used by the
-		// system and won't be returned to the user over pgwire.
+		// Attempt to parse as timestamp.
 		if dt, err := ParseDTimestamp(evalCtx, s, time.Nanosecond); err == nil {
 			ts.WallTime = dt.Time.UnixNano()
 			break
@@ -97,13 +102,14 @@ func EvalAsOfTimestamp(
 		// Attempt to parse as an interval.
 		if iv, err := ParseDInterval(s); err == nil {
 			if (iv.Duration == duration.Duration{}) {
-				convErr = errors.Errorf("AS OF SYSTEM TIME: interval value %v too small, must be <= %v", te, -1*time.Microsecond)
-			} else {
-				ts.WallTime = duration.Add(evalCtx, stmtTimestamp, iv.Duration).UnixNano()
+				convErr = errors.Errorf("interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
 			}
+			ts.WallTime = duration.Add(evalCtx, stmtTimestamp, iv.Duration).UnixNano()
 			break
 		}
-		convErr = errors.Errorf("AS OF SYSTEM TIME: value is neither timestamp, decimal, nor interval")
+		convErr = errors.Errorf("value is neither timestamp, decimal, nor interval")
+	case *DTimestamp:
+		ts.WallTime = d.UnixNano()
 	case *DTimestampTZ:
 		ts.WallTime = d.UnixNano()
 	case *DInt:
@@ -113,17 +119,16 @@ func EvalAsOfTimestamp(
 	case *DInterval:
 		ts.WallTime = duration.Add(evalCtx, stmtTimestamp, d.Duration).UnixNano()
 	default:
-		convErr = errors.Errorf("AS OF SYSTEM TIME: expected timestamp, decimal, or interval, got %s (%T)", d.ResolvedType(), d)
+		convErr = errors.Errorf("expected timestamp, decimal, or interval, got %s (%T)", d.ResolvedType(), d)
 	}
 	if convErr != nil {
 		return ts, convErr
 	}
-
-	var zero hlc.Timestamp
+	zero := hlc.Timestamp{}
 	if ts == zero {
-		return ts, errors.Errorf("AS OF SYSTEM TIME: zero timestamp is invalid")
+		return ts, errors.Errorf("zero timestamp is invalid")
 	} else if ts.Less(zero) {
-		return ts, errors.Errorf("AS OF SYSTEM TIME: timestamp before 1970-01-01T00:00:00Z is invalid")
+		return ts, errors.Errorf("timestamp before 1970-01-01T00:00:00Z is invalid")
 	}
 	return ts, nil
 }
@@ -138,8 +143,7 @@ func DecimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 	parts := strings.SplitN(s, ".", 2)
 	nanos, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		return hlc.Timestamp{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
-			"AS OF SYSTEM TIME: parsing argument")
+		return hlc.Timestamp{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "parsing argument")
 	}
 	var logical int64
 	if len(parts) > 1 {
@@ -149,15 +153,13 @@ func DecimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 		const logicalLength = 10
 		p := parts[1]
 		if lp := len(p); lp > logicalLength {
-			return hlc.Timestamp{}, pgerror.Newf(pgerror.CodeSyntaxError,
-				"AS OF SYSTEM TIME: logical part has too many digits")
+			return hlc.Timestamp{}, pgerror.Newf(pgerror.CodeSyntaxError, "logical part has too many digits")
 		} else if lp < logicalLength {
 			p += strings.Repeat("0", logicalLength-lp)
 		}
 		logical, err = strconv.ParseInt(p, 10, 32)
 		if err != nil {
-			return hlc.Timestamp{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
-				"AS OF SYSTEM TIME: parsing argument")
+			return hlc.Timestamp{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "parsing argument")
 		}
 	}
 	return hlc.Timestamp{
