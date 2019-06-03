@@ -259,6 +259,7 @@ func registerTPCHBench(r *registry) {
 			ScaleFactor:     1,
 			benchType:       tpch,
 			numRunsPerQuery: 3,
+			minVersion:      `v19.1.0`,
 		},
 		{
 			Nodes:           3,
