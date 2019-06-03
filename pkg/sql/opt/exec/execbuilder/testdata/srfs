@@ -246,7 +246,6 @@ ORDER BY a0.created_at
 ----
 limit                                 ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
  │                                    count        10                         ·                                                                                        ·
- │                                    offset       0                          ·                                                                                        ·
  └── sort                             ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
       │                               order        +created_at                ·                                                                                        ·
       └── group                       ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
