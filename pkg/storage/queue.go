@@ -146,14 +146,13 @@ func (pq *priorityQueue) update(item *replicaItem, priority float64) {
 }
 
 var (
-	errQueueDisabled     = errors.New("queue disabled")
-	errQueueStopped      = errors.New("queue stopped")
-	errReplicaNotAddable = errors.New("replica shouldn't be added to queue")
+	errQueueDisabled = errors.New("queue disabled")
+	errQueueStopped  = errors.New("queue stopped")
 )
 
 func isExpectedQueueError(err error) bool {
 	cause := errors.Cause(err)
-	return err == nil || cause == errQueueDisabled || cause == errReplicaNotAddable
+	return err == nil || cause == errQueueDisabled
 }
 
 // shouldQueueAgain is a helper function to determine whether the
@@ -440,7 +439,7 @@ func (h baseQueueHelper) MaybeAdd(ctx context.Context, repl replicaInQueue, now 
 }
 
 func (h baseQueueHelper) Add(ctx context.Context, repl replicaInQueue, prio float64) {
-	_, err := h.bq.addInternal(ctx, repl.Desc(), true /* should */, prio)
+	_, err := h.bq.addInternal(ctx, repl.Desc(), prio)
 	if err != nil && log.V(1) {
 		log.Infof(ctx, "during Add: %s", err)
 	}
@@ -544,7 +543,10 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	// know what they're getting into so that's fine.
 	realRepl, _ := repl.(*Replica)
 	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, cfg)
-	if _, err := bq.addInternal(ctx, repl.Desc(), should, priority); !isExpectedQueueError(err) {
+	if !should {
+		return
+	}
+	if _, err := bq.addInternal(ctx, repl.Desc(), priority); !isExpectedQueueError(err) {
 		log.Errorf(ctx, "unable to add: %s", err)
 	}
 }
@@ -561,7 +563,7 @@ func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl replicaInQueue
 // the replica is already queued at a lower priority, updates the existing
 // priority. Expects the queue lock to be held by caller.
 func (bq *baseQueue) addInternal(
-	ctx context.Context, desc *roachpb.RangeDescriptor, should bool, priority float64,
+	ctx context.Context, desc *roachpb.RangeDescriptor, priority float64,
 ) (bool, error) {
 	// NB: this is intentionally outside of bq.mu to avoid having to consider
 	// lock ordering constraints.
@@ -588,13 +590,6 @@ func (bq *baseQueue) addInternal(
 	// If the replica is currently in purgatory, don't re-add it.
 	if _, ok := bq.mu.purgatory[desc.RangeID]; ok {
 		return false, nil
-	}
-
-	// Note that even though the caller said not to queue the replica, we don't
-	// want to remove it if it's already been queued. It may have been added by
-	// a queuer that knows more than this one.
-	if !should {
-		return false, errReplicaNotAddable
 	}
 
 	item, ok := bq.mu.replicas[desc.RangeID]
