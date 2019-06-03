@@ -1555,7 +1555,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 			RequestHeader: roachpb.RequestHeader{
 				Key: roachpb.Key(key),
 			},
-			SplitKey: roachpb.Key(key),
+			SplitKey:       roachpb.Key(key),
 			ExpirationTime: hlc.MaxTimestamp,
 		}
 		if _, err := client.SendWrapped(context.Background(), ds, req); err != nil {
