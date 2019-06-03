@@ -89,6 +89,45 @@ limit
  └── const: -1 [type=int]
 
 # --------------------------------------------------
+# EliminateOffset
+# --------------------------------------------------
+opt expect=EliminateOffset
+SELECT * FROM a OFFSET 0
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+opt expect=EliminateOffset
+SELECT * FROM a LIMIT 5 OFFSET 0
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── limit: 5
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+opt expect-not=EliminateOffset
+SELECT * FROM a LIMIT 5 OFFSET 1
+----
+limit
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── offset
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── const: 1 [type=int]
+ └── const: 5 [type=int]
+
+# --------------------------------------------------
 # PushLimitIntoProject
 # --------------------------------------------------
 opt expect=PushLimitIntoProject
