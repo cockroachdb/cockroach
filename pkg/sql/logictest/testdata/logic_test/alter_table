@@ -596,7 +596,7 @@ ALTER TABLE add_default ADD fee FLOAT NOT NULL DEFAULT 2.99
 statement ok
 ALTER TABLE add_default ALTER COLUMN fee DROP DEFAULT
 
-statement error null value in column "fee" violates not-null constraint
+statement error pgcode XXA00 null value in column "fee" violates not-null constraint
 COMMIT
 
 statement error pgcode 42703 column "fee" does not exist

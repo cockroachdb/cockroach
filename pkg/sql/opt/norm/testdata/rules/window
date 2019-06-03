@@ -99,3 +99,185 @@ project
       │    └── columns: i:2(int) f:3(float)
       └── windows
            └── rank [type=undefined]
+
+# PushSelectIntoWindow
+
+norm expect=PushSelectIntoWindow
+SELECT * FROM (SELECT i, rank() OVER (PARTITION BY i) FROM a) WHERE i > 4
+----
+window partition=(2)
+ ├── columns: i:2(int!null) rank:6(int)
+ ├── select
+ │    ├── columns: i:2(int!null)
+ │    ├── scan a
+ │    │    └── columns: i:2(int)
+ │    └── filters
+ │         └── i > 4 [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
+ └── windows
+      └── rank [type=undefined]
+
+# Only push down filters bound by the partition cols.
+norm expect=PushSelectIntoWindow
+SELECT * FROM (SELECT i, s, rank() OVER (PARTITION BY i) FROM a) WHERE i > 4 AND s = 'foo'
+----
+select
+ ├── columns: i:2(int!null) s:4(string!null) rank:6(int)
+ ├── fd: ()-->(4)
+ ├── window partition=(2)
+ │    ├── columns: i:2(int!null) s:4(string) rank:6(int)
+ │    ├── select
+ │    │    ├── columns: i:2(int!null) s:4(string)
+ │    │    ├── scan a
+ │    │    │    └── columns: i:2(int) s:4(string)
+ │    │    └── filters
+ │    │         └── i > 4 [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
+ │    └── windows
+ │         └── rank [type=undefined]
+ └── filters
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Multiple partition cols.
+norm expect=PushSelectIntoWindow
+SELECT * FROM (SELECT i, s, f, rank() OVER (PARTITION BY i, f) FROM a) WHERE i > 4 AND f = 3.0 AND s = 'foo'
+----
+select
+ ├── columns: i:2(int!null) s:4(string!null) f:3(float!null) rank:6(int)
+ ├── fd: ()-->(3,4)
+ ├── window partition=(2)
+ │    ├── columns: i:2(int!null) f:3(float!null) s:4(string) rank:6(int)
+ │    ├── fd: ()-->(3)
+ │    ├── select
+ │    │    ├── columns: i:2(int!null) f:3(float!null) s:4(string)
+ │    │    ├── fd: ()-->(3)
+ │    │    ├── scan a
+ │    │    │    └── columns: i:2(int) f:3(float) s:4(string)
+ │    │    └── filters
+ │    │         ├── i > 4 [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
+ │    │         └── f = 3.0 [type=bool, outer=(3), constraints=(/3: [/3.0 - /3.0]; tight), fd=()-->(3)]
+ │    └── windows
+ │         └── rank [type=undefined]
+ └── filters
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# This is not really correct, but there isn't a precedent for rejecting such filters.
+# TODO(justin): consider revisiting this and not pushing this filter down.
+norm expect=PushSelectIntoWindow
+SELECT * FROM (SELECT i, s, f, rank() OVER (PARTITION BY i, f) FROM a) WHERE random() < 0.5
+----
+window partition=(2,3)
+ ├── columns: i:2(int) s:4(string) f:3(float) rank:6(int)
+ ├── side-effects
+ ├── select
+ │    ├── columns: i:2(int) f:3(float) s:4(string)
+ │    ├── side-effects
+ │    ├── scan a
+ │    │    └── columns: i:2(int) f:3(float) s:4(string)
+ │    └── filters
+ │         └── random() < 0.5 [type=bool, side-effects]
+ └── windows
+      └── rank [type=undefined]
+
+# Can't push down a filter on an ordering column.
+norm expect-not=PushSelectIntoWindow
+SELECT * FROM (SELECT f, rank() OVER (PARTITION BY i ORDER BY f) FROM a) WHERE f > 4
+----
+project
+ ├── columns: f:3(float!null) rank:6(int)
+ └── select
+      ├── columns: i:2(int) f:3(float!null) rank:6(int)
+      ├── window partition=(2) ordering=+3 opt(2)
+      │    ├── columns: i:2(int) f:3(float) rank:6(int)
+      │    ├── scan a
+      │    │    └── columns: i:2(int) f:3(float)
+      │    └── windows
+      │         └── rank [type=undefined]
+      └── filters
+           └── f > 4.0 [type=bool, outer=(3), constraints=(/3: [/4.000000000000001 - ]; tight)]
+
+# Can't push down a filter on an arbitrary column.
+norm expect-not=PushSelectIntoWindow
+SELECT * FROM (SELECT s, rank() OVER (PARTITION BY i ORDER BY f) FROM a) WHERE s = 'foo'
+----
+project
+ ├── columns: s:4(string!null) rank:6(int)
+ ├── fd: ()-->(4)
+ └── select
+      ├── columns: i:2(int) f:3(float) s:4(string!null) rank:6(int)
+      ├── fd: ()-->(4)
+      ├── window partition=(2) ordering=+3 opt(2)
+      │    ├── columns: i:2(int) f:3(float) s:4(string) rank:6(int)
+      │    ├── scan a
+      │    │    └── columns: i:2(int) f:3(float) s:4(string)
+      │    └── windows
+      │         └── rank [type=undefined]
+      └── filters
+           └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Can push down filters on columns in the closure of the partition columns.
+norm expect=PushSelectIntoWindow
+SELECT * FROM (SELECT i, rank() OVER (PARTITION BY k ORDER BY f) FROM a) WHERE i = 3
+----
+project
+ ├── columns: i:2(int!null) rank:6(int)
+ ├── fd: ()-->(2)
+ └── window partition=(1)
+      ├── columns: k:1(int!null) i:2(int!null) rank:6(int)
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── select
+      │    ├── columns: k:1(int!null) i:2(int!null)
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── filters
+      │         └── i = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+      └── windows
+           └── rank [type=undefined]
+
+norm expect=PushSelectIntoWindow
+SELECT * FROM (SELECT i, f, rank() OVER (PARTITION BY k ORDER BY f) FROM a) WHERE i*f::int = 3
+----
+project
+ ├── columns: i:2(int) f:3(float) rank:6(int)
+ └── window partition=(1)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) rank:6(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── select
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── filters
+      │         └── (i * f::INT8) = 3 [type=bool, outer=(2,3)]
+      └── windows
+           └── rank [type=undefined]
+
+norm expect-not=PushSelectIntoWindow
+SELECT * FROM (SELECT i, f, rank() OVER (PARTITION BY k ORDER BY f) AS rnk FROM a) WHERE rnk = 3
+----
+project
+ ├── columns: i:2(int) f:3(float) rnk:6(int!null)
+ ├── fd: ()-->(6)
+ └── select
+      ├── columns: k:1(int!null) i:2(int) f:3(float) rank:6(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(6), (1)-->(2,3)
+      ├── window partition=(1)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) rank:6(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── windows
+      │         └── rank [type=undefined]
+      └── filters
+           └── rank = 3 [type=bool, outer=(6), constraints=(/6: [/3 - /3]; tight), fd=()-->(6)]
