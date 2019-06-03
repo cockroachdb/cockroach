@@ -1105,9 +1105,6 @@ func addrWithDefaultHost(addr string) (string, error) {
 	if host == "" {
 		host = "localhost"
 	}
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
 	return net.JoinHostPort(host, port), nil
 }
 

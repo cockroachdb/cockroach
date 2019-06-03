@@ -174,3 +174,25 @@ func TestGCProfiles(t *testing.T) {
 		sum -= len(data[:i])
 	}
 }
+
+func TestAddrWithDefaultHost(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		inAddr  string
+		outAddr string
+	}{
+		{"localhost:123", "localhost:123"},
+		{":123", "localhost:123"},
+		{"[::1]:123", "[::1]:123"},
+	}
+
+	for _, test := range testData {
+		addr, err := addrWithDefaultHost(test.inAddr)
+		if err != nil {
+			t.Error(err)
+		} else if addr != test.outAddr {
+			t.Errorf("expected %q, got %q", test.outAddr, addr)
+		}
+	}
+}
