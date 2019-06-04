@@ -119,7 +119,7 @@ func (x *JoinType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (JoinType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_join_type_88efa33afe97ce73, []int{0}
+	return fileDescriptor_join_type_dda3f9d67d2c6e6d, []int{0}
 }
 
 func init() {
@@ -127,10 +127,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("sql/sqlbase/join_type.proto", fileDescriptor_join_type_88efa33afe97ce73)
+	proto.RegisterFile("sql/sqlbase/join_type.proto", fileDescriptor_join_type_dda3f9d67d2c6e6d)
 }
 
-var fileDescriptor_join_type_88efa33afe97ce73 = []byte{
+var fileDescriptor_join_type_dda3f9d67d2c6e6d = []byte{
 	// 211 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2e, 0x2e, 0xcc, 0xd1,
 	0x2f, 0x2e, 0xcc, 0x49, 0x4a, 0x2c, 0x4e, 0xd5, 0xcf, 0xca, 0xcf, 0xcc, 0x8b, 0x2f, 0xa9, 0x2c,

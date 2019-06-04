@@ -33,7 +33,7 @@ func (m *ClusterVersion) Reset()         { *m = ClusterVersion{} }
 func (m *ClusterVersion) String() string { return proto.CompactTextString(m) }
 func (*ClusterVersion) ProtoMessage()    {}
 func (*ClusterVersion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_version_84ec45dd3a8e6142, []int{0}
+	return fileDescriptor_cluster_version_b841abdd485ccaec, []int{0}
 }
 func (m *ClusterVersion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -306,10 +306,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("settings/cluster/cluster_version.proto", fileDescriptor_cluster_version_84ec45dd3a8e6142)
+	proto.RegisterFile("settings/cluster/cluster_version.proto", fileDescriptor_cluster_version_b841abdd485ccaec)
 }
 
-var fileDescriptor_cluster_version_84ec45dd3a8e6142 = []byte{
+var fileDescriptor_cluster_version_b841abdd485ccaec = []byte{
 	// 201 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x2b, 0x4e, 0x2d, 0x29,
 	0xc9, 0xcc, 0x4b, 0x2f, 0xd6, 0x4f, 0xce, 0x29, 0x2d, 0x2e, 0x49, 0x2d, 0x82, 0xd1, 0xf1, 0x65,

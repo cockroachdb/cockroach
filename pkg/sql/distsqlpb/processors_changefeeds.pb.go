@@ -43,7 +43,7 @@ func (m *ChangeAggregatorSpec) Reset()         { *m = ChangeAggregatorSpec{} }
 func (m *ChangeAggregatorSpec) String() string { return proto.CompactTextString(m) }
 func (*ChangeAggregatorSpec) ProtoMessage()    {}
 func (*ChangeAggregatorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_changefeeds_60cb7ecd76929b28, []int{0}
+	return fileDescriptor_processors_changefeeds_a63ada01938ee3f3, []int{0}
 }
 func (m *ChangeAggregatorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -79,7 +79,7 @@ func (m *ChangeAggregatorSpec_Watch) Reset()         { *m = ChangeAggregatorSpec
 func (m *ChangeAggregatorSpec_Watch) String() string { return proto.CompactTextString(m) }
 func (*ChangeAggregatorSpec_Watch) ProtoMessage()    {}
 func (*ChangeAggregatorSpec_Watch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_changefeeds_60cb7ecd76929b28, []int{0, 0}
+	return fileDescriptor_processors_changefeeds_a63ada01938ee3f3, []int{0, 0}
 }
 func (m *ChangeAggregatorSpec_Watch) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -124,7 +124,7 @@ func (m *ChangeFrontierSpec) Reset()         { *m = ChangeFrontierSpec{} }
 func (m *ChangeFrontierSpec) String() string { return proto.CompactTextString(m) }
 func (*ChangeFrontierSpec) ProtoMessage()    {}
 func (*ChangeFrontierSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_changefeeds_60cb7ecd76929b28, []int{1}
+	return fileDescriptor_processors_changefeeds_a63ada01938ee3f3, []int{1}
 }
 func (m *ChangeFrontierSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -794,10 +794,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/distsqlpb/processors_changefeeds.proto", fileDescriptor_processors_changefeeds_60cb7ecd76929b28)
+	proto.RegisterFile("sql/distsqlpb/processors_changefeeds.proto", fileDescriptor_processors_changefeeds_a63ada01938ee3f3)
 }
 
-var fileDescriptor_processors_changefeeds_60cb7ecd76929b28 = []byte{
+var fileDescriptor_processors_changefeeds_a63ada01938ee3f3 = []byte{
 	// 417 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x92, 0xc1, 0x8a, 0x13, 0x31,
 	0x1c, 0xc6, 0x9b, 0x6d, 0xab, 0x98, 0x75, 0x51, 0xc2, 0xa2, 0x43, 0xc1, 0xd9, 0xb2, 0x7a, 0x28,

@@ -93,7 +93,7 @@ func (x *TimeSeriesQueryAggregator) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (TimeSeriesQueryAggregator) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_1f7ae1dea9c20e22, []int{0}
+	return fileDescriptor_timeseries_bc92b91a39423999, []int{0}
 }
 
 // TimeSeriesQueryDerivative describes a derivative function used to convert
@@ -139,7 +139,7 @@ func (x *TimeSeriesQueryDerivative) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (TimeSeriesQueryDerivative) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_1f7ae1dea9c20e22, []int{1}
+	return fileDescriptor_timeseries_bc92b91a39423999, []int{1}
 }
 
 // TimeSeriesDatapoint is a single point of time series data; a value associated
@@ -158,7 +158,7 @@ func (m *TimeSeriesDatapoint) Reset()         { *m = TimeSeriesDatapoint{} }
 func (m *TimeSeriesDatapoint) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesDatapoint) ProtoMessage()    {}
 func (*TimeSeriesDatapoint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_1f7ae1dea9c20e22, []int{0}
+	return fileDescriptor_timeseries_bc92b91a39423999, []int{0}
 }
 func (m *TimeSeriesDatapoint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -203,7 +203,7 @@ func (m *TimeSeriesData) Reset()         { *m = TimeSeriesData{} }
 func (m *TimeSeriesData) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesData) ProtoMessage()    {}
 func (*TimeSeriesData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_1f7ae1dea9c20e22, []int{1}
+	return fileDescriptor_timeseries_bc92b91a39423999, []int{1}
 }
 func (m *TimeSeriesData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -253,7 +253,7 @@ func (m *Query) Reset()         { *m = Query{} }
 func (m *Query) String() string { return proto.CompactTextString(m) }
 func (*Query) ProtoMessage()    {}
 func (*Query) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_1f7ae1dea9c20e22, []int{2}
+	return fileDescriptor_timeseries_bc92b91a39423999, []int{2}
 }
 func (m *Query) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -341,7 +341,7 @@ func (m *TimeSeriesQueryRequest) Reset()         { *m = TimeSeriesQueryRequest{}
 func (m *TimeSeriesQueryRequest) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesQueryRequest) ProtoMessage()    {}
 func (*TimeSeriesQueryRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_1f7ae1dea9c20e22, []int{3}
+	return fileDescriptor_timeseries_bc92b91a39423999, []int{3}
 }
 func (m *TimeSeriesQueryRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -381,7 +381,7 @@ func (m *TimeSeriesQueryResponse) Reset()         { *m = TimeSeriesQueryResponse
 func (m *TimeSeriesQueryResponse) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesQueryResponse) ProtoMessage()    {}
 func (*TimeSeriesQueryResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_1f7ae1dea9c20e22, []int{4}
+	return fileDescriptor_timeseries_bc92b91a39423999, []int{4}
 }
 func (m *TimeSeriesQueryResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -418,7 +418,7 @@ func (m *TimeSeriesQueryResponse_Result) Reset()         { *m = TimeSeriesQueryR
 func (m *TimeSeriesQueryResponse_Result) String() string { return proto.CompactTextString(m) }
 func (*TimeSeriesQueryResponse_Result) ProtoMessage()    {}
 func (*TimeSeriesQueryResponse_Result) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_1f7ae1dea9c20e22, []int{4, 0}
+	return fileDescriptor_timeseries_bc92b91a39423999, []int{4, 0}
 }
 func (m *TimeSeriesQueryResponse_Result) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -452,7 +452,7 @@ func (m *DumpRequest) Reset()         { *m = DumpRequest{} }
 func (m *DumpRequest) String() string { return proto.CompactTextString(m) }
 func (*DumpRequest) ProtoMessage()    {}
 func (*DumpRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timeseries_1f7ae1dea9c20e22, []int{5}
+	return fileDescriptor_timeseries_bc92b91a39423999, []int{5}
 }
 func (m *DumpRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1882,10 +1882,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("ts/tspb/timeseries.proto", fileDescriptor_timeseries_1f7ae1dea9c20e22)
+	proto.RegisterFile("ts/tspb/timeseries.proto", fileDescriptor_timeseries_bc92b91a39423999)
 }
 
-var fileDescriptor_timeseries_1f7ae1dea9c20e22 = []byte{
+var fileDescriptor_timeseries_bc92b91a39423999 = []byte{
 	// 711 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x93, 0x4d, 0x6f, 0xda, 0x48,
 	0x18, 0xc7, 0x19, 0x30, 0x01, 0x1e, 0xb2, 0xac, 0x33, 0x1b, 0x6d, 0xbc, 0x6c, 0xe4, 0x10, 0x4b,

@@ -46,7 +46,7 @@ func (m *Error) Reset()         { *m = Error{} }
 func (m *Error) String() string { return proto.CompactTextString(m) }
 func (*Error) ProtoMessage()    {}
 func (*Error) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_a71973a7ba445e50, []int{0}
+	return fileDescriptor_errors_fd8ce6c252fe715b, []int{0}
 }
 func (m *Error) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -83,7 +83,7 @@ func (m *Error_Source) Reset()         { *m = Error_Source{} }
 func (m *Error_Source) String() string { return proto.CompactTextString(m) }
 func (*Error_Source) ProtoMessage()    {}
 func (*Error_Source) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_a71973a7ba445e50, []int{0, 0}
+	return fileDescriptor_errors_fd8ce6c252fe715b, []int{0, 0}
 }
 func (m *Error_Source) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -119,7 +119,7 @@ func (m *Error_SafeDetail) Reset()         { *m = Error_SafeDetail{} }
 func (m *Error_SafeDetail) String() string { return proto.CompactTextString(m) }
 func (*Error_SafeDetail) ProtoMessage()    {}
 func (*Error_SafeDetail) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_a71973a7ba445e50, []int{0, 1}
+	return fileDescriptor_errors_fd8ce6c252fe715b, []int{0, 1}
 }
 func (m *Error_SafeDetail) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -982,10 +982,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_a71973a7ba445e50)
+	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_fd8ce6c252fe715b)
 }
 
-var fileDescriptor_errors_a71973a7ba445e50 = []byte{
+var fileDescriptor_errors_fd8ce6c252fe715b = []byte{
 	// 346 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x51, 0xb1, 0x4e, 0x2a, 0x41,
 	0x14, 0x65, 0x1f, 0xb0, 0xbc, 0x77, 0xe1, 0x15, 0x8c, 0x89, 0x99, 0x50, 0x2c, 0x20, 0x0d, 0xd5,

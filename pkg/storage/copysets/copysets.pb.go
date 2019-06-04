@@ -51,7 +51,7 @@ func (x CopysetStrategy) String() string {
 	return proto.EnumName(CopysetStrategy_name, int32(x))
 }
 func (CopysetStrategy) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_copysets_2b2bf11e5f467be1, []int{0}
+	return fileDescriptor_copysets_f13f74b83457fab4, []int{0}
 }
 
 // AllCopysets contains the map between replication factor to
@@ -69,7 +69,7 @@ func (m *AllCopysets) Reset()         { *m = AllCopysets{} }
 func (m *AllCopysets) String() string { return proto.CompactTextString(m) }
 func (*AllCopysets) ProtoMessage()    {}
 func (*AllCopysets) Descriptor() ([]byte, []int) {
-	return fileDescriptor_copysets_2b2bf11e5f467be1, []int{0}
+	return fileDescriptor_copysets_f13f74b83457fab4, []int{0}
 }
 func (m *AllCopysets) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -111,7 +111,7 @@ func (m *Copysets) Reset()         { *m = Copysets{} }
 func (m *Copysets) String() string { return proto.CompactTextString(m) }
 func (*Copysets) ProtoMessage()    {}
 func (*Copysets) Descriptor() ([]byte, []int) {
-	return fileDescriptor_copysets_2b2bf11e5f467be1, []int{1}
+	return fileDescriptor_copysets_f13f74b83457fab4, []int{1}
 }
 func (m *Copysets) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -148,7 +148,7 @@ func (m *Copyset) Reset()         { *m = Copyset{} }
 func (m *Copyset) String() string { return proto.CompactTextString(m) }
 func (*Copyset) ProtoMessage()    {}
 func (*Copyset) Descriptor() ([]byte, []int) {
-	return fileDescriptor_copysets_2b2bf11e5f467be1, []int{2}
+	return fileDescriptor_copysets_f13f74b83457fab4, []int{2}
 }
 func (m *Copyset) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1028,10 +1028,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/copysets/copysets.proto", fileDescriptor_copysets_2b2bf11e5f467be1)
+	proto.RegisterFile("storage/copysets/copysets.proto", fileDescriptor_copysets_f13f74b83457fab4)
 }
 
-var fileDescriptor_copysets_2b2bf11e5f467be1 = []byte{
+var fileDescriptor_copysets_f13f74b83457fab4 = []byte{
 	// 467 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0xcd, 0x6e, 0xd3, 0x40,
 	0x14, 0x85, 0x33, 0xf9, 0x01, 0xe7, 0x46, 0x82, 0x64, 0x54, 0x50, 0xe4, 0x85, 0x13, 0x05, 0x16,

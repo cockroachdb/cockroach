@@ -35,7 +35,7 @@ func (m *LeaseVal) Reset()         { *m = LeaseVal{} }
 func (m *LeaseVal) String() string { return proto.CompactTextString(m) }
 func (*LeaseVal) ProtoMessage()    {}
 func (*LeaseVal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_lease_aad6f82586d4116a, []int{0}
+	return fileDescriptor_lease_d404cc90825180e5, []int{0}
 }
 func (m *LeaseVal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -342,9 +342,9 @@ var (
 	ErrIntOverflowLease   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("internal/client/lease.proto", fileDescriptor_lease_aad6f82586d4116a) }
+func init() { proto.RegisterFile("internal/client/lease.proto", fileDescriptor_lease_d404cc90825180e5) }
 
-var fileDescriptor_lease_aad6f82586d4116a = []byte{
+var fileDescriptor_lease_d404cc90825180e5 = []byte{
 	// 207 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0xce, 0xcc, 0x2b, 0x49,
 	0x2d, 0xca, 0x4b, 0xcc, 0xd1, 0x4f, 0xce, 0xc9, 0x4c, 0xcd, 0x2b, 0xd1, 0xcf, 0x49, 0x4d, 0x2c,

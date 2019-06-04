@@ -59,7 +59,7 @@ func (x RangeLogEventType) String() string {
 	return proto.EnumName(RangeLogEventType_name, int32(x))
 }
 func (RangeLogEventType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_log_ec9647c2a5c91039, []int{0}
+	return fileDescriptor_log_bcf2c90254b7aeca, []int{0}
 }
 
 type RangeLogEvent struct {
@@ -77,7 +77,7 @@ func (m *RangeLogEvent) Reset()         { *m = RangeLogEvent{} }
 func (m *RangeLogEvent) String() string { return proto.CompactTextString(m) }
 func (*RangeLogEvent) ProtoMessage()    {}
 func (*RangeLogEvent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_ec9647c2a5c91039, []int{0}
+	return fileDescriptor_log_bcf2c90254b7aeca, []int{0}
 }
 func (m *RangeLogEvent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -118,7 +118,7 @@ func (m *RangeLogEvent_Info) Reset()         { *m = RangeLogEvent_Info{} }
 func (m *RangeLogEvent_Info) String() string { return proto.CompactTextString(m) }
 func (*RangeLogEvent_Info) ProtoMessage()    {}
 func (*RangeLogEvent_Info) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_ec9647c2a5c91039, []int{0, 0}
+	return fileDescriptor_log_bcf2c90254b7aeca, []int{0, 0}
 }
 func (m *RangeLogEvent_Info) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -937,9 +937,9 @@ var (
 	ErrIntOverflowLog   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/storagepb/log.proto", fileDescriptor_log_ec9647c2a5c91039) }
+func init() { proto.RegisterFile("storage/storagepb/log.proto", fileDescriptor_log_bcf2c90254b7aeca) }
 
-var fileDescriptor_log_ec9647c2a5c91039 = []byte{
+var fileDescriptor_log_bcf2c90254b7aeca = []byte{
 	// 638 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x94, 0xcd, 0x6e, 0xd3, 0x40,
 	0x14, 0x85, 0xe3, 0x26, 0xad, 0x93, 0x69, 0x5a, 0xd2, 0xa1, 0x45, 0x21, 0xa0, 0x38, 0x2a, 0x20,

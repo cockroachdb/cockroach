@@ -42,7 +42,7 @@ func (m *StoreRequestHeader) Reset()         { *m = StoreRequestHeader{} }
 func (m *StoreRequestHeader) String() string { return proto.CompactTextString(m) }
 func (*StoreRequestHeader) ProtoMessage()    {}
 func (*StoreRequestHeader) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e9dab11d72650a60, []int{0}
+	return fileDescriptor_api_33820ca6069fde40, []int{0}
 }
 func (m *StoreRequestHeader) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -83,7 +83,7 @@ func (m *CollectChecksumRequest) Reset()         { *m = CollectChecksumRequest{}
 func (m *CollectChecksumRequest) String() string { return proto.CompactTextString(m) }
 func (*CollectChecksumRequest) ProtoMessage()    {}
 func (*CollectChecksumRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e9dab11d72650a60, []int{1}
+	return fileDescriptor_api_33820ca6069fde40, []int{1}
 }
 func (m *CollectChecksumRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -130,7 +130,7 @@ func (m *CollectChecksumResponse) Reset()         { *m = CollectChecksumResponse
 func (m *CollectChecksumResponse) String() string { return proto.CompactTextString(m) }
 func (*CollectChecksumResponse) ProtoMessage()    {}
 func (*CollectChecksumResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e9dab11d72650a60, []int{2}
+	return fileDescriptor_api_33820ca6069fde40, []int{2}
 }
 func (m *CollectChecksumResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -169,7 +169,7 @@ func (m *WaitForApplicationRequest) Reset()         { *m = WaitForApplicationReq
 func (m *WaitForApplicationRequest) String() string { return proto.CompactTextString(m) }
 func (*WaitForApplicationRequest) ProtoMessage()    {}
 func (*WaitForApplicationRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e9dab11d72650a60, []int{3}
+	return fileDescriptor_api_33820ca6069fde40, []int{3}
 }
 func (m *WaitForApplicationRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -203,7 +203,7 @@ func (m *WaitForApplicationResponse) Reset()         { *m = WaitForApplicationRe
 func (m *WaitForApplicationResponse) String() string { return proto.CompactTextString(m) }
 func (*WaitForApplicationResponse) ProtoMessage()    {}
 func (*WaitForApplicationResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e9dab11d72650a60, []int{4}
+	return fileDescriptor_api_33820ca6069fde40, []int{4}
 }
 func (m *WaitForApplicationResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -239,7 +239,7 @@ func (m *WaitForReplicaInitRequest) Reset()         { *m = WaitForReplicaInitReq
 func (m *WaitForReplicaInitRequest) String() string { return proto.CompactTextString(m) }
 func (*WaitForReplicaInitRequest) ProtoMessage()    {}
 func (*WaitForReplicaInitRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e9dab11d72650a60, []int{5}
+	return fileDescriptor_api_33820ca6069fde40, []int{5}
 }
 func (m *WaitForReplicaInitRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -273,7 +273,7 @@ func (m *WaitForReplicaInitResponse) Reset()         { *m = WaitForReplicaInitRe
 func (m *WaitForReplicaInitResponse) String() string { return proto.CompactTextString(m) }
 func (*WaitForReplicaInitResponse) ProtoMessage()    {}
 func (*WaitForReplicaInitResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e9dab11d72650a60, []int{6}
+	return fileDescriptor_api_33820ca6069fde40, []int{6}
 }
 func (m *WaitForReplicaInitResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1643,9 +1643,9 @@ var (
 	ErrIntOverflowApi   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/api.proto", fileDescriptor_api_e9dab11d72650a60) }
+func init() { proto.RegisterFile("storage/api.proto", fileDescriptor_api_33820ca6069fde40) }
 
-var fileDescriptor_api_e9dab11d72650a60 = []byte{
+var fileDescriptor_api_33820ca6069fde40 = []byte{
 	// 653 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x95, 0x41, 0x6f, 0xd3, 0x30,
 	0x14, 0xc7, 0x9b, 0x6e, 0x6b, 0x8b, 0x8b, 0x84, 0x66, 0xa1, 0x31, 0x0a, 0x6a, 0x46, 0x26, 0xa4,
