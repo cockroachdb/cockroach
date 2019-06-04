@@ -112,6 +112,7 @@ func newColOperator(
 			return nil, err
 		}
 		op = exec.NewNoop(inputs[0])
+		columnTypes = spec.Input[0].ColumnTypes
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
