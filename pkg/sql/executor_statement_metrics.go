@@ -116,7 +116,13 @@ func (ex *connExecutor) maybeSavePlan(
 // - result is the result set computed by the query/statement.
 // - err is the error encountered, if any.
 func (ex *connExecutor) recordStatementSummary(
-	ctx context.Context, planner *planner, automaticRetryCount int, rowsAffected int, err error,
+	ctx context.Context,
+	planner *planner,
+	automaticRetryCount int,
+	rowsAffected int,
+	err error,
+	bytesRead int64,
+	rowsRead int64,
 ) {
 	phaseTimes := planner.statsCollector.PhaseTimes()
 
@@ -167,7 +173,7 @@ func (ex *connExecutor) recordStatementSummary(
 		stmt, planner.curPlan.savedPlanForStats,
 		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagOptUsed),
 		automaticRetryCount, rowsAffected, err,
-		parseLat, planLat, runLat, svcLat, execOverhead,
+		parseLat, planLat, runLat, svcLat, execOverhead, bytesRead, rowsRead,
 	)
 
 	if log.V(2) {

@@ -339,6 +339,11 @@ type DistSQLReceiver struct {
 	// A handler for clock signals arriving from remote nodes. This should update
 	// this node's clock.
 	updateClock func(observedTs hlc.Timestamp)
+
+	// bytesRead and rowsRead track the corresponding metrics while executing the
+	// statement.
+	bytesRead int64
+	rowsRead  int64
 }
 
 // errWrap is a container for an error, for use with atomic.Value, which
@@ -390,7 +395,7 @@ var receiverSyncPool = sync.Pool{
 
 // MakeDistSQLReceiver creates a DistSQLReceiver.
 //
-// ctx is the Context that the receiver will use throughput its
+// ctx is the Context that the receiver will use throughout its
 // lifetime. resultWriter is the container where the results will be
 // stored. If only the row count is needed, this can be nil.
 //
@@ -517,6 +522,12 @@ func (r *DistSQLReceiver) Push(
 			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
+		}
+		if meta.Metrics != nil {
+			r.bytesRead += meta.Metrics.BytesRead
+			r.rowsRead += meta.Metrics.RowsRead
+			meta.Metrics.Release()
+			meta.Release()
 		}
 		return r.status
 	}

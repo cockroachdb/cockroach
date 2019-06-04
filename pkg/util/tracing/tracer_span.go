@@ -227,10 +227,9 @@ func IsRecordable(os opentracing.Span) bool {
 	return isCockroachSpan
 }
 
-// GetRecording retrieves the current recording, if the span has
-// recording enabled. This can be called while spans that are part of the
-// record are still open; it can run concurrently with operations on those
-// spans.
+// GetRecording retrieves the current recording, if the span has recording
+// enabled. This can be called while spans that are part of the record are
+// still open; it can run concurrently with operations on those spans.
 func GetRecording(os opentracing.Span) []RecordedSpan {
 	if _, noop := os.(*noopSpan); noop {
 		return nil
