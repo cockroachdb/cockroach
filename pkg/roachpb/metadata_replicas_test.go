@@ -1,0 +1,92 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License included
+// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+//
+// Change Date: 2022-10-01
+//
+// On the date above, in accordance with the Business Source License, use
+// of this software will be governed by the Apache License, Version 2.0,
+// included in the file licenses/APL.txt and at
+// https://www.apache.org/licenses/LICENSE-2.0
+
+package roachpb
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestVotersLearnersAll(t *testing.T) {
+	tests := [][]ReplicaDescriptor{
+		{},
+		{{Type: ReplicaType_VOTER}},
+		{{Type: ReplicaType_LEARNER}},
+		{{Type: ReplicaType_VOTER}, {Type: ReplicaType_LEARNER}, {Type: ReplicaType_VOTER}},
+		{{Type: ReplicaType_LEARNER}, {Type: ReplicaType_VOTER}, {Type: ReplicaType_LEARNER}},
+	}
+	for i, test := range tests {
+		r := MakeReplicaDescriptors(test)
+		for _, voter := range r.Voters() {
+			assert.Equal(t, ReplicaType_VOTER, voter.Type, "testcase %d", i)
+		}
+		for _, learner := range r.Learners() {
+			assert.Equal(t, ReplicaType_LEARNER, learner.Type, "testcase %d", i)
+		}
+		assert.Equal(t, len(test), len(r.All()), "testcase %d", i)
+	}
+}
+
+func TestReplicaDescriptorsRemove(t *testing.T) {
+	tests := []struct {
+		replicas []ReplicaDescriptor
+		remove   ReplicationTarget
+		expected bool
+	}{
+		{
+			remove:   ReplicationTarget{NodeID: 1, StoreID: 1},
+			expected: false,
+		},
+		{
+			replicas: []ReplicaDescriptor{{NodeID: 1, StoreID: 1}},
+			remove:   ReplicationTarget{NodeID: 2, StoreID: 2},
+			expected: false,
+		},
+		{
+			replicas: []ReplicaDescriptor{{NodeID: 1, StoreID: 1}},
+			remove:   ReplicationTarget{NodeID: 1, StoreID: 1},
+			expected: true,
+		},
+		{
+			// Make sure we sort after the swap in removal.
+			replicas: []ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 4, StoreID: 4, Type: ReplicaType_LEARNER},
+			},
+			remove:   ReplicationTarget{NodeID: 2, StoreID: 2},
+			expected: true,
+		},
+	}
+	for i, test := range tests {
+		r := MakeReplicaDescriptors(test.replicas)
+		lenBefore := len(r.All())
+		removedDesc, ok := r.RemoveReplica(test.remove.NodeID, test.remove.StoreID)
+		assert.Equal(t, test.expected, ok, "testcase %d", i)
+		if ok {
+			assert.Equal(t, test.remove.NodeID, removedDesc.NodeID, "testcase %d", i)
+			assert.Equal(t, test.remove.StoreID, removedDesc.StoreID, "testcase %d", i)
+			assert.Equal(t, lenBefore-1, len(r.All()), "testcase %d", i)
+		} else {
+			assert.Equal(t, lenBefore, len(r.All()), "testcase %d", i)
+		}
+		for _, voter := range r.Voters() {
+			assert.Equal(t, ReplicaType_VOTER, voter.Type, "testcase %d", i)
+		}
+		for _, learner := range r.Learners() {
+			assert.Equal(t, ReplicaType_LEARNER, learner.Type, "testcase %d", i)
+		}
+	}
+}
