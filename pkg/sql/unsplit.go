@@ -30,8 +30,13 @@ type unsplitNode struct {
 
 	tableDesc *sqlbase.TableDescriptor
 	index     *sqlbase.IndexDescriptor
-	rows      planNode
 	run       unsplitRun
+	rows      planNode
+	// If set, the source for rows produces "raw" keys that address a row in kv.
+	// Otherwise, the source produces primary key tuples. In particular, this
+	// option is set when performing UNSPLIT ALL because the split points are
+	// read from crdb_internal.ranges as raw keys.
+	raw bool
 }
 
 // Unsplit executes a KV unsplit.
@@ -41,44 +46,75 @@ func (p *planner) Unsplit(ctx context.Context, n *tree.Unsplit) (planNode, error
 	if err != nil {
 		return nil, err
 	}
+	ret := &unsplitNode{
+		tableDesc: tableDesc.TableDesc(),
+		index:     index,
+	}
 	// Calculate the desired types for the select statement. It is OK if the
 	// select statement returns fewer columns (the relevant prefix is used).
 	desiredTypes := make([]*types.T, len(index.ColumnIDs))
+	columns := make(sqlbase.ResultColumns, len(index.ColumnIDs))
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
 			return nil, err
 		}
 		desiredTypes[i] = &c.Type
+		columns[i].Typ = &c.Type
+		columns[i].Name = c.Name
 	}
 
 	// Create the plan for the unsplit rows source.
-	rows, err := p.newPlan(ctx, n.Rows, desiredTypes)
-	if err != nil {
-		return nil, err
-	}
-
-	cols := planColumns(rows)
-	if len(cols) == 0 {
-		return nil, errors.Errorf("no columns in UNSPLIT AT data")
-	}
-	if len(cols) > len(index.ColumnIDs) {
-		return nil, errors.Errorf("too many columns in UNSPLIT AT data")
-	}
-	for i := range cols {
-		if !cols[i].Typ.Equivalent(desiredTypes[i]) {
-			return nil, errors.Errorf(
-				"UNSPLIT AT data column %d (%s) must be of type %s, not type %s",
-				i+1, index.ColumnNames[i], desiredTypes[i], cols[i].Typ,
-			)
+	if n.All {
+		statement := `
+			SELECT
+				start_key
+			FROM
+				crdb_internal.ranges
+			WHERE
+				table_name=$1::string AND index_name=$2::string AND manual_split_time IS NOT NULL
+		`
+		ranges, err := p.ExtendedEvalContext().InternalExecutor.Query(
+			ctx, "split points query", p.txn, statement, n.TableOrIndex.Table.String(), n.TableOrIndex.Index)
+		if err != nil {
+			return nil, err
 		}
+		v := p.newContainerValuesNode(columns, 0)
+		for _, d := range ranges {
+			if _, err := v.rows.AddRow(ctx, d); err != nil {
+				return nil, err
+			}
+		}
+		// Rows contains "raw" split points so set raw.
+		ret.rows = v
+		ret.raw = true
+	} else {
+		rows, err := p.newPlan(ctx, n.Rows, desiredTypes)
+		if err != nil {
+			return nil, err
+		}
+
+		cols := planColumns(rows)
+		if len(cols) == 0 {
+			return nil, errors.Errorf("no columns in UNSPLIT AT data")
+		}
+		if len(cols) > len(index.ColumnIDs) {
+			return nil, errors.Errorf("too many columns in UNSPLIT AT data")
+		}
+		for i := range cols {
+			if !cols[i].Typ.Equivalent(desiredTypes[i]) {
+				return nil, errors.Errorf(
+					"UNSPLIT AT data column %d (%s) must be of type %s, not type %s",
+					i+1, index.ColumnNames[i], desiredTypes[i], cols[i].Typ,
+				)
+			}
+		}
+		// Rows contain primary key tuples, so raw is not set.
+		ret.rows = rows
+		ret.raw = false
 	}
 
-	return &unsplitNode{
-		tableDesc: tableDesc.TableDesc(),
-		index:     index,
-		rows:      rows,
-	}, nil
+	return ret, nil
 }
 
 var unsplitNodeColumns = sqlbase.ResultColumns{
@@ -115,9 +151,17 @@ func (n *unsplitNode) Next(params runParams) (bool, error) {
 	}
 
 	row := n.rows.Values()
-	rowKey, err := getRowKey(n.tableDesc, n.index, row)
-	if err != nil {
-		return false, err
+	var rowKey []byte
+	var err error
+	// If raw is set, we don't have to convert the primary key tuples to a "raw"
+	// split point.
+	if n.raw {
+		rowKey = []byte(*row[0].(*tree.DBytes))
+	} else {
+		rowKey, err = getRowKey(n.tableDesc, n.index, row)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
