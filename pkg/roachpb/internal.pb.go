@@ -107,7 +107,7 @@ func (m *InternalTimeSeriesData) Reset()         { *m = InternalTimeSeriesData{}
 func (m *InternalTimeSeriesData) String() string { return proto.CompactTextString(m) }
 func (*InternalTimeSeriesData) ProtoMessage()    {}
 func (*InternalTimeSeriesData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_internal_1f616e5f0cc948ec, []int{0}
+	return fileDescriptor_internal_5e7c34440b843dbf, []int{0}
 }
 func (m *InternalTimeSeriesData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -173,7 +173,7 @@ func (m *InternalTimeSeriesSample) Reset()         { *m = InternalTimeSeriesSamp
 func (m *InternalTimeSeriesSample) String() string { return proto.CompactTextString(m) }
 func (*InternalTimeSeriesSample) ProtoMessage()    {}
 func (*InternalTimeSeriesSample) Descriptor() ([]byte, []int) {
-	return fileDescriptor_internal_1f616e5f0cc948ec, []int{1}
+	return fileDescriptor_internal_5e7c34440b843dbf, []int{1}
 }
 func (m *InternalTimeSeriesSample) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1261,9 +1261,9 @@ var (
 	ErrIntOverflowInternal   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/internal.proto", fileDescriptor_internal_1f616e5f0cc948ec) }
+func init() { proto.RegisterFile("roachpb/internal.proto", fileDescriptor_internal_5e7c34440b843dbf) }
 
-var fileDescriptor_internal_1f616e5f0cc948ec = []byte{
+var fileDescriptor_internal_5e7c34440b843dbf = []byte{
 	// 387 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x91, 0xb1, 0x8e, 0xda, 0x30,
 	0x00, 0x86, 0x31, 0x26, 0x40, 0x8d, 0x90, 0xa8, 0x4b, 0x23, 0x0b, 0x55, 0x69, 0xca, 0x64, 0xa9,

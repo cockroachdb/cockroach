@@ -47,7 +47,7 @@ func (m *DiagnosticReport) Reset()         { *m = DiagnosticReport{} }
 func (m *DiagnosticReport) String() string { return proto.CompactTextString(m) }
 func (*DiagnosticReport) ProtoMessage()    {}
 func (*DiagnosticReport) Descriptor() ([]byte, []int) {
-	return fileDescriptor_diagnostics_6c05230cd048e2a9, []int{0}
+	return fileDescriptor_diagnostics_e5619658e364d454, []int{0}
 }
 func (m *DiagnosticReport) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -91,7 +91,7 @@ func (m *NodeInfo) Reset()         { *m = NodeInfo{} }
 func (m *NodeInfo) String() string { return proto.CompactTextString(m) }
 func (*NodeInfo) ProtoMessage()    {}
 func (*NodeInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_diagnostics_6c05230cd048e2a9, []int{1}
+	return fileDescriptor_diagnostics_e5619658e364d454, []int{1}
 }
 func (m *NodeInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -134,7 +134,7 @@ func (m *StoreInfo) Reset()         { *m = StoreInfo{} }
 func (m *StoreInfo) String() string { return proto.CompactTextString(m) }
 func (*StoreInfo) ProtoMessage()    {}
 func (*StoreInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_diagnostics_6c05230cd048e2a9, []int{2}
+	return fileDescriptor_diagnostics_e5619658e364d454, []int{2}
 }
 func (m *StoreInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -174,7 +174,7 @@ func (m *CPUInfo) Reset()         { *m = CPUInfo{} }
 func (m *CPUInfo) String() string { return proto.CompactTextString(m) }
 func (*CPUInfo) ProtoMessage()    {}
 func (*CPUInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_diagnostics_6c05230cd048e2a9, []int{3}
+	return fileDescriptor_diagnostics_e5619658e364d454, []int{3}
 }
 func (m *CPUInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -214,7 +214,7 @@ func (m *HardwareInfo) Reset()         { *m = HardwareInfo{} }
 func (m *HardwareInfo) String() string { return proto.CompactTextString(m) }
 func (*HardwareInfo) ProtoMessage()    {}
 func (*HardwareInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_diagnostics_6c05230cd048e2a9, []int{4}
+	return fileDescriptor_diagnostics_e5619658e364d454, []int{4}
 }
 func (m *HardwareInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -251,7 +251,7 @@ func (m *OSInfo) Reset()         { *m = OSInfo{} }
 func (m *OSInfo) String() string { return proto.CompactTextString(m) }
 func (*OSInfo) ProtoMessage()    {}
 func (*OSInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_diagnostics_6c05230cd048e2a9, []int{5}
+	return fileDescriptor_diagnostics_e5619658e364d454, []int{5}
 }
 func (m *OSInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -287,7 +287,7 @@ func (m *MemInfo) Reset()         { *m = MemInfo{} }
 func (m *MemInfo) String() string { return proto.CompactTextString(m) }
 func (*MemInfo) ProtoMessage()    {}
 func (*MemInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_diagnostics_6c05230cd048e2a9, []int{6}
+	return fileDescriptor_diagnostics_e5619658e364d454, []int{6}
 }
 func (m *MemInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3042,10 +3042,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("server/diagnosticspb/diagnostics.proto", fileDescriptor_diagnostics_6c05230cd048e2a9)
+	proto.RegisterFile("server/diagnosticspb/diagnostics.proto", fileDescriptor_diagnostics_e5619658e364d454)
 }
 
-var fileDescriptor_diagnostics_6c05230cd048e2a9 = []byte{
+var fileDescriptor_diagnostics_e5619658e364d454 = []byte{
 	// 1206 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x56, 0xcf, 0x6f, 0x1b, 0xc5,
 	0x17, 0xaf, 0xbd, 0xfe, 0x39, 0x49, 0xfb, 0x4d, 0xa7, 0xf9, 0x86, 0x25, 0xad, 0x9c, 0x62, 0x89,

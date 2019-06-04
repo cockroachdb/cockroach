@@ -60,7 +60,7 @@ func (m *RecordedSpan) Reset()         { *m = RecordedSpan{} }
 func (m *RecordedSpan) String() string { return proto.CompactTextString(m) }
 func (*RecordedSpan) ProtoMessage()    {}
 func (*RecordedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_36cb8126afc70b66, []int{0}
+	return fileDescriptor_recorded_span_b3d2761e220dafd7, []int{0}
 }
 func (m *RecordedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -98,7 +98,7 @@ func (m *RecordedSpan_LogRecord) Reset()         { *m = RecordedSpan_LogRecord{}
 func (m *RecordedSpan_LogRecord) String() string { return proto.CompactTextString(m) }
 func (*RecordedSpan_LogRecord) ProtoMessage()    {}
 func (*RecordedSpan_LogRecord) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_36cb8126afc70b66, []int{0, 2}
+	return fileDescriptor_recorded_span_b3d2761e220dafd7, []int{0, 2}
 }
 func (m *RecordedSpan_LogRecord) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -134,7 +134,7 @@ func (m *RecordedSpan_LogRecord_Field) Reset()         { *m = RecordedSpan_LogRe
 func (m *RecordedSpan_LogRecord_Field) String() string { return proto.CompactTextString(m) }
 func (*RecordedSpan_LogRecord_Field) ProtoMessage()    {}
 func (*RecordedSpan_LogRecord_Field) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_36cb8126afc70b66, []int{0, 2, 0}
+	return fileDescriptor_recorded_span_b3d2761e220dafd7, []int{0, 2, 0}
 }
 func (m *RecordedSpan_LogRecord_Field) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1284,10 +1284,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/tracing/recorded_span.proto", fileDescriptor_recorded_span_36cb8126afc70b66)
+	proto.RegisterFile("util/tracing/recorded_span.proto", fileDescriptor_recorded_span_b3d2761e220dafd7)
 }
 
-var fileDescriptor_recorded_span_36cb8126afc70b66 = []byte{
+var fileDescriptor_recorded_span_b3d2761e220dafd7 = []byte{
 	// 536 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x52, 0x4f, 0x6f, 0xd3, 0x3e,
 	0x18, 0x9e, 0xd7, 0xb4, 0x69, 0xde, 0x56, 0x3f, 0x4d, 0x56, 0xf5, 0x53, 0x16, 0xa1, 0xa4, 0x80,

@@ -34,7 +34,7 @@ func (m *BootstrapRequest) Reset()         { *m = BootstrapRequest{} }
 func (m *BootstrapRequest) String() string { return proto.CompactTextString(m) }
 func (*BootstrapRequest) ProtoMessage()    {}
 func (*BootstrapRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_init_a2f92a9ec99703a0, []int{0}
+	return fileDescriptor_init_d4c403fd893ea000, []int{0}
 }
 func (m *BootstrapRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -68,7 +68,7 @@ func (m *BootstrapResponse) Reset()         { *m = BootstrapResponse{} }
 func (m *BootstrapResponse) String() string { return proto.CompactTextString(m) }
 func (*BootstrapResponse) ProtoMessage()    {}
 func (*BootstrapResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_init_a2f92a9ec99703a0, []int{1}
+	return fileDescriptor_init_d4c403fd893ea000, []int{1}
 }
 func (m *BootstrapResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -453,9 +453,9 @@ var (
 	ErrIntOverflowInit   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("server/serverpb/init.proto", fileDescriptor_init_a2f92a9ec99703a0) }
+func init() { proto.RegisterFile("server/serverpb/init.proto", fileDescriptor_init_d4c403fd893ea000) }
 
-var fileDescriptor_init_a2f92a9ec99703a0 = []byte{
+var fileDescriptor_init_d4c403fd893ea000 = []byte{
 	// 164 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x4e, 0x2d, 0x2a,
 	0x4b, 0x2d, 0xd2, 0x87, 0x50, 0x05, 0x49, 0xfa, 0x99, 0x79, 0x99, 0x25, 0x7a, 0x05, 0x45, 0xf9,
