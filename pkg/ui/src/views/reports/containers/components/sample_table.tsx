@@ -152,10 +152,11 @@ function SampleHeader(props) {
 
 function SampleRow(props) {
   const { s, cols, expandedSample, onToggleSample, onToggleComponent, expandedComponents, setComponent } = props;
+  const compSp: protos.cockroach.util.tracing.IRecordedSpan = findCompSpan(s);
 
   function onClick(c, e) {
-    onToggleSample(s.spans[0].trace_id, s.spans[0].span_id);
-    setComponent(s.spans[0].span_id);
+    onToggleSample(compSp.trace_id, compSp.span_id);
+    setComponent(compSp.span_id);
   }
 
   function renderExpandedSample() {
@@ -173,7 +174,7 @@ function SampleRow(props) {
           ))
         }
         </tr>
-      {expandedSample && s.spans[0].span_id.equals(expandedSample.span_id) &&
+      {expandedSample && compSp.span_id.equals(expandedSample.span_id) &&
          <tr>
            <td className="sample-expanded" colspan={cols.length}>
              <Loading
@@ -192,6 +193,12 @@ export class SampleTable extends React.Component<SampleTableProps> {
   constructor(props: SampleTableProps) {
     super(props);
     this.state = {expandedComponents: {}};
+  }
+
+  componentDidUpdate() {
+    if (this.props.expandedSample && this.props.expandedSample.scrollIntoView) {
+      this.props.expandedSample.scrollIntoView();
+    }
   }
 
   extractColumns = (samples: protos.cockroach.util.tracing.ComponentSamples.ISample[]) => {

@@ -319,8 +319,9 @@ export class ExpandedSpan {
     }
     const msg: string = line.formatMessage();
     const msg_title: string = line.formatMessageTitle(expanded);
+    const ref = line.span && line.span.span_id.eq(props.focus_span_id) ? props.focus_ref : null;
     columns.push(
-        <td className={log_class} style={log_style} title={msg_title} onClick={onClick}>
+        <td className={log_class} style={log_style} title={msg_title} onClick={onClick} ref={ref}>
           {msg}
           {expanded &&
            <line.formatMessageHTML />
@@ -458,11 +459,13 @@ export class ExpandedSample {
   trace_id: Long;
   span_id: Long;
   root: ExpandedSpan;
+  focus_ref: any;
 
   constructor(trace_id: Long, span_id: Long, nodes: protos.cockroach.server.serverpb.ComponentTraceResponse.INodeResponse[]) {
     this.active = false;
     this.trace_id = trace_id;
     this.span_id = span_id;
+    this.focus_ref =  React.createRef();
 
     const spans: {[span_id: Long]: ExpandedSpan} = {};
     const roots: Long[] = [];
@@ -582,6 +585,13 @@ export class ExpandedSample {
     this.root = spans[root_id];
   }
 
+  scrollIntoView = () => {
+    if (this.focus_ref) {
+      this.focus_ref.current.scrollIntoView({block: 'center', inline: 'center', behavior: 'smooth'});
+      this.focus_ref = null;
+    }
+  }
+
   // Render the component trace.
   Render = (props) => {
     var line_nos: number[] = [];
@@ -593,7 +603,13 @@ export class ExpandedSample {
         {
           _.map(line_nos, (no) => (
             <tr className="line">
-              <this.root.renderTraceLine {...props} col_no={0} line_no={no} />
+              <this.root.renderTraceLine
+                {...props}
+                col_no={0}
+                line_no={no}
+                focus_span_id={this.span_id}
+                focus_ref={this.focus_ref}
+              />
             </tr>
           ));
       </table>

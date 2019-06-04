@@ -110,15 +110,32 @@ class Components extends React.Component<ComponentsProps, ComponentsState> {
     var newResponses: protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse[];
     if (!this.props.components || nextProps.components.data != this.props.components.data) {
       if (isTesting()) {
-        newActivityResponses = genActivityResponses();
+        const newActivityResponses = genActivityResponses(this.state.testActivityResponses);
         this.state.activityResponses = diffActivityResponses(newActivityResponses, this.state.testActivityResponses);
-        this.state.testActivityResponses = newActivityResponses();
+        this.state.testActivityResponses = newActivityResponses;
       } else {
         this.state.activityResponses = diffActivityResponses(
           nextProps.components && nextProps.components.data ? nextProps.components.data.nodes : null,
           this.props.components && this.props.components.data ? this.props.components.data.nodes : null);
       }
     }
+  }
+
+  componentDidMount() {
+    const comp = this;
+    function escFunction(event) {
+      if (event.keyCode === 27) {
+        if (comp.state.expandedSpanID) {
+          comp.setState({expandedSpanID: null, expandedSample: null});
+          return;
+        }
+        if (comp.state.expandedCell) {
+          comp.setState({expandedCell: null, componentTraces: null});
+          return;
+        }
+      }
+    }
+    document.addEventListener("keydown", escFunction, false);
   }
 
   renderReportBody() {

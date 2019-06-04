@@ -208,7 +208,9 @@ function ExpandedCell(props) {
   const { sc, componentTraces, expanded } = props;
   if (!componentTraces) {
     return (
-        <span id="title">Start cluster-wide sampling to inspect traces through system components</span>
+        <td className="matrix-cell-expanded" colspan={props.colspan}>
+          <span id="title">Start cluster-wide sampling to inspect traces through system components</span>
+        </td>
     );
   }
   const loading: boolean = componentTraces && componentTraces.active;

@@ -18,7 +18,7 @@ import * as protos from "src/js/protos";
 
 // For testing only.
 
-const static_num_nodes: number = 50;
+const static_num_nodes: number = 32;
 
 const static_components: any[] = [
   {name: "gateway.pgwire.clients", freq: 72},
@@ -257,7 +257,7 @@ export function genSampleMap() {
 }
 
 function genActivityResponse(node_id: number) {
-  if (Math.random() < 0.02) {
+  if (Math.random() < 0.05) {
     return new protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse(
       {node_id: node_id, error_message: "no route to host"});
   }
@@ -282,8 +282,22 @@ function genActivityResponse(node_id: number) {
     {node_id: node_id, components: activities, start_time: start_time});
 }
 
-export function genActivityResponses() {
+export function genActivityResponses(last: protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse[]) {
   var resps: protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse[] =
     Array(static_num_nodes).fill(0).map((e,i)=>genActivityResponse(i+1));
+  // Add these newly generated results to the previous results.
+  if (last) {
+    for (let i = 0; i < resps.length; i++) {
+      if (resps[i].error_message == "" && last[i].error_message == "") {
+        _.map(last[i].components, (ca, name) => {
+          if (name in resps[i].components) {
+            resps[i].components[name].span_count = resps[i].components[name].span_count.add(ca.span_count);
+            resps[i].components[name].stuck_count = resps[i].components[name].stuck_count.add(ca.stuck_count);
+            resps[i].components[name].errors = resps[i].components[name].errors.add(ca.errors);
+          }
+        });
+      }
+    }
+  }
   return resps;
 }
