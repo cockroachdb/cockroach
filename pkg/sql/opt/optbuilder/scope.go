@@ -495,6 +495,24 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 						break
 					}
 				}
+
+				// If agg is ordering sensitive, check if the orders match as well.
+				if !agg.IsCommutative() {
+					if len(a.OrderBy) != len(agg.OrderBy) {
+						match = false
+					}
+
+					// Now check if the orderings are identical.
+					if match {
+						for k := range a.OrderBy {
+							if !a.OrderBy[k].Equal(agg.OrderBy[k]) {
+								match = false
+								break
+							}
+						}
+					}
+				}
+
 				if match {
 					// Aggregate already exists, so return information about the
 					// existing column that computes it.

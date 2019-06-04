@@ -471,6 +471,7 @@ func CountLeases(
 	values, err := executor.QueryRow(
 		ctx, "count-leases", nil /* txn */, stmt, at.GoTime(),
 	)
+
 	if err != nil {
 		return 0, err
 	}

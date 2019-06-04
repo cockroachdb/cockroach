@@ -1,0 +1,36 @@
+# LogicTest: local-opt fakedist-opt
+
+statement ok
+CREATE TABLE tab (
+  col1 INT PRIMARY KEY,
+  col2 INT,
+  col3 STRING
+)
+
+# Ordered aggregations when there are no rows.
+query I
+SELECT array_agg(col1 ORDER BY col2) FROM TAB
+----
+NULL
+
+statement ok
+INSERT INTO tab VALUES (-3, 7, 'a'), (-2, 6, 'a'), (-1, 5, 'a'), (0, 7, 'b'), (1, 5, 'b'), (2, 6, 'b')
+
+query T colnames
+SELECT array_agg(col1 ORDER BY col1) FROM tab
+----
+array_agg
+{-3,-2,-1,0,1,2}
+
+query TTT colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), array_agg(col1 ORDER BY col3, col1) FROM tab
+----
+array_agg         array_agg         array_agg
+{-3,-2,-1,0,1,2}  {-1,1,-2,2,-3,0}  {-3,-2,-1,0,1,2}
+
+query TTT colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), col3 FROM tab GROUP BY col3 ORDER BY col3
+----
+array_agg   array_agg   col3
+{-3,-2,-1}  {-1,-2,-3}  a
+{0,1,2}     {1,2,0}     b

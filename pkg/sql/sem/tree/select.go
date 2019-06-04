@@ -656,6 +656,12 @@ func (node *Order) Format(ctx *FmtCtx) {
 	}
 }
 
+// Equal checks if the node ordering is equivalent to other.
+func (node *Order) Equal(other *Order) bool {
+	return node.Expr.String() == other.Expr.String() && node.Direction == other.Direction &&
+		node.Table == other.Table && node.OrderType == other.OrderType
+}
+
 // Limit represents a LIMIT clause.
 type Limit struct {
 	Offset, Count Expr
