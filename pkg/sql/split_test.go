@@ -147,7 +147,8 @@ func TestSplitAt(t *testing.T) {
 	for _, tt := range tests {
 		var key roachpb.Key
 		var pretty string
-		err := db.QueryRow(tt.in, tt.args...).Scan(&key, &pretty)
+		var expirationTimestamp *string
+		err := db.QueryRow(tt.in, tt.args...).Scan(&key, &pretty, &expirationTimestamp)
 		if err != nil && tt.error == "" {
 			t.Fatalf("%s: unexpected error: %s", tt.in, err)
 		} else if tt.error != "" && err == nil {
