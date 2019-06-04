@@ -370,6 +370,22 @@ SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_
 start_pretty   end_pretty  split_enforced_until
 /Table/56/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
 
+statement ok
+ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
+
+statement ok
+ALTER TABLE foo UNSPLIT ALL
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+----
+start_pretty   end_pretty
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL
+----
+start_pretty   end_pretty
+
 # Make sure that the cluster id isn't unset.
 query B
 select crdb_internal.cluster_id() != '00000000-0000-0000-0000-000000000000' FROM foo
