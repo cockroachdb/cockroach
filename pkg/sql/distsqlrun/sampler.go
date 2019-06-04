@@ -264,11 +264,11 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			// columns.
 			col := s.sketches[i].spec.Columns[0]
 			s.sketches[i].numRows++
-			if row[col].IsNull() {
+			isNull := row[col].IsNull()
+			if isNull {
 				s.sketches[i].numNulls++
-				continue
 			}
-			if s.outTypes[col].Family() == types.IntFamily {
+			if s.outTypes[col].Family() == types.IntFamily && !isNull {
 				// Fast path for integers.
 				// TODO(radu): make this more general.
 				val, err := row[col].GetInt()
