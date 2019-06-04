@@ -15,6 +15,8 @@ package distsqlpb
 import (
 	"context"
 	"fmt"
+	"math"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -208,6 +210,32 @@ type ProducerMetadata struct {
 	// SamplerProgress contains incremental progress information from the sampler
 	// processor.
 	SamplerProgress *RemoteProducerMetadata_SamplerProgress
+}
+
+// MetricsSpanID is a special SpanID assigned to all RecordedSpans that are
+// used for metrics propagation. If we leave SpanID field uninitialized, then
+// it gets a value of 0 which belongs to the root span and should not belong
+// to any other span.
+const MetricsSpanID = math.MaxUint64
+
+// traceDataMetaPool is a pool of metadata used to propagate metrics.
+var traceDataMetaPool = sync.Pool{
+	New: func() interface{} {
+		return &ProducerMetadata{
+			TraceData: append([]tracing.RecordedSpan{}, tracing.RecordedSpan{SpanID: MetricsSpanID}),
+		}
+	},
+}
+
+// Release is part of Releasable interface.
+func (meta *ProducerMetadata) Release() {
+	traceDataMetaPool.Put(meta)
+}
+
+// GetTraceDataMeta returns a metadata object from the pool of metrics
+// metadata.
+func GetTraceDataMeta() *ProducerMetadata {
+	return traceDataMetaPool.Get().(*ProducerMetadata)
 }
 
 // RemoteProducerMetaToLocalMeta converts a RemoteProducerMetadata struct to

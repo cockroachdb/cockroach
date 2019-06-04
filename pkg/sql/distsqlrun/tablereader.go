@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	pbtypes "github.com/gogo/protobuf/types"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -62,6 +63,8 @@ type tableReader struct {
 	// initialization, call input.Next() to retrieve rows once initialized.
 	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
+
+	rowsRead int64
 }
 
 var _ Processor = &tableReader{}
@@ -277,6 +280,7 @@ func (tr *tableReader) Release() {
 		ProcessorBase: tr.ProcessorBase,
 		fetcher:       tr.fetcher,
 		spans:         tr.spans[:0],
+		rowsRead:      0,
 	}
 	trPool.Put(tr)
 }
@@ -297,6 +301,7 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 			break
 		}
 
+		tr.rowsRead++
 		if outRow := tr.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
@@ -355,10 +360,33 @@ func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMet
 	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
+
+	meta := distsqlpb.GetTraceDataMeta()
+	trs := tableReaderStatsPool.Get().(*TableReaderStats)
+	trs.InputStats.NumRows, trs.BytesRead = tr.rowsRead, tr.fetcher.GetBytesRead()
+	stats, err := pbtypes.MarshalAny(trs)
+	if err != nil {
+		panic(err)
+	}
+	// meta comes with already preallocated TraceData of length 1, so it is safe
+	// to write to it without checking.
+	meta.TraceData[0].Stats = stats
+	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.
 func (tr *tableReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	return tr.generateMeta(ctx)
+}
+
+var tableReaderStatsPool = sync.Pool{
+	New: func() interface{} {
+		return &TableReaderStats{InputStats: InputStats{}}
+	},
+}
+
+// Release is part of Releasable interface.
+func (trs *TableReaderStats) Release() {
+	tableReaderStatsPool.Put(trs)
 }

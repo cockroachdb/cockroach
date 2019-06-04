@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1626,7 +1627,10 @@ func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error
 func getOrderedChildSpans(spanID uint64, allSpans []tracing.RecordedSpan) []spanWithIndex {
 	children := make([]spanWithIndex, 0)
 	for i := range allSpans {
-		if allSpans[i].ParentSpanID == spanID {
+		// We're omitting spans with a special MetricsSpanID since those are used
+		// only to propagate metrics about the goodput of the system and should not
+		// be considered "children" of any span.
+		if allSpans[i].ParentSpanID == spanID && allSpans[i].SpanID != distsqlpb.MetricsSpanID {
 			children = append(
 				children,
 				spanWithIndex{
@@ -1647,6 +1651,12 @@ func getOrderedChildSpans(spanID uint64, allSpans []tracing.RecordedSpan) []span
 func getMessagesForSubtrace(
 	span spanWithIndex, allSpans []tracing.RecordedSpan, seenSpans map[uint64]struct{},
 ) ([]logRecordRow, error) {
+	// We're omitting spans with a special MetricsSpanID since those are used
+	// only to propagate metrics about the goodput of the system and should not
+	// belong to any trace.
+	if span.SpanID == distsqlpb.MetricsSpanID {
+		return nil, nil
+	}
 	if _, ok := seenSpans[span.SpanID]; ok {
 		return nil, errors.Errorf("duplicate span %d", span.SpanID)
 	}
@@ -1889,10 +1899,11 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 	numRows int,
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
+	bytesRead, rowsRead int64,
 ) {
 	s.appStats.recordStatement(
 		stmt, samplePlanDescription, distSQLUsed, optUsed, automaticRetryCount, numRows, err,
-		parseLat, planLat, runLat, svcLat, ovhLat)
+		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
 }
 
 // SQLStats is part of the sqlStatsCollector interface.

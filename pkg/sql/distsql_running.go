@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -338,6 +339,12 @@ type DistSQLReceiver struct {
 	// A handler for clock signals arriving from remote nodes. This should update
 	// this node's clock.
 	updateClock func(observedTs hlc.Timestamp)
+
+	// bytesRead and rowsRead track the corresponding metrics while executing the
+	// statement.
+	bytesRead int64
+	rowsRead  int64
+	scratch   pbtypes.DynamicAny
 }
 
 // errWrap is a container for an error, for use with atomic.Value, which
@@ -510,9 +517,11 @@ func (r *DistSQLReceiver) Push(
 		}
 		if len(meta.TraceData) > 0 {
 			span := opentracing.SpanFromContext(r.ctx)
-			if span == nil {
-				r.resultWriter.SetError(
-					errors.New("trying to ingest remote spans but there is no recording span set up"))
+			if span == nil || !tracing.IsRecording(span) {
+				// If there is no span or the span is non recording, then full tracing
+				// is disabled, but we're still propagating stats about the goodput of
+				// the system.
+				r.processMetricsMeta(meta)
 			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
@@ -584,6 +593,32 @@ func (r *DistSQLReceiver) Push(
 		return r.status
 	}
 	return r.status
+}
+
+func (r *DistSQLReceiver) processMetricsMeta(meta *distsqlpb.ProducerMetadata) {
+	if len(meta.TraceData) > 1 {
+		r.resultWriter.SetError(
+			errors.Errorf("unexpectedly multiple RecordedSpans in a single metadata object"))
+	} else {
+		rs := meta.TraceData[0]
+		if rs.Stats != nil {
+			if err := pbtypes.UnmarshalAny(rs.Stats, &r.scratch); err != nil {
+				r.resultWriter.SetError(errors.Errorf("error unmarshaling stats: %s", err))
+				return
+			}
+			if trs, ok := r.scratch.Message.(*distsqlrun.TableReaderStats); ok {
+				r.bytesRead += trs.BytesRead
+				r.rowsRead += trs.InputStats.NumRows
+			} else {
+				r.resultWriter.SetError(
+					errors.Errorf("unexpectedly stats are not TableReaderStats"))
+			}
+		} else {
+			r.resultWriter.SetError(
+				errors.Errorf("unexpectedly Stats field of a RecordedSpan is nil"))
+		}
+	}
+	meta.Release()
 }
 
 // errPriority computes the priority of err.

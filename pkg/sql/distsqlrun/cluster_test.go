@@ -256,6 +256,7 @@ func TestClusterFlow(t *testing.T) {
 	}
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreTxnCoordMeta(metas)
+	metas = ignoreMetricsMeta(metas)
 	if len(metas) != 0 {
 		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -294,6 +295,18 @@ func ignoreTxnCoordMeta(metas []distsqlpb.ProducerMetadata) []distsqlpb.Producer
 	res := make([]distsqlpb.ProducerMetadata, 0)
 	for _, m := range metas {
 		if m.TxnCoordMeta == nil {
+			res = append(res, m)
+		}
+	}
+	return res
+}
+
+// ignoreMetricsMeta takes a slice of metadata and returns the entries
+// excluding the metrics about node's goodput.
+func ignoreMetricsMeta(metas []distsqlpb.ProducerMetadata) []distsqlpb.ProducerMetadata {
+	res := make([]distsqlpb.ProducerMetadata, 0)
+	for _, m := range metas {
+		if m.TraceData == nil || !(len(m.TraceData) == 1 && m.TraceData[0].Stats != nil) {
 			res = append(res, m)
 		}
 	}
@@ -508,6 +521,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	}
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreTxnCoordMeta(metas)
+	metas = ignoreMetricsMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -752,6 +766,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						}
 						metas = ignoreMisplannedRanges(metas)
 						metas = ignoreTxnCoordMeta(metas)
+						metas = ignoreMetricsMeta(metas)
 						if len(metas) != 0 {
 							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 						}
