@@ -6396,7 +6396,7 @@ func TestProposalOverhead(t *testing.T) {
 	// changes. Try to make this number go down and not up. It slightly
 	// undercounts because our proposal filter is called before
 	// maxLeaseIndex and a few other fields are filled in.
-	const expectedOverhead = 48
+	const expectedOverhead = 50
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}

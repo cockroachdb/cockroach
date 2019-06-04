@@ -860,7 +860,7 @@ func (r *Replica) changeReplicas(
 		if repDescIdx == -1 {
 			return nil, errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
 		}
-		if !updatedDesc.RemoveReplica(repDesc) {
+		if _, ok := updatedDesc.RemoveReplica(repDesc.NodeID, repDesc.StoreID); !ok {
 			return nil, errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
 		}
 	}
