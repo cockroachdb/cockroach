@@ -65,7 +65,7 @@ func (x NodeLivenessStatus) String() string {
 	return proto.EnumName(NodeLivenessStatus_name, int32(x))
 }
 func (NodeLivenessStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_6f963fa8db838a98, []int{0}
+	return fileDescriptor_liveness_01e67075c153b6d9, []int{0}
 }
 
 // Liveness holds information about a node's latest heartbeat and epoch.
@@ -90,7 +90,7 @@ func (m *Liveness) Reset()         { *m = Liveness{} }
 func (m *Liveness) String() string { return proto.CompactTextString(m) }
 func (*Liveness) ProtoMessage()    {}
 func (*Liveness) Descriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_6f963fa8db838a98, []int{0}
+	return fileDescriptor_liveness_01e67075c153b6d9, []int{0}
 }
 func (m *Liveness) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -575,10 +575,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/storagepb/liveness.proto", fileDescriptor_liveness_6f963fa8db838a98)
+	proto.RegisterFile("storage/storagepb/liveness.proto", fileDescriptor_liveness_01e67075c153b6d9)
 }
 
-var fileDescriptor_liveness_6f963fa8db838a98 = []byte{
+var fileDescriptor_liveness_01e67075c153b6d9 = []byte{
 	// 418 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x52, 0xc1, 0x8e, 0x93, 0x40,
 	0x18, 0xee, 0xb4, 0xb4, 0x5b, 0xa7, 0x89, 0xc5, 0x71, 0x0f, 0x4d, 0x0f, 0x40, 0xdc, 0x0b, 0xf1,

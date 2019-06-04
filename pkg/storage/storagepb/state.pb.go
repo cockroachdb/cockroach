@@ -86,7 +86,7 @@ func (m *ReplicaState) Reset()         { *m = ReplicaState{} }
 func (m *ReplicaState) String() string { return proto.CompactTextString(m) }
 func (*ReplicaState) ProtoMessage()    {}
 func (*ReplicaState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_a0385afc3e7c821d, []int{0}
+	return fileDescriptor_state_acafaf1bfa5a7fc9, []int{0}
 }
 func (m *ReplicaState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -149,7 +149,7 @@ func (m *RangeInfo) Reset()         { *m = RangeInfo{} }
 func (m *RangeInfo) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo) ProtoMessage()    {}
 func (*RangeInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_a0385afc3e7c821d, []int{1}
+	return fileDescriptor_state_acafaf1bfa5a7fc9, []int{1}
 }
 func (m *RangeInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -186,7 +186,7 @@ func (m *RangeInfo_CTEntry) Reset()         { *m = RangeInfo_CTEntry{} }
 func (m *RangeInfo_CTEntry) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo_CTEntry) ProtoMessage()    {}
 func (*RangeInfo_CTEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_a0385afc3e7c821d, []int{1, 0}
+	return fileDescriptor_state_acafaf1bfa5a7fc9, []int{1, 0}
 }
 func (m *RangeInfo_CTEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -224,7 +224,7 @@ func (m *LatchManagerInfo) Reset()         { *m = LatchManagerInfo{} }
 func (m *LatchManagerInfo) String() string { return proto.CompactTextString(m) }
 func (*LatchManagerInfo) ProtoMessage()    {}
 func (*LatchManagerInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_a0385afc3e7c821d, []int{2}
+	return fileDescriptor_state_acafaf1bfa5a7fc9, []int{2}
 }
 func (m *LatchManagerInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1682,10 +1682,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/storagepb/state.proto", fileDescriptor_state_a0385afc3e7c821d)
+	proto.RegisterFile("storage/storagepb/state.proto", fileDescriptor_state_acafaf1bfa5a7fc9)
 }
 
-var fileDescriptor_state_a0385afc3e7c821d = []byte{
+var fileDescriptor_state_acafaf1bfa5a7fc9 = []byte{
 	// 966 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0xcf, 0x6f, 0xe3, 0x44,
 	0x14, 0x5e, 0xb7, 0x4e, 0x9b, 0x4c, 0x5a, 0x1a, 0x86, 0xed, 0xd6, 0xea, 0xd2, 0xa4, 0x0a, 0x02,

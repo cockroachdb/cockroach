@@ -37,7 +37,7 @@ func (m *RaftTruncatedState) Reset()         { *m = RaftTruncatedState{} }
 func (m *RaftTruncatedState) String() string { return proto.CompactTextString(m) }
 func (*RaftTruncatedState) ProtoMessage()    {}
 func (*RaftTruncatedState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_internal_raft_8611ae4325a43066, []int{0}
+	return fileDescriptor_internal_raft_39b715693aff992e, []int{0}
 }
 func (m *RaftTruncatedState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -73,7 +73,7 @@ func (m *RaftTombstone) Reset()         { *m = RaftTombstone{} }
 func (m *RaftTombstone) String() string { return proto.CompactTextString(m) }
 func (*RaftTombstone) ProtoMessage()    {}
 func (*RaftTombstone) Descriptor() ([]byte, []int) {
-	return fileDescriptor_internal_raft_8611ae4325a43066, []int{1}
+	return fileDescriptor_internal_raft_39b715693aff992e, []int{1}
 }
 func (m *RaftTombstone) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -115,7 +115,7 @@ func (m *RaftSnapshotData) Reset()         { *m = RaftSnapshotData{} }
 func (m *RaftSnapshotData) String() string { return proto.CompactTextString(m) }
 func (*RaftSnapshotData) ProtoMessage()    {}
 func (*RaftSnapshotData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_internal_raft_8611ae4325a43066, []int{2}
+	return fileDescriptor_internal_raft_39b715693aff992e, []int{2}
 }
 func (m *RaftSnapshotData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -152,7 +152,7 @@ func (m *RaftSnapshotData_KeyValue) Reset()         { *m = RaftSnapshotData_KeyV
 func (m *RaftSnapshotData_KeyValue) String() string { return proto.CompactTextString(m) }
 func (*RaftSnapshotData_KeyValue) ProtoMessage()    {}
 func (*RaftSnapshotData_KeyValue) Descriptor() ([]byte, []int) {
-	return fileDescriptor_internal_raft_8611ae4325a43066, []int{2, 0}
+	return fileDescriptor_internal_raft_39b715693aff992e, []int{2, 0}
 }
 func (m *RaftSnapshotData_KeyValue) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1050,10 +1050,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("roachpb/internal_raft.proto", fileDescriptor_internal_raft_8611ae4325a43066)
+	proto.RegisterFile("roachpb/internal_raft.proto", fileDescriptor_internal_raft_39b715693aff992e)
 }
 
-var fileDescriptor_internal_raft_8611ae4325a43066 = []byte{
+var fileDescriptor_internal_raft_39b715693aff992e = []byte{
 	// 447 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x52, 0xb1, 0x8e, 0xd3, 0x4c,
 	0x10, 0x8e, 0xed, 0x44, 0xff, 0xdd, 0x26, 0xd1, 0xe5, 0x5f, 0x9d, 0x90, 0x15, 0x84, 0x1d, 0x5c,

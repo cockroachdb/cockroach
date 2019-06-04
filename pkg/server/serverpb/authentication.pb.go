@@ -39,7 +39,7 @@ func (m *UserLoginRequest) Reset()         { *m = UserLoginRequest{} }
 func (m *UserLoginRequest) String() string { return proto.CompactTextString(m) }
 func (*UserLoginRequest) ProtoMessage()    {}
 func (*UserLoginRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{0}
+	return fileDescriptor_authentication_358751f097f5617b, []int{0}
 }
 func (m *UserLoginRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -76,7 +76,7 @@ func (m *UserLoginResponse) Reset()         { *m = UserLoginResponse{} }
 func (m *UserLoginResponse) String() string { return proto.CompactTextString(m) }
 func (*UserLoginResponse) ProtoMessage()    {}
 func (*UserLoginResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{1}
+	return fileDescriptor_authentication_358751f097f5617b, []int{1}
 }
 func (m *UserLoginResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -113,7 +113,7 @@ func (m *UserLogoutRequest) Reset()         { *m = UserLogoutRequest{} }
 func (m *UserLogoutRequest) String() string { return proto.CompactTextString(m) }
 func (*UserLogoutRequest) ProtoMessage()    {}
 func (*UserLogoutRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{2}
+	return fileDescriptor_authentication_358751f097f5617b, []int{2}
 }
 func (m *UserLogoutRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -147,7 +147,7 @@ func (m *UserLogoutResponse) Reset()         { *m = UserLogoutResponse{} }
 func (m *UserLogoutResponse) String() string { return proto.CompactTextString(m) }
 func (*UserLogoutResponse) ProtoMessage()    {}
 func (*UserLogoutResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{3}
+	return fileDescriptor_authentication_358751f097f5617b, []int{3}
 }
 func (m *UserLogoutResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -187,7 +187,7 @@ func (m *SessionCookie) Reset()         { *m = SessionCookie{} }
 func (m *SessionCookie) String() string { return proto.CompactTextString(m) }
 func (*SessionCookie) ProtoMessage()    {}
 func (*SessionCookie) Descriptor() ([]byte, []int) {
-	return fileDescriptor_authentication_a7ea30ecf9a74aa6, []int{4}
+	return fileDescriptor_authentication_358751f097f5617b, []int{4}
 }
 func (m *SessionCookie) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1019,10 +1019,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("server/serverpb/authentication.proto", fileDescriptor_authentication_a7ea30ecf9a74aa6)
+	proto.RegisterFile("server/serverpb/authentication.proto", fileDescriptor_authentication_358751f097f5617b)
 }
 
-var fileDescriptor_authentication_a7ea30ecf9a74aa6 = []byte{
+var fileDescriptor_authentication_358751f097f5617b = []byte{
 	// 368 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x4d, 0x4b, 0xeb, 0x40,
 	0x14, 0x86, 0x3b, 0xb9, 0xdc, 0xdc, 0x76, 0xee, 0xbd, 0x68, 0xc7, 0x52, 0x6a, 0x90, 0x28, 0xc1,

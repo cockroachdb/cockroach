@@ -63,7 +63,7 @@ func (x *SketchType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SketchType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_22834793748d1b5a, []int{0}
+	return fileDescriptor_processors_table_stats_921c15abaa793951, []int{0}
 }
 
 // SketchSpec contains the specification for a generated statistic.
@@ -88,7 +88,7 @@ func (m *SketchSpec) Reset()         { *m = SketchSpec{} }
 func (m *SketchSpec) String() string { return proto.CompactTextString(m) }
 func (*SketchSpec) ProtoMessage()    {}
 func (*SketchSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_22834793748d1b5a, []int{0}
+	return fileDescriptor_processors_table_stats_921c15abaa793951, []int{0}
 }
 func (m *SketchSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -164,7 +164,7 @@ func (m *SamplerSpec) Reset()         { *m = SamplerSpec{} }
 func (m *SamplerSpec) String() string { return proto.CompactTextString(m) }
 func (*SamplerSpec) ProtoMessage()    {}
 func (*SamplerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_22834793748d1b5a, []int{1}
+	return fileDescriptor_processors_table_stats_921c15abaa793951, []int{1}
 }
 func (m *SamplerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -227,7 +227,7 @@ func (m *SampleAggregatorSpec) Reset()         { *m = SampleAggregatorSpec{} }
 func (m *SampleAggregatorSpec) String() string { return proto.CompactTextString(m) }
 func (*SampleAggregatorSpec) ProtoMessage()    {}
 func (*SampleAggregatorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_table_stats_22834793748d1b5a, []int{2}
+	return fileDescriptor_processors_table_stats_921c15abaa793951, []int{2}
 }
 func (m *SampleAggregatorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1126,10 +1126,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/distsqlpb/processors_table_stats.proto", fileDescriptor_processors_table_stats_22834793748d1b5a)
+	proto.RegisterFile("sql/distsqlpb/processors_table_stats.proto", fileDescriptor_processors_table_stats_921c15abaa793951)
 }
 
-var fileDescriptor_processors_table_stats_22834793748d1b5a = []byte{
+var fileDescriptor_processors_table_stats_921c15abaa793951 = []byte{
 	// 606 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x54, 0x3f, 0x6f, 0x13, 0x4f,
 	0x10, 0xf5, 0xc6, 0x76, 0xec, 0xac, 0x7f, 0xfe, 0xe1, 0x2c, 0x41, 0x3a, 0x45, 0xc8, 0x3e, 0x4c,

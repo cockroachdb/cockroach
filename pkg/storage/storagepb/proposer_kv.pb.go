@@ -47,7 +47,7 @@ func (m *Split) Reset()         { *m = Split{} }
 func (m *Split) String() string { return proto.CompactTextString(m) }
 func (*Split) ProtoMessage()    {}
 func (*Split) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{0}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{0}
 }
 func (m *Split) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -84,7 +84,7 @@ func (m *Merge) Reset()         { *m = Merge{} }
 func (m *Merge) String() string { return proto.CompactTextString(m) }
 func (*Merge) ProtoMessage()    {}
 func (*Merge) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{1}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{1}
 }
 func (m *Merge) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -120,7 +120,7 @@ type ChangeReplicas struct {
 func (m *ChangeReplicas) Reset()      { *m = ChangeReplicas{} }
 func (*ChangeReplicas) ProtoMessage() {}
 func (*ChangeReplicas) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{2}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{2}
 }
 func (m *ChangeReplicas) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -171,7 +171,7 @@ func (m *ComputeChecksum) Reset()         { *m = ComputeChecksum{} }
 func (m *ComputeChecksum) String() string { return proto.CompactTextString(m) }
 func (*ComputeChecksum) ProtoMessage()    {}
 func (*ComputeChecksum) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{3}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{3}
 }
 func (m *ComputeChecksum) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -210,7 +210,7 @@ func (m *Compaction) Reset()         { *m = Compaction{} }
 func (m *Compaction) String() string { return proto.CompactTextString(m) }
 func (*Compaction) ProtoMessage()    {}
 func (*Compaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{4}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{4}
 }
 func (m *Compaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -249,7 +249,7 @@ func (m *SuggestedCompaction) Reset()         { *m = SuggestedCompaction{} }
 func (m *SuggestedCompaction) String() string { return proto.CompactTextString(m) }
 func (*SuggestedCompaction) ProtoMessage()    {}
 func (*SuggestedCompaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{5}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{5}
 }
 func (m *SuggestedCompaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -320,7 +320,7 @@ func (m *ReplicatedEvalResult) Reset()         { *m = ReplicatedEvalResult{} }
 func (m *ReplicatedEvalResult) String() string { return proto.CompactTextString(m) }
 func (*ReplicatedEvalResult) ProtoMessage()    {}
 func (*ReplicatedEvalResult) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{6}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{6}
 }
 func (m *ReplicatedEvalResult) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -366,7 +366,7 @@ func (m *ReplicatedEvalResult_AddSSTable) Reset()         { *m = ReplicatedEvalR
 func (m *ReplicatedEvalResult_AddSSTable) String() string { return proto.CompactTextString(m) }
 func (*ReplicatedEvalResult_AddSSTable) ProtoMessage()    {}
 func (*ReplicatedEvalResult_AddSSTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{6, 0}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{6, 0}
 }
 func (m *ReplicatedEvalResult_AddSSTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -405,7 +405,7 @@ func (m *WriteBatch) Reset()         { *m = WriteBatch{} }
 func (m *WriteBatch) String() string { return proto.CompactTextString(m) }
 func (*WriteBatch) ProtoMessage()    {}
 func (*WriteBatch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{7}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{7}
 }
 func (m *WriteBatch) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -444,7 +444,7 @@ func (m *LogicalOpLog) Reset()         { *m = LogicalOpLog{} }
 func (m *LogicalOpLog) String() string { return proto.CompactTextString(m) }
 func (*LogicalOpLog) ProtoMessage()    {}
 func (*LogicalOpLog) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{8}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{8}
 }
 func (m *LogicalOpLog) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -550,7 +550,7 @@ func (m *RaftCommand) Reset()         { *m = RaftCommand{} }
 func (m *RaftCommand) String() string { return proto.CompactTextString(m) }
 func (*RaftCommand) ProtoMessage()    {}
 func (*RaftCommand) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_1429340720644549, []int{9}
+	return fileDescriptor_proposer_kv_2bc0db1482c3f886, []int{9}
 }
 func (m *RaftCommand) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3399,10 +3399,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/storagepb/proposer_kv.proto", fileDescriptor_proposer_kv_1429340720644549)
+	proto.RegisterFile("storage/storagepb/proposer_kv.proto", fileDescriptor_proposer_kv_2bc0db1482c3f886)
 }
 
-var fileDescriptor_proposer_kv_1429340720644549 = []byte{
+var fileDescriptor_proposer_kv_2bc0db1482c3f886 = []byte{
 	// 1369 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x56, 0x4f, 0x6f, 0x1b, 0x45,
 	0x14, 0x8f, 0x93, 0x75, 0xb2, 0x79, 0x4e, 0xec, 0xcd, 0x34, 0x6d, 0x97, 0xa2, 0xc6, 0x51, 0x52,

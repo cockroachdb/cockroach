@@ -41,7 +41,7 @@ func (m *VectorizedStats) Reset()         { *m = VectorizedStats{} }
 func (m *VectorizedStats) String() string { return proto.CompactTextString(m) }
 func (*VectorizedStats) ProtoMessage()    {}
 func (*VectorizedStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_3477029c41c5fd5d, []int{0}
+	return fileDescriptor_stats_a042525136bc0cf3, []int{0}
 }
 func (m *VectorizedStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -427,9 +427,9 @@ var (
 	ErrIntOverflowStats   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/execpb/stats.proto", fileDescriptor_stats_3477029c41c5fd5d) }
+func init() { proto.RegisterFile("sql/execpb/stats.proto", fileDescriptor_stats_a042525136bc0cf3) }
 
-var fileDescriptor_stats_3477029c41c5fd5d = []byte{
+var fileDescriptor_stats_a042525136bc0cf3 = []byte{
 	// 287 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x34, 0x90, 0xbd, 0x4e, 0xeb, 0x30,
 	0x14, 0xc7, 0xeb, 0xb4, 0x89, 0x7a, 0xdd, 0xe1, 0x4a, 0x56, 0x54, 0x85, 0x4a, 0x38, 0x11, 0x53,

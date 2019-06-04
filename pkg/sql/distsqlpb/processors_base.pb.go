@@ -63,7 +63,7 @@ func (m *PostProcessSpec) Reset()         { *m = PostProcessSpec{} }
 func (m *PostProcessSpec) String() string { return proto.CompactTextString(m) }
 func (*PostProcessSpec) ProtoMessage()    {}
 func (*PostProcessSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_base_876aab0d2c832324, []int{0}
+	return fileDescriptor_processors_base_25e7fab13c0d9f17, []int{0}
 }
 func (m *PostProcessSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -98,7 +98,7 @@ func (m *Columns) Reset()         { *m = Columns{} }
 func (m *Columns) String() string { return proto.CompactTextString(m) }
 func (*Columns) ProtoMessage()    {}
 func (*Columns) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_base_876aab0d2c832324, []int{1}
+	return fileDescriptor_processors_base_25e7fab13c0d9f17, []int{1}
 }
 func (m *Columns) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -136,7 +136,7 @@ func (m *TableReaderSpan) Reset()         { *m = TableReaderSpan{} }
 func (m *TableReaderSpan) String() string { return proto.CompactTextString(m) }
 func (*TableReaderSpan) ProtoMessage()    {}
 func (*TableReaderSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_base_876aab0d2c832324, []int{2}
+	return fileDescriptor_processors_base_25e7fab13c0d9f17, []int{2}
 }
 func (m *TableReaderSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -923,10 +923,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/distsqlpb/processors_base.proto", fileDescriptor_processors_base_876aab0d2c832324)
+	proto.RegisterFile("sql/distsqlpb/processors_base.proto", fileDescriptor_processors_base_25e7fab13c0d9f17)
 }
 
-var fileDescriptor_processors_base_876aab0d2c832324 = []byte{
+var fileDescriptor_processors_base_25e7fab13c0d9f17 = []byte{
 	// 362 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x91, 0xc1, 0x4e, 0xea, 0x40,
 	0x14, 0x86, 0x19, 0x28, 0x70, 0xef, 0x70, 0xb9, 0x98, 0x89, 0x89, 0x13, 0x42, 0x6a, 0x03, 0x24,

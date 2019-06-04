@@ -65,7 +65,7 @@ func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
 func (m *MVCCMetadata) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata) ProtoMessage()    {}
 func (*MVCCMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_5a1c2eb0c23562a1, []int{0}
+	return fileDescriptor_mvcc_7428407f353094b3, []int{0}
 }
 func (m *MVCCMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -108,7 +108,7 @@ func (m *MVCCMetadata_SequencedIntent) Reset()         { *m = MVCCMetadata_Seque
 func (m *MVCCMetadata_SequencedIntent) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata_SequencedIntent) ProtoMessage()    {}
 func (*MVCCMetadata_SequencedIntent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_5a1c2eb0c23562a1, []int{0, 0}
+	return fileDescriptor_mvcc_7428407f353094b3, []int{0, 0}
 }
 func (m *MVCCMetadata_SequencedIntent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -224,7 +224,7 @@ func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
 func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
 func (*MVCCStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_5a1c2eb0c23562a1, []int{1}
+	return fileDescriptor_mvcc_7428407f353094b3, []int{1}
 }
 func (m *MVCCStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1529,10 +1529,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptor_mvcc_5a1c2eb0c23562a1)
+	proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptor_mvcc_7428407f353094b3)
 }
 
-var fileDescriptor_mvcc_5a1c2eb0c23562a1 = []byte{
+var fileDescriptor_mvcc_7428407f353094b3 = []byte{
 	// 646 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0x4f, 0x4f, 0x13, 0x41,
 	0x14, 0xc0, 0x59, 0x5b, 0x60, 0x3b, 0x2d, 0x45, 0x26, 0x1c, 0x1a, 0x4c, 0xb6, 0xa5, 0x1c, 0x6c,

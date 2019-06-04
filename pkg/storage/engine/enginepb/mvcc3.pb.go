@@ -110,7 +110,7 @@ func (m *TxnMeta) Reset()         { *m = TxnMeta{} }
 func (m *TxnMeta) String() string { return proto.CompactTextString(m) }
 func (*TxnMeta) ProtoMessage()    {}
 func (*TxnMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{0}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{0}
 }
 func (m *TxnMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -164,7 +164,7 @@ func (m *MVCCStatsDelta) Reset()         { *m = MVCCStatsDelta{} }
 func (m *MVCCStatsDelta) String() string { return proto.CompactTextString(m) }
 func (*MVCCStatsDelta) ProtoMessage()    {}
 func (*MVCCStatsDelta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{1}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{1}
 }
 func (m *MVCCStatsDelta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -216,7 +216,7 @@ func (m *MVCCPersistentStats) Reset()         { *m = MVCCPersistentStats{} }
 func (m *MVCCPersistentStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCPersistentStats) ProtoMessage()    {}
 func (*MVCCPersistentStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{2}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{2}
 }
 func (m *MVCCPersistentStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -263,7 +263,7 @@ func (m *RangeAppliedState) Reset()         { *m = RangeAppliedState{} }
 func (m *RangeAppliedState) String() string { return proto.CompactTextString(m) }
 func (*RangeAppliedState) ProtoMessage()    {}
 func (*RangeAppliedState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{3}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{3}
 }
 func (m *RangeAppliedState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -302,7 +302,7 @@ func (m *MVCCWriteValueOp) Reset()         { *m = MVCCWriteValueOp{} }
 func (m *MVCCWriteValueOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCWriteValueOp) ProtoMessage()    {}
 func (*MVCCWriteValueOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{4}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{4}
 }
 func (m *MVCCWriteValueOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -341,7 +341,7 @@ func (m *MVCCWriteIntentOp) Reset()         { *m = MVCCWriteIntentOp{} }
 func (m *MVCCWriteIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCWriteIntentOp) ProtoMessage()    {}
 func (*MVCCWriteIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{5}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{5}
 }
 func (m *MVCCWriteIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -379,7 +379,7 @@ func (m *MVCCUpdateIntentOp) Reset()         { *m = MVCCUpdateIntentOp{} }
 func (m *MVCCUpdateIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCUpdateIntentOp) ProtoMessage()    {}
 func (*MVCCUpdateIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{6}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{6}
 }
 func (m *MVCCUpdateIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -419,7 +419,7 @@ func (m *MVCCCommitIntentOp) Reset()         { *m = MVCCCommitIntentOp{} }
 func (m *MVCCCommitIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCCommitIntentOp) ProtoMessage()    {}
 func (*MVCCCommitIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{7}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{7}
 }
 func (m *MVCCCommitIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -461,7 +461,7 @@ func (m *MVCCAbortIntentOp) Reset()         { *m = MVCCAbortIntentOp{} }
 func (m *MVCCAbortIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCAbortIntentOp) ProtoMessage()    {}
 func (*MVCCAbortIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{8}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{8}
 }
 func (m *MVCCAbortIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -499,7 +499,7 @@ func (m *MVCCAbortTxnOp) Reset()         { *m = MVCCAbortTxnOp{} }
 func (m *MVCCAbortTxnOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCAbortTxnOp) ProtoMessage()    {}
 func (*MVCCAbortTxnOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{9}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{9}
 }
 func (m *MVCCAbortTxnOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -540,7 +540,7 @@ func (m *MVCCLogicalOp) Reset()         { *m = MVCCLogicalOp{} }
 func (m *MVCCLogicalOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCLogicalOp) ProtoMessage()    {}
 func (*MVCCLogicalOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_40a164001ad58245, []int{10}
+	return fileDescriptor_mvcc3_74ecfdd393b3fe87, []int{10}
 }
 func (m *MVCCLogicalOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3843,10 +3843,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptor_mvcc3_40a164001ad58245)
+	proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptor_mvcc3_74ecfdd393b3fe87)
 }
 
-var fileDescriptor_mvcc3_40a164001ad58245 = []byte{
+var fileDescriptor_mvcc3_74ecfdd393b3fe87 = []byte{
 	// 1059 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x57, 0x4f, 0x6f, 0x1b, 0x45,
 	0x14, 0xcf, 0xfe, 0x71, 0xb2, 0x1e, 0x3b, 0xa9, 0x3d, 0xad, 0x84, 0x55, 0x54, 0x6f, 0x6a, 0x24,
