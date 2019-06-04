@@ -111,11 +111,17 @@ func (node *ShowColumns) Format(ctx *FmtCtx) {
 }
 
 // ShowDatabases represents a SHOW DATABASES statement.
-type ShowDatabases struct{}
+type ShowDatabases struct {
+	WithComment bool
+}
 
 // Format implements the NodeFormatter interface.
 func (node *ShowDatabases) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW DATABASES")
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowTraceType is an enum of SHOW TRACE variants.

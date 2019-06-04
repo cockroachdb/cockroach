@@ -22,6 +22,19 @@ postgres
 system
 test
 
+statement ok
+COMMENT ON DATABASE a IS 'A'
+
+query TT colnames
+SHOW DATABASES WITH COMMENT
+----
+database_name  comment
+a              A
+defaultdb      NULL
+postgres       NULL
+system         NULL
+test           NULL
+
 query T colnames
 SHOW SCHEMAS FROM a
 ----

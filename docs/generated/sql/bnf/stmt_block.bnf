@@ -465,7 +465,7 @@ show_csettings_stmt ::=
 	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS'
 
 show_databases_stmt ::=
-	'SHOW' 'DATABASES'
+	'SHOW' 'DATABASES' with_comment
 
 show_grants_stmt ::=
 	'SHOW' 'GRANTS' opt_on_targets_roles for_grantee_clause
