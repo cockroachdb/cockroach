@@ -3093,3 +3093,262 @@ group-by
            ├── fd: (1)-->(2,3)
            ├── prune: (1-3)
            └── interesting orderings: (+1,+2) (+3,+2,+1)
+
+# Testing ordered aggregations.
+exec-ddl
+CREATE TABLE tab (col1 int NOT NULL, col2 int NOT NULL, col3 string)
+----
+
+build
+SELECT array_agg(col1 ORDER BY col1) FROM tab
+----
+scalar-group-by
+ ├── columns: array_agg:5(int[])
+ ├── window partition=() ordering=+1
+ │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) array_agg:5(int[])
+ │    ├── scan tab
+ │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+ │    └── windows
+ │         └── windows-item: range from unbounded to unbounded [type=int[]]
+ │              └── array-agg [type=int[]]
+ │                   └── variable: col1 [type=int]
+ └── aggregations
+      └── const-agg [type=int[]]
+           └── variable: array_agg [type=int[]]
+
+# Ignore aggregate orderings for non commutative aggregates.
+build
+SELECT count(col1 ORDER BY col2) FROM tab
+----
+scalar-group-by
+ ├── columns: count:5(int)
+ ├── project
+ │    ├── columns: col1:1(int!null)
+ │    └── scan tab
+ │         └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+ └── aggregations
+      └── count [type=int]
+           └── variable: col1 [type=int]
+
+# Multiple ordered aggregations.
+build
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2) from tab
+----
+scalar-group-by
+ ├── columns: array_agg:5(int[]) array_agg:6(int[])
+ ├── window partition=() ordering=+2
+ │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) array_agg:5(int[]) array_agg:6(int[])
+ │    ├── window partition=() ordering=+1
+ │    │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) array_agg:5(int[])
+ │    │    ├── scan tab
+ │    │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+ │    │    └── windows
+ │    │         └── windows-item: range from unbounded to unbounded [type=int[]]
+ │    │              └── array-agg [type=int[]]
+ │    │                   └── variable: col1 [type=int]
+ │    └── windows
+ │         └── windows-item: range from unbounded to unbounded [type=int[]]
+ │              └── array-agg [type=int[]]
+ │                   └── variable: col1 [type=int]
+ └── aggregations
+      ├── const-agg [type=int[]]
+      │    └── variable: array_agg [type=int[]]
+      └── const-agg [type=int[]]
+           └── variable: array_agg [type=int[]]
+
+build
+SELECT concat_agg(col3 ORDER BY col1), array_agg(col1) FROM tab
+----
+scalar-group-by
+ ├── columns: concat_agg:5(string) array_agg:6(int[])
+ ├── window partition=()
+ │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) concat_agg:5(string) array_agg:6(int[])
+ │    ├── window partition=() ordering=+1
+ │    │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) concat_agg:5(string)
+ │    │    ├── scan tab
+ │    │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+ │    │    └── windows
+ │    │         └── windows-item: range from unbounded to unbounded [type=string]
+ │    │              └── concat-agg [type=string]
+ │    │                   └── variable: col3 [type=string]
+ │    └── windows
+ │         └── windows-item: range from unbounded to unbounded [type=int[]]
+ │              └── array-agg [type=int[]]
+ │                   └── variable: col1 [type=int]
+ └── aggregations
+      ├── const-agg [type=string]
+      │    └── variable: concat_agg [type=string]
+      └── const-agg [type=int[]]
+           └── variable: array_agg [type=int[]]
+
+build
+SELECT concat_agg(col3 ORDER BY col1), sum(col1 ORDER BY col2) FROM tab
+----
+scalar-group-by
+ ├── columns: concat_agg:5(string) sum:6(decimal)
+ ├── window partition=()
+ │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) concat_agg:5(string) sum:6(decimal)
+ │    ├── window partition=() ordering=+1
+ │    │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) concat_agg:5(string)
+ │    │    ├── scan tab
+ │    │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+ │    │    └── windows
+ │    │         └── windows-item: range from unbounded to unbounded [type=string]
+ │    │              └── concat-agg [type=string]
+ │    │                   └── variable: col3 [type=string]
+ │    └── windows
+ │         └── windows-item: range from unbounded to unbounded [type=decimal]
+ │              └── sum [type=decimal]
+ │                   └── variable: col1 [type=int]
+ └── aggregations
+      ├── const-agg [type=string]
+      │    └── variable: concat_agg [type=string]
+      └── const-agg [type=decimal]
+           └── variable: sum [type=decimal]
+
+build
+SELECT array_agg(col1 ORDER BY col1) FROM tab GROUP BY col2
+----
+project
+ ├── columns: array_agg:5(int[])
+ └── group-by
+      ├── columns: col2:2(int!null) array_agg:5(int[])
+      ├── grouping columns: col2:2(int!null)
+      ├── window partition=(2) ordering=+1
+      │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) array_agg:5(int[])
+      │    ├── scan tab
+      │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+      │    └── windows
+      │         └── windows-item: range from unbounded to unbounded [type=int[]]
+      │              └── array-agg [type=int[]]
+      │                   └── variable: col1 [type=int]
+      └── aggregations
+           └── const-agg [type=int[]]
+                └── variable: array_agg [type=int[]]
+
+build
+SELECT array_agg(col1 ORDER BY col1), array_agg(col3 ORDER BY col1) FROM tab GROUP BY col2
+----
+project
+ ├── columns: array_agg:5(int[]) array_agg:6(string[])
+ └── group-by
+      ├── columns: col2:2(int!null) array_agg:5(int[]) array_agg:6(string[])
+      ├── grouping columns: col2:2(int!null)
+      ├── window partition=(2) ordering=+1
+      │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) array_agg:5(int[]) array_agg:6(string[])
+      │    ├── scan tab
+      │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+      │    └── windows
+      │         ├── windows-item: range from unbounded to unbounded [type=int[]]
+      │         │    └── array-agg [type=int[]]
+      │         │         └── variable: col1 [type=int]
+      │         └── windows-item: range from unbounded to unbounded [type=string[]]
+      │              └── array-agg [type=string[]]
+      │                   └── variable: col3 [type=string]
+      └── aggregations
+           ├── const-agg [type=int[]]
+           │    └── variable: array_agg [type=int[]]
+           └── const-agg [type=string[]]
+                └── variable: array_agg [type=string[]]
+
+build
+SELECT array_agg(col1 ORDER BY col1), array_agg(col3 ORDER BY col1) FROM tab GROUP BY col2 HAVING col2 > 1
+----
+project
+ ├── columns: array_agg:5(int[]) array_agg:6(string[])
+ └── select
+      ├── columns: col2:2(int!null) array_agg:5(int[]) array_agg:6(string[])
+      ├── group-by
+      │    ├── columns: col2:2(int!null) array_agg:5(int[]) array_agg:6(string[])
+      │    ├── grouping columns: col2:2(int!null)
+      │    ├── window partition=(2) ordering=+1
+      │    │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) array_agg:5(int[]) array_agg:6(string[])
+      │    │    ├── scan tab
+      │    │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+      │    │    └── windows
+      │    │         ├── windows-item: range from unbounded to unbounded [type=int[]]
+      │    │         │    └── array-agg [type=int[]]
+      │    │         │         └── variable: col1 [type=int]
+      │    │         └── windows-item: range from unbounded to unbounded [type=string[]]
+      │    │              └── array-agg [type=string[]]
+      │    │                   └── variable: col3 [type=string]
+      │    └── aggregations
+      │         ├── const-agg [type=int[]]
+      │         │    └── variable: array_agg [type=int[]]
+      │         └── const-agg [type=string[]]
+      │              └── variable: array_agg [type=string[]]
+      └── filters
+           └── gt [type=bool]
+                ├── variable: col2 [type=int]
+                └── const: 1 [type=int]
+
+# Testing aggregations as window when group by has a projection.
+build
+SELECT array_agg(col1 ORDER BY col1) FROM tab GROUP BY upper(col3)
+----
+project
+ ├── columns: array_agg:5(int[])
+ └── group-by
+      ├── columns: array_agg:5(int[]) column6:6(string)
+      ├── grouping columns: column6:6(string)
+      ├── window partition=(6) ordering=+1
+      │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) array_agg:5(int[]) column6:6(string)
+      │    ├── project
+      │    │    ├── columns: column6:6(string) col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+      │    │    ├── scan tab
+      │    │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+      │    │    └── projections
+      │    │         └── function: upper [type=string]
+      │    │              └── variable: col3 [type=string]
+      │    └── windows
+      │         └── windows-item: range from unbounded to unbounded [type=int[]]
+      │              └── array-agg [type=int[]]
+      │                   └── variable: col1 [type=int]
+      └── aggregations
+           └── const-agg [type=int[]]
+                └── variable: array_agg [type=int[]]
+
+build
+SELECT array_agg(col1 ORDER BY col1), upper(col3) FROM tab GROUP BY upper(col3)
+----
+group-by
+ ├── columns: array_agg:5(int[]) upper:6(string)
+ ├── grouping columns: column6:6(string)
+ ├── window partition=(6) ordering=+1
+ │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) array_agg:5(int[]) column6:6(string)
+ │    ├── project
+ │    │    ├── columns: column6:6(string) col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+ │    │    ├── scan tab
+ │    │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+ │    │    └── projections
+ │    │         └── function: upper [type=string]
+ │    │              └── variable: col3 [type=string]
+ │    └── windows
+ │         └── windows-item: range from unbounded to unbounded [type=int[]]
+ │              └── array-agg [type=int[]]
+ │                   └── variable: col1 [type=int]
+ └── aggregations
+      └── const-agg [type=int[]]
+           └── variable: array_agg [type=int[]]
+
+build
+SELECT array_agg(lower(col3)) FROM tab GROUP BY upper(col3)
+----
+project
+ ├── columns: array_agg:6(string[])
+ └── group-by
+      ├── columns: array_agg:6(string[]) column7:7(string)
+      ├── grouping columns: column7:7(string)
+      ├── project
+      │    ├── columns: column5:5(string) column7:7(string)
+      │    ├── scan tab
+      │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+      │    └── projections
+      │         ├── function: lower [type=string]
+      │         │    └── variable: col3 [type=string]
+      │         └── function: upper [type=string]
+      │              └── variable: col3 [type=string]
+      └── aggregations
+           └── array-agg [type=string[]]
+                └── variable: column5 [type=string]
+>>>>>>> Stashed changes
