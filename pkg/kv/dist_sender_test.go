@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"sync/atomic"
@@ -2191,7 +2192,8 @@ func TestMultiRangeWithEndTransaction(t *testing.T) {
 		var testFn simpleSendFn = func(
 			_ context.Context,
 			_ SendOptions,
-			_ ReplicaSlice, ba roachpb.BatchRequest,
+			_ ReplicaSlice,
+			ba roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, error) {
 			var cur []roachpb.Method
 			for _, union := range ba.Requests {
@@ -2324,7 +2326,8 @@ func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 			var testFn simpleSendFn = func(
 				_ context.Context,
 				_ SendOptions,
-				_ ReplicaSlice, ba roachpb.BatchRequest,
+				_ ReplicaSlice,
+				ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, error) {
 				var cur []roachpb.Method
 				for _, union := range ba.Requests {
@@ -2346,7 +2349,7 @@ func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 			ds := NewDistSender(cfg, g)
 			ds.DisableParallelBatches()
 
-			// Send a batch request containing two puts.
+			// Send a batch request containing the requests.
 			var ba roachpb.BatchRequest
 			ba.Txn = &roachpb.Transaction{Name: "test"}
 			ba.Add(test.reqs...)
@@ -2358,6 +2361,131 @@ func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 			for j, batchMethods := range act {
 				if !reflect.DeepEqual(test.exp[j], batchMethods) {
 					t.Fatalf("expected [%d] %v, got %v", j, test.exp[j], batchMethods)
+				}
+			}
+		})
+	}
+}
+
+// TestParallelCommitsDetectIntentMissingCause tests the functionality in
+// DistSender.detectIntentMissingDueToIntentResolution.
+func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	key := roachpb.Key("a")
+	txn := roachpb.MakeTransaction(
+		"test", key, roachpb.NormalUserPriority,
+		clock.Now(), clock.MaxOffset().Nanoseconds(),
+	)
+
+	testCases := []struct {
+		name       string
+		queryTxnFn func() (roachpb.TransactionStatus, error)
+		expErr     string
+	}{
+		{
+			name: "transaction record PENDING, real intent missing error",
+			queryTxnFn: func() (roachpb.TransactionStatus, error) {
+				return roachpb.PENDING, nil
+			},
+			expErr: "the batch experienced mixed success and failure: intent missing",
+		},
+		{
+			name: "transaction record STAGING, real intent missing error",
+			queryTxnFn: func() (roachpb.TransactionStatus, error) {
+				return roachpb.STAGING, nil
+			},
+			expErr: "the batch experienced mixed success and failure: intent missing",
+		},
+		{
+			name: "transaction record COMMITTED, intent missing error caused by intent resolution",
+			queryTxnFn: func() (roachpb.TransactionStatus, error) {
+				return roachpb.COMMITTED, nil
+			},
+		},
+		{
+			name: "transaction record ABORTED, ambiguous intent missing error",
+			queryTxnFn: func() (roachpb.TransactionStatus, error) {
+				return roachpb.ABORTED, nil
+			},
+			expErr: "result is ambiguous (intent missing and record aborted)",
+		},
+		{
+			name: "QueryTxn error, unresolved ambiguity",
+			queryTxnFn: func() (roachpb.TransactionStatus, error) {
+				return 0, errors.New("unable to query txn")
+			},
+			expErr: "result is ambiguous (error=unable to query txn [intent missing])",
+		},
+	}
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			var testFn simpleSendFn = func(
+				_ context.Context,
+				_ SendOptions,
+				_ ReplicaSlice,
+				ba roachpb.BatchRequest,
+			) (*roachpb.BatchResponse, error) {
+				br := ba.CreateReply()
+				switch ba.Requests[0].GetInner().Method() {
+				case roachpb.QueryIntent:
+					br.Error = roachpb.NewError(roachpb.NewIntentMissingError(key, nil))
+				case roachpb.QueryTxn:
+					status, err := test.queryTxnFn()
+					if err != nil {
+						br.Error = roachpb.NewError(err)
+					} else {
+						respTxn := txn
+						respTxn.Status = status
+						br.Responses[0].GetQueryTxn().QueriedTxn = respTxn
+					}
+				case roachpb.EndTransaction:
+					br.Txn = ba.Txn.Clone()
+					br.Txn.Status = roachpb.STAGING
+				}
+				return br, nil
+			}
+
+			cfg := DistSenderConfig{
+				AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+				Clock:      clock,
+				RPCContext: rpcContext,
+				TestingKnobs: ClientTestingKnobs{
+					TransportFactory: adaptSimpleTransport(testFn),
+				},
+				RangeDescriptorDB: defaultMockRangeDescriptorDB,
+			}
+			ds := NewDistSender(cfg, g)
+
+			// Send a parallel commit batch request.
+			var ba roachpb.BatchRequest
+			ba.Txn = txn.Clone()
+			ba.Add(&roachpb.QueryIntentRequest{
+				RequestHeader:  roachpb.RequestHeader{Key: key},
+				Txn:            txn.TxnMeta,
+				ErrorIfMissing: true,
+			})
+			ba.Add(&roachpb.EndTransactionRequest{
+				RequestHeader:  roachpb.RequestHeader{Key: key},
+				Commit:         true,
+				InFlightWrites: []roachpb.SequencedWrite{{Key: key, Sequence: 1}},
+			})
+
+			// Verify that the response is expected.
+			_, pErr := ds.Send(context.Background(), ba)
+			if test.expErr == "" {
+				if pErr != nil {
+					t.Fatalf("unexpected error %v", pErr)
+				}
+			} else {
+				if !testutils.IsPError(pErr, regexp.QuoteMeta(test.expErr)) {
+					t.Fatalf("expected error %q; found %v", test.expErr, pErr)
 				}
 			}
 		})

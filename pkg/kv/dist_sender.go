@@ -914,14 +914,31 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	}
 	if qiPErr := qiReply.pErr; qiPErr != nil {
 		// The batch with the pre-commit QueryIntent requests returned an error.
-		// Wrap this in a MixedSuccessError, as we know that the EndTransaction
-		// batch succeeded. It is not possible for qiPErr to be a MixedSuccessError
-		// itself, so we don't need to handle that case like we do down below.
-		qiPErr.UpdateTxn(ba.Txn)
-		maybeSwapErrorIndex(qiPErr, swapIdx, lastIdx)
-		pErr := roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: qiPErr})
-		pErr.Index = qiPErr.Index
-		return nil, pErr
+		ignoreMissing := false
+		if _, ok := qiPErr.GetDetail().(*roachpb.IntentMissingError); ok {
+			// If the error is an IntentMissingError, detect whether this is due
+			// to intent resolution and can be safely ignored.
+			ignoreMissing, err = ds.detectIntentMissingDueToIntentResolution(ctx, br.Txn)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+		}
+		if !ignoreMissing {
+			// Wrap this in a MixedSuccessError, as we know that the EndTransaction
+			// batch succeeded. It is not possible for qiPErr to be a MixedSuccessError
+			// itself, so we don't need to handle that case like we do down below.
+			qiPErr.UpdateTxn(br.Txn)
+			maybeSwapErrorIndex(qiPErr, swapIdx, lastIdx)
+			pErr := roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: qiPErr})
+			pErr.Index = qiPErr.Index
+			return nil, pErr
+		}
+		// Populate the pre-commit QueryIntent batch response. If we made it
+		// here then we know we can ignore intent missing errors.
+		qiReply.reply = qiBa.CreateReply()
+		for _, ru := range qiReply.reply.Responses {
+			ru.GetQueryIntent().FoundIntent = true
+		}
 	}
 
 	// Both halves of the split batch succeeded. Piece them back together.
@@ -933,6 +950,80 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		return nil, roachpb.NewError(err)
 	}
 	return br, nil
+}
+
+// detectIntentMissingDueToIntentResolution attempts to detect whether a missing
+// intent error thrown by a pre-commit QueryIntent request was due to intent
+// resolution after the transaction was already finalized instead of due to a
+// failure of the corresponding pipelined write. It is possible for these two
+// situations to be confused because the pre-commit QueryIntent requests are
+// issued in parallel with the staging EndTransaction request and may evaluate
+// after the transaction becomes implicitly committed. If this happens and a
+// concurrent transaction observes the implicit commit and makes the commit
+// explicit, it is allowed to begin resolving the transactions intents.
+//
+// MVCC values don't remember their transaction once they have been resolved.
+// This loss of information means that QueryIntent returns an intent missing
+// error if it finds the resolved value that correspond to its desired intent.
+// Because of this, the race discussed above can result in intent missing errors
+// during a parallel commit even when the transaction successfully committed.
+//
+// This method queries the transaction record to determine whether an intent
+// missing error was caused by this race or whether the intent missing error
+// is real and guarantees that the transaction is not implicitly committed.
+//
+// See #37866 (issue) and #37900 (corresponding tla+ update).
+func (ds *DistSender) detectIntentMissingDueToIntentResolution(
+	ctx context.Context, txn *roachpb.Transaction,
+) (bool, error) {
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = ds.clock.Now()
+	ba.Add(&roachpb.QueryTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.TxnMeta.Key,
+		},
+		Txn: txn.TxnMeta,
+	})
+	log.VEvent(ctx, 1, "detecting whether missing intent is due to intent resolution")
+	br, pErr := ds.Send(ctx, ba)
+	if pErr != nil {
+		// We weren't able to determine whether the intent missing error is
+		// due to intent resolution or not, so it is still ambiguous whether
+		// the commit succeeded.
+		return false, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s [intent missing]", pErr))
+	}
+	respTxn := &br.Responses[0].GetQueryTxn().QueriedTxn
+	switch respTxn.Status {
+	case roachpb.COMMITTED:
+		// The transaction has already been finalized as committed. The missing
+		// intent error must have been a result of a concurrent transaction
+		// recovery finding the transaction in the implicit commit state and
+		// resolving one of its intents before the pre-commit QueryIntent
+		// queried that intent. We know that the transaction was committed
+		// successfully, so ignore the error.
+		return true, nil
+	case roachpb.ABORTED:
+		// The transaction has either already been finalized as aborted or has
+		// been finalized as committed and already had its transaction record
+		// GCed. We can't distinguish between these two conditions with full
+		// certainty, so we're forced to return an ambiguous commit error.
+		// TODO(nvanbenschoten): QueryTxn will materialize an ABORTED transaction
+		// record if one does not already exist. If we are certain that no actor
+		// will ever persist an ABORTED transaction record after a COMMIT record is
+		// GCed and we returned whether the record was synthesized in the QueryTxn
+		// response then we could use the existence of an ABORTED transaction record
+		// to further isolates the ambiguity caused by the loss of information
+		// during intent resolution. If this error becomes a problem, we can explore
+		// this option.
+		return false, roachpb.NewAmbiguousResultError("intent missing and record aborted")
+	default:
+		// The transaction has not been finalized yet, so the missing intent
+		// error must have been caused by a real missing intent. Propagate the
+		// missing intent error.
+		// NB: we don't expect the record to be PENDING at this point, but it's
+		// not worth making any hard assertions about what we get back here.
+		return false, nil
+	}
 }
 
 // maybeSwapErrorIndex swaps the error index from a to b or b to a if the
