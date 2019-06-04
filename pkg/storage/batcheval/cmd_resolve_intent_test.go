@@ -42,6 +42,7 @@ type mockEvalCtx struct {
 	abortSpan        *abortspan.AbortSpan
 	gcThreshold      hlc.Timestamp
 	term, firstIndex uint64
+	canCreateTxnFn   func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason)
 }
 
 func (m *mockEvalCtx) String() string {
@@ -107,7 +108,7 @@ func (m *mockEvalCtx) GetSplitQPS() float64 {
 func (m *mockEvalCtx) CanCreateTxnRecord(
 	uuid.UUID, []byte, hlc.Timestamp,
 ) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
-	panic("unimplemented")
+	return m.canCreateTxnFn()
 }
 func (m *mockEvalCtx) GetGCThreshold() hlc.Timestamp {
 	return m.gcThreshold
