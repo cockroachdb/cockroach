@@ -15,6 +15,7 @@ package distsqlpb
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -208,6 +209,29 @@ type ProducerMetadata struct {
 	// SamplerProgress contains incremental progress information from the sampler
 	// processor.
 	SamplerProgress *RemoteProducerMetadata_SamplerProgress
+	// Metrics contains information about goodput of the node.
+	Metrics *RemoteProducerMetadata_Metrics
+}
+
+// metricsMetaPool is a pool of metadata used to propagate metrics.
+var metricsMetaPool = sync.Pool{
+	New: func() interface{} {
+		return &ProducerMetadata{
+			Metrics: &RemoteProducerMetadata_Metrics{},
+		}
+	},
+}
+
+// Release is part of Releasable interface. Note that we do not explicitly
+// reset the values of the fields since those will be correctly assigned during
+// the next usage.
+func (meta *ProducerMetadata) Release() {
+	metricsMetaPool.Put(meta)
+}
+
+// GetMetricsMeta returns a metadata object from the pool of metrics metadata.
+func GetMetricsMeta() *ProducerMetadata {
+	return metricsMetaPool.Get().(*ProducerMetadata)
 }
 
 // RemoteProducerMetaToLocalMeta converts a RemoteProducerMetadata struct to
@@ -227,6 +251,8 @@ func RemoteProducerMetaToLocalMeta(rpm RemoteProducerMetadata) (ProducerMetadata
 		meta.SamplerProgress = v.SamplerProgress
 	case *RemoteProducerMetadata_Error:
 		meta.Err = v.Error.ErrorDetail()
+	case *RemoteProducerMetadata_Metrics_:
+		meta.Metrics = v.Metrics
 	default:
 		return meta, false
 	}
@@ -260,6 +286,10 @@ func LocalMetaToRemoteProducerMeta(meta ProducerMetadata) RemoteProducerMetadata
 	} else if meta.SamplerProgress != nil {
 		rpm.Value = &RemoteProducerMetadata_SamplerProgress_{
 			SamplerProgress: meta.SamplerProgress,
+		}
+	} else if meta.Metrics != nil {
+		rpm.Value = &RemoteProducerMetadata_Metrics_{
+			Metrics: meta.Metrics,
 		}
 	} else {
 		rpm.Value = &RemoteProducerMetadata_Error{

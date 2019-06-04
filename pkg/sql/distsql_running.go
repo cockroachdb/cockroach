@@ -338,6 +338,11 @@ type DistSQLReceiver struct {
 	// A handler for clock signals arriving from remote nodes. This should update
 	// this node's clock.
 	updateClock func(observedTs hlc.Timestamp)
+
+	// bytesRead and rowsRead track the corresponding metrics while executing the
+	// statement.
+	bytesRead int64
+	rowsRead  int64
 }
 
 // errWrap is a container for an error, for use with atomic.Value, which
@@ -516,6 +521,11 @@ func (r *DistSQLReceiver) Push(
 			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
+		}
+		if meta.Metrics != nil {
+			r.bytesRead += meta.Metrics.BytesRead
+			r.rowsRead += meta.Metrics.RowsRead
+			meta.Release()
 		}
 		return r.status
 	}
