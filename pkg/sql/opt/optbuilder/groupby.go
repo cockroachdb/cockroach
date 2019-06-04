@@ -77,6 +77,17 @@ type groupby struct {
 	buildingGroupingCols bool
 }
 
+// HasNonCommutativeAggregates checks whether any of the aggregates are
+// non-commutative or ordering sensitive.
+func (g groupby) HasNonCommutativeAggregates() bool {
+	for i := range g.aggs {
+		if !g.aggs[i].IsCommutative() {
+			return true
+		}
+	}
+	return false
+}
+
 // aggregateInfo stores information about an aggregation function call.
 type aggregateInfo struct {
 	*tree.FuncExpr
@@ -106,6 +117,16 @@ func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree
 		return nil, err
 	}
 	return a, nil
+}
+
+// IsCommutative checks whether the aggregate is commutative or ordering insensitive.
+func (a aggregateInfo) IsCommutative() bool {
+	switch a.def.Name {
+	case "array_agg", "concat_agg", "string_agg":
+		return a.OrderBy == nil
+	default:
+		return true
+	}
 }
 
 // Eval is part of the tree.TypedExpr interface.
@@ -224,6 +245,19 @@ func (b *Builder) buildAggregation(
 	aggInScope := fromScope.groupby.aggInScope
 	aggOutScope := fromScope.groupby.aggOutScope
 
+	// Build ColSet of grouping columns.
+	var groupingColSet opt.ColSet
+	for i := range groupingCols {
+		groupingColSet.Add(int(groupingCols[i].id))
+	}
+
+	// If there are any aggregates that are ordering sensitive, build the aggregations
+	// as window functions over each group.
+	if aggOutScope.groupby.HasNonCommutativeAggregates() {
+		//log.Fatalf(context.Background(), "%+v", aggOutScope.groupby.aggs[0].OrderBy[0])
+		return b.buildAggregationAsWindow(groupingColSet, having, fromScope)
+	}
+
 	aggInfos := aggOutScope.groupby.aggs
 
 	// Construct the aggregation operators.
@@ -287,11 +321,6 @@ func (b *Builder) buildAggregation(
 	// Construct the pre-projection, which renders the grouping columns and the
 	// aggregate arguments, as well as any additional order by columns.
 	b.constructProjectForScope(fromScope, aggInScope)
-
-	var groupingColSet opt.ColSet
-	for i := range groupingCols {
-		groupingColSet.Add(int(groupingCols[i].id))
-	}
 
 	aggOutScope.expr = b.constructGroupBy(
 		aggInScope.expr.(memo.RelExpr),
@@ -578,6 +607,8 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 	case "jsonb_agg":
 		return b.factory.ConstructJsonbAgg(args[0])
 	case "string_agg":
+		// TODO(ridwanmsharif): Confirm with Justin what the desired behavior here should be.
+		// Why can we handle non constant second arguments in window fns but not aggregates?
 		if !memo.CanExtractConstDatum(args[1]) {
 			panic(unimplementedWithIssueDetailf(28417, "string_agg",
 				"aggregate functions with multiple non-constant expressions are not supported"))
