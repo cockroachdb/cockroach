@@ -28,7 +28,6 @@ func TestWrap(t *testing.T) {
 		expectWrap bool
 	}{
 		{errors.New("woo"), true},
-		{&roachpb.UnhandledRetryableError{}, false},
 		{&roachpb.TransactionRetryWithProtoRefreshError{}, false},
 		{&roachpb.AmbiguousResultError{}, false},
 	}

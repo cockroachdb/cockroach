@@ -40,10 +40,6 @@ func (e *UnhandledRetryableError) Error() string {
 	return e.PErr.Message
 }
 
-// ClientVisibleRetryError implements the ClientVisibleRetryError interface.
-func (e *UnhandledRetryableError) ClientVisibleRetryError() {}
-
-var _ ClientVisibleRetryError = &UnhandledRetryableError{}
 var _ error = &UnhandledRetryableError{}
 
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
