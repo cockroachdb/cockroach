@@ -77,6 +77,17 @@ type groupby struct {
 	buildingGroupingCols bool
 }
 
+// HasNonCommutativeAggregates checks whether any of the aggregates are
+// non-commutative or ordering sensitive.
+func (g groupby) HasNonCommutativeAggregates() bool {
+	for i := range g.aggs {
+		if !g.aggs[i].IsCommutative() {
+			return true
+		}
+	}
+	return false
+}
+
 // aggregateInfo stores information about an aggregation function call.
 type aggregateInfo struct {
 	*tree.FuncExpr
@@ -106,6 +117,27 @@ func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree
 		return nil, err
 	}
 	return a, nil
+}
+
+// IsOrderingSensitive returns true if the given aggregate operator is
+// ordering sensitive. That is, it can give different results based on the order
+// values are fed to it.
+func (a aggregateInfo) IsOrderingSensitive() bool {
+	switch a.def.Name {
+	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsCommutative checks whether the aggregate is commutative. That is, if it is
+// ordering insensitive or if no ordering is specified.
+func (a aggregateInfo) IsCommutative() bool {
+	if a.IsOrderingSensitive() {
+		return a.OrderBy == nil
+	}
+	return true
 }
 
 // Eval is part of the tree.TypedExpr interface.
@@ -224,6 +256,18 @@ func (b *Builder) buildAggregation(
 	aggInScope := fromScope.groupby.aggInScope
 	aggOutScope := fromScope.groupby.aggOutScope
 
+	// Build ColSet of grouping columns.
+	var groupingColSet opt.ColSet
+	for i := range groupingCols {
+		groupingColSet.Add(int(groupingCols[i].id))
+	}
+
+	// If there are any aggregates that are ordering sensitive, build the aggregations
+	// as window functions over each group.
+	if aggOutScope.groupby.HasNonCommutativeAggregates() {
+		return b.buildAggregationAsWindow(groupingColSet, having, fromScope)
+	}
+
 	aggInfos := aggOutScope.groupby.aggs
 
 	// Construct the aggregation operators.
@@ -264,7 +308,7 @@ func (b *Builder) buildAggregation(
 
 		aggCols[i].scalar = b.constructAggregate(agg.def.Name, args).(opt.ScalarExpr)
 
-		if opt.AggregateIsOrderingSensitive(aggCols[i].scalar.Op()) {
+		if agg.IsOrderingSensitive() {
 			haveOrderingSensitiveAgg = true
 		}
 
@@ -287,11 +331,6 @@ func (b *Builder) buildAggregation(
 	// Construct the pre-projection, which renders the grouping columns and the
 	// aggregate arguments, as well as any additional order by columns.
 	b.constructProjectForScope(fromScope, aggInScope)
-
-	var groupingColSet opt.ColSet
-	for i := range groupingCols {
-		groupingColSet.Add(int(groupingCols[i].id))
-	}
 
 	aggOutScope.expr = b.constructGroupBy(
 		aggInScope.expr.(memo.RelExpr),
@@ -578,6 +617,8 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 	case "jsonb_agg":
 		return b.factory.ConstructJsonbAgg(args[0])
 	case "string_agg":
+		// TODO(ridwanmsharif): Confirm with Justin what the desired behavior here should be.
+		// Why can we handle non constant second arguments in window fns but not aggregates?
 		if !memo.CanExtractConstDatum(args[1]) {
 			panic(unimplementedWithIssueDetailf(28417, "string_agg",
 				"aggregate functions with multiple non-constant expressions are not supported"))
