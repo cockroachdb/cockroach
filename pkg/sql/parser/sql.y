@@ -3318,9 +3318,9 @@ show_columns_stmt:
 // %Text: SHOW DATABASES
 // %SeeAlso: WEBDOCS/show-databases.html
 show_databases_stmt:
-  SHOW DATABASES
+  SHOW DATABASES with_comment
   {
-    $$.val = &tree.ShowDatabases{}
+    $$.val = &tree.ShowDatabases{WithComment: $3.bool()}
   }
 | SHOW DATABASES error // SHOW HELP: SHOW DATABASES
 
