@@ -138,6 +138,9 @@ func newTableReader(
 	}
 	tr.input = &rowFetcherWrapper{Fetcher: &tr.fetcher}
 
+	// We always want to collect metrics on the table reader, so we wrap it with
+	// metrics collector.
+	tr.input = &metricsCollector{RowSource: tr.input}
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		tr.input = NewInputStatCollector(tr.input)
 		tr.finishTrace = tr.outputStatsToTrace
@@ -355,10 +358,34 @@ func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMet
 	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
+	if mc, ok := tr.input.(*metricsCollector); ok {
+		meta := distsqlpb.MetricsMetaPool.Get().(*distsqlpb.ProducerMetadata)
+		meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.fetcher.GetBytesRead(), mc.rowsRead
+		trailingMeta = append(trailingMeta, *meta)
+	}
 	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.
 func (tr *tableReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	return tr.generateMeta(ctx)
+}
+
+// metricsCollector gathers statistics about goodput of the table readers. Note
+// that it is a lightweight version of InputStatCollector - namely, tracking
+// stall time is omitted for performance reasons.
+type metricsCollector struct {
+	RowSource
+
+	rowsRead int64
+}
+
+var _ RowSource = &metricsCollector{}
+
+func (mc *metricsCollector) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+	row, meta := mc.RowSource.Next()
+	if row != nil {
+		mc.rowsRead++
+	}
+	return row, meta
 }
