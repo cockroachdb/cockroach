@@ -103,11 +103,16 @@ var splitNodeColumns = sqlbase.ResultColumns{
 		Name: "pretty",
 		Typ:  types.String,
 	},
+	{
+		Name: "expiration_time",
+		Typ:  types.Timestamp,
+	},
 }
 
 // splitRun contains the run-time state of splitNode during local execution.
 type splitRun struct {
-	lastSplitKey []byte
+	lastSplitKey       []byte
+	lastExpirationTime hlc.Timestamp
 }
 
 func (n *splitNode) startExec(params runParams) error {
@@ -139,6 +144,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
+	// TODO(jeffreyxiao): Remove this check in v20.1.
 	// Don't set the manual flag if the cluster is not up-to-date.
 	stickyBitEnabled := params.EvalContext().Settings.Version.IsActive(cluster.VersionStickyBit)
 	expirationTime := hlc.Timestamp{}
@@ -150,14 +156,20 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 	}
 
 	n.run.lastSplitKey = rowKey
+	n.run.lastExpirationTime = expirationTime
 
 	return true, nil
 }
 
 func (n *splitNode) Values() tree.Datums {
+	expirationTime := tree.DNull
+	if !n.run.lastExpirationTime.Equal(hlc.MaxTimestamp) {
+		expirationTime = tree.TimestampToInexactDTimestamp(n.run.lastExpirationTime)
+	}
 	return tree.Datums{
 		tree.NewDBytes(tree.DBytes(n.run.lastSplitKey)),
 		tree.NewDString(keys.PrettyPrint(nil /* valDirs */, n.run.lastSplitKey)),
+		expirationTime,
 	}
 }
 
