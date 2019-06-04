@@ -275,6 +275,8 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 		for _, entry := range entries {
 			select {
 			case ch <- entry:
+			case <-p.cfg.Stopper.ShouldQuiesce():
+				return
 			case <-ctx.Done():
 				return
 			}
@@ -324,6 +326,8 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 
 			select {
 			case ch <- entry:
+			case <-p.cfg.Stopper.ShouldQuiesce():
+				return
 			case <-ctx.Done():
 				return
 			}
