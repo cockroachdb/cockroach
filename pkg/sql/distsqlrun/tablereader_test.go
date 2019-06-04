@@ -161,7 +161,7 @@ func TestTableReader(t *testing.T) {
 				var res sqlbase.EncDatumRows
 				for {
 					row, meta := results.Next()
-					if meta != nil && meta.TxnCoordMeta == nil {
+					if meta != nil && meta.TxnCoordMeta == nil && meta.Metrics == nil {
 						t.Fatalf("unexpected metadata: %+v", meta)
 					}
 					if row == nil {
@@ -273,8 +273,8 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		for _, m := range metas {
 			if len(m.Ranges) > 0 {
 				misplannedRanges = m.Ranges
-			} else if m.TxnCoordMeta == nil {
-				t.Fatalf("expected only txn coord meta or misplanned ranges, got: %+v", metas)
+			} else if m.TxnCoordMeta == nil && m.Metrics == nil {
+				t.Fatalf("expected only txn coord meta, metrics, or misplanned ranges, got: %+v", metas)
 			}
 		}
 		if len(misplannedRanges) != 2 {
@@ -446,7 +446,7 @@ func BenchmarkTableReader(b *testing.B) {
 				count := 0
 				for {
 					row, meta := tr.Next()
-					if meta != nil && meta.TxnCoordMeta == nil {
+					if meta != nil && meta.TxnCoordMeta == nil && meta.Metrics == nil {
 						b.Fatalf("unexpected metadata: %+v", meta)
 					}
 					if row == nil {
