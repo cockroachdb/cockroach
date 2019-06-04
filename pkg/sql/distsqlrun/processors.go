@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
@@ -860,12 +861,15 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta distsqlpb.ProducerMetadata) {
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the
-// annotated context that's also stored in pb.ctx.
+// annotated context that's also stored in pb.Ctx.
 func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {
-	pb.Ctx = ctx
+	var tracer *tracing.Tracer
+	if tr, ok := pb.flowCtx.AmbientContext.Tracer.(*tracing.Tracer); ok {
+		tracer = tr
+	}
 
-	pb.origCtx = pb.Ctx
-	pb.Ctx, pb.span = processorSpan(pb.Ctx, name)
+	pb.origCtx = ctx
+	pb.Ctx, pb.span = processorSpan(ctx, name, tracer)
 	if pb.span != nil {
 		pb.span.SetTag(tracing.TagPrefix+"processorid", pb.processorID)
 	}
@@ -965,8 +969,20 @@ func (rb *rowSourceBase) consumerClosed(name string) {
 
 // processorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
-func processorSpan(ctx context.Context, name string) (context.Context, opentracing.Span) {
-	return tracing.ChildSpanSeparateRecording(ctx, name)
+// If the parent span is not recording and tracer is non-nil, tracer will be
+// used to create a new Recordable but non-Recording span.
+func processorSpan(
+	ctx context.Context, name string, tracer *tracing.Tracer,
+) (context.Context, opentracing.Span) {
+	span := opentracing.SpanFromContext(ctx)
+	if span != nil && !tracing.IsBlackHoleSpan(span) {
+		return tracing.ChildSpanSeparateRecording(ctx, name)
+	}
+	if tracer == nil {
+		return ctx, nil
+	}
+	span = tracer.StartRootSpan(name, logtags.FromContext(ctx), tracing.RecordableSpan)
+	return opentracing.ContextWithSpan(ctx, span), span
 }
 
 func newProcessor(

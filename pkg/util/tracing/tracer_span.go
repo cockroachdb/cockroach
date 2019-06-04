@@ -146,6 +146,12 @@ func IsRecording(s opentracing.Span) bool {
 	return s.(*span).isRecording()
 }
 
+// IsNoop returns true if s is a noop span.
+func IsNoop(s opentracing.Span) bool {
+	_, noop := s.(*noopSpan)
+	return noop
+}
+
 func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 	if group == nil {
 		panic("no spanGroup")
@@ -219,17 +225,34 @@ func IsRecordable(os opentracing.Span) bool {
 	return isCockroachSpan
 }
 
-// GetRecording retrieves the current recording, if the span has
-// recording enabled. This can be called while spans that are part of the
-// record are still open; it can run concurrently with operations on those
-// spans.
+// GetRecording retrieves the current recording, if the span either has
+// recording enabled or is recordable. This can be called while spans that are
+// part of the record are still open; it can run concurrently with operations
+// on those spans.
 func GetRecording(os opentracing.Span) []RecordedSpan {
 	if _, noop := os.(*noopSpan); noop {
 		return nil
 	}
 	s := os.(*span)
 	if !s.isRecording() {
-		return nil
+		// The span is not recording but is recordable. We use such spans to
+		// propagate some metrics unconditionally.
+		s.mu.Lock()
+		if s.mu.stats == nil {
+			s.mu.Unlock()
+			return nil
+		}
+		// We are only interested in stats, so all other fields of the span are
+		// ignored.
+		rs := RecordedSpan{}
+		stats, err := types.MarshalAny(s.mu.stats)
+		if err != nil {
+			// TODO(yuzefovich): what should we do here?
+			panic(err)
+		}
+		rs.Stats = stats
+		s.mu.Unlock()
+		return []RecordedSpan{rs}
 	}
 	s.mu.Lock()
 	group := s.mu.recordingGroup

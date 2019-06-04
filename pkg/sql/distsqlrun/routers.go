@@ -281,7 +281,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 		go func(ctx context.Context, rb *routerBase, ro *routerOutput, wg *sync.WaitGroup) {
 			var span opentracing.Span
 			if rb.statsCollectionEnabled {
-				ctx, span = processorSpan(ctx, "router output")
+				ctx, span = processorSpan(ctx, "router output", nil /* tracer */)
 				span.SetTag(distsqlpb.StreamIDTagKey, ro.streamID)
 			}
 

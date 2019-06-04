@@ -1891,10 +1891,11 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 	numRows int,
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
+	bytesRead, rowsRead int64,
 ) {
 	s.appStats.recordStatement(
 		stmt, samplePlanDescription, distSQLUsed, optUsed, automaticRetryCount, numRows, err,
-		parseLat, planLat, runLat, svcLat, ovhLat)
+		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
 }
 
 // SQLStats is part of the sqlStatsCollector interface.

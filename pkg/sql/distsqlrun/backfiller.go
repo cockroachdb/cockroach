@@ -85,7 +85,7 @@ func (*backfiller) OutputTypes() []types.T {
 func (b *backfiller) Run(ctx context.Context) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
-	ctx, span := processorSpan(ctx, opName)
+	ctx, span := processorSpan(ctx, opName, nil /* tracer */)
 	defer tracing.FinishSpan(span)
 
 	if err := b.mainLoop(ctx); err != nil {

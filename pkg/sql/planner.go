@@ -581,6 +581,7 @@ type sqlStatsCollector interface {
 		numRows int,
 		err error,
 		parseLat, planLat, runLat, svcLat, ovhLat float64,
+		bytesRead, rowsRead int64,
 	)
 
 	// SQLStats provides access to the global sqlStats object.

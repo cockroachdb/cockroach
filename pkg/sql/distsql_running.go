@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -340,6 +341,12 @@ type DistSQLReceiver struct {
 	// A handler for clock signals arriving from remote nodes. This should update
 	// this node's clock.
 	updateClock func(observedTs hlc.Timestamp)
+
+	// bytesRead and rowsRead track the corresponding metrics while executing the
+	// statement.
+	bytesRead int64
+	rowsRead  int64
+	scratch   pbtypes.DynamicAny
 }
 
 // errWrap is a container for an error, for use with atomic.Value, which
@@ -515,6 +522,27 @@ func (r *DistSQLReceiver) Push(
 			if span == nil {
 				r.resultWriter.SetError(
 					errors.New("trying to ingest remote spans but there is no recording span set up"))
+			} else if tracing.IsNoop(span) || (tracing.IsRecordable(span) && !tracing.IsRecording(span)) {
+				// If span is a noop or is recordable but non recording, then full
+				// tracing is disabled, and we're using the same tracing infrastructure
+				// to propagate stats about the goodput of the system. Therefore, in
+				// every recorded span we look only at stats.
+				for _, rs := range meta.TraceData {
+					if rs.Stats == nil {
+						continue
+					}
+					if err := pbtypes.UnmarshalAny(rs.Stats, &r.scratch); err != nil {
+						r.resultWriter.SetError(errors.Errorf("error unmarshalling stats: %s", err))
+						return r.status
+					}
+					if trs, ok := r.scratch.Message.(*distsqlrun.TableReaderStats); ok {
+						r.bytesRead += trs.BytesRead
+						r.rowsRead += trs.InputStats.NumRows
+					} else {
+						// TODO(yuzefovich): what should we do here?
+						r.resultWriter.SetError(errors.Errorf("unexpectedly stats are not TableReaderStats"))
+					}
+				}
 			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}

@@ -139,11 +139,8 @@ func newTableReader(
 		tr.spans[i] = s.Span
 	}
 	tr.input = &rowFetcherWrapper{Fetcher: &tr.fetcher}
-
-	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
-		tr.input = NewInputStatCollector(tr.input)
-		tr.finishTrace = tr.outputStatsToTrace
-	}
+	tr.input = NewInputStatCollector(tr.input)
+	tr.finishTrace = tr.outputStatsToTrace
 
 	return tr, nil
 }

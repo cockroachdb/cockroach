@@ -122,6 +122,7 @@ func (a *appStats) recordStatement(
 	numRows int,
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
+	bytesRead, rowsRead int64,
 ) {
 	if a == nil || !stmtStatsEnable.Get(&a.st.SV) {
 		return
@@ -156,6 +157,8 @@ func (a *appStats) recordStatement(
 	s.data.RunLat.Record(s.data.Count, runLat)
 	s.data.ServiceLat.Record(s.data.Count, svcLat)
 	s.data.OverheadLat.Record(s.data.Count, ovhLat)
+	s.data.BytesRead = bytesRead
+	s.data.RowsRead = rowsRead
 	s.Unlock()
 }
 

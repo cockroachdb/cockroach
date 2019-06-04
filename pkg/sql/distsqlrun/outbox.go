@@ -198,7 +198,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	defer m.RowChannel.ConsumerClosed()
 
 	var span opentracing.Span
-	ctx, span = processorSpan(ctx, "outbox")
+	ctx, span = processorSpan(ctx, "outbox", nil /* tracer */)
 	if span != nil && tracing.IsRecording(span) {
 		m.statsCollectionEnabled = true
 		span.SetTag(distsqlpb.StreamIDTagKey, m.streamID)
