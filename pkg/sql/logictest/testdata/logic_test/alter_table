@@ -675,7 +675,13 @@ statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER TABLE nonexistent SPLIT ALL
+
+statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER INDEX nonexistent@noindex SPLIT AT VALUES (42)
+
+statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER INDEX nonexistent@noindex SPLIT ALL
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent UNSPLIT AT VALUES (42)
@@ -693,6 +699,9 @@ ALTER TABLE privsview ADD d INT
 
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview SPLIT AT VALUES (42)
+
+statement error pgcode 42809 "privsview" is not a table
+ALTER TABLE privsview SPLIT ALL
 
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview UNSPLIT AT VALUES (42)

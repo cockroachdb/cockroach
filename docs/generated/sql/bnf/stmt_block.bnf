@@ -1231,6 +1231,7 @@ alter_split_stmt ::=
 
 alter_unsplit_stmt ::=
 	'ALTER' 'TABLE' table_name 'UNSPLIT' 'AT' select_stmt
+	| 'ALTER' 'TABLE' table_name 'UNSPLIT' 'ALL'
 
 alter_scatter_stmt ::=
 	'ALTER' 'TABLE' table_name 'SCATTER'
@@ -1253,6 +1254,7 @@ alter_split_index_stmt ::=
 
 alter_unsplit_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'UNSPLIT' 'AT' select_stmt
+	| 'ALTER' 'INDEX' table_index_name 'UNSPLIT' 'ALL'
 
 alter_scatter_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'SCATTER'
