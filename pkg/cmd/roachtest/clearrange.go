@@ -52,8 +52,12 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 
 		// NB: on a 10 node cluster, this should take well below 3h.
 		tBegin := timeutil.Now()
+		// Currently we must set `--ranges=0` since automatic merges cannot merge ranges created by
+		// manual splits, and dropping the table does not remove manual splits. The latter may change
+		// in the future in which case it'll be fine to set `--ranges` to something else. But for now,
+		// setting it to nonzero causes the test to hang forever waiting on ranges to be merged.
 		c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
-			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
+			"--payload-bytes=10240", "--ranges=0", "--rows=65104166", "--seed=4", "--db=bigbank")
 		c.l.Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 		c.Stop(ctx)
 		t.Status()
