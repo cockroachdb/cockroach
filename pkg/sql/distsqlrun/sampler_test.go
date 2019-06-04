@@ -151,7 +151,7 @@ func TestSamplerSketch(t *testing.T) {
 		{-1, 3},
 		{1, -1},
 	}
-	cardinalities := []int{2, 8}
+	cardinalities := []int{3, 9}
 	numNulls := []int{2, 1}
 
 	rows := sqlbase.GenEncDatumRowsInt(inputRows)

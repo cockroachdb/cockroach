@@ -26,7 +26,7 @@ statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
 __auto__         {b}           1000       10              0
 __auto__         {c}           1000       10              0
-__auto__         {d}           1000       0               1000
+__auto__         {d}           1000       1               1000
 
 # Disable automatic stats
 statement ok
@@ -45,7 +45,7 @@ statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
 __auto__         {b}           1000       10              0
 __auto__         {c}           1000       10              0
-__auto__         {d}           1000       0               1000
+__auto__         {d}           1000       1               1000
 
 # Enable automatic stats
 statement ok
@@ -66,8 +66,8 @@ __auto__         {b}           1000       10              0
 __auto__         {b}           1000       10              0
 __auto__         {c}           1000       10              0
 __auto__         {c}           1000       10              0
-__auto__         {d}           1000       0               1000
-__auto__         {d}           1000       1               730
+__auto__         {d}           1000       1               1000
+__auto__         {d}           1000       2               730
 
 # Upsert more than 20% of the table.
 statement ok
@@ -90,9 +90,9 @@ __auto__         {b}           1050       10              0
 __auto__         {c}           1000       10              0
 __auto__         {c}           1000       10              0
 __auto__         {c}           1050       10              0
-__auto__         {d}           1000       0               1000
-__auto__         {d}           1000       1               730
-__auto__         {d}           1050       2               365
+__auto__         {d}           1000       1               1000
+__auto__         {d}           1000       2               730
+__auto__         {d}           1050       3               365
 
 # Delete more than 20% of the table.
 statement ok
@@ -115,9 +115,9 @@ __auto__         {c}           1000       10              0
 __auto__         {c}           1000       10              0
 __auto__         {c}           1050       10              0
 __auto__         {c}           550        5               0
-__auto__         {d}           1000       0               1000
-__auto__         {d}           1000       1               730
-__auto__         {d}           1050       2               365
+__auto__         {d}           1000       1               1000
+__auto__         {d}           1000       2               730
+__auto__         {d}           1050       3               365
 __auto__         {d}           550        1               0
 
 # Test CREATE TABLE ... AS
