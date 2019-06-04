@@ -15,6 +15,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,6 +28,24 @@ func checkFrom(expr tree.Expr, inScope *scope) {
 		panic(pgerror.Newf(pgerror.CodeInvalidNameError,
 			"cannot use %q without a FROM clause", tree.ErrString(expr)))
 	}
+}
+
+// windowAggregateFrame() returns a frame that any aggregate build as a window
+// can use.
+func windowAggregateFrame() memo.WindowFrame {
+	return memo.WindowFrame{
+		StartBoundType: unboundedStartBound.BoundType,
+		EndBoundType:   unboundedEndBound.BoundType,
+	}
+}
+
+// getTypedExprs casts the exprs into TypedExps and returns them.
+func getTypedExprs(exprs []tree.Expr) []tree.TypedExpr {
+	argExprs := make([]tree.TypedExpr, len(exprs))
+	for i, expr := range exprs {
+		argExprs[i] = expr.(tree.TypedExpr)
+	}
+	return argExprs
 }
 
 // expandStar expands expr into a list of columns if expr

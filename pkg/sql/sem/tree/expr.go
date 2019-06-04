@@ -1233,6 +1233,9 @@ type FuncExpr struct {
 	Filter    Expr
 	WindowDef *WindowDef
 
+	// OrderBy is used for aggregations that specify an order:
+	// array_agg(col1 ORDER BY col2)
+	OrderBy OrderBy
 	typeAnnotation
 	fnProps *FunctionProperties
 	fn      *Overload
