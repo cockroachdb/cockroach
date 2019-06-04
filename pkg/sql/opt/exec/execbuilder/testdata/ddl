@@ -91,17 +91,17 @@ CREATE TABLE s (k1 INT, k2 INT, v INT, PRIMARY KEY (k1,k2))
 query TTTTT colnames
 EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
 ----
-tree                 field     description       columns               ordering
-split                ·         ·                 (key, pretty)         ·
- └── limit           ·         ·                 (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
-      │              count     3                 ·                     ·
-      └── render     ·         ·                 (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
-           │         render 0  test.public.s.k1  ·                     ·
-           │         render 1  test.public.s.k2  ·                     ·
-           └── scan  ·         ·                 (k1, k2, v[omitted])  k1!=NULL; k2!=NULL; key(k1,k2); +k1
-·                    table     s@primary         ·                     ·
-·                    spans     ALL               ·                     ·
-·                    limit     3                 ·                     ·
+tree                 field     description       columns                              ordering
+split                ·         ·                 (key, pretty, split_enforced_until)  ·
+ └── limit           ·         ·                 (k1, k2)                             k1!=NULL; k2!=NULL; key(k1,k2); +k1
+      │              count     3                 ·                                    ·
+      └── render     ·         ·                 (k1, k2)                             k1!=NULL; k2!=NULL; key(k1,k2); +k1
+           │         render 0  test.public.s.k1  ·                                    ·
+           │         render 1  test.public.s.k2  ·                                    ·
+           └── scan  ·         ·                 (k1, k2, v[omitted])                 k1!=NULL; k2!=NULL; key(k1,k2); +k1
+·                    table     s@primary         ·                                    ·
+·                    spans     ALL               ·                                    ·
+·                    limit     3                 ·                                    ·
 
 statement ok
 DROP TABLE t; DROP TABLE other
