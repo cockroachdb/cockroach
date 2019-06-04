@@ -16,6 +16,12 @@ package errorutil
 
 import "testing"
 
+// Renumber lines so they're stable no matter what changes above. (We
+// could make the regexes accept any string of digits, but we also
+// want to make sure that the correct line numbers get captured).
+//
+//line error_test.go:1000
+
 func TestUnexpectedWithIssueErrorf(t *testing.T) {
 	err := UnexpectedWithIssueErrorf(1234, "args: %d %s %f", 1, "two", 3.0)
 	exp := "unexpected error: args: 1 two 3.000000\n" +
@@ -28,7 +34,7 @@ func TestUnexpectedWithIssueErrorf(t *testing.T) {
 	}
 
 	safeMsg := err.(UnexpectedWithIssueErr).SafeMessage()
-	exp = "issue #1234: error_test.go:20: args: %d %s %f | int; string; float64"
+	exp = "issue #1234: error_test.go:1002: args: %d %s %f | int; string; float64"
 	if safeMsg != exp {
 		t.Errorf("Expected SafeMessage:\n%s\ngot:\n%s", exp, safeMsg)
 	}
