@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -354,13 +353,6 @@ type Engine interface {
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.
 	CreateCheckpoint(dir string) error
-}
-
-// MapProvidingEngine is an Engine that also provides facilities for making a
-// sorted map that's persisted by the Engine.
-type MapProvidingEngine interface {
-	Engine
-	diskmap.Factory
 }
 
 // WithSSTables extends the Engine interface with a method to get info

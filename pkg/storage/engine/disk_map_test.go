@@ -404,7 +404,7 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 		b.Run(fmt.Sprintf("InputSize%d", inputSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				func() {
-					diskMap := NewRocksDBMap(tempEngine)
+					diskMap := tempEngine.NewSortedDiskMap()
 					defer diskMap.Close(ctx)
 					batchWriter := diskMap.NewBatchWriter()
 					// This Close() flushes writes.
@@ -445,7 +445,7 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 	}
 	defer tempEngine.Close()
 
-	diskMap := NewRocksDBMap(tempEngine)
+	diskMap := tempEngine.NewSortedDiskMap()
 	defer diskMap.Close(context.Background())
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
