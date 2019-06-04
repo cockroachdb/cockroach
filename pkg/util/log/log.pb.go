@@ -61,7 +61,7 @@ func (x Severity) String() string {
 	return proto.EnumName(Severity_name, int32(x))
 }
 func (Severity) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_log_3a319d334ebe63bc, []int{0}
+	return fileDescriptor_log_0fd5880d8ab2850d, []int{0}
 }
 
 // Entry represents a cockroach structured log entry.
@@ -81,7 +81,7 @@ func (m *Entry) Reset()         { *m = Entry{} }
 func (m *Entry) String() string { return proto.CompactTextString(m) }
 func (*Entry) ProtoMessage()    {}
 func (*Entry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_3a319d334ebe63bc, []int{0}
+	return fileDescriptor_log_0fd5880d8ab2850d, []int{0}
 }
 func (m *Entry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -122,7 +122,7 @@ func (m *FileDetails) Reset()         { *m = FileDetails{} }
 func (m *FileDetails) String() string { return proto.CompactTextString(m) }
 func (*FileDetails) ProtoMessage()    {}
 func (*FileDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_3a319d334ebe63bc, []int{1}
+	return fileDescriptor_log_0fd5880d8ab2850d, []int{1}
 }
 func (m *FileDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -160,7 +160,7 @@ func (m *FileInfo) Reset()         { *m = FileInfo{} }
 func (m *FileInfo) String() string { return proto.CompactTextString(m) }
 func (*FileInfo) ProtoMessage()    {}
 func (*FileInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_3a319d334ebe63bc, []int{2}
+	return fileDescriptor_log_0fd5880d8ab2850d, []int{2}
 }
 func (m *FileInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1039,9 +1039,9 @@ var (
 	ErrIntOverflowLog   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("util/log/log.proto", fileDescriptor_log_3a319d334ebe63bc) }
+func init() { proto.RegisterFile("util/log/log.proto", fileDescriptor_log_0fd5880d8ab2850d) }
 
-var fileDescriptor_log_3a319d334ebe63bc = []byte{
+var fileDescriptor_log_0fd5880d8ab2850d = []byte{
 	// 477 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x92, 0xc1, 0x8a, 0xd3, 0x40,
 	0x18, 0xc7, 0x3b, 0x9b, 0xa4, 0x4d, 0xbe, 0xca, 0x12, 0x06, 0x0f, 0x51, 0x77, 0xd3, 0x52, 0x3c,

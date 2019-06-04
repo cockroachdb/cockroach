@@ -370,7 +370,7 @@ func (x *Family) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Family) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_f4f9be392afeb30c, []int{0}
+	return fileDescriptor_types_a8696e4aad641d59, []int{0}
 }
 
 // InternalType is the protobuf encoding for SQL types. It is always wrapped by
@@ -426,7 +426,7 @@ func (m *InternalType) Reset()         { *m = InternalType{} }
 func (m *InternalType) String() string { return proto.CompactTextString(m) }
 func (*InternalType) ProtoMessage()    {}
 func (*InternalType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_f4f9be392afeb30c, []int{0}
+	return fileDescriptor_types_a8696e4aad641d59, []int{0}
 }
 func (m *InternalType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1073,9 +1073,9 @@ var (
 	ErrIntOverflowTypes   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/types/types.proto", fileDescriptor_types_f4f9be392afeb30c) }
+func init() { proto.RegisterFile("sql/types/types.proto", fileDescriptor_types_a8696e4aad641d59) }
 
-var fileDescriptor_types_f4f9be392afeb30c = []byte{
+var fileDescriptor_types_a8696e4aad641d59 = []byte{
 	// 630 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0xcf, 0x6e, 0xd3, 0x4c,
 	0x14, 0xc5, 0x33, 0xf5, 0x9f, 0xc6, 0x13, 0x27, 0x71, 0xa7, 0xed, 0xf7, 0x99, 0x2e, 0x1c, 0x93,

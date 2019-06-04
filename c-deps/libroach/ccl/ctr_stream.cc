@@ -5,7 +5,7 @@
 // the License. You may obtain a copy of the License at
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
-//  (found in the LICENSE.Apache file in the root directory).
+//  (found in the licenses/CCL.txt file in the root directory).
 
 #include "ctr_stream.h"
 #include <google/protobuf/stubs/port.h>

@@ -39,7 +39,7 @@ func (m *SSTUserProperties) Reset()         { *m = SSTUserProperties{} }
 func (m *SSTUserProperties) String() string { return proto.CompactTextString(m) }
 func (*SSTUserProperties) ProtoMessage()    {}
 func (*SSTUserProperties) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rocksdb_878870d635e786d2, []int{0}
+	return fileDescriptor_rocksdb_4b3cffbad7f1f875, []int{0}
 }
 func (m *SSTUserProperties) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -77,7 +77,7 @@ func (m *SSTUserPropertiesCollection) Reset()         { *m = SSTUserPropertiesCo
 func (m *SSTUserPropertiesCollection) String() string { return proto.CompactTextString(m) }
 func (*SSTUserPropertiesCollection) ProtoMessage()    {}
 func (*SSTUserPropertiesCollection) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rocksdb_878870d635e786d2, []int{1}
+	return fileDescriptor_rocksdb_4b3cffbad7f1f875, []int{1}
 }
 func (m *SSTUserPropertiesCollection) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -120,7 +120,7 @@ func (m *HistogramData) Reset()         { *m = HistogramData{} }
 func (m *HistogramData) String() string { return proto.CompactTextString(m) }
 func (*HistogramData) ProtoMessage()    {}
 func (*HistogramData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rocksdb_878870d635e786d2, []int{2}
+	return fileDescriptor_rocksdb_4b3cffbad7f1f875, []int{2}
 }
 func (m *HistogramData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -158,7 +158,7 @@ func (m *TickersAndHistograms) Reset()         { *m = TickersAndHistograms{} }
 func (m *TickersAndHistograms) String() string { return proto.CompactTextString(m) }
 func (*TickersAndHistograms) ProtoMessage()    {}
 func (*TickersAndHistograms) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rocksdb_878870d635e786d2, []int{3}
+	return fileDescriptor_rocksdb_4b3cffbad7f1f875, []int{3}
 }
 func (m *TickersAndHistograms) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1301,10 +1301,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/engine/enginepb/rocksdb.proto", fileDescriptor_rocksdb_878870d635e786d2)
+	proto.RegisterFile("storage/engine/enginepb/rocksdb.proto", fileDescriptor_rocksdb_4b3cffbad7f1f875)
 }
 
-var fileDescriptor_rocksdb_878870d635e786d2 = []byte{
+var fileDescriptor_rocksdb_4b3cffbad7f1f875 = []byte{
 	// 492 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x53, 0x4d, 0x6f, 0x13, 0x31,
 	0x10, 0xad, 0xb3, 0x9b, 0x94, 0x3a, 0x20, 0x60, 0x95, 0xc3, 0x2a, 0x88, 0x25, 0x44, 0x42, 0xca,
