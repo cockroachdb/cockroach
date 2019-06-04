@@ -31,12 +31,9 @@ func TestNewTempEngine(t *testing.T) {
 	}
 	defer engine.Close()
 
-	tempEngine, ok := engine.(*RocksDB)
-	if !ok {
-		t.Fatalf("temp engine could not be asserted as a rocksdb instance")
-	}
 	// Temp engine initialized with the temporary directory.
-	if tempDir != tempEngine.cfg.Dir {
-		t.Fatalf("temp engine initialized with unexpected parent directory.\nexpected %s\nactual %s", tempDir, tempEngine.cfg.Dir)
+	if dir := engine.(*rocksDBTempEngine).db.cfg.Dir; tempDir != dir {
+		t.Fatalf("temp engine initialized with unexpected parent directory.\nexpected %s\nactual %s",
+			tempDir, dir)
 	}
 }

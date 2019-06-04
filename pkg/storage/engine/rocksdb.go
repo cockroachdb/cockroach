@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -3142,16 +3141,6 @@ func (r *RocksDB) LinkFile(oldname, newname string) error {
 		}
 	}
 	return nil
-}
-
-// NewSortedDiskMap implements the MapProvidingEngine interface.
-func (r *RocksDB) NewSortedDiskMap() diskmap.SortedDiskMap {
-	return NewRocksDBMap(r)
-}
-
-// NewSortedDiskMultiMap implements the MapProvidingEngine interface.
-func (r *RocksDB) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
-	return NewRocksDBMultiMap(r)
 }
 
 // IsValidSplitKey returns whether the key is a valid split key. Certain key
