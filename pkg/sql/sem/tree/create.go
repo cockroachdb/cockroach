@@ -836,8 +836,10 @@ func (node *PartitionBy) Format(ctx *FmtCtx) {
 
 // ListPartition represents a PARTITION definition within a PARTITION BY LIST.
 type ListPartition struct {
-	Name         UnrestrictedName
-	Exprs        Exprs
+	Name  UnrestrictedName
+	Exprs Exprs
+	// enhance create partition feature with locate zone
+	Location     KVOptions
 	Subpartition *PartitionBy
 }
 
@@ -890,6 +892,18 @@ type CreateTable struct {
 // false otherwise.
 func (node *CreateTable) As() bool {
 	return node.AsSource != nil
+}
+
+// enhance create partition feature with locate zone
+// return true if this create table's partition has Location setting
+func (node *CreateTable) PartitionHasLocation() bool {
+	list := node.PartitionBy.List
+	for _, ptb := range list {
+		if ptb.Location != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // Format implements the NodeFormatter interface.
