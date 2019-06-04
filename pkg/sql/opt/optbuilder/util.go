@@ -29,6 +29,15 @@ func checkFrom(expr tree.Expr, inScope *scope) {
 	}
 }
 
+// getTypedExprs casts the exprs into TypedExps and returns them.
+func getTypedExprs(exprs []tree.Expr) []tree.TypedExpr {
+	argExprs := make([]tree.TypedExpr, len(exprs))
+	for i, expr := range exprs {
+		argExprs[i] = expr.(tree.TypedExpr)
+	}
+	return argExprs
+}
+
 // expandStar expands expr into a list of columns if expr
 // corresponds to a "*", "<table>.*" or "(Expr).*".
 func (b *Builder) expandStar(
