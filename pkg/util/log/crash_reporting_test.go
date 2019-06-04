@@ -31,6 +31,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Renumber lines so they're stable no matter what changes above. (We
+// could make the regexes accept any string of digits, but we also
+// want to make sure that the correct line numbers get captured).
+//
+//line crash_reporting_test.go:1000
+
 type safeErrorTestCase struct {
 	format string
 	rs     []interface{}
@@ -66,7 +72,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 		{
 			// Same as last, but skipping through to the cause: panic(errors.Wrap(safeErr, "gibberish")).
 			format: "", rs: []interface{}{errors.Wrap(runtimeErr, "unseen")},
-			expErr: "?:0: crash_reporting_test.go:68: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
+			expErr: "?:0: crash_reporting_test.go:1035: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
 			expStr: "",
 		},
 		{
@@ -90,7 +96,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 			format: "outer %+v", rs: []interface{}{
 				errors.Wrapf(context.Canceled, "this will unfortunately be lost: %d", Safe(6)),
 			},
-			expErr: "?:0: outer %+v | crash_reporting_test.go:91: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
+			expErr: "?:0: outer %+v | crash_reporting_test.go:1058: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
 			expStr: "",
 		},
 		{
@@ -103,17 +109,17 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 			// Verify that unknown sentinel errors print at least their type (regression test).
 			// Also, that its Error() is never called (since it would panic).
 			format: "%s", rs: []interface{}{errWrappedSentinel},
-			expErr: "?:0: %s | crash_reporting_test.go:48: caused by *errors.withMessage: caused by crash_reporting_test.go:48: caused by *errors.withMessage: caused by struct { error }",
+			expErr: "?:0: %s | crash_reporting_test.go:1015: caused by *errors.withMessage: caused by crash_reporting_test.go:1015: caused by *errors.withMessage: caused by struct { error }",
 			expStr: "",
 		},
 		{
 			format: "", rs: []interface{}{errWrapped3},
-			expErr: "?:0: crash_reporting_test.go:47: caused by *errors.withMessage: caused by crash_reporting_test.go:46: caused by *errors.withMessage: caused by crash_reporting_test.go:45: caused by *errors.withMessage: caused by crash_reporting_test.go:44",
+			expErr: "?:0: crash_reporting_test.go:1014: caused by *errors.withMessage: caused by crash_reporting_test.go:1013: caused by *errors.withMessage: caused by crash_reporting_test.go:1012: caused by *errors.withMessage: caused by crash_reporting_test.go:1011",
 			expStr: "",
 		},
 		{
 			format: "", rs: []interface{}{&net.OpError{Op: "write", Net: "tcp", Source: &util.UnresolvedAddr{AddressField: "sensitive-source"}, Addr: &util.UnresolvedAddr{AddressField: "sensitive-addr"}, Err: errors.New("not safe")}},
-			expErr: "?:0: *net.OpError: write tcp redacted->redacted: crash_reporting_test.go:115",
+			expErr: "?:0: *net.OpError: write tcp redacted->redacted: crash_reporting_test.go:1082",
 			expStr: "",
 		},
 	}

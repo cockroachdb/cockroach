@@ -30,6 +30,12 @@ import (
 	raven "github.com/getsentry/raven-go"
 )
 
+// Renumber lines so they're stable no matter what changes above. (We
+// could make the regexes accept any string of digits, but we also
+// want to make sure that the correct line numbers get captured).
+//
+//line crash_reporting_packet_test.go:1000
+
 // interceptingTransport is an implementation of raven.Transport that delegates
 // calls to the Send method to the send function contained within.
 type interceptingTransport struct {
@@ -103,9 +109,9 @@ func TestCrashReportingPacket(t *testing.T) {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
-				message += "82"
+				message += "[0-9]+" // TODO(bdarnell): verify on gccgo
 			} else {
-				message += "85"
+				message += "1053"
 			}
 			message += ": " + panicPre
 			return message
@@ -114,9 +120,9 @@ func TestCrashReportingPacket(t *testing.T) {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
-				message += "88"
+				message += "88" // TODO(bdarnell): verify on gccgo
 			} else {
-				message += "93"
+				message += "1061"
 			}
 			message += ": " + panicPost
 			return message
