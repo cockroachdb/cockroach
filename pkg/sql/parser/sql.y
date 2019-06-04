@@ -1110,6 +1110,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
 //   ALTER TABLE ... SPLIT AT <selectclause>
 //   ALTER TABLE ... UNSPLIT AT <selectclause>
+//   ALTER TABLE ... UNSPLIT ALL
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER TABLE ... INJECT STATISTICS ...  (experimental)
 //   ALTER TABLE ... PARTITION BY RANGE ( <name...> ) ( <rangespec> )
@@ -1230,6 +1231,7 @@ alter_range_stmt:
 //   ALTER INDEX ... RENAME TO <newname>
 //   ALTER INDEX ... SPLIT AT <selectclause>
 //   ALTER INDEX ... UNSPLIT AT <selectclause>
+//   ALTER INDEX ... UNSPLIT ALL
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER PARTITION ... OF INDEX ... CONFIGURE ZONE <zoneconfig>
 //
@@ -1296,6 +1298,14 @@ alter_unsplit_stmt:
     $$.val = &tree.Unsplit{
       TableOrIndex: tree.TableIndexName{Table: name},
       Rows: $6.slct(),
+    }
+  }
+| ALTER TABLE table_name UNSPLIT ALL
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Unsplit {
+      TableOrIndex: tree.TableIndexName{Table: name},
+      All: true,
     }
   }
 

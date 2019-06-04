@@ -1,13 +1,22 @@
 // Copyright 2016 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License included
+// Licensed under the Apache License, Version 2.0 (the "License");
 // in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
 //
 // Change Date: 2022-10-01
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
 //
 // On the date above, in accordance with the Business Source License, use
+// Unless required by applicable law or agreed to in writing, software
 // of this software will be governed by the Apache License, Version 2.0,
+// distributed under the License is distributed on an "AS IS" BASIS,
 // included in the file licenses/APL.txt and at
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // https://www.apache.org/licenses/LICENSE-2.0
 
 package sql
