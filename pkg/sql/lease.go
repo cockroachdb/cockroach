@@ -471,7 +471,11 @@ func CountLeases(
 	values, err := executor.QueryRow(
 		ctx, "count-leases", nil /* txn */, stmt, at.GoTime(),
 	)
-	if err != nil {
+
+	// TODO(ridwanmsharif): This is a temporary patch. This is needed because when
+	// aggregate functions are built using windows, they are no longer scalar group by.
+	// This is why they can sometimes have no rows.
+	if err != nil || values == nil {
 		return 0, err
 	}
 	count := int(tree.MustBeDInt(values[0]))

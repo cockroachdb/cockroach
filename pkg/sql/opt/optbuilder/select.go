@@ -693,7 +693,6 @@ func (b *Builder) buildSelectClause(
 	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
 	b.buildProjectSet(fromScope)
-
 	if needsAgg {
 		// We must wait to build the aggregation until after the above block since
 		// any SRFs found in the SELECT list will change the FROM scope (they

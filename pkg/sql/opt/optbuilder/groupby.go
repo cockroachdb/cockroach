@@ -77,6 +77,17 @@ type groupby struct {
 	buildingGroupingCols bool
 }
 
+// HasNonCommutativeAggregates checks whether any of the aggregates are
+// non-commutative or ordering sensitive.
+func (g groupby) HasNonCommutativeAggregates() bool {
+	for i := range g.aggs {
+		if !g.aggs[i].IsCommutative() {
+			return true
+		}
+	}
+	return false
+}
+
 // aggregateInfo stores information about an aggregation function call.
 type aggregateInfo struct {
 	*tree.FuncExpr
@@ -106,6 +117,16 @@ func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree
 		return nil, err
 	}
 	return a, nil
+}
+
+// IsCommutative checks whether the aggregate is commutative or ordering insensitive.
+func (a aggregateInfo) IsCommutative() bool {
+	switch a.def.Name {
+	case "array_agg", "concat_agg", "string_agg":
+		return a.OrderBy == nil
+	default:
+		return true
+	}
 }
 
 // Eval is part of the tree.TypedExpr interface.
@@ -223,6 +244,12 @@ func (b *Builder) buildAggregation(
 ) (outScope *scope) {
 	aggInScope := fromScope.groupby.aggInScope
 	aggOutScope := fromScope.groupby.aggOutScope
+
+	// If there are any aggregates that are ordering sensitive, build the aggregations
+	// as window functions over each group.
+	if aggOutScope.groupby.HasNonCommutativeAggregates() {
+		return b.buildAggregationAsWindow(groupingCols, having, fromScope)
+	}
 
 	aggInfos := aggOutScope.groupby.aggs
 

@@ -63,6 +63,8 @@ func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 var _ tree.Expr = &windowInfo{}
 var _ tree.TypedExpr = &windowInfo{}
 
+var unboundedEndBound = &tree.WindowFrameBound{BoundType: tree.UnboundedFollowing}
+var unboundedStartBound = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
 var defaultStartBound = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
 var defaultEndBound = &tree.WindowFrameBound{BoundType: tree.CurrentRow}
 
@@ -88,20 +90,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 		w := inScope.windows[i].expr.(*windowInfo)
 		argExprs := b.getTypedWindowArgs(w)
 
-		argLists[i] = make(memo.ScalarListExpr, len(argExprs))
-		for j, a := range argExprs {
-			col := argScope.findExistingCol(a)
-			if col == nil {
-				col = b.synthesizeColumn(
-					argScope,
-					fmt.Sprintf("%s_%d_arg%d", w.def.Name, i+1, j+1),
-					a.ResolvedType(),
-					a,
-					b.buildScalar(a, inScope, nil, nil, nil),
-				)
-			}
-			argLists[i][j] = b.factory.ConstructVariable(col.id)
-		}
+		argLists[i] = b.constructArgs(argExprs, i, w.def.Name, argScope, inScope)
 
 		// PARTITION BY (a, b) => PARTITION BY a, b
 		cols := flattenTuples(w.partition)
@@ -170,31 +159,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	for i := range inScope.windows {
 		w := inScope.windows[i].expr.(*windowInfo)
 
-		frameIdx := -1
-
-		// The number of window functions is probably fairly small, so do an O(n^2)
-		// loop.
-		// TODO(justin): make this faster.
-		// TODO(justin): consider coalescing frames with compatible orderings.
-		for j := range frames {
-			if partitions[i].Equals(frames[j].Partition) &&
-				orderings[i].Equals(&frames[j].Ordering) {
-				frameIdx = j
-				break
-			}
-		}
-
-		// If we can't reuse an existing frame, make a new one.
-		if frameIdx == -1 {
-			frames = append(frames, memo.WindowExpr{
-				WindowPrivate: memo.WindowPrivate{
-					Partition: partitions[i],
-					Ordering:  orderings[i],
-				},
-				Windows: memo.WindowsExpr{},
-			})
-			frameIdx = len(frames) - 1
-		}
+		frameIdx := b.findAppropriateFramePosition(&frames, partitions[i], orderings[i])
 
 		frames[frameIdx].Windows = append(frames[frameIdx].Windows,
 			memo.WindowsItem{
@@ -210,6 +175,119 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	for _, f := range frames {
 		outScope.expr = b.factory.ConstructWindow(outScope.expr, f.Windows, &f.WindowPrivate)
 	}
+}
+
+// buildAggregationAsWindow builds the aggregation operators as window functions.
+// Returns the output scope for the aggregation operation.
+func (b *Builder) buildAggregationAsWindow(
+	groupingCols []scopeColumn, having opt.ScalarExpr, fromScope *scope,
+) *scope {
+	aggOutScope := fromScope.groupby.aggOutScope
+
+	aggInfos := aggOutScope.groupby.aggs
+
+	// Construct the aggregation operators.
+	aggCols := aggOutScope.getAggregateCols()
+
+	var groupingColSet opt.ColSet
+	for i := range groupingCols {
+		groupingColSet.Add(int(groupingCols[i].id))
+	}
+	argLists := make([][]opt.ScalarExpr, len(aggInfos))
+	partitions := make([]opt.ColSet, len(aggInfos))
+	orderings := make([]physical.OrderingChoice, len(aggInfos))
+	windowFrames := make([]tree.WindowFrame, len(aggInfos))
+	argScope := fromScope.push()
+	argScope.appendColumnsFromScope(fromScope)
+	for i, agg := range aggInfos {
+		argExprs := b.getTypedArgs(&agg)
+		argLists[i] = b.constructArgs(argExprs, i, agg.def.Name, argScope, fromScope)
+
+		// Build appropriate partitions.
+		partitions[i] = groupingColSet.Copy()
+
+		// Build appropriate orderings.
+		if !agg.IsCommutative() {
+			ord := make(opt.Ordering, 0, len(agg.OrderBy))
+			for j, t := range agg.OrderBy {
+				te := argScope.resolveAndRequireType(t.Expr, types.Any)
+				cols := flattenTuples([]tree.TypedExpr{te})
+
+				for _, e := range cols {
+					col := argScope.findExistingCol(e)
+					if col == nil {
+						col = b.synthesizeColumn(
+							argScope,
+							fmt.Sprintf("%s_%d_orderby_%d", agg.def.Name, i+1, j+1),
+							te.ResolvedType(),
+							te,
+							b.buildScalar(e, fromScope, nil, nil, nil),
+						)
+					}
+					ord = append(ord, opt.MakeOrderingColumn(col.id, t.Direction == tree.Descending))
+				}
+			}
+			orderings[i].FromOrdering(ord)
+		}
+
+		// Build appropriate window frames.
+		windowFrames[i].Bounds.StartBound = unboundedStartBound
+		windowFrames[i].Bounds.EndBound = unboundedEndBound
+	}
+
+	b.constructProjectForScope(fromScope, argScope)
+	newExpr := argScope.expr
+
+	// frames accumulates the set of distinct window frames we're computing over
+	// so that we can group functions over the same partition and ordering.
+	frames := make([]memo.WindowExpr, 0, len(aggInfos))
+	for i, agg := range aggInfos {
+		frameIdx := b.findAppropriateFramePosition(&frames, partitions[i], orderings[i])
+
+		frames[frameIdx].Windows = append(frames[frameIdx].Windows,
+			memo.WindowsItem{
+				Function: b.constructAggregate(agg.def.Name, argLists[i]),
+				WindowsItemPrivate: memo.WindowsItemPrivate{
+					Frame:      &windowFrames[i],
+					ColPrivate: memo.ColPrivate{Col: agg.col.id},
+				},
+			},
+		)
+	}
+	for _, f := range frames {
+		newExpr = b.factory.ConstructWindow(newExpr, f.Windows, &f.WindowPrivate)
+	}
+
+	// Use a grouping ColSet that includes the columns the window function added.
+	windowGroupingColSet := groupingColSet.Copy()
+	for i := range aggCols {
+		windowGroupingColSet.Add(int(aggCols[i].id))
+	}
+
+	private := memo.GroupingPrivate{GroupingCols: windowGroupingColSet}
+	private.Ordering.FromOrderingWithOptCols(nil, windowGroupingColSet)
+	// TODO(ridwanmsharif): Fix this. For some reason the scalar on top of the window functions
+	// isn't working.
+	if groupingColSet.Empty() && false {
+		aggs := make(memo.AggregationsExpr, 0, len(aggCols))
+		for i := range aggCols {
+			aggs = append(aggs, memo.AggregationsItem{
+				Agg:        b.factory.ConstructConstAgg(b.factory.ConstructVariable(aggCols[i].id)),
+				ColPrivate: memo.ColPrivate{Col: aggCols[i].id},
+			})
+		}
+		aggOutScope.expr = b.factory.ConstructScalarGroupBy(newExpr, aggs, &private)
+	} else {
+		aggOutScope.expr = b.factory.ConstructDistinctOn(newExpr, memo.EmptyAggregationsExpr, &private)
+	}
+
+	// Wrap with having filter if it exists.
+	if having != nil {
+		input := aggOutScope.expr.(memo.RelExpr)
+		filters := memo.FiltersExpr{{Condition: having}}
+		aggOutScope.expr = b.factory.ConstructSelect(input, filters)
+	}
+	return aggOutScope
 }
 
 // getTypedWindowArgs returns the arguments to the window function as
@@ -243,4 +321,70 @@ func (b *Builder) getTypedWindowArgs(w *windowInfo) []tree.TypedExpr {
 	}
 
 	return argExprs
+}
+
+// getTypedArgs returns the arguments to the aggregate function as a
+// []tree.TypedExpr similar to getTypedWindowArgs.
+func (b *Builder) getTypedArgs(agg *aggregateInfo) []tree.TypedExpr {
+	argExprs := make([]tree.TypedExpr, len(agg.Exprs))
+	for i, pexpr := range agg.Exprs {
+		argExprs[i] = pexpr.(tree.TypedExpr)
+	}
+	return argExprs
+}
+
+// Construct the argExprs into a memo.ScalarListExpr.
+func (b *Builder) constructArgs(
+	argExprs []tree.TypedExpr, windowIndex int, funcName string, argScope, fromScope *scope,
+) memo.ScalarListExpr {
+	argList := make(memo.ScalarListExpr, len(argExprs))
+	for j, a := range argExprs {
+		col := argScope.findExistingCol(a)
+		if col == nil {
+			col = b.synthesizeColumn(
+				argScope,
+				fmt.Sprintf("%s_%d_arg%d", funcName, windowIndex+1, j+1),
+				a.ResolvedType(),
+				a,
+				b.buildScalar(a, fromScope, nil, nil, nil),
+			)
+		}
+		argList[j] = b.factory.ConstructVariable(col.id)
+	}
+	return argList
+}
+
+// findAppropriateFramePosition finds a frame position to which a window of the
+// given partition and ordering can be added to. If no such frame is found, a
+// new one is made.
+func (b *Builder) findAppropriateFramePosition(
+	frames *[]memo.WindowExpr, partition opt.ColSet, ordering physical.OrderingChoice,
+) int {
+	frameIdx := -1
+
+	// The number of window functions is probably fairly small, so do an O(n^2)
+	// loop.
+	// TODO(justin): make this faster.
+	// TODO(justin): consider coalescing frames with compatible orderings.
+	for j := range *frames {
+		if partition.Equals((*frames)[j].Partition) &&
+			ordering.Equals(&(*frames)[j].Ordering) {
+			frameIdx = j
+			break
+		}
+	}
+
+	// If we can't reuse an existing frame, make a new one.
+	if frameIdx == -1 {
+		*frames = append(*frames, memo.WindowExpr{
+			WindowPrivate: memo.WindowPrivate{
+				Partition: partition,
+				Ordering:  ordering,
+			},
+			Windows: memo.WindowsExpr{},
+		})
+		frameIdx = len(*frames) - 1
+	}
+
+	return frameIdx
 }
