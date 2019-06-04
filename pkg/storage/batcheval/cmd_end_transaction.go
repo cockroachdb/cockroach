@@ -44,7 +44,7 @@ import (
 var TxnAutoGC = true
 
 func init() {
-	RegisterCommand(roachpb.EndTransaction, declareKeysEndTransaction, evalEndTransaction)
+	RegisterCommand(roachpb.EndTransaction, declareKeysEndTransaction, EndTransaction)
 }
 
 func declareKeysEndTransaction(
@@ -151,10 +151,10 @@ func declareKeysEndTransaction(
 	}
 }
 
-// evalEndTransaction either commits or aborts (rolls back) an extant
+// EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter. Rolling back
 // an already rolled-back txn is ok.
-func evalEndTransaction(
+func EndTransaction(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.EndTransactionRequest)
@@ -266,12 +266,8 @@ func evalEndTransaction(
 
 	// Attempt to commit or abort the transaction per the args.Commit parameter.
 	if args.Commit {
-		// If the transaction is still PENDING, determine whether the commit
-		// should be rejected.
-		if reply.Txn.Status == roachpb.PENDING {
-			if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, args); retry {
-				return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
-			}
+		if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, args); retry {
+			return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
 		}
 
 		// If the transaction needs to be staged as part of an implicit commit
