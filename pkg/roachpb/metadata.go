@@ -259,6 +259,9 @@ func (r ReplicaDescriptor) String() string {
 	} else {
 		fmt.Fprintf(&buf, "%d", r.ReplicaID)
 	}
+	if r.Type == ReplicaType_LEARNER {
+		buf.WriteString("LEARNER")
+	}
 	return buf.String()
 }
 

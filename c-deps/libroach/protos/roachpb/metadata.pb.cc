@@ -341,6 +341,16 @@ void InitDefaults() {
 }  // namespace protobuf_roachpb_2fmetadata_2eproto
 namespace cockroach {
 namespace roachpb {
+bool ReplicaType_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+      return true;
+    default:
+      return false;
+  }
+}
+
 
 // ===================================================================
 
@@ -753,6 +763,7 @@ void ReplicaDescriptor::InitAsDefaultInstance() {
 const int ReplicaDescriptor::kNodeIdFieldNumber;
 const int ReplicaDescriptor::kStoreIdFieldNumber;
 const int ReplicaDescriptor::kReplicaIdFieldNumber;
+const int ReplicaDescriptor::kTypeFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ReplicaDescriptor::ReplicaDescriptor()
@@ -768,15 +779,15 @@ ReplicaDescriptor::ReplicaDescriptor(const ReplicaDescriptor& from)
       _has_bits_(from._has_bits_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   ::memcpy(&node_id_, &from.node_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&replica_id_) -
-    reinterpret_cast<char*>(&node_id_)) + sizeof(replica_id_));
+    static_cast<size_t>(reinterpret_cast<char*>(&type_) -
+    reinterpret_cast<char*>(&node_id_)) + sizeof(type_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ReplicaDescriptor)
 }
 
 void ReplicaDescriptor::SharedCtor() {
   ::memset(&node_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&replica_id_) -
-      reinterpret_cast<char*>(&node_id_)) + sizeof(replica_id_));
+      reinterpret_cast<char*>(&type_) -
+      reinterpret_cast<char*>(&node_id_)) + sizeof(type_));
 }
 
 ReplicaDescriptor::~ReplicaDescriptor() {
@@ -803,10 +814,10 @@ void ReplicaDescriptor::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 7u) {
+  if (cached_has_bits & 15u) {
     ::memset(&node_id_, 0, static_cast<size_t>(
-        reinterpret_cast<char*>(&replica_id_) -
-        reinterpret_cast<char*>(&node_id_)) + sizeof(replica_id_));
+        reinterpret_cast<char*>(&type_) -
+        reinterpret_cast<char*>(&node_id_)) + sizeof(type_));
   }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
@@ -867,6 +878,26 @@ bool ReplicaDescriptor::MergePartialFromCodedStream(
         break;
       }
 
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          if (::cockroach::roachpb::ReplicaType_IsValid(value)) {
+            set_type(static_cast< ::cockroach::roachpb::ReplicaType >(value));
+          } else {
+            unknown_fields_stream.WriteVarint32(32u);
+            unknown_fields_stream.WriteVarint32(
+                static_cast< ::google::protobuf::uint32>(value));
+          }
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -906,6 +937,11 @@ void ReplicaDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->replica_id(), output);
   }
 
+  if (cached_has_bits & 0x00000008u) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      4, this->type(), output);
+  }
+
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
                    static_cast<int>(_internal_metadata_.unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ReplicaDescriptor)
@@ -917,7 +953,7 @@ size_t ReplicaDescriptor::ByteSizeLong() const {
 
   total_size += _internal_metadata_.unknown_fields().size();
 
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 15u) {
     if (has_node_id()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int32Size(
@@ -934,6 +970,11 @@ size_t ReplicaDescriptor::ByteSizeLong() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int32Size(
           this->replica_id());
+    }
+
+    if (has_type()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::EnumSize(this->type());
     }
 
   }
@@ -955,7 +996,7 @@ void ReplicaDescriptor::MergeFrom(const ReplicaDescriptor& from) {
   (void) cached_has_bits;
 
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 7u) {
+  if (cached_has_bits & 15u) {
     if (cached_has_bits & 0x00000001u) {
       node_id_ = from.node_id_;
     }
@@ -964,6 +1005,9 @@ void ReplicaDescriptor::MergeFrom(const ReplicaDescriptor& from) {
     }
     if (cached_has_bits & 0x00000004u) {
       replica_id_ = from.replica_id_;
+    }
+    if (cached_has_bits & 0x00000008u) {
+      type_ = from.type_;
     }
     _has_bits_[0] |= cached_has_bits;
   }
@@ -989,6 +1033,7 @@ void ReplicaDescriptor::InternalSwap(ReplicaDescriptor* other) {
   swap(node_id_, other->node_id_);
   swap(store_id_, other->store_id_);
   swap(replica_id_, other->replica_id_);
+  swap(type_, other->type_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
