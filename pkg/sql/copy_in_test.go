@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,7 +127,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 	}
 }
 
-// TestCopyRandom inserts 100 random rows using COPY and ensures the SELECT'd
+// TestCopyRandom inserts random rows using COPY and ensures the SELECT'd
 // data is the same.
 func TestCopyRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -186,7 +187,7 @@ func TestCopyRandom(t *testing.T) {
 
 	var inputs [][]interface{}
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
 		row := make([]interface{}, len(typs))
 		for j, t := range typs {
 			var ds string
@@ -196,6 +197,10 @@ func TestCopyRandom(t *testing.T) {
 			} else {
 				d := sqlbase.RandDatum(rng, t, false)
 				ds = tree.AsStringWithFlags(d, tree.FmtBareStrings)
+				switch t {
+				case types.Float:
+					ds = strings.TrimSuffix(ds, ".0")
+				}
 			}
 			row[j] = ds
 		}

@@ -149,13 +149,13 @@ func makeAddColumn(s *scope) (tree.Statement, bool) {
 		return nil, false
 	}
 	col.Nullable.Nullability = s.schema.randNullability()
-	if coin() {
+	if s.coin() {
 		col.DefaultExpr.Expr = &tree.ParenExpr{Expr: makeScalar(s, t, nil)}
-	} else if coin() {
+	} else if s.coin() {
 		col.Computed.Computed = true
 		col.Computed.Expr = &tree.ParenExpr{Expr: makeScalar(s, t, colRefs)}
 	}
-	for coin() {
+	for s.coin() {
 		col.CheckExprs = append(col.CheckExprs, tree.ColumnTableDefCheckExpr{
 			Expr: makeBoolExpr(s, colRefs),
 		})
@@ -196,7 +196,7 @@ func makeCreateIndex(s *scope) (tree.Statement, bool) {
 	}
 	var cols tree.IndexElemList
 	seen := map[tree.Name]bool{}
-	for len(cols) < 1 || coin() {
+	for len(cols) < 1 || s.coin() {
 		col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
@@ -208,7 +208,7 @@ func makeCreateIndex(s *scope) (tree.Statement, bool) {
 		})
 	}
 	var storing tree.NameList
-	for coin() {
+	for s.coin() {
 		col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
 		if seen[col.Name] {
 			continue
@@ -220,7 +220,7 @@ func makeCreateIndex(s *scope) (tree.Statement, bool) {
 	return &tree.CreateIndex{
 		Name:    s.schema.name("idx"),
 		Table:   *tableRef.TableName,
-		Unique:  coin(),
+		Unique:  s.coin(),
 		Columns: cols,
 		Storing: storing,
 	}, true
