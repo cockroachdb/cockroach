@@ -732,6 +732,9 @@ message TableDescriptor {
   // index case. Also use for dropped interleaved indexes and columns.
   repeated GCDescriptorMutation gc_mutations = 33 [(gogoproto.nullable) = false,
                                                   (gogoproto.customname) = "GCMutations"];
+
+  optional string create_query = 34 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp create_as_of_time = 35 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
