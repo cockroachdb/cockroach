@@ -1572,11 +1572,12 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 					end := int(*endVal.(*tree.DInt))
 					// We assume that both start and end boundaries are inclusive. This
 					// should be the case for integer valued columns (due to normalization
-					// by constraint.PreferInclusive).
+					// by constraint.PreferInclusive). We must cast each end to a float
+					// *before* performing the subtraction to avoid overflow.
 					if c.Columns.Get(col).Ascending() {
-						distinctCount += float64(end - start)
+						distinctCount += float64(end) - float64(start)
 					} else {
-						distinctCount += float64(start - end)
+						distinctCount += float64(start) - float64(end)
 					}
 				} else {
 					// We can't determine the distinct count for this column. For example,
