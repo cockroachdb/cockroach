@@ -14,6 +14,7 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"strings"
 	"testing"
 
@@ -55,7 +56,7 @@ func TestUnsplitAt(t *testing.T) {
 	for _, splitStmt := range splitStmts {
 		var key roachpb.Key
 		var pretty string
-		var expirationTimestamp *string
+		var expirationTimestamp gosql.NullString
 		if err := db.QueryRow(splitStmt).Scan(&key, &pretty, &expirationTimestamp); err != nil {
 			t.Fatalf("unexpected error setting up test: %s", err)
 		}
