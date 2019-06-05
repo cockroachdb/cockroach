@@ -12,20 +12,34 @@
 
 package sqlsmith
 
-import "math/rand"
-
-func coin() bool {
-	return rand.Intn(2) == 0
+func (s *Smither) coin() bool {
+	return s.rnd.Intn(2) == 0
 }
 
-func d6() int {
-	return rand.Intn(6) + 1
+func (s *Smither) d6() int {
+	return s.rnd.Intn(6) + 1
 }
 
-func d9() int {
-	return rand.Intn(6) + 1
+func (s *Smither) d9() int {
+	return s.rnd.Intn(9) + 1
 }
 
-func d100() int {
-	return rand.Intn(100) + 1
+func (s *Smither) d100() int {
+	return s.rnd.Intn(100) + 1
+}
+
+func (s *scope) coin() bool {
+	return s.schema.coin()
+}
+
+func (s *scope) d6() int {
+	return s.schema.d6()
+}
+
+func (s *scope) d9() int {
+	return s.schema.d9()
+}
+
+func (s *scope) d100() int {
+	return s.schema.d100()
 }

@@ -790,6 +790,21 @@
   version = "v1.10.0"
 
 [[projects]]
+  digest = "1:010d46ea3c1e730897e53058d1013a963f3f987675dda87df64f891b945281db"
+  name = "github.com/google/go-cmp"
+  packages = [
+    "cmp",
+    "cmp/cmpopts",
+    "cmp/internal/diff",
+    "cmp/internal/flags",
+    "cmp/internal/function",
+    "cmp/internal/value",
+  ]
+  pruneopts = "UT"
+  revision = "6f77996f0c42f7b84e5a2b252227263f93432e9b"
+  version = "v0.3.0"
+
+[[projects]]
   digest = "1:63ede27834b468648817fb80cfb95d40abfc61341f89cb7a0d6779b6aa955425"
   name = "github.com/google/go-github"
   packages = ["github"]
@@ -1807,6 +1822,7 @@
   input-imports = [
     "cloud.google.com/go/storage",
     "github.com/Azure/azure-storage-blob-go/azblob",
+    "github.com/BurntSushi/toml",
     "github.com/MichaelTJones/walk",
     "github.com/PuerkitoBio/goquery",
     "github.com/Shopify/sarama",
@@ -1874,6 +1890,8 @@
     "github.com/golang/snappy",
     "github.com/google/btree",
     "github.com/google/flatbuffers/go",
+    "github.com/google/go-cmp/cmp",
+    "github.com/google/go-cmp/cmp/cmpopts",
     "github.com/google/go-github/github",
     "github.com/google/pprof/driver",
     "github.com/google/pprof/profile",
