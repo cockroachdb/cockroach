@@ -14,9 +14,7 @@ package sql
 
 import (
 	"context"
-	"time"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -24,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -192,55 +189,24 @@ func parseExpirationTime(
 	if expireExpr == nil {
 		return hlc.MaxTimestamp, nil
 	}
-	expirationTime := hlc.Timestamp{}
-	stmtTimestamp := evalCtx.GetStmtTimestamp()
 	typedExpireExpr, err := expireExpr.TypeCheck(semaCtx, types.String)
 	if err != nil {
-		return expirationTime, err
+		return hlc.Timestamp{}, err
+	}
+	if !tree.IsConst(evalCtx, typedExpireExpr) {
+		return hlc.Timestamp{}, errors.Errorf("SPLIT AT: only constant expressions are allowed for expiration")
 	}
 	d, err := typedExpireExpr.Eval(evalCtx)
 	if err != nil {
-		return expirationTime, err
+		return hlc.Timestamp{}, err
 	}
-	var convErr error
-	switch d := d.(type) {
-	case *tree.DString:
-		s := string(*d)
-		// Attempt to parse as timestamp.
-		// The expiration time can be seen by the user, so use precision of microseconds.
-		if dt, err := tree.ParseDTimestamp(evalCtx, s, time.Microsecond); err == nil {
-			expirationTime.WallTime = dt.Time.UnixNano()
-			break
-		}
-		// Attempt to parse as a decimal.
-		if dec, _, err := apd.NewFromString(s); err == nil {
-			expirationTime, convErr = tree.DecimalToHLC(dec)
-			break
-		}
-		// Attempt to parse as an interval.
-		if iv, err := tree.ParseDInterval(s); err == nil {
-			expirationTime.WallTime = duration.Add(evalCtx, stmtTimestamp, iv.Duration).UnixNano()
-			break
-		}
-		convErr = errors.Errorf("SPLIT AT: value is neither timestamp, decimal, nor interval")
-	case *tree.DTimestamp:
-		expirationTime.WallTime = d.UnixNano()
-	case *tree.DTimestampTZ:
-		expirationTime.WallTime = d.UnixNano()
-	case *tree.DInt:
-		expirationTime.WallTime = int64(*d)
-	case *tree.DDecimal:
-		expirationTime, convErr = tree.DecimalToHLC(&d.Decimal)
-	case *tree.DInterval:
-		expirationTime.WallTime = duration.Add(evalCtx, stmtTimestamp, d.Duration).UnixNano()
-	default:
-		convErr = errors.Errorf("SPLIT AT: expected timestamp, decimal, or interval, got %s (%T)", d.ResolvedType(), d)
+	stmtTimestamp := evalCtx.GetStmtTimestamp()
+	ts, err := tree.DatumToHLC(evalCtx, stmtTimestamp, d)
+	if err != nil {
+		return ts, errors.Wrap(err, "SPLIT AT")
 	}
-	if convErr != nil {
-		return expirationTime, convErr
+	if ts.GoTime().Before(stmtTimestamp) {
+		return ts, errors.Errorf("SPLIT AT: expiration time should be greater than or equal to current time")
 	}
-	if expirationTime.Less(hlc.Timestamp{}) {
-		return expirationTime, errors.Errorf("SPLIT AT: timestamp before 1970-01-01T00:00:00Z is invalid")
-	}
-	return expirationTime, nil
+	return ts, nil
 }
