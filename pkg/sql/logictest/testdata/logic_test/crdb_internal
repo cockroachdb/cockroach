@@ -413,3 +413,29 @@ query T
 SELECT crdb_internal.pretty_key(e'\\xa82a00918ed9':::BYTES, (-5096189069466142898):::INT8);
 ----
 /Table/32/???/9/6/81
+
+subtest max_retry_counter
+# Verify that the max_retry counter in statement stats actually increases with retries.
+
+statement ok
+SET application_name = 'test_max_retry'
+
+statement OK
+SELECT crdb_internal.force_retry('2ms'::INTERVAL)
+
+statement OK
+RESET application_name
+
+# Note: two rows of output are expected: one for the statement that
+# failed with a retry error, and one for the final retry attempt that
+# succeeded without an error.
+# Wel also expect the RESET statement to not have any retry.
+query TBB
+SELECT key, (max_retries > 1), flags LIKE '!%' AS f
+  FROM crdb_internal.node_statement_statistics
+ WHERE application_name = 'test_max_retry'
+ORDER BY key, f
+----
+SELECT crdb_internal.force_retry(_)  true  false
+SELECT crdb_internal.force_retry(_)  true  true
+SET application_name = DEFAULT       false false
