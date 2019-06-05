@@ -509,6 +509,12 @@ func (desc *TableDescriptor) IsView() bool {
 	return desc.ViewQuery != ""
 }
 
+// IsAs returns true if the TableDescriptor actually describes
+// a Table resource with an As source.
+func (desc *TableDescriptor) IsAs() bool {
+	return desc.CreateQuery != ""
+}
+
 // IsSequence returns true if the TableDescriptor actually describes a
 // Sequence resource rather than a Table.
 func (desc *TableDescriptor) IsSequence() bool {
