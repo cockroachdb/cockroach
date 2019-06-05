@@ -509,3 +509,16 @@ SELECT * FROM empty
 scan empty
  ├── columns: x:1(int)
  └── stats: [rows=1]
+
+# Regression test: previously, overflow when computing estimated distinct count
+# here resulted in a row count of zero being estimated.
+opt
+SELECT x FROM a WHERE x >= -9223372036854775808 AND x <= 0 ORDER BY x LIMIT 10
+----
+scan a
+ ├── columns: x:1(int!null)
+ ├── constraint: /1: [/-9223372036854775808 - /0]
+ ├── limit: 10
+ ├── stats: [rows=10]
+ ├── key: (1)
+ └── ordering: +1
