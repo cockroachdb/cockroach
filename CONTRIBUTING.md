@@ -6,6 +6,7 @@
 - [Commit Messages](#commit-messages)
 - [Code Review Workflow](#code-review-workflow)
 - [Debugging](#debugging)
+- [Issue Triage](#issue-triage-)
 
 ## Prerequisites
 
@@ -227,3 +228,7 @@ commands for `pprof`, `trace` and logs are logged to allow for convenient
 inspection of the cluster.
 
 [first PR guide]: docs/first-pr.md
+
+## Issue triage [![Open Source Helpers](https://www.codetriage.com/cockroachdb/cockroach/badges/users.svg)](https://www.codetriage.com/cockroachdb/cockroach)
+
+You can contribute by triaging issues which may include reproducing bug reports or asking for vital information, such as version numbers or reproduction instructions. If you would like to start triaging issues, one easy way to get started is to [subscribe to cockroach on CodeTriage](https://www.codetriage.com/cockroachdb/cockroach).
