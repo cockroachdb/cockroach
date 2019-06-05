@@ -32,7 +32,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:7(bool) s:8(bool) t:9(bool) u:10(bool) v:11(int) w:12(int) x:13(int) y:14(int) z:15(int)
+ ├── columns: r:7(bool) s:8(bool) t:9(bool!null) u:10(bool!null) v:11(int) w:12(int) x:13(int) y:14(int) z:15(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
@@ -66,7 +66,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:7(bool) s:8(bool) t:9(bool) u:10(bool) v:11(float) w:12(int) x:13(int) y:14(int) z:15(int)
+ ├── columns: r:7(bool) s:8(bool) t:9(bool!null) u:10(bool!null) v:11(float) w:12(int) x:13(int) y:14(int) z:15(int!null)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float)
  │    ├── key: (1)
@@ -144,7 +144,7 @@ opt expect=SimplifyCoalesce
 SELECT COALESCE((1, 2, 3), (2, 3, 4)) FROM a
 ----
 project
- ├── columns: coalesce:7(tuple{int, int, int})
+ ├── columns: coalesce:7(tuple{int, int, int}!null)
  ├── fd: ()-->(7)
  ├── scan a
  └── projections
@@ -557,7 +557,7 @@ FROM
     a
 ----
 project
- ├── columns: case:7(string)
+ ├── columns: case:7(string!null)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
@@ -571,7 +571,7 @@ FROM
     a
 ----
 project
- ├── columns: case:7(string)
+ ├── columns: case:7(string!null)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
@@ -600,7 +600,7 @@ FROM
     a
 ----
 project
- ├── columns: case:7(string)
+ ├── columns: case:7(string!null)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)

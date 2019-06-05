@@ -654,7 +654,7 @@ build
 SELECT 1 IN (1, 2) AS r
 ----
 project
- ├── columns: r:1(bool)
+ ├── columns: r:1(bool!null)
  ├── values
  │    └── tuple [type=tuple]
  └── projections
@@ -1085,7 +1085,7 @@ build
 SELECT @1 AS r, @2 AS s FROM a
 ----
 project
- ├── columns: r:3(int) s:4(float)
+ ├── columns: r:3(int!null) s:4(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
  └── projections
@@ -1143,7 +1143,7 @@ FROM (
 project
  ├── columns: e:2(int) f:3(string) g:4(bool)
  ├── project
- │    ├── columns: x:1(tuple{int AS e, string AS f, bool AS g})
+ │    ├── columns: x:1(tuple{int AS e, string AS f, bool AS g}!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections

@@ -1764,7 +1764,7 @@ full-join
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── project
- │    ├── columns: k:11(int)
+ │    ├── columns: k:11(int!null)
  │    ├── scan a
  │    │    ├── columns: a.k:6(int!null)
  │    │    └── key: (6)
@@ -2172,7 +2172,7 @@ INNER JOIN (SELECT x, y, y+1 AS z FROM b WHERE y>10) AS b
 ON a.f>=b.z::float AND (a.k=b.x) IS True AND a.f>=b.z::float AND (a.i=b.y) IS NOT False
 ----
 inner-join
- ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null) z:8(int)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null) z:8(int!null)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (7)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  ├── select
@@ -2186,7 +2186,7 @@ inner-join
  │    └── filters
  │         └── i > 0 [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
  ├── project
- │    ├── columns: z:8(int) x:6(int!null) y:7(int!null)
+ │    ├── columns: z:8(int!null) x:6(int!null) y:7(int!null)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7), (7)-->(8)
  │    ├── select

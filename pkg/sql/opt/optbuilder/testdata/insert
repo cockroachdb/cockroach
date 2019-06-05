@@ -456,7 +456,7 @@ build
 INSERT INTO abcde AS foo SELECT 1 RETURNING foo.a + 1, foo.b * foo.c
 ----
 project
- ├── columns: "?column?":12(int) "?column?":13(int)
+ ├── columns: "?column?":12(int!null) "?column?":13(int)
  ├── insert foo
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
  │    ├── insert-mapping:
@@ -920,9 +920,9 @@ build
 INSERT INTO abcde (b, a) SELECT x::int, y FROM xyz RETURNING *
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) e:5(int)
  └── insert abcde
-      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) e:5(int) rowid:6(int!null)
       ├── insert-mapping:
       │    ├──  y:8 => a:1
       │    ├──  x:10 => b:2
@@ -931,11 +931,11 @@ project
       │    ├──  y:8 => e:5
       │    └──  column12:12 => rowid:6
       └── project
-           ├── columns: column13:13(int) y:8(int) x:10(int) column11:11(int!null) column12:12(int)
+           ├── columns: column13:13(int!null) y:8(int) x:10(int!null) column11:11(int!null) column12:12(int)
            ├── project
-           │    ├── columns: column11:11(int!null) column12:12(int) y:8(int) x:10(int)
+           │    ├── columns: column11:11(int!null) column12:12(int) y:8(int) x:10(int!null)
            │    ├── project
-           │    │    ├── columns: x:10(int) y:8(int)
+           │    │    ├── columns: x:10(int!null) y:8(int)
            │    │    ├── scan xyz
            │    │    │    └── columns: xyz.x:7(string!null) y:8(int) z:9(float)
            │    │    └── projections
@@ -1332,7 +1332,7 @@ insert checks
  │    └──  column11:11 => checks.d:4
  ├── check columns: check1:12(bool) check2:13(bool)
  └── project
-      ├── columns: check1:12(bool) check2:13(bool) abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int) column11:11(int)
+      ├── columns: check1:12(bool) check2:13(bool!null) abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int) column11:11(int)
       ├── project
       │    ├── columns: column11:11(int) abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int)
       │    ├── project

@@ -262,10 +262,8 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 	// sometimes constructs these in order to guarantee a not-null column.
 	for i := range prj.Projections {
 		item := &prj.Projections[i]
-		if opt.IsConstValueOp(item.Element) {
-			if ExtractConstDatum(item.Element) != tree.DNull {
-				rel.NotNullCols.Add(int(item.Col))
-			}
+		if ExprIsNeverNull(item.Element, inputProps.NotNullCols) {
+			rel.NotNullCols.Add(int(item.Col))
 		}
 	}
 

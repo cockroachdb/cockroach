@@ -47,7 +47,7 @@ insert abcde
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column13:13(int) y:8(int!null) column10:10(int!null) column11:11(int) column12:12(int)
+      ├── columns: column13:13(int!null) y:8(int!null) column10:10(int!null) column11:11(int) column12:12(int)
       ├── cardinality: [0 - 10]
       ├── side-effects
       ├── fd: ()-->(10,12), (8)-->(13)
@@ -96,13 +96,13 @@ build
 INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z LIMIT 10 RETURNING *
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── cardinality: [0 - 10]
  ├── side-effects, mutations
  ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
  ├── prune: (1-4)
  └── insert abcde
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
       ├── insert-mapping:
       │    ├──  y:8 => a:1
       │    ├──  y:8 => b:2
@@ -114,7 +114,7 @@ project
       ├── side-effects, mutations
       ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
       └── project
-           ├── columns: column13:13(int) y:8(int!null) column10:10(int!null) column11:11(int) column12:12(int)
+           ├── columns: column13:13(int!null) y:8(int!null) column10:10(int!null) column11:11(int) column12:12(int)
            ├── cardinality: [0 - 10]
            ├── side-effects
            ├── fd: ()-->(10,12), (8)-->(13)
@@ -163,12 +163,12 @@ build
 INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z RETURNING *
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── side-effects, mutations
  ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
  ├── prune: (1-4)
  └── insert abcde
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
       ├── insert-mapping:
       │    ├──  y:8 => a:1
       │    ├──  y:8 => b:2
@@ -179,7 +179,7 @@ project
       ├── side-effects, mutations
       ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
       └── project
-           ├── columns: column13:13(int) y:8(int!null) column10:10(int!null) column11:11(int) column12:12(int)
+           ├── columns: column13:13(int!null) y:8(int!null) column10:10(int!null) column11:11(int) column12:12(int)
            ├── side-effects
            ├── fd: ()-->(10,12), (8)-->(13)
            ├── prune: (8,10-13)

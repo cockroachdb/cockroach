@@ -369,9 +369,9 @@ build
 WITH t(x) AS (WITH t(x) AS (SELECT 1) SELECT x * 10 FROM t) SELECT x + 2 FROM t
 ----
 project
- ├── columns: "?column?":3(int)
+ ├── columns: "?column?":3(int!null)
  ├── project
- │    ├── columns: "?column?":2(int)
+ │    ├── columns: "?column?":2(int!null)
  │    ├── project
  │    │    ├── columns: "?column?":1(int!null)
  │    │    ├── values

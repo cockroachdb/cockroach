@@ -889,7 +889,7 @@ HoistProjectSubquery
   + │    │    │    ├── key: ()
   + │    │    │    ├── fd: ()-->(10)
   + │    │    │    ├── project
-  + │    │    │    │    ├── columns: notnull:9(bool)
+  + │    │    │    │    ├── columns: notnull:9(bool!null)
   + │    │    │    │    ├── outer: (1)
   + │    │    │    │    ├── cardinality: [0 - 1]
   + │    │    │    │    ├── key: ()
@@ -976,7 +976,7 @@ CommuteVar
     │    │    │    ├── key: ()
     │    │    │    ├── fd: ()-->(10)
     │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
+    │    │    │    │    ├── columns: notnull:9(bool!null)
     │    │    │    │    ├── outer: (1)
     │    │    │    │    ├── cardinality: [0 - 1]
     │    │    │    │    ├── key: ()
@@ -1044,7 +1044,7 @@ PushSelectIntoProject
     │    │    │    ├── key: ()
     │    │    │    ├── fd: ()-->(10)
     │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
+    │    │    │    │    ├── columns: notnull:9(bool!null)
     │    │    │    │    ├── outer: (1)
     │    │    │    │    ├── cardinality: [0 - 1]
     │    │    │    │    ├── key: ()
@@ -1124,7 +1124,7 @@ MergeSelects
     │    │    │    ├── key: ()
     │    │    │    ├── fd: ()-->(10)
     │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
+    │    │    │    │    ├── columns: notnull:9(bool!null)
     │    │    │    │    ├── outer: (1)
     │    │    │    │    ├── cardinality: [0 - 1]
     │    │    │    │    ├── key: ()
@@ -1202,7 +1202,7 @@ EliminateSelect
     │    │    │    ├── key: ()
     │    │    │    ├── fd: ()-->(10)
     │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
+    │    │    │    │    ├── columns: notnull:9(bool!null)
     │    │    │    │    ├── outer: (1)
     │    │    │    │    ├── cardinality: [0 - 1]
     │    │    │    │    ├── key: ()
@@ -1283,7 +1283,7 @@ MergeProjects
     │    │    │    ├── key: ()
     │    │    │    ├── fd: ()-->(10)
     │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
+    │    │    │    │    ├── columns: notnull:9(bool!null)
     │    │    │    │    ├── outer: (1)
     │    │    │    │    ├── cardinality: [0 - 1]
     │    │    │    │    ├── key: ()
@@ -1353,7 +1353,7 @@ FoldNonNullIsNotNull
     │    │    │    ├── key: ()
     │    │    │    ├── fd: ()-->(10)
     │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
+    │    │    │    │    ├── columns: notnull:9(bool!null)
     │    │    │    │    ├── outer: (1)
     │    │    │    │    ├── cardinality: [0 - 1]
     │    │    │    │    ├── key: ()
@@ -1408,7 +1408,7 @@ SimplifyAndTrue
     │    │    │    ├── key: ()
     │    │    │    ├── fd: ()-->(10)
     │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
+    │    │    │    │    ├── columns: notnull:9(bool!null)
     │    │    │    │    ├── outer: (1)
     │    │    │    │    ├── cardinality: [0 - 1]
     │    │    │    │    ├── key: ()
@@ -1464,7 +1464,7 @@ TryDecorrelateProject
   - │    │    │    ├── key: ()
   - │    │    │    ├── fd: ()-->(10)
   - │    │    │    ├── project
-  - │    │    │    │    ├── columns: notnull:9(bool)
+  - │    │    │    │    ├── columns: notnull:9(bool!null)
   + │    │    ├── columns: case:11(bool) x:1(int!null)
   + │    │    ├── key: (1)
   + │    │    ├── fd: (1)-->(11)
@@ -1486,7 +1486,7 @@ TryDecorrelateProject
   - │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    ├── fd: ()-->(10)
   + │    │    │    │    ├── project
-  + │    │    │    │    │    ├── columns: notnull:9(bool)
+  + │    │    │    │    │    ├── columns: notnull:9(bool!null)
     │    │    │    │    │    ├── outer: (1)
     │    │    │    │    │    ├── cardinality: [0 - 1]
     │    │    │    │    │    ├── key: ()
@@ -1556,7 +1556,7 @@ TryDecorrelateScalarGroupBy
   - │    │    │    │    ├── key: ()
   - │    │    │    │    ├── fd: ()-->(10)
   - │    │    │    │    ├── project
-  - │    │    │    │    │    ├── columns: notnull:9(bool)
+  - │    │    │    │    │    ├── columns: notnull:9(bool!null)
   - │    │    │    │    │    ├── outer: (1)
   - │    │    │    │    │    ├── cardinality: [0 - 1]
   - │    │    │    │    │    ├── key: ()
@@ -1576,7 +1576,7 @@ TryDecorrelateScalarGroupBy
   + │    │    │    │    │    │    ├── columns: x:1(int!null)
   + │    │    │    │    │    │    └── key: (1)
   + │    │    │    │    │    ├── project
-  + │    │    │    │    │    │    ├── columns: notnull:9(bool)
+  + │    │    │    │    │    │    ├── columns: notnull:9(bool!null)
     │    │    │    │    │    │    ├── outer: (1)
     │    │    │    │    │    │    ├── cardinality: [0 - 1]
     │    │    │    │    │    │    ├── key: ()
@@ -1647,7 +1647,7 @@ TryDecorrelateProjectSelect
   - │    │    │    │    │    │    ├── columns: x:1(int!null)
   - │    │    │    │    │    │    └── key: (1)
   - │    │    │    │    │    ├── project
-  - │    │    │    │    │    │    ├── columns: notnull:9(bool)
+  - │    │    │    │    │    │    ├── columns: notnull:9(bool!null)
   - │    │    │    │    │    │    ├── outer: (1)
   - │    │    │    │    │    │    ├── cardinality: [0 - 1]
   - │    │    │    │    │    │    ├── key: ()
@@ -1676,7 +1676,7 @@ TryDecorrelateProjectSelect
   + │    │    │    │    │         │    ├── columns: x:1(int!null)
   + │    │    │    │    │         │    └── key: (1)
   + │    │    │    │    │         ├── project
-  + │    │    │    │    │         │    ├── columns: notnull:9(bool) k:3(int!null) i:4(int)
+  + │    │    │    │    │         │    ├── columns: notnull:9(bool!null) k:3(int!null) i:4(int)
   + │    │    │    │    │         │    ├── key: (3)
   + │    │    │    │    │         │    ├── fd: (3)-->(4), (4)-->(9)
   + │    │    │    │    │         │    ├── scan a
@@ -1732,7 +1732,7 @@ DecorrelateJoin
     │    │    │    │    │         │    ├── columns: x:1(int!null)
     │    │    │    │    │         │    └── key: (1)
     │    │    │    │    │         ├── project
-    │    │    │    │    │         │    ├── columns: notnull:9(bool) k:3(int!null) i:4(int)
+    │    │    │    │    │         │    ├── columns: notnull:9(bool!null) k:3(int!null) i:4(int)
     │    │    │    │    │         │    ├── key: (3)
     │    │    │    │    │         │    ├── fd: (3)-->(4), (4)-->(9)
     │    │    │    │    │         │    ├── scan a
@@ -1786,15 +1786,15 @@ PushFilterIntoJoinRight
     │    │    │    │    │         │    ├── columns: x:1(int!null)
     │    │    │    │    │         │    └── key: (1)
   - │    │    │    │    │         ├── project
-  - │    │    │    │    │         │    ├── columns: notnull:9(bool) k:3(int!null) i:4(int)
+  - │    │    │    │    │         │    ├── columns: notnull:9(bool!null) k:3(int!null) i:4(int)
   + │    │    │    │    │         ├── select
-  + │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int) notnull:9(bool)
+  + │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int) notnull:9(bool!null)
     │    │    │    │    │         │    ├── key: (3)
     │    │    │    │    │         │    ├── fd: (3)-->(4), (4)-->(9)
   - │    │    │    │    │         │    ├── scan a
   - │    │    │    │    │         │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │         │    ├── project
-  + │    │    │    │    │         │    │    ├── columns: notnull:9(bool) k:3(int!null) i:4(int)
+  + │    │    │    │    │         │    │    ├── columns: notnull:9(bool!null) k:3(int!null) i:4(int)
     │    │    │    │    │         │    │    ├── key: (3)
   - │    │    │    │    │         │    │    └── fd: (3)-->(4)
   - │    │    │    │    │         │    └── projections
@@ -1854,11 +1854,11 @@ PushSelectIntoProject
     │    │    │    │    │         │    ├── columns: x:1(int!null)
     │    │    │    │    │         │    └── key: (1)
     │    │    │    │    │         ├── select
-    │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int) notnull:9(bool)
+    │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int) notnull:9(bool!null)
     │    │    │    │    │         │    ├── key: (3)
     │    │    │    │    │         │    ├── fd: (3)-->(4), (4)-->(9)
     │    │    │    │    │         │    ├── project
-    │    │    │    │    │         │    │    ├── columns: notnull:9(bool) k:3(int!null) i:4(int)
+    │    │    │    │    │         │    │    ├── columns: notnull:9(bool!null) k:3(int!null) i:4(int)
     │    │    │    │    │         │    │    ├── key: (3)
     │    │    │    │    │         │    │    ├── fd: (3)-->(4), (4)-->(9)
   - │    │    │    │    │         │    │    ├── scan a
@@ -1922,13 +1922,13 @@ EliminateSelect
     │    │    │    │    │         │    ├── columns: x:1(int!null)
     │    │    │    │    │         │    └── key: (1)
   - │    │    │    │    │         ├── select
-  - │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int) notnull:9(bool)
+  - │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int) notnull:9(bool!null)
   + │    │    │    │    │         ├── project
-  + │    │    │    │    │         │    ├── columns: notnull:9(bool) k:3(int!null) i:4(int)
+  + │    │    │    │    │         │    ├── columns: notnull:9(bool!null) k:3(int!null) i:4(int)
     │    │    │    │    │         │    ├── key: (3)
     │    │    │    │    │         │    ├── fd: (3)-->(4), (4)-->(9)
   - │    │    │    │    │         │    ├── project
-  - │    │    │    │    │         │    │    ├── columns: notnull:9(bool) k:3(int!null) i:4(int)
+  - │    │    │    │    │         │    │    ├── columns: notnull:9(bool!null) k:3(int!null) i:4(int)
   + │    │    │    │    │         │    ├── select
   + │    │    │    │    │         │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │         │    │    ├── key: (3)
@@ -1999,8 +1999,8 @@ PruneJoinRightCols
     │    │    │    │    │         │    ├── columns: x:1(int!null)
     │    │    │    │    │         │    └── key: (1)
     │    │    │    │    │         ├── project
-  - │    │    │    │    │         │    ├── columns: notnull:9(bool) k:3(int!null) i:4(int)
-  + │    │    │    │    │         │    ├── columns: notnull:9(bool) k:3(int!null)
+  - │    │    │    │    │         │    ├── columns: notnull:9(bool!null) k:3(int!null) i:4(int)
+  + │    │    │    │    │         │    ├── columns: notnull:9(bool!null) k:3(int!null)
     │    │    │    │    │         │    ├── key: (3)
   - │    │    │    │    │         │    ├── fd: (3)-->(4), (4)-->(9)
   + │    │    │    │    │         │    ├── fd: (3)-->(9)
@@ -2060,7 +2060,7 @@ EliminateGroupByProject
   - │    │    │    │    │         │    ├── columns: x:1(int!null)
   - │    │    │    │    │         │    └── key: (1)
   - │    │    │    │    │         ├── project
-  - │    │    │    │    │         │    ├── columns: notnull:9(bool) k:3(int!null)
+  - │    │    │    │    │         │    ├── columns: notnull:9(bool!null) k:3(int!null)
   - │    │    │    │    │         │    ├── key: (3)
   - │    │    │    │    │         │    ├── fd: (3)-->(9)
   - │    │    │    │    │         │    ├── select
@@ -2085,7 +2085,7 @@ EliminateGroupByProject
   + │    │    │    │    │    │    ├── columns: x:1(int!null)
   + │    │    │    │    │    │    └── key: (1)
   + │    │    │    │    │    ├── project
-  + │    │    │    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+  + │    │    │    │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
   + │    │    │    │    │    │    ├── key: (3)
   + │    │    │    │    │    │    ├── fd: (3)-->(9)
   + │    │    │    │    │    │    ├── select
@@ -2147,14 +2147,14 @@ EliminateSelect
   + │    │    │    │    │    ├── columns: x:1(int!null)
   + │    │    │    │    │    └── key: (1)
   + │    │    │    │    ├── project
-  + │    │    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+  + │    │    │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
   + │    │    │    │    │    ├── key: (3)
     │    │    │    │    │    ├── fd: (3)-->(9)
   - │    │    │    │    │    ├── scan xy
   - │    │    │    │    │    │    ├── columns: x:1(int!null)
   - │    │    │    │    │    │    └── key: (1)
   - │    │    │    │    │    ├── project
-  - │    │    │    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+  - │    │    │    │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
   + │    │    │    │    │    ├── select
   + │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │    │    ├── key: (3)
@@ -2230,14 +2230,14 @@ EliminateSelect
   + │    │    │    │    ├── columns: x:1(int!null)
   + │    │    │    │    └── key: (1)
   + │    │    │    ├── project
-  + │    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+  + │    │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
   + │    │    │    │    ├── key: (3)
     │    │    │    │    ├── fd: (3)-->(9)
   - │    │    │    │    ├── scan xy
   - │    │    │    │    │    ├── columns: x:1(int!null)
   - │    │    │    │    │    └── key: (1)
   - │    │    │    │    ├── project
-  - │    │    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+  - │    │    │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
   + │    │    │    │    ├── select
   + │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │    ├── key: (3)
@@ -2302,7 +2302,7 @@ PruneProjectCols
     │    │    │    │    ├── columns: x:1(int!null)
     │    │    │    │    └── key: (1)
     │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+    │    │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
     │    │    │    │    ├── key: (3)
     │    │    │    │    ├── fd: (3)-->(9)
     │    │    │    │    ├── select
@@ -2355,14 +2355,14 @@ InlineProjectInProject
   + │    │    │    ├── columns: x:1(int!null)
   + │    │    │    └── key: (1)
   + │    │    ├── project
-  + │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+  + │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
   + │    │    │    ├── key: (3)
     │    │    │    ├── fd: (3)-->(9)
   - │    │    │    ├── scan xy
   - │    │    │    │    ├── columns: x:1(int!null)
   - │    │    │    │    └── key: (1)
   - │    │    │    ├── project
-  - │    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+  - │    │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
   + │    │    │    ├── select
   + │    │    │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    ├── key: (3)
@@ -2440,7 +2440,7 @@ GenerateMergeJoins
   + │    │    │    ├── key: (1)
   + │    │    │    └── ordering: +1
     │    │    ├── project
-    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+    │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
     │    │    │    ├── key: (3)
     │    │    │    ├── fd: (3)-->(9)
   + │    │    │    ├── ordering: +3
@@ -2497,7 +2497,7 @@ GenerateStreamingGroupBy
     │    │    │    ├── key: (1)
     │    │    │    └── ordering: +1
     │    │    ├── project
-    │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+    │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
     │    │    │    ├── key: (3)
     │    │    │    ├── fd: (3)-->(9)
     │    │    │    ├── ordering: +3
@@ -2545,7 +2545,7 @@ Final best expression
    │    │    │    ├── key: (1)
    │    │    │    └── ordering: +1
    │    │    ├── project
-   │    │    │    ├── columns: notnull:9(bool) k:3(int!null)
+   │    │    │    ├── columns: notnull:9(bool!null) k:3(int!null)
    │    │    │    ├── key: (3)
    │    │    │    ├── fd: (3)-->(9)
    │    │    │    ├── ordering: +3

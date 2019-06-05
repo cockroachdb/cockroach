@@ -24,17 +24,17 @@ ORDER BY y
 LIMIT 10
 ----
 limit
- ├── columns: y:2(int!null) x:3(string!null) c:5(int)
+ ├── columns: y:2(int!null) x:3(string!null) c:5(int!null)
  ├── internal-ordering: +2
  ├── cardinality: [0 - 10]
  ├── fd: (2)-->(5)
  ├── ordering: +2
  ├── sort
- │    ├── columns: y:2(int!null) b.x:3(string!null) c:5(int)
+ │    ├── columns: y:2(int!null) b.x:3(string!null) c:5(int!null)
  │    ├── fd: (2)-->(5)
  │    ├── ordering: +2
  │    └── project
- │         ├── columns: c:5(int) y:2(int!null) b.x:3(string!null)
+ │         ├── columns: c:5(int!null) y:2(int!null) b.x:3(string!null)
  │         ├── fd: (2)-->(5)
  │         ├── select
  │         │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null) z:4(decimal!null)
@@ -76,7 +76,7 @@ ORDER BY y
 LIMIT 10
 ----
 project
- ├── columns: y:2(int!null) x:3(string!null) c:6(int)
+ ├── columns: y:2(int!null) x:3(string!null) c:6(int!null)
  ├── cardinality: [0 - 10]
  ├── fd: (2)-->(6)
  ├── ordering: +2
@@ -97,7 +97,7 @@ project
  │    │         │    ├── columns: b.x:3(string!null)
  │    │         │    └── key: (3)
  │    │         ├── project
- │    │         │    ├── columns: column5:5(string) y:2(int!null)
+ │    │         │    ├── columns: column5:5(string!null) y:2(int!null)
  │    │         │    ├── select
  │    │         │    │    ├── columns: a.x:1(int!null) y:2(int!null)
  │    │         │    │    ├── key: (1)

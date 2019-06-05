@@ -76,7 +76,7 @@ opt expect=SimplifyTrueAnd
 SELECT true AND k=1 AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6(bool!null)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
@@ -87,7 +87,7 @@ opt expect=SimplifyAndTrue
 SELECT k=1 AND true AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6(bool!null)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
@@ -191,7 +191,7 @@ opt expect=SimplifyFalseOr
 SELECT false OR k=1 AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6(bool!null)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
@@ -202,7 +202,7 @@ opt expect=SimplifyOrFalse
 SELECT k=1 OR false AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6(bool!null)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
@@ -238,7 +238,7 @@ opt expect=(SimplifyOrFalse,SimplifyFalseOr,SimplifyAndTrue)
 SELECT (k=1 OR false) AND (false OR k=2 OR false) AND true AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6(bool!null)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)

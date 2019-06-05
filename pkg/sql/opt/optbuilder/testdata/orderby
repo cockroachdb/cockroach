@@ -281,10 +281,10 @@ build
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
 ----
 sort
- ├── columns: a:1(int!null) b:2(int!null) ab:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) ab:4(int!null)
  ├── ordering: -4,+1
  └── project
-      ├── columns: ab:4(int) a:1(int!null) b:2(int!null)
+      ├── columns: ab:4(int!null) a:1(int!null) b:2(int!null)
       ├── select
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
       │    ├── scan t
