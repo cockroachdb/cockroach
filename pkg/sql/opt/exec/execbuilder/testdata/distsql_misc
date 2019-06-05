@@ -6,10 +6,10 @@ subtest scrub
 # the optimizer).
 #
 # # Verify the index check execution plan uses a merge join.
-# 
+#
 # statement ok
 # CREATE TABLE test (k INT PRIMARY KEY, v INT, data INT, INDEX secondary (v) STORING (data))
-# 
+#
 # query T
 # SELECT url FROM [EXPLAIN (DISTSQL)
 #     SELECT leftside.v, leftside.k, leftside.data, rightside.v, rightside.k, rightside.data
@@ -23,16 +23,16 @@ subtest scrub
 # ]
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJyckc2K2zAQgO99CjGnLBlIJDs9CAq6dCFLGpdscio-uNY0a3AkM5Khy5J3L45hNw5x2vQ4I33zzc8bOG9pXRwogP4BEnKEhn1JIXjuUv2Hpf0Neo5QuaaNXTpHKD0T6DeIVawJNGyLnzVtqLDEszkgWIpFVZ_KNlwdCn41kUIEhKyNWhiFRqJJID8i-DZ-FA6x2BNoecR_lz97jsQzOfQaOUWjpmiS6ahG3aM5n1ENXYFK7-zdUyb_MWUyPiXCoYjli6jJaaFGremo9UPWOs-WmOzAlnfk375caf0b8Z6efOWIZ-mw_-1rQ1o87lYrke22XzfiKVuuAaGmX3FyNtzDF672L8MUIDxWdSTWYmKUWD6L9W61ehDZRkzM4j1-P4fE7iIJmhTNAs3n0Q0t7rnLhkLjXaDLTV2tPO_WQ3ZP_bqDb7mk7-zLk6YPsxN3SlgKsX-VfbB0_VPX4Dksb8LpAJaXsLoJJ7fNyR1mdQmnN-HFhTk_fvoTAAD__3P7gDg=
-# 
+#
 # # Verify the foreign key check execution plan uses a merge join.
-# 
+#
 # statement ok
 # CREATE TABLE parent (
 #   id INT PRIMARY KEY,
 #   id2 INT,
 #   UNIQUE INDEX (id, id2)
 # )
-# 
+#
 # statement ok
 # CREATE TABLE child (
 #   child_id INT PRIMARY KEY,
@@ -40,7 +40,7 @@ subtest scrub
 #   id2 INT,
 #   FOREIGN KEY (id, id2) REFERENCES parent (id, id2)
 # )
-# 
+#
 # query T
 # SELECT url FROM [EXPLAIN (DISTSQL)
 #     SELECT p.child_id, p.id, p.id2
