@@ -384,24 +384,17 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
 	// - we explicitly chose a window function
 	if fn.def.Class == tree.WindowClass || (!ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
-		// Pick some random subset of cols for the partition.
-		wrefs := refs.extend()
-		s.schema.rnd.Shuffle(len(wrefs), func(i, j int) {
-			wrefs[i], wrefs[j] = wrefs[j], wrefs[i]
-		})
 		var parts tree.Exprs
-		for s.coin() && len(wrefs) > 0 {
-			parts = append(parts, wrefs[0].item)
-			wrefs = wrefs[1:]
-		}
+		s.schema.sample(len(refs), 2, func(i int) {
+			parts = append(parts, refs[i].item)
+		})
 		var order tree.OrderBy
-		for s.coin() && len(wrefs) > 0 {
+		s.schema.sample(len(refs)-len(parts), 2, func(i int) {
 			order = append(order, &tree.Order{
-				Expr:      wrefs[0].item,
+				Expr:      refs[i+len(parts)].item,
 				Direction: s.schema.randDirection(),
 			})
-			wrefs = wrefs[1:]
-		}
+		})
 		var frame *tree.WindowFrame
 		if s.coin() {
 			frame = makeWindowFrame(s, refs)
