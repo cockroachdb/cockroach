@@ -1024,8 +1024,6 @@ func (ex *connExecutor) resetExtraTxnState(
 
 	ex.extraTxnState.tables.databaseCache = dbCacheHolder.getDatabaseCache()
 
-	ex.extraTxnState.autoRetryCounter = 0
-
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
 		p.decRef(ctx)
@@ -1930,6 +1928,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	switch advInfo.txnEvent {
 	case noEvent:
 	case txnStart:
+		ex.extraTxnState.autoRetryCounter = 0
 	case txnCommit:
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(
