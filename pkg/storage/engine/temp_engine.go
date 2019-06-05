@@ -27,12 +27,12 @@ func (r *rocksDBTempEngine) Close() {
 
 // NewSortedDiskMap implements the diskmap.Factory interface.
 func (r *rocksDBTempEngine) NewSortedDiskMap() diskmap.SortedDiskMap {
-	return NewRocksDBMap(r.db)
+	return newRocksDBMap(r.db, false /* allowDuplications */)
 }
 
 // NewSortedDiskMultiMap implements the diskmap.Factory interface.
 func (r *rocksDBTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
-	return NewRocksDBMultiMap(r.db)
+	return newRocksDBMap(r.db, true /* allowDuplicates */)
 }
 
 // NewTempEngine creates a new engine for DistSQL processors to use when the
