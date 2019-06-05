@@ -222,8 +222,8 @@ func (r *Replica) adminSplitWithDescriptor(
 		}
 		log.Event(ctx, "range already split")
 		// Even if the range is already split, we should still update the sticky
-		// bit if it is different.
-		if args.ExpirationTime != desc.StickyBit {
+		// bit if it has a later expiration time.
+		if desc.StickyBit.Less(args.ExpirationTime) {
 			newDesc := *desc
 			newDesc.StickyBit = args.ExpirationTime
 			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
