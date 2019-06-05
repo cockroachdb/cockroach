@@ -290,7 +290,8 @@ func (mq *mergeQueue) process(
 	}
 
 	// Range was manually split and not expired, so skip merging.
-	if rhsDesc.StickyBit.GoTime().After(mq.store.Clock().PhysicalTime()) {
+	now := mq.store.Clock().Now()
+	if now.Less(rhsDesc.StickyBit) {
 		log.VEventf(ctx, 2, "skipping merge: ranges were manually split and sticky bit was not expired")
 		// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
 		// repeatedly processing ranges that cannot be merged.
@@ -316,7 +317,7 @@ func (mq *mergeQueue) process(
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be merged.
 		log.Infof(ctx, "merge saw concurrent descriptor modification; maybe retrying")
-		mq.MaybeAddAsync(ctx, lhsRepl, mq.store.Clock().Now())
+		mq.MaybeAddAsync(ctx, lhsRepl, now)
 	default:
 		// While range merges are unstable, be extra cautious and mark every error
 		// as purgatory-worthy.
