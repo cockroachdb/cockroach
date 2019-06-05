@@ -263,11 +263,11 @@ SELECT count(*) FROM (SELECT * FROM tab0 WHERE col3 = 10) GROUP BY col0
 ----
 project
  ├── columns: count:8(int)
- ├── stats: [rows=1.99997344]
+ ├── stats: [rows=0.999973439]
  └── group-by
       ├── columns: col0:2(int) count_rows:8(int)
       ├── grouping columns: col0:2(int)
-      ├── stats: [rows=1.99997344, distinct(2)=0.999973439, null(2)=1.99997344]
+      ├── stats: [rows=0.999973439, distinct(2)=0.999973439, null(2)=0.999973439]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── select
@@ -616,12 +616,12 @@ SELECT * FROM c WHERE x >= 0 AND x < 100
 ----
 select
  ├── columns: x:1(int!null) z:2(int!null)
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=65.5215193, null(2)=0]
+ ├── stats: [rows=99.8990918, distinct(1)=99.8990918, null(1)=0, distinct(2)=65.4824076, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan c
  │    ├── columns: x:1(int) z:2(int!null)
- │    ├── stats: [rows=1000, distinct(1)=990, null(1)=10, distinct(2)=100, null(2)=0]
+ │    ├── stats: [rows=1000, distinct(1)=991, null(1)=10, distinct(2)=100, null(2)=0]
  │    ├── lax-key: (1,2)
  │    └── fd: (1)~~>(2)
  └── filters
@@ -1382,25 +1382,25 @@ HAVING
 project
  ├── columns: "?column?":5(int!null)
  ├── cardinality: [0 - 2]
- ├── stats: [rows=1]
+ ├── stats: [rows=0.5]
  ├── fd: ()-->(5)
  ├── select
  │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool!null)
  │    ├── cardinality: [0 - 2]
- │    ├── stats: [rows=1, distinct(4)=1, null(4)=0]
+ │    ├── stats: [rows=0.5, distinct(4)=0.5, null(4)=0]
  │    ├── key: (2,3)
  │    ├── fd: ()-->(4)
  │    ├── group-by
  │    │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool)
  │    │    ├── grouping columns: column2:2(string) column3:3(varbit)
  │    │    ├── cardinality: [1 - 2]
- │    │    ├── stats: [rows=1, distinct(4)=0, null(4)=1, distinct(2,3)=0, null(2,3)=1]
+ │    │    ├── stats: [rows=2, distinct(4)=2, null(4)=2, distinct(2,3)=2, null(2,3)=2]
  │    │    ├── key: (2,3)
  │    │    ├── fd: (2,3)-->(4)
  │    │    ├── values
  │    │    │    ├── columns: column1:1(bool) column2:2(string) column3:3(varbit)
  │    │    │    ├── cardinality: [2 - 2]
- │    │    │    ├── stats: [rows=2, distinct(2,3)=0, null(2,3)=2]
+ │    │    │    ├── stats: [rows=2, distinct(2,3)=2, null(2,3)=2]
  │    │    │    ├── (true, NULL, B'001000101101110') [type=tuple{bool, string, varbit}]
  │    │    │    └── (true, e'19\x1e', NULL) [type=tuple{bool, string, varbit}]
  │    │    └── aggregations
