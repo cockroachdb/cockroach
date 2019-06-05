@@ -225,8 +225,11 @@ type queueConfig struct {
 	// concurrently. If not set, defaults to 1.
 	maxConcurrency       int
 	addOrMaybeAddSemSize int
-	// needsLease controls whether this queue requires the range lease to
-	// operate on a replica. If so, one will be acquired if necessary.
+	// needsLease controls whether this queue requires the range lease to operate
+	// on a replica. If so, one will be acquired if necessary. Many queues set
+	// needsLease not because they literally need a lease, but because they work
+	// on a range level and use it to ensure that only one node in the cluster
+	// processes that range.
 	needsLease bool
 	// needsRaftInitialized controls whether the Raft group will be initialized
 	// (if not already initialized) when deciding whether to process this
@@ -264,16 +267,72 @@ type queueConfig struct {
 	purgatory *metric.Gauge
 }
 
-// baseQueue is the base implementation of the replicaQueue interface.
-// Queue implementations should embed a baseQueue and implement queueImpl.
+// baseQueue is the base implementation of the replicaQueue interface. Queue
+// implementations should embed a baseQueue and implement queueImpl.
 //
-// In addition to normal processing of replicas via the replica
-// scanner, queues have an optional notion of purgatory, where
-// replicas which fail queue processing with a retryable error may be
-// sent such that they will be quickly retried when the failure
-// condition changes. Queue implementations opt in for purgatory by
-// implementing the purgatoryChan method of queueImpl such that it
-// returns a non-nil channel.
+// A queue contains replicas in one of three stages: queued, processing, and
+// purgatory. A "queued" replica is waiting for processing with some priority
+// that was selected when it was added. A "processing" replica is actively being
+// worked on by the queue, which delegates to the queueImpl's `process` method.
+// Replicas are selected from the queue for processing purely in priority order.
+// A "purgatory" replica has been marked by the queue implementation as
+// temporarily uninteresting and it will not be processed again until some
+// queue-specific event occurs. Not every queue has a purgatory.
+//
+// Generally, replicas are added to a queue by a replicaScanner, which is a
+// Store-level object. The scanner is configured with a set of queues (which in
+// practice is all of the queues) and will repeatedly iterate through every
+// replica on the store at a measured pace, handing each replica to every
+// queueImpl's `shouldQueue` method. This method is implemented differently by
+// each queue and decides whether the replica is currently interesting. If so,
+// it also selects a priority. Note that queues have a bounded size controlled
+// by the `maxSize` config option, which means the ones with lowest priority may
+// be dropped if processing cannot keep up and the queue fills.
+//
+// Replicas are added asynchronously through `MaybeAddAsync` or `AddAsync`.
+// MaybeAddAsync checks the various requirements selected by the queue config
+// (needsSystemConfig, needsLease, acceptsUnsplitRanges) as well as the
+// queueImpl's `shouldQueue`. AddAsync does not check any of this and accept a
+// priority directly instead of getting it from `shouldQueue`. These methods run
+// with shared a maximum concurrency of `addOrMaybeAddSemSize`. If the maximum
+// concurrency is reached, MaybeAddAsync will silently drop the replica but
+// AddAsync will block.
+//
+// Synchronous replica addition is intentionally not part of the public
+// interface. Many queue impl's "processing" work functions acquire various
+// locks on Replica, so it would be too easy for a callsite of such a method to
+// deadlock. See #36413 for context. Additionally, the queues themselves process
+// asynchronously and the bounded size means what you add isn't guaranteed to be
+// processed, so the exclusive-async contract just forces callers to realize
+// this early.
+//
+// Processing is rate limited by the queueImpl's `timer` which receives the
+// amount of time it took to processes the previous replica and returns the
+// amount of time to wait before processing the next one. A bounded amount of
+// processing concurrency is allowed, which is controlled by the
+// `maxConcurrency` option in the queue's configuration. If a replica is added
+// while being processed, it's requeued after the processing finishes.
+//
+// Note that all sorts of things can change between when a replica is enqueued
+// and when it is processed, so the queue makes sure to grab the latest one
+// right before processing by looking up the current replica with the same
+// RangeID. This replica could be gone or, in extreme cases, could have been
+// removed and re-added and now has a new ReplicaID. Implementors needs to be
+// resilient to this.
+//
+// A queueImpl can opt into a purgatory by returning a non-nil channel from the
+// `purgatoryChan` method. A replica is put into purgatory when the `process`
+// method returns an error with a `purgatoryError` as an entry somewhere in the
+// `Cause` chain. A replica in purgatory is not processed again until the
+// channel is signaled, at which point every replica in purgatory is immediately
+// processed. This catchup is run without the `timer` rate limiting but shares
+// the same `maxConcurrency` semaphore as regular processing. Note that if a
+// purgatory replica is pushed out of a full queue, it's also removed from
+// purgatory. Replicas in purgatory count against the max queue size.
+//
+// After construction a queue needs to be `Start`ed, which spawns a goroutine to
+// continually pop the "queued" replica with the highest priority and process
+// it. In practice, this is done by the same replicaScanner that adds replicas.
 type baseQueue struct {
 	log.AmbientContext
 
@@ -321,7 +380,7 @@ func newBaseQueue(
 	if cfg.maxConcurrency == 0 {
 		cfg.maxConcurrency = 1
 	}
-	// NB: addOrmaybeAddSemSize coupled with tight scanner intervals in tests
+	// NB: addOrMaybeAddSemSize coupled with tight scanner intervals in tests
 	// unfortunately bog down the race build if they are increased too much.
 	if cfg.addOrMaybeAddSemSize == 0 {
 		cfg.addOrMaybeAddSemSize = 20
@@ -636,6 +695,12 @@ func (bq *baseQueue) addInternal(
 // purgatory, the callback is called immediately with the purgatory error. If
 // the range is not in the queue (either waiting or processing), the method
 // returns false.
+//
+// NB: If the replica this attaches to is dropped from an overfull queue, this
+// callback is never called. This is surprising, but the single caller of this
+// is okay with these semantics. Adding new uses is discouraged without cleaning
+// up the contract of this method, but this code doesn't lend itself readily to
+// upholding invariants so there may need to be some cleanup first.
 func (bq *baseQueue) MaybeAddCallback(rangeID roachpb.RangeID, cb processCallback) bool {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
@@ -867,10 +932,13 @@ func isPurgatoryError(err error) (purgatoryError, bool) {
 }
 
 // assertInvariants codifies the guarantees upheld by the data structures in the
-// base queue. In summary, a replica is
-// - either only in mu.replicas
-// - or in both mu.replicas and exactly one of the priority queue or purgatory.
-// - an item is *only* in bq.mu.replicas if and only if it is processing.
+// base queue. In summary, a replica is one of:
+// - "queued" and in mu.replicas and mu.priorityQ
+// - "processing" and only in mu.replicas
+// - "purgatory" and in mu.replicas and mu.purgatory
+//
+// Note that in particular, nothing is ever in both mu.priorityQ and
+// mu.purgatory.
 func (bq *baseQueue) assertInvariants() {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
