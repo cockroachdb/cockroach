@@ -1276,7 +1276,7 @@ func TestPGPreparedExec(t *testing.T) {
 		{
 			"CREATE TABLE d.public.t AS SELECT $1+1 AS x",
 			[]preparedExecTest{
-				baseTest.SetArgs(1).RowsAffected(1),
+				baseTest.SetArgs(1),
 			},
 		},
 		{
