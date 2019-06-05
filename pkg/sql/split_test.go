@@ -114,7 +114,7 @@ func TestSplitAt(t *testing.T) {
 			in: "ALTER TABLE d.i SPLIT AT VALUES (11) WITH EXPIRATION '1 day'::interval",
 		},
 		{
-			in: "ALTER TABLE d.i SPLIT AT VALUES (12) WITH EXPIRATION '7258118400000000.0'",
+			in: "ALTER TABLE d.i SPLIT AT VALUES (12) WITH EXPIRATION '7258118400000000000.0'",
 		},
 		{
 			in: "ALTER TABLE d.i SPLIT AT VALUES (13) WITH EXPIRATION '2200-01-01 00:00:00.0'",
@@ -139,6 +139,14 @@ func TestSplitAt(t *testing.T) {
 		{
 			in:    "ALTER TABLE d.i SPLIT AT VALUES (17) WITH EXPIRATION '1969-01-01 00:00:00.0'",
 			error: "SPLIT AT: timestamp before 1970-01-01T00:00:00Z is invalid",
+		},
+		{
+			in:    "ALTER TABLE d.i SPLIT AT VALUES (17) WITH EXPIRATION '1970-01-01 00:00:00.0'",
+			error: "SPLIT AT: zero timestamp is invalid",
+		},
+		{
+			in:    "ALTER TABLE d.i SPLIT AT VALUES (17) WITH EXPIRATION '-1 day'::interval",
+			error: "SPLIT AT: expiration time should be greater than or equal to current time",
 		},
 	}
 
