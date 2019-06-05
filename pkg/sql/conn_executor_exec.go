@@ -668,7 +668,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 	}
 
-	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
+	defer func() {
+		planner.maybeLogStatement(ctx, "exec", ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err())
+	}()
 
 	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
 	ex.sessionTracing.TracePlanEnd(ctx, err)
