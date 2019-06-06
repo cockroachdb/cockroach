@@ -1714,6 +1714,53 @@ project
            └── ntile [type=int, outer=(2)]
                 └── variable: t.public.a.i [type=int]
 
+# Ensure OFFSET expressions don't get pruned.
+norm
+SELECT ntile(i) OVER (ORDER BY i RANGE BETWEEN f::INT PRECEDING AND CURRENT ROW) FROM a
+----
+project
+ ├── columns: ntile:5(int)
+ └── window partition=() ordering=+2
+      ├── columns: i:2(int) f:3(float) ntile:5(int)
+      ├── scan a
+      │    └── columns: i:2(int) f:3(float)
+      └── windows
+           └── windows-item: range from offset to current-row [type=int, outer=(2,3)]
+                └── window-from-offset [type=int]
+                     ├── ntile [type=int]
+                     │    └── variable: i [type=int]
+                     └── f::INT8 [type=int]
+
+# Ensure filter cols don't get pruned.
+norm
+SELECT
+    avg(i) FILTER (WHERE true) OVER (),
+    avg(i) FILTER (WHERE false) OVER ()
+FROM a
+----
+project
+ ├── columns: avg:5(decimal) avg:6(decimal)
+ └── window partition=()
+      ├── columns: i:2(int) avg:5(decimal) avg:6(decimal) avg_1_filter:7(bool!null) avg_2_filter:8(bool!null)
+      ├── fd: ()-->(7,8)
+      ├── project
+      │    ├── columns: avg_1_filter:7(bool!null) avg_2_filter:8(bool!null) i:2(int)
+      │    ├── fd: ()-->(7,8)
+      │    ├── scan a
+      │    │    └── columns: i:2(int)
+      │    └── projections
+      │         ├── true [type=bool]
+      │         └── false [type=bool]
+      └── windows
+           ├── agg-filter [type=decimal, outer=(2,7)]
+           │    ├── avg [type=decimal]
+           │    │    └── variable: i [type=int]
+           │    └── variable: avg_1_filter [type=bool]
+           └── agg-filter [type=decimal, outer=(2,8)]
+                ├── avg [type=decimal]
+                │    └── variable: i [type=int]
+                └── variable: avg_2_filter [type=bool]
+
 # --------------------------------------------------
 # PruneWindowOutputCols
 # --------------------------------------------------

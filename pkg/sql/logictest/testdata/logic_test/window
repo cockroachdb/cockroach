@@ -2281,7 +2281,9 @@ Tablet      Samsung          200.00   6450.00
 statement error aggregate functions are not allowed in FILTER
 SELECT count(*) FILTER (WHERE count(*) > 5) OVER () FROM products
 
-statement error window functions are not allowed in FILTER
+# TODO(justin): it's a bit troublesome to get the error messages between the HP
+# and CBO to match here, so once the HP is removed put the CBO error message here.
+statement error window function
 SELECT count(*) FILTER (WHERE count(*) OVER () > 5) OVER () FROM products
 
 statement error incompatible FILTER expression type: int
@@ -2319,6 +2321,9 @@ NULL                   200.00   200.00                 200.00
 737.50                 NULL     575.00                 350.00
 737.50                 NULL     575.00                 150.00
 737.50                 NULL     500.00                 175.00
+
+statement error DISTINCT is not implemented for window functions
+SELECT count(DISTINCT group_name) OVER (), count(DISTINCT product_name) OVER () FROM products
 
 statement error RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column
 SELECT sum(price) OVER (RANGE 100 PRECEDING) FROM products
