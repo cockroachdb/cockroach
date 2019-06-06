@@ -156,7 +156,8 @@ type Flow struct {
 	// processors contains a subset of the processors in the flow - the ones that
 	// run in their own goroutines. Some processors that implement RowSource are
 	// scheduled to run in their consumer's goroutine; those are not present here.
-	processors []Processor
+	processors   []Processor
+	releaseables []Releasable
 	// startables are entities that must be started when the flow starts;
 	// currently these are outboxes and routers.
 	startables []startable
@@ -476,6 +477,9 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 		if !fuse() {
 			f.processors = append(f.processors, p)
 		}
+		if r, ok := p.(Releasable); ok {
+			f.releaseables = append(f.releaseables, r)
+		}
 	}
 	return nil
 }
@@ -663,10 +667,8 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	}
 	// This closes the monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.Stop(ctx)
-	for _, p := range f.processors {
-		if d, ok := p.(Releasable); ok {
-			d.Release()
-		}
+	for _, p := range f.releaseables {
+		p.Release()
 	}
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
