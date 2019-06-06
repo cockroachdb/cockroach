@@ -3356,6 +3356,55 @@ project
            └── const-agg [type=string[]]
                 └── variable: array_agg [type=string[]]
 
+# Add projection on top to ensure the default NULL values are set correctly.
+opt
+SELECT count(DISTINCT col1), count(*), array_agg(col1 ORDER BY col2) FROM tab
+----
+project
+ ├── columns: count:5(int) count:6(int) array_agg:7(int[])
+ ├── scalar-group-by
+ │    ├── columns: array_agg:7(int[]) count:8(int) count_rows:9(int)
+ │    ├── window partition=() ordering=+2
+ │    │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) count:5(int) count_rows:6(int) array_agg:7(int[])
+ │    │    ├── window partition=()
+ │    │    │    ├── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null) count:5(int) count_rows:6(int)
+ │    │    │    ├── scan tab
+ │    │    │    │    └── columns: col1:1(int!null) col2:2(int!null) col3:3(string) rowid:4(int!null)
+ │    │    │    └── windows
+ │    │    │         ├── windows-item: range from unbounded to unbounded [type=int]
+ │    │    │         │    └── count [type=int]
+ │    │    │         │         └── variable: col1 [type=int]
+ │    │    │         └── windows-item: range from unbounded to unbounded [type=int]
+ │    │    │              └── count-rows [type=int]
+ │    │    └── windows
+ │    │         └── windows-item: range from unbounded to unbounded [type=int[]]
+ │    │              └── array-agg [type=int[]]
+ │    │                   └── variable: col1 [type=int]
+ │    └── aggregations
+ │         ├── const-agg [type=int]
+ │         │    └── variable: count [type=int]
+ │         ├── const-agg [type=int]
+ │         │    └── variable: count_rows [type=int]
+ │         └── const-agg [type=int[]]
+ │              └── variable: array_agg [type=int[]]
+ └── projections
+      ├── case [type=int]
+      │    ├── true [type=bool]
+      │    ├── when [type=int]
+      │    │    ├── is [type=bool]
+      │    │    │    ├── variable: count [type=int]
+      │    │    │    └── null [type=unknown]
+      │    │    └── const: 0 [type=int]
+      │    └── variable: count [type=int]
+      └── case [type=int]
+           ├── true [type=bool]
+           ├── when [type=int]
+           │    ├── is [type=bool]
+           │    │    ├── variable: count_rows [type=int]
+           │    │    └── null [type=unknown]
+           │    └── const: 0 [type=int]
+           └── variable: count_rows [type=int]
+
 # Testing aggregations as window when group by has a projection.
 opt
 SELECT array_agg(col1 ORDER BY col1) FROM tab GROUP BY upper(col3)
@@ -3425,4 +3474,3 @@ project
       └── aggregations
            └── array-agg [type=string[]]
                 └── variable: column5 [type=string]
->>>>>>> Stashed changes
