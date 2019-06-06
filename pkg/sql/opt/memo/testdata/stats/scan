@@ -522,3 +522,95 @@ scan a
  ├── stats: [rows=10]
  ├── key: (1)
  └── ordering: +1
+
+# Regression test for #37953.
+exec-ddl
+CREATE TABLE t37953 (
+    a UUID NOT NULL,
+    b FLOAT8 NOT NULL,
+    c TIME NOT NULL,
+    d UUID NOT NULL,
+    e VARCHAR,
+    f "char" NULL,
+    g INT4 NOT NULL,
+    h VARCHAR NULL,
+    i REGPROC NULL,
+    j FLOAT8 NOT NULL
+)
+----
+TABLE t37953
+ ├── a uuid not null
+ ├── b float not null
+ ├── c time not null
+ ├── d uuid not null
+ ├── e varchar
+ ├── f "char"
+ ├── g int4 not null
+ ├── h varchar
+ ├── i regproc
+ ├── j float not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+norm
+WITH
+  subq (col0, col1)
+    AS (
+      SELECT
+        tab1.g AS col0,
+        CASE
+        WHEN ilike_escape(
+          regexp_replace(
+            tab0.h,
+            tab1.e,
+            tab0.f,
+            tab0.e::STRING
+          ),
+          tab1.f,
+          ''
+        )
+        THEN true
+        ELSE false
+        END
+          AS col1
+      FROM
+        t37953 AS tab0, t37953 AS tab1
+      WHERE
+        tab0.j IN (tab1.j,)
+    )
+SELECT
+  1
+FROM
+  subq
+WHERE
+  subq.col1;
+----
+project
+ ├── columns: "?column?":24(int!null)
+ ├── stats: [rows=0.95099005]
+ ├── fd: ()-->(24)
+ ├── select
+ │    ├── columns: col1:23(bool!null)
+ │    ├── stats: [rows=0.95099005, distinct(23)=0.95099005, null(23)=0]
+ │    ├── fd: ()-->(23)
+ │    ├── project
+ │    │    ├── columns: col1:23(bool)
+ │    │    ├── stats: [rows=333333.333, distinct(23)=333333.333, null(23)=16336.65]
+ │    │    ├── inner-join
+ │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:16(varchar) tab1.f:17("char") tab1.j:21(float!null)
+ │    │    │    ├── stats: [rows=333333.333, distinct(10)=100, null(10)=0, distinct(21)=100, null(21)=0, distinct(5,6,8,16,17)=333333.333, null(5,6,8,16,17)=16336.65]
+ │    │    │    ├── scan tab0
+ │    │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
+ │    │    │    │    └── stats: [rows=1000, distinct(10)=100, null(10)=0, distinct(5,6,8)=1000, null(5,6,8)=29.701]
+ │    │    │    ├── scan tab1
+ │    │    │    │    ├── columns: tab1.e:16(varchar) tab1.f:17("char") tab1.j:21(float!null)
+ │    │    │    │    └── stats: [rows=1000, distinct(21)=100, null(21)=0, distinct(16,17)=1000, null(16,17)=19.9]
+ │    │    │    └── filters
+ │    │    │         └── tab0.j IN (tab1.j,) [type=bool, outer=(10,21)]
+ │    │    └── projections
+ │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h, tab1.e, tab0.f, tab0.e::STRING), tab1.f, '') THEN true ELSE false END [type=bool, outer=(5,6,8,16,17)]
+ │    └── filters
+ │         └── variable: col1 [type=bool, outer=(23), constraints=(/23: [/true - /true]; tight), fd=()-->(23)]
+ └── projections
+      └── const: 1 [type=int]
