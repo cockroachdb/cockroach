@@ -137,6 +137,9 @@ func (o *orderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 // all the relevant vectors in o.comparators.
 func (o *orderedSynchronizer) updateComparators(batchIdx int) {
 	batch := o.inputBatches[batchIdx]
+	if batch.Length() == 0 {
+		return
+	}
 	for i := range o.ordering {
 		o.comparators[i].setVec(batchIdx, batch.ColVecs()[o.ordering[i].ColIdx])
 	}
