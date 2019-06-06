@@ -636,8 +636,8 @@ func (ts *TestServer) SplitRange(
 		RequestHeader: roachpb.RequestHeader{
 			Key: splitKey,
 		},
-		SplitKey: splitKey,
-		Manual:   true,
+		SplitKey:       splitKey,
+		ExpirationTime: hlc.MaxTimestamp,
 	}
 	_, pErr := client.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &splitReq)
 	if pErr != nil {

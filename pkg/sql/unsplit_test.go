@@ -14,6 +14,7 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"strings"
 	"testing"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -54,7 +56,8 @@ func TestUnsplitAt(t *testing.T) {
 	for _, splitStmt := range splitStmts {
 		var key roachpb.Key
 		var pretty string
-		if err := db.QueryRow(splitStmt).Scan(&key, &pretty); err != nil {
+		var expirationTimestamp gosql.NullString
+		if err := db.QueryRow(splitStmt).Scan(&key, &pretty, &expirationTimestamp); err != nil {
 			t.Fatalf("unexpected error setting up test: %s", err)
 		}
 	}
@@ -143,8 +146,8 @@ func TestUnsplitAt(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if rng.StickyBit != nil {
-				t.Fatalf("%s: expected range sticky bit to be nil, got %s", tt.in, pretty)
+			if (rng.StickyBit != hlc.Timestamp{}) {
+				t.Fatalf("%s: expected range sticky bit to be hlc.MinTimestamp, got %s", tt.in, pretty)
 			}
 		}
 	}

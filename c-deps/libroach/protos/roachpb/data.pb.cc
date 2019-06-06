@@ -2586,7 +2586,6 @@ bool StickyBitTrigger::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // .cockroach.util.hlc.Timestamp sticky_bit = 1;
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
@@ -2624,7 +2623,6 @@ void StickyBitTrigger::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // .cockroach.util.hlc.Timestamp sticky_bit = 1;
   if (this->has_sticky_bit()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       1, this->_internal_sticky_bit(), output);
@@ -2641,7 +2639,6 @@ size_t StickyBitTrigger::ByteSizeLong() const {
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
-  // .cockroach.util.hlc.Timestamp sticky_bit = 1;
   if (this->has_sticky_bit()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(

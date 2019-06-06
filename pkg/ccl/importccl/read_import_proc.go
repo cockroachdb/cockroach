@@ -487,7 +487,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	if cp.spec.IngestDirectly {
 		for _, tbl := range cp.spec.Tables {
 			for _, span := range tbl.AllIndexSpans() {
-				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key, false /* manual */); err != nil {
+				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key, hlc.Timestamp{} /* expirationTime */); err != nil {
 					return err
 				}
 

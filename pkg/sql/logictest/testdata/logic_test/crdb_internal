@@ -210,12 +210,12 @@ zone_id  zone_name cli_specifier  config_yaml  config_sql  config_protobuf
 query ITTTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  manual_split_time  lease_holder
+range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  split_enforced_until  lease_holder
 
 query ITTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  manual_split_time
+range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  split_enforced_until
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
@@ -330,30 +330,45 @@ CREATE TABLE foo (a INT PRIMARY KEY); INSERT INTO foo VALUES(1)
 statement ok
 ALTER TABLE foo SPLIT AT VALUES(2)
 
-query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE manual_split_time IS NOT NULL
+query TTT colnames
+SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty   end_pretty
-/Table/56/1/2  /Max
+start_pretty   end_pretty  split_enforced_until
+/Table/56/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
 
-query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE manual_split_time IS NOT NULL
+query TTT colnames
+SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
 ----
-start_pretty   end_pretty
-/Table/56/1/2  /Max
+start_pretty   end_pretty  split_enforced_until
+/Table/56/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
 
 statement ok
 ALTER TABLE foo UNSPLIT AT VALUES(2)
 
 query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE manual_split_time IS NOT NULL
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
 ----
-start_pretty   end_pretty
+start_pretty  end_pretty
 
 query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE manual_split_time IS NOT NULL
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
 ----
-start_pretty   end_pretty
+start_pretty  end_pretty
+
+statement ok
+ALTER TABLE foo SPLIT AT VALUES(2) WITH EXPIRATION '2200-01-01 00:00:00.0'
+
+query TTT colnames
+SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+----
+start_pretty   end_pretty  split_enforced_until
+/Table/56/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
+
+query TTT colnames
+SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+----
+start_pretty   end_pretty  split_enforced_until
+/Table/56/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
 
 # Make sure that the cluster id isn't unset.
 query B

@@ -620,6 +620,7 @@ unreserved_keyword ::=
 	| 'EXPERIMENTAL_RANGES'
 	| 'EXPERIMENTAL_RELOCATE'
 	| 'EXPERIMENTAL_REPLICA'
+	| 'EXPIRATION'
 	| 'EXPLAIN'
 	| 'EXPORT'
 	| 'EXTENSION'
@@ -1228,6 +1229,7 @@ alter_onetable_stmt ::=
 
 alter_split_stmt ::=
 	'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt
+	| 'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr
 
 alter_unsplit_stmt ::=
 	'ALTER' 'TABLE' table_name 'UNSPLIT' 'AT' select_stmt
@@ -1250,6 +1252,7 @@ alter_oneindex_stmt ::=
 
 alter_split_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'SPLIT' 'AT' select_stmt
+	| 'ALTER' 'INDEX' table_index_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr
 
 alter_unsplit_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'UNSPLIT' 'AT' select_stmt
