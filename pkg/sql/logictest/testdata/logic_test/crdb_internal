@@ -436,7 +436,7 @@ statement ok
 SET application_name = 'test_max_retry'
 
 statement OK
-SELECT crdb_internal.force_retry('2ms'::INTERVAL)
+SELECT crdb_internal.force_retry('50ms'::INTERVAL)
 
 statement OK
 RESET application_name
@@ -444,9 +444,11 @@ RESET application_name
 # Note: two rows of output are expected: one for the statement that
 # failed with a retry error, and one for the final retry attempt that
 # succeeded without an error.
-# Wel also expect the RESET statement to not have any retry.
+# We also expect the RESET statement to not have any retry.
+# This tests that the retry counter is properly reset to 0
+# between statements.
 query TBB
-SELECT key, (max_retries > 1), flags LIKE '!%' AS f
+SELECT key, (max_retries > 0), flags LIKE '!%' AS f
   FROM crdb_internal.node_statement_statistics
  WHERE application_name = 'test_max_retry'
 ORDER BY key, f
