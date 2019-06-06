@@ -3342,8 +3342,6 @@ project
                 └── windows-item: range from unbounded to unbounded [type=string[]]
                      └── array-agg [type=string[]]
                           └── variable: col3 [type=string]
-<<<<<<< Updated upstream
-=======
 
 # Add projection on top to ensure the default NULL values are set correctly.
 opt
@@ -3393,9 +3391,6 @@ project
            │    │    └── null [type=unknown]
            │    └── const: 0 [type=int]
            └── variable: count_rows [type=int]
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
 
 # Testing aggregations as window when group by has a projection.
 opt
@@ -3460,4 +3455,3 @@ project
       └── aggregations
            └── array-agg [type=string[]]
                 └── variable: column5 [type=string]
->>>>>>> Stashed changes
