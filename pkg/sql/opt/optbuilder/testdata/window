@@ -79,6 +79,11 @@ SELECT k FROM kv WHERE avg(k) OVER () > 1
 error (42P20): avg(): window functions are not allowed in WHERE
 
 build
+SELECT avg(DISTINCT k) OVER () FROM kv
+----
+error (0A000): DISTINCT is not implemented for window functions
+
+build
 SELECT 1 FROM kv GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
 ----
 error (42P20): sum(): window functions are not allowed in HAVING
@@ -364,12 +369,28 @@ project
 build
 SELECT avg(DISTINCT k) OVER () FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+error (0A000): DISTINCT is not implemented for window functions
 
 build
 SELECT avg(k) FILTER (WHERE k > 5) OVER () FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: avg:8(decimal)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg_1_filter:9(bool)
+      ├── project
+      │    ├── columns: avg_1_filter:9(bool) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         └── gt [type=bool]
+      │              ├── variable: k [type=int]
+      │              └── const: 5 [type=int]
+      └── windows
+           └── agg-filter [type=decimal]
+                ├── avg [type=decimal]
+                │    └── variable: k [type=int]
+                └── variable: avg_1_filter [type=bool]
 
 build
 SELECT avg(k), max(v) OVER () FROM kv ORDER BY 1
@@ -395,7 +416,14 @@ sort
 build
 SELECT k, v, rank() OVER w FROM kv WINDOW w AS ()
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: k:1(int!null) v:2(int) rank:8(int)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── rank [type=undefined]
 
 build
 SELECT k, v, first_value(v) OVER () FROM kv
@@ -865,15 +893,15 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           ├── windows-item: from unbounded to unbounded [type=decimal]
+           ├── windows-item: range from unbounded to unbounded [type=decimal]
            │    └── avg [type=decimal]
            │         └── variable: k [type=int]
            ├── avg [type=decimal]
            │    └── variable: k [type=int]
-           ├── windows-item: from current-row to unbounded [type=decimal]
+           ├── windows-item: range from current-row to unbounded [type=decimal]
            │    └── avg [type=decimal]
            │         └── variable: k [type=int]
-           └── windows-item: from current-row to current-row [type=decimal]
+           └── windows-item: range from current-row to current-row [type=decimal]
                 └── avg [type=decimal]
                      └── variable: k [type=int]
 
@@ -892,15 +920,15 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           ├── windows-item: from unbounded to unbounded [type=decimal]
+           ├── windows-item: range from unbounded to unbounded [type=decimal]
            │    └── avg [type=decimal]
            │         └── variable: k [type=int]
            ├── avg [type=decimal]
            │    └── variable: k [type=int]
-           ├── windows-item: from current-row to unbounded [type=decimal]
+           ├── windows-item: range from current-row to unbounded [type=decimal]
            │    └── avg [type=decimal]
            │         └── variable: k [type=int]
-           └── windows-item: from current-row to current-row [type=decimal]
+           └── windows-item: range from current-row to current-row [type=decimal]
                 └── avg [type=decimal]
                      └── variable: k [type=int]
 
@@ -919,7 +947,7 @@ project
       └── windows
            ├── avg [type=decimal]
            │    └── variable: k [type=int]
-           └── windows-item: from current-row to current-row [type=decimal]
+           └── windows-item: range from current-row to current-row [type=decimal]
                 └── avg [type=decimal]
                      └── variable: k [type=int]
 
@@ -927,37 +955,609 @@ project
 build
 SELECT avg(k) OVER (ORDER BY v RANGE BETWEEN k - 10 PRECEDING AND CURRENT ROW) FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: avg:8(decimal)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── windows-item: range from offset to current-row [type=decimal]
+                └── window-from-offset [type=decimal]
+                     ├── avg [type=decimal]
+                     │    └── variable: k [type=int]
+                     └── minus [type=int]
+                          ├── variable: k [type=int]
+                          └── const: 10 [type=int]
 
 build
 SELECT avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: avg:8(decimal)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── windows-item: range from unbounded to offset [type=decimal]
+                └── window-to-offset [type=decimal]
+                     ├── avg [type=decimal]
+                     │    └── variable: k [type=int]
+                     └── const: 10 [type=int]
 
 build
 SELECT
     avg(v) OVER (PARTITION BY w ORDER BY f RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS avg_price
 FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: avg_price:8(decimal)
+ └── window partition=(3) ordering=+4
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── windows-item: range from offset to offset [type=decimal]
+                └── window-to-offset [type=decimal]
+                     ├── window-from-offset [type=decimal]
+                     │    ├── avg [type=decimal]
+                     │    │    └── variable: v [type=int]
+                     │    └── const: 1.0 [type=float]
+                     └── const: 1.0 [type=float]
 
-# TODO(justin): add support for ROWS.
 build
 SELECT
-    avg(v) OVER (PARTITION BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS avg_price
+    avg(v) OVER (PARTITION BY w ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS avg_price
 FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: avg_price:8(decimal)
+ └── window partition=(3)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── windows-item: rows from offset to offset [type=decimal]
+                └── window-to-offset [type=decimal]
+                     ├── window-from-offset [type=decimal]
+                     │    ├── avg [type=decimal]
+                     │    │    └── variable: v [type=int]
+                     │    └── const: 1 [type=int]
+                     └── const: 1 [type=int]
 
-# TODO(justin): add support for GROUPS expressions.
 build
 SELECT
-    avg(v) OVER (GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+    avg(v) OVER (
+        PARTITION BY
+            w
+        ROWS
+            BETWEEN (SELECT count(*) FROM kv) PRECEDING AND 1 FOLLOWING
+    )
+FROM
+    kv
+----
+project
+ ├── columns: avg:16(decimal)
+ └── window partition=(3)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:16(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── windows-item: rows from offset to offset [type=decimal]
+                └── window-to-offset [type=decimal]
+                     ├── window-from-offset [type=decimal]
+                     │    ├── avg [type=decimal]
+                     │    │    └── variable: v [type=int]
+                     │    └── subquery [type=int]
+                     │         └── max1-row
+                     │              ├── columns: count_rows:15(int)
+                     │              └── scalar-group-by
+                     │                   ├── columns: count_rows:15(int)
+                     │                   ├── project
+                     │                   │    └── scan kv
+                     │                   │         └── columns: k:8(int!null) v:9(int) w:10(int) f:11(float) d:12(decimal) s:13(string) b:14(bool)
+                     │                   └── aggregations
+                     │                        └── count-rows [type=int]
+                     └── const: 1 [type=int]
+
+# TODO(justin): consider adding rules to hoist correlated subqueries in the
+# OFFSET positions.
+build
+SELECT
+    avg(v) OVER (
+        PARTITION BY
+            w
+        ROWS
+            BETWEEN (SELECT count(*) FROM kv inner_table WHERE inner_table.k = outer_table.v) PRECEDING AND 1 FOLLOWING
+    )
+FROM
+    kv outer_table
+----
+project
+ ├── columns: avg:16(decimal)
+ └── window partition=(3)
+      ├── columns: outer_table.k:1(int!null) outer_table.v:2(int) outer_table.w:3(int) outer_table.f:4(float) outer_table.d:5(decimal) outer_table.s:6(string) outer_table.b:7(bool) avg:16(decimal)
+      ├── scan outer_table
+      │    └── columns: outer_table.k:1(int!null) outer_table.v:2(int) outer_table.w:3(int) outer_table.f:4(float) outer_table.d:5(decimal) outer_table.s:6(string) outer_table.b:7(bool)
+      └── windows
+           └── windows-item: rows from offset to offset [type=decimal]
+                └── window-to-offset [type=decimal]
+                     ├── window-from-offset [type=decimal]
+                     │    ├── avg [type=decimal]
+                     │    │    └── variable: outer_table.v [type=int]
+                     │    └── subquery [type=int]
+                     │         └── max1-row
+                     │              ├── columns: count_rows:15(int)
+                     │              └── scalar-group-by
+                     │                   ├── columns: count_rows:15(int)
+                     │                   ├── project
+                     │                   │    └── select
+                     │                   │         ├── columns: inner_table.k:8(int!null) inner_table.v:9(int) inner_table.w:10(int) inner_table.f:11(float) inner_table.d:12(decimal) inner_table.s:13(string) inner_table.b:14(bool)
+                     │                   │         ├── scan inner_table
+                     │                   │         │    └── columns: inner_table.k:8(int!null) inner_table.v:9(int) inner_table.w:10(int) inner_table.f:11(float) inner_table.d:12(decimal) inner_table.s:13(string) inner_table.b:14(bool)
+                     │                   │         └── filters
+                     │                   │              └── eq [type=bool]
+                     │                   │                   ├── variable: inner_table.k [type=int]
+                     │                   │                   └── variable: outer_table.v [type=int]
+                     │                   └── aggregations
+                     │                        └── count-rows [type=int]
+                     └── const: 1 [type=int]
+
+build
+SELECT
+    avg(v) OVER (ORDER BY v GROUPS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
 FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: avg:8(decimal)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── windows-item: groups from offset to offset [type=decimal]
+                └── window-to-offset [type=decimal]
+                     ├── window-from-offset [type=decimal]
+                     │    ├── avg [type=decimal]
+                     │    │    └── variable: v [type=int]
+                     │    └── const: 1 [type=int]
+                     └── const: 1 [type=int]
+
+build
+SELECT
+    avg(v) OVER (GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)
+FROM kv
+----
+project
+ ├── columns: avg:8(decimal)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── windows-item: groups from offset to unbounded [type=decimal]
+                └── window-from-offset [type=decimal]
+                     ├── avg [type=decimal]
+                     │    └── variable: v [type=int]
+                     └── const: 1 [type=int]
 
 build
 SELECT avg(v) OVER (ORDER BY f RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: avg:8(decimal)
+ └── window partition=() ordering=+4
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── windows-item: range from offset to unbounded [type=decimal]
+                └── window-from-offset [type=decimal]
+                     ├── avg [type=decimal]
+                     │    └── variable: v [type=int]
+                     └── const: 1.0 [type=float]
+
+build
+SELECT
+  avg(v) OVER (ORDER BY f RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING),
+  avg(v) OVER (ORDER BY d RANGE BETWEEN 2 FOLLOWING AND UNBOUNDED FOLLOWING)
+FROM kv
+----
+project
+ ├── columns: avg:8(decimal) avg:9(decimal)
+ └── window partition=() ordering=+5
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg:9(decimal)
+      ├── window partition=() ordering=+4
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── windows
+      │         └── windows-item: range from offset to unbounded [type=decimal]
+      │              └── window-from-offset [type=decimal]
+      │                   ├── avg [type=decimal]
+      │                   │    └── variable: v [type=int]
+      │                   └── const: 1.0 [type=float]
+      └── windows
+           └── windows-item: range from offset to unbounded [type=decimal]
+                └── window-from-offset [type=decimal]
+                     ├── avg [type=decimal]
+                     │    └── variable: v [type=int]
+                     └── const: 2 [type=decimal]
+
+# Ensure window functions get appropriately deduplicated.
+
+build
+SELECT
+    avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW),
+    avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW),
+    avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW),
+    1 + avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    1 + avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW),
+    1 + avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    1 + avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW),
+    1 + avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    1 + avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)
+FROM
+    kv
+----
+project
+ ├── columns: avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal) avg:12(decimal) avg:13(decimal) avg:14(decimal) avg:15(decimal) avg:16(decimal) avg:17(decimal) avg:18(decimal) avg:19(decimal) "?column?":20(decimal) "?column?":21(decimal) "?column?":22(decimal) "?column?":23(decimal) "?column?":24(decimal) "?column?":25(decimal) "?column?":26(decimal) "?column?":27(decimal) "?column?":28(decimal) "?column?":29(decimal) "?column?":30(decimal) "?column?":31(decimal)
+ ├── window partition=()
+ │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal) avg:12(decimal) avg:13(decimal) avg:14(decimal) avg:15(decimal) avg:16(decimal) avg:17(decimal) avg:18(decimal) avg:19(decimal)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+ │    └── windows
+ │         ├── windows-item: range from unbounded to unbounded [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── avg [type=decimal]
+ │         │    └── variable: k [type=int]
+ │         ├── windows-item: range from current-row to unbounded [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── windows-item: range from current-row to current-row [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── windows-item: rows from unbounded to unbounded [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── windows-item: rows from unbounded to current-row [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── windows-item: rows from current-row to unbounded [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── windows-item: rows from current-row to current-row [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── windows-item: groups from unbounded to unbounded [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── windows-item: groups from unbounded to current-row [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── windows-item: groups from current-row to unbounded [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         └── windows-item: groups from current-row to current-row [type=decimal]
+ │              └── avg [type=decimal]
+ │                   └── variable: k [type=int]
+ └── projections
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      └── plus [type=decimal]
+           ├── const: 1 [type=decimal]
+           └── variable: avg [type=decimal]
+
+build
+SELECT
+    avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ORDER BY v RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ORDER BY v RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING),
+    avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v RANGE BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
+FROM
+    kv
+----
+project
+ ├── columns: avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal) "?column?":12(decimal) "?column?":13(decimal) "?column?":14(decimal) "?column?":15(decimal)
+ ├── window partition=() ordering=+2
+ │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal)
+ │    ├── scan kv
+ │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+ │    └── windows
+ │         ├── windows-item: range from unbounded to unbounded [type=decimal]
+ │         │    └── avg [type=decimal]
+ │         │         └── variable: k [type=int]
+ │         ├── windows-item: range from offset to unbounded [type=decimal]
+ │         │    └── window-from-offset [type=decimal]
+ │         │         ├── avg [type=decimal]
+ │         │         │    └── variable: k [type=int]
+ │         │         └── const: 1 [type=int]
+ │         ├── windows-item: range from offset to offset [type=decimal]
+ │         │    └── window-to-offset [type=decimal]
+ │         │         ├── window-from-offset [type=decimal]
+ │         │         │    ├── avg [type=decimal]
+ │         │         │    │    └── variable: k [type=int]
+ │         │         │    └── const: 1 [type=int]
+ │         │         └── const: 1 [type=int]
+ │         └── windows-item: range from unbounded to offset [type=decimal]
+ │              └── window-to-offset [type=decimal]
+ │                   ├── avg [type=decimal]
+ │                   │    └── variable: k [type=int]
+ │                   └── const: 1 [type=int]
+ └── projections
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      ├── plus [type=decimal]
+      │    ├── const: 1 [type=decimal]
+      │    └── variable: avg [type=decimal]
+      └── plus [type=decimal]
+           ├── const: 1 [type=decimal]
+           └── variable: avg [type=decimal]
+
+# Filter.
+
+build
+SELECT rank() FILTER (WHERE k = 1) OVER () FROM kv
+----
+error (42809): FILTER specified but rank() is not an aggregate function
+
+build
+SELECT avg(f) FILTER (WHERE k = 1) OVER () FROM kv
+----
+project
+ ├── columns: avg:8(float)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(float) avg_1_filter:9(bool)
+      ├── project
+      │    ├── columns: avg_1_filter:9(bool) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         └── eq [type=bool]
+      │              ├── variable: k [type=int]
+      │              └── const: 1 [type=int]
+      └── windows
+           └── agg-filter [type=float]
+                ├── avg [type=float]
+                │    └── variable: f [type=float]
+                └── variable: avg_1_filter [type=bool]
+
+build
+SELECT count(*) FILTER (WHERE true) OVER (), count(*) FILTER (WHERE false) OVER () FROM kv
+----
+project
+ ├── columns: count:8(int) count:9(int)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) count:8(int) count:9(int) count_1_arg1:10(bool!null) count_2_filter:11(bool!null)
+      ├── project
+      │    ├── columns: count_1_arg1:10(bool!null) count_2_filter:11(bool!null) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         ├── true [type=bool]
+      │         └── false [type=bool]
+      └── windows
+           ├── agg-filter [type=int]
+           │    ├── count [type=int]
+           │    │    └── variable: count_1_arg1 [type=bool]
+           │    └── variable: count_1_arg1 [type=bool]
+           └── agg-filter [type=int]
+                ├── count [type=int]
+                │    └── variable: count_1_arg1 [type=bool]
+                └── variable: count_2_filter [type=bool]
+
+build
+SELECT
+    count(*) FILTER (WHERE false) OVER (),
+    count(*) FILTER (WHERE false) OVER (),
+    avg(k) FILTER (WHERE false) OVER ()
+FROM
+    kv
+----
+project
+ ├── columns: count:8(int) count:8(int) avg:9(decimal)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) count:8(int) avg:9(decimal) count_1_arg1:10(bool!null) count_1_filter:11(bool!null)
+      ├── project
+      │    ├── columns: count_1_arg1:10(bool!null) count_1_filter:11(bool!null) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         ├── true [type=bool]
+      │         └── false [type=bool]
+      └── windows
+           ├── agg-filter [type=int]
+           │    ├── count [type=int]
+           │    │    └── variable: count_1_arg1 [type=bool]
+           │    └── variable: count_1_filter [type=bool]
+           └── agg-filter [type=decimal]
+                ├── avg [type=decimal]
+                │    └── variable: k [type=int]
+                └── variable: count_1_filter [type=bool]
+
+# Named windows.
+
+build
+SELECT
+  rank() OVER (w)
+FROM kv WINDOW w as (ORDER BY v)
+----
+project
+ ├── columns: rank:8(int)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── rank [type=undefined]
+
+build
+SELECT
+  rank() OVER (w)
+FROM kv WINDOW w as (ORDER BY v)
+----
+project
+ ├── columns: rank:8(int)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── rank [type=undefined]
+
+build
+SELECT
+  rank() OVER (w),
+  rank() OVER w,
+  row_number() OVER (w2),
+  row_number() OVER (w2 ORDER BY f),
+  row_number() OVER w2
+FROM kv WINDOW w as (ORDER BY v), w2 as (PARTITION BY v)
+----
+project
+ ├── columns: rank:8(int) rank:9(int) row_number:10(int) row_number:11(int) row_number:12(int)
+ └── window partition=(2) ordering=+4
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) rank:9(int) row_number:10(int) row_number:11(int) row_number:12(int)
+      ├── window partition=(2)
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) rank:9(int) row_number:10(int) row_number:12(int)
+      │    ├── window partition=() ordering=+2
+      │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) rank:9(int)
+      │    │    ├── scan kv
+      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    └── windows
+      │    │         ├── rank [type=undefined]
+      │    │         └── rank [type=undefined]
+      │    └── windows
+      │         ├── row-number [type=undefined]
+      │         └── row-number [type=undefined]
+      └── windows
+           └── row-number [type=undefined]
+
+build
+SELECT
+  rank() OVER w
+FROM kv WINDOW w as (ORDER BY v), w2 as (PARTITION BY v)
+----
+project
+ ├── columns: rank:8(int)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── windows
+           └── rank [type=undefined]
+
+build
+SELECT
+  rank() OVER w
+FROM kv WINDOW w as (ORDER BY v)
+ORDER BY rank() OVER w
+----
+sort
+ ├── columns: rank:8(int)
+ ├── ordering: +8
+ └── project
+      ├── columns: rank:8(int)
+      └── window partition=() ordering=+2
+           ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+           ├── scan kv
+           │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+           └── windows
+                └── rank [type=undefined]
+
+build
+SELECT
+  rank() OVER w
+FROM kv
+WHERE rank() OVER w < 4
+WINDOW w as (ORDER BY v)
+----
+error (42P20): rank(): window functions are not allowed in WHERE
+
+# Window names don't descend through scopes.
+build
+SELECT
+  (SELECT rank() OVER w)
+FROM kv WINDOW w as (ORDER BY v)
+----
+error (42704): window "w" does not exist
+
+# Window names may only be used a single time.
+build
+SELECT
+  rank() OVER (w)
+FROM kv WINDOW w as (ORDER BY v), w as (PARTITION BY v)
+----
+error (42P20): window "w" is already defined
+
+# Rules for overriding a window definition.
+build
+SELECT rank() OVER (w ORDER BY f) FROM kv WINDOW w as (ORDER BY v)
+----
+error (42P20): cannot override ORDER BY clause of window "w"
+
+build
+SELECT rank() OVER (w PARTITION BY f) FROM kv WINDOW w as (ORDER BY v)
+----
+error (42P20): cannot override PARTITION BY clause of window "w"
+
+build
+SELECT rank() OVER (w) FROM kv WINDOW w as (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+----
+error (42P20): cannot copy window "w" because it has a frame clause

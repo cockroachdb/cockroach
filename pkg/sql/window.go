@@ -293,12 +293,13 @@ func constructWindowDef(
 	var refName string
 	switch {
 	case def.RefName != "":
-		// SELECT rank() OVER (w) FROM t WINDOW w as (...)
+		// SELECT rank() OVER (w) FROM t WINDOW w AS (...)
 		// We copy the referenced window specification, and modify it if necessary.
 		refName = string(def.RefName)
 		modifyRef = true
 	case def.Name != "":
-		// SELECT rank() OVER w FROM t WINDOW w as (...)
+		// SELECT rank() OVER w FROM t WINDOW w AS (...)
+		// Note the lack of parens around w, compared to the first case.
 		// We use the referenced window specification directly, without modification.
 		refName = string(def.Name)
 	}
@@ -314,25 +315,7 @@ func constructWindowDef(
 		return *referencedSpec, nil
 	}
 
-	// referencedSpec.Partitions is always used.
-	if len(def.Partitions) > 0 {
-		return def, pgerror.Newf(pgerror.CodeWindowingError, "cannot override PARTITION BY clause of window %q", refName)
-	}
-	def.Partitions = referencedSpec.Partitions
-
-	// referencedSpec.OrderBy is used if set.
-	if len(referencedSpec.OrderBy) > 0 {
-		if len(def.OrderBy) > 0 {
-			return def, pgerror.Newf(pgerror.CodeWindowingError, "cannot override ORDER BY clause of window %q", refName)
-		}
-		def.OrderBy = referencedSpec.OrderBy
-	}
-
-	if referencedSpec.Frame != nil {
-		return def, pgerror.Newf(pgerror.CodeWindowingError, "cannot copy window %q because it has a frame clause", refName)
-	}
-
-	return def, nil
+	return tree.OverrideWindowDef(referencedSpec, def)
 }
 
 // Once the extractWindowFunctions has been run over each render, the remaining

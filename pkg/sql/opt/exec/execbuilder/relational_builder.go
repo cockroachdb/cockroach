@@ -1346,6 +1346,93 @@ func (b *Builder) resultColumn(id opt.ColumnID) sqlbase.ResultColumn {
 	}
 }
 
+// extractFromOffset extracts the start bound expression of a window function
+// that uses the OFFSET windowing mode for its start bound.
+func (b *Builder) extractFromOffset(e opt.ScalarExpr) (_ opt.ScalarExpr, ok bool) {
+	if opt.IsWindowOp(e) || opt.IsAggregateOp(e) {
+		return nil, false
+	}
+	if modifier, ok := e.(*memo.WindowFromOffsetExpr); ok {
+		return modifier.Offset, true
+	}
+	return b.extractFromOffset(e.Child(0).(opt.ScalarExpr))
+}
+
+// extractToOffset extracts the end bound expression of a window function
+// that uses the OFFSET windowing mode for its end bound.
+func (b *Builder) extractToOffset(e opt.ScalarExpr) (_ opt.ScalarExpr, ok bool) {
+	if opt.IsWindowOp(e) || opt.IsAggregateOp(e) {
+		return nil, false
+	}
+	if modifier, ok := e.(*memo.WindowToOffsetExpr); ok {
+		return modifier.Offset, true
+	}
+	return b.extractToOffset(e.Child(0).(opt.ScalarExpr))
+}
+
+// extractFilter extracts a FILTER expression from a window function tower.
+// Returns the expression and true if there was a filter, and false otherwise.
+func (b *Builder) extractFilter(e opt.ScalarExpr) (opt.ScalarExpr, bool) {
+	if opt.IsWindowOp(e) || opt.IsAggregateOp(e) {
+		return nil, false
+	}
+	if filter, ok := e.(*memo.AggFilterExpr); ok {
+		return filter.Filter, true
+	}
+	return b.extractFilter(e.Child(0).(opt.ScalarExpr))
+}
+
+// extractWindowFunction extracts the window function being computed from a
+// potential tower of modifiers attached to the Function field of a
+// WindowsItem.
+func (b *Builder) extractWindowFunction(e opt.ScalarExpr) opt.ScalarExpr {
+	if opt.IsWindowOp(e) || opt.IsAggregateOp(e) {
+		return e
+	}
+	return b.extractWindowFunction(e.Child(0).(opt.ScalarExpr))
+}
+
+func (b *Builder) isOffsetMode(boundType tree.WindowFrameBoundType) bool {
+	return boundType == tree.OffsetPreceding || boundType == tree.OffsetFollowing
+}
+
+func (b *Builder) buildFrame(input execPlan, w *memo.WindowsItem) (*tree.WindowFrame, error) {
+	scalarCtx := input.makeBuildScalarCtx()
+	newDef := &tree.WindowFrame{
+		Mode: w.Frame.Mode,
+		Bounds: tree.WindowFrameBounds{
+			StartBound: &tree.WindowFrameBound{
+				BoundType: w.Frame.StartBoundType,
+			},
+			EndBound: &tree.WindowFrameBound{
+				BoundType: w.Frame.EndBoundType,
+			},
+		},
+	}
+	if boundExpr, ok := b.extractFromOffset(w.Function); ok {
+		if !b.isOffsetMode(w.Frame.StartBoundType) {
+			panic(pgerror.AssertionFailedf("expected offset to only be present in offset mode"))
+		}
+		offset, err := b.buildScalar(&scalarCtx, boundExpr)
+		if err != nil {
+			return nil, err
+		}
+		newDef.Bounds.StartBound.OffsetExpr = offset
+	}
+
+	if boundExpr, ok := b.extractToOffset(w.Function); ok {
+		if !b.isOffsetMode(newDef.Bounds.EndBound.BoundType) {
+			panic(pgerror.AssertionFailedf("expected offset to only be present in offset mode"))
+		}
+		offset, err := b.buildScalar(&scalarCtx, boundExpr)
+		if err != nil {
+			return nil, err
+		}
+		newDef.Bounds.EndBound.OffsetExpr = offset
+	}
+	return newDef, nil
+}
+
 func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	input, err := b.buildRelational(w.Input)
 	if err != nil {
@@ -1398,11 +1485,12 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	})
 
 	argIdxs := make([][]exec.ColumnOrdinal, len(w.Windows))
+	filterIdxs := make([]int, len(w.Windows))
 	exprs := make([]*tree.FuncExpr, len(w.Windows))
 
 	for i := range w.Windows {
 		item := &w.Windows[i]
-		fn := item.Function
+		fn := b.extractWindowFunction(item.Function)
 		name, overload := memo.FindWindowOverload(fn)
 		props, _ := builtins.GetBuiltinProperties(name)
 
@@ -1415,17 +1503,37 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 			argIdxs[i][j] = exec.ColumnOrdinal(idx)
 		}
 
+		frame, err := b.buildFrame(input, item)
+		if err != nil {
+			return execPlan{}, err
+		}
+
+		var builtFilter tree.TypedExpr
+		filter, ok := b.extractFilter(item.Function)
+		if ok {
+			f, ok := filter.(*memo.VariableExpr)
+			if !ok {
+				panic(pgerror.AssertionFailedf("expected FILTER expression to be a VariableExpr"))
+			}
+			filterIdxs[i], _ = input.outputCols.Get(int(f.Col))
+
+			builtFilter, err = b.buildScalar(&ctx, filter)
+			if err != nil {
+				return execPlan{}, err
+			}
+		} else {
+			filterIdxs[i] = -1
+		}
+
 		exprs[i] = tree.NewTypedFuncExpr(
 			tree.WrapFunction(name),
 			0,
 			args,
-			// TODO(justin): support filters (only apply to aggregates, not window
-			// functions in general).
-			nil,
+			builtFilter,
 			&tree.WindowDef{
 				Partitions: partitionExprs,
 				OrderBy:    orderingExprs,
-				Frame:      item.Frame,
+				Frame:      frame,
 			},
 			overload.FixedReturnType(),
 			props,
@@ -1465,6 +1573,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		Exprs:      exprs,
 		OutputIdxs: outputIdxs,
 		ArgIdxs:    argIdxs,
+		FilterIdxs: filterIdxs,
 		Partition:  partitionIdxs,
 		Ordering:   input.sqlOrdering(ord),
 	})

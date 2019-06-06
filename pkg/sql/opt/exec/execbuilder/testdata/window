@@ -89,31 +89,35 @@ EXPLAIN (VERBOSE) SELECT max(v) OVER (), min(v) FROM kv ORDER BY 1
 query TTT
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-sort                 ·      ·
- │                   order  +variance,+k
- └── window          ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  kv@primary
-·                    spans  ALL
+render                    ·      ·
+ └── sort                 ·      ·
+      │                   order  +variance,+k
+      └── render          ·      ·
+           └── window     ·      ·
+                └── scan  ·      ·
+·                         table  kv@primary
+·                         spans  ALL
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-sort                 ·         ·                                         (k int, stddev decimal)                                                                          ·
- │                   order     +variance,+k                              ·                                                                                                ·
- └── window          ·         ·                                         (k int, stddev decimal, variance decimal)                                                        ·
-      │              window 0  (stddev((d)[decimal]) OVER w)[decimal]    ·                                                                                                ·
-      │              window 1  (variance((d)[decimal]) OVER w)[decimal]  ·                                                                                                ·
-      │              render 1  (stddev((d)[decimal]) OVER w)[decimal]    ·                                                                                                ·
-      │              render 2  (variance((d)[decimal]) OVER w)[decimal]  ·                                                                                                ·
-      └── render     ·         ·                                         (k int, v int, d decimal)                                                                        k!=NULL; key(k)
-           │         render 0  (k)[int]                                  ·                                                                                                ·
-           │         render 1  (v)[int]                                  ·                                                                                                ·
-           │         render 2  (d)[decimal]                              ·                                                                                                ·
-           └── scan  ·         ·                                         (k int, v int, w[omitted] int, f[omitted] float, d decimal, s[omitted] string, b[omitted] bool)  k!=NULL; key(k)
-·                    table     kv@primary                                ·                                                                                                ·
-·                    spans     ALL                                       ·                                                                                                ·
+render                    ·         ·                                                                                                                   (k int, stddev decimal)                                      ·
+ │                        render 0  (k)[int]                                                                                                            ·                                                            ·
+ │                        render 1  (stddev)[decimal]                                                                                                   ·                                                            ·
+ └── sort                 ·         ·                                                                                                                   (k int, stddev decimal, variance decimal)                    +variance,+k
+      │                   order     +variance,+k                                                                                                        ·                                                            ·
+      └── render          ·         ·                                                                                                                   (k int, stddev decimal, variance decimal)                    ·
+           │              render 0  (k)[int]                                                                                                            ·                                                            ·
+           │              render 1  (stddev)[decimal]                                                                                                   ·                                                            ·
+           │              render 2  (variance)[decimal]                                                                                                 ·                                                            ·
+           └── window     ·         ·                                                                                                                   (k int, v int, d decimal, stddev decimal, variance decimal)  ·
+                │         window 0  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
+                │         window 1  (variance((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
+                │         render 3  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
+                │         render 4  (variance((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
+                └── scan  ·         ·                                                                                                                   (k int, v int, d decimal)                                    ·
+·                         table     kv@primary                                                                                                          ·                                                            ·
+·                         spans     ALL                                                                                                                 ·                                                            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
@@ -307,24 +311,88 @@ EXPLAIN (VERBOSE)
         avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
         avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
         avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
-        avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)
+        avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW),
+        avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+        avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW),
+        avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+        avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)
     FROM
         kv
 ----
-render          ·         ·                                                                         (avg, avg, avg, avg)     ·
- │              render 0  avg                                                                       ·                        ·
- │              render 1  avg                                                                       ·                        ·
- │              render 2  avg                                                                       ·                        ·
- │              render 3  avg                                                                       ·                        ·
- └── window     ·         ·                                                                         (k, avg, avg, avg, avg)  ·
-      │         window 0  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                        ·
-      │         window 1  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                        ·
-      │         window 2  avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                        ·
-      │         window 3  avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                        ·
-      │         render 1  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                        ·
-      │         render 2  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                        ·
-      │         render 3  avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                        ·
-      │         render 4  avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                        ·
-      └── scan  ·         ·                                                                         (k)                      ·
-·               table     kv@primary                                                                ·                        ·
-·               spans     ALL                                                                       ·                        ·
+render          ·          ·                                                                          (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)     ·
+ │              render 0   avg                                                                        ·                                                                ·
+ │              render 1   avg                                                                        ·                                                                ·
+ │              render 2   avg                                                                        ·                                                                ·
+ │              render 3   avg                                                                        ·                                                                ·
+ │              render 4   avg                                                                        ·                                                                ·
+ │              render 5   avg                                                                        ·                                                                ·
+ │              render 6   avg                                                                        ·                                                                ·
+ │              render 7   avg                                                                        ·                                                                ·
+ │              render 8   avg                                                                        ·                                                                ·
+ │              render 9   avg                                                                        ·                                                                ·
+ │              render 10  avg                                                                        ·                                                                ·
+ │              render 11  avg                                                                        ·                                                                ·
+ └── window     ·          ·                                                                          (k, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)  ·
+      │         window 0   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)   ·                                                                ·
+      │         window 1   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)           ·                                                                ·
+      │         window 2   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)           ·                                                                ·
+      │         window 3   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                   ·                                                                ·
+      │         window 4   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)    ·                                                                ·
+      │         window 5   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            ·                                                                ·
+      │         window 6   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)            ·                                                                ·
+      │         window 7   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                    ·                                                                ·
+      │         window 8   avg(@1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                                                                ·
+      │         window 9   avg(@1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                                ·
+      │         window 10  avg(@1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                                                                ·
+      │         window 11  avg(@1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                                                                ·
+      │         render 1   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)   ·                                                                ·
+      │         render 2   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)           ·                                                                ·
+      │         render 3   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)           ·                                                                ·
+      │         render 4   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                   ·                                                                ·
+      │         render 5   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)    ·                                                                ·
+      │         render 6   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            ·                                                                ·
+      │         render 7   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)            ·                                                                ·
+      │         render 8   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                    ·                                                                ·
+      │         render 9   avg(@1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                                                                ·
+      │         render 10  avg(@1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                                ·
+      │         render 11  avg(@1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                                                                ·
+      │         render 12  avg(@1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                                                                ·
+      └── scan  ·          ·                                                                          (k)                                                              ·
+·               table      kv@primary                                                                 ·                                                                ·
+·               spans      ALL                                                                        ·                                                                ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+    SELECT
+        avg(v) OVER (
+            PARTITION BY
+                w
+            ROWS
+                BETWEEN (SELECT count(*) FROM kv) PRECEDING AND 1 FOLLOWING
+        )
+    FROM
+        kv
+----
+root                 ·             ·                                                                          (avg)         ·
+ ├── render          ·             ·                                                                          (avg)         ·
+ │    │              render 0      avg                                                                        ·             ·
+ │    └── window     ·             ·                                                                          (v, w, avg)   ·
+ │         │         window 0      avg(@1) OVER (PARTITION BY @2 ROWS BETWEEN @S1 PRECEDING AND 1 FOLLOWING)  ·             ·
+ │         │         render 2      avg(@1) OVER (PARTITION BY @2 ROWS BETWEEN @S1 PRECEDING AND 1 FOLLOWING)  ·             ·
+ │         └── scan  ·             ·                                                                          (v, w)        ·
+ │                   table         kv@primary                                                                 ·             ·
+ │                   spans         ALL                                                                        ·             ·
+ └── subquery        ·             ·                                                                          (avg)         ·
+      │              id            @S1                                                                        ·             ·
+      │              original sql  (SELECT count(*) FROM kv)                                                  ·             ·
+      │              exec mode     one row                                                                    ·             ·
+      └── group      ·             ·                                                                          (count_rows)  ·
+           │         aggregate 0   count_rows()                                                               ·             ·
+           │         scalar        ·                                                                          ·             ·
+           └── scan  ·             ·                                                                          ()            ·
+·                    table         kv@primary                                                                 ·             ·
+·                    spans         ALL                                                                        ·             ·
