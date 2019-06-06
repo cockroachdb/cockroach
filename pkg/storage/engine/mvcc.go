@@ -869,7 +869,7 @@ func mvccGetInternal(
 		// by this transaction or not an intent at all (so there's no
 		// conflict). Note that when reading the own intent, the timestamp
 		// specified is irrelevant; we always want to see the intent (see
-		// TestMVCCReadWithPushedTimestamp).
+		// TestMVCCGetWithPushedTimestamp).
 		seekKey.Timestamp = metaTimestamp
 
 		// Check for case where we're reading our own txn's intent
