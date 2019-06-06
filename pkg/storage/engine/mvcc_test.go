@@ -3469,73 +3469,87 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	}
 }
 
-// TestMVCCReadWithDiffEpochs writes a value first using epoch 1, then
+// TestMVCCGetWithDiffEpochs writes a value first using epoch 1, then
 // reads using epoch 2 to verify that values written during different
 // transaction epochs are not visible.
-func TestMVCCReadWithDiffEpochs(t *testing.T) {
+func TestMVCCGetWithDiffEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-	engine := createTestEngine()
-	defer engine.Close()
+	for _, impl := range mvccGetImpls {
+		t.Run(impl.name, func(t *testing.T) {
+			mvccGet := impl.fn
 
-	// Write initial value without a txn.
-	if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
-		t.Fatal(err)
-	}
-	// Now write using txn1, epoch 1.
-	txn1ts := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
-	if err := MVCCPut(ctx, engine, nil, testKey1, txn1ts.OrigTimestamp, value2, txn1ts); err != nil {
-		t.Fatal(err)
-	}
-	// Try reading using different txns & epochs.
-	testCases := []struct {
-		txn      *roachpb.Transaction
-		expValue *roachpb.Value
-		expErr   bool
-	}{
-		// No transaction; should see error.
-		{nil, nil, true},
-		// Txn1, epoch 1; should see new value2.
-		{txn1, &value2, false},
-		// Txn1, epoch 2; should see original value1.
-		{txn1e2, &value1, false},
-		// Txn2; should see error.
-		{txn2, nil, true},
-	}
-	for i, test := range testCases {
-		value, _, err := MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, MVCCGetOptions{
-			Txn: test.txn,
-		})
-		if test.expErr {
-			if err == nil {
-				t.Errorf("test %d: unexpected success", i)
-			} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
-				t.Errorf("test %d: expected write intent error; got %v", i, err)
+			ctx := context.Background()
+			engine := createTestEngine()
+			defer engine.Close()
+
+			// Write initial value without a txn.
+			if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
+				t.Fatal(err)
 			}
-		} else if err != nil || value == nil || !bytes.Equal(test.expValue.RawBytes, value.RawBytes) {
-			t.Errorf("test %d: expected value %q, err nil; got %+v, %v", i, test.expValue.RawBytes, value, err)
-		}
+			// Now write using txn1, epoch 1.
+			txn1ts := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
+			if err := MVCCPut(ctx, engine, nil, testKey1, txn1ts.OrigTimestamp, value2, txn1ts); err != nil {
+				t.Fatal(err)
+			}
+			// Try reading using different txns & epochs.
+			testCases := []struct {
+				txn      *roachpb.Transaction
+				expValue *roachpb.Value
+				expErr   bool
+			}{
+				// No transaction; should see error.
+				{nil, nil, true},
+				// Txn1, epoch 1; should see new value2.
+				{txn1, &value2, false},
+				// Txn1, epoch 2; should see original value1.
+				{txn1e2, &value1, false},
+				// Txn2; should see error.
+				{txn2, nil, true},
+			}
+			for i, test := range testCases {
+				t.Run(strconv.Itoa(i), func(t *testing.T) {
+					value, _, err := mvccGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, MVCCGetOptions{
+						Txn: test.txn,
+					})
+					if test.expErr {
+						if err == nil {
+							t.Errorf("test %d: unexpected success", i)
+						} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
+							t.Errorf("test %d: expected write intent error; got %v", i, err)
+						}
+					} else if err != nil || value == nil || !bytes.Equal(test.expValue.RawBytes, value.RawBytes) {
+						t.Errorf("test %d: expected value %q, err nil; got %+v, %v", i, test.expValue.RawBytes, value, err)
+					}
+				})
+			}
+		})
 	}
 }
 
-// TestMVCCReadWithOldEpoch writes a value first using epoch 2, then
+// TestMVCCGetWithOldEpoch writes a value first using epoch 2, then
 // reads using epoch 1 to verify that the read will fail.
-func TestMVCCReadWithOldEpoch(t *testing.T) {
+func TestMVCCGetWithOldEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-	engine := createTestEngine()
-	defer engine.Close()
+	for _, impl := range mvccGetImpls {
+		t.Run(impl.name, func(t *testing.T) {
+			mvccGet := impl.fn
 
-	if err := MVCCPut(ctx, engine, nil, testKey1, txn1e2.OrigTimestamp, value2, txn1e2); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err := MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, MVCCGetOptions{
-		Txn: txn1,
-	})
-	if err == nil {
-		t.Fatalf("unexpected success of get")
+			ctx := context.Background()
+			engine := createTestEngine()
+			defer engine.Close()
+
+			if err := MVCCPut(ctx, engine, nil, testKey1, txn1e2.OrigTimestamp, value2, txn1e2); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := mvccGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, MVCCGetOptions{
+				Txn: txn1,
+			})
+			if err == nil {
+				t.Fatalf("unexpected success of get")
+			}
+		})
 	}
 }
 
@@ -3676,38 +3690,44 @@ func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 	}
 }
 
-// TestMVCCReadWithPushedTimestamp verifies that a read for a value
+// TestMVCCGetWithPushedTimestamp verifies that a read for a value
 // written by the transaction, but then subsequently pushed, can still
 // be read by the txn at the later timestamp, even if an earlier
 // timestamp is specified. This happens when a txn's intents are
 // resolved by other actors; the intents shouldn't become invisible
 // to pushed txn.
-func TestMVCCReadWithPushedTimestamp(t *testing.T) {
+func TestMVCCGetWithPushedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-	engine := createTestEngine()
-	defer engine.Close()
+	for _, impl := range mvccGetImpls {
+		t.Run(impl.name, func(t *testing.T) {
+			mvccGet := impl.fn
 
-	// Start with epoch 1.
-	if err := MVCCPut(ctx, engine, nil, testKey1, txn1.OrigTimestamp, value1, txn1); err != nil {
-		t.Fatal(err)
-	}
-	// Resolve the intent, pushing its timestamp forward.
-	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
-	if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
-		Span:   roachpb.Span{Key: testKey1},
-		Status: txn.Status,
-		Txn:    txn.TxnMeta,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// Attempt to read using naive txn's previous timestamp.
-	value, _, err := MVCCGet(ctx, engine, testKey1, hlc.Timestamp{Logical: 1}, MVCCGetOptions{
-		Txn: txn1,
-	})
-	if err != nil || value == nil || !bytes.Equal(value.RawBytes, value1.RawBytes) {
-		t.Errorf("expected value %q, err nil; got %+v, %v", value1.RawBytes, value, err)
+			ctx := context.Background()
+			engine := createTestEngine()
+			defer engine.Close()
+
+			// Start with epoch 1.
+			if err := MVCCPut(ctx, engine, nil, testKey1, txn1.OrigTimestamp, value1, txn1); err != nil {
+				t.Fatal(err)
+			}
+			// Resolve the intent, pushing its timestamp forward.
+			txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
+			if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{
+				Span:   roachpb.Span{Key: testKey1},
+				Status: txn.Status,
+				Txn:    txn.TxnMeta,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// Attempt to read using naive txn's previous timestamp.
+			value, _, err := mvccGet(ctx, engine, testKey1, hlc.Timestamp{Logical: 1}, MVCCGetOptions{
+				Txn: txn1,
+			})
+			if err != nil || value == nil || !bytes.Equal(value.RawBytes, value1.RawBytes) {
+				t.Errorf("expected value %q, err nil; got %+v, %v", value1.RawBytes, value, err)
+			}
+		})
 	}
 }
 
