@@ -2521,26 +2521,35 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 			startVal := sp.StartKey().Value(col)
 			endVal := sp.EndKey().Value(col)
 			if startVal.Compare(sb.evalCtx, endVal) != 0 {
-				// TODO(rytaft): are there other types we should handle here
-				// besides int?
+				var start, end float64
 				if startVal.ResolvedType().Family() == types.IntFamily &&
 					endVal.ResolvedType().Family() == types.IntFamily {
-					start := int(*startVal.(*tree.DInt))
-					end := int(*endVal.(*tree.DInt))
-					// We assume that both start and end boundaries are inclusive. This
-					// should be the case for integer valued columns (due to normalization
-					// by constraint.PreferInclusive). We must cast each end to a float
-					// *before* performing the subtraction to avoid overflow.
-					if c.Columns.Get(col).Ascending() {
-						distinctCount += float64(end) - float64(start)
-					} else {
-						distinctCount += float64(start) - float64(end)
+					start = float64(*startVal.(*tree.DInt))
+					end = float64(*endVal.(*tree.DInt))
+				} else if startVal.ResolvedType().Family() == types.DateFamily &&
+					endVal.ResolvedType().Family() == types.DateFamily {
+					startDate := startVal.(*tree.DDate)
+					endDate := endVal.(*tree.DDate)
+					if !startDate.IsFinite() || !endDate.IsFinite() {
+						// One of the boundaries is not finite, so we can't determine the
+						// distinct count for this column.
+						return applied
 					}
+					start = float64(startDate.PGEpochDays())
+					end = float64(endDate.PGEpochDays())
 				} else {
 					// We can't determine the distinct count for this column. For example,
 					// the number of distinct values in the constraint
 					// /a: [/'cherry' - /'mango'] cannot be determined.
 					return applied
+				}
+				// We assume that both start and end boundaries are inclusive. This
+				// should be the case for integer and date columns (due to
+				// normalization by constraint.PreferInclusive).
+				if c.Columns.Get(col).Ascending() {
+					distinctCount += end - start
+				} else {
+					distinctCount += start - end
 				}
 			}
 			if i != 0 {
