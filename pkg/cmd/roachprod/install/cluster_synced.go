@@ -123,14 +123,16 @@ func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
 
 	session, err := c.newSession(index)
 	if err != nil {
-		return "", nil
+		return "", errors.Wrapf(err, "GetInternalIP: failed dial %s:%d", c.Name, index)
 	}
 	defer session.Close()
 
 	cmd := `hostname --all-ip-addresses`
 	out, err := session.CombinedOutput(cmd)
 	if err != nil {
-		return "", nil
+		return "", errors.Wrapf(err,
+			"GetInternalIP: failed to execute hostname on %s:%d: (output) %s",
+			c.Name, index, out)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
