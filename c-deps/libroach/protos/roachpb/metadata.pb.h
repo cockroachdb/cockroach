@@ -743,7 +743,6 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
-  // optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
   bool has_sticky_bit() const;
   void clear_sticky_bit();
   static const int kStickyBitFieldNumber = 7;
@@ -2677,7 +2676,6 @@ inline void RangeDescriptor::set_generation(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.generation)
 }
 
-// optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
 inline bool RangeDescriptor::has_sticky_bit() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
