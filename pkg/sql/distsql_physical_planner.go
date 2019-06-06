@@ -18,6 +18,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -600,6 +601,18 @@ type PhysicalPlan struct {
 	PlanToStreamColMap []int
 }
 
+func (p *PhysicalPlan) Release() {
+	*p = PhysicalPlan{
+		PhysicalPlan: distsqlplan.PhysicalPlan{
+			Processors:    p.Processors[:0],
+			ResultRouters: p.ResultRouters[:0],
+			ResultTypes:   p.ResultTypes[:0],
+		},
+		PlanToStreamColMap: p.PlanToStreamColMap[:0],
+	}
+	physicalPlanPool.Put(p)
+}
+
 // makePlanToStreamColMap initializes a new PhysicalPlan.PlanToStreamColMap. The
 // columns that are present in the result stream(s) should be set in the map.
 func makePlanToStreamColMap(numCols int) []int {
@@ -1091,7 +1104,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		spanPartitions = []SpanPartition{{nodeID, n.spans}}
 	}
 
-	p := &PhysicalPlan{}
+	p := newPhysicalPlan()
 	stageID := p.NewStageID()
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
@@ -1991,6 +2004,8 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	planCtx *PlanningCtx, n *zigzagJoinNode,
 ) (plan *PhysicalPlan, err error) {
 
+	plan = newPhysicalPlan()
+
 	tables := make([]sqlbase.TableDescriptor, len(n.sides))
 	indexIds := make([]uint32, len(n.sides))
 	cols := make([]distsqlpb.Columns, len(n.sides))
@@ -2140,6 +2155,16 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]types.T, 
 	return types, nil
 }
 
+var physicalPlanPool = sync.Pool{
+	New: func() interface{} {
+		return new(PhysicalPlan)
+	},
+}
+
+func newPhysicalPlan() *PhysicalPlan {
+	return physicalPlanPool.Get().(*PhysicalPlan)
+}
+
 func (dsp *DistSQLPlanner) createPlanForJoin(
 	planCtx *PlanningCtx, n *joinNode,
 ) (*PhysicalPlan, error) {
@@ -2202,7 +2227,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightPlan.PlanToStreamColMap)
 	}
 
-	p := &PhysicalPlan{}
+	p := newPhysicalPlan()
 	var leftRouters, rightRouters []distsqlplan.ProcessorIdx
 	p.PhysicalPlan, leftRouters, rightRouters = distsqlplan.MergePlans(
 		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
@@ -2442,7 +2467,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	// continue the DistSQL planning recursion on that planNode.
 	seenTop := false
 	nParents := uint32(0)
-	p := &PhysicalPlan{}
+	p := newPhysicalPlan()
 	// This will be set to first DistSQL-enabled planNode we find, if any. We'll
 	// modify its parent later to connect its source to the DistSQL-planned
 	// subtree.
@@ -2582,10 +2607,10 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 		ResultTypes:   resultTypes,
 	}
 
-	return &PhysicalPlan{
-		PhysicalPlan:       plan,
-		PlanToStreamColMap: identityMapInPlace(make([]int, numColumns)),
-	}, nil
+	p := newPhysicalPlan()
+	p.PhysicalPlan = plan
+	p.PlanToStreamColMap = identityMapInPlace(make([]int, numColumns))
+	return p, nil
 }
 
 func (dsp *DistSQLPlanner) createPlanForValues(
@@ -2907,7 +2932,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		}
 	}
 
-	p := &PhysicalPlan{}
+	p := newPhysicalPlan()
 
 	// Merge the plans' PlanToStreamColMap, which we know are equivalent.
 	p.PlanToStreamColMap = planToStreamColMap

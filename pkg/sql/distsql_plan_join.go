@@ -37,7 +37,7 @@ var planInterleavedJoins = settings.RegisterBoolSetting(
 func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	planCtx *PlanningCtx, n *joinNode,
 ) (plan *PhysicalPlan, ok bool, err error) {
-	plan = &PhysicalPlan{}
+	plan = newPhysicalPlan()
 	if !useInterleavedJoin(n) {
 		return nil, false, nil
 	}

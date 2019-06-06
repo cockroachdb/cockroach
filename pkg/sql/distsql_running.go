@@ -258,6 +258,8 @@ func (dsp *DistSQLPlanner) Run(
 		planCtx.planner.curPlan.execErr = recv.resultWriter.Err()
 		planCtx.planner.curPlan.close(ctx)
 	}
+
+	plan.Release()
 	flow.Cleanup(ctx)
 }
 
