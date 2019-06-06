@@ -240,7 +240,7 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 		if dbName != "" {
 			var err error
 			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, dbName,
-				DatabaseLookupFlags{required: true})
+				DatabaseLookupFlags{required: true, avoidCached: p.avoidCachedDescriptors})
 			if err != nil {
 				return nil, err
 			}

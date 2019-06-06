@@ -471,8 +471,8 @@ func TestCreateStatementType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "SELECT 10" {
-		t.Fatal("expected SELECT 10, got", cmdTag)
+	if cmdTag != "CREATE TABLE AS" {
+		t.Fatal("expected CREATE TABLE AS, got", cmdTag)
 	}
 }
 
