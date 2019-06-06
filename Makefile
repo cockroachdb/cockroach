@@ -762,6 +762,11 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/vecbuiltins/row_number.eg.go \
   pkg/sql/exec/zerocolumns.eg.go
 
+EXECGEN_EXCLUSION_STRING = $(shell echo ${EXECGEN_TARGETS} | sed 's/ / -e /g')
+
+$(info Cleaning old generated files.)
+$(shell find ./pkg/sql/exec -type f -name '*.eg.go' | grep -v -e ${EXECGEN_EXCLUSION_STRING} | xargs rm)
+
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
 	pkg/sql/opt/operator.og.go \
@@ -1475,9 +1480,13 @@ unsafe-clean-c-deps:
 	git -C $(LIBROACH_SRC_DIR) clean -dxf
 	git -C $(KRB5_SRC_DIR)     clean -dxf
 
+.PHONY: clean-generated-go
+clean-generated-go:
+	find ./pkg/sql/exec -type f -name '*.eg.go' -exec rm {} +
+
 .PHONY: clean
 clean: ## Remove build artifacts.
-clean: clean-c-deps
+clean: clean-c-deps clean-generated-go
 	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources build/defs.mk*
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
