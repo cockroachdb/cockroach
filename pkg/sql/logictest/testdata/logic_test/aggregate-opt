@@ -34,3 +34,9 @@ SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), col3 
 array_agg   array_agg   col3
 {-3,-2,-1}  {-1,-2,-3}  a
 {0,1,2}     {1,2,0}     b
+
+query TTII colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), count(col3), count(*) FROM tab
+----
+array_agg         array_agg         count  count
+{-3,-2,-1,0,1,2}  {-1,1,-2,2,-3,0}  6      6
