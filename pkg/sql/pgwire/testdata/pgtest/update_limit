@@ -1,0 +1,43 @@
+send
+Query {"String": "DROP TABLE IF EXISTS t; CREATE TABLE t (i int8); INSERT INTO t VALUES (1), (2);"}
+----
+
+# drop sometimes produces a notice
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Run an update that will affect multiple rows, but Execute with only 1 row
+# specified. The spec says maxrows should be ignored in this case, so we
+# expected both rows to be updated.
+send
+Parse {"Query": "UPDATE t SET i = -i"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"UPDATE 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM t"}
+----
+
+# ignore row desc due to oid mismatch
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"-1"}]}
+{"Type":"DataRow","Values":[{"text":"-2"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
