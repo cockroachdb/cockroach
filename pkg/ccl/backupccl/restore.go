@@ -752,6 +752,7 @@ rangeLoop:
 // there's some way to test it without running an O(hour) long benchmark.
 func splitAndScatter(
 	restoreCtx context.Context,
+	settings *cluster.Settings,
 	db *client.DB,
 	kr *storageccl.KeyRewriter,
 	numClusterNodes int,
@@ -780,6 +781,12 @@ func splitAndScatter(
 	}
 
 	importSpanChunksCh := make(chan []importEntry)
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	stickyBitEnabled := settings.Version.IsActive(cluster.VersionStickyBit)
+	expirationTime := hlc.Timestamp{}
+	if stickyBitEnabled {
+		expirationTime = hlc.MaxTimestamp
+	}
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(importSpanChunksCh)
 		for idx, importSpanChunk := range importSpanChunks {
@@ -793,7 +800,7 @@ func splitAndScatter(
 			// TODO(dan): Really, this should be splitting the Key of the first
 			// entry in the _next_ chunk.
 			log.VEventf(restoreCtx, 1, "presplitting chunk %d of %d", idx, len(importSpanChunks))
-			if err := db.AdminSplit(ctx, chunkKey, chunkKey, hlc.Timestamp{} /* expirationTime */); err != nil {
+			if err := db.AdminSplit(ctx, chunkKey, chunkKey, expirationTime); err != nil {
 				return err
 			}
 
@@ -849,7 +856,7 @@ func splitAndScatter(
 					// TODO(dan): Really, this should be splitting the Key of
 					// the _next_ entry.
 					log.VEventf(restoreCtx, 1, "presplitting %d of %d", idx, len(importSpans))
-					if err := db.AdminSplit(ctx, newSpanKey, newSpanKey, hlc.Timestamp{} /* expirationTime */); err != nil {
+					if err := db.AdminSplit(ctx, newSpanKey, newSpanKey, expirationTime); err != nil {
 						return err
 					}
 
@@ -1019,6 +1026,7 @@ func restore(
 	restoreCtx context.Context,
 	db *client.DB,
 	gossip *gossip.Gossip,
+	settings *cluster.Settings,
 	backupDescs []BackupDescriptor,
 	endTime hlc.Timestamp,
 	sqlDescs []sqlbase.Descriptor,
@@ -1068,7 +1076,9 @@ func restore(
 		return mu.res, nil, nil, err
 	}
 
-	{
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	stickyBitEnabled := settings.Version.IsActive(cluster.VersionStickyBit)
+	if !stickyBitEnabled {
 		// Disable merging for the table IDs being restored into. We don't want the
 		// merge queue undoing the splits performed during RESTORE.
 		tableIDs := make([]uint32, 0, len(tables))
@@ -1159,7 +1169,7 @@ func restore(
 	readyForImportCh := make(chan importEntry, presplitLeadLimit)
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(readyForImportCh)
-		return splitAndScatter(ctx, db, kr, numClusterNodes, importSpans, readyForImportCh)
+		return splitAndScatter(ctx, settings, db, kr, numClusterNodes, importSpans, readyForImportCh)
 	})
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
@@ -1240,6 +1250,19 @@ func restore(
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
 		return mu.res, nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 			"importing %d ranges", len(importSpans))
+	}
+
+	// Unsplit ranges after restoration is complete.
+	if stickyBitEnabled {
+		for _, importSpan := range importSpans {
+			newSpanKey, err := rewriteBackupSpanKey(kr, importSpan.Span.Key)
+			if err != nil {
+				return mu.res, nil, nil, err
+			}
+			if err := db.AdminUnsplit(restoreCtx, newSpanKey); err != nil {
+				return mu.res, nil, nil, err
+			}
+		}
 	}
 
 	return mu.res, databases, tables, nil
@@ -1469,6 +1492,7 @@ func (r *restoreResumer) Resume(
 		ctx,
 		p.ExecCfg().DB,
 		p.ExecCfg().Gossip,
+		p.ExecCfg().Settings,
 		backupDescs,
 		details.EndTime,
 		sqlDescs,

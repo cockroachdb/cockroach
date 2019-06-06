@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -484,10 +485,17 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Settings)
 	})
 
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	stickyBitEnabled := cp.flowCtx.Settings.Version.IsActive(cluster.VersionStickyBit)
+	expirationTime := hlc.Timestamp{}
+	if stickyBitEnabled {
+		expirationTime = cp.flowCtx.ClientDB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	}
+
 	if cp.spec.IngestDirectly {
 		for _, tbl := range cp.spec.Tables {
 			for _, span := range tbl.AllIndexSpans() {
-				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key, hlc.Timestamp{} /* expirationTime */); err != nil {
+				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
 					return err
 				}
 

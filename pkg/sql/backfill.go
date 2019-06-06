@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1071,12 +1072,19 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
-	disableCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	sc.execCfg.Gossip.DisableMerges(disableCtx, []uint32{uint32(sc.tableID)})
+	// TODO(jeffreyxiao): Remove check in 20.1.
+	stickyBitEnabled := sc.execCfg.Settings.Version.IsActive(cluster.VersionStickyBit)
+	expirationTime := hlc.Timestamp{}
+	if !stickyBitEnabled {
+		disableCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		sc.execCfg.Gossip.DisableMerges(disableCtx, []uint32{uint32(sc.tableID)})
+	} else {
+		expirationTime = hlc.MaxTimestamp
+	}
 
 	for _, span := range addingSpans {
-		if err := sc.db.AdminSplit(ctx, span.Key, span.Key, hlc.Timestamp{} /* expirationTime */); err != nil {
+		if err := sc.db.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
 			return err
 		}
 	}
@@ -1087,7 +1095,18 @@ func (sc *SchemaChanger) backfillIndexes(
 		backfill.IndexMutationFilter, addingSpans); err != nil {
 		return err
 	}
-	return sc.validateIndexes(ctx, evalCtx, lease)
+	if err := sc.validateIndexes(ctx, evalCtx, lease); err != nil {
+		return err
+	}
+	// Unsplit ranges after backfill and validation are complete.
+	if stickyBitEnabled {
+		for _, span := range addingSpans {
+			if err := sc.db.AdminUnsplit(ctx, span.Key); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
