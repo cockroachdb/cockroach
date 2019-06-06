@@ -3121,6 +3121,80 @@ func TestMVCCGetWithDiffEpochs(t *testing.T) {
 	}
 }
 
+// TestMVCCGetWithDiffEpochsAndTimestamps writes a value first using
+// epoch 1, then reads using epoch 2 with different timestamps to verify
+// that values written during different transaction epochs are not visible.
+//
+// The test includes the case where the read at epoch 2 is at a *lower*
+// timestamp than the intent write at epoch 1. This is not expected to
+// happen commonly, but caused issues in #36089.
+func TestMVCCGetWithDiffEpochsAndTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, impl := range mvccGetImpls {
+		t.Run(impl.name, func(t *testing.T) {
+			mvccGet := impl.fn
+
+			ctx := context.Background()
+			engine := createTestEngine()
+			defer engine.Close()
+
+			// Write initial value without a txn at timestamp 1.
+			if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
+				t.Fatal(err)
+			}
+			// Write another value without a txn at timestamp 3.
+			if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, value2, nil); err != nil {
+				t.Fatal(err)
+			}
+			// Now write using txn1, epoch 1.
+			txn1ts := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
+			// Bump epoch 1's write timestamp to timestamp 4.
+			txn1ts.Timestamp = hlc.Timestamp{WallTime: 4}
+			// Expected to hit WriteTooOld error but to still lay down intent.
+			err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value3, txn1ts)
+			if _, ok := err.(*roachpb.WriteTooOldError); !ok {
+				t.Fatalf("unexpectedly not WriteTooOld: %s", err)
+			}
+			// Try reading using different epochs & timestamps.
+			testCases := []struct {
+				txn      *roachpb.Transaction
+				readTS   hlc.Timestamp
+				expValue *roachpb.Value
+			}{
+				// Epoch 1, read 1; should see new value3.
+				{txn1, hlc.Timestamp{WallTime: 1}, &value3},
+				// Epoch 1, read 2; should see new value3.
+				{txn1, hlc.Timestamp{WallTime: 2}, &value3},
+				// Epoch 1, read 3; should see new value3.
+				{txn1, hlc.Timestamp{WallTime: 3}, &value3},
+				// Epoch 1, read 4; should see new value3.
+				{txn1, hlc.Timestamp{WallTime: 4}, &value3},
+				// Epoch 1, read 5; should see new value3.
+				{txn1, hlc.Timestamp{WallTime: 5}, &value3},
+				// Epoch 2, read 1; should see committed value1.
+				{txn1e2, hlc.Timestamp{WallTime: 1}, &value1},
+				// Epoch 2, read 2; should see committed value1.
+				{txn1e2, hlc.Timestamp{WallTime: 2}, &value1},
+				// Epoch 2, read 3; should see committed value2.
+				{txn1e2, hlc.Timestamp{WallTime: 3}, &value2},
+				// Epoch 2, read 4; should see committed value2.
+				{txn1e2, hlc.Timestamp{WallTime: 4}, &value2},
+				// Epoch 2, read 5; should see committed value2.
+				{txn1e2, hlc.Timestamp{WallTime: 5}, &value2},
+			}
+			for i, test := range testCases {
+				t.Run(strconv.Itoa(i), func(t *testing.T) {
+					value, _, err := mvccGet(ctx, engine, testKey1, test.readTS, true, test.txn)
+					if err != nil || value == nil || !bytes.Equal(test.expValue.RawBytes, value.RawBytes) {
+						t.Errorf("test %d: expected value %q, err nil; got %+v, %v", i, test.expValue.RawBytes, value, err)
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestMVCCGetWithOldEpoch writes a value first using epoch 2, then
 // reads using epoch 1 to verify that the read will fail.
 func TestMVCCGetWithOldEpoch(t *testing.T) {
