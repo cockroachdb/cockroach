@@ -16,7 +16,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -131,6 +129,40 @@ func (n *createTableNode) startExec(params runParams) error {
 	var affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor
 	creationTime := params.p.txn.CommitTimestamp()
 	if n.n.As() {
+		// TODO(adityamaru): This planning step is only to populate db/schema
+		// details in the table names in-place, to later store in the table
+		// descriptor. Figure out a cleaner way to do this.
+		_, err = params.p.Select(params.ctx, n.n.AsSource, []*types.T{})
+		if err != nil {
+			return err
+		}
+
+		// Ensure that all the table names pretty-print as fully qualified, so we
+		// store that in the table descriptor.
+		//
+		// The traversal will update the TableNames in-place, so the changes are
+		// persisted in n.n.AsSource. We exploit the fact that planning step above
+		// has populated any missing db/schema details in the table names in-place.
+		// We use tree.FormatNode merely as a traversal method; its output buffer is
+		// discarded immediately after the traversal because it is not needed
+		// further.
+		{
+			f := tree.NewFmtCtx(tree.FmtParsable)
+			f.SetReformatTableNames(
+				func(_ *tree.FmtCtx, tn *tree.TableName) {
+					// Persist the database prefix expansion.
+					if tn.SchemaName != "" {
+						// All CTE or table aliases have no schema
+						// information. Those do not turn into explicit.
+						tn.ExplicitSchema = true
+						tn.ExplicitCatalog = true
+					}
+				},
+			)
+			f.FormatNode(n.n.AsSource)
+			f.Close() // We don't need the string.
+		}
+
 		asCols = planColumns(n.sourcePlan)
 		if !n.run.synthRowID {
 			// rowID column is already present in the input as the last column, so
@@ -149,24 +181,8 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	if desc.Adding() {
-		// if this table and all its references are created in the same
-		// transaction it can be made PUBLIC.
-		refs, err := desc.FindAllReferences()
-		if err != nil {
-			return err
-		}
-		var foundExternalReference bool
-		for id := range refs {
-			if t := params.p.Tables().getUncommittedTableByID(id).MutableTableDescriptor; t == nil || !t.IsNewTable() {
-				foundExternalReference = true
-				break
-			}
-		}
-		if !foundExternalReference {
-			desc.State = sqlbase.TableDescriptor_PUBLIC
-		}
-	}
+	// Ensure desc is in ADD state so that it is queued as a SchemaChange.
+	desc.State = sqlbase.TableDescriptor_ADD
 
 	// Descriptor written to store here.
 	if err := params.p.createDescriptorWithID(
@@ -194,7 +210,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+	err = MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
 		EventLogCreateTable,
@@ -205,110 +221,9 @@ func (n *createTableNode) startExec(params runParams) error {
 			Statement string
 			User      string
 		}{n.n.Table.FQString(), n.n.String(), params.SessionData().User},
-	); err != nil {
-		return err
-	}
+	)
 
-	if n.n.As() {
-		// This is a very simplified version of the INSERT logic: no CHECK
-		// expressions, no FK checks, no arbitrary insertion order, no
-		// RETURNING, etc.
-
-		// Instantiate a row inserter and table writer. It has a 1-1
-		// mapping to the definitions in the descriptor.
-		ri, err := row.MakeInserter(
-			params.p.txn,
-			sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
-			nil,
-			desc.Columns,
-			row.SkipFKs,
-			&params.p.alloc)
-		if err != nil {
-			return err
-		}
-		ti := tableInserterPool.Get().(*tableInserter)
-		*ti = tableInserter{ri: ri}
-		tw := tableWriter(ti)
-		if n.run.autoCommit == autoCommitEnabled {
-			tw.enableAutoCommit()
-		}
-		defer func() {
-			tw.close(params.ctx)
-			*ti = tableInserter{}
-			tableInserterPool.Put(ti)
-		}()
-		if err := tw.init(params.p.txn, params.p.EvalContext()); err != nil {
-			return err
-		}
-
-		// Prepare the buffer for row values. At this point, one more
-		// column has been added by ensurePrimaryKey() to the list of
-		// columns in sourcePlan.
-		rowBuffer := make(tree.Datums, len(desc.Columns))
-		pkColIdx := len(desc.Columns) - 1
-
-		// The optimizer includes the rowID expression as part of the input
-		// expression. But the heuristic planner does not do this, so construct
-		// a rowID expression to be evaluated separately.
-		var defTypedExpr tree.TypedExpr
-		if n.run.synthRowID {
-			// Prepare the rowID expression.
-			defExprSQL := *desc.Columns[pkColIdx].DefaultExpr
-			defExpr, err := parser.ParseExpr(defExprSQL)
-			if err != nil {
-				return err
-			}
-			defTypedExpr, err = params.p.analyzeExpr(
-				params.ctx,
-				defExpr,
-				nil, /*sources*/
-				tree.IndexedVarHelper{},
-				types.Any,
-				false, /*requireType*/
-				"CREATE TABLE AS")
-			if err != nil {
-				return err
-			}
-		}
-
-		for {
-			if err := params.p.cancelChecker.Check(); err != nil {
-				return err
-			}
-			if next, err := n.sourcePlan.Next(params); !next {
-				if err != nil {
-					return err
-				}
-				_, err := tw.finalize(
-					params.ctx, params.extendedEvalCtx.Tracing.KVTracingEnabled())
-				if err != nil {
-					return err
-				}
-				break
-			}
-
-			// Populate the buffer and generate the PK value.
-			copy(rowBuffer, n.sourcePlan.Values())
-			if n.run.synthRowID {
-				rowBuffer[pkColIdx], err = defTypedExpr.Eval(params.p.EvalContext())
-				if err != nil {
-					return err
-				}
-			}
-
-			err := tw.row(params.ctx, rowBuffer, params.extendedEvalCtx.Tracing.KVTracingEnabled())
-			if err != nil {
-				return err
-			}
-			n.run.rowsAffected++
-		}
-	}
-
-	// Initiate a run of CREATE STATISTICS. We use a large number
-	// for rowsAffected because we want to make sure that stats always get
-	// created/refreshed here.
-	params.ExecCfg().StatsRefresher.NotifyMutation(desc.ID, math.MaxInt32 /* rowsAffected */)
-	return nil
+	return err
 }
 
 // enableAutoCommit is part of the autoCommitNode interface.
@@ -324,13 +239,6 @@ func (n *createTableNode) Close(ctx context.Context) {
 		n.sourcePlan.Close(ctx)
 		n.sourcePlan = nil
 	}
-}
-
-func (n *createTableNode) FastPathResults() (int, bool) {
-	if n.n.As() {
-		return n.run.rowsAffected, true
-	}
-	return 0, false
 }
 
 type indexMatch bool
@@ -910,6 +818,7 @@ func InitTableDescriptor(
 		Version:          1,
 		ModificationTime: creationTime,
 		Privileges:       privileges,
+		CreateAsOfTime:   creationTime,
 	})
 }
 
@@ -924,6 +833,8 @@ func makeTableDescIfAs(
 	semaCtx *tree.SemaContext,
 ) (desc sqlbase.MutableTableDescriptor, err error) {
 	desc = InitTableDescriptor(id, parentID, p.Table.Table(), creationTime, privileges)
+	desc.CreateQuery = tree.AsStringWithFlags(p.AsSource, tree.FmtParsable)
+
 	for i, colRes := range resultColumns {
 		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
 		columnTableDef.Nullable.Nullability = tree.SilentNull
