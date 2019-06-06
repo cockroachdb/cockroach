@@ -66,7 +66,7 @@ type distSQLExplainable interface {
 	// makePlanForExplainDistSQL returns the DistSQL physical plan that can be
 	// used by the explainDistSQLNode to generate flow specs (and run in the case
 	// of EXPLAIN ANALYZE).
-	makePlanForExplainDistSQL(*PlanningCtx, *DistSQLPlanner) (PhysicalPlan, error)
+	makePlanForExplainDistSQL(*PlanningCtx, *DistSQLPlanner) (*PhysicalPlan, error)
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
@@ -156,7 +156,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		}
 	}
 
-	var plan PhysicalPlan
+	var plan *PhysicalPlan
 	var err error
 	if planNode, ok := n.plan.(distSQLExplainable); ok {
 		plan, err = planNode.makePlanForExplainDistSQL(planCtx, distSQLPlanner)
@@ -167,7 +167,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		return err
 	}
 
-	distSQLPlanner.FinalizePlan(planCtx, &plan)
+	distSQLPlanner.FinalizePlan(planCtx, plan)
 
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 	diagram, err := distsqlpb.GeneratePlanDiagram(flows)
@@ -224,7 +224,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		)
 		defer recv.Release()
 		distSQLPlanner.Run(
-			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil /* finishedSetupFn */)
+			planCtx, newParams.p.txn, plan, recv, newParams.extendedEvalCtx, nil /* finishedSetupFn */)
 
 		n.run.executedStatement = true
 

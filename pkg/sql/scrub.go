@@ -533,8 +533,8 @@ func scrubPlanDistSQL(
 	if err != nil {
 		return nil, err
 	}
-	planCtx.ExtendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, &physPlan)
-	return &physPlan, nil
+	planCtx.ExtendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, physPlan)
+	return physPlan, nil
 }
 
 // scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If

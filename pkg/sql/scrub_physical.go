@@ -144,7 +144,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	o.primaryColIdxs = primaryColIdxs
 	o.columns = columns
 	o.run.started = true
-	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, &physPlan, distsqlrun.ScrubTypes)
+	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, distsqlrun.ScrubTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err

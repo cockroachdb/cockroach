@@ -33,18 +33,18 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	indexDesc sqlbase.IndexDescriptor,
 	spans []roachpb.Span,
 	readAsOf hlc.Timestamp,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	spec, _, err := initTableReaderSpec(n, planCtx, nil /* indexVarMap */)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	spanPartitions, err := dsp.PartitionSpans(planCtx, n.spans)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
-	var p PhysicalPlan
+	p := &PhysicalPlan{}
 	stageID := p.NewStageID()
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
@@ -72,6 +72,6 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	p.ResultTypes = distsqlrun.ScrubTypes
 	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(distsqlrun.ScrubTypes)))
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 	return p, nil
 }

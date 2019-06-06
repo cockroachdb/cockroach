@@ -61,18 +61,18 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	spans []roachpb.Span,
 	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables, readAsOf)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
-	var p PhysicalPlan
+	p := &PhysicalPlan{}
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ib := &distsqlpb.BackfillerSpec{}
@@ -93,6 +93,6 @@ func (dsp *DistSQLPlanner) createBackfiller(
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
 	}
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 	return p, nil
 }

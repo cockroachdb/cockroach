@@ -81,7 +81,7 @@ func PlanAndRunExport(
 	// columns filename/rows/bytes.
 	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(ExportPlanResultTypes))
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	recv := MakeDistSQLReceiver(
 		ctx, resultRows, tree.Rows,
@@ -91,7 +91,7 @@ func PlanAndRunExport(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, txn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	return resultRows.Err()
 }
 
@@ -314,7 +314,7 @@ func LoadCSV(
 
 	// We have the split ranges. Now re-read the CSV files and route them to SST writers.
 
-	p := PhysicalPlan{}
+	p := &PhysicalPlan{}
 	// This is a hardcoded two stage plan. The first stage is the mappers,
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
@@ -421,7 +421,7 @@ func LoadCSV(
 		return err
 	}
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	recv := MakeDistSQLReceiver(
 		ctx,
@@ -439,7 +439,7 @@ func LoadCSV(
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		dsp.Run(planCtx, txn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return resultRows.Err()
 	})
 }
@@ -547,7 +547,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		return nil, errors.Errorf("SST size must fit in an int32: %d", splitSize)
 	}
 
-	var p PhysicalPlan
+	p := &PhysicalPlan{}
 	stageID := p.NewStageID()
 
 	for _, cs := range csvSpecs {
@@ -633,7 +633,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 
 	// TODO(dan): Consider making FinalizePlan take a map explicitly instead
 	// of this PlanCtx. https://reviewable.io/reviews/cockroachdb/cockroach/17279#-KqOrLpy9EZwbRKHLYe6:-KqOp00ntQEyzwEthAsl:bd4nzje
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	recv := MakeDistSQLReceiver(
 		ctx,
@@ -651,7 +651,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	samples = nil
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	if err := rowResultWriter.Err(); err != nil {
 		return nil, err
 	}
@@ -690,7 +690,7 @@ func DistIngest(
 		inputSpecs[i].IngestDirectly = true
 	}
 
-	var p PhysicalPlan
+	p := &PhysicalPlan{}
 
 	// Setup a one-stage plan with one proc per input spec.
 	stageID := p.NewStageID()
@@ -723,7 +723,7 @@ func DistIngest(
 		return nil
 	})
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	if err := job.FractionProgressed(ctx,
 		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
@@ -748,7 +748,7 @@ func DistIngest(
 	defer recv.Release()
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	if err := rowResultWriter.Err(); err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
