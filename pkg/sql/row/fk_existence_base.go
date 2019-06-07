@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -80,6 +81,10 @@ type fkExistenceCheckBaseHelper struct {
 	// mutatedIdx is the descriptor for the target index being mutated.
 	// Stored only for error messages.
 	mutatedIdx *sqlbase.IndexDescriptor
+
+	// valuesScratch is memory used to populate an error message when the check
+	// fails.
+	valuesScratch tree.Datums
 }
 
 // makeFkExistenceCheckBaseHelper instantiates a FK helper.
@@ -159,16 +164,17 @@ func makeFkExistenceCheckBaseHelper(
 	}
 
 	return fkExistenceCheckBaseHelper{
-		txn:          txn,
-		dir:          dir,
-		rf:           rf,
-		ref:          ref,
-		searchTable:  searchTable,
-		searchIdx:    searchIdx,
-		ids:          ids,
-		prefixLen:    prefixLen,
-		searchPrefix: searchPrefix,
-		mutatedIdx:   mutatedIdx,
+		txn:           txn,
+		dir:           dir,
+		rf:            rf,
+		ref:           ref,
+		searchTable:   searchTable,
+		searchIdx:     searchIdx,
+		ids:           ids,
+		prefixLen:     prefixLen,
+		searchPrefix:  searchPrefix,
+		mutatedIdx:    mutatedIdx,
+		valuesScratch: make(tree.Datums, prefixLen),
 	}, nil
 }
 
