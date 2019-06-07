@@ -30,9 +30,11 @@ import (
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errbase"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -904,6 +906,32 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 		}
 	}
 	return op, metaSources, nil
+}
+
+// VectorizedSetupError is a wrapper for any error that happens during
+// setupVectorized.
+type VectorizedSetupError struct {
+	cause error
+}
+
+// Error is part of the error interface.
+func (e *VectorizedSetupError) Error() string {
+	return e.cause.Error()
+}
+
+// Unwrap is part of the Wrapper interface.
+func (e *VectorizedSetupError) Unwrap() error {
+	return e.cause
+}
+
+func decodeVectorizedSetupError(
+	_ context.Context, cause error, _ string, _ []string, _ protoutil.SimpleMessage,
+) error {
+	return &VectorizedSetupError{cause: cause}
+}
+
+func init() {
+	errors.RegisterWrapperDecoder(errbase.GetTypeKey((*VectorizedSetupError)(nil)), decodeVectorizedSetupError)
 }
 
 func (f *Flow) setupVectorized(ctx context.Context) error {
