@@ -89,6 +89,15 @@ func linkShadowSpan(
 	var opts []opentracing.StartSpanOption
 	// Replicate the options, using the lightstep context in the reference.
 	opts = append(opts, opentracing.StartTime(s.startTime))
+	if s.startTags != nil {
+		startTags := make(opentracing.Tags)
+		tags := s.startTags.Get()
+		for i := range tags {
+			tag := &tags[i]
+			startTags[tag.Key()] = tag.Value()
+		}
+		opts = append(opts, startTags)
+	}
 	if s.mu.tags != nil {
 		opts = append(opts, s.mu.tags)
 	}
