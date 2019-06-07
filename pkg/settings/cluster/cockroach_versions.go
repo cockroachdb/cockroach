@@ -42,7 +42,6 @@ const (
 	VersionClearRange
 	VersionPartitioning
 	VersionRecomputeStats
-	VersionPerReplicaZoneConstraints
 	Version2_0
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
@@ -204,11 +203,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	// 	Key:     VersionReadUncommittedRangeLookups,
 	// 	Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 13},
 	// },
-	{
-		// VersionPerReplicaZoneConstraints is https://github.com/cockroachdb/cockroach/pull/22819.
-		Key:     VersionPerReplicaZoneConstraints,
-		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 14},
-	},
+	// Removed.
+	// {
+	// 	// VersionPerReplicaZoneConstraints is https://github.com/cockroachdb/cockroach/pull/22819.
+	// 	Key:     VersionPerReplicaZoneConstraints,
+	// 	Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 14},
+	// },
 	// Removed.
 	// {
 	// 	// VersionLeasePreferences is https://github.com/cockroachdb/cockroach/pull/23202.

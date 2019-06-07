@@ -621,13 +621,6 @@ func writeZoneConfig(
 		// To keep the Subzone and SubzoneSpan arrays consistent
 		zone.SubzoneSpans = nil
 	}
-	if len(zone.Constraints) > 1 || (len(zone.Constraints) == 1 && zone.Constraints[0].NumReplicas != 0) {
-		st := execCfg.Settings
-		if !st.Version.IsActive(cluster.VersionPerReplicaZoneConstraints) {
-			return 0, pgerror.New(pgerror.CodeCheckViolationError,
-				"cluster version does not support zone configs with per-replica constraints")
-		}
-	}
 
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
 		return execCfg.InternalExecutor.Exec(ctx, "delete-zone", txn,
