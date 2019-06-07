@@ -231,10 +231,6 @@ func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
 	return r.mu.replicaID
 }
 
-func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
-	return r.mu.state.Desc
-}
-
 func (r *Replica) AssertState(ctx context.Context, reader engine.Reader) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()

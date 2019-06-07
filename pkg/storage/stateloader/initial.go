@@ -16,7 +16,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -75,17 +74,7 @@ func WriteInitialReplicaState(
 	s.Lease = &lease
 	s.GCThreshold = &gcThreshold
 	s.TxnSpanGCThreshold = &txnSpanGCThreshold
-
-	// If the version is high enough to guarantee that all nodes will understand
-	// the AppliedStateKey then we can just straight to using it without ever
-	// writing the legacy stats and index keys.
-	if !activeVersion.Less(cluster.VersionByKey(cluster.VersionRangeAppliedStateKey)) {
-		s.UsingAppliedStateKey = true
-	} else {
-		if err := engine.AccountForLegacyMVCCStats(s.Stats, desc.RangeID); err != nil {
-			return enginepb.MVCCStats{}, err
-		}
-	}
+	s.UsingAppliedStateKey = true
 
 	if existingLease, err := rsl.LoadLease(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
