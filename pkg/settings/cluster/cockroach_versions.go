@@ -34,8 +34,6 @@ type VersionKey int
 const (
 	VersionBase VersionKey = iota
 	VersionSplitHardStateBelowRaft
-	VersionStatsBasedRebalancing
-	Version1_1
 	Version2_0
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
@@ -81,12 +79,11 @@ const (
 // 1.1.2, do not have associated migrations.
 //
 // NB: The version upgrade process requires the versions as seen by a cluster to
-// be monotonic. Once we've added 1.1-0 (Version1_1), we can't slot in 1.0-4
-// (VersionFixSomeCriticalBug) because clusters already running 1.1-0 won't
-// migrate through the new 1.0-4 version. Such clusters would need to be wiped.
-// As a result, do not bump the major or minor version until we are absolutely
-// sure that no new migrations will need to be added (i.e., when cutting the
-// final release candidate).
+// be monotonic. Once we've added 1.1-0,  we can't slot in 1.0-4 because
+// clusters already running 1.1-0 won't migrate through the new 1.0-4 version.
+// Such clusters would need to be wiped. As a result, do not bump the major or
+// minor version until we are absolutely sure that no new migrations will need
+// to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		// VersionBase corresponds to any binary older than 1.0-1, though these
@@ -105,16 +102,18 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionSplitHardStateBelowRaft,
 		Version: roachpb.Version{Major: 1, Minor: 0, Unstable: 2},
 	},
-	{
-		// VersionStatsBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/16878.
-		Key:     VersionStatsBasedRebalancing,
-		Version: roachpb.Version{Major: 1, Minor: 0, Unstable: 3},
-	},
-	{
-		// Version1_1 is CockroachDB v1.1. It's used for all v1.1.x patch releases.
-		Key:     Version1_1,
-		Version: roachpb.Version{Major: 1, Minor: 1},
-	},
+	// Removed.
+	// {
+	// 	// VersionStatsBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/16878.
+	// 	Key:     VersionStatsBasedRebalancing,
+	// 	Version: roachpb.Version{Major: 1, Minor: 0, Unstable: 3},
+	// },
+	// Removed.
+	// {
+	// 	// Version1_1 is CockroachDB v1.1. It's used for all v1.1.x patch releases.
+	// 	Key:     Version1_1,
+	// 	Version: roachpb.Version{Major: 1, Minor: 1},
+	// },
 	// Removed.
 	// {
 	//   // VersionRaftLastIndex is https://github.com/cockroachdb/cockroach/pull/18717.
