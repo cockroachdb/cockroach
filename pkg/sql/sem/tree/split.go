@@ -46,6 +46,7 @@ type Unsplit struct {
 	// Each row contains values for the columns in the PK or index (or a prefix
 	// of the columns).
 	Rows *Select
+	All  bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -57,8 +58,12 @@ func (node *Unsplit) Format(ctx *FmtCtx) {
 		ctx.WriteString("TABLE ")
 	}
 	ctx.FormatNode(&node.TableOrIndex)
-	ctx.WriteString(" UNSPLIT AT ")
-	ctx.FormatNode(node.Rows)
+	if node.All {
+		ctx.WriteString(" UNSPLIT ALL")
+	} else {
+		ctx.WriteString(" UNSPLIT AT ")
+		ctx.FormatNode(node.Rows)
+	}
 }
 
 // Relocate represents an `ALTER TABLE/INDEX .. EXPERIMENTAL_RELOCATE ..`
