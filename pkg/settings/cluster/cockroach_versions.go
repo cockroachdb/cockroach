@@ -40,7 +40,6 @@ const (
 	VersionRPCNetworkStats
 	VersionRPCVersionCheck
 	VersionClearRange
-	VersionPartitioning
 	Version2_0
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
@@ -152,21 +151,22 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionClearRange,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 6},
 	},
-	{
-		// VersionPartitioning gates all backwards-incompatible changes required by
-		// table partitioning, as described in the RFC:
-		// https://github.com/cockroachdb/cockroach/pull/18683
-		//
-		// These backwards-incompatible changes include:
-		//   - writing table descriptors with a partitioning scheme
-		//   - writing zone configs with index or partition subzones
-		//
-		// There is no guarantee that upgrading a cluster that uses partitioning
-		// will work properly until v2.0 is released. Such clusters should expect to
-		// be wiped after every v1.1-X upgrade.
-		Key:     VersionPartitioning,
-		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 7},
-	},
+	// Removed.
+	// {
+	// 	// VersionPartitioning gates all backwards-incompatible changes required by
+	// 	// table partitioning, as described in the RFC:
+	// 	// https://github.com/cockroachdb/cockroach/pull/18683
+	// 	//
+	// 	// These backwards-incompatible changes include:
+	// 	//   - writing table descriptors with a partitioning scheme
+	// 	//   - writing zone configs with index or partition subzones
+	// 	//
+	// 	// There is no guarantee that upgrading a cluster that uses partitioning
+	// 	// will work properly until v2.0 is released. Such clusters should expect to
+	// 	// be wiped after every v1.1-X upgrade.
+	// 	Key:     VersionPartitioning,
+	// 	Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 7},
+	// },
 	// Removed.
 	// {
 	// 	// VersionLeaseSequence is https://github.com/cockroachdb/cockroach/pull/20953.

@@ -608,10 +608,6 @@ func writeZoneConfig(
 ) (numAffected int, err error) {
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
-		if !st.Version.IsActive(cluster.VersionPartitioning) {
-			return 0, pgerror.New(pgerror.CodeCheckViolationError,
-				"cluster version does not support zone configs on indexes or partitions")
-		}
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(
 			st, execCfg.ClusterID(), table, zone.Subzones, hasNewSubzones)
 		if err != nil {
