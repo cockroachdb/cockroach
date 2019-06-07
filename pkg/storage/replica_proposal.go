@@ -959,11 +959,8 @@ func (r *Replica) evaluateProposal(
 		// side-effects that are to be replicated to all replicas.
 		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
 		res.Replicated.Timestamp = ba.Timestamp
-		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
-			res.Replicated.Delta = ms.ToStatsDelta()
-		} else {
-			res.Replicated.DeprecatedDelta = &ms
-		}
+		res.Replicated.Delta = ms.ToStatsDelta()
+
 		// If the RangeAppliedState key is not being used and the cluster version is
 		// high enough to guarantee that all current and future binaries will
 		// understand the key, we send the migration flag through Raft. Because
