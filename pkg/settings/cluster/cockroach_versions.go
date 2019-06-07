@@ -33,7 +33,6 @@ type VersionKey int
 //go:generate stringer -type=VersionKey
 const (
 	VersionBase VersionKey = iota
-	VersionSplitHardStateBelowRaft
 	Version2_0
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
@@ -97,11 +96,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	// 	Key:     VersionRaftLogTruncationBelowRaft,
 	// 	Version: roachpb.Version{Major: 1, Minor: 0, Unstable: 1},
 	// },
-	{
-		// VersionSplitHardStateBelowRaft is https://github.com/cockroachdb/cockroach/pull/17051.
-		Key:     VersionSplitHardStateBelowRaft,
-		Version: roachpb.Version{Major: 1, Minor: 0, Unstable: 2},
-	},
+	// Removed.
+	// {
+	// 	// VersionSplitHardStateBelowRaft is https://github.com/cockroachdb/cockroach/pull/17051.
+	// 	Key:     VersionSplitHardStateBelowRaft,
+	// 	Version: roachpb.Version{Major: 1, Minor: 0, Unstable: 2},
+	// },
 	// Removed.
 	// {
 	// 	// VersionStatsBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/16878.
