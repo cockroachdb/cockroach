@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -74,12 +73,6 @@ func (th *testClusterWithHelpers) getVersionFromSetting(i int) *cluster.ExposedC
 func (th *testClusterWithHelpers) setVersion(i int, version string) error {
 	_, err := th.ServerConn(i).Exec("SET CLUSTER SETTING version = $1", version)
 	return err
-}
-
-func (th *testClusterWithHelpers) mustSetVersion(i int, version string) {
-	if err := th.setVersion(i, version); err != nil {
-		th.Fatalf("%d: %s", i, err)
-	}
 }
 
 func (th *testClusterWithHelpers) setDowngrade(i int, version string) error {
@@ -207,6 +200,7 @@ func TestClusterVersionUnreplicatedRaftTruncatedState(t *testing.T) {
 	dir, finish := testutils.TempDir(t)
 	defer finish()
 
+	// NB: this test can be removed when that version is always-on.
 	oldVersion := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState - 1)
 	oldVersionS := oldVersion.String()
 	newVersionS := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState).String()
@@ -515,128 +509,4 @@ func TestAllVersionsAgree(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-func TestClusterVersionMixedVersionTooOld(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	// Prevent node crashes from generating several megabytes of stacks when
-	// GOTRACEBACK=all, as it is on CI.
-	defer log.DisableTracebacks()()
-
-	exits := make(chan int, 100)
-
-	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
-	defer log.ResetExitFunc()
-
-	// Three nodes at v1.1 and a fourth one at 1.0, but all operating at v1.0.
-	versions := [][2]string{{"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.0"}}
-
-	// Start by running 1.0.
-	bootstrapVersion := cluster.ClusterVersion{
-		Version: cluster.VersionByKey(cluster.VersionBase),
-	}
-
-	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
-	}
-	tc := setupMixedCluster(t, knobs, versions, "")
-	defer tc.Stopper().Stop(ctx)
-
-	exp := "1.1"
-
-	// The last node refuses to perform an upgrade that would risk its own life.
-	if err := tc.setVersion(len(versions)-1, exp); !testutils.IsError(err, "cannot upgrade to 1.1: node running 1.0") {
-		t.Fatal(err)
-	}
-
-	// The other nodes are less careful.
-	tc.mustSetVersion(0, exp)
-
-	<-exits // wait for fourth node to die
-
-	// Check that we can still talk to the first three nodes.
-	for i := 0; i < tc.NumServers()-1; i++ {
-		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			if version := tc.getVersionFromShow(i); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			return nil
-		})
-	}
-}
-
-func TestClusterVersionMixedVersionTooNew(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	// Prevent node crashes from generating several megabytes of stacks when
-	// GOTRACEBACK=all, as it is on CI.
-	defer log.DisableTracebacks()()
-
-	exits := make(chan int, 100)
-
-	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
-	defer log.ResetExitFunc()
-
-	// Three nodes at v1.1 and a fourth one (started later) at 1.1-2 (and
-	// incompatible with anything earlier).
-	versions := [][2]string{{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}}
-
-	// Try running 1.1.
-	bootstrapVersion := cluster.ClusterVersion{
-		Version: roachpb.Version{Major: 1, Minor: 1},
-	}
-
-	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
-	}
-	tc := setupMixedCluster(t, knobs, versions, "")
-	defer tc.Stopper().Stop(ctx)
-
-	tc.AddServer(t, base.TestServerArgs{
-		Settings: cluster.MakeClusterSettings(
-			roachpb.Version{Major: 1, Minor: 1, Unstable: 2},
-			roachpb.Version{Major: 1, Minor: 1, Unstable: 2}),
-	})
-
-	// TODO(tschottdorf): the cluster remains running even though we're running
-	// an illegal combination of versions. The root cause is that nothing
-	// populates the version setting table entry, and so each node implicitly
-	// assumes its own version. We also use versions prior to 1.1-5 to avoid
-	// the version compatibility check in the RPC heartbeat.
-	//
-	// TODO(tschottdorf): validate something about the on-disk contents of the
-	// nodes at this point.
-	exp := "1.1"
-
-	// Write the de facto cluster version (v1.1) into the table. Note that we
-	// can do this from the node running 1.1-2 (it could be prevented, but doesn't
-	// seem too interesting).
-	if err := tc.setVersion(3, exp); err != nil {
-		t.Fatal(err)
-	}
-
-	<-exits // wait for fourth node to die
-
-	// Check that we can still talk to the first three nodes.
-	for i := 0; i < tc.NumServers()-1; i++ {
-		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			if version := tc.getVersionFromShow(i); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			return nil
-		})
-	}
 }
