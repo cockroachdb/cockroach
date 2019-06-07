@@ -14,10 +14,13 @@ package cluster
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 )
 
 // keyedVersion associates a key to a version.
@@ -39,21 +42,56 @@ func (kv keyedVersions) MustByKey(k VersionKey) roachpb.Version {
 	return kv[key].Version
 }
 
-// Validated returns the receiver after asserting that versions are in chronological order
-// and that their keys correspond to their position in the list.
-func (kv keyedVersions) Validated() keyedVersions {
-	ctx := context.Background()
+// Validated makes sure that the keyedVersions are sorted chronologically, that
+// their keys correspond to their position in the list, and that no obsolete
+// versions (i.e. known to always be active) are present.
+func (kv keyedVersions) Validate() error {
+	type majorMinor struct {
+		major, minor int32
+		vs           []keyedVersion
+	}
+	var byRelease []majorMinor
 	for i, namedVersion := range kv {
 		if int(namedVersion.Key) != i {
-			log.Fatalf(ctx, "version %s should have key %d but has %d",
+			return errors.Errorf("version %s should have key %d but has %d",
 				namedVersion, i, namedVersion.Key)
 		}
 		if i > 0 {
 			prev := kv[i-1]
 			if !prev.Version.Less(namedVersion.Version) {
-				log.Fatalf(ctx, "version %s must be larger than %s", namedVersion, prev)
+				return errors.Errorf("version %s must be larger than %s", namedVersion, prev)
 			}
 		}
+		mami := majorMinor{major: namedVersion.Major, minor: namedVersion.Minor}
+		n := len(byRelease)
+		if n == 0 || byRelease[n-1].major != mami.major || byRelease[n-1].minor != mami.minor {
+			// Add new entry to the slice.
+			byRelease = append(byRelease, mami)
+			n++
+		}
+		// Add to existing entry.
+		byRelease[n-1].vs = append(byRelease[n-1].vs, namedVersion)
 	}
-	return kv
+
+	if n := len(byRelease) - 3; n >= 0 {
+		var buf strings.Builder
+		for i, mami := range byRelease[:n+1] {
+			s := "next release"
+			if i+1 < len(byRelease)-1 {
+				nextMM := byRelease[i+1]
+				s = fmt.Sprintf("%d.%d", nextMM.major, nextMM.minor)
+			}
+			for _, nv := range mami.vs {
+				fmt.Fprintf(&buf, "introduced in %s: %s\n", s, nv.Key)
+			}
+		}
+		mostRecentRelease := byRelease[len(byRelease)-1]
+		return errors.Errorf(
+			"found versions that are always active because %d.%d is already "+
+				"released; these should be removed:\n%s",
+			mostRecentRelease.minor, mostRecentRelease.major,
+			buf.String(),
+		)
+	}
+	return nil
 }
