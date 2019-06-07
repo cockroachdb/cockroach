@@ -12,6 +12,7 @@ package colrpc
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -133,4 +134,32 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	// We require no error from the stream handler as nothing was canceled. The
 	// panic is bubbled up through the Next chain on the Inbox's host.
 	require.NoError(t, <-streamHandlerErrCh)
+}
+
+func TestInboxTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	inbox, err := NewInbox([]types.T{types.Int64})
+	require.NoError(t, err)
+
+	var (
+		ctx         = context.Background()
+		readerErrCh = make(chan error)
+		rpcLayer    = makeMockFlowStreamRPCLayer()
+	)
+	go func() {
+		readerErrCh <- exec.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+	}()
+
+	// Timeout the inbox.
+	const timeoutErr = "timeout error"
+	inbox.Timeout(errors.New(timeoutErr))
+
+	// And now the stream arrives.
+	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, nil /* doneFn */)
+
+	readerErr := <-readerErrCh
+	require.True(t, testutils.IsError(readerErr, timeoutErr), readerErr)
+	streamErr := <-streamHandlerErrCh
+	require.True(t, testutils.IsError(streamErr, "stream arrived too late"), streamErr)
 }

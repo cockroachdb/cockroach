@@ -63,7 +63,11 @@ type Inbox struct {
 	// cancellation.
 	contextCh chan context.Context
 
-	// errCh is that channel that RunWithStream will block on, waiting until the
+	// timeoutCh is the channel over which an error will be sent if the reader
+	// goroutine should exit while waiting for a stream.
+	timeoutCh chan error
+
+	// errCh is the channel that RunWithStream will block on, waiting until the
 	// Inbox does not need a stream any more. An error will only be sent on this
 	// channel in the event of a cancellation or a non-io.EOF error originating
 	// from a stream.Recv.
@@ -93,6 +97,7 @@ func NewInbox(typs []types.T) (*Inbox, error) {
 		serializer:   s,
 		streamCh:     make(chan flowStreamServer, 1),
 		contextCh:    make(chan context.Context, 1),
+		timeoutCh:    make(chan error, 1),
 		errCh:        make(chan error, 1),
 		bufferedMeta: make([]distsqlpb.ProducerMetadata, 0),
 	}
@@ -124,6 +129,9 @@ func (i *Inbox) init(ctx context.Context) error {
 	// remote connection.
 	select {
 	case i.stream = <-i.streamCh:
+	case err := <-i.timeoutCh:
+		i.errCh <- fmt.Errorf("%s: remote stream arrived too late", err)
+		return err
 	case <-ctx.Done():
 		i.errCh <- fmt.Errorf("%s: Inbox while waiting for stream", ctx.Err())
 		return ctx.Err()
@@ -174,6 +182,12 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		// The client canceled the stream.
 		return fmt.Errorf("%s: streamCtx in Inbox stream handler (remote client canceled)", streamCtx.Err())
 	}
+}
+
+// Timeout sends the given error to any readers waiting for a stream to be
+// established (i.e. RunWithStream to be called).
+func (i *Inbox) Timeout(err error) {
+	i.timeoutCh <- err
 }
 
 // Init is part of the Operator interface.
