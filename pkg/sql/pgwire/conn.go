@@ -364,7 +364,8 @@ Loop:
 		if el == nil || el.Finished() {
 			el = tracing.StartEventLog(connCtx, c.tracer, "pgwire.conn", "event log")
 		}
-		el.Log(typ.String())
+		bufCpy := c.readBuf
+		logMsg(el, typ, &bufCpy)
 
 		switch typ {
 		case pgwirebase.ClientMsgPassword:
@@ -486,6 +487,32 @@ Loop:
 		_ /* err */ = writeErr(ctx, &sqlServer.GetExecutorConfig().Settings.SV,
 			newAdminShutdownErr(ErrDrainingExistingConn), &c.msgBuilder, &c.writerState.buf)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
+	}
+}
+
+func logMsg(evl *tracing.EventLog, typ pgwirebase.ClientMessageType, buf *pgwirebase.ReadBuffer) {
+	switch typ {
+	case pgwirebase.ClientMsgSimpleQuery:
+		// !!! err handling
+		query, _ := buf.GetString()
+		evl.Log(fmt.Sprintf("SimpleQuery: %s", query))
+	case pgwirebase.ClientMsgParse:
+		// !!! err handling
+		name, _ := buf.GetString()
+		query, _ := buf.GetString()
+		evl.Log(fmt.Sprintf("Parse: %s - %s", name, query))
+	case pgwirebase.ClientMsgBind:
+		// !!! err handling
+		portalName, _ := buf.GetString()
+		statementName, _ := buf.GetString()
+		evl.Log(fmt.Sprintf("Bind: %s - %s", portalName, statementName))
+	case pgwirebase.ClientMsgExecute:
+		// !!! err handling
+		portalName, _ := buf.GetString()
+		limit, _ := buf.GetUint32()
+		evl.Log(fmt.Sprintf("Execute (limit %d)): %s ", limit, portalName))
+	default:
+		evl.Log(typ.String())
 	}
 }
 
@@ -713,7 +740,7 @@ func (c *conn) handleSimpleQuery(
 				ParseEnd:     endParse,
 			})
 	}
-	el.Log(fmt.Sprintf("executing %s", stmts))
+	// !!! el.Log(fmt.Sprintf("executing %s", stmts))
 	//sp := opentracing.SpanFromContext(ctx)
 	//sp.SetTag("statements", stmts)
 
