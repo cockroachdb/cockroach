@@ -314,6 +314,10 @@ func (ds *ServerImpl) setupFlow(
 	if parentSpan == nil {
 		sp = ds.Tracer.(*tracing.Tracer).StartRootSpan(
 			opName, logtags.FromContext(ctx), tracing.NonRecordableSpan)
+	} else if localState.IsLocal {
+		// If we're a local flow, we don't need a "follows from" relationship: we're
+		// going to run this flow synchronously.
+		sp = tracing.StartChildSpan(opName, parentSpan, logtags.FromContext(ctx), false /* separateRecording */)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
 		// TODO(andrei): We should use something more efficient than StartSpan; we

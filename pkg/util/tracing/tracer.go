@@ -376,6 +376,7 @@ func (t *Tracer) StartRootSpan(
 		tracer:    t,
 		operation: opName,
 		startTime: time.Now(),
+		startTags: logTags,
 	}
 	s.mu.duration = -1
 
@@ -387,15 +388,16 @@ func (t *Tracer) StartRootSpan(
 	}
 
 	if t.useNetTrace() {
+		var tags []logtags.Tag
+		if logTags != nil {
+			tags = logTags.Get()
+		}
+
 		s.netTr = trace.New("tracing", opName)
 		s.netTr.SetMaxEvents(maxLogsPerSpan)
-	}
-
-	if logTags != nil {
-		for _, t := range logTags.Get() {
-			s.setTagInner(
-				tagName(t.Key()), t.ValueStr(),
-				true /* locked - we're lying but we're just creating the span */)
+		for i := range tags {
+			tag := &tags[i]
+			s.netTr.LazyPrintf("%s:%v", tag.Key(), tag.Value())
 		}
 	}
 
@@ -430,6 +432,7 @@ func StartChildSpan(
 		operation:    opName,
 		startTime:    time.Now(),
 		parentSpanID: pSpan.SpanID,
+		startTags:    logTags,
 	}
 
 	// Copy baggage from parent.
@@ -460,17 +463,19 @@ func StartChildSpan(
 	if pSpan.netTr != nil {
 		s.netTr = trace.New("tracing", opName)
 		s.netTr.SetMaxEvents(maxLogsPerSpan)
+		if startTags := s.startTags; startTags != nil {
+			tags := startTags.Get()
+			for i := range tags {
+				tag := &tags[i]
+				s.netTr.LazyPrintf("%s:%v", tag.Key(), tag.Value())
+			}
+		}
 	}
 
 	if pSpan.netTr != nil || pSpan.shadowTr != nil {
 		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)
-		}
-	}
-	if logTags != nil {
-		for _, t := range logTags.Get() {
-			s.SetTag(tagName(t.Key()), t.ValueStr())
 		}
 	}
 
