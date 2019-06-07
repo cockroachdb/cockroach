@@ -290,12 +290,6 @@ func ReadVersionFromEngineOrDefault(
 	if err != nil {
 		return cluster.ClusterVersion{}, err
 	}
-
-	// These values should always exist in 1.1-initialized clusters, but may
-	// not on 1.0.x; we synthesize the missing version.
-	if cv.Version == (roachpb.Version{}) {
-		cv.Version = cluster.VersionByKey(cluster.VersionBase)
-	}
 	return cv, nil
 }
 
@@ -338,6 +332,12 @@ func SynthesizeClusterVersionFromEngines(
 		cv, err := ReadVersionFromEngineOrDefault(ctx, eng)
 		if err != nil {
 			return cluster.ClusterVersion{}, err
+		}
+		if cv.Version == (roachpb.Version{}) {
+			// This is needed when a node first joins an existing cluster, in
+			// which case it won't know what version to use until the first
+			// Gossip update comes in.
+			cv.Version = minSupportedVersion
 		}
 
 		// Avoid running a binary with a store that is too new. For example,

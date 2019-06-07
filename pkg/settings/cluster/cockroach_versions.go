@@ -32,7 +32,7 @@ type VersionKey int
 //
 //go:generate stringer -type=VersionKey
 const (
-	VersionBase VersionKey = iota
+	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version2_0
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
@@ -84,12 +84,13 @@ const (
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions([]keyedVersion{
-	{
-		// VersionBase corresponds to any binary older than 1.0-1, though these
-		// binaries predate this cluster versioning system.
-		Key:     VersionBase,
-		Version: roachpb.Version{Major: 1},
-	},
+	// Removed.
+	// {
+	// 	// VersionBase corresponds to any binary older than 1.0-1, though these
+	// 	// binaries predate this cluster versioning system.
+	// 	Key:     VersionBase,
+	// 	Version: roachpb.Version{Major: 1},
+	// },
 	// Removed.
 	// {
 	// 	// VersionRaftLogTruncationBelowRaft is https://github.com/cockroachdb/cockroach/pull/16993.
