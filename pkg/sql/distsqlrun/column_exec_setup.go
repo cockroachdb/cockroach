@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errbase"
+	proto "github.com/gogo/protobuf/proto"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -904,6 +906,34 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 		}
 	}
 	return op, metaSources, nil
+}
+
+type VectorizedSetupError struct {
+	cause error
+}
+
+func (e *VectorizedSetupError) Error() string {
+	return e.cause.Error()
+}
+
+func (e *VectorizedSetupError) Unwrap() error {
+	return e.cause
+}
+
+func encodeVectorizedSetupError(ctx context.Context, err error) (string, []string, proto.Message) {
+	encErr := errors.EncodeError(ctx, err.(*VectorizedSetupError).cause)
+	return "", nil, &encErr
+}
+
+func decodeVectorizedSetupError(
+	_ context.Context, cause error, _ string, _ []string, _ proto.Message,
+) error {
+	return &VectorizedSetupError{cause: cause}
+}
+
+func init() {
+	errors.RegisterWrapperEncoder(errbase.GetTypeKey((*VectorizedSetupError)(nil)), encodeVectorizedSetupError)
+	errors.RegisterWrapperDecoder(errbase.GetTypeKey((*VectorizedSetupError)(nil)), decodeVectorizedSetupError)
 }
 
 func (f *Flow) setupVectorized(ctx context.Context) error {

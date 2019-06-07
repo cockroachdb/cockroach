@@ -29,12 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors/markers"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -63,8 +66,6 @@ type runnerResult struct {
 }
 
 func (req runnerRequest) run() {
-	defer distsqlplan.ReleaseSetupFlowRequest(req.flowReq)
-
 	res := runnerResult{nodeID: req.nodeID}
 
 	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID)
@@ -181,6 +182,7 @@ func (dsp *DistSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.PlanToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
+StartFlows:
 	evalCtxProto := distsqlpb.MakeEvalContext(evalCtx.EvalContext)
 	setupReq := distsqlpb.SetupFlowRequest{
 		TxnCoordMeta: txnCoordMeta,
@@ -209,6 +211,8 @@ func (dsp *DistSQLPlanner) Run(
 			nodeID:     nodeID,
 			resultChan: resultChan,
 		}
+		defer distsqlplan.ReleaseSetupFlowRequest(&req)
+
 		// Send out a request to the workers; if no worker is available, run
 		// directly.
 		select {
@@ -230,6 +234,24 @@ func (dsp *DistSQLPlanner) Run(
 		// into the local flow.
 	}
 	if firstErr != nil {
+		if _, ok := markers.If(firstErr, func(err error) (v interface{}, ok bool) {
+			v, ok = err.(*distsqlrun.VectorizedSetupError)
+			return v, ok
+		}); ok && evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn {
+			// Error vectorizing remote flows, try again with off.
+			// Generate a new flow ID so that any remote nodes that successfully set
+			// up a vectorized flow will not be connected to by a non-vectorized flow.
+			newFlowID := uuid.MakeV4()
+			log.Infof(
+				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %s", flows[thisNodeID].FlowID, newFlowID, firstErr,
+			)
+			for i := range flows {
+				flows[i].FlowID.UUID = newFlowID
+			}
+			evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
+			defer func() { evalCtx.SessionData.Vectorize = sessiondata.VectorizeOn }()
+			goto StartFlows
+		}
 		recv.SetError(firstErr)
 		return
 	}
