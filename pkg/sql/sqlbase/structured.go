@@ -1359,17 +1359,6 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		}
 	}
 
-	if st != nil && st.Version.IsInitialized() {
-		if !st.Version.IsActive(cluster.VersionBitArrayColumns) {
-			for i := range desc.Columns {
-				if desc.Columns[i].Type.Family() == types.BitFamily {
-					return fmt.Errorf("cluster version does not support BIT (required: %s)",
-						cluster.VersionByKey(cluster.VersionBitArrayColumns))
-				}
-			}
-		}
-	}
-
 	for _, m := range desc.Mutations {
 		unSetEnums := m.State == DescriptorMutation_UNKNOWN || m.Direction == DescriptorMutation_NONE
 		switch desc := m.Descriptor_.(type) {
