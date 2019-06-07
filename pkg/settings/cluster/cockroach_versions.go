@@ -35,7 +35,6 @@ const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version2_0
 	VersionImportSkipRecords
-	VersionProposedTSLeaseRequest
 	Version2_1
 	VersionCascadingZoneConfigs
 	VersionLoadSplits
@@ -217,11 +216,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionImportSkipRecords,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 1},
 	},
-	{
-		// VersionProposedTSLeaseRequest is https://github.com/cockroachdb/cockroach/pull/23466
-		Key:     VersionProposedTSLeaseRequest,
-		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 2},
-	},
+	// Removed.
+	// {
+	// 	// VersionProposedTSLeaseRequest is https://github.com/cockroachdb/cockroach/pull/23466
+	// 	Key:     VersionProposedTSLeaseRequest,
+	// 	Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 2},
+	// },
 	// Removed.
 	// {
 	// 	// VersionRangeAppliedStateKey is https://github.com/cockroachdb/cockroach/pull/22317.
