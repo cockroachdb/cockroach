@@ -36,7 +36,6 @@ const (
 	Version2_0
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
-	VersionImportFormats
 	Version2_1
 	VersionCascadingZoneConfigs
 	VersionLoadSplits
@@ -229,11 +228,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	// 	Key:     VersionRangeAppliedStateKey,
 	// 	Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 3},
 	// },
-	{
-		// VersionImportFormats is https://github.com/cockroachdb/cockroach/pull/25615.
-		Key:     VersionImportFormats,
-		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 4},
-	},
+	// Removed.
+	// {
+	// 	// VersionImportFormats is https://github.com/cockroachdb/cockroach/pull/25615.
+	// 	Key:     VersionImportFormats,
+	// 	Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 4},
+	// },
 	// Removed.
 	// {
 	// 	// VersionSecondaryLookupJoins is https://github.com/cockroachdb/cockroach/pull/25628.
