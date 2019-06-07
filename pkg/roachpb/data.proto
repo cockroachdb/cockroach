@@ -35,6 +35,9 @@ message Span {
   // In such a case, the Span encompasses the key range from Key to EndKey,
   // including Key and excluding EndKey.
   bytes end_key = 4 [(gogoproto.casttype) = "Key"];
+  // True if we know a priori that this key range contains a single key,
+  // implying that a Scan from key to end_key could be replaced by a Get of key.
+  bool single_key = 5;
 }
 
 // ValueType defines a set of type constants placed in the "tag" field of Value

@@ -494,6 +494,7 @@ void Span::InitAsDefaultInstance() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Span::kKeyFieldNumber;
 const int Span::kEndKeyFieldNumber;
+const int Span::kSingleKeyFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Span::Span()
@@ -515,12 +516,14 @@ Span::Span(const Span& from)
   if (from.end_key().size() > 0) {
     end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.end_key_);
   }
+  single_key_ = from.single_key_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Span)
 }
 
 void Span::SharedCtor() {
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   end_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  single_key_ = false;
 }
 
 Span::~Span() {
@@ -550,6 +553,7 @@ void Span::Clear() {
 
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  single_key_ = false;
   _internal_metadata_.Clear();
 }
 
@@ -585,6 +589,20 @@ bool Span::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_end_key()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool single_key = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(40u /* 40 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &single_key_)));
         } else {
           goto handle_unusual;
         }
@@ -627,6 +645,11 @@ void Span::SerializeWithCachedSizes(
       4, this->end_key(), output);
   }
 
+  // bool single_key = 5;
+  if (this->single_key() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(5, this->single_key(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Span)
@@ -648,6 +671,11 @@ size_t Span::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::BytesSize(
         this->end_key());
+  }
+
+  // bool single_key = 5;
+  if (this->single_key() != 0) {
+    total_size += 1 + 1;
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -675,6 +703,9 @@ void Span::MergeFrom(const Span& from) {
 
     end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.end_key_);
   }
+  if (from.single_key() != 0) {
+    set_single_key(from.single_key());
+  }
 }
 
 void Span::CopyFrom(const Span& from) {
@@ -698,6 +729,7 @@ void Span::InternalSwap(Span* other) {
     GetArenaNoVirtual());
   end_key_.Swap(&other->end_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
+  swap(single_key_, other->single_key_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

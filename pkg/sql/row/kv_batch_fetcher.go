@@ -179,7 +179,11 @@ func makeKVBatchFetcherWithSendFunc(
 	if useBatchLimit {
 		// Verify the spans are ordered if a batch limit is used.
 		for i := 1; i < len(spans); i++ {
-			if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
+			lastEndKey := spans[i-1].EndKey
+			if spans[i-1].SingleKey {
+				lastEndKey = spans[i-1].Key
+			}
+			if spans[i].Key.Compare(lastEndKey) < 0 {
 				return txnKVFetcher{}, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
 			}
 		}
@@ -233,16 +237,28 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	if f.reverse {
 		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
 		for i := range f.spans {
-			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
-			scans[i].SetSpan(f.spans[i])
-			ba.Requests[i].MustSetInner(&scans[i])
+			if f.spans[i].SingleKey {
+				get := new(roachpb.GetRequest)
+				get.Key = f.spans[i].Key
+				ba.Requests[i].MustSetInner(get)
+			} else {
+				scans[i].ScanFormat = roachpb.BATCH_RESPONSE
+				scans[i].SetSpan(f.spans[i])
+				ba.Requests[i].MustSetInner(&scans[i])
+			}
 		}
 	} else {
 		scans := make([]roachpb.ScanRequest, len(f.spans))
 		for i := range f.spans {
-			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
-			scans[i].SetSpan(f.spans[i])
-			ba.Requests[i].MustSetInner(&scans[i])
+			if f.spans[i].SingleKey {
+				get := new(roachpb.GetRequest)
+				get.Key = f.spans[i].Key
+				ba.Requests[i].MustSetInner(get)
+			} else {
+				scans[i].ScanFormat = roachpb.BATCH_RESPONSE
+				scans[i].SetSpan(f.spans[i])
+				ba.Requests[i].MustSetInner(&scans[i])
+			}
 		}
 	}
 	if cap(f.requestSpans) < len(f.spans) {
@@ -345,6 +361,11 @@ func (f *txnKVFetcher) nextBatch(
 				f.remainingBatches = t.BatchResponses[1:]
 			}
 			return true, t.Rows, batchResp, origSpan, nil
+		case *roachpb.GetResponse:
+			if t.Value == nil {
+				return true, nil, nil, origSpan, nil
+			}
+			return true, []roachpb.KeyValue{{Key: origSpan.Key, Value: *t.Value}}, nil, origSpan, nil
 		}
 	}
 	if f.fetchEnd {

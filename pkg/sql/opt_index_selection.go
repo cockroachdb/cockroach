@@ -674,6 +674,21 @@ func appendSpansFromConstraintSpan(
 	}
 	s.EndKey = append(s.EndKey, interstices[cs.EndKey().Length()]...)
 
+	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
+
+	keysEqual := s.Key.Equal(s.EndKey)
+	if cs.StartKey().Length() == len(index.ColumnIDs) && keysEqual && len(tableDesc.Families) == 1 {
+		// Just 1 family, and tight? We can use a Get request!
+		var span roachpb.Span
+		span.Key = make(roachpb.Key, len(s.Key))
+		copy(span.Key, s.Key)
+		span.Key = keys.MakeFamilyKey(span.Key, uint32(tableDesc.Families[0].ID))
+		span.EndKey = span.Key.PrefixEnd()
+		span.SingleKey = true
+		spans = append(spans, span)
+		return spans, nil
+	}
+
 	// Optimization: for single row lookups on a table with multiple column
 	// families, only scan the relevant column families. This is disabled for
 	// deletions to ensure that the entire row is deleted.
@@ -682,7 +697,7 @@ func appendSpansFromConstraintSpan(
 		index.ID == tableDesc.PrimaryIndex.ID &&
 		len(tableDesc.Families) > 1 &&
 		cs.StartKey().Length() == len(tableDesc.PrimaryIndex.ColumnIDs) &&
-		s.Key.Equal(s.EndKey) {
+		keysEqual {
 		neededFamilyIDs := neededColumnFamilyIDs(tableDesc, needed)
 		if len(neededFamilyIDs) < len(tableDesc.Families) {
 			for i, familyID := range neededFamilyIDs {
@@ -706,7 +721,6 @@ func appendSpansFromConstraintSpan(
 	// We tighten the end key to prevent reading interleaved children after the
 	// last parent key. If cs.End.Inclusive is true, we also advance the key as
 	// necessary.
-	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
 	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc.TableDesc(), index, s.EndKey, endInclusive)
 	if err != nil {
 		return nil, err

@@ -289,12 +289,19 @@ class Span : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
+  // bool single_key = 5;
+  void clear_single_key();
+  static const int kSingleKeyFieldNumber = 5;
+  bool single_key() const;
+  void set_single_key(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Span)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
+  bool single_key_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -2748,6 +2755,20 @@ inline void Span::set_allocated_end_key(::std::string* end_key) {
   }
   end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.end_key)
+}
+
+// bool single_key = 5;
+inline void Span::clear_single_key() {
+  single_key_ = false;
+}
+inline bool Span::single_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Span.single_key)
+  return single_key_;
+}
+inline void Span::set_single_key(bool value) {
+  
+  single_key_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Span.single_key)
 }
 
 // -------------------------------------------------------------------
