@@ -39,7 +39,6 @@ const (
 	VersionImportFormats
 	VersionSecondaryLookupJoins
 	VersionColumnarTimeSeries
-	VersionBatchResponse
 	Version2_1
 	VersionCascadingZoneConfigs
 	VersionLoadSplits
@@ -265,11 +264,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	// 	Key:     VersionAsyncConsensus,
 	// 	Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 9},
 	// },
-	{
-		// VersionBatchResponse is https://github.com/cockroachdb/cockroach/pull/26553.
-		Key:     VersionBatchResponse,
-		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 10},
-	},
+	// Removed.
+	// {
+	// 	// VersionBatchResponse is https://github.com/cockroachdb/cockroach/pull/26553.
+	// 	Key:     VersionBatchResponse,
+	// 	Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 10},
+	// },
 	// Removed.
 	// {
 	// 	// VersionCreateChangefeed is https://github.com/cockroachdb/cockroach/pull/27962.
