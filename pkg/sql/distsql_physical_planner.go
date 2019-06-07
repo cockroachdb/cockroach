@@ -1107,8 +1107,12 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	p := newPhysicalPlan()
 	stageID := p.NewStageID()
 
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
-	p.Processors = make([]distsqlplan.Processor, 0, len(spanPartitions))
+	nPartitions := len(spanPartitions)
+	if cap(p.ResultRouters) >= nPartitions {
+		p.ResultRouters = p.ResultRouters[:nPartitions]
+	} else {
+		p.ResultRouters = make([]distsqlplan.ProcessorIdx, nPartitions)
+	}
 
 	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
 
@@ -1156,11 +1160,15 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		p.SetMergeOrdering(dsp.convertOrdering(n.props, scanNodeToTableOrdinalMap))
 	}
 
-	var typs []types.T
+	var nTypes int
 	if returnMutations {
-		typs = make([]types.T, 0, len(n.desc.Columns)+len(n.desc.MutationColumns()))
+		nTypes = len(n.desc.Columns) + len(n.desc.MutationColumns())
 	} else {
-		typs = make([]types.T, 0, len(n.desc.Columns))
+		nTypes = len(n.desc.Columns)
+	}
+	typs := p.ResultTypes[:0]
+	if cap(typs) < nTypes {
+		typs = make([]types.T, 0, nTypes)
 	}
 	for i := range n.desc.Columns {
 		typs = append(typs, n.desc.Columns[i].Type)
@@ -1181,7 +1189,13 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			outCols[i] = uint32(tableOrdinal(n.desc, id, n.colCfg.visibility))
 		}
 	}
-	planToStreamColMap := make([]int, len(n.cols))
+
+	nCols := len(n.cols)
+	if cap(p.PlanToStreamColMap) >= nCols {
+		p.PlanToStreamColMap = p.PlanToStreamColMap[:nCols]
+	} else {
+		p.PlanToStreamColMap = make([]int, nCols)
+	}
 	descColumnIDs := make([]sqlbase.ColumnID, 0, len(n.desc.Columns))
 	for i := range n.desc.Columns {
 		descColumnIDs = append(descColumnIDs, n.desc.Columns[i].ID)
@@ -1191,18 +1205,16 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			descColumnIDs = append(descColumnIDs, c.ID)
 		}
 	}
-	for i := range planToStreamColMap {
-		planToStreamColMap[i] = -1
+	for i := range p.PlanToStreamColMap {
+		p.PlanToStreamColMap[i] = -1
 		for j, c := range outCols {
 			if descColumnIDs[c] == n.cols[i].ID {
-				planToStreamColMap[i] = j
+				p.PlanToStreamColMap[i] = j
 				break
 			}
 		}
 	}
 	p.AddProjection(outCols)
-
-	p.PlanToStreamColMap = planToStreamColMap
 	return p, nil
 }
 
