@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // {{/*
@@ -86,11 +87,27 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 			curRIdx := rGroup.rowStartIdx
 			curLLength := lGroup.rowEndIdx
 			curRLength := rGroup.rowEndIdx
+			areGroupsProcessed := false
+			if o.joinType == sqlbase.JoinType_LEFT_OUTER {
+				if lGroup.unmatched {
+					if curLIdx+1 != curLLength {
+						panic("unexpectedly length of the left unmatched group is not 1")
+					}
+					// The row already does not have a match, so we don't need to do any
+					// additional processing.
+					o.groups.addLeftOuterGroup(curLIdx, curRIdx)
+					curLIdx++
+					areGroupsProcessed = true
+				}
+			}
 			// Expand or filter each group based on the current equality column.
-			for curLIdx < curLLength && curRIdx < curRLength {
+			for curLIdx < curLLength && curRIdx < curRLength && !areGroupsProcessed {
 				// TODO(georgeutsin): change null check logic for non INNER joins.
 				// {{ if $.LNull }}
 				if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
+					if o.joinType == sqlbase.JoinType_LEFT_OUTER {
+						o.groups.addLeftOuterGroup(curLIdx, curRIdx)
+					}
 					curLIdx++
 					continue
 				}
@@ -113,7 +130,7 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 				_ASSIGN_EQ("match", "lVal", "rVal")
 				if match {
 					// Find the length of the groups on each side.
-					lGroupLength, rGroupLength := 0, 0
+					lGroupLength, rGroupLength := 1, 1
 					lComplete, rComplete := false, false
 					beginLIdx, beginRIdx := curLIdx, curRIdx
 
@@ -121,6 +138,7 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 					if curLLength == 0 {
 						lGroupLength, lComplete = 0, true
 					} else {
+						curLIdx++
 						for curLIdx < curLLength {
 							// TODO(georgeutsin): change null check logic for non INNER joins.
 							// {{ if $.LNull }}
@@ -144,6 +162,7 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 					if curRLength == 0 {
 						rGroupLength, rComplete = 0, true
 					} else {
+						curRIdx++
 						for curRIdx < curRLength {
 							// TODO(georgeutsin): change null check logic for non INNER joins.
 							// {{ if $.RNull }}
@@ -165,9 +184,9 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 
 					// Last equality column and either group is incomplete. Save state and have it handled in the next iteration.
 					if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
-						o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lBufferedGroup, &o.proberState.lGroupEndIdx, &o.proberState.needToResetLeftBufferedGroup)
+						o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lBufferedGroup, &o.proberState.lGroupEndIdx)
 						o.proberState.lIdx = lGroupLength + beginLIdx
-						o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rBufferedGroup, &o.proberState.rGroupEndIdx, &o.proberState.needToResetRightBufferedGroup)
+						o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rBufferedGroup, &o.proberState.rGroupEndIdx)
 						o.proberState.rIdx = rGroupLength + beginRIdx
 
 						o.groups.finishedCol()
@@ -183,11 +202,45 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 					// {{ else }}
 					_ASSIGN_GT("incrementLeft", "lVal", "rVal")
 					// {{ end }}
-
 					if incrementLeft {
 						curLIdx++
+						if o.joinType == sqlbase.JoinType_LEFT_OUTER {
+							// All the rows on the left within the current group will not get
+							// a match on the right, so we're adding each of them as a left
+							// outer group.
+							o.groups.addLeftOuterGroup(curLIdx-1, curRIdx)
+							for curLIdx < curLLength {
+								// {{ if $.LNull }}
+								if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
+									break
+								}
+								// {{ end }}
+								newLVal := lKeys[_L_SEL_IND]
+								_ASSIGN_EQ("match", "newLVal", "lVal")
+								if !match {
+									break
+								}
+								o.groups.addLeftOuterGroup(curLIdx, curRIdx)
+								curLIdx++
+							}
+						}
 					} else {
 						curRIdx++
+					}
+
+				}
+			}
+			if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+				// The current group is not the last one within the column, so it
+				// cannot be extended into the next batch, and we need to process it
+				// right now.
+				if o.joinType == sqlbase.JoinType_LEFT_OUTER {
+					// Any unprocessed row in the left group will not get a match, so each
+					// one of them becomes a new unmatched group with a corresponding null
+					// group.
+					for curLIdx < curLLength {
+						o.groups.addLeftOuterGroup(curLIdx, curRIdx)
+						curLIdx++
 					}
 				}
 			}
@@ -276,7 +329,6 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 				// {{ if $.IsSel }}
 				srcStartIdx = int(sel[srcStartIdx])
 				// {{ end }}
-				val = srcCol[srcStartIdx]
 
 				repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 				toAppend := repeatsLeft
@@ -284,15 +336,21 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 					toAppend = outputBatchSize - outStartIdx
 				}
 
+				var isNull bool
 				// {{ if $.HasNulls }}
-				if src.Nulls().NullAt64(uint64(srcStartIdx)) {
+				isNull = src.Nulls().NullAt64(uint64(srcStartIdx))
+				if isNull {
 					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
+					outStartIdx += toAppend
 				}
 				// {{ end }}
 
-				for i := 0; i < toAppend; i++ {
-					outCol[outStartIdx] = val
-					outStartIdx++
+				if !isNull {
+					val = srcCol[srcStartIdx]
+					for i := 0; i < toAppend; i++ {
+						outCol[outStartIdx] = val
+						outStartIdx++
+					}
 				}
 
 				if toAppend < repeatsLeft {
@@ -402,29 +460,33 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 					toAppend = outputBatchSize - outStartIdx
 				}
 
-				// {{ if $.HasNulls }}
-				// {{ if $.IsSel }}
-				out.Nulls().ExtendWithSel(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend), sel)
-				// {{ else }}
-				out.Nulls().Extend(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
-				// {{ end }}
-				// {{ end }}
-
-				// Optimization in the case that group length is 1, use assign instead of copy.
-				if toAppend == 1 {
-					// {{ if $.IsSel }}
-					outCol[outStartIdx] = srcCol[sel[o.builderState.right.curSrcStartIdx]]
-					// {{ else }}
-					outCol[outStartIdx] = srcCol[o.builderState.right.curSrcStartIdx]
-					// {{ end }}
+				if rightGroup.nullGroup {
+					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
 				} else {
+					// {{ if $.HasNulls }}
 					// {{ if $.IsSel }}
-					for i := 0; i < toAppend; i++ {
-						outCol[i+outStartIdx] = srcCol[sel[i+o.builderState.right.curSrcStartIdx]]
-					}
+					out.Nulls().ExtendWithSel(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend), sel)
 					// {{ else }}
-					copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
+					out.Nulls().Extend(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
 					// {{ end }}
+					// {{ end }}
+
+					// Optimization in the case that group length is 1, use assign instead of copy.
+					if toAppend == 1 {
+						// {{ if $.IsSel }}
+						outCol[outStartIdx] = srcCol[sel[o.builderState.right.curSrcStartIdx]]
+						// {{ else }}
+						outCol[outStartIdx] = srcCol[o.builderState.right.curSrcStartIdx]
+						// {{ end }}
+					} else {
+						// {{ if $.IsSel }}
+						for i := 0; i < toAppend; i++ {
+							outCol[i+outStartIdx] = srcCol[sel[i+o.builderState.right.curSrcStartIdx]]
+						}
+						// {{ else }}
+						copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
+						// {{ end }}
+					}
 				}
 
 				outStartIdx += toAppend
@@ -536,6 +598,16 @@ func (o *mergeJoinOp) isGroupFinished(
 		switch colTyp {
 		// {{ range .MJOverloads }}
 		case _TYPES_T:
+			if input == &o.left {
+				// Nulls only from the left input can be saved in the buffer, so we do
+				// not perform this check on the right input.
+				// TODO(yuzefovich): update this when new join types are supported.
+				if o.joinType == sqlbase.LeftOuterJoin {
+					if savedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(savedGroupIdx - 1)) {
+						return true
+					}
+				}
+			}
 			prevVal := savedGroup.ColVec(int(colIdx))._TemplateType()[savedGroupIdx-1]
 			var curVal _GOTYPE
 			if sel != nil {
