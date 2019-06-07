@@ -380,13 +380,58 @@ func (r *Replica) adminSplitWithDescriptor(
 func (r *Replica) AdminUnsplit(
 	ctx context.Context, args roachpb.AdminUnsplitRequest, reason string,
 ) (roachpb.AdminUnsplitResponse, *roachpb.Error) {
-	// TODO(jeffreyxiao): Have a retry loop for ConditionalFailed errors similar
-	// to AdminSplit
 	var reply roachpb.AdminUnsplitResponse
+	var lastErr error
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxRetries = 10
+	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
+		// The replica may have been destroyed since the start of the retry loop. We
+		// need to explicitly check this condition. Having a valid lease, as we
+		// verify below, does not imply that the range still exists: even after a
+		// range has been merged into its left-hand neighbor, its final lease (i.e.,
+		// the lease we have in r.mu.state.Lease) can remain valid indefinitely.
+		if _, err := r.IsDestroyed(); err != nil {
+			return reply, roachpb.NewError(err)
+		}
 
-	desc := *r.Desc()
+		// Admin commands always require the range lease to begin (see
+		// executeAdminBatch), but we may have lost it while in this retry loop.
+		// Without the lease, a replica's local descriptor can be arbitrarily
+		// stale, which will result in a ConditionFailedError. To avoid this,
+		// we make sure that we still have the lease before each attempt.
+		if _, pErr := r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			return reply, pErr
+		}
+
+		reply, lastErr = r.adminUnsplitWithDescriptor(ctx, args, r.Desc(), reason)
+		// On seeing a ConditionFailedError or an AmbiguousResultError, retry
+		// the command with the updated descriptor.
+		if retry := causer.Visit(lastErr, func(err error) bool {
+			switch err.(type) {
+			case *roachpb.ConditionFailedError:
+				return true
+			case *roachpb.AmbiguousResultError:
+				return true
+			default:
+				return false
+			}
+		}); !retry {
+			return reply, roachpb.NewError(lastErr)
+		}
+	}
+	// If we broke out of the loop after MaxRetries, return the last error.
+	return roachpb.AdminUnsplitResponse{}, roachpb.NewError(lastErr)
+}
+
+func (r *Replica) adminUnsplitWithDescriptor(
+	ctx context.Context,
+	args roachpb.AdminUnsplitRequest,
+	desc *roachpb.RangeDescriptor,
+	reason string,
+) (roachpb.AdminUnsplitResponse, error) {
+	var reply roachpb.AdminUnsplitResponse
 	if !bytes.Equal(desc.StartKey.AsRawKey(), args.Header().Key) {
-		return reply, roachpb.NewErrorf("key %s is not the start of a range", args.Header().Key)
+		return reply, errors.Errorf("key %s is not the start of a range", args.Header().Key)
 	}
 
 	// If the range's sticky bit is already hlc.Timestamp{}, we treat the
@@ -396,13 +441,13 @@ func (r *Replica) AdminUnsplit(
 		return reply, nil
 	}
 
-	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		newDesc := desc
+		newDesc := *desc
 		newDesc.StickyBit = hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
 
-		if err := updateRangeDescriptor(b, descKey, &desc, &newDesc); err != nil {
+		if err := updateRangeDescriptor(b, descKey, desc, &newDesc); err != nil {
 			return err
 		}
 		if err := updateRangeAddressing(b, &newDesc); err != nil {
@@ -420,11 +465,17 @@ func (r *Replica) AdminUnsplit(
 			},
 		})
 		return txn.Run(ctx, b)
-	}); err != nil {
-		return reply, roachpb.NewErrorf("unsplit at key %s failed: %s", args.Header().Key, err)
+	})
+	// The ConditionFailedError can occur because the descriptors acting as
+	// expected values in the CPuts used to update the range descriptor are
+	// picked outside the transaction. Return ConditionFailedError in the error
+	// detail so that the command can be retried.
+	if msg, ok := maybeDescriptorChangedError(desc, err); ok {
+		// NB: we have to wrap the existing error here as consumers of this code
+		// look at the root cause to sniff out the changed descriptor.
+		err = &benignError{errors.Wrap(err, msg)}
 	}
-
-	return reply, nil
+	return reply, err
 }
 
 // AdminMerge extends this range to subsume the range that comes next
