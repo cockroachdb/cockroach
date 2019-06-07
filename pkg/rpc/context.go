@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,6 +44,8 @@ import (
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/encoding"
+	encodingproto "google.golang.org/grpc/encoding/proto"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 )
@@ -494,6 +497,10 @@ type internalClientAdapter struct {
 func (a internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
+	// For Batch calls which happen due to RPCs, the stack is grown prior to
+	// unmarshaling in the growStackCodec. Internal calls bypass serialization
+	// and thus miss out on the stack growth so do it here.
+	growstack.Grow()
 	return a.InternalServer.Batch(ctx, ba)
 }
 
@@ -651,6 +658,28 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 	}
 
 	return dialOpts, nil
+}
+
+// growStackCodec wraps the default grpc/encoding/proto codec to detect
+// BatchRequest rpcs and grow the stack prior to Unmarshaling.
+type growStackCodec struct {
+	encoding.Codec
+}
+
+// Unmarshal detects BatchRequests and calls growstack.Grow before calling
+// through to the underlying codec.
+func (c growStackCodec) Unmarshal(data []byte, v interface{}) error {
+	if _, ok := v.(*roachpb.BatchRequest); ok {
+		growstack.Grow()
+	}
+	return c.Codec.Unmarshal(data, v)
+}
+
+// Install the growStackCodec over the default proto codec in order to grow the
+// stack for BatchRequest RPCs prior to unmarshaling.
+func init() {
+	protoCodec := encoding.GetCodec(encodingproto.Name)
+	encoding.RegisterCodec(growStackCodec{Codec: protoCodec})
 }
 
 // onlyOnceDialer implements the grpc.WithDialer interface but only
