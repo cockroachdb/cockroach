@@ -39,7 +39,6 @@ const (
 	VersionMVCCNetworkStats
 	VersionRPCNetworkStats
 	VersionRPCVersionCheck
-	VersionClearRange
 	Version2_0
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
@@ -146,11 +145,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionRPCVersionCheck,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 5},
 	},
-	{
-		// VersionClearRange is https://github.com/cockroachdb/cockroach/pull/20601.
-		Key:     VersionClearRange,
-		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 6},
-	},
+	// Removed.
+	// {
+	// 	// VersionClearRange is https://github.com/cockroachdb/cockroach/pull/20601.
+	// 	Key:     VersionClearRange,
+	// 	Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 6},
+	// },
 	// Removed.
 	// {
 	// 	// VersionPartitioning gates all backwards-incompatible changes required by
