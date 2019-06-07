@@ -133,3 +133,9 @@ query I
 SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 0
+
+statement error creating or manipulating partitions requires a CCL binary
+CREATE TABLE b (id INT PRIMARY KEY) PARTITION BY LIST (id) (
+PARTITION c VALUES IN (1) CONFIGURE ZONE USING (constraints='[+region=test]')
+)
+
