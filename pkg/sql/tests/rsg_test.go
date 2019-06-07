@@ -501,7 +501,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 
 	var smither *sqlsmith.Smither
 
-	tableStmts := make([]string, 10)
+	tableStmts := make([]string, 2)
 	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		// Create some random tables for the smither's column references and INSERT.
 		for i := 0; i < len(tableStmts); i++ {
@@ -510,10 +510,11 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 			if err := db.exec(ctx, stmt); err != nil {
 				return err
 			}
+			fmt.Printf("%s;\n", stmt)
 			tableStmts[i] = stmt
 		}
 		var err error
-		smither, err = sqlsmith.NewSmither(db.db, r.Rnd)
+		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())
 		return err
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := smither.Generate()
@@ -533,7 +534,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		if ignoredRegex.MatchString(msg) {
 			shouldLogErr = false
 		}
-		if shouldLogErr {
+		if testing.Verbose() && shouldLogErr {
 			fmt.Printf("ERROR: %s\ncaused by:\n%s;\n\n", err, s)
 		}
 		return err
