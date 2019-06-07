@@ -344,6 +344,8 @@ func (sb *statisticsBuilder) colStatLeaf(
 		colSet.ForEach(func(i int) {
 			distinctCount *= sb.colStatLeaf(util.MakeFastIntSet(i), s, fd).DistinctCount
 		})
+		// Fetch the colStat again since it may now have a different address.
+		colStat, _ = s.ColStats.Lookup(colSet)
 		colStat.DistinctCount = min(distinctCount, s.RowCount)
 	}
 
