@@ -8,40 +8,39 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[VersionBase-0]
-	_ = x[Version2_0-1]
-	_ = x[VersionImportSkipRecords-2]
-	_ = x[VersionProposedTSLeaseRequest-3]
-	_ = x[VersionRangeAppliedStateKey-4]
-	_ = x[VersionImportFormats-5]
-	_ = x[VersionSecondaryLookupJoins-6]
-	_ = x[VersionColumnarTimeSeries-7]
-	_ = x[VersionBatchResponse-8]
-	_ = x[VersionCreateChangefeed-9]
-	_ = x[VersionBitArrayColumns-10]
-	_ = x[VersionLoadBasedRebalancing-11]
-	_ = x[Version2_1-12]
-	_ = x[VersionCascadingZoneConfigs-13]
-	_ = x[VersionLoadSplits-14]
-	_ = x[VersionExportStorageWorkload-15]
-	_ = x[VersionLazyTxnRecord-16]
-	_ = x[VersionSequencedReads-17]
-	_ = x[VersionUnreplicatedRaftTruncatedState-18]
-	_ = x[VersionCreateStats-19]
-	_ = x[VersionDirectImport-20]
-	_ = x[VersionSideloadedStorageNoReplicaID-21]
-	_ = x[VersionPushTxnToInclusive-22]
-	_ = x[VersionSnapshotsWithoutLog-23]
-	_ = x[Version19_1-24]
-	_ = x[VersionStart19_2-25]
-	_ = x[VersionQueryTxnTimestamp-26]
-	_ = x[VersionStickyBit-27]
-	_ = x[VersionParallelCommits-28]
+	_ = x[Version2_0-0]
+	_ = x[VersionImportSkipRecords-1]
+	_ = x[VersionProposedTSLeaseRequest-2]
+	_ = x[VersionRangeAppliedStateKey-3]
+	_ = x[VersionImportFormats-4]
+	_ = x[VersionSecondaryLookupJoins-5]
+	_ = x[VersionColumnarTimeSeries-6]
+	_ = x[VersionBatchResponse-7]
+	_ = x[VersionCreateChangefeed-8]
+	_ = x[VersionBitArrayColumns-9]
+	_ = x[VersionLoadBasedRebalancing-10]
+	_ = x[Version2_1-11]
+	_ = x[VersionCascadingZoneConfigs-12]
+	_ = x[VersionLoadSplits-13]
+	_ = x[VersionExportStorageWorkload-14]
+	_ = x[VersionLazyTxnRecord-15]
+	_ = x[VersionSequencedReads-16]
+	_ = x[VersionUnreplicatedRaftTruncatedState-17]
+	_ = x[VersionCreateStats-18]
+	_ = x[VersionDirectImport-19]
+	_ = x[VersionSideloadedStorageNoReplicaID-20]
+	_ = x[VersionPushTxnToInclusive-21]
+	_ = x[VersionSnapshotsWithoutLog-22]
+	_ = x[Version19_1-23]
+	_ = x[VersionStart19_2-24]
+	_ = x[VersionQueryTxnTimestamp-25]
+	_ = x[VersionStickyBit-26]
+	_ = x[VersionParallelCommits-27]
 }
 
-const _VersionKey_name = "VersionBaseVersion2_0VersionImportSkipRecordsVersionProposedTSLeaseRequestVersionRangeAppliedStateKeyVersionImportFormatsVersionSecondaryLookupJoinsVersionColumnarTimeSeriesVersionBatchResponseVersionCreateChangefeedVersionBitArrayColumnsVersionLoadBasedRebalancingVersion2_1VersionCascadingZoneConfigsVersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
+const _VersionKey_name = "Version2_0VersionImportSkipRecordsVersionProposedTSLeaseRequestVersionRangeAppliedStateKeyVersionImportFormatsVersionSecondaryLookupJoinsVersionColumnarTimeSeriesVersionBatchResponseVersionCreateChangefeedVersionBitArrayColumnsVersionLoadBasedRebalancingVersion2_1VersionCascadingZoneConfigsVersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
 
-var _VersionKey_index = [...]uint16{0, 11, 21, 45, 74, 101, 121, 148, 173, 193, 216, 238, 265, 275, 302, 319, 347, 367, 388, 425, 443, 462, 497, 522, 548, 559, 575, 599, 615, 637}
+var _VersionKey_index = [...]uint16{0, 10, 34, 63, 90, 110, 137, 162, 182, 205, 227, 254, 264, 291, 308, 336, 356, 377, 414, 432, 451, 486, 511, 537, 548, 564, 588, 604, 626}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
