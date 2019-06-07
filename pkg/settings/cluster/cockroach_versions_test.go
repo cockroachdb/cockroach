@@ -22,7 +22,5 @@ import (
 func TestVersionsAreValid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("will be fixed in next commit")
-
 	require.NoError(t, versionsSingleton.Validate())
 }
