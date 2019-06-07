@@ -53,8 +53,8 @@ func (s vectorizedInboundStreamHandler) run(
 	return s.RunWithStream(ctx, stream)
 }
 
-func (s vectorizedInboundStreamHandler) timeout(_ error) {
-	// TODO(asubiotto): We need to add a cancellation strategy to the inbox.
+func (s vectorizedInboundStreamHandler) timeout(err error) {
+	s.Timeout(err)
 }
 
 type rowInboundStreamHandler struct {
