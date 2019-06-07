@@ -11,29 +11,28 @@ func _() {
 	_ = x[Version2_0-0]
 	_ = x[VersionImportSkipRecords-1]
 	_ = x[VersionProposedTSLeaseRequest-2]
-	_ = x[VersionImportFormats-3]
-	_ = x[Version2_1-4]
-	_ = x[VersionCascadingZoneConfigs-5]
-	_ = x[VersionLoadSplits-6]
-	_ = x[VersionExportStorageWorkload-7]
-	_ = x[VersionLazyTxnRecord-8]
-	_ = x[VersionSequencedReads-9]
-	_ = x[VersionUnreplicatedRaftTruncatedState-10]
-	_ = x[VersionCreateStats-11]
-	_ = x[VersionDirectImport-12]
-	_ = x[VersionSideloadedStorageNoReplicaID-13]
-	_ = x[VersionPushTxnToInclusive-14]
-	_ = x[VersionSnapshotsWithoutLog-15]
-	_ = x[Version19_1-16]
-	_ = x[VersionStart19_2-17]
-	_ = x[VersionQueryTxnTimestamp-18]
-	_ = x[VersionStickyBit-19]
-	_ = x[VersionParallelCommits-20]
+	_ = x[Version2_1-3]
+	_ = x[VersionCascadingZoneConfigs-4]
+	_ = x[VersionLoadSplits-5]
+	_ = x[VersionExportStorageWorkload-6]
+	_ = x[VersionLazyTxnRecord-7]
+	_ = x[VersionSequencedReads-8]
+	_ = x[VersionUnreplicatedRaftTruncatedState-9]
+	_ = x[VersionCreateStats-10]
+	_ = x[VersionDirectImport-11]
+	_ = x[VersionSideloadedStorageNoReplicaID-12]
+	_ = x[VersionPushTxnToInclusive-13]
+	_ = x[VersionSnapshotsWithoutLog-14]
+	_ = x[Version19_1-15]
+	_ = x[VersionStart19_2-16]
+	_ = x[VersionQueryTxnTimestamp-17]
+	_ = x[VersionStickyBit-18]
+	_ = x[VersionParallelCommits-19]
 }
 
-const _VersionKey_name = "Version2_0VersionImportSkipRecordsVersionProposedTSLeaseRequestVersionImportFormatsVersion2_1VersionCascadingZoneConfigsVersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
+const _VersionKey_name = "Version2_0VersionImportSkipRecordsVersionProposedTSLeaseRequestVersion2_1VersionCascadingZoneConfigsVersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
 
-var _VersionKey_index = [...]uint16{0, 10, 34, 63, 83, 93, 120, 137, 165, 185, 206, 243, 261, 280, 315, 340, 366, 377, 393, 417, 433, 455}
+var _VersionKey_index = [...]uint16{0, 10, 34, 63, 73, 100, 117, 145, 165, 186, 223, 241, 260, 295, 320, 346, 357, 373, 397, 413, 435}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
