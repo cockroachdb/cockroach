@@ -235,13 +235,6 @@ func importPlanHook(
 				if skip < 0 {
 					return pgerror.Newf(pgerror.CodeSyntaxError, "%s must be >= 0", csvSkip)
 				}
-				// We need to handle the case where the user wants to skip records and the node
-				// interpreting the statement might be newer than other nodes in the cluster.
-				if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionImportSkipRecords) {
-					return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError,
-						"Using non-CSV import format requires all nodes to be upgraded to %s",
-						cluster.VersionByKey(cluster.VersionImportSkipRecords))
-				}
 				format.Csv.Skip = uint32(skip)
 			}
 		case "MYSQLOUTFILE":

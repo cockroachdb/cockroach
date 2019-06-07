@@ -9,29 +9,28 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[Version2_0-0]
-	_ = x[VersionImportSkipRecords-1]
-	_ = x[Version2_1-2]
-	_ = x[VersionCascadingZoneConfigs-3]
-	_ = x[VersionLoadSplits-4]
-	_ = x[VersionExportStorageWorkload-5]
-	_ = x[VersionLazyTxnRecord-6]
-	_ = x[VersionSequencedReads-7]
-	_ = x[VersionUnreplicatedRaftTruncatedState-8]
-	_ = x[VersionCreateStats-9]
-	_ = x[VersionDirectImport-10]
-	_ = x[VersionSideloadedStorageNoReplicaID-11]
-	_ = x[VersionPushTxnToInclusive-12]
-	_ = x[VersionSnapshotsWithoutLog-13]
-	_ = x[Version19_1-14]
-	_ = x[VersionStart19_2-15]
-	_ = x[VersionQueryTxnTimestamp-16]
-	_ = x[VersionStickyBit-17]
-	_ = x[VersionParallelCommits-18]
+	_ = x[Version2_1-1]
+	_ = x[VersionCascadingZoneConfigs-2]
+	_ = x[VersionLoadSplits-3]
+	_ = x[VersionExportStorageWorkload-4]
+	_ = x[VersionLazyTxnRecord-5]
+	_ = x[VersionSequencedReads-6]
+	_ = x[VersionUnreplicatedRaftTruncatedState-7]
+	_ = x[VersionCreateStats-8]
+	_ = x[VersionDirectImport-9]
+	_ = x[VersionSideloadedStorageNoReplicaID-10]
+	_ = x[VersionPushTxnToInclusive-11]
+	_ = x[VersionSnapshotsWithoutLog-12]
+	_ = x[Version19_1-13]
+	_ = x[VersionStart19_2-14]
+	_ = x[VersionQueryTxnTimestamp-15]
+	_ = x[VersionStickyBit-16]
+	_ = x[VersionParallelCommits-17]
 }
 
-const _VersionKey_name = "Version2_0VersionImportSkipRecordsVersion2_1VersionCascadingZoneConfigsVersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
+const _VersionKey_name = "Version2_0Version2_1VersionCascadingZoneConfigsVersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
 
-var _VersionKey_index = [...]uint16{0, 10, 34, 44, 71, 88, 116, 136, 157, 194, 212, 231, 266, 291, 317, 328, 344, 368, 384, 406}
+var _VersionKey_index = [...]uint16{0, 10, 20, 47, 64, 92, 112, 133, 170, 188, 207, 242, 267, 293, 304, 320, 344, 360, 382}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
