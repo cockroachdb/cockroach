@@ -336,13 +336,6 @@ func importPlanHook(
 			return pgerror.Unimplementedf("import.format", "unsupported import format: %q", importStmt.FileFormat)
 		}
 
-		if format.Format != roachpb.IOFileFormat_CSV {
-			if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionImportFormats) {
-				return errors.Errorf("Using %s requires all nodes to be upgraded to %s",
-					csvSkip, cluster.VersionByKey(cluster.VersionImportFormats))
-			}
-		}
-
 		// sstSize, if 0, will be set to an appropriate default by the specific
 		// implementation (local or distributed) since each has different optimal
 		// settings.
