@@ -55,6 +55,12 @@ import (
 func (ex *connExecutor) execStmt(
 	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	if ex.evl == nil || ex.evl.Finished() {
+		ex.evl = tracing.StartEventLog(context.Background(),
+			ex.server.cfg.AmbientCtx.Tracer, "sql.executor.connection_log", "event log")
+	}
+	ex.evl.Log(stmt.String())
+
 	ctx, csp := tracing.StartComponentSpan(
 		ctx, ex.server.cfg.AmbientCtx.Tracer, "sql.executor.statements", "execStmt" /* operation */)
 	csp.SetTag("command", stmt.String())

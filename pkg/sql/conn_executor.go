@@ -1028,6 +1028,9 @@ type connExecutor struct {
 	// hasCreatedTemporarySchema is set if the executor has created a
 	// temporary schema, which requires special cleanup on close.
 	hasCreatedTemporarySchema bool
+
+	// !!! comment
+	evl *tracing.EventLog
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
