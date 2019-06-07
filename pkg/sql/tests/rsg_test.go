@@ -501,19 +501,18 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 
 	var smither *sqlsmith.Smither
 
-	tableStmts := make([]string, 10)
 	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		// Create some random tables for the smither's column references and INSERT.
-		for i := 0; i < len(tableStmts); i++ {
+		for i := 0; i < 2; i++ {
 			create := sqlbase.RandCreateTable(r.Rnd, i)
 			stmt := create.String()
 			if err := db.exec(ctx, stmt); err != nil {
 				return err
 			}
-			tableStmts[i] = stmt
+			fmt.Printf("%s;\n", stmt)
 		}
 		var err error
-		smither, err = sqlsmith.NewSmither(db.db, r.Rnd)
+		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())
 		return err
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := smither.Generate()
@@ -534,16 +533,10 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 			shouldLogErr = false
 		}
 		if shouldLogErr {
-			fmt.Printf("ERROR: %s\ncaused by:\n%s;\n\n", err, s)
+			//fmt.Printf("ERROR: %s\ncaused by:\n%s;\n\n", err, s)
 		}
 		return err
 	})
-
-	fmt.Printf("To reproduce, use schema:\n\n")
-	for _, stmt := range tableStmts {
-		fmt.Printf("%s;", stmt)
-	}
-	fmt.Printf("\n")
 }
 
 // testRandomSyntax performs all of the RSG setup and teardown for common
