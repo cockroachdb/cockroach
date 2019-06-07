@@ -42,7 +42,6 @@ const (
 	VersionBatchResponse
 	VersionCreateChangefeed
 	VersionBitArrayColumns
-	VersionLoadBasedRebalancing
 	Version2_1
 	VersionCascadingZoneConfigs
 	VersionLoadSplits
@@ -289,11 +288,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionBitArrayColumns,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 13},
 	},
-	{
-		// VersionLoadBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/28852.
-		Key:     VersionLoadBasedRebalancing,
-		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 14},
-	},
+	// Removed.
+	// {
+	// 	// VersionLoadBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/28852.
+	// 	Key:     VersionLoadBasedRebalancing,
+	// 	Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 14},
+	// },
 	{
 		// Version2_1 is CockroachDB v2.1. It's used for all v2.1.x patch releases.
 		Key:     Version2_1,
