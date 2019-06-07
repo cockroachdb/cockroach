@@ -1283,8 +1283,8 @@ func setVersion(c *Context, v roachpb.Version) error {
 func TestVersionCheckBidirectional(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v1 := cluster.VersionByKey(cluster.VersionRPCNetworkStats)
-	v2 := cluster.VersionByKey(cluster.VersionRPCVersionCheck)
+	v1 := roachpb.Version{Major: 1}
+	v2 := cluster.BinaryServerVersion
 
 	testData := []struct {
 		name          string

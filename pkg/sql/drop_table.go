@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -333,17 +332,15 @@ func (p *planner) initiateDropTable(
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
 	}
 
-	// If the table is not interleaved and the ClearRange feature is
-	// enabled in the cluster, use the delayed GC mechanism to schedule
-	// usage of the more efficient ClearRange pathway. ClearRange will
-	// only work if the entire hierarchy of interleaved tables are
-	// dropped at once, as with ON DELETE CASCADE where the top-level
-	// "root" table is dropped.
+	// If the table is not interleaved , use the delayed GC mechanism to
+	// schedule usage of the more efficient ClearRange pathway. ClearRange will
+	// only work if the entire hierarchy of interleaved tables are dropped at
+	// once, as with ON DELETE CASCADE where the top-level "root" table is
+	// dropped.
 	//
-	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be
-	// able to use this faster mechanism.
-	if tableDesc.IsTable() && !tableDesc.IsInterleaved() &&
-		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
+	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be able to use
+	// this faster mechanism.
+	if tableDesc.IsTable() && !tableDesc.IsInterleaved() {
 		// Get the zone config applying to this table in order to
 		// ensure there is a GC TTL.
 		_, _, _, err := GetZoneConfigInTxn(

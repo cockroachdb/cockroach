@@ -364,7 +364,7 @@ func (sc *SchemaChanger) ExtendLease(
 }
 
 func (sc *SchemaChanger) canClearRangeForDrop(index *sqlbase.IndexDescriptor) bool {
-	return sc.execCfg.Settings.Version.IsActive(cluster.VersionClearRange) && !index.IsInterleaved()
+	return !index.IsInterleaved()
 }
 
 // DropTableDesc removes a descriptor from the KV database.
