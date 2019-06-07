@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -1023,17 +1022,6 @@ func splitTrigger(
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
-		}
-
-		if !rec.ClusterSettings().Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
-			// Write an initial state upstream of Raft even though it might
-			// clobber downstream simply because that's what 1.0 does and if we
-			// don't write it here, then a 1.0 version applying it as a follower
-			// won't write a HardState at all and is guaranteed to crash.
-			rsl := stateloader.Make(split.RightDesc.RangeID)
-			if err := rsl.SynthesizeRaftState(ctx, batch); err != nil {
-				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to synthesize initial Raft state")
-			}
 		}
 
 		bothDeltaMS.Subtract(preRightMS)

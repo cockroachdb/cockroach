@@ -2402,7 +2402,7 @@ func (r *Replica) applyRaftCommand(
 	start := timeutil.Now()
 
 	var assertHS *raftpb.HardState
-	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
+	if util.RaceEnabled && rResult.Split != nil {
 		rsl := stateloader.Make(rResult.Split.RightDesc.RangeID)
 		oldHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
