@@ -29,6 +29,8 @@ type VersionKey int
 //   - Remove its associated runtime checks.
 //   - If the version is not the latest one, delete the constant, comment out
 //     its stanza, and say "Removed." above the versionsSingleton.
+//
+//go:generate stringer -type=VersionKey
 const (
 	VersionBase VersionKey = iota
 	VersionSplitHardStateBelowRaft
@@ -480,7 +482,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 
 	// Add new versions here (step two of two).
 
-}).Validated()
+})
 
 var (
 	// BinaryMinimumSupportedVersion is the earliest version of data supported by
