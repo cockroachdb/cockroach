@@ -43,7 +43,6 @@ const (
 	VersionPartitioning
 	VersionRecomputeStats
 	VersionPerReplicaZoneConstraints
-	VersionLeasePreferences
 	Version2_0
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
@@ -210,11 +209,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionPerReplicaZoneConstraints,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 14},
 	},
-	{
-		// VersionLeasePreferences is https://github.com/cockroachdb/cockroach/pull/23202.
-		Key:     VersionLeasePreferences,
-		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 15},
-	},
+	// Removed.
+	// {
+	// 	// VersionLeasePreferences is https://github.com/cockroachdb/cockroach/pull/23202.
+	// 	Key:     VersionLeasePreferences,
+	// 	Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 15},
+	// },
 	{
 		// Version2_0 is CockroachDB v2.0. It's used for all v2.0.x patch releases.
 		Key:     Version2_0,

@@ -628,13 +628,6 @@ func writeZoneConfig(
 				"cluster version does not support zone configs with per-replica constraints")
 		}
 	}
-	if len(zone.LeasePreferences) > 0 {
-		st := execCfg.Settings
-		if !st.Version.IsActive(cluster.VersionLeasePreferences) {
-			return 0, pgerror.New(pgerror.CodeCheckViolationError,
-				"cluster version does not support zone configs with lease placement preferences")
-		}
-	}
 
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
 		return execCfg.InternalExecutor.Exec(ctx, "delete-zone", txn,
