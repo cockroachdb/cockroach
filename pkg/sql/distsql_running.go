@@ -27,12 +27,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors/markers"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -61,8 +64,6 @@ type runnerResult struct {
 }
 
 func (req runnerRequest) run() {
-	defer distsqlplan.ReleaseSetupFlowRequest(req.flowReq)
-
 	res := runnerResult{nodeID: req.nodeID}
 
 	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID)
@@ -100,6 +101,109 @@ func (dsp *DistSQLPlanner) initRunners() {
 			}
 		})
 	}
+}
+
+// setupFlows sets up all the flows specified in flows using the provided state.
+// It will first attempt to set up all remote flows using the dsp workers if
+// available or sequentially if not, and then finally set up the gateway flow,
+// whose output is the DistSQLReceiver provided. This flow is then returned to
+// be run.
+func (dsp *DistSQLPlanner) setupFlows(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	txnCoordMeta *roachpb.TxnCoordMeta,
+	flows map[roachpb.NodeID]*distsqlpb.FlowSpec,
+	recv *DistSQLReceiver,
+	localState distsqlrun.LocalState,
+) (context.Context, *distsqlrun.Flow, error) {
+	thisNodeID := dsp.nodeDesc.NodeID
+
+	evalCtxProto := distsqlpb.MakeEvalContext(evalCtx.EvalContext)
+	setupReq := distsqlpb.SetupFlowRequest{
+		TxnCoordMeta: txnCoordMeta,
+		Version:      distsqlrun.Version,
+		EvalContext:  evalCtxProto,
+		TraceKV:      evalCtx.Tracing.KVTracingEnabled(),
+	}
+
+	// Start all the flows except the flow on this node (there is always a flow on
+	// this node).
+	var resultChan chan runnerResult
+	if len(flows) > 1 {
+		resultChan = make(chan runnerResult, len(flows)-1)
+	}
+	for nodeID, flowSpec := range flows {
+		if nodeID == thisNodeID {
+			// Skip this node.
+			continue
+		}
+		req := setupReq
+		req.Flow = *flowSpec
+		runReq := runnerRequest{
+			ctx:        ctx,
+			nodeDialer: dsp.nodeDialer,
+			flowReq:    &req,
+			nodeID:     nodeID,
+			resultChan: resultChan,
+		}
+		defer distsqlplan.ReleaseSetupFlowRequest(&req)
+
+		// Send out a request to the workers; if no worker is available, run
+		// directly.
+		select {
+		case dsp.runnerChan <- runReq:
+		default:
+			runReq.run()
+		}
+	}
+
+	var firstErr error
+	// Now wait for all the flows to be scheduled on remote nodes. Note that we
+	// are not waiting for the flows themselves to complete.
+	for i := 0; i < len(flows)-1; i++ {
+		res := <-resultChan
+		if firstErr == nil {
+			firstErr = res.err
+		}
+		// TODO(radu): accumulate the flows that we failed to set up and move them
+		// into the local flow.
+	}
+	if firstErr != nil {
+		if _, ok := markers.If(firstErr, func(err error) (v interface{}, ok bool) {
+			v, ok = err.(*distsqlrun.VectorizedSetupError)
+			return v, ok
+		}); ok && evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn {
+			// Error vectorizing remote flows, try again with off.
+			// Generate a new flow ID so that any remote nodes that successfully set
+			// up a vectorized flow will not be connected to by a non-vectorized flow.
+			newFlowID := uuid.MakeV4()
+			log.Infof(
+				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %+v", flows[thisNodeID].FlowID, newFlowID, firstErr,
+			)
+			for i := range flows {
+				flows[i].FlowID.UUID = newFlowID
+			}
+			evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
+			// Reset vectorize setting after returning.
+			defer func() { evalCtx.SessionData.Vectorize = sessiondata.VectorizeOn }()
+			// Recurse once with sessiondata.VectorizeOff, note that this branch will
+			// not be hit again due to the condition above that
+			// evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn.
+			return dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
+		}
+		return nil, nil, firstErr
+	}
+
+	// Set up the flow on this node.
+	localReq := setupReq
+	localReq.Flow = *flows[thisNodeID]
+	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
+	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return ctx, flow, nil
 }
 
 // Run executes a physical plan. The plan should have been finalized using
@@ -177,66 +281,8 @@ func (dsp *DistSQLPlanner) Run(
 
 	recv.outputTypes = plan.ResultTypes
 	recv.resultToStreamColMap = plan.PlanToStreamColMap
-	thisNodeID := dsp.nodeDesc.NodeID
 
-	evalCtxProto := distsqlpb.MakeEvalContext(evalCtx.EvalContext)
-	setupReq := distsqlpb.SetupFlowRequest{
-		TxnCoordMeta: txnCoordMeta,
-		Version:      distsqlrun.Version,
-		EvalContext:  evalCtxProto,
-		TraceKV:      evalCtx.Tracing.KVTracingEnabled(),
-	}
-
-	// Start all the flows except the flow on this node (there is always a flow on
-	// this node).
-	var resultChan chan runnerResult
-	if len(flows) > 1 {
-		resultChan = make(chan runnerResult, len(flows)-1)
-	}
-	for nodeID, flowSpec := range flows {
-		if nodeID == thisNodeID {
-			// Skip this node.
-			continue
-		}
-		req := setupReq
-		req.Flow = *flowSpec
-		runReq := runnerRequest{
-			ctx:        ctx,
-			nodeDialer: dsp.nodeDialer,
-			flowReq:    &req,
-			nodeID:     nodeID,
-			resultChan: resultChan,
-		}
-		// Send out a request to the workers; if no worker is available, run
-		// directly.
-		select {
-		case dsp.runnerChan <- runReq:
-		default:
-			runReq.run()
-		}
-	}
-
-	var firstErr error
-	// Now wait for all the flows to be scheduled on remote nodes. Note that we
-	// are not waiting for the flows themselves to complete.
-	for i := 0; i < len(flows)-1; i++ {
-		res := <-resultChan
-		if firstErr == nil {
-			firstErr = res.err
-		}
-		// TODO(radu): accumulate the flows that we failed to set up and move them
-		// into the local flow.
-	}
-	if firstErr != nil {
-		recv.SetError(firstErr)
-		return
-	}
-
-	// Set up the flow on this node.
-	localReq := setupReq
-	localReq.Flow = *flows[thisNodeID]
-	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
-	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
+	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
 	if err != nil {
 		recv.SetError(err)
 		return

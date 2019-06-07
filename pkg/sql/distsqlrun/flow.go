@@ -502,8 +502,20 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 			log.VEventf(ctx, 1, "vectorized flow.")
 			return nil
 		}
-		// Vectorization attempt failed with an error. Reset state to be used by
-		// the row execution branch.
+		// Vectorization attempt failed with an error.
+		if f.spec.Gateway != f.nodeID {
+			// If we are not the gateway node, do not attempt to plan this with the
+			// row execution branch since there is no way to tell whether vectorized
+			// planning will succeed on any other node. Notify the gateway by
+			// returning an error.
+			log.VEventf(
+				ctx,
+				1,
+				"flow vectorization failed on remote node, returning error to gateway for possible replanning: %s", err,
+			)
+			return &VectorizedSetupError{cause: err}
+		}
+		// Reset state to be used by the row execution branch.
 		f.processors = nil
 		f.inboundStreams = nil
 		f.startables = nil
