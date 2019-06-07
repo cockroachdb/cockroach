@@ -79,6 +79,7 @@ message ComponentActivity {
   // counts were collected from counters.
   google.protobuf.Timestamp timestamp = 5 [(gogoproto.nullable) = false,
                                            (gogoproto.stdtime) = true];
+  map<string, int64> custom_events = 6;
 }
 
 message ComponentSamples {

@@ -27,6 +27,7 @@ export class ComponentActivityRates {
   span_rate: number;
   event_rate: number;
   error_rate: number;
+  custom_event_rates: { [event: string]: number};
   stuck_count: number;
 
   constructor(ca?: protos.cockroach.util.tracing.IComponentActivity,
@@ -38,19 +39,46 @@ export class ComponentActivityRates {
       this.event_rate = ca.event_count.sub(last.event_count).toNumber() / diff;
       this.error_rate = ca.errors.sub(last.errors).toNumber() / diff;
       this.stuck_count = ca.stuck_count.toNumber();
+      // !!! this.custom_event_rates = ca.custom_events;
     } else if (ca && server_ts) {
       const diff: number = time_util.durationAsNumber(time_util.subtractTimestamps(ca.timestamp, server_ts));
       this.span_rate = ca.span_count.toNumber() / diff;
       this.event_rate = ca.event_count.toNumber() / diff;
       this.error_rate = ca.errors.toNumber() / diff;
       this.stuck_count = ca.stuck_count.toNumber();
+      // !!! this.custom_event_rates = ca.custom_events;
     } else {
       this.span_rate = 0;
       this.event_rate = 0;
       this.error_rate = 0;
       this.stuck_count = 0;
     }
+    this.custom_event_rates = computeCustomEventsRates(ca, last, server_ts);
   }
+}
+
+function computeCustomEventsRates(
+  ca?: protos.cockroach.util.tracing.IComponentActivity,
+  last?: protos.cockroach.util.tracing.IComponentActivity,
+  server_ts?: protos.google.protobuf.Timestamp) : { [event: string]: number}{
+  var res : new { [event: string]: number} = new Map();
+  if (ca && last) {
+    const diff: number = time_util.durationAsNumber(time_util.subtractTimestamps(ca.timestamp, last.timestamp));
+    var n = ca.custom_events
+    var p = last.custom_events
+    for (let k of Object.keys(n)) {
+      res[k] = (n[k] - p[k]) / diff;
+    }
+  } else if (ca && server_ts) {
+    const diff: number = time_util.durationAsNumber(time_util.subtractTimestamps(ca.timestamp, server_ts));
+    var n = ca.custom_events
+    for (let k of Object.keys(n)) {
+      res[k] = n[k] / diff;
+    }
+  } else {
+    res = {};
+  }
+  return res;
 }
 
 interface IComponentActivityMetrics {

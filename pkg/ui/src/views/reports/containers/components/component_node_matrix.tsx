@@ -243,9 +243,19 @@ function MatrixCell(props) {
 
   const reported: boolean = (node_id in sc.nodeActivities);
   const activity: ComponentActivityRates = reported ? sc.getNodeActivity(node_id) : new ComponentActivityRates();
+
+  var custom_events_str: string = "";
+  if (reported){
+    for (let k of Object.keys(activity.custom_event_rates)) {
+      custom_events_str += " " + k + "/s: " +
+        time_util.formatNumber(activity.custom_event_rates[k], 3) + "\n";
+    }
+  }
+
   const title: string = reported ? ("Requests/s: " + time_util.formatNumber(activity.span_rate, 3) +
                                     ", errors/s: " + time_util.formatNumber(activity.error_rate, 3) +
-                                    ", stuck: " + activity.stuck_count)
+                                    ", stuck: " + activity.stuck_count +
+                                    " , custom events:\n" + custom_events_str)
     : "Unreported";
   const className: string = isExpanded ? "matrix-cell matrix-cell--expanded" : "matrix-cell";
   const style: any = { width: cellWidth };

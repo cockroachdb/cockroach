@@ -81,7 +81,10 @@ function diffActivityResponses(cur: protos.cockroach.server.serverpb.ComponentsR
     var node: NodeResponse = new NodeResponse(n.node_id);
     _.map(n.components, (ca, name) => {
       const last_n: protos.cockroach.server.serverpb.ComponentsResponse.NodeResponse = last_by_node_id[n.node_id];
-      node.components[name] = new ComponentActivityRates(ca, last_n ? last_n.components[name] : null, n.start_time);
+      const custom_events: { [event: string]: number} = ca.custom_events;
+        // last_n.components[name].custom_events: null;
+      node.components[name] = new ComponentActivityRates(
+        ca, last_n ? last_n.components[name] : null, n.start_time);
     });
     nodes.push(node);
   });

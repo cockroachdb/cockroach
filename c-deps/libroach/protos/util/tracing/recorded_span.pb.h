@@ -43,7 +43,7 @@ namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[11];
+  static const ::google::protobuf::internal::ParseTable schema[12];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -55,6 +55,9 @@ namespace tracing {
 class ComponentActivity;
 class ComponentActivityDefaultTypeInternal;
 extern ComponentActivityDefaultTypeInternal _ComponentActivity_default_instance_;
+class ComponentActivity_CustomEventsEntry_DoNotUse;
+class ComponentActivity_CustomEventsEntry_DoNotUseDefaultTypeInternal;
+extern ComponentActivity_CustomEventsEntry_DoNotUseDefaultTypeInternal _ComponentActivity_CustomEventsEntry_DoNotUse_default_instance_;
 class ComponentSamples;
 class ComponentSamplesDefaultTypeInternal;
 extern ComponentSamplesDefaultTypeInternal _ComponentSamples_default_instance_;
@@ -91,6 +94,7 @@ extern RecordedSpan_TagsEntry_DoNotUseDefaultTypeInternal _RecordedSpan_TagsEntr
 namespace google {
 namespace protobuf {
 template<> ::cockroach::util::tracing::ComponentActivity* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentActivity>(Arena*);
+template<> ::cockroach::util::tracing::ComponentActivity_CustomEventsEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentActivity_CustomEventsEntry_DoNotUse>(Arena*);
 template<> ::cockroach::util::tracing::ComponentSamples* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentSamples>(Arena*);
 template<> ::cockroach::util::tracing::ComponentSamples_Sample* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentSamples_Sample>(Arena*);
 template<> ::cockroach::util::tracing::ComponentTraces* Arena::CreateMaybeMessage<::cockroach::util::tracing::ComponentTraces>(Arena*);
@@ -599,6 +603,25 @@ class RecordedSpan : public ::google::protobuf::MessageLite /* @@protoc_insertio
 };
 // -------------------------------------------------------------------
 
+class ComponentActivity_CustomEventsEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<ComponentActivity_CustomEventsEntry_DoNotUse, 
+    ::std::string, ::google::protobuf::int64,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_INT64,
+    0 > {
+public:
+  typedef ::google::protobuf::internal::MapEntryLite<ComponentActivity_CustomEventsEntry_DoNotUse, 
+    ::std::string, ::google::protobuf::int64,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_INT64,
+    0 > SuperType;
+  ComponentActivity_CustomEventsEntry_DoNotUse();
+  ComponentActivity_CustomEventsEntry_DoNotUse(::google::protobuf::Arena* arena);
+  void MergeFrom(const ComponentActivity_CustomEventsEntry_DoNotUse& other);
+  static const ComponentActivity_CustomEventsEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const ComponentActivity_CustomEventsEntry_DoNotUse*>(&_ComponentActivity_CustomEventsEntry_DoNotUse_default_instance_); }
+};
+
+// -------------------------------------------------------------------
+
 class ComponentActivity : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.tracing.ComponentActivity) */ {
  public:
   ComponentActivity();
@@ -633,7 +656,7 @@ class ComponentActivity : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_ComponentActivity_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    5;
+    6;
 
   void Swap(ComponentActivity* other);
   friend void swap(ComponentActivity& a, ComponentActivity& b) {
@@ -682,7 +705,17 @@ class ComponentActivity : public ::google::protobuf::MessageLite /* @@protoc_ins
 
   // nested types ----------------------------------------------------
 
+
   // accessors -------------------------------------------------------
+
+  // map<string, int64> custom_events = 6;
+  int custom_events_size() const;
+  void clear_custom_events();
+  static const int kCustomEventsFieldNumber = 6;
+  const ::google::protobuf::Map< ::std::string, ::google::protobuf::int64 >&
+      custom_events() const;
+  ::google::protobuf::Map< ::std::string, ::google::protobuf::int64 >*
+      mutable_custom_events();
 
   bool has_timestamp() const;
   void clear_timestamp();
@@ -723,6 +756,12 @@ class ComponentActivity : public ::google::protobuf::MessageLite /* @@protoc_ins
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::MapFieldLite<
+      ComponentActivity_CustomEventsEntry_DoNotUse,
+      ::std::string, ::google::protobuf::int64,
+      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+      ::google::protobuf::internal::WireFormatLite::TYPE_INT64,
+      0 > custom_events_;
   ::google::protobuf::Timestamp* timestamp_;
   ::google::protobuf::int64 span_count_;
   ::google::protobuf::int64 event_count_;
@@ -767,7 +806,7 @@ class ComponentSamples_Sample : public ::google::protobuf::MessageLite /* @@prot
                &_ComponentSamples_Sample_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    6;
+    7;
 
   void Swap(ComponentSamples_Sample* other);
   friend void swap(ComponentSamples_Sample& a, ComponentSamples_Sample& b) {
@@ -902,7 +941,7 @@ class ComponentSamples : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_ComponentSamples_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    7;
+    8;
 
   void Swap(ComponentSamples* other);
   friend void swap(ComponentSamples& a, ComponentSamples& b) {
@@ -1010,7 +1049,7 @@ class ComponentTraces_Event : public ::google::protobuf::MessageLite /* @@protoc
                &_ComponentTraces_Event_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    8;
+    9;
 
   void Swap(ComponentTraces_Event* other);
   friend void swap(ComponentTraces_Event& a, ComponentTraces_Event& b) {
@@ -1145,7 +1184,7 @@ class ComponentTraces : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_ComponentTraces_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    10;
+    11;
 
   void Swap(ComponentTraces* other);
   friend void swap(ComponentTraces& a, ComponentTraces& b) {
@@ -1753,6 +1792,8 @@ inline void RecordedSpan::set_allocated_stats(::google::protobuf::Any* stats) {
 
 // -------------------------------------------------------------------
 
+// -------------------------------------------------------------------
+
 // ComponentActivity
 
 // int64 span_count = 1;
@@ -1857,6 +1898,24 @@ inline void ComponentActivity::set_allocated_timestamp(::google::protobuf::Times
   }
   timestamp_ = timestamp;
   // @@protoc_insertion_point(field_set_allocated:cockroach.util.tracing.ComponentActivity.timestamp)
+}
+
+// map<string, int64> custom_events = 6;
+inline int ComponentActivity::custom_events_size() const {
+  return custom_events_.size();
+}
+inline void ComponentActivity::clear_custom_events() {
+  custom_events_.Clear();
+}
+inline const ::google::protobuf::Map< ::std::string, ::google::protobuf::int64 >&
+ComponentActivity::custom_events() const {
+  // @@protoc_insertion_point(field_map:cockroach.util.tracing.ComponentActivity.custom_events)
+  return custom_events_.GetMap();
+}
+inline ::google::protobuf::Map< ::std::string, ::google::protobuf::int64 >*
+ComponentActivity::mutable_custom_events() {
+  // @@protoc_insertion_point(field_mutable_map:cockroach.util.tracing.ComponentActivity.custom_events)
+  return custom_events_.MutableMap();
 }
 
 // -------------------------------------------------------------------
@@ -2205,6 +2264,8 @@ inline void ComponentTraces::set_allocated_timestamp(::google::protobuf::Timesta
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

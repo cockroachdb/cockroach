@@ -26,6 +26,7 @@ namespace protobuf_google_2fprotobuf_2ftimestamp_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_google_2fprotobuf_2ftimestamp_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Timestamp;
 }  // namespace protobuf_google_2fprotobuf_2ftimestamp_2eproto
 namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ComponentActivity_CustomEventsEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ComponentTraces_Event;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RecordedSpan_BaggageEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RecordedSpan_LogRecord_Field;
@@ -64,6 +65,11 @@ class RecordedSpanDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<RecordedSpan>
       _instance;
 } _RecordedSpan_default_instance_;
+class ComponentActivity_CustomEventsEntry_DoNotUseDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<ComponentActivity_CustomEventsEntry_DoNotUse>
+      _instance;
+} _ComponentActivity_CustomEventsEntry_DoNotUse_default_instance_;
 class ComponentActivityDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<ComponentActivity>
@@ -174,6 +180,19 @@ static void InitDefaultsRecordedSpan() {
       &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_RecordedSpan_LogRecord.base,
       &protobuf_google_2fprotobuf_2fany_2eproto::scc_info_Any.base,}};
 
+static void InitDefaultsComponentActivity_CustomEventsEntry_DoNotUse() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::util::tracing::_ComponentActivity_CustomEventsEntry_DoNotUse_default_instance_;
+    new (ptr) ::cockroach::util::tracing::ComponentActivity_CustomEventsEntry_DoNotUse();
+  }
+  ::cockroach::util::tracing::ComponentActivity_CustomEventsEntry_DoNotUse::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_ComponentActivity_CustomEventsEntry_DoNotUse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsComponentActivity_CustomEventsEntry_DoNotUse}, {}};
+
 static void InitDefaultsComponentActivity() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -185,9 +204,10 @@ static void InitDefaultsComponentActivity() {
   ::cockroach::util::tracing::ComponentActivity::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_ComponentActivity =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsComponentActivity}, {
-      &protobuf_google_2fprotobuf_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_ComponentActivity =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsComponentActivity}, {
+      &protobuf_google_2fprotobuf_2ftimestamp_2eproto::scc_info_Timestamp.base,
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentActivity_CustomEventsEntry_DoNotUse.base,}};
 
 static void InitDefaultsComponentSamples_Sample() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -270,6 +290,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan_LogRecord_Field.base);
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan_LogRecord.base);
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_ComponentActivity_CustomEventsEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ComponentActivity.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ComponentSamples_Sample.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ComponentSamples.base);
@@ -1426,6 +1447,14 @@ void RecordedSpan::InternalSwap(RecordedSpan* other) {
 
 // ===================================================================
 
+ComponentActivity_CustomEventsEntry_DoNotUse::ComponentActivity_CustomEventsEntry_DoNotUse() {}
+ComponentActivity_CustomEventsEntry_DoNotUse::ComponentActivity_CustomEventsEntry_DoNotUse(::google::protobuf::Arena* arena) : SuperType(arena) {}
+void ComponentActivity_CustomEventsEntry_DoNotUse::MergeFrom(const ComponentActivity_CustomEventsEntry_DoNotUse& other) {
+  MergeFromInternal(other);
+}
+
+// ===================================================================
+
 void ComponentActivity::InitAsDefaultInstance() {
   ::cockroach::util::tracing::_ComponentActivity_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::google::protobuf::Timestamp*>(
       ::google::protobuf::Timestamp::internal_default_instance());
@@ -1442,6 +1471,7 @@ const int ComponentActivity::kEventCountFieldNumber;
 const int ComponentActivity::kStuckCountFieldNumber;
 const int ComponentActivity::kErrorsFieldNumber;
 const int ComponentActivity::kTimestampFieldNumber;
+const int ComponentActivity::kCustomEventsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ComponentActivity::ComponentActivity()
@@ -1455,6 +1485,7 @@ ComponentActivity::ComponentActivity(const ComponentActivity& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  custom_events_.MergeFrom(from.custom_events_);
   if (from.has_timestamp()) {
     timestamp_ = new ::google::protobuf::Timestamp(*from.timestamp_);
   } else {
@@ -1496,6 +1527,7 @@ void ComponentActivity::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  custom_events_.Clear();
   if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
     delete timestamp_;
   }
@@ -1589,6 +1621,29 @@ bool ComponentActivity::MergePartialFromCodedStream(
         break;
       }
 
+      // map<string, int64> custom_events = 6;
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
+          ComponentActivity_CustomEventsEntry_DoNotUse::Parser< ::google::protobuf::internal::MapFieldLite<
+              ComponentActivity_CustomEventsEntry_DoNotUse,
+              ::std::string, ::google::protobuf::int64,
+              ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+              ::google::protobuf::internal::WireFormatLite::TYPE_INT64,
+              0 >,
+            ::google::protobuf::Map< ::std::string, ::google::protobuf::int64 > > parser(&custom_events_);
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+              input, &parser));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            parser.key().data(), static_cast<int>(parser.key().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.util.tracing.ComponentActivity.CustomEventsEntry.key"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -1640,6 +1695,55 @@ void ComponentActivity::SerializeWithCachedSizes(
       5, this->_internal_timestamp(), output);
   }
 
+  // map<string, int64> custom_events = 6;
+  if (!this->custom_events().empty()) {
+    typedef ::google::protobuf::Map< ::std::string, ::google::protobuf::int64 >::const_pointer
+        ConstPtr;
+    typedef ConstPtr SortItem;
+    typedef ::google::protobuf::internal::CompareByDerefFirst<SortItem> Less;
+    struct Utf8Check {
+      static void Check(ConstPtr p) {
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          p->first.data(), static_cast<int>(p->first.length()),
+          ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+          "cockroach.util.tracing.ComponentActivity.CustomEventsEntry.key");
+      }
+    };
+
+    if (output->IsSerializationDeterministic() &&
+        this->custom_events().size() > 1) {
+      ::std::unique_ptr<SortItem[]> items(
+          new SortItem[this->custom_events().size()]);
+      typedef ::google::protobuf::Map< ::std::string, ::google::protobuf::int64 >::size_type size_type;
+      size_type n = 0;
+      for (::google::protobuf::Map< ::std::string, ::google::protobuf::int64 >::const_iterator
+          it = this->custom_events().begin();
+          it != this->custom_events().end(); ++it, ++n) {
+        items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);
+      }
+      ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());
+      ::std::unique_ptr<ComponentActivity_CustomEventsEntry_DoNotUse> entry;
+      for (size_type i = 0; i < n; i++) {
+        entry.reset(custom_events_.NewEntryWrapper(
+            items[static_cast<ptrdiff_t>(i)]->first, items[static_cast<ptrdiff_t>(i)]->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            6, *entry, output);
+        Utf8Check::Check(items[static_cast<ptrdiff_t>(i)]);
+      }
+    } else {
+      ::std::unique_ptr<ComponentActivity_CustomEventsEntry_DoNotUse> entry;
+      for (::google::protobuf::Map< ::std::string, ::google::protobuf::int64 >::const_iterator
+          it = this->custom_events().begin();
+          it != this->custom_events().end(); ++it) {
+        entry.reset(custom_events_.NewEntryWrapper(
+            it->first, it->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            6, *entry, output);
+        Utf8Check::Check(&*it);
+      }
+    }
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.util.tracing.ComponentActivity)
@@ -1650,6 +1754,20 @@ size_t ComponentActivity::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // map<string, int64> custom_events = 6;
+  total_size += 1 *
+      ::google::protobuf::internal::FromIntSize(this->custom_events_size());
+  {
+    ::std::unique_ptr<ComponentActivity_CustomEventsEntry_DoNotUse> entry;
+    for (::google::protobuf::Map< ::std::string, ::google::protobuf::int64 >::const_iterator
+        it = this->custom_events().begin();
+        it != this->custom_events().end(); ++it) {
+      entry.reset(custom_events_.NewEntryWrapper(it->first, it->second));
+      total_size += ::google::protobuf::internal::WireFormatLite::
+          MessageSizeNoVirtual(*entry);
+    }
+  }
 
   if (this->has_timestamp()) {
     total_size += 1 +
@@ -1702,6 +1820,7 @@ void ComponentActivity::MergeFrom(const ComponentActivity& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  custom_events_.MergeFrom(from.custom_events_);
   if (from.has_timestamp()) {
     mutable_timestamp()->::google::protobuf::Timestamp::MergeFrom(from.timestamp());
   }
@@ -1736,6 +1855,7 @@ void ComponentActivity::Swap(ComponentActivity* other) {
 }
 void ComponentActivity::InternalSwap(ComponentActivity* other) {
   using std::swap;
+  custom_events_.Swap(&other->custom_events_);
   swap(timestamp_, other->timestamp_);
   swap(span_count_, other->span_count_);
   swap(event_count_, other->event_count_);
@@ -2806,6 +2926,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::Record
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::RecordedSpan* Arena::CreateMaybeMessage< ::cockroach::util::tracing::RecordedSpan >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::util::tracing::RecordedSpan >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentActivity_CustomEventsEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentActivity_CustomEventsEntry_DoNotUse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::tracing::ComponentActivity_CustomEventsEntry_DoNotUse >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentActivity* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentActivity >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::util::tracing::ComponentActivity >(arena);

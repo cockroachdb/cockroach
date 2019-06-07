@@ -110,6 +110,29 @@ type componentMetrics struct {
 	eventCount metrics.Counter
 	stuckCount metrics.Counter
 	errorCount metrics.Counter
+	mu         struct {
+		syncutil.Mutex
+		events map[string]int64
+	}
+}
+
+func (cm *componentMetrics) incEvent(ev string) {
+	cm.mu.Lock()
+	if cm.mu.events == nil {
+		cm.mu.events = make(map[string]int64)
+	}
+	cm.mu.events[ev]++
+	cm.mu.Unlock()
+}
+
+func (cm *componentMetrics) getEvents() map[string]int64 {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	m := make(map[string]int64)
+	for ev, cnt := range cm.mu.events {
+		m[ev] = cnt
+	}
+	return m
 }
 
 // metricsMap holds a mutex-protected map from component name to
@@ -146,8 +169,12 @@ func incSpanCount(component string, inc int64) {
 	compMetrics.getComponentMetrics(component).spanCount.Inc(inc)
 }
 
-func incEventCount(component string, inc int64) {
-	compMetrics.getComponentMetrics(component).eventCount.Inc(inc)
+func incEventCount(component string, event string, inc int64) {
+	cm := compMetrics.getComponentMetrics(component)
+	cm.eventCount.Inc(inc)
+	if event != "" {
+		cm.incEvent(event)
+	}
 }
 
 func incStuckCount(component string, inc int64) {
@@ -262,6 +289,7 @@ func GetComponentActivity() map[string]ComponentActivity {
 		ca.StuckCount = v.stuckCount.Count()
 		ca.Errors = v.errorCount.Count()
 		ca.Timestamp = timeutil.Now()
+		ca.CustomEvents = v.getEvents()
 		result[k] = ca
 	}
 	compMetrics.RUnlock()
@@ -340,7 +368,7 @@ func recordComponentErrInner(component string, event string, err string) {
 	if err != "" {
 		incErrorCount(component, 1)
 	}
-	incEventCount(component, 1)
+	incEventCount(component, event, 1)
 
 	activeRecordings.RLock()
 	defer activeRecordings.RUnlock()
