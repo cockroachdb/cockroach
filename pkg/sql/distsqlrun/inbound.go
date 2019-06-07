@@ -51,8 +51,8 @@ func (s vectorizedInboundStreamStrategy) run(
 	return s.RunWithStream(ctx, stream)
 }
 
-func (s vectorizedInboundStreamStrategy) timeout(_ error) {
-	// TODO(asubiotto): We need to add a cancellation strategy to the inbox.
+func (s vectorizedInboundStreamStrategy) timeout(err error) {
+	s.Timeout(err)
 }
 
 type rowInboundStreamStrategy struct {
