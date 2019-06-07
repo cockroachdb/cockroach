@@ -33,7 +33,6 @@ type VersionKey int
 //go:generate stringer -type=VersionKey
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
-	Version2_0
 	Version2_1
 	VersionCascadingZoneConfigs
 	VersionLoadSplits
@@ -205,11 +204,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	// 	Key:     VersionLeasePreferences,
 	// 	Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 15},
 	// },
-	{
-		// Version2_0 is CockroachDB v2.0. It's used for all v2.0.x patch releases.
-		Key:     Version2_0,
-		Version: roachpb.Version{Major: 2, Minor: 0},
-	},
+	// Removed.
+	// {
+	// 	// Version2_0 is CockroachDB v2.0. It's used for all v2.0.x patch releases.
+	// 	Key:     Version2_0,
+	// 	Version: roachpb.Version{Major: 2, Minor: 0},
+	// },
 	// Removed.
 	// {
 	// 	// VersionImportSkipRecords is https://github.com/cockroachdb/cockroach/pull/23466
