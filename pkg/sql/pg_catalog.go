@@ -47,6 +47,14 @@ const (
 	defaultCollationTag    = "en-US"
 )
 
+var cockroachIndexEncodingOid *tree.DOid
+
+func init() {
+	h := makeOidHasher()
+	h.writeStr(cockroachIndexEncoding)
+	cockroachIndexEncodingOid = h.getOid()
+}
+
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
 // This code attempts to comply as closely as possible to the system catalogs documented
 // in https://www.postgresql.org/docs/9.6/static/catalogs.html.
@@ -269,10 +277,8 @@ CREATE TABLE pg_catalog.pg_am (
 	amtype CHAR
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
-		h.writeStr(cockroachIndexEncoding)
 		return addRow(
-			h.getOid(),                            // oid - all versions
+			cockroachIndexEncodingOid,             // oid - all versions
 			tree.NewDName(cockroachIndexEncoding), // amname - all versions
 			zeroVal,                               // amstrategies - < v9.6
 			zeroVal,                               // amsupport - < v9.6
@@ -524,7 +530,7 @@ CREATE TABLE pg_catalog.pg_class (
 					namespaceOid,              // relnamespace
 					oidZero,                   // reltype (PG creates a composite type in pg_type for each table)
 					tree.DNull,                // relowner
-					tree.DNull,                // relam
+					cockroachIndexEncodingOid, // relam
 					oidZero,                   // relfilenode
 					oidZero,                   // reltablespace
 					tree.DNull,                // relpages
@@ -565,7 +571,7 @@ CREATE TABLE pg_catalog.pg_class (
 						namespaceOid,                         // relnamespace
 						oidZero,                              // reltype
 						tree.DNull,                           // relowner
-						tree.DNull,                           // relam
+						cockroachIndexEncodingOid,            // relam
 						oidZero,                              // relfilenode
 						oidZero,                              // reltablespace
 						tree.DNull,                           // relpages
