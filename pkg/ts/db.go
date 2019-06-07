@@ -46,16 +46,6 @@ var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-// deprecatedResolution10StoreDuration is retained for backward compatibility during a version upgrade.
-var deprecatedResolution10StoreDuration = func() *settings.DurationSetting {
-	s := settings.RegisterDurationSetting(
-		"timeseries.storage.10s_resolution_ttl", "replaced by timeseries.storage.resolution_10s.ttl",
-		deprecatedResolution10sDefaultPruneThreshold,
-	)
-	s.SetDeprecated()
-	return s
-}()
-
 // Resolution10sStorageTTL defines the maximum age of data that will be retained
 // at he 10 second resolution. Data older than this is subject to being "rolled
 // up" into the 30 minute resolution and then deleted.
@@ -114,10 +104,7 @@ type DB struct {
 func NewDB(db *client.DB, settings *cluster.Settings) *DB {
 	pruneThresholdByResolution := map[Resolution]func() int64{
 		Resolution10s: func() int64 {
-			if settings.Version.IsActive(cluster.VersionColumnarTimeSeries) {
-				return Resolution10sStorageTTL.Get(&settings.SV).Nanoseconds()
-			}
-			return deprecatedResolution10StoreDuration.Get(&settings.SV).Nanoseconds()
+			return Resolution10sStorageTTL.Get(&settings.SV).Nanoseconds()
 		},
 		Resolution30m:  func() int64 { return Resolution30mStorageTTL.Get(&settings.SV).Nanoseconds() },
 		resolution1ns:  func() int64 { return resolution1nsDefaultRollupThreshold.Nanoseconds() },
@@ -352,11 +339,11 @@ func (db *DB) Metrics() *TimeSeriesMetrics {
 // WriteColumnar returns true if this DB should write data in the newer columnar
 // format.
 func (db *DB) WriteColumnar() bool {
-	return !db.forceRowFormat && db.st.Version.IsActive(cluster.VersionColumnarTimeSeries)
+	return !db.forceRowFormat
 }
 
 // WriteRollups returns true if this DB should write rollups for resolutions
 // targeted for a rollup resolution.
 func (db *DB) WriteRollups() bool {
-	return !db.forceRowFormat && db.st.Version.IsActive(cluster.VersionColumnarTimeSeries)
+	return !db.forceRowFormat
 }
