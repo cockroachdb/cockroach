@@ -41,6 +41,9 @@ import (
 // The other non-CBO upserters perform custom left lookup joins. However, that
 // doesn't allow sharing of optimization rules and doesn't work with correlated
 // SET expressions.
+//
+// For more details on how the CBO compiles UPSERT statements, see the block
+// comment on Builder.buildInsert in opt/optbuilder/insert.go.
 type optTableUpserter struct {
 	tableUpserterBase
 
@@ -100,7 +103,9 @@ func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bo
 	tu.batchSize++
 	tu.resultCount++
 
-	// Consult the canary column to determine whether to insert or update.
+	// Consult the canary column to determine whether to insert or update. For
+	// more details on how canary columns work, see the block comment on
+	// Builder.buildInsert in opt/optbuilder/insert.go.
 	insertEnd := len(tu.ri.InsertCols)
 	if tu.canaryOrdinal == -1 {
 		// No canary column means that existing row should be overwritten (i.e.
