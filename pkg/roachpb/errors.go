@@ -191,7 +191,7 @@ func (e *Error) UpdateTxn(o *Transaction) {
 		return
 	}
 	if e.UnexposedTxn == nil {
-		e.UnexposedTxn = o
+		e.UnexposedTxn = o.Clone()
 	} else {
 		e.UnexposedTxn.Update(o)
 	}
