@@ -21,7 +21,7 @@ import (
 	"testing"
 	"testing/iotest"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
+	"github.com/cockroachdb/datadriven"
 )
 
 func TestScanner(t *testing.T) {
