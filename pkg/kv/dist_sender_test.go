@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -2777,12 +2778,12 @@ func TestErrorIndexAlignment(t *testing.T) {
 			if pErr == nil {
 				t.Fatalf("expected an error to be returned from distSender")
 			}
-			aPS, ok := pErr.GetDetail().(*roachpb.MixedSuccessError)
+			mse, ok := pErr.GetDetail().(*roachpb.MixedSuccessError)
 			if a, e := ok, tc.expectedMixedSuccess; a != e {
 				t.Fatalf("expected mixed success %t; got %t", e, a)
 			}
 			if ok {
-				pErr = aPS.Wrapped
+				pErr.SetDetail(mse.GetWrapped())
 			}
 
 			if pErr.Index == nil {
@@ -2873,9 +2874,8 @@ func TestMixedSuccessErrorWrapped(t *testing.T) {
 		reqNum++
 		// Return an error on the third batch request.
 		if reqNum == 3 {
-			// The relative index is always 1 since
-			// we return an error for the second
-			// request of the 3rd batch.
+			// The relative index is always 1 since we return
+			// an error for the second request of the 3rd batch.
 			index := &roachpb.ErrPosition{Index: 1}
 
 			// This will be the error that will be wrapped
@@ -2883,10 +2883,9 @@ func TestMixedSuccessErrorWrapped(t *testing.T) {
 			// MixedSuccessError to test if it escapes the dist-sender.
 			// Set the wrapped index and the MixedSuccessError index to the
 			// same value because that's what the code does.
-			wrapped := roachpb.NewError(errors.Errorf("dummy error"))
-			wrapped.Index = index
-			reply.Error = roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: wrapped})
+			reply.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{})
 			reply.Error.Index = index
+			reply.Error.SetDetail(roachpb.WrapWithMixedSuccessError(reply.Error.GetDetail()))
 		}
 		return reply, nil
 	}
@@ -2925,28 +2924,27 @@ func TestMixedSuccessErrorWrapped(t *testing.T) {
 	if pErr == nil {
 		t.Fatalf("expected an error to be returned from distSender")
 	}
+
+	// The error message is correctly set.
+	if !strings.Contains(pErr.Message, "lease holder unknown") {
+		t.Fatalf("err = %s", pErr.Message)
+	}
+	// The index is correctly set.
+	if pErr.Index == nil {
+		t.Fatalf("expected error index to be set for err %T", pErr.GetDetail())
+	}
+	if pErr.Index.Index != 4 {
+		t.Errorf("expected error index to be %d, instead got %d", 3, pErr.Index.Index)
+	}
+
+	// The error detail is a MixedSuccessError.
 	mse, ok := pErr.GetDetail().(*roachpb.MixedSuccessError)
 	if !ok {
 		t.Fatalf("expected mixed success error, got %v", pErr)
 	}
-
-	wrapped := mse.Wrapped
-
-	// The error wrapped is not a MixedSuccessError and is the original
-	// wrapped error.
-	if _, ok := wrapped.GetDetail().(*roachpb.MixedSuccessError); ok {
-		t.Fatal("found another mixed success error")
-	}
-	if wrapped.Message != "dummy error" {
-		t.Fatalf("err = %s", wrapped.Message)
-	}
-
-	// The index is correctly set.
-	if wrapped.Index == nil {
-		t.Fatalf("expected error index to be set for err %T", pErr.GetDetail())
-	}
-	if wrapped.Index.Index != 4 {
-		t.Errorf("expected error index to be %d, instead got %d", 3, wrapped.Index.Index)
+	// The wrapped error is not a MixedSuccessError.
+	if wrapped, ok := mse.GetWrapped().(*roachpb.NotLeaseHolderError); !ok {
+		t.Fatalf("expected wrapped not leaseholder error, got %v", wrapped)
 	}
 }
 

@@ -427,7 +427,10 @@ message IntegerOverflowError {
 message MixedSuccessError {
   option (gogoproto.equal) = true;
 
-  optional Error wrapped = 1;
+  reserved 1;
+  optional ErrorDetail wrapped = 2 [(gogoproto.nullable) = false];
+  // wrapped_message is only set if wrapped is unset.
+  optional string wrapped_message = 3 [(gogoproto.nullable) = false];
 }
 
 // A BatchTimestampBeforeGCError indicates that a request's timestamp was
