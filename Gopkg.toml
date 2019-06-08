@@ -99,9 +99,7 @@ ignored = [
 # Pin to 2017.2.2 because of https://github.com/cockroachdb/cockroach/issues/33669.
 [[constraint]]
   name = "honnef.co/go/tools"
-  # This revision is not yet on master (as of 05-12-2019); when it is, we can
-  # switch to just using the master branch.
-  revision = "4187a5ff696fcfe80ef2204f78a3ae8262b2d54d"
+  revision = "1f0868a609b73436e79b066f93c7f1a28c5dbae2"
 
 # Test util - don't need to pin.
 [[constraint]]
