@@ -368,6 +368,14 @@
   revision = "3c56c65c97a11c610354ce15b9939c0d0aff5d7a"
 
 [[projects]]
+  branch = "master"
+  digest = "1:85071046e2bc80625cbd99ee5584a675f2dd8a4c56872f04a5d8b913e1c11d0d"
+  name = "github.com/cockroachdb/datadriven"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "edce558372380347c6fef147e62f5559a9f8413d"
+
+[[projects]]
   digest = "1:cd936a7edd1897083994b6d397f9c975a5a8dc58e845f0cf3d1e5cf4717b918b"
   name = "github.com/cockroachdb/gostdlib"
   packages = [
@@ -1795,7 +1803,7 @@
     "version",
   ]
   pruneopts = "UT"
-  revision = "4187a5ff696fcfe80ef2204f78a3ae8262b2d54d"
+  revision = "1f0868a609b73436e79b066f93c7f1a28c5dbae2"
 
 [[projects]]
   branch = "no-flag-names-parens"
@@ -1851,6 +1859,7 @@
     "github.com/cockroachdb/cmux",
     "github.com/cockroachdb/cockroach-go/crdb",
     "github.com/cockroachdb/crlfmt",
+    "github.com/cockroachdb/datadriven",
     "github.com/cockroachdb/gostdlib/cmd/gofmt",
     "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
     "github.com/cockroachdb/returncheck",
