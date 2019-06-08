@@ -1125,6 +1125,15 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			if resp.pErr != nil {
 				if pErr == nil {
 					pErr = resp.pErr
+					// Update the error's transaction with any new information from
+					// the batch response. This may contain interesting updates if
+					// the batch was parallelized and part of it succeeded.
+					pErr.UpdateTxn(br.Txn)
+				} else {
+					// Even though we ignore the second error, update the first
+					// error's transaction with any new information from the
+					// second error. This may contain interesting updates.
+					pErr.UpdateTxn(resp.pErr.GetTxn())
 				}
 				continue
 			}
@@ -1139,21 +1148,22 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			}
 
 			// Combine the new response with the existing one (including updating
-			// the headers).
+			// the headers) if we haven't yet seen an error.
 			if pErr == nil {
 				if err := br.Combine(resp.reply, resp.positions); err != nil {
 					pErr = roachpb.NewError(err)
 				}
+			} else {
+				// Update the error's transaction with any new information from
+				// the batch response. This may contain interesting updates if
+				// the batch was parallelized and part of it succeeded.
+				pErr.UpdateTxn(resp.reply.Txn)
 			}
 		}
 
 		// If we experienced an error, don't neglect to update the error's
 		// attached transaction with any responses which were received.
 		if pErr != nil {
-			// Update the error's transaction with any new information from
-			// the batch response. This may contain interesting updates if
-			// the batch was parallelized and part of it succeeded.
-			pErr.UpdateTxn(br.Txn)
 			// If this is a write batch with any successful responses, but
 			// we're ultimately returning an error, wrap the error with a
 			// MixedSuccessError.
