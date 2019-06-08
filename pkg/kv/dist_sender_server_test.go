@@ -1640,31 +1640,34 @@ func TestBadRequest(t *testing.T) {
 }
 
 // TestPropagateTxnOnError verifies that DistSender.Send properly propagates the
-// txn data to a next iteration. Use the txn.ObservedTimestamps field to verify
-// that.
+// txn data to a next iteration. The test uses the txn.ObservedTimestamps field
+// to verify that.
 func TestPropagateTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Inject this observed timestamp into the part of the batch's response that
-	// does not result in an error. Even though the batch as a whole results in
-	// an error, the transaction should still propagate this information.
-	observedTS := roachpb.ObservedTimestamp{
-		NodeID: 7, Timestamp: hlc.Timestamp{WallTime: 15},
-	}
-	containsObservedTS := func(txn *roachpb.Transaction) bool {
-		for _, ts := range txn.ObservedTimestamps {
-			if ts.Equal(observedTS) {
-				return true
+	// Inject these two observed timestamps into the parts of the batch's
+	// response that does not result in an error. Even though the batch as a
+	// whole results in an error, the transaction should still propagate this
+	// information.
+	ot1 := roachpb.ObservedTimestamp{NodeID: 7, Timestamp: hlc.Timestamp{WallTime: 15}}
+	ot2 := roachpb.ObservedTimestamp{NodeID: 8, Timestamp: hlc.Timestamp{WallTime: 16}}
+	containsObservedTSs := func(txn *roachpb.Transaction) bool {
+		contains := func(ot roachpb.ObservedTimestamp) bool {
+			for _, ts := range txn.ObservedTimestamps {
+				if ts.Equal(ot) {
+					return true
+				}
 			}
+			return false
 		}
-		return false
+		return contains(ot1) && contains(ot2)
 	}
 
 	// Set up a filter to so that the first CPut operation will
 	// get a ReadWithinUncertaintyIntervalError and so that the
-	// Put operation will return with the new observed timestamp.
-	keyA := roachpb.Key("a")
-	keyB := roachpb.Key("b")
+	// Put operations on either side of the CPut will each return
+	// with the new observed timestamp.
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 	var numCPuts int32
 	var storeKnobs storage.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
@@ -1673,7 +1676,9 @@ func TestPropagateTxnOnError(t *testing.T) {
 			switch fArgs.Req.(type) {
 			case *roachpb.PutRequest:
 				if k.Equal(keyA) {
-					fArgs.Hdr.Txn.ObservedTimestamps = append(fArgs.Hdr.Txn.ObservedTimestamps, observedTS)
+					fArgs.Hdr.Txn.UpdateObservedTimestamp(ot1.NodeID, ot1.Timestamp)
+				} else if k.Equal(keyC) {
+					fArgs.Hdr.Txn.UpdateObservedTimestamp(ot2.NodeID, ot2.Timestamp)
 				}
 			case *roachpb.ConditionalPutRequest:
 				if k.Equal(keyB) {
@@ -1694,7 +1699,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
-	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
+	if err := setupMultipleRanges(ctx, db, "b", "c"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1704,10 +1709,9 @@ func TestPropagateTxnOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The following txn creates a batch request that is split
-	// into two requests: Put and CPut. The CPut operation will
-	// get a ReadWithinUncertaintyIntervalError and the txn will be
-	// retried.
+	// The following txn creates a batch request that is split into three
+	// requests: Put, CPut, and Put. The CPut operation will get a
+	// ReadWithinUncertaintyIntervalError and the txn will be retried.
 	epoch := 0
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Observe the commit timestamp to prevent refreshes.
@@ -1718,13 +1722,13 @@ func TestPropagateTxnOnError(t *testing.T) {
 		if epoch >= 2 {
 			// ObservedTimestamps must contain the timestamp returned from the
 			// Put operation.
-			if !containsObservedTS(proto) {
+			if !containsObservedTSs(proto) {
 				t.Errorf("expected observed timestamp, found: %v", proto.ObservedTimestamps)
 			}
 		} else {
 			// ObservedTimestamps must not contain the timestamp returned from
 			// the Put operation.
-			if containsObservedTS(proto) {
+			if containsObservedTSs(proto) {
 				t.Errorf("unexpected observed timestamp, found: %v", proto.ObservedTimestamps)
 			}
 		}
@@ -1732,6 +1736,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 		b := txn.NewBatch()
 		b.Put(keyA, "val")
 		b.CPut(keyB, "new_val", origVal)
+		b.Put(keyC, "val2")
 		err := txn.CommitInBatch(ctx, b)
 		if epoch == 1 {
 			if retErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
