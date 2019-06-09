@@ -280,9 +280,9 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	return err
 }
 
-// ReadVersionFromEngineOrDefault reads the persisted cluster version from the
-// engine, falling back to v1.0 if no version is specified on the engine.
-func ReadVersionFromEngineOrDefault(
+// ReadVersionFromEngineOrZero reads the persisted cluster version from the
+// engine, falling back to the zero value.
+func ReadVersionFromEngineOrZero(
 	ctx context.Context, e engine.Engine,
 ) (cluster.ClusterVersion, error) {
 	var cv cluster.ClusterVersion
@@ -329,7 +329,7 @@ func SynthesizeClusterVersionFromEngines(
 	// (because then minStoreVersion don't change any more).
 	for _, eng := range engines {
 		var cv cluster.ClusterVersion
-		cv, err := ReadVersionFromEngineOrDefault(ctx, eng)
+		cv, err := ReadVersionFromEngineOrZero(ctx, eng)
 		if err != nil {
 			return cluster.ClusterVersion{}, err
 		}
