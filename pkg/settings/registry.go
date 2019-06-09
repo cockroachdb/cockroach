@@ -45,6 +45,7 @@ var retiredSettings = map[string]struct{}{
 	"schemachanger.bulk_index_backfill.enabled":            {},
 	"rocksdb.ingest_backpressure.delay_l0_file":            {}, // never used
 	"server.heap_profile.system_memory_threshold_fraction": {},
+	"timeseries.storage.10s_resolution_ttl":                {},
 }
 
 // Register adds a setting to the registry.

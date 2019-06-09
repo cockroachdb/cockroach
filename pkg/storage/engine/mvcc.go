@@ -44,25 +44,6 @@ var (
 	NilKey = MVCCKey{}
 )
 
-// AccountForLegacyMVCCStats adjusts ms to account for the predicted impact it
-// will have on the values that it records when the structure is initially stored.
-// Specifically, MVCCStats is stored on the RangeStats legacy key, which means
-// that its creation will have an impact on system-local data size and key count.
-func AccountForLegacyMVCCStats(ms *enginepb.MVCCStats, rangeID roachpb.RangeID) error {
-	key := keys.RangeStatsLegacyKey(rangeID)
-	metaKey := MakeMVCCMetadataKey(key)
-
-	// MVCCStats is stored inline, so compute MVCCMetadata accordingly.
-	value := roachpb.Value{}
-	if err := value.SetProto(ms); err != nil {
-		return err
-	}
-	meta := enginepb.MVCCMetadata{RawBytes: value.RawBytes}
-
-	updateStatsForInline(ms, key, 0, 0, int64(metaKey.EncodedSize()), int64(meta.Size()))
-	return nil
-}
-
 // MakeValue returns the inline value.
 func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 	return roachpb.Value{RawBytes: meta.RawBytes}

@@ -848,8 +848,6 @@ func backupPlanHook(
 			return errors.Errorf("BACKUP cannot be used inside a transaction")
 		}
 
-		requireVersion2 := false
-
 		to, err := toFn()
 		if err != nil {
 			return err
@@ -881,7 +879,6 @@ func backupPlanHook(
 		mvccFilter := MVCCFilter_Latest
 		if _, ok := opts[backupOptRevisionHistory]; ok {
 			mvccFilter = MVCCFilter_All
-			requireVersion2 = true
 		}
 
 		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
@@ -1014,15 +1011,6 @@ func backupPlanHook(
 				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 					"expected previous backups to cover until time %v, got %v", startTime, coveredTime)
 			}
-		}
-
-		// older nodes don't know about many new fields, e.g. MVCCAll and may
-		// incorrectly evaluate either an export RPC, or a resumed backup job.
-		if requireVersion2 && !p.ExecCfg().Settings.Version.IsActive(cluster.Version2_0) {
-			return errors.Errorf(
-				"BACKUP features introduced in 2.0 requires cluster version >= %s (",
-				cluster.VersionByKey(cluster.Version2_0).String(),
-			)
 		}
 
 		// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion

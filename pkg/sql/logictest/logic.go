@@ -417,7 +417,7 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
 		overrideDistSQLMode: "off", overrideOptimizerMode: "off",
 		bootstrapVersion: cluster.ClusterVersion{
-			Version: cluster.VersionByKey(cluster.VersionBase),
+			Version: roachpb.Version{Major: 1},
 		},
 		serverVersion:  roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: true,

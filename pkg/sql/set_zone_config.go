@@ -608,10 +608,6 @@ func writeZoneConfig(
 ) (numAffected int, err error) {
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
-		if !st.Version.IsActive(cluster.VersionPartitioning) {
-			return 0, pgerror.New(pgerror.CodeCheckViolationError,
-				"cluster version does not support zone configs on indexes or partitions")
-		}
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(
 			st, execCfg.ClusterID(), table, zone.Subzones, hasNewSubzones)
 		if err != nil {
@@ -620,20 +616,6 @@ func writeZoneConfig(
 	} else {
 		// To keep the Subzone and SubzoneSpan arrays consistent
 		zone.SubzoneSpans = nil
-	}
-	if len(zone.Constraints) > 1 || (len(zone.Constraints) == 1 && zone.Constraints[0].NumReplicas != 0) {
-		st := execCfg.Settings
-		if !st.Version.IsActive(cluster.VersionPerReplicaZoneConstraints) {
-			return 0, pgerror.New(pgerror.CodeCheckViolationError,
-				"cluster version does not support zone configs with per-replica constraints")
-		}
-	}
-	if len(zone.LeasePreferences) > 0 {
-		st := execCfg.Settings
-		if !st.Version.IsActive(cluster.VersionLeasePreferences) {
-			return 0, pgerror.New(pgerror.CodeCheckViolationError,
-				"cluster version does not support zone configs with lease placement preferences")
-		}
 	}
 
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {

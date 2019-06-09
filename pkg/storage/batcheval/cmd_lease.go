@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -145,10 +144,7 @@ func evalNewLease(
 	pd.Replicated.State = &storagepb.ReplicaState{
 		Lease: &lease,
 	}
-
-	if rec.ClusterSettings().Version.IsActive(cluster.VersionProposedTSLeaseRequest) {
-		pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
-	}
+	pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
 
 	pd.Local.Metrics = new(result.Metrics)
 	if isTransfer {
