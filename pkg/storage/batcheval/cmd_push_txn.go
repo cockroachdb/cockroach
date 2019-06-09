@@ -200,11 +200,27 @@ func PushTxn(
 	}
 
 	// The pusher might be aware of a newer version of the pushee.
-	reply.PusheeTxn.Timestamp.Forward(args.PusheeTxn.Timestamp)
+	increasedEpochOrTimestamp := false
+	if reply.PusheeTxn.Timestamp.Less(args.PusheeTxn.Timestamp) {
+		reply.PusheeTxn.Timestamp = args.PusheeTxn.Timestamp
+		increasedEpochOrTimestamp = true
+	}
 	if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 		reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
+		increasedEpochOrTimestamp = true
 	}
 	reply.PusheeTxn.UpgradePriority(args.PusheeTxn.Priority)
+
+	// If the pusher is aware that the pushee's currently recorded attempt at a
+	// parallel commit failed, either because it found intents at a higher
+	// timestamp than the parallel commit attempt or because it found intents at
+	// a higher epoch than the parallel commit attempt, it should not consider
+	// the pushee to be performing a parallel commit. Its commit status is not
+	// indeterminate.
+	if increasedEpochOrTimestamp && reply.PusheeTxn.Status == roachpb.STAGING {
+		reply.PusheeTxn.Status = roachpb.PENDING
+		reply.PusheeTxn.InFlightWrites = nil
+	}
 
 	pushType := args.PushType
 	var pusherWins bool
