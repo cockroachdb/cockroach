@@ -189,10 +189,6 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				timer.Reset(jitteredInterval(storeRebalancerTimerDuration))
 			}
 
-			if !sr.st.Version.IsActive(cluster.VersionLoadBasedRebalancing) {
-				continue
-			}
-
 			mode := LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
 			if mode == LBRebalancingOff {
 				continue

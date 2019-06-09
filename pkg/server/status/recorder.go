@@ -449,15 +449,6 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		TotalSystemMemory: systemMemory,
 	}
 
-	// If the cluster hasn't yet been definitively moved past the network stats
-	// phase, ensure that we provide latencies separately for backwards compatibility.
-	if !mr.settings.Version.IsActive(cluster.VersionRPCNetworkStats) {
-		nodeStat.Latencies = make(map[roachpb.NodeID]int64)
-		for nodeID, na := range nodeStat.Activity {
-			nodeStat.Latencies[nodeID] = na.Latency
-		}
-	}
-
 	eachRecordableValue(mr.mu.nodeRegistry, func(name string, val float64) {
 		nodeStat.Metrics[name] = val
 	})

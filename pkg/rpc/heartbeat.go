@@ -65,10 +65,6 @@ func checkVersion(
 		// Cluster version has not yet been determined.
 		return nil
 	}
-	if !clusterVersion.IsActive(cluster.VersionRPCVersionCheck) {
-		// Cluster version predates this version check.
-		return nil
-	}
 	activeVersion := clusterVersion.Version().Version
 	if peerVersion == (roachpb.Version{}) {
 		return errors.Errorf(
