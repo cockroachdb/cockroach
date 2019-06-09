@@ -471,7 +471,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// Since the wrapped version setting exposes the new versions, it must
 	// definitely be present on all stores on the first try.
 	if err := tc.Servers[1].GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
-		cv, err := storage.ReadVersionFromEngineOrDefault(ctx, s.Engine())
+		cv, err := storage.ReadVersionFromEngineOrZero(ctx, s.Engine())
 		if err != nil {
 			return err
 		}
