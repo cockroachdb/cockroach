@@ -757,7 +757,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expTxn: committedRecord,
 		},
 		{
-			// Standard case where a transaction record is created during a
+			// Non-standard case where a transaction record is created during a
 			// parallel commit. The record already exists because of a failed
 			// parallel commit attempt. The re-stage will fail because of the
 			// pushed timestamp.
@@ -772,10 +772,10 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
-			// Standard case where a transaction record is created during a
-			// non-parallel commit. The record already exists because of a
-			// failed parallel commit attempt. The commit will fail because
-			// of the pushed timestamp.
+			// Non-standard case where a transaction record is created during
+			// a non-parallel commit. The record already exists because of a
+			// failed parallel commit attempt. The commit will fail because of
+			// the pushed timestamp.
 			name: "record staging, try commit at pushed timestamp",
 			// Replica state.
 			existingTxn: stagingRecord,
@@ -786,9 +786,9 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
-			// Standard case where a transaction is rolled back. The record
-			// already exists because of a failed parallel commit attempt in
-			// a prior epoch.
+			// Non-standard case where a transaction is rolled back. The record
+			// already exists because of a failed parallel commit attempt in a
+			// prior epoch.
 			name: "record staging, try rollback at higher epoch",
 			// Replica state.
 			existingTxn: stagingRecord,
@@ -805,7 +805,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// Standard case where a transaction record is created during a
+			// Non-standard case where a transaction record is created during a
 			// parallel commit. The record already exists because of a failed
 			// parallel commit attempt in a prior epoch.
 			name: "record staging, try re-stage at higher epoch",
@@ -825,8 +825,8 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// Standard case where a transaction record is created during a
-			// non-parallel commit. The record already exists because of a
+			// Non-standard case where a transaction record is created during
+			// a non-parallel commit. The record already exists because of a
 			// failed parallel commit attempt in a prior epoch.
 			name: "record staging, try commit at higher epoch",
 			// Replica state.
@@ -844,7 +844,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// Standard case where a transaction record is created during a
+			// Non-standard case where a transaction record is created during a
 			// parallel commit. The record already exists because of a failed
 			// parallel commit attempt in a prior epoch. The re-stage will fail
 			// because of the pushed timestamp.
@@ -859,7 +859,7 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
-			// Standard case where a transaction record is created during a
+			// Non-standard case where a transaction record is created during a
 			// non-parallel commit. The record already exists because of a
 			// failed parallel commit attempt in a prior epoch. The commit will
 			// fail because of the pushed timestamp.
