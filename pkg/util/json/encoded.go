@@ -19,8 +19,8 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 type jsonEncoded struct {
@@ -116,7 +116,7 @@ func jsonTypeFromRootBuffer(v []byte) ([]byte, Type, error) {
 			return v[containerHeaderLen+jEntryLen:], StringJSONType, nil
 		}
 	}
-	return nil, 0, pgerror.AssertionFailedf("unknown json type %d", typeTag)
+	return nil, 0, errors.AssertionFailedf("unknown json type %d", errors.Safe(typeTag))
 }
 
 func newEncoded(e jEntry, v []byte) (JSON, error) {
@@ -157,7 +157,7 @@ func newEncoded(e jEntry, v []byte) (JSON, error) {
 
 func getUint32At(v []byte, idx int) (uint32, error) {
 	if idx+4 > len(v) {
-		return 0, pgerror.AssertionFailedf(
+		return 0, errors.AssertionFailedf(
 			"insufficient bytes to decode uint32 int value: %+v", v)
 	}
 
@@ -504,14 +504,14 @@ func (j *jsonEncoded) shallowDecode() (JSON, error) {
 		}
 		return result, nil
 	default:
-		return nil, pgerror.AssertionFailedf("unknown json type: %v", j.typ)
+		return nil, errors.AssertionFailedf("unknown json type: %v", errors.Safe(j.typ))
 	}
 }
 
 func (j *jsonEncoded) mustDecode() JSON {
 	decoded, err := j.shallowDecode()
 	if err != nil {
-		panic(fmt.Sprintf("invalid JSON data: %s, %v", err.Error(), j.value))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "invalid JSON data: %v", j.value))
 	}
 	return decoded
 }

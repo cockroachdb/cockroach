@@ -14,8 +14,8 @@ package json
 
 import (
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // This file implements the format described in the JSONB encoding RFC.
@@ -39,7 +39,7 @@ const jEntryLen = 4
 // JSON value, but check it just to be safe.
 func checkLength(length int) error {
 	if length > maxByteLength {
-		return pgerror.AssertionFailedf("JSON value too large: %d bytes", length)
+		return errors.AssertionFailedf("JSON value too large: %d bytes", errors.Safe(length))
 	}
 	return nil
 }
@@ -206,8 +206,8 @@ func DecodeJSON(b []byte) ([]byte, JSON, error) {
 	case objectContainerTag:
 		return decodeJSONObject(containerHeader, b)
 	}
-	return b, nil, pgerror.AssertionFailedf(
-		"error decoding JSON value, header: %x", containerHeader)
+	return b, nil, errors.AssertionFailedf(
+		"error decoding JSON value, header: %x", errors.Safe(containerHeader))
 }
 
 // FromEncoding returns a JSON value which is lazily decoded.
@@ -272,7 +272,7 @@ func decodeJSONObject(containerHeader uint32, b []byte) ([]byte, JSON, error) {
 		if key, ok := nextJSON.(jsonString); ok {
 			result[i].k = key
 		} else {
-			return b, nil, pgerror.AssertionFailedf(
+			return b, nil, errors.AssertionFailedf(
 				"key encoded as non-string: %T", nextJSON)
 		}
 	}
@@ -312,6 +312,6 @@ func decodeJSONValue(e jEntry, b []byte) ([]byte, JSON, error) {
 	case containerTag:
 		return DecodeJSON(b)
 	}
-	return b, nil, pgerror.AssertionFailedf(
-		"error decoding JSON value, unexpected type code: %d", e.typCode)
+	return b, nil, errors.AssertionFailedf(
+		"error decoding JSON value, unexpected type code: %d", errors.Safe(e.typCode))
 }
