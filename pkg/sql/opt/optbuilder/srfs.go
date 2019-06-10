@@ -15,9 +15,9 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,7 +47,7 @@ func (s *srf) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr
 		// calls f.Walk(s) on the external raw srf, which replaces any internal
 		// raw srfs with srf structs. The next call to TypeCheck on the external
 		// raw srf triggers this error.
-		return nil, pgerror.UnimplementedWithIssuef(26234, "nested set-returning functions")
+		return nil, unimplemented.NewWithIssuef(26234, "nested set-returning functions")
 	}
 
 	return s, nil

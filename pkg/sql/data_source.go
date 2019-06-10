@@ -20,7 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // For more detailed documentation on DataSourceInfos, see
@@ -460,7 +461,7 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 	}
 	tn, ok := n.(*tree.TableName)
 	if !ok {
-		return nil, nil, pgerror.Unimplemented(
+		return nil, nil, unimplemented.New(
 			"complex table expression in UPDATE/DELETE",
 			"cannot use a complex table name with DELETE/UPDATE",
 		)

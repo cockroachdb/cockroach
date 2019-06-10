@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -1616,7 +1617,7 @@ func setSessionVar(ctx *tree.EvalContext, settingName, newVal string, isLocal bo
 		return errors.AssertionFailedf("session accessor not set")
 	}
 	if isLocal {
-		return pgerror.UnimplementedWithIssuef(32562, "transaction-scoped settings are not supported")
+		return unimplemented.NewWithIssuef(32562, "transaction-scoped settings are not supported")
 	}
 	return ctx.SessionAccessor.SetSessionVar(ctx.Context, settingName, newVal)
 }

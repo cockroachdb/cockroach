@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -138,7 +139,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	isDDL := opt.IsDDLOp(e)
 	if isDDL {
 		if err := b.evalCtx.Txn.SetSystemConfigTrigger(); err != nil {
-			return execPlan{}, pgerror.UnimplementedWithIssuef(26508,
+			return execPlan{}, unimplemented.NewWithIssuef(26508,
 				"schema change statement cannot follow a statement that has written in the same transaction: %v", err)
 		}
 	}

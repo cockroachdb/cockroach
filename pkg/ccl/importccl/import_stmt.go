@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -326,7 +327,7 @@ func importPlanHook(
 			}
 			format.PgDump.MaxRowSize = maxRowSize
 		default:
-			return pgerror.Unimplementedf("import.format", "unsupported import format: %q", importStmt.FileFormat)
+			return unimplemented.Newf("import.format", "unsupported import format: %q", importStmt.FileFormat)
 		}
 
 		// sstSize, if 0, will be set to an appropriate default by the specific
@@ -364,7 +365,7 @@ func importPlanHook(
 				}
 			}
 			if !found {
-				return pgerror.Unimplementedf("import.compression", "unsupported compression value: %q", override)
+				return unimplemented.Newf("import.compression", "unsupported compression value: %q", override)
 			}
 		}
 

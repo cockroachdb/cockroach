@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -103,7 +104,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
 			if d.HasFKConstraint() {
-				return pgerror.UnimplementedWithIssue(32917,
+				return unimplemented.NewWithIssue(32917,
 					"adding a REFERENCES constraint while also adding a column via ALTER not supported")
 			}
 
@@ -236,7 +237,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					col, err := n.tableDesc.FindActiveColumnByName(string(colName))
 					if err != nil {
 						if _, dropped, inactiveErr := n.tableDesc.FindColumnByName(colName); inactiveErr == nil && !dropped {
-							return pgerror.UnimplementedWithIssue(32917,
+							return unimplemented.NewWithIssue(32917,
 								"adding a REFERENCES constraint while the column is being added not supported")
 						}
 						return err
@@ -771,7 +772,7 @@ func applyColumnMutation(
 		case schemachange.ColumnConversionTrivial:
 			col.Type = *typ
 		default:
-			return pgerror.UnimplementedWithIssueDetail(9851,
+			return unimplemented.NewWithIssueDetail(9851,
 				fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
 				"type conversion not yet implemented")
 		}

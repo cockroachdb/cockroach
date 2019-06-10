@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -83,7 +84,7 @@ func valueEncodePartitionTuple(
 			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMaxVal))
 			continue
 		case *tree.Placeholder:
-			return nil, pgerror.UnimplementedWithIssuef(
+			return nil, unimplemented.NewWithIssuef(
 				19464, "placeholders are not supported in PARTITION BY")
 		default:
 			// Fall-through.

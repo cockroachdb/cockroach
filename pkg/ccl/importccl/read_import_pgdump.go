@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -371,7 +372,7 @@ func readPostgresCreateTable(
 
 func getTableName(tn *tree.TableName) (string, error) {
 	if sc := tn.Schema(); sc != "" && sc != "public" {
-		return "", pgerror.Unimplementedf(
+		return "", unimplemented.Newf(
 			"import non-public schema",
 			"non-public schemas unsupported: %s", sc,
 		)
@@ -382,7 +383,7 @@ func getTableName(tn *tree.TableName) (string, error) {
 // getTableName variant for UnresolvedObjectName.
 func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 	if u.NumParts >= 2 && u.Parts[1] != "public" {
-		return "", pgerror.Unimplementedf(
+		return "", unimplemented.Newf(
 			"import non-public schema",
 			"non-public schemas unsupported: %s", u.Parts[1],
 		)

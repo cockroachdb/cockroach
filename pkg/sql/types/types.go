@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -1639,7 +1639,7 @@ func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
 // type of an ArrayFamily-typed column. If not, it returns an error.
 func CheckArrayElementType(t *T) error {
 	if ok, issueNum := IsValidArrayElementType(t); !ok {
-		return pgerror.UnimplementedWithIssueDetailf(issueNum, t.String(),
+		return unimplemented.NewWithIssueDetailf(issueNum, t.String(),
 			"arrays of %s not allowed", t)
 	}
 	return nil

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -233,7 +234,7 @@ func computeFkCheckColumnIDs(
 		}
 
 	case sqlbase.ForeignKeyReference_PARTIAL:
-		return nil, pgerror.UnimplementedWithIssue(20305, "MATCH PARTIAL not supported")
+		return nil, unimplemented.NewWithIssue(20305, "MATCH PARTIAL not supported")
 
 	default:
 		return nil, errors.AssertionFailedf("unknown composite key match type: %v", match)

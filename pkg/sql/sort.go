@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -226,10 +227,10 @@ func (n *sortNode) Close(ctx context.Context) {
 
 func ensureColumnOrderable(c sqlbase.ResultColumn) error {
 	if c.Typ.Family() == types.ArrayFamily {
-		return pgerror.UnimplementedWithIssuef(32707, "can't order by column type %s", c.Typ)
+		return unimplemented.NewWithIssuef(32707, "can't order by column type %s", c.Typ)
 	}
 	if c.Typ.Family() == types.JsonFamily {
-		return pgerror.UnimplementedWithIssue(32706, "can't order by column type jsonb")
+		return unimplemented.NewWithIssue(32706, "can't order by column type jsonb")
 	}
 	return nil
 }

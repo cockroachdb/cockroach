@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -201,7 +202,7 @@ func validateArrayDimensions(nDimensions int, nElements int) error {
 		}
 		fallthrough
 	default:
-		return pgerror.UnimplementedWithIssuef(32552,
+		return unimplemented.NewWithIssuef(32552,
 			"%d-dimension arrays not supported; only 1-dimension", nDimensions)
 	}
 	return nil

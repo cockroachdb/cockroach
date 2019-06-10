@@ -15,8 +15,8 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (planNode, error) {
@@ -42,7 +42,7 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 	switch n.Modes.UserPriority {
 	case tree.UnspecifiedUserPriority:
 	default:
-		return nil, pgerror.Unimplemented("default transaction priority",
+		return nil, unimplemented.New("default transaction priority",
 			"unsupported session default: transaction priority")
 	}
 	return newZeroNode(nil /* columns */), nil

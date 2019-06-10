@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -793,7 +794,7 @@ func checkResultType(typ *types.T) error {
 			// mixed signals -- that nested arrays appear to be supported
 			// in this case, and not in other cases (eg. CREATE). So we
 			// reject them in every case instead.
-			return pgerror.UnimplementedWithIssueDetail(32552,
+			return unimplemented.NewWithIssueDetail(32552,
 				"result", "arrays cannot have arrays as element type")
 		}
 	case types.AnyFamily:

@@ -17,11 +17,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/lib/pq/oid"
 )
 
@@ -129,7 +129,7 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		r.typ == commandComplete &&
 		r.stmtType == tree.Rows {
 
-		r.err = pgerror.UnimplementedWithIssuef(4035,
+		r.err = unimplemented.NewWithIssuef(4035,
 			"execute row count limits not supported: %d of %d",
 			r.limit, r.rowsAffected)
 		r.conn.bufferErr(r.err)
