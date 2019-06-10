@@ -219,7 +219,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		}
 		if len(m.Data.Metadata) != 0 {
 			for _, rpm := range m.Data.Metadata {
-				meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(rpm)
+				meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, rpm)
 				if !ok {
 					continue
 				}
@@ -275,7 +275,7 @@ func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 			return allMeta
 		}
 		for _, remoteMeta := range msg.Data.Metadata {
-			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(remoteMeta)
+			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, remoteMeta)
 			if !ok {
 				continue
 			}

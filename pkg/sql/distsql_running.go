@@ -76,7 +76,7 @@ func (req runnerRequest) run() {
 		if err != nil {
 			res.err = err
 		} else {
-			res.err = resp.Error.ErrorDetail()
+			res.err = resp.Error.ErrorDetail(req.ctx)
 		}
 	}
 	req.resultChan <- res

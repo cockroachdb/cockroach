@@ -260,8 +260,7 @@ func TestInternalErrorReporting(t *testing.T) {
 					`\*errors.withMessage\n`+
 					`\*safedetails.withSafeDetails: %s\(\) \(3\)\n`+
 					`eval.go:\d+: \*withstack.withStack \(4\)\n`+
-					`\*pgerror.withCandidateCode: 22000 \(5\)\n`+
-					`\*telemetrykeys.withTelemetry: crdb_internal.force_assertion_error\(\) \(6\)\n`+
+					`\*telemetrykeys.withTelemetry: crdb_internal.force_assertion_error\(\) \(5\)\n`+
 					`\(check the extra data payloads\)`,
 				part.Message,
 			); !ok {

@@ -149,7 +149,7 @@ func processProducerMessage(
 	draining *bool,
 	msg *distsqlpb.ProducerMessage,
 ) processMessageResult {
-	err := sd.AddMessage(msg)
+	err := sd.AddMessage(ctx, msg)
 	if err != nil {
 		return processMessageResult{
 			err: pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s",

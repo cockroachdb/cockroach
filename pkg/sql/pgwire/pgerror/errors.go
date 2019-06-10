@@ -14,21 +14,38 @@ package pgerror
 
 import (
 	"bytes"
+	goErr "errors"
 	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 var _ error = &Error{}
 
 // Error implements the error interface.
-func (pg *Error) Error() string {
-	return pg.Message
+func (pg *Error) Error() string { return pg.Message }
+
+// ErrorHint implements the hintdetail.ErrorHinter interface.
+func (pg *Error) ErrorHint() string { return pg.Hint }
+
+// ErrorDetail implements the hintdetail.ErrorDetailer interface.
+func (pg *Error) ErrorDetail() string { return pg.Detail }
+
+// SafeDetails implements the errbase.SafeDetailer interface.
+// TODO(knz): this is provided for compatibility with 19.1 nodes.
+// Remove in 19.3, together with the "SafeDetail" proto field.
+func (pg *Error) SafeDetails() []string {
+	details := make([]string, len(pg.SafeDetail))
+	for i, d := range pg.SafeDetail {
+		details[i] = d.SafeMessage + d.EncodedStackTrace
+	}
+	return details
 }
 
 // FullError can be used when the hint and/or detail are to be tested.
@@ -36,10 +53,9 @@ func FullError(err error) string {
 	var errString string
 	if pqErr, ok := err.(*pq.Error); ok {
 		errString = formatMsgHintDetail("pq: ", pqErr.Message, pqErr.Hint, pqErr.Detail)
-	} else if pg, ok := GetPGCause(err); ok {
-		errString = formatMsgHintDetail("", err.Error(), pg.Hint, pg.Detail)
 	} else {
-		errString = err.Error()
+		pg := Flatten(err)
+		errString = formatMsgHintDetail("", err.Error(), pg.Hint, pg.Detail)
 	}
 	return errString
 }
@@ -59,167 +75,101 @@ func formatMsgHintDetail(prefix, msg, hint, detail string) string {
 	return b.String()
 }
 
-// NewWithDepthf creates an Error and extracts the context
+// NewWithDepthf creates an error with a pg code and extracts the context
 // information at the specified depth level.
-func NewWithDepthf(depth int, code string, format string, args ...interface{}) *Error {
-	srcCtx := makeSrcCtx(depth + 1)
-	return &Error{
-		Message: fmt.Sprintf(format, args...),
-		Code:    code,
-		Source:  &srcCtx,
-	}
+func NewWithDepthf(depth int, code string, format string, args ...interface{}) error {
+	err := errors.NewWithDepthf(1+depth, format, args...)
+	err = WithCandidateCode(err, code)
+	return err
 }
 
-// New creates an Error.
-func New(code string, msg string) *Error {
-	return NewWithDepthf(1, code, "%s", msg)
+// New creates an error with a code.
+func New(code string, msg string) error {
+	err := errors.NewWithDepth(1, msg)
+	err = WithCandidateCode(err, code)
+	return err
 }
 
 // Newf creates an Error with a format string.
-func Newf(code string, format string, args ...interface{}) *Error {
-	return NewWithDepthf(1, code, format, args...)
+func Newf(code string, format string, args ...interface{}) error {
+	err := errors.NewWithDepthf(1, format, args...)
+	err = WithCandidateCode(err, code)
+	return err
 }
 
-// DangerousStatementf creates a new Error for "rejected dangerous statements".
-func DangerousStatementf(format string, args ...interface{}) *Error {
+// DangerousStatementf creates a new error for "rejected dangerous
+// statements".
+func DangerousStatementf(format string, args ...interface{}) error {
 	var buf bytes.Buffer
 	buf.WriteString("rejected: ")
 	fmt.Fprintf(&buf, format, args...)
 	buf.WriteString(" (sql_safe_updates = true)")
-	return NewWithDepthf(1, CodeWarningError, "%s", buf.String())
+	err := goErr.New(buf.String())
+	err = errors.WithSafeDetails(err, format, args...)
+	err = WithCandidateCode(err, pgcode.Warning)
+	return err
 }
 
 // WrongNumberOfPreparedStatements creates new an Error for trying to prepare
 // a query string containing more than one statement.
-func WrongNumberOfPreparedStatements(n int) *Error {
-	return NewWithDepthf(1, CodeInvalidPreparedStatementDefinitionError,
-		"prepared statement had %d statements, expected 1", n)
-}
-
-// SetHintf annotates an Error object with a hint.
-func (pg *Error) SetHintf(f string, args ...interface{}) *Error {
-	pg.Hint = fmt.Sprintf(f, args...)
-	return pg
-}
-
-// SetDetailf annotates an Error object with details.
-func (pg *Error) SetDetailf(f string, args ...interface{}) *Error {
-	pg.Detail = fmt.Sprintf(f, args...)
-	return pg
-}
-
-// ResetSource resets the Source field of the Error object
-// with the details on the depth-level caller of ResetSource.
-func (pg *Error) ResetSource(depth int) {
-	srcCtx := makeSrcCtx(depth + 1)
-	pg.Source = &srcCtx
-}
-
-// makeSrcCtx creates a Error_Source value with contextual information
-// about the caller at the requested depth.
-func makeSrcCtx(depth int) Error_Source {
-	f, l, fun := caller.Lookup(depth + 1)
-	return Error_Source{File: f, Line: int32(l), Function: fun}
-}
-
-// GetPGCause returns an unwrapped Error.
-func GetPGCause(err error) (*Error, bool) {
-	switch pgErr := errors.Cause(err).(type) {
-	case *Error:
-		return pgErr, true
-
-	default:
-		return nil, false
-	}
+func WrongNumberOfPreparedStatements(n int) error {
+	err := errors.NewWithDepthf(1, "prepared statement had %d statements, expected 1", errors.Safe(n))
+	err = WithCandidateCode(err, pgcode.InvalidPreparedStatementDefinition)
+	return err
 }
 
 // UnimplementedWithIssuef constructs an error with the formatted message
 // and a link to the passed issue. Recorded as "#<issue>" in tracking.
-func UnimplementedWithIssuef(issue int, format string, args ...interface{}) *Error {
-	err := NewWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: "+format, args...)
-	err.TelemetryKey = fmt.Sprintf("#%d", issue)
-	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
-}
+//
+// TODO(knz): this alias exists as a transition until the callers
+// are modified to use the errors package directly.
+var UnimplementedWithIssuef = unimplemented.NewWithIssuef
 
 // UnimplementedWithIssue constructs an error with the given message
 // and a link to the passed issue. Recorded as "#<issue>" in tracking.
-func UnimplementedWithIssue(issue int, msg string) *Error {
-	err := NewWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
-	err.TelemetryKey = fmt.Sprintf("#%d", issue)
-	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
-}
+//
+// TODO(knz): this alias exists as a transition until the callers
+// are modified to use the errors package directly.
+var UnimplementedWithIssue = unimplemented.NewWithIssue
 
 // UnimplementedWithIssueDetail constructs an error with the given message
 // and a link to the passed issue. Recorded as "#<issue>.detail" in tracking.
 // This is useful when we need an extra axis of information to drill down into.
-func UnimplementedWithIssueDetail(issue int, detail, msg string) *Error {
-	err := NewWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
-	if detail == "" {
-		err.TelemetryKey = fmt.Sprintf("#%d", issue)
-	} else {
-		err.TelemetryKey = fmt.Sprintf("#%d.%s", issue, detail)
-	}
-	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
-}
+//
+// TODO(knz): this alias exists as a transition until the callers
+// are modified to use the errors package directly.
+var UnimplementedWithIssueDetail = unimplemented.NewWithIssueDetail
 
 // UnimplementedWithIssueDetailf is like the above
 // but supports message formatting.
-func UnimplementedWithIssueDetailf(issue int, detail, format string, args ...interface{}) *Error {
-	err := NewWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: "+format, args...)
-	if detail == "" {
-		err.TelemetryKey = fmt.Sprintf("#%d", issue)
-	} else {
-		err.TelemetryKey = fmt.Sprintf("#%d.%s", issue, detail)
-	}
-	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
-}
+//
+// TODO(knz): this alias exists as a transition until the callers
+// are modified to use the errors package directly.
+var UnimplementedWithIssueDetailf = unimplemented.NewWithIssueDetailf
 
 // UnimplementedWithIssueHint constructs an error with the given
 // message, hint, and a link to the passed issue. Recorded as "#<issue>"
 // in tracking.
-func UnimplementedWithIssueHint(issue int, msg, hint string) *Error {
-	err := NewWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
-	err.TelemetryKey = fmt.Sprintf("#%d", issue)
-	return err.SetHintf("%s\nSee: https://github.com/cockroachdb/cockroach/issues/%d", hint, issue)
-}
-
-const unimplementedErrorHint = `This feature is not yet implemented in CockroachDB.
-
-Please check https://github.com/cockroachdb/cockroach/issues to check
-whether this feature is already tracked. If you cannot find it there,
-please report this error with reproduction steps at:
-
-    https://github.com/cockroachdb/cockroach/issues/new/choose
-
-If you would rather not post publicly, please contact us directly at:
-
-    support@cockroachlabs.com
-
-The Cockroach Labs team appreciates your feedback.
-`
+//
+// TODO(knz): this alias exists as a transition until the callers
+// are modified to use the errors package directly.
+var UnimplementedWithIssueHint = unimplemented.NewWithIssueHint
 
 // Unimplemented constructs an unimplemented feature error with a format string.
 //
 // `feature` is used for tracking, and is not included when the error is printed.
-func Unimplemented(feature, msg string) *Error {
-	return UnimplementedWithDepthf(1, feature, "%s", msg)
-}
+//
+// TODO(knz): this alias exists as a transition until the callers
+// are modified to use the errors package directly.
+var Unimplemented = unimplemented.New
 
 // Unimplementedf constructs an unimplemented feature error.
 //
 // `feature` is used for tracking, and is not included when the error is printed.
-func Unimplementedf(feature, format string, args ...interface{}) *Error {
-	return UnimplementedWithDepthf(1, feature, format, args...)
-}
-
-// UnimplementedWithDepthf constructs an implemented feature error,
-// tracking the context at the specified depth.
-func UnimplementedWithDepthf(depth int, feature, format string, args ...interface{}) *Error {
-	err := NewWithDepthf(depth+1, CodeFeatureNotSupportedError, "unimplemented: "+format, args...)
-	err.TelemetryKey = feature
-	err.Hint = unimplementedErrorHint
-	return err
-}
+//
+// TODO(knz): this alias exists as a transition until the callers
+// are modified to use the errors package directly.
+var Unimplementedf = unimplemented.Newf
 
 var _ fmt.Formatter = &Error{}
 
