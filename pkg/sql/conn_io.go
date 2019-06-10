@@ -433,7 +433,7 @@ func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
 		}
 		if cmdIdx != len(buf.mu.data) {
 			return nil, 0, errors.AssertionFailedf(
-				"can only wait for next command; corrupt cursor: %d", log.Safe(curPos))
+				"can only wait for next command; corrupt cursor: %d", errors.Safe(curPos))
 		}
 		// Wait for the next Command to arrive to the buffer.
 		buf.mu.cond.Wait()
@@ -450,7 +450,7 @@ func (buf *StmtBuf) translatePosLocked(pos CmdPos) (int, error) {
 	if pos < buf.mu.startPos {
 		return 0, errors.AssertionFailedf(
 			"position %d no longer in buffer (buffer starting at %d)",
-			log.Safe(pos), log.Safe(buf.mu.startPos))
+			errors.Safe(pos), errors.Safe(buf.mu.startPos))
 	}
 	return int(pos - buf.mu.startPos), nil
 }

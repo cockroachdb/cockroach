@@ -761,7 +761,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 				return status, nil
 			}); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err,
-					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
+					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
 			}
 		}
 		return nil
@@ -927,7 +927,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 					// uniqueness violation.
 					return errors.AssertionFailedf(
 						"validation of index %s failed: expected %d rows, found %d",
-						idx.Name, log.Safe(expectedCount[i]), log.Safe(idxLen))
+						idx.Name, errors.Safe(expectedCount[i]), errors.Safe(idxLen))
 				}
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1171,7 +1171,7 @@ func runSchemaChangesInTxn(
 					idx.ForeignKey = t.Constraint.ForeignKey
 				default:
 					return errors.AssertionFailedf(
-						"unsupported constraint type: %d", log.Safe(t.Constraint.ConstraintType))
+						"unsupported constraint type: %d", errors.Safe(t.Constraint.ConstraintType))
 				}
 				constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 
@@ -1240,7 +1240,7 @@ func runSchemaChangesInTxn(
 			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
 		default:
 			return errors.AssertionFailedf(
-				"unsupported constraint type: %d", log.Safe(c.ConstraintType))
+				"unsupported constraint type: %d", errors.Safe(c.ConstraintType))
 		}
 	}
 	return nil

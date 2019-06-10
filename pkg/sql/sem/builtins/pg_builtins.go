@@ -472,7 +472,7 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 		d, err := availOpts[priv](false /* withGrantOpt */)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"error checking privilege %q", log.Safe(priv))
+				"error checking privilege %q", errors.Safe(priv))
 		}
 		switch d {
 		case tree.DNull, tree.DBoolFalse:

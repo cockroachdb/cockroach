@@ -218,7 +218,7 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	if !root.Relational().OuterCols.Empty() {
 		return nil, errors.AssertionFailedf(
 			"top-level relational expression cannot have outer columns: %s",
-			log.Safe(root.Relational().OuterCols),
+			errors.Safe(root.Relational().OuterCols),
 		)
 	}
 

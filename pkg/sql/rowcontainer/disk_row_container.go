@@ -259,7 +259,7 @@ func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow,
 		d.scratchEncRow[col], k, err = sqlbase.EncDatumFromBuffer(&d.types[col], d.encodings[i], k)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"unable to decode row, column idx %d", log.Safe(col))
+				"unable to decode row, column idx %d", errors.Safe(col))
 		}
 	}
 	for _, i := range d.valueIdxs {
@@ -267,7 +267,7 @@ func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow,
 		d.scratchEncRow[i], v, err = sqlbase.EncDatumFromBuffer(&d.types[i], sqlbase.DatumEncoding_VALUE, v)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"unable to decode row, value idx %d", log.Safe(i))
+				"unable to decode row, value idx %d", errors.Safe(i))
 		}
 	}
 	return d.scratchEncRow, nil

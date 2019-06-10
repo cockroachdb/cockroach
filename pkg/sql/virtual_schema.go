@@ -324,7 +324,7 @@ func NewVirtualSchemaHolder(
 
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-					"failed to initialize %s", log.Safe(def.getSchema()))
+					"failed to initialize %s", errors.Safe(def.getSchema()))
 			}
 
 			if schema.tableValidator != nil {

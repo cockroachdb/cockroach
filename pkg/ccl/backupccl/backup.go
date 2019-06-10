@@ -749,7 +749,7 @@ func backup(
 	})
 
 	if err := g.Wait(); err != nil {
-		return mu.exported, errors.Wrapf(err, "exporting %d ranges", log.Safe(len(spans)))
+		return mu.exported, errors.Wrapf(err, "exporting %d ranges", errors.Safe(len(spans)))
 	}
 
 	// No more concurrency, so no need to acquire locks below.

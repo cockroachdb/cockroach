@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
@@ -760,7 +759,7 @@ func (node *WindowFrameBound) doc(p *PrettyCfg) pretty.Doc {
 	case UnboundedFollowing:
 		return pretty.Keyword("UNBOUNDED FOLLOWING")
 	default:
-		panic(errors.AssertionFailedf("unexpected type %d", log.Safe(node.BoundType)))
+		panic(errors.AssertionFailedf("unexpected type %d", errors.Safe(node.BoundType)))
 	}
 }
 

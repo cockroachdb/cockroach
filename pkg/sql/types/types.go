@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -989,7 +988,7 @@ func (t *T) SQLStandardName() string {
 		case oid.T_regtype:
 			return "regtype"
 		default:
-			panic(errors.AssertionFailedf("unexpected Oid: %v", log.Safe(t.Oid())))
+			panic(errors.AssertionFailedf("unexpected Oid: %v", errors.Safe(t.Oid())))
 		}
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
@@ -1019,7 +1018,7 @@ func (t *T) SQLStandardName() string {
 	case UuidFamily:
 		return "uuid"
 	default:
-		panic(errors.AssertionFailedf("unexpected Family: %v", log.Safe(t.Family())))
+		panic(errors.AssertionFailedf("unexpected Family: %v", errors.Safe(t.Family())))
 	}
 }
 

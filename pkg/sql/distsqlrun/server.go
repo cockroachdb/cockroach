@@ -383,7 +383,7 @@ func (ds *ServerImpl) setupFlow(
 			be = sessiondata.BytesEncodeBase64
 		default:
 			return nil, nil, errors.AssertionFailedf("unknown byte encode format: %s",
-				log.Safe(req.EvalContext.BytesEncodeFormat))
+				errors.Safe(req.EvalContext.BytesEncodeFormat))
 		}
 		sd := &sessiondata.SessionData{
 			ApplicationName: req.EvalContext.ApplicationName,

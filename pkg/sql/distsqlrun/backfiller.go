@@ -235,7 +235,7 @@ func GetResumeSpans(
 
 	if mutationIdx == noIndex {
 		return nil, nil, 0, errors.AssertionFailedf(
-			"mutation %d has completed", log.Safe(mutationID))
+			"mutation %d has completed", errors.Safe(mutationID))
 	}
 
 	// Find the job.
@@ -251,12 +251,12 @@ func GetResumeSpans(
 
 	if jobID == 0 {
 		return nil, nil, 0, errors.AssertionFailedf(
-			"no job found for mutation %d", log.Safe(mutationID))
+			"no job found for mutation %d", errors.Safe(mutationID))
 	}
 
 	job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
-		return nil, nil, 0, errors.Wrapf(err, "can't find job %d", log.Safe(jobID))
+		return nil, nil, 0, errors.Wrapf(err, "can't find job %d", errors.Safe(jobID))
 	}
 	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {

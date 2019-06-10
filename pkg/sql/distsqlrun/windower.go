@@ -488,18 +488,18 @@ func (w *windower) processPartition(
 					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &startBound.OffsetType.Type, startBound.TypedOffset)
 					if err != nil {
 						return errors.NewAssertionErrorWithWrappedErrf(err,
-							"error decoding %d bytes", log.Safe(len(startBound.TypedOffset)))
+							"error decoding %d bytes", errors.Safe(len(startBound.TypedOffset)))
 					}
 					if len(rem) != 0 {
 						return errors.AssertionFailedf(
-							"%d trailing bytes in encoded value", log.Safe(len(rem)))
+							"%d trailing bytes in encoded value", errors.Safe(len(rem)))
 					}
 					frameRun.StartBoundOffset = datum
 				case distsqlpb.WindowerSpec_Frame_GROUPS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				default:
 					return errors.AssertionFailedf(
-						"unexpected WindowFrameMode: %d", log.Safe(windowFn.frame.Mode))
+						"unexpected WindowFrameMode: %d", errors.Safe(windowFn.frame.Mode))
 				}
 			}
 			if endBound != nil {
@@ -512,18 +512,18 @@ func (w *windower) processPartition(
 						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &endBound.OffsetType.Type, endBound.TypedOffset)
 						if err != nil {
 							return errors.NewAssertionErrorWithWrappedErrf(err,
-								"error decoding %d bytes", log.Safe(len(endBound.TypedOffset)))
+								"error decoding %d bytes", errors.Safe(len(endBound.TypedOffset)))
 						}
 						if len(rem) != 0 {
 							return errors.AssertionFailedf(
-								"%d trailing bytes in encoded value", log.Safe(len(rem)))
+								"%d trailing bytes in encoded value", errors.Safe(len(rem)))
 						}
 						frameRun.EndBoundOffset = datum
 					case distsqlpb.WindowerSpec_Frame_GROUPS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					default:
 						return errors.AssertionFailedf("unexpected WindowFrameMode: %d",
-							log.Safe(windowFn.frame.Mode))
+							errors.Safe(windowFn.frame.Mode))
 					}
 				}
 			}
@@ -689,7 +689,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			for _, col := range w.partitionBy {
 				if int(col) >= len(row) {
 					return errors.AssertionFailedf(
-						"hash column %d, row with only %d columns", log.Safe(col), log.Safe(len(row)))
+						"hash column %d, row with only %d columns", errors.Safe(col), errors.Safe(len(row)))
 				}
 				var err error
 				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, preferredEncoding, w.scratch)

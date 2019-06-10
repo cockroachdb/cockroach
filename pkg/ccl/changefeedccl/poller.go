@@ -660,9 +660,9 @@ func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescripto
 					return errors.AssertionFailedf(
 						"error: detected table ID %d backfill completed at %s "+
 							"earlier than highwater timestamp %s",
-						log.Safe(desc.ID),
-						log.Safe(boundaryTime),
-						log.Safe(p.mu.highWater),
+						errors.Safe(desc.ID),
+						errors.Safe(boundaryTime),
+						errors.Safe(p.mu.highWater),
 					)
 				}
 				p.mu.scanBoundaries = append(p.mu.scanBoundaries, boundaryTime)
