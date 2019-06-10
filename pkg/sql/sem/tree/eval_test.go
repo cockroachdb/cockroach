@@ -266,7 +266,7 @@ func TestEvalError(t *testing.T) {
 		{`'baz'::decimal`,
 			`could not parse "baz" as type decimal`},
 		{`'2010-09-28 12:00:00.1q'::date`,
-			`could not parse "2010-09-28 12:00:00.1q" as type date`},
+			`parsing as type date: could not parse "2010-09-28 12:00:00.1q"`},
 		{`'12:00:00q'::time`, `could not parse "12:00:00q" as type time`},
 		{`'2010-09-28 12:00.1 MST'::timestamp`,
 			`unimplemented: timestamp abbreviations not supported`},

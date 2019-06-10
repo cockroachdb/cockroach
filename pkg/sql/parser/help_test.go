@@ -400,13 +400,10 @@ func TestContextualHelp(t *testing.T) {
 				t.Fatalf("parser didn't trigger error")
 			}
 
-			if err.Error() != "help token in input" {
+			if !strings.HasPrefix(err.Error(), "help token in input") {
 				t.Fatal(err)
 			}
-			pgerr, ok := pgerror.GetPGCause(err)
-			if !ok {
-				t.Fatalf("expected pg error, got %v", err)
-			}
+			pgerr := pgerror.Flatten(err)
 			help := pgerr.Hint
 			msg := HelpMessage{Command: test.key, HelpMessageBody: HelpMessages[test.key]}
 			expected := msg.String()

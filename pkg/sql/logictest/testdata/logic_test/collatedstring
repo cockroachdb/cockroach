@@ -179,17 +179,17 @@ SELECT 'ü' COLLATE de < 'x' COLLATE de
 true
 
 
-statement error invalid locale e: language: tag is not well-formed at or near "\)"
+statement error syntax error: invalid locale e: language: tag is not well-formed
 CREATE TABLE e1 (
   a STRING COLLATE e
 )
 
-statement error multiple COLLATE declarations for column "a" at or near "\)"
+statement error multiple COLLATE declarations for column "a"
 CREATE TABLE e2 (
   a STRING COLLATE en COLLATE de
 )
 
-statement error COLLATE declaration for non-string-typed column "a" at or near "\)"
+statement error COLLATE declaration for non-string-typed column "a"
 CREATE TABLE e3 (
   a INT COLLATE en
 )
