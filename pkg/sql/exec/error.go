@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
 )
@@ -49,11 +50,17 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 				if isPanicFromVectorizedEngine(panicEmittedFrom) {
 					// We only want to catch runtime errors coming from the vectorized
 					// engine.
-					switch t := err.(type) {
-					case *pgerror.Error:
-						retErr = t
-					default:
-						retErr = pgerror.AssertionFailedf("unexpected error from the vectorized runtime: %v", t)
+					if e, ok := err.(error); ok {
+						// Any error without a code already is "surprising" and
+						// needs to be annotated to indicate that it was
+						// unexpected.
+						if code := pgerror.GetPGCode(e); code == pgcode.Uncategorized {
+							e = errors.Wrap(e, "unexpected error from the vectorized runtime")
+						}
+						retErr = e
+					} else {
+						// Not an error object. Definitely unexpected.
+						retErr = pgerror.AssertionFailedf("unexpected error from the vectorized runtime: %v", err)
 					}
 				} else {
 					// Do not recover from the panic not related to the vectorized
