@@ -547,12 +547,8 @@ func expectSendError(
 		t.Fatalf("%s: expected command SendError, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
 	}
 
-	pg, ok := se.Err.(*pgerror.Error)
-	if !ok {
-		t.Fatalf("expected pgerror, got %T (%s)", se.Err, se.Err)
-	}
-	if pg.Code != pgErrCode {
-		t.Fatalf("expected code %s, got: %s", pgErrCode, pg.Code)
+	if code := pgerror.GetPGCode(se.Err); code != pgErrCode {
+		t.Fatalf("expected code %s, got: %s", pgErrCode, code)
 	}
 
 	if err := finishQuery(execPortal, c); err != nil {

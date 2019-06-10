@@ -321,7 +321,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		}()
 
 		err := rc.AddRow(ctx, rows[0])
-		if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {
+		if code := pgerror.GetPGCode(err); code != pgerror.CodeDiskFullError {
 			t.Fatalf(
 				"unexpected error %v, expected disk full error %s", err, pgerror.CodeDiskFullError,
 			)

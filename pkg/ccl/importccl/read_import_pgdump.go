@@ -287,9 +287,6 @@ func readPostgresCreateTable(
 			return ret, nil
 		}
 		if err != nil {
-			if pg, ok := pgerror.GetPGCause(err); ok {
-				return nil, errors.Errorf("%s\n%s", pg.Message, pg.Detail)
-			}
 			return nil, errors.Wrap(err, "postgres parse error")
 		}
 		switch stmt := stmt.(type) {
