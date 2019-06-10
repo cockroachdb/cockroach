@@ -18,12 +18,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // SchemaResolver abstracts the interfaces needed from the logical
@@ -224,9 +226,11 @@ func ResolveTargetObject(
 		if !tn.ExplicitSchema && !tn.ExplicitCatalog {
 			return nil, pgerror.New(pgerror.CodeInvalidNameError, "no database specified")
 		}
-		return nil, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
+		err = pgerror.Newf(pgcode.InvalidSchemaName,
 			"cannot create %q because the target database or schema does not exist",
-			tree.ErrString(tn)).SetHintf("verify that the current database and search_path are valid and/or the target database exists")
+			tree.ErrString(tn))
+		err = errors.WithHint(err, "verify that the current database and search_path are valid and/or the target database exists")
+		return nil, err
 	}
 	if tn.Schema() != tree.PublicSchema {
 		return nil, pgerror.Newf(pgerror.CodeInvalidNameError,
@@ -469,10 +473,11 @@ func expandIndexName(
 	}
 	if !found {
 		if requireTable {
-			return nil, nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
+			err = pgerror.Newf(pgcode.UndefinedObject,
 				"schema or database was not found while searching index: %q",
-				tree.ErrString(&index.Index)).SetHintf(
-				"check the current database and search_path are valid")
+				tree.ErrString(&index.Index))
+			err = errors.WithHint(err, "check the current database and search_path are valid")
+			return nil, nil, err
 		}
 		return nil, nil, nil
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -32,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -946,9 +947,10 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
 					// If the primary index contains a stored column, we don't need to
 					// store it - it's already part of the index.
-					return pgerror.Newf(
-						pgerror.CodeDuplicateColumnError, "index %q already contains column %q", index.Name, col.Name).
-						SetDetailf("column %q is part of the primary index and therefore implicit in all indexes", col.Name)
+					err = pgerror.Newf(
+						pgcode.DuplicateColumn, "index %q already contains column %q", index.Name, col.Name)
+					err = errors.WithDetailf(err, "column %q is part of the primary index and therefore implicit in all indexes", col.Name)
+					return err
 				}
 				if index.ContainsColumnID(col.ID) {
 					return pgerror.Newf(

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -49,7 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/net/trace"
 )
 
@@ -1672,7 +1673,7 @@ func isCommit(stmt tree.Statement) bool {
 }
 
 func errIsRetriable(err error) bool {
-	err = errors.Cause(err)
+	err = errors.UnwrapAll(err)
 	_, retriable := err.(*roachpb.TransactionRetryWithProtoRefreshError)
 	return retriable
 }
@@ -1970,11 +1971,18 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 					// This situation is sufficiently serious that we cannot let
 					// the error that caused the schema change to fail flow back
 					// to the client as-is. We replace it by a custom code
-					// dedicated to this situation.
-					newErr := pgerror.Newf(
-						pgerror.CodeTransactionCommittedWithSchemaChangeFailure,
-						"%v", schemaChangeErr).SetHintf(
-						"Some of the non-DDL statements may have committed successfully, but some of the DDL statement(s) failed.\n" +
+					// dedicated to this situation. Replacement occurs
+					// because this error code is a "serious error" and the code
+					// computation logic will give it a higher priority.
+					//
+					// We also print out the original error code as prefix of
+					// the error message, in case it was a serious error.
+					newErr := pgerror.Wrapf(schemaChangeErr,
+						pgcode.TransactionCommittedWithSchemaChangeFailure,
+						"transaction committed but schema change aborted with error: (%s)",
+						pgerror.GetPGCode(schemaChangeErr))
+					newErr = errors.WithHint(newErr,
+						"Some of the non-DDL statements may have committed successfully, but some of the DDL statement(s) failed.\n"+
 							"Manual inspection may be required to determine the actual state of the database.")
 					res.SetError(newErr)
 				}

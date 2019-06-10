@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -59,8 +60,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // ClusterOrganization is the organization name.
@@ -1267,8 +1268,9 @@ func (st *SessionTracing) StartTracing(
 			}
 			fmt.Fprintf(&desiredOptions, "%s%s", comma, recOption)
 
-			return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
-				"tracing is already started with different options").SetHintf(
+			err := pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"tracing is already started with different options")
+			return errors.WithHintf(err,
 				"reset with SET tracing = off; SET tracing = %s", desiredOptions.String())
 		}
 

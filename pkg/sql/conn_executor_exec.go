@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // RestartSavepointName is the only savepoint ident that we accept.
@@ -385,12 +387,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		if ts != nil {
 			if origTs := ex.state.getOrigTimestamp(); *ts != origTs {
-				return makeErrEvent(
-					pgerror.Newf(pgerror.CodeSyntaxError,
-						"inconsistent AS OF SYSTEM TIME timestamp; expected: %s",
-						origTs).SetHintf(
-						"Generally AS OF SYSTEM TIME cannot be used inside a transaction."),
-				)
+				err = pgerror.Newf(pgcode.Syntax,
+					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", origTs)
+				err = errors.WithHint(err,
+					"Generally AS OF SYSTEM TIME cannot be used inside a transaction.")
+				return makeErrEvent(err)
 			}
 			p.semaCtx.AsOfTimestamp = ts
 		}
@@ -619,17 +620,9 @@ func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
 	// not supported") because perhaps there was an actual mistake in
 	// the query in addition to the unsupported correlation, and we also
 	// want to give a chance to the user to fix mistakes.
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		if pgErr.Code == pgerror.CodeUndefinedColumnError ||
-			pgErr.Code == pgerror.CodeUndefinedTableError {
-			// Be careful to not modify the error in-place (via SetHintf) as
-			// the error object may be globally instantiated.
-			newErr := *pgErr
-			pgErr = &newErr
-			_ = pgErr.SetHintf("some correlated subqueries are not supported yet - see %s",
-				"https://github.com/cockroachdb/cockroach/issues/3288")
-			return pgErr
-		}
+	if code := pgerror.GetPGCode(err); code == pgcode.UndefinedColumn || code == pgcode.UndefinedTable {
+		err = errors.WithHintf(err, "some correlated subqueries are not supported yet - see %s",
+			"https://github.com/cockroachdb/cockroach/issues/3288")
 	}
 	return err
 }
