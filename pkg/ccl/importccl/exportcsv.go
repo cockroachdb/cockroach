@@ -95,7 +95,7 @@ func exportPlanHook(
 			return err
 		}
 
-		if err := p.RequireSuperUser(ctx, "EXPORT"); err != nil {
+		if _, err := p.RequireSuperUser(ctx, "EXPORT"); err != nil {
 			return err
 		}
 
