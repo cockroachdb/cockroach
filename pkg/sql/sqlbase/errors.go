@@ -14,8 +14,10 @@ package sqlbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -128,9 +130,8 @@ func NewDependentObjectError(msg string) error {
 
 // NewDependentObjectErrorWithHint creates a dependent object error with a hint
 func NewDependentObjectErrorWithHint(msg string, hint string) error {
-	pErr := pgerror.New(pgerror.CodeDependentObjectsStillExistError, msg)
-	pErr.Hint = hint
-	return pErr
+	err := pgerror.New(pgcode.DependentObjectsStillExist, msg)
+	return errors.WithHint(err, hint)
 }
 
 // NewRangeUnavailableError creates an unavailable range error.
