@@ -23,17 +23,7 @@ const (
 		"until end of transaction block"
 	txnCommittedMsg = "current transaction is committed, commands ignored " +
 		"until end of transaction block"
-	txnRetryMsgPrefix = "restart transaction"
 )
-
-// NewRetryError creates an error signifying that the transaction can be retried.
-// It signals to the user that the SQL txn entered the RESTART_WAIT state after a
-// serialization error, and that a ROLLBACK TO SAVEPOINT COCKROACH_RESTART statement
-// should be issued.
-func NewRetryError(cause error) error {
-	return pgerror.Newf(
-		pgerror.CodeSerializationFailureError, "%s: %s", txnRetryMsgPrefix, cause)
-}
 
 // NewTransactionAbortedError creates an error for trying to run a command in
 // the context of transaction that's already aborted.
@@ -163,23 +153,6 @@ func NewWindowInAggError() error {
 // contained within another aggregate function.
 func NewAggInAggError() error {
 	return pgerror.New(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
-}
-
-// NewStatementCompletionUnknownError creates an error with the corresponding pg
-// code. This is used to inform the client that it's unknown whether a statement
-// succeeded or not. Of particular interest to clients is when this error is
-// returned for a statement outside of a transaction or for a COMMIT/RELEASE
-// SAVEPOINT - there manual inspection may be necessary to check whether the
-// statement/transaction committed. When this is returned for other
-// transactional statements, the transaction has been rolled back (like it is
-// for any errors).
-//
-// NOTE(andrei): When introducing this error, I haven't verified the exact
-// conditions under which Postgres returns this code, nor its relationship to
-// code CodeTransactionResolutionUnknownError. I couldn't find good
-// documentation on these codes.
-func NewStatementCompletionUnknownError(err error) error {
-	return pgerror.Newf(pgerror.CodeStatementCompletionUnknownError, "%+v", err)
 }
 
 // QueryCanceledError is an error representing query cancellation.

@@ -119,8 +119,7 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.err != nil {
-		// TODO(andrei): I'm not sure this is the best place to do error conversion.
-		r.conn.bufferErr(convertToErrWithPGCode(r.err))
+		r.conn.bufferErr(r.err)
 		return
 	}
 
@@ -173,8 +172,7 @@ func (r *commandResult) CloseWithErr(err error) {
 	r.conn.writerState.fi.registerCmd(r.pos)
 
 	r.err = err
-	// TODO(andrei): I'm not sure this is the best place to do error conversion.
-	r.conn.bufferErr(convertToErrWithPGCode(err))
+	r.conn.bufferErr(err)
 }
 
 // Discard is part of the CommandResult interface.
