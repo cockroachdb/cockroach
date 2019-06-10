@@ -342,12 +342,8 @@ func (ex *connExecutor) execBind(
 			} else {
 				d, err := pgwirebase.DecodeOidDatum(ptCtx, t, qArgFormatCodes[i], arg)
 				if err != nil {
-					if _, ok := pgerror.GetPGCause(err); ok {
-						return retErr(err)
-					}
 					return retErr(pgerror.Wrapf(err, pgerror.CodeProtocolViolationError,
 						"error in argument for %s", k))
-
 				}
 				qargs[k] = d
 			}
