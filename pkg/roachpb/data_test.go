@@ -487,7 +487,6 @@ var nonZeroTxn = Transaction{
 	RefreshedTimestamp:       makeTS(20, 22),
 	MaxTimestamp:             makeTS(40, 41),
 	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
-	DeprecatedWriting:        true,
 	WriteTooOld:              true,
 	IntentSpans:              []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:           []SequencedWrite{{Key: []byte("c"), Sequence: 1}},

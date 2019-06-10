@@ -1747,12 +1747,6 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
-  // bool deprecated_writing = 9;
-  void clear_deprecated_writing();
-  static const int kDeprecatedWritingFieldNumber = 9;
-  bool deprecated_writing() const;
-  void set_deprecated_writing(bool value);
-
   // bool write_too_old = 12;
   void clear_write_too_old();
   static const int kWriteTooOldFieldNumber = 12;
@@ -1780,7 +1774,6 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* epoch_zero_timestamp_;
   ::cockroach::util::hlc::Timestamp* refreshed_timestamp_;
   int status_;
-  bool deprecated_writing_;
   bool write_too_old_;
   bool orig_timestamp_was_observed_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
@@ -4233,20 +4226,6 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Observe
 Transaction::observed_timestamps() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.observed_timestamps)
   return observed_timestamps_;
-}
-
-// bool deprecated_writing = 9;
-inline void Transaction::clear_deprecated_writing() {
-  deprecated_writing_ = false;
-}
-inline bool Transaction::deprecated_writing() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.deprecated_writing)
-  return deprecated_writing_;
-}
-inline void Transaction::set_deprecated_writing(bool value) {
-  
-  deprecated_writing_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.deprecated_writing)
 }
 
 // bool write_too_old = 12;
