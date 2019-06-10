@@ -489,14 +489,14 @@ func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliState
 		}
 		fmt.Println()
 	} else {
-		_, err := parser.Parse(fmt.Sprintf("select %s(??", funcName))
-		pgerr := pgerror.Flatten(err)
-		if !strings.HasPrefix(pgerr.Hint, "help:") {
+		_, helpText, _ := c.serverSideParse(fmt.Sprintf("select %s(??", funcName))
+		if helpText != "" {
+			fmt.Println(helpText)
+		} else {
 			fmt.Fprintf(stderr,
 				"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
 			return errState
 		}
-		fmt.Println(pgerr.Hint[6:])
 	}
 	return nextState
 }
@@ -747,20 +747,21 @@ func (c *cliState) GetCompletions(_ string) []string {
 
 	if !strings.HasSuffix(sql, "??") {
 		fmt.Fprintf(c.ins.Stdout(),
-			"\ntab completion not supported; append '??' and press tab for contextual help\n\n%s", sql)
-		return nil
+			"\ntab completion not supported; append '??' and press tab for contextual help\n\n")
+	} else {
+		_, helpText, err := c.serverSideParse(sql)
+		if helpText != "" {
+			// We have a completion suggestion. Use that.
+			fmt.Fprintf(c.ins.Stdout(), "\nSuggestion:\n%s\n", helpText)
+		} else if err != nil {
+			// Some other error. Display it.
+			fmt.Fprintf(c.ins.Stdout(), "\n%v\n", err)
+			maybeShowErrorDetails(c.ins.Stdout(), err, false)
+		}
 	}
 
-	_, pgErr := c.serverSideParse(sql)
-	if pgErr != nil {
-		if pgErr.Message == "help token in input" && strings.HasPrefix(pgErr.Hint, "help:") {
-			fmt.Fprintf(c.ins.Stdout(), "\nSuggestion:\n%s\n", pgErr.Hint[6:])
-		} else {
-			fmt.Fprintf(c.ins.Stdout(), "\n%v\n", pgErr)
-			maybeShowErrorDetails(c.ins.Stdout(), pgErr, false)
-		}
-		fmt.Fprint(c.ins.Stdout(), c.currentPrompt, sql)
-	}
+	// After the suggestion or error, re-display the prompt and current entry.
+	fmt.Fprint(c.ins.Stdout(), c.currentPrompt, sql)
 	return nil
 }
 
@@ -1090,18 +1091,19 @@ func (c *cliState) doPrepareStatementLine(
 
 func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnum) cliStateEnum {
 	// From here on, client-side syntax checking is enabled.
-	parsedStmts, pgErr := c.serverSideParse(c.concatLines)
-	if pgErr != nil {
-		if pgErr.Message == "help token in input" && strings.HasPrefix(pgErr.Hint, "help:") {
-			fmt.Println(pgErr.Hint[6:])
-		} else {
-			_ = c.invalidSyntax(0, "statement ignored: %v", pgErr)
-			maybeShowErrorDetails(stderr, pgErr, false)
+	parsedStmts, helpText, err := c.serverSideParse(c.concatLines)
+	if err != nil {
+		if helpText != "" {
+			// There was a help text included. Use it.
+			fmt.Println(helpText)
+		}
 
-			// Stop here if exiterr is set.
-			if c.errExit {
-				return cliStop
-			}
+		_ = c.invalidSyntax(0, "statement ignored: %v", err)
+		maybeShowErrorDetails(stderr, err, false)
+
+		// Stop here if exiterr is set.
+		if c.errExit {
+			return cliStop
 		}
 
 		// Remove the erroneous lines from the buffered input,
@@ -1217,11 +1219,12 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 // a newline character is printed before anything else.
 func maybeShowErrorDetails(w io.Writer, err error, printNewline bool) {
 	var hint, detail string
-	if pqErr, ok := err.(*pq.Error); ok {
+	if pqErr, ok := errors.UnwrapAll(err).(*pq.Error); ok {
 		hint, detail = pqErr.Hint, pqErr.Detail
 	} else {
-		pgErr := pgerror.Flatten(err)
-		hint, detail = pgErr.Hint, pgErr.Detail
+		// Extract the standard hint and details.
+		hint = errors.FlattenHints(err)
+		detail = errors.FlattenDetails(err)
 	}
 	if detail != "" {
 		if printNewline {
@@ -1475,30 +1478,19 @@ func (c *cliState) tryEnableCheckSyntax() {
 // serverSideParse uses the SHOW SYNTAX statement to analyze the given string.
 // If the syntax is correct, the function returns the statement
 // decomposition in the first return value. If it is not, the function
-// assembles a pgerror.Error with suitable Detail and Hint fields.
-func (c *cliState) serverSideParse(sql string) (stmts []string, pgErr *pgerror.Error) {
+// extracts a help string if available.
+func (c *cliState) serverSideParse(sql string) (stmts []string, helpText string, err error) {
 	cols, rows, err := runQuery(c.conn, makeQuery("SHOW SYNTAX "+lex.EscapeSQLString(sql)), true)
 	if err != nil {
 		// The query failed with some error. This is not a syntax error
 		// detected by SHOW SYNTAX (those show up as valid rows) but
-		// instead something else. Do our best to convert that something
-		// else back to a pgerror.Error.
-		if pgErr, ok := err.(*pgerror.Error); ok {
-			return nil, pgErr
-		} else if pqErr, ok := err.(*pq.Error); ok {
-			err = pgerror.New(string(pqErr.Code), pqErr.Message)
-			err = errors.WithHint(err, pqErr.Hint)
-			err = errors.WithDetail(err, pqErr.Detail)
-			pgErr := pgerror.Flatten(err)
-			return nil, pgErr
-		}
-		return nil, pgerror.Flatten(pgerror.Newf(pgerror.CodeDataExceptionError,
-			"unexpected error: %v", err))
+		// instead something else.
+		return nil, "", errors.Wrap(err, "unexpected error")
 	}
 
 	if len(cols) < 2 {
-		return nil, pgerror.Flatten(pgerror.Newf(pgerror.CodeDataExceptionError,
-			"invalid results for SHOW SYNTAX: %q %q", cols, rows))
+		return nil, "", errors.Newf(
+			"invalid results for SHOW SYNTAX: %q %q", cols, rows)
 	}
 
 	// If SHOW SYNTAX reports an error, then it does so on the first row.
@@ -1516,20 +1508,32 @@ func (c *cliState) serverSideParse(sql string) (stmts []string, pgErr *pgerror.E
 				code = row[1]
 			}
 		}
-		err := pgerror.New(code, message)
-		err = errors.WithHint(err, hint)
-		err = errors.WithDetail(err, detail)
-		return nil, pgerror.Flatten(err)
+		// Is it a help text?
+		if strings.HasPrefix(message, "help token in input") && strings.HasPrefix(hint, "help:") {
+			// Yes: return it.
+			helpText = hint[6:]
+			hint = ""
+		}
+		// In any case report that there was an error while parsing.
+		err := errors.New(message)
+		err = pgerror.WithCandidateCode(err, code)
+		if hint != "" {
+			err = errors.WithHint(err, hint)
+		}
+		if detail != "" {
+			err = errors.WithDetail(err, detail)
+		}
+		return nil, helpText, err
 	}
 
 	// Otherwise, hopefully we got some SQL statements.
 	stmts = make([]string, len(rows))
 	for i := range rows {
 		if rows[i][0] != "sql" {
-			return nil, pgerror.Flatten(pgerror.Newf(pgerror.CodeDataExceptionError,
-				"invalid results for SHOW SYNTAX: %q %q", cols, rows))
+			return nil, "", errors.Newf(
+				"invalid results for SHOW SYNTAX: %q %q", cols, rows)
 		}
 		stmts[i] = rows[i][1]
 	}
-	return stmts, nil
+	return stmts, "", nil
 }
