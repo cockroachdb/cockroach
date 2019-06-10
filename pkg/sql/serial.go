@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // uniqueRowIDExpr is used as default expression when
@@ -82,7 +83,7 @@ func (p *planner) processSerialInColumnDef(
 
 	default:
 		return nil, nil, nil, nil,
-			pgerror.AssertionFailedf("unknown serial normalization mode: %s", serialNormalizationMode)
+			errors.AssertionFailedf("unknown serial normalization mode: %s", serialNormalizationMode)
 	}
 
 	// Clear the IsSerial bit now that it's been remapped.

@@ -19,7 +19,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // GetAggregateInfo returns the aggregate constructor and the return type for
@@ -206,15 +205,15 @@ func (ag *aggregatorBase) init(
 			h := exprHelper{}
 			// Pass nil types and row - there are no variables in these expressions.
 			if err := h.init(argument, nil /* types */, flowCtx.EvalCtx); err != nil {
-				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
+				return errors.Wrapf(err, "%s", argument)
 			}
 			d, err := h.eval(nil /* row */)
 			if err != nil {
-				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
+				return errors.Wrapf(err, "%s", argument)
 			}
 			argTypes[len(aggInfo.ColIdx)+j] = *d.ResolvedType()
 			if err != nil {
-				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
+				return errors.Wrapf(err, "%s", argument)
 			}
 			arguments[j] = d
 		}

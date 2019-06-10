@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // buildUnion builds a set of memo groups that represent the given union
@@ -82,7 +83,7 @@ func (b *Builder) buildUnion(
 		}
 		if l.hidden != r.hidden {
 			// This should never happen.
-			panic(pgerror.AssertionFailedf("%v types cannot be matched", clause.Type))
+			panic(errors.AssertionFailedf("%v types cannot be matched", clause.Type))
 		}
 
 		var typ *types.T

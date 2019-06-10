@@ -1138,7 +1138,7 @@ func (ex *connExecutor) runObserverStatement(
 		ex.runSetTracing(ctx, sqlStmt, res)
 		return nil
 	default:
-		res.SetError(pgerror.AssertionFailedf("unrecognized observer statement type %T", stmt.AST))
+		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", stmt.AST))
 		return nil
 	}
 }
@@ -1179,7 +1179,7 @@ func (ex *connExecutor) runSetTracing(
 	ctx context.Context, n *tree.SetTracing, res RestrictedCommandResult,
 ) {
 	if len(n.Values) == 0 {
-		res.SetError(pgerror.AssertionFailedf("set tracing missing argument"))
+		res.SetError(errors.AssertionFailedf("set tracing missing argument"))
 		return
 	}
 
@@ -1188,7 +1188,7 @@ func (ex *connExecutor) runSetTracing(
 		v = unresolvedNameToStrVal(v)
 		strVal, ok := v.(*tree.StrVal)
 		if !ok {
-			res.SetError(pgerror.AssertionFailedf(
+			res.SetError(errors.AssertionFailedf(
 				"expected string for set tracing argument, not %T", v))
 			return
 		}

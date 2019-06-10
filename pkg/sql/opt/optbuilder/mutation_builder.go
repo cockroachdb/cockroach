@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // mutationBuilder is a helper struct that supports building Insert, Update,
@@ -595,7 +596,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			scopeOrd := mb.mapToReturnScopeOrd(i)
 			if scopeOrd == -1 {
-				panic(pgerror.AssertionFailedf("column %d is not available in the mutation input", i))
+				panic(errors.AssertionFailedf("column %d is not available in the mutation input", i))
 			}
 			private.ReturnCols[i] = mb.outScope.cols[scopeOrd].id
 		}
@@ -746,7 +747,7 @@ func findNotNullIndexCol(index cat.Index) int {
 			return indexCol.Ordinal
 		}
 	}
-	panic(pgerror.AssertionFailedf("should have found not null column in index"))
+	panic(errors.AssertionFailedf("should have found not null column in index"))
 }
 
 // resultsNeeded determines whether a statement that might have a RETURNING
@@ -758,7 +759,7 @@ func resultsNeeded(r tree.ReturningClause) bool {
 	case *tree.ReturningNothing, *tree.NoReturningClause:
 		return false
 	default:
-		panic(pgerror.AssertionFailedf("unexpected ReturningClause type: %T", t))
+		panic(errors.AssertionFailedf("unexpected ReturningClause type: %T", t))
 	}
 }
 

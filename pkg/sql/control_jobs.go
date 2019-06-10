@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 type controlJobsNode struct {
@@ -79,7 +80,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 
 		jobID, ok := tree.AsDInt(jobIDDatum)
 		if !ok {
-			return pgerror.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
+			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
 		switch n.desiredStatus {
@@ -90,7 +91,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		case jobs.StatusCanceled:
 			err = reg.Cancel(params.ctx, params.p.txn, int64(jobID))
 		default:
-			err = pgerror.AssertionFailedf("unhandled status %v", n.desiredStatus)
+			err = errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
 		}
 		if err != nil {
 			return err

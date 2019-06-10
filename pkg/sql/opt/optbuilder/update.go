@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // buildUpdate builds a memo group for an UpdateOp expression. First, an input
@@ -131,7 +132,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 // exactly as many columns as are expected by the named SET columns.
 func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 	if len(mb.targetColList) != 0 {
-		panic(pgerror.AssertionFailedf("addTargetColsForUpdate cannot be called more than once"))
+		panic(errors.AssertionFailedf("addTargetColsForUpdate cannot be called more than once"))
 	}
 
 	for _, expr := range exprs {

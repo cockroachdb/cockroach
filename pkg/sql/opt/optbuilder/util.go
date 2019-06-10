@@ -125,7 +125,7 @@ func (b *Builder) expandStar(
 		}
 
 	default:
-		panic(pgerror.AssertionFailedf("unhandled type: %T", expr))
+		panic(errors.AssertionFailedf("unhandled type: %T", expr))
 	}
 
 	return aliases, exprs

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // PlaceholderIdx is the 0-based index of a placeholder. Placeholder "$1"
@@ -184,7 +185,7 @@ func (p *PlaceholderInfo) Assign(src *PlaceholderInfo, numPlaceholders int) erro
 
 func checkPlaceholderArity(numTypes, numPlaceholders int) error {
 	if numTypes > numPlaceholders {
-		return pgerror.AssertionFailedf(
+		return errors.AssertionFailedf(
 			"unexpected placeholder types: got %d, expected %d",
 			numTypes, numPlaceholders)
 	} else if numTypes < numPlaceholders {

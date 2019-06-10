@@ -27,11 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 const nonCoveringIndexPenalty = 10
@@ -99,7 +99,7 @@ func (p *planner) selectIndex(
 		var err error
 		s.spans, err = unconstrainedSpans(s.desc, s.index, s.isDeleteSource)
 		if err != nil {
-			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"table ID = %d, index ID = %d", log.Safe(s.desc.ID), log.Safe(s.index.ID))
 		}
 		return s, nil
@@ -235,7 +235,7 @@ func (p *planner) selectIndex(
 	s.spans, err = spansFromConstraint(
 		s.desc, c.index, constraint, s.valNeededForCol, s.isDeleteSource)
 	if err != nil {
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(
+		return nil, errors.NewAssertionErrorWithWrappedErrf(
 			err, "constraint = %s, table ID = %d, index ID = %d",
 			constraint, log.Safe(s.desc.ID), log.Safe(s.index.ID),
 		)
@@ -626,7 +626,7 @@ func encodeConstraintKey(
 				return nil, err
 			}
 			if len(keys) > 1 {
-				err := pgerror.AssertionFailedf("trying to use multiple keys in index lookup")
+				err := errors.AssertionFailedf("trying to use multiple keys in index lookup")
 				return nil, err
 			}
 			key = keys[0]

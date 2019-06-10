@@ -16,10 +16,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // optTableUpserter implements the upsert operation when it is planned by the
@@ -220,7 +220,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 		} else {
 			rowIndex, ok = tu.ru.FetchColIDtoRowIndex[colID]
 			if !ok {
-				return pgerror.AssertionFailedf("no existing value is available for column")
+				return errors.AssertionFailedf("no existing value is available for column")
 			}
 			tu.resultRow[returnIndex] = fetchRow[rowIndex]
 		}

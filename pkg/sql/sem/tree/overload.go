@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // Overload is one of the overloads of a built-in function.
@@ -393,7 +394,7 @@ func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired *types.T, overloads []overloadImpl, inBinOp bool, exprs ...Expr,
 ) ([]TypedExpr, []overloadImpl, error) {
 	if len(overloads) > math.MaxUint8 {
-		return nil, nil, pgerror.AssertionFailedf("too many overloads (%d > 255)", len(overloads))
+		return nil, nil, errors.AssertionFailedf("too many overloads (%d > 255)", len(overloads))
 	}
 
 	var s typeCheckOverloadState
@@ -406,7 +407,7 @@ func typeCheckOverloadedExprs(
 		// Only one overload can be provided if it has parameters with HomogeneousType.
 		if _, ok := overload.params().(HomogeneousType); ok {
 			if len(overloads) > 1 {
-				return nil, nil, pgerror.AssertionFailedf(
+				return nil, nil, errors.AssertionFailedf(
 					"only one overload can have HomogeneousType parameters")
 			}
 			typedExprs, _, err := TypeCheckSameTypedExprs(ctx, desired, exprs...)
@@ -785,7 +786,7 @@ func checkReturn(
 				)
 			}
 			if des != nil && !typ.ResolvedType().Equivalent(des) {
-				return false, nil, nil, pgerror.AssertionFailedf(
+				return false, nil, nil, errors.AssertionFailedf(
 					"desired constant value type %s but set type %s",
 					log.Safe(des), log.Safe(typ.ResolvedType()),
 				)

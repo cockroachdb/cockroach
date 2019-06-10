@@ -41,8 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // TableRewriteMap maps old table IDs to new table and parent IDs.
@@ -68,13 +68,12 @@ func loadBackupDescs(
 	for i, uri := range uris {
 		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings)
 		if err != nil {
-			return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"failed to read backup descriptor")
+			return nil, errors.Wrapf(err, "failed to read backup descriptor")
 		}
 		backupDescs[i] = desc
 	}
 	if len(backupDescs) == 0 {
-		return nil, pgerror.Newf(pgerror.CodeDataExceptionError, "no backups found")
+		return nil, errors.Newf("no backups found")
 	}
 	return backupDescs, nil
 }
@@ -319,7 +318,7 @@ func allocateTableRewrites(
 				{
 					parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, parentID)
 					if err != nil {
-						return pgerror.NewAssertionErrorWithWrappedErrf(err,
+						return errors.NewAssertionErrorWithWrappedErrf(err,
 							"failed to lookup parent DB %d", log.Safe(parentID))
 					}
 
@@ -912,7 +911,7 @@ func WriteTableDescs(
 			} else {
 				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tables[i].ParentID)
 				if err != nil {
-					return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					return errors.NewAssertionErrorWithWrappedErrf(err,
 						"failed to lookup parent DB %d", log.Safe(tables[i].ParentID))
 				}
 				// TODO(mberhault): CheckPrivilege wants a planner.
@@ -930,7 +929,7 @@ func WriteTableDescs(
 			b.InitPut(kv.Key, &kv.Value, false)
 		}
 		if err := txn.Run(ctx, b); err != nil {
-			if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
+			if _, ok := errors.UnwrapAll(err).(*roachpb.ConditionFailedError); ok {
 				return pgerror.Newf(pgerror.CodeDuplicateObjectError, "table already exists")
 			}
 			return err
@@ -938,14 +937,13 @@ func WriteTableDescs(
 
 		for _, table := range tables {
 			if err := table.Validate(ctx, txn, settings); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"validate table %d", log.Safe(table.ID))
 			}
 		}
 		return nil
 	}()
-	return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-		"restoring table desc and namespace entries")
+	return errors.Wrapf(err, "restoring table desc and namespace entries")
 }
 
 func restoreJobDescription(
@@ -992,12 +990,12 @@ func restoreJobDescription(
 func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.Key, error) {
 	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
 	if err != nil {
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
 	}
 	if !rewritten && bytes.Equal(newKey, key) {
 		// if nothing was changed, we didn't match the top-level key at all.
-		return nil, pgerror.AssertionFailedf(
+		return nil, errors.AssertionFailedf(
 			"no rewrite for span start key: %s", key)
 	}
 	// Modify all spans that begin at the primary index to instead begin at the
@@ -1005,7 +1003,7 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
 	// will be created.
 	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
 	} else if idx == 1 && len(b) == 0 {
 		newKey = keys.MakeTablePrefix(uint32(id))
@@ -1085,7 +1083,7 @@ func restore(
 	for i := range tables {
 		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tables[i]))
 		if err != nil {
-			return mu.res, nil, nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+			return mu.res, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
@@ -1103,8 +1101,7 @@ func restore(
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 	importSpans, _, err := makeImportSpans(spans, backupDescs, highWaterMark, errOnMissingRange)
 	if err != nil {
-		return mu.res, nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"making import requests for %d backups", len(backupDescs))
+		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
 	for i := range importSpans {
@@ -1204,8 +1201,7 @@ func restore(
 
 				importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
 				if pErr != nil {
-					return pgerror.Wrapf(pErr.GoError(), pgerror.CodeDataExceptionError,
-						"importing span %v", importRequest.DataSpan)
+					return errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan)
 
 				}
 
@@ -1215,8 +1211,7 @@ func restore(
 				// Assert that we're actually marking the correct span done. See #23977.
 				if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
 					mu.Unlock()
-					return pgerror.Newf(pgerror.CodeDataExceptionError,
-						"request %d for span %v (to %v) does not match import span for same idx: %v",
+					return errors.Newf("request %d for span %v (to %v) does not match import span for same idx: %v",
 						idx, importRequest.DataSpan, newSpanKey, importSpans[idx],
 					)
 				}
@@ -1238,8 +1233,7 @@ func restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return mu.res, nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"importing %d ranges", len(importSpans))
+		return mu.res, nil, nil, errors.Wrapf(err, "importing %d ranges", len(importSpans))
 	}
 
 	return mu.res, databases, tables, nil
@@ -1495,8 +1489,7 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
 	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, r.job.Payload().Username, r.settings, nil); err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"restoring %d TableDescriptors", len(r.tables))
+		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of

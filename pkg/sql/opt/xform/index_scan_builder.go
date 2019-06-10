@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // indexScanBuilder composes a constrained, limited scan over a table index.
@@ -85,12 +85,12 @@ func (b *indexScanBuilder) addSelect(filters memo.FiltersExpr) {
 	if len(filters) != 0 {
 		if b.indexJoinPrivate.Table == 0 {
 			if b.innerFilters != nil {
-				panic(pgerror.AssertionFailedf("cannot call addSelect methods twice before index join is added"))
+				panic(errors.AssertionFailedf("cannot call addSelect methods twice before index join is added"))
 			}
 			b.innerFilters = filters
 		} else {
 			if b.outerFilters != nil {
-				panic(pgerror.AssertionFailedf("cannot call addSelect methods twice after index join is added"))
+				panic(errors.AssertionFailedf("cannot call addSelect methods twice after index join is added"))
 			}
 			b.outerFilters = filters
 		}
@@ -132,10 +132,10 @@ func (b *indexScanBuilder) addSelectAfterSplit(
 // produces the given set of columns by lookup in the primary index.
 func (b *indexScanBuilder) addIndexJoin(cols opt.ColSet) {
 	if b.indexJoinPrivate.Table != 0 {
-		panic(pgerror.AssertionFailedf("cannot call addIndexJoin twice"))
+		panic(errors.AssertionFailedf("cannot call addIndexJoin twice"))
 	}
 	if b.outerFilters != nil {
-		panic(pgerror.AssertionFailedf("cannot add index join after an outer filter has been added"))
+		panic(errors.AssertionFailedf("cannot add index join after an outer filter has been added"))
 	}
 	b.indexJoinPrivate = memo.IndexJoinPrivate{
 		Table: b.tabID,
@@ -178,7 +178,7 @@ func (b *indexScanBuilder) build(grp memo.RelExpr) {
 	if len(b.outerFilters) == 0 {
 		// indexJoinDef == 0: outerFilters == 0 handled by #1 and #2 above.
 		// indexJoinDef != 0: outerFilters == 0 handled by #3 above.
-		panic(pgerror.AssertionFailedf("outer filter cannot be 0 at this point"))
+		panic(errors.AssertionFailedf("outer filter cannot be 0 at this point"))
 	}
 	b.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: b.outerFilters}, grp)
 }

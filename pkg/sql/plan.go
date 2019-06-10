@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 type planMaker interface {
@@ -735,7 +736,7 @@ func (p *planner) newPlan(
 		if newStmt != nil {
 			return p.newPlan(ctx, newStmt, nil /* desiredTypes */)
 		}
-		return nil, pgerror.AssertionFailedf("unknown statement type: %T", stmt)
+		return nil, errors.AssertionFailedf("unknown statement type: %T", stmt)
 	}
 }
 

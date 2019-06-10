@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type execFactory struct {
@@ -922,7 +922,7 @@ func (ef *execFactory) environmentQuery(query string) (string, error) {
 	}
 
 	if len(r) != 1 {
-		return "", pgerror.AssertionFailedf(
+		return "", errors.AssertionFailedf(
 			"expected env query %q to return a single column, returned %d",
 			query,
 			len(r),
@@ -931,7 +931,7 @@ func (ef *execFactory) environmentQuery(query string) (string, error) {
 
 	s, ok := r[0].(*tree.DString)
 	if !ok {
-		return "", pgerror.AssertionFailedf(
+		return "", errors.AssertionFailedf(
 			"expected env query %q to return a DString, returned %T",
 			query,
 			r[0],

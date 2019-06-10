@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // subquery represents a subquery expression in an expression tree
@@ -40,15 +41,15 @@ type subquery struct {
 // retrieve the Datum result of a subquery.
 func (p *planner) EvalSubquery(expr *tree.Subquery) (result tree.Datum, err error) {
 	if expr.Idx == 0 {
-		return nil, pgerror.AssertionFailedf("subquery %q was not processed, analyzeSubqueries not called?", expr)
+		return nil, errors.AssertionFailedf("subquery %q was not processed, analyzeSubqueries not called?", expr)
 	}
 	if expr.Idx < 0 || expr.Idx-1 >= len(p.curPlan.subqueryPlans) {
-		return nil, pgerror.AssertionFailedf("invalid index %d for %q", expr.Idx, expr)
+		return nil, errors.AssertionFailedf("invalid index %d for %q", expr.Idx, expr)
 	}
 
 	s := &p.curPlan.subqueryPlans[expr.Idx-1]
 	if !s.started {
-		return nil, pgerror.AssertionFailedf("subquery %d (%q) not started prior to evaluation", expr.Idx, expr)
+		return nil, errors.AssertionFailedf("subquery %d (%q) not started prior to evaluation", expr.Idx, expr)
 	}
 	return s.result, nil
 }

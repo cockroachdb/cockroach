@@ -17,13 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ivarBinder is a tree.Visitor that binds ordinal references
@@ -78,7 +77,7 @@ func processExpression(
 	typedExpr, err := tree.TypeCheck(expr, semaCtx, types.Any)
 	if err != nil {
 		// Type checking must succeed by now.
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "%s", expr)
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "%s", expr)
 	}
 
 	// Pre-evaluate constant expressions. This is necessary to avoid repeatedly

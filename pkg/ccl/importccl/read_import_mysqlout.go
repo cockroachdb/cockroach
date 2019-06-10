@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -114,7 +115,7 @@ func (d *mysqloutfileReader) readFile(
 	addRow := func() error {
 		copy(d.conv.datums, row)
 		if err := d.conv.row(ctx, inputIdx, count); err != nil {
-			return wrapRowErr(err, inputName, count, pgerror.CodeDataExceptionError, "")
+			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 		}
 		count++
 

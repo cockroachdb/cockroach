@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // valueEncodePartitionTuple typechecks the datums in maybeTuple. It returns the
@@ -101,7 +101,7 @@ func valueEncodePartitionTuple(
 		}
 		datum, err := typedExpr.Eval(evalCtx)
 		if err != nil {
-			return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, typedExpr.String())
+			return nil, errors.Wrap(err, typedExpr.String())
 		}
 		if err := sqlbase.CheckDatumTypeFitsColumnType(&cols[i], datum.ResolvedType()); err != nil {
 			return nil, err
@@ -195,8 +195,7 @@ func createPartitioningImpl(
 			encodedTuple, err := valueEncodePartitionTuple(
 				tree.PartitionByList, evalCtx, expr, cols)
 			if err != nil {
-				return partDesc, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-					"PARTITION %s", p.Name)
+				return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
 			p.Values = append(p.Values, encodedTuple)
 		}
@@ -220,18 +219,15 @@ func createPartitioningImpl(
 		p.FromInclusive, err = valueEncodePartitionTuple(
 			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.From}, cols)
 		if err != nil {
-			return partDesc, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"PARTITION %s", p.Name)
+			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		p.ToExclusive, err = valueEncodePartitionTuple(
 			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.To}, cols)
 		if err != nil {
-			return partDesc, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"PARTITION %s", p.Name)
+			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		if r.Subpartition != nil {
-			return partDesc, pgerror.Newf(pgerror.CodeDataExceptionError,
-				"PARTITION %s: cannot subpartition a range partition", p.Name)
+			return partDesc, errors.Newf("PARTITION %s: cannot subpartition a range partition", p.Name)
 		}
 		partDesc.Range = append(partDesc.Range, p)
 	}

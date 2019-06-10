@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -216,7 +215,7 @@ func parseExpirationTime(
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
 	ts, err := tree.DatumToHLC(evalCtx, stmtTimestamp, d)
 	if err != nil {
-		return ts, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "SPLIT AT")
+		return ts, errors.Wrap(err, "SPLIT AT")
 	}
 	if ts.GoTime().Before(stmtTimestamp) {
 		return ts, errors.Errorf("SPLIT AT: expiration time should be greater than or equal to current time")

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // buildJoin builds a set of memo groups that represent the given join table
@@ -108,7 +109,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		return outScope
 
 	default:
-		panic(pgerror.AssertionFailedf("unsupported join condition %#v", cond))
+		panic(errors.AssertionFailedf("unsupported join condition %#v", cond))
 	}
 }
 

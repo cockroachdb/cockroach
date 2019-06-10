@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // fkExistenceBatchChecker accumulates foreign key existence checks and sends
@@ -127,7 +128,7 @@ func (f *fkExistenceBatchChecker) runCheck(
 			}
 
 		default:
-			return pgerror.AssertionFailedf("impossible case: fkExistenceCheckBaseHelper has dir=%v", fk.dir)
+			return errors.AssertionFailedf("impossible case: fkExistenceCheckBaseHelper has dir=%v", fk.dir)
 		}
 	}
 
@@ -153,5 +154,5 @@ func (f *SpanKVFetcher) nextBatch(
 
 // getRangesInfo implements the kvBatchFetcher interface.
 func (f *SpanKVFetcher) getRangesInfo() []roachpb.RangeInfo {
-	panic(pgerror.AssertionFailedf("getRangesInfo() called on SpanKVFetcher"))
+	panic(errors.AssertionFailedf("getRangesInfo() called on SpanKVFetcher"))
 }

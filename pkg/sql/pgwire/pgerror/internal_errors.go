@@ -20,22 +20,6 @@ import (
 
 // This file provides facilities to track internal errors.
 
-// AssertionFailedf creates an internal error.
-//
-// TODO(knz): this function exists as a transition until the callers
-// are modified to use the errors package directly.
-var AssertionFailedf = errors.AssertionFailedf
-
-// AssertionFailedWithDepthf creates an internal error.
-//
-// TODO(knz): this function exists as a transition until the callers
-// are modified to use the errors package directly.
-var AssertionFailedWithDepthf = errors.AssertionFailedWithDepthf
-
-// NewAssertionErrorWithWrappedErrf creates an internal error
-// and attaches (but masks) the provided error cause.
-var NewAssertionErrorWithWrappedErrf = errors.NewAssertionErrorWithWrappedErrf
-
 // NewInternalTrackingError instantiates an error
 // meant for use with telemetry.ReportError directly.
 //
@@ -43,7 +27,7 @@ var NewAssertionErrorWithWrappedErrf = errors.NewAssertionErrorWithWrappedErrf
 // above.
 func NewInternalTrackingError(issue int, detail string) error {
 	key := fmt.Sprintf("#%d.%s", issue, detail)
-	err := AssertionFailedWithDepthf(1, "%s", errors.Safe(key))
+	err := errors.AssertionFailedWithDepthf(1, "%s", errors.Safe(key))
 	err = errors.WithTelemetry(err, key)
 	err = errors.WithIssueLink(err, errors.IssueLink{IssueURL: fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issue)})
 	return err

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -95,7 +95,7 @@ func (b *Builder) buildDataSource(
 		case cat.Sequence:
 			return b.buildSequenceSelect(t, inScope)
 		default:
-			panic(pgerror.AssertionFailedf("unknown DataSource type %T", ds))
+			panic(errors.AssertionFailedf("unknown DataSource type %T", ds))
 		}
 
 	case *tree.ParenTableExpr:
@@ -135,7 +135,7 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	default:
-		panic(pgerror.AssertionFailedf("unknown table expr: %T", texpr))
+		panic(errors.AssertionFailedf("unknown table expr: %T", texpr))
 	}
 }
 
@@ -158,7 +158,7 @@ func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 
 		sel, ok = stmt.AST.(*tree.Select)
 		if !ok {
-			panic(pgerror.AssertionFailedf("expected SELECT statement"))
+			panic(errors.AssertionFailedf("expected SELECT statement"))
 		}
 
 		b.views[view] = sel
@@ -557,7 +557,7 @@ func (b *Builder) buildSelectStmt(
 		return b.buildValuesClause(stmt, desiredTypes, inScope)
 
 	default:
-		panic(pgerror.AssertionFailedf("unknown select statement type: %T", stmt))
+		panic(errors.AssertionFailedf("unknown select statement type: %T", stmt))
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -78,7 +79,7 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired *types.T) (ret Type
 				return nil, err
 			case errConstNotInt:
 			default:
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "unexpected error")
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error")
 			}
 		}
 	}
@@ -310,7 +311,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 		oid.semanticType = typ
 		return oid, nil
 	default:
-		return nil, pgerror.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
 }
 
@@ -473,7 +474,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
-		return nil, pgerror.AssertionFailedf("attempt to type byte array literal to %T", typ)
+		return nil, errors.AssertionFailedf("attempt to type byte array literal to %T", typ)
 	}
 
 	// Typing a string literal constant into some value type.
@@ -491,7 +492,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 
 	datum, err := parseStringAs(typ, expr.s, ctx)
 	if datum == nil && err == nil {
-		return nil, pgerror.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
 	return datum, err
 }

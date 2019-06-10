@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -571,7 +571,7 @@ func importPlanHook(
 				// them. After this call, any queries on a table will be served by the newly
 				// imported data.
 				if err := backupccl.WriteTableDescs(ctx, txn, nil, tableDescs, p.User(), p.ExecCfg().Settings, seqValKVs); err != nil {
-					return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "creating tables")
+					return errors.Wrapf(err, "creating tables")
 				}
 
 				// TODO(dt): we should be creating the job with this txn too. Once a job
@@ -669,7 +669,7 @@ func doDistributedCSVTransform(
 	); err != nil {
 
 		// Check if this was a context canceled error and restart if it was.
-		if s, ok := status.FromError(errors.Cause(err)); ok {
+		if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
 			if s.Code() == codes.Canceled && s.Message() == context.Canceled.Error() {
 				return roachpb.BulkOpSummary{}, jobs.NewRetryJobError("node failure")
 			}
