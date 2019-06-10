@@ -812,8 +812,7 @@ func (ex *connExecutor) saveLogicalPlanDescription(
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner
 // when the optimizer hits an error.
 func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Statement) bool {
-	pgerr, ok := pgerror.GetPGCause(err)
-	if !ok || pgerr.Code != pgerror.CodeFeatureNotSupportedError {
+	if !errors.HasUnimplementedError(err) {
 		// We only fallback on "feature not supported" errors.
 		return false
 	}

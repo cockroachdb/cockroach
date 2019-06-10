@@ -133,14 +133,13 @@ func (b *Builder) Build() (err error) {
 			// adding lots of checks for `if err != nil` throughout the code. This is
 			// only possible because the code does not update shared state and does
 			// not manipulate locks.
-			switch e := r.(type) {
-			case builderError:
-				err = e.error
-			case *pgerror.Error:
+			if e, ok := r.(error); ok {
 				err = e
-			default:
-				panic(r)
+				return
 			}
+			// Other panic objects can't be considered "safe" and thus are
+			// propagated as crashes that terminate the session.
+			panic(r)
 		}
 	}()
 
@@ -161,11 +160,17 @@ func (b *Builder) Build() (err error) {
 
 // builderError is used to wrap errors returned by various external APIs that
 // occur during the build process. It exists for us to be able to panic on these
-// errors and then catch them inside Builder.Build even if they are not
-// pgerror.Error.
+// errors and then catch them inside Builder.Build.
 type builderError struct {
-	error
+	error error
 }
+
+// builderError are errors.
+func (b builderError) Error() string { return b.error.Error() }
+
+// Cause implements the causer interface. This is used so that builderErrors
+// can be peeked through by the common error facilities.
+func (b builderError) Cause() error { return b.error }
 
 // unimplementedWithIssueDetailf formats according to a format
 // specifier and returns a Postgres error with the
