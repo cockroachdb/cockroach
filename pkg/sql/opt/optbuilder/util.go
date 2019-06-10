@@ -15,11 +15,13 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 func checkFrom(expr tree.Expr, inScope *scope) {
@@ -396,11 +398,14 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	if err != nil {
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
-		if pgerr, ok := pgerror.GetPGCause(err); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
-			panic(pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
+		if code := pgerror.GetPGCode(err); code == pgcode.InvalidSchemaName {
+			var newErr error
+			newErr = pgerror.Newf(pgcode.InvalidSchemaName,
 				"cannot create %q because the target database or schema does not exist",
-				tree.ErrString(name)).
-				SetHintf("verify that the current database and search_path are valid and/or the target database exists"))
+				tree.ErrString(name))
+			newErr = errors.WithSecondaryError(newErr, err)
+			newErr = errors.WithHint(newErr, "verify that the current database and search_path are valid and/or the target database exists")
+			panic(newErr)
 		}
 		panic(builderError{err})
 	}
