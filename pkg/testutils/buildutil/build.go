@@ -24,10 +24,16 @@ import (
 // VerifyNoImports verifies that a package doesn't depend (directly or
 // indirectly) on forbidden packages. The forbidden packages are specified as
 // either exact matches or prefix matches.
+// A match is not reported if the package that includes the forbidden package
+// is listed in the whitelist.
 // If GOPATH isn't set, it is an indication that the source is not available and
 // the test is skipped.
 func VerifyNoImports(
-	t testing.TB, pkgPath string, cgo bool, forbiddenPkgs, forbiddenPrefixes []string,
+	t testing.TB,
+	pkgPath string,
+	cgo bool,
+	forbiddenPkgs, forbiddenPrefixes []string,
+	whitelist ...string,
 ) {
 
 	// Skip test if source is not available.
@@ -53,7 +59,16 @@ func VerifyNoImports(
 		for _, imp := range pkg.Imports {
 			for _, forbidden := range forbiddenPkgs {
 				if forbidden == imp {
-					return errors.Errorf("%s imports %s, which is forbidden", short(path), short(imp))
+					whitelisted := false
+					for _, w := range whitelist {
+						if path == w {
+							whitelisted = true
+							break
+						}
+					}
+					if !whitelisted {
+						return errors.Errorf("%s imports %s, which is forbidden", short(path), short(imp))
+					}
 				}
 				if forbidden == "c-deps" && imp == "C" && strings.HasPrefix(path, "github.com/cockroachdb/cockroach/pkg") {
 					for _, name := range pkg.CgoFiles {
