@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -782,7 +783,7 @@ func getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName) {
 	}
 	tn, ok := n.(*tree.TableName)
 	if !ok {
-		panic(pgerror.Unimplemented(
+		panic(unimplemented.New(
 			"complex table expression in UPDATE/DELETE",
 			"cannot use a complex table name with DELETE/UPDATE"))
 	}

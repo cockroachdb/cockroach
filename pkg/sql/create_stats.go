@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -204,7 +205,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		columnIDs := make([]sqlbase.ColumnID, len(columns))
 		for i := range columns {
 			if columns[i].Type.Family() == types.JsonFamily {
-				return nil, pgerror.UnimplementedWithIssuef(35844,
+				return nil, unimplemented.NewWithIssuef(35844,
 					"CREATE STATISTICS is not supported for JSON columns")
 			}
 			columnIDs[i] = columns[i].ID

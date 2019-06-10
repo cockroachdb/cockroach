@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // This file contains the implementation of common table expressions. See
@@ -75,7 +76,7 @@ func popCteNameEnvironment(p *planner) error {
 				return err
 			}
 			if seenMutation {
-				return pgerror.UnimplementedWithIssuef(24307,
+				return unimplemented.NewWithIssuef(24307,
 					"common table expression %q with side effects was not used in query", alias)
 			}
 		}
@@ -148,7 +149,7 @@ func (p *planner) getCTEDataSource(tn *tree.TableName) (planDataSource, bool, er
 				// TODO(jordan): figure out how to lift this restriction.
 				// CTE expressions that are used more than once will need to be
 				// pre-evaluated like subqueries, I think.
-				return planDataSource{}, false, pgerror.UnimplementedWithIssuef(21084,
+				return planDataSource{}, false, unimplemented.NewWithIssuef(21084,
 					"unsupported multiple use of CTE clause %q", tree.ErrString(tn))
 			}
 			cteSource.used = true

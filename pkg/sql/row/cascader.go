@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -231,7 +232,7 @@ func spanForIndexValues(
 		}
 
 	case sqlbase.ForeignKeyReference_PARTIAL:
-		return roachpb.Span{}, pgerror.UnimplementedWithIssue(20305, "MATCH PARTIAL not supported")
+		return roachpb.Span{}, unimplemented.NewWithIssue(20305, "MATCH PARTIAL not supported")
 
 	default:
 		return roachpb.Span{}, errors.AssertionFailedf("unknown composite key match type: %v", match)

@@ -16,8 +16,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 type createDatabaseNode struct {
@@ -36,7 +36,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	if tmpl := n.Template; tmpl != "" {
 		// See https://www.postgresql.org/docs/current/static/manage-ag-templatedbs.html
 		if !strings.EqualFold(tmpl, "template0") {
-			return nil, pgerror.UnimplementedWithIssuef(10151,
+			return nil, unimplemented.NewWithIssuef(10151,
 				"unsupported template: %s", tmpl)
 		}
 	}
@@ -46,7 +46,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		if !(strings.EqualFold(enc, "UTF8") ||
 			strings.EqualFold(enc, "UTF-8") ||
 			strings.EqualFold(enc, "UNICODE")) {
-			return nil, pgerror.Unimplementedf("create.db.encoding",
+			return nil, unimplemented.Newf("create.db.encoding",
 				"unsupported encoding: %s", enc)
 		}
 	}
@@ -54,7 +54,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	if col := n.Collate; col != "" {
 		// We only support C and C.UTF-8.
 		if col != "C" && col != "C.UTF-8" {
-			return nil, pgerror.Unimplementedf("create.db.collation",
+			return nil, unimplemented.Newf("create.db.collation",
 				"unsupported collation: %s", col)
 		}
 	}
@@ -62,7 +62,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 	if ctype := n.CType; ctype != "" {
 		// We only support C and C.UTF-8.
 		if ctype != "C" && ctype != "C.UTF-8" {
-			return nil, pgerror.Unimplementedf("create.db.classification",
+			return nil, unimplemented.Newf("create.db.classification",
 				"unsupported character classification: %s", ctype)
 		}
 	}

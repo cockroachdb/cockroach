@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -177,7 +177,7 @@ func (b builderError) Cause() error { return b.error }
 // pg code FeatureNotSupported, wrapped in a
 // builderError.
 func unimplementedWithIssueDetailf(issue int, detail, format string, args ...interface{}) error {
-	return pgerror.UnimplementedWithIssueDetailf(issue, detail, format, args...)
+	return unimplemented.NewWithIssueDetailf(issue, detail, format, args...)
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL

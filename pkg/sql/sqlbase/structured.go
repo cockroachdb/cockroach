@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1827,7 +1828,7 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 			}
 		}
 	}
-	return pgerror.UnimplementedWithIssueDetailf(35730, typInfo, msg)
+	return unimplemented.NewWithIssueDetailf(35730, typInfo, msg)
 }
 
 func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames []string) error {
@@ -2201,16 +2202,16 @@ func (desc *MutableTableDescriptor) DropConstraint(
 ) error {
 	switch detail.Kind {
 	case ConstraintTypePK:
-		return pgerror.Unimplemented("drop-constraint-pk", "cannot drop primary key")
+		return unimplemented.New("drop-constraint-pk", "cannot drop primary key")
 
 	case ConstraintTypeUnique:
-		return pgerror.Unimplementedf("drop-constraint-unique",
+		return unimplemented.Newf("drop-constraint-unique",
 			"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
 			tree.ErrNameStringP(&detail.Index.Name))
 
 	case ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
-			return pgerror.Unimplementedf("rename-constraint-check-mutation",
+			return unimplemented.Newf("rename-constraint-check-mutation",
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.CheckConstraint.Name))
 		}
@@ -2234,7 +2235,7 @@ func (desc *MutableTableDescriptor) DropConstraint(
 		return nil
 
 	default:
-		return pgerror.Unimplementedf(fmt.Sprintf("drop-constraint-%s", detail.Kind),
+		return unimplemented.Newf(fmt.Sprintf("drop-constraint-%s", detail.Kind),
 			"constraint %q has unsupported type", tree.ErrNameString(name))
 	}
 
@@ -2256,7 +2257,7 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 
 	case ConstraintTypeFK:
 		if detail.FK.Validity == ConstraintValidity_Validating {
-			return pgerror.Unimplementedf("rename-constraint-fk-mutation",
+			return unimplemented.Newf("rename-constraint-fk-mutation",
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.FK.Name))
 		}
@@ -2273,7 +2274,7 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 
 	case ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
-			return pgerror.Unimplementedf("rename-constraint-check-mutation",
+			return unimplemented.Newf("rename-constraint-check-mutation",
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.CheckConstraint.Name))
 		}
@@ -2281,7 +2282,7 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 		return nil
 
 	default:
-		return pgerror.Unimplementedf(fmt.Sprintf("rename-constraint-%s", detail.Kind),
+		return unimplemented.Newf(fmt.Sprintf("rename-constraint-%s", detail.Kind),
 			"constraint %q has unsupported type", tree.ErrNameString(oldName))
 	}
 }

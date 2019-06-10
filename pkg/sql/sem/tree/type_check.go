@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -502,10 +503,10 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	for i, t := range expr.Indirection {
 		if t.Slice {
-			return nil, pgerror.UnimplementedWithIssuef(32551, "ARRAY slicing in %s", expr)
+			return nil, unimplemented.NewWithIssuef(32551, "ARRAY slicing in %s", expr)
 		}
 		if i > 0 {
-			return nil, pgerror.UnimplementedWithIssueDetailf(32552, "ind", "multidimensional indexing: %s", expr)
+			return nil, unimplemented.NewWithIssueDetailf(32552, "ind", "multidimensional indexing: %s", expr)
 		}
 
 		beginExpr, err := typeCheckAndRequire(ctx, t.Begin, types.Int, "ARRAY subscript")
@@ -738,9 +739,9 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 		// caller will add the function name as prefix.
 		const msg = "this function is not supported"
 		if def.UnsupportedWithIssue < 0 {
-			return pgerror.Unimplemented(def.Name+"()", msg)
+			return unimplemented.New(def.Name+"()", msg)
 		}
-		return pgerror.UnimplementedWithIssueDetail(def.UnsupportedWithIssue, def.Name, msg)
+		return unimplemented.NewWithIssueDetail(def.UnsupportedWithIssue, def.Name, msg)
 	}
 	if def.Private {
 		return pgerror.Wrapf(errPrivateFunction, pgerror.CodeReservedNameError,

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -99,7 +100,7 @@ func (p *planner) Select(
 		wrapped = s.Select.Select
 		if s.Select.With != nil {
 			if with != nil {
-				return nil, pgerror.UnimplementedWithIssue(24303,
+				return nil, unimplemented.NewWithIssue(24303,
 					"multiple WITH clauses in parentheses")
 			}
 			with = s.Select.With
@@ -489,7 +490,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		}
 		if ts != *p.semaCtx.AsOfTimestamp {
 			return hlc.MaxTimestamp, false,
-				pgerror.UnimplementedWithIssue(35712,
+				unimplemented.NewWithIssue(35712,
 					"cannot specify AS OF SYSTEM TIME with different timestamps")
 		}
 		return ts, true, nil

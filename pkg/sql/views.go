@@ -17,10 +17,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // planDependencyInfo collects the dependencies related to a single
@@ -88,7 +88,7 @@ func (p *planner) analyzeViewQuery(
 
 	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
 	if p.curPlan.hasStar {
-		return nil, nil, pgerror.UnimplementedWithIssue(10028, "views do not currently support * expressions")
+		return nil, nil, unimplemented.NewWithIssue(10028, "views do not currently support * expressions")
 	}
 
 	return p.curPlan.deps, planColumns(sourcePlan), nil

@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -117,59 +116,6 @@ func WrongNumberOfPreparedStatements(n int) error {
 	err = WithCandidateCode(err, pgcode.InvalidPreparedStatementDefinition)
 	return err
 }
-
-// UnimplementedWithIssuef constructs an error with the formatted message
-// and a link to the passed issue. Recorded as "#<issue>" in tracking.
-//
-// TODO(knz): this alias exists as a transition until the callers
-// are modified to use the errors package directly.
-var UnimplementedWithIssuef = unimplemented.NewWithIssuef
-
-// UnimplementedWithIssue constructs an error with the given message
-// and a link to the passed issue. Recorded as "#<issue>" in tracking.
-//
-// TODO(knz): this alias exists as a transition until the callers
-// are modified to use the errors package directly.
-var UnimplementedWithIssue = unimplemented.NewWithIssue
-
-// UnimplementedWithIssueDetail constructs an error with the given message
-// and a link to the passed issue. Recorded as "#<issue>.detail" in tracking.
-// This is useful when we need an extra axis of information to drill down into.
-//
-// TODO(knz): this alias exists as a transition until the callers
-// are modified to use the errors package directly.
-var UnimplementedWithIssueDetail = unimplemented.NewWithIssueDetail
-
-// UnimplementedWithIssueDetailf is like the above
-// but supports message formatting.
-//
-// TODO(knz): this alias exists as a transition until the callers
-// are modified to use the errors package directly.
-var UnimplementedWithIssueDetailf = unimplemented.NewWithIssueDetailf
-
-// UnimplementedWithIssueHint constructs an error with the given
-// message, hint, and a link to the passed issue. Recorded as "#<issue>"
-// in tracking.
-//
-// TODO(knz): this alias exists as a transition until the callers
-// are modified to use the errors package directly.
-var UnimplementedWithIssueHint = unimplemented.NewWithIssueHint
-
-// Unimplemented constructs an unimplemented feature error with a format string.
-//
-// `feature` is used for tracking, and is not included when the error is printed.
-//
-// TODO(knz): this alias exists as a transition until the callers
-// are modified to use the errors package directly.
-var Unimplemented = unimplemented.New
-
-// Unimplementedf constructs an unimplemented feature error.
-//
-// `feature` is used for tracking, and is not included when the error is printed.
-//
-// TODO(knz): this alias exists as a transition until the callers
-// are modified to use the errors package directly.
-var Unimplementedf = unimplemented.Newf
 
 var _ fmt.Formatter = &Error{}
 

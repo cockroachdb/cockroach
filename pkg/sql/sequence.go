@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -228,7 +229,7 @@ func assignSequenceOptions(
 
 		switch option.Name {
 		case tree.SeqOptCycle:
-			return pgerror.UnimplementedWithIssue(20961,
+			return unimplemented.NewWithIssue(20961,
 				"CYCLE option is not supported")
 		case tree.SeqOptNoCycle:
 			// Do nothing; this is the default.
@@ -241,7 +242,7 @@ func assignSequenceOptions(
 			case v == 1:
 				// Do nothing; this is the default.
 			case v > 1:
-				return pgerror.UnimplementedWithIssuef(32567,
+				return unimplemented.NewWithIssuef(32567,
 					"CACHE values larger than 1 are not supported, found %d", v)
 			}
 		case tree.SeqOptIncrement:
