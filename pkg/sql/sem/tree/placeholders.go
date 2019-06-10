@@ -65,7 +65,7 @@ func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
 func (pt PlaceholderTypes) AssertAllSet() error {
 	for i := range pt {
 		if pt[i] == nil {
-			return placeholderTypeAmbiguityError{PlaceholderIdx(i)}
+			return placeholderTypeAmbiguityError(PlaceholderIdx(i))
 		}
 	}
 	return nil
