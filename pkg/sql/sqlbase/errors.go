@@ -64,7 +64,7 @@ func NewUnsupportedSchemaUsageError(name string) error {
 // NewCCLRequiredError creates an error for when a CCL feature is used in an OSS
 // binary.
 func NewCCLRequiredError(err error) error {
-	return pgerror.Wrapf(err, pgerror.CodeCCLRequired, "")
+	return pgerror.WithCandidateCode(err, pgerror.CodeCCLRequired)
 }
 
 // IsCCLRequiredError returns whether the error is a CCLRequired error.
