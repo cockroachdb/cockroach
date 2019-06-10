@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -281,7 +282,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			default:
-				return pgerror.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"unsupported constraint: %T", t.ConstraintDef)
 			}
 
@@ -594,7 +595,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableInjectStats:
 			sd, ok := n.statsData[i]
 			if !ok {
-				return pgerror.AssertionFailedf("missing stats data")
+				return errors.AssertionFailedf("missing stats data")
 			}
 			if err := injectTableStats(params, n.tableDesc.TableDesc(), sd); err != nil {
 				return err
@@ -643,7 +644,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = true
 
 		default:
-			return pgerror.AssertionFailedf("unsupported alter command: %T", cmd)
+			return errors.AssertionFailedf("unsupported alter command: %T", cmd)
 		}
 
 		// Allocate IDs now, so new IDs are available to subsequent commands
@@ -861,8 +862,7 @@ func injectTableStats(
 		params.EvalContext().Txn,
 		`DELETE FROM system.table_statistics WHERE "tableID" = $1`, desc.ID,
 	); err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"failed to delete old stats")
+		return errors.Wrapf(err, "failed to delete old stats")
 	}
 
 	// Insert each statistic.
@@ -919,8 +919,7 @@ func injectTableStats(
 			s.NullCount,
 			histogram,
 		); err != nil {
-			return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"failed to insert stats")
+			return errors.Wrapf(err, "failed to insert stats")
 		}
 	}
 

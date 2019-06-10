@@ -18,14 +18,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // indexCheckOperation implements the checkOperation interface. It is a
@@ -97,7 +96,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	plan, err := params.p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
 	if err != nil {
 		log.Errorf(ctx, "failed to create query plan for query: %s", checkQuery)
-		return pgerror.NewAssertionErrorWithWrappedErrf(err, "could not create query plan")
+		return errors.NewAssertionErrorWithWrappedErrf(err, "could not create query plan")
 	}
 
 	// All columns projected in the plan generated from the query are

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -217,7 +218,7 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 				return tree.NewDString(""), nil
 			}
 			if len(r) > 1 {
-				return nil, pgerror.AssertionFailedf("pg_get_indexdef query has more than 1 result row: %+v", r)
+				return nil, errors.AssertionFailedf("pg_get_indexdef query has more than 1 result row: %+v", r)
 			}
 			return r[0], nil
 		},
@@ -469,7 +470,7 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 	for _, priv := range privs {
 		d, err := availOpts[priv](false /* withGrantOpt */)
 		if err != nil {
-			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"error checking privilege %q", log.Safe(priv))
 		}
 		switch d {
@@ -478,7 +479,7 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 		case tree.DBoolTrue:
 			continue
 		default:
-			return nil, pgerror.AssertionFailedf(
+			return nil, errors.AssertionFailedf(
 				"unexpected privilege check result %v", d)
 		}
 	}
@@ -517,7 +518,7 @@ func evalPrivilegeCheck(
 		case tree.DBoolTrue:
 			continue
 		default:
-			return nil, pgerror.AssertionFailedf("unexpected privilege check result %v", r[0])
+			return nil, errors.AssertionFailedf("unexpected privilege check result %v", r[0])
 		}
 	}
 	return tree.DBoolTrue, nil
@@ -1598,7 +1599,7 @@ SELECT description
 
 func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {
 	if ctx.SessionAccessor == nil {
-		return nil, pgerror.AssertionFailedf("session accessor not set")
+		return nil, errors.AssertionFailedf("session accessor not set")
 	}
 	ok, s, err := ctx.SessionAccessor.GetSessionVar(ctx.Context, settingName, missingOk)
 	if err != nil {
@@ -1612,7 +1613,7 @@ func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (t
 
 func setSessionVar(ctx *tree.EvalContext, settingName, newVal string, isLocal bool) error {
 	if ctx.SessionAccessor == nil {
-		return pgerror.AssertionFailedf("session accessor not set")
+		return errors.AssertionFailedf("session accessor not set")
 	}
 	if isLocal {
 		return pgerror.UnimplementedWithIssuef(32562, "transaction-scoped settings are not supported")

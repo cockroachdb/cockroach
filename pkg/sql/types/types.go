@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -451,54 +452,54 @@ func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string)
 	t := OidToType[o]
 	if family != t.Family() {
 		if family != CollatedStringFamily || StringFamily != t.Family() {
-			panic(pgerror.AssertionFailedf(
+			panic(errors.AssertionFailedf(
 				"oid %s does not match %s", oid.TypeName[o], family))
 		}
 	}
 	if family == ArrayFamily || family == TupleFamily {
-		panic(pgerror.AssertionFailedf("cannot make non-scalar type %s", family))
+		panic(errors.AssertionFailedf("cannot make non-scalar type %s", family))
 	}
 	if family != CollatedStringFamily && locale != "" {
-		panic(pgerror.AssertionFailedf("non-collation type cannot have locale %s", locale))
+		panic(errors.AssertionFailedf("non-collation type cannot have locale %s", locale))
 	}
 
 	if precision < 0 {
-		panic(pgerror.AssertionFailedf("negative precision is not allowed"))
+		panic(errors.AssertionFailedf("negative precision is not allowed"))
 	}
 	switch family {
 	case DecimalFamily, TimeFamily, TimestampFamily, TimestampTZFamily:
 	default:
 		if precision != 0 {
-			panic(pgerror.AssertionFailedf("type %s cannot have precision", family))
+			panic(errors.AssertionFailedf("type %s cannot have precision", family))
 		}
 	}
 
 	if width < 0 {
-		panic(pgerror.AssertionFailedf("negative width is not allowed"))
+		panic(errors.AssertionFailedf("negative width is not allowed"))
 	}
 	switch family {
 	case IntFamily:
 		switch width {
 		case 16, 32, 64:
 		default:
-			panic(pgerror.AssertionFailedf("invalid width %d for IntFamily type", width))
+			panic(errors.AssertionFailedf("invalid width %d for IntFamily type", width))
 		}
 	case FloatFamily:
 		switch width {
 		case 32, 64:
 		default:
-			panic(pgerror.AssertionFailedf("invalid width %d for FloatFamily type", width))
+			panic(errors.AssertionFailedf("invalid width %d for FloatFamily type", width))
 		}
 	case DecimalFamily:
 		if width > precision {
-			panic(pgerror.AssertionFailedf(
+			panic(errors.AssertionFailedf(
 				"decimal scale %d cannot be larger than precision %d", width, precision))
 		}
 	case StringFamily, BytesFamily, CollatedStringFamily, BitFamily:
 		// These types can have any width.
 	default:
 		if width != 0 {
-			panic(pgerror.AssertionFailedf("type %s cannot have width", family))
+			panic(errors.AssertionFailedf("type %s cannot have width", family))
 		}
 	}
 
@@ -518,7 +519,7 @@ func MakeBit(width int32) *T {
 		return typeBit
 	}
 	if width < 0 {
-		panic(pgerror.AssertionFailedf("width %d cannot be negative", width))
+		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
 		Family: BitFamily, Oid: oid.T_bit, Width: width, Locale: &emptyLocale}}
@@ -531,7 +532,7 @@ func MakeVarBit(width int32) *T {
 		return VarBit
 	}
 	if width < 0 {
-		panic(pgerror.AssertionFailedf("width %d cannot be negative", width))
+		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
 		Family: BitFamily, Width: width, Oid: oid.T_varbit, Locale: &emptyLocale}}
@@ -544,7 +545,7 @@ func MakeString(width int32) *T {
 		return String
 	}
 	if width < 0 {
-		panic(pgerror.AssertionFailedf("width %d cannot be negative", width))
+		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_text, Width: width, Locale: &emptyLocale}}
@@ -557,7 +558,7 @@ func MakeVarChar(width int32) *T {
 		return VarChar
 	}
 	if width < 0 {
-		panic(pgerror.AssertionFailedf("width %d cannot be negative", width))
+		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_varchar, Width: width, Locale: &emptyLocale}}
@@ -570,7 +571,7 @@ func MakeChar(width int32) *T {
 		return typeBpChar
 	}
 	if width < 0 {
-		panic(pgerror.AssertionFailedf("width %d cannot be negative", width))
+		panic(errors.AssertionFailedf("width %d cannot be negative", width))
 	}
 	return &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
@@ -599,7 +600,7 @@ func MakeCollatedString(strType *T, locale string) *T {
 		return &T{InternalType: InternalType{
 			Family: CollatedStringFamily, Oid: strType.Oid(), Width: strType.Width(), Locale: &locale}}
 	}
-	panic(pgerror.AssertionFailedf("cannot apply collation to non-string type: %s", strType))
+	panic(errors.AssertionFailedf("cannot apply collation to non-string type: %s", strType))
 }
 
 // MakeDecimal constructs a new instance of a DECIMAL type (oid = T_numeric)
@@ -611,13 +612,13 @@ func MakeDecimal(precision, scale int32) *T {
 		return Decimal
 	}
 	if precision < 0 {
-		panic(pgerror.AssertionFailedf("precision %d cannot be negative", precision))
+		panic(errors.AssertionFailedf("precision %d cannot be negative", precision))
 	}
 	if scale < 0 {
-		panic(pgerror.AssertionFailedf("scale %d cannot be negative", scale))
+		panic(errors.AssertionFailedf("scale %d cannot be negative", scale))
 	}
 	if scale > precision {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"scale %d cannot be larger than precision %d", scale, precision))
 	}
 	return &T{InternalType: InternalType{
@@ -636,7 +637,7 @@ func MakeTime(precision int32) *T {
 		return Time
 	}
 	if precision != 6 {
-		panic(pgerror.AssertionFailedf("precision %d is not currently supported", precision))
+		panic(errors.AssertionFailedf("precision %d is not currently supported", precision))
 	}
 	return &T{InternalType: InternalType{
 		Family: TimeFamily, Oid: oid.T_time, Precision: precision, Locale: &emptyLocale}}
@@ -649,7 +650,7 @@ func MakeTimestamp(precision int32) *T {
 		return &T{InternalType: InternalType{
 			Family: TimestampFamily, Oid: oid.T_timestamp, Precision: precision, Locale: &emptyLocale}}
 	}
-	panic(pgerror.AssertionFailedf("precision %d is not currently supported", precision))
+	panic(errors.AssertionFailedf("precision %d is not currently supported", precision))
 }
 
 // MakeTimestampTZ constructs a new instance of a TIMESTAMPTZ type that has at
@@ -659,7 +660,7 @@ func MakeTimestampTZ(precision int32) *T {
 		return &T{InternalType: InternalType{
 			Family: TimestampTZFamily, Oid: oid.T_timestamptz, Precision: precision, Locale: &emptyLocale}}
 	}
-	panic(pgerror.AssertionFailedf("precision %d is not currently supported", precision))
+	panic(errors.AssertionFailedf("precision %d is not currently supported", precision))
 }
 
 // MakeArray constructs a new instance of an ArrayFamily type with the given
@@ -684,7 +685,7 @@ func MakeTuple(contents []T) *T {
 // given field types and labels.
 func MakeLabeledTuple(contents []T, labels []string) *T {
 	if len(contents) != len(labels) && labels != nil {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"tuple contents and labels must be of same length: %v, %v", contents, labels))
 	}
 	return &T{InternalType: InternalType{
@@ -835,7 +836,7 @@ func (t *T) Name() string {
 		case 32:
 			return "float4"
 		default:
-			panic(pgerror.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
+			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
 		}
 	case INetFamily:
 		return "inet"
@@ -848,7 +849,7 @@ func (t *T) Name() string {
 		case 16:
 			return "int2"
 		default:
-			panic(pgerror.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
+			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
 		}
 	case IntervalFamily:
 		return "interval"
@@ -870,7 +871,7 @@ func (t *T) Name() string {
 		case oid.T_name:
 			return "name"
 		}
-		panic(pgerror.AssertionFailedf("unexpected OID: %d", t.Oid()))
+		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 	case TimeFamily:
 		return "time"
 	case TimestampFamily:
@@ -885,7 +886,7 @@ func (t *T) Name() string {
 	case UuidFamily:
 		return "uuid"
 	default:
-		panic(pgerror.AssertionFailedf("unexpected Family: %s", t.Family()))
+		panic(errors.AssertionFailedf("unexpected Family: %s", t.Family()))
 	}
 }
 
@@ -909,7 +910,7 @@ func (t *T) PGName() string {
 	// Postgres does not have an UNKNOWN[] type. However, CRDB does, so
 	// manufacture a name for it.
 	if t.Family() != ArrayFamily || t.ArrayContents().Family() != UnknownFamily {
-		panic(pgerror.AssertionFailedf("unknown PG name for oid %d", t.Oid()))
+		panic(errors.AssertionFailedf("unknown PG name for oid %d", t.Oid()))
 	}
 	return "_unknown"
 }
@@ -952,7 +953,7 @@ func (t *T) SQLStandardName() string {
 		case 64:
 			return "double precision"
 		default:
-			panic(pgerror.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
+			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
 		}
 	case INetFamily:
 		return "inet"
@@ -966,7 +967,7 @@ func (t *T) SQLStandardName() string {
 		case 64:
 			return "bigint"
 		default:
-			panic(pgerror.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
+			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
 		}
 	case IntervalFamily:
 		return "interval"
@@ -988,7 +989,7 @@ func (t *T) SQLStandardName() string {
 		case oid.T_regtype:
 			return "regtype"
 		default:
-			panic(pgerror.AssertionFailedf("unexpected Oid: %v", log.Safe(t.Oid())))
+			panic(errors.AssertionFailedf("unexpected Oid: %v", log.Safe(t.Oid())))
 		}
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
@@ -1004,7 +1005,7 @@ func (t *T) SQLStandardName() string {
 		case oid.T_name:
 			return "name"
 		}
-		panic(pgerror.AssertionFailedf("unexpected OID: %d", t.Oid()))
+		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 	case TimeFamily:
 		return "time without time zone"
 	case TimestampFamily:
@@ -1018,7 +1019,7 @@ func (t *T) SQLStandardName() string {
 	case UuidFamily:
 		return "uuid"
 	default:
-		panic(pgerror.AssertionFailedf("unexpected Family: %v", log.Safe(t.Family())))
+		panic(errors.AssertionFailedf("unexpected Family: %v", log.Safe(t.Family())))
 	}
 }
 
@@ -1061,7 +1062,7 @@ func (t *T) SQLString() string {
 		case 64:
 			return "INT8"
 		default:
-			panic(pgerror.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
+			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
 		}
 	case StringFamily:
 		return t.stringTypeSQL()
@@ -1184,7 +1185,7 @@ func (t *T) Size() (n int) {
 	temp := *t
 	err := temp.downgradeType()
 	if err != nil {
-		panic(pgerror.AssertionFailedf("error during Size call: %v", err))
+		panic(errors.AssertionFailedf("error during Size call: %v", err))
 	}
 	return temp.InternalType.Size()
 }
@@ -1299,7 +1300,7 @@ func (t *T) upgradeType() error {
 				t.InternalType.Width = 64
 			}
 		default:
-			return pgerror.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
+			return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
 		}
 
 	case FloatFamily:
@@ -1331,7 +1332,7 @@ func (t *T) upgradeType() error {
 				}
 			}
 		default:
-			return pgerror.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
+			return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
 		}
 
 		// Precision should always be set to 0 going forward.
@@ -1349,11 +1350,11 @@ func (t *T) upgradeType() error {
 		case visibleNONE:
 			t.InternalType.Oid = oid.T_text
 		default:
-			return pgerror.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
+			return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
 		}
 		if t.InternalType.Family == StringFamily {
 			if t.InternalType.Locale != nil && len(*t.InternalType.Locale) != 0 {
-				return pgerror.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"STRING type should not have locale: %s", *t.InternalType.Locale)
 			}
 		}
@@ -1366,7 +1367,7 @@ func (t *T) upgradeType() error {
 		case visibleNONE:
 			t.InternalType.Oid = oid.T_bit
 		default:
-			return pgerror.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
+			return errors.AssertionFailedf("unexpected visible type: %d", t.InternalType.VisibleType)
 		}
 
 	case ArrayFamily:
@@ -1386,7 +1387,7 @@ func (t *T) upgradeType() error {
 
 		// Marshaling/unmarshaling nested arrays is not yet supported.
 		if t.ArrayContents().Family() == ArrayFamily {
-			return pgerror.AssertionFailedf("nested array should never be unmarshaled")
+			return errors.AssertionFailedf("nested array should never be unmarshaled")
 		}
 
 		// Zero out fields that may have been used to store information about
@@ -1413,7 +1414,7 @@ func (t *T) upgradeType() error {
 		t.InternalType.Family = StringFamily
 		t.InternalType.Oid = oid.T_name
 		if t.Width() != 0 {
-			return pgerror.AssertionFailedf("name type cannot have non-zero width: %d", t.Width())
+			return errors.AssertionFailedf("name type cannot have non-zero width: %d", t.Width())
 		}
 
 	default:
@@ -1498,13 +1499,13 @@ func (t *T) downgradeType() error {
 		case oid.T_name:
 			t.InternalType.Family = name
 		default:
-			return pgerror.AssertionFailedf("unexpected Oid: %d", t.Oid())
+			return errors.AssertionFailedf("unexpected Oid: %d", t.Oid())
 		}
 
 	case ArrayFamily:
 		// Marshaling/unmarshaling nested arrays is not yet supported.
 		if t.ArrayContents().Family() == ArrayFamily {
-			return pgerror.AssertionFailedf("nested array should never be marshaled")
+			return errors.AssertionFailedf("nested array should never be marshaled")
 		}
 
 		// Downgrade to array representation used before 19.2, in which the array

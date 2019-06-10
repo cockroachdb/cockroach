@@ -1427,7 +1427,7 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			nextPos = pos + 1
 		case rewind:
 			if advInfo.rewCap.rewindPos != ex.extraTxnState.txnRewindPos {
-				return pgerror.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"unexpected rewind position: %d when txn start is: %d",
 					log.Safe(advInfo.rewCap.rewindPos),
 					log.Safe(ex.extraTxnState.txnRewindPos))
@@ -1435,7 +1435,7 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			// txnRewindPos stays unchanged.
 			return nil
 		default:
-			return pgerror.AssertionFailedf(
+			return errors.AssertionFailedf(
 				"unexpected advance code when starting a txn: %s",
 				log.Safe(advInfo.code))
 		}
@@ -1725,12 +1725,12 @@ func (ex *connExecutor) setTransactionModes(
 		}
 	}
 	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
-		return pgerror.AssertionFailedf(
+		return errors.AssertionFailedf(
 			"unknown isolation level: %s", log.Safe(modes.Isolation))
 	}
 	rwMode := modes.ReadWriteMode
 	if modes.AsOf.Expr != nil && (asOfTs == hlc.Timestamp{}) {
-		return pgerror.AssertionFailedf("expected an evaluated AS OF timestamp")
+		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
 	if (asOfTs != hlc.Timestamp{}) {
 		ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs)
@@ -1754,7 +1754,7 @@ func priorityToProto(mode tree.UserPriority) (roachpb.UserPriority, error) {
 	case tree.High:
 		pri = roachpb.MaxUserPriority
 	default:
-		return roachpb.UserPriority(0), pgerror.AssertionFailedf("unknown user priority: %s", log.Safe(mode))
+		return roachpb.UserPriority(0), errors.AssertionFailedf("unknown user priority: %s", log.Safe(mode))
 	}
 	return pri, nil
 }
@@ -1998,7 +1998,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			return advanceInfo{}, err
 		}
 	default:
-		return advanceInfo{}, pgerror.AssertionFailedf(
+		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", log.Safe(advInfo.txnEvent))
 	}
 

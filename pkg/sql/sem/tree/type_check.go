@@ -265,7 +265,7 @@ func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 // desired.
 func TypeCheck(expr Expr, ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	if desired == nil {
-		return nil, pgerror.AssertionFailedf(
+		return nil, errors.AssertionFailedf(
 			"the desired type for tree.TypeCheck cannot be nil, use types.Any instead: %T", expr)
 	}
 
@@ -1002,7 +1002,7 @@ func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
 		// Non-nullity and non-negativity will be checked later.
 		requiredType = types.Int
 	default:
-		return pgerror.AssertionFailedf("unexpected WindowFrameMode: %d", log.Safe(f.Mode))
+		return errors.AssertionFailedf("unexpected WindowFrameMode: %d", log.Safe(f.Mode))
 	}
 	if startBound.HasOffset() {
 		typedStartOffsetExpr, err := typeCheckAndRequire(ctx, startBound.OffsetExpr, requiredType, "window frame start")
@@ -2022,7 +2022,7 @@ func typeCheckSameTypedConsts(
 			reqTyp = typedExpr.ResolvedType()
 		}
 	}
-	return nil, pgerror.AssertionFailedf("should throw error above")
+	return nil, errors.AssertionFailedf("should throw error above")
 }
 
 // Used to type check all constants with the optional desired type. The
@@ -2246,7 +2246,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 				}
 
 			default:
-				panic(pgerror.AssertionFailedf("unhandled state: %v", log.Safe(v.state[arg.Idx])))
+				panic(errors.AssertionFailedf("unhandled state: %v", log.Safe(v.state[arg.Idx])))
 			}
 			return false, expr
 		}
@@ -2273,7 +2273,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 				// this cast.
 
 			default:
-				panic(pgerror.AssertionFailedf("unhandled state: %v", v.state[arg.Idx]))
+				panic(errors.AssertionFailedf("unhandled state: %v", v.state[arg.Idx]))
 			}
 			return false, expr
 		}
@@ -2292,7 +2292,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 			// We already decided not to use casts, nothing to do.
 
 		default:
-			panic(pgerror.AssertionFailedf("unhandled state: %v", v.state[t.Idx]))
+			panic(errors.AssertionFailedf("unhandled state: %v", v.state[t.Idx]))
 		}
 	}
 	return true, expr

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // srf represents an srf expression in an expression tree
@@ -54,7 +55,7 @@ func (s *srf) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr
 
 // Eval is part of the tree.TypedExpr interface.
 func (s *srf) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.AssertionFailedf("srf must be replaced before evaluation"))
+	panic(errors.AssertionFailedf("srf must be replaced before evaluation"))
 }
 
 var _ tree.Expr = &srf{}

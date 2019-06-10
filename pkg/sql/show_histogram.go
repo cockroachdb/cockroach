@@ -16,12 +16,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Ideally, we would want upper_bound to have the type of the column the
@@ -57,7 +57,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 				return nil, fmt.Errorf("histogram %d not found", n.HistogramID)
 			}
 			if len(row) != 1 {
-				return nil, pgerror.AssertionFailedf("expected 1 column from internal query")
+				return nil, errors.AssertionFailedf("expected 1 column from internal query")
 			}
 			if row[0] == tree.DNull {
 				// We found a statistic, but it has no histogram.

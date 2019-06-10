@@ -19,12 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // This file contains facilities to encode primary and secondary
@@ -679,7 +678,7 @@ func EncodeInvertedIndexKeys(
 	keyPrefix []byte,
 ) (key [][]byte, err error) {
 	if len(index.ColumnIDs) > 1 {
-		return nil, pgerror.AssertionFailedf("trying to apply inverted index to more than one column")
+		return nil, errors.AssertionFailedf("trying to apply inverted index to more than one column")
 	}
 
 	var val tree.Datum
@@ -704,7 +703,7 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 	case *tree.DJSON:
 		return json.EncodeInvertedIndexKeys(inKey, (t.JSON))
 	}
-	return nil, pgerror.AssertionFailedf("trying to apply inverted index to non JSON type")
+	return nil, errors.AssertionFailedf("trying to apply inverted index to non JSON type")
 }
 
 // EncodeSecondaryIndex encodes key/values for a secondary

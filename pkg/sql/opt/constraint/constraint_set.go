@@ -16,8 +16,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // Unconstrained is an empty constraint set which does not impose any
@@ -310,7 +310,7 @@ func (s *Set) allocConstraint(capacity int) *Constraint {
 
 	// Subsequent constraints extend slice.
 	if cap(s.otherConstraints) < capacity {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"correct capacity should have been set when otherConstraints was allocated"))
 	}
 

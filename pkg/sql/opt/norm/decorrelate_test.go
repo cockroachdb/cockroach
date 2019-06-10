@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // TestAllAggsIgnoreNullsOrNullOnEmpty verifies the assumption made in
@@ -30,7 +30,7 @@ func TestAllAggsIgnoreNullsOrNullOnEmpty(t *testing.T) {
 			continue
 		}
 		if !opt.AggregateIgnoresNulls(op) && !opt.AggregateIsNullOnEmpty(op) {
-			panic(pgerror.AssertionFailedf(
+			panic(errors.AssertionFailedf(
 				"%s does not ignore nulls and is not null on empty", log.Safe(op),
 			))
 		}

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -321,7 +321,7 @@ func (ts *txnState) setReadOnlyMode(mode tree.ReadWriteMode) error {
 		}
 		ts.readOnly = false
 	default:
-		return pgerror.AssertionFailedf("unknown read mode: %s", log.Safe(mode))
+		return errors.AssertionFailedf("unknown read mode: %s", log.Safe(mode))
 	}
 	return nil
 }

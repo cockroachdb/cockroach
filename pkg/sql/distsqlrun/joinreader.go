@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // TODO(radu): we currently create one batch at a time and run the KV operations
@@ -127,7 +126,7 @@ func newJoinReader(
 	output RowReceiver,
 ) (*joinReader, error) {
 	if spec.Visibility != distsqlpb.ScanVisibility_PUBLIC {
-		return nil, pgerror.AssertionFailedf("joinReader specified with visibility %+v", spec.Visibility)
+		return nil, errors.AssertionFailedf("joinReader specified with visibility %+v", spec.Visibility)
 	}
 
 	jr := &joinReader{

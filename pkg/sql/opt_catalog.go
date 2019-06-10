@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // optCatalog implements the cat.Catalog interface over the SchemaResolver
@@ -212,7 +213,7 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 	case *optSequence:
 		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
 	default:
-		return pgerror.AssertionFailedf("invalid object type: %T", o)
+		return errors.AssertionFailedf("invalid object type: %T", o)
 	}
 }
 
@@ -228,7 +229,7 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 	case *optSequence:
 		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
 	default:
-		return pgerror.AssertionFailedf("invalid object type: %T", o)
+		return errors.AssertionFailedf("invalid object type: %T", o)
 	}
 }
 
@@ -263,7 +264,7 @@ func (oc *optCatalog) dataSourceForDesc(
 		ds = newOptSequence(desc, name)
 
 	default:
-		return nil, pgerror.AssertionFailedf("unexpected table descriptor: %+v", desc)
+		return nil, errors.AssertionFailedf("unexpected table descriptor: %+v", desc)
 	}
 
 	oc.dataSources[desc] = ds
@@ -1152,7 +1153,7 @@ func (fk *optForeignKeyConstraint) ColumnCount() int {
 // OriginColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i int) int {
 	if originTable.ID() != fk.originTable {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"invalid table %d passed to OriginColumnOrdinal (expected %d)",
 			originTable.ID(), fk.originTable,
 		))
@@ -1161,7 +1162,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 	tab := originTable.(*optTable)
 	index, err := tab.desc.FindIndexByID(fk.originIndex)
 	if err != nil {
-		panic(pgerror.AssertionFailedf("%v", err))
+		panic(errors.AssertionFailedf("%v", err))
 	}
 
 	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
@@ -1171,7 +1172,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 // ReferencedColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.Table, i int) int {
 	if referencedTable.ID() != fk.referencedTable {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"invalid table %d passed to ReferencedColumnOrdinal (expected %d)",
 			referencedTable.ID(), fk.referencedTable,
 		))
@@ -1179,7 +1180,7 @@ func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.T
 	tab := referencedTable.(*optTable)
 	index, err := tab.desc.FindIndexByID(fk.referencedIndex)
 	if err != nil {
-		panic(pgerror.AssertionFailedf("%v", err))
+		panic(errors.AssertionFailedf("%v", err))
 	}
 
 	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])

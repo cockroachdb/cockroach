@@ -215,11 +215,11 @@ var errInvalidDbPrefix = errors.WithHint(
 	"verify that the current database is set")
 
 func newInvalidVirtualSchemaError() error {
-	return pgerror.AssertionFailedf("virtualSchema cannot have both the populate and generator functions defined")
+	return errors.AssertionFailedf("virtualSchema cannot have both the populate and generator functions defined")
 }
 
 func newInvalidVirtualDefEntryError() error {
-	return pgerror.AssertionFailedf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
+	return errors.AssertionFailedf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
 }
 
 // getPlanInfo returns the column metadata and a constructor for a new
@@ -322,13 +322,13 @@ func NewVirtualSchemaHolder(
 			tableDesc, err := def.initVirtualTableDesc(ctx, st, id)
 
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to initialize %s", log.Safe(def.getSchema()))
 			}
 
 			if schema.tableValidator != nil {
 				if err := schema.tableValidator(&tableDesc); err != nil {
-					return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "programmer error")
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programmer error")
 				}
 			}
 

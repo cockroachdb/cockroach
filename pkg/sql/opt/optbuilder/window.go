@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // windowInfo stores information about a window function call.
@@ -48,7 +48,7 @@ func (w *windowInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.Ty
 
 // Eval is part of the tree.TypedExpr interface.
 func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.AssertionFailedf("windowInfo must be replaced before evaluation"))
+	panic(errors.AssertionFailedf("windowInfo must be replaced before evaluation"))
 }
 
 var _ tree.Expr = &windowInfo{}
@@ -318,7 +318,7 @@ func (b *Builder) getTypedWindowArgs(w *windowInfo) []tree.TypedExpr {
 		if len(argExprs) < 3 {
 			null, err := tree.ReType(tree.DNull, argExprs[0].ResolvedType())
 			if err != nil {
-				panic(pgerror.NewAssertionErrorWithWrappedErrf(err, "error calling tree.ReType"))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "error calling tree.ReType"))
 			}
 			argExprs = append(argExprs, null)
 		}

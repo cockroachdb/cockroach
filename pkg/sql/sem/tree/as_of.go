@@ -79,7 +79,7 @@ func EvalAsOfTimestamp(
 
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
 	ts, err := DatumToHLC(evalCtx, stmtTimestamp, d)
-	return ts, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "AS OF SYSTEM TIME")
+	return ts, errors.Wrap(err, "AS OF SYSTEM TIME")
 }
 
 // DatumToHLC performs the conversion from a Datum to an HLC timestamp.

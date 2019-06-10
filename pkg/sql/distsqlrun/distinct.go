@@ -17,7 +17,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -25,7 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // Distinct is the physical processor implementation of the DISTINCT relational operator.
@@ -71,7 +71,7 @@ func NewDistinct(
 	output RowReceiver,
 ) (RowSourcedProcessor, error) {
 	if len(spec.DistinctColumns) == 0 {
-		return nil, pgerror.AssertionFailedf("0 distinct columns specified for distinct processor")
+		return nil, errors.AssertionFailedf("0 distinct columns specified for distinct processor")
 	}
 
 	var distinctCols, orderedCols util.FastIntSet
@@ -87,7 +87,7 @@ func NewDistinct(
 		distinctCols.Add(int(col))
 	}
 	if !orderedCols.SubsetOf(distinctCols) {
-		return nil, pgerror.AssertionFailedf("ordered cols must be a subset of distinct cols")
+		return nil, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
 	}
 
 	ctx := flowCtx.EvalCtx.Ctx()

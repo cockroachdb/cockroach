@@ -51,9 +51,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // ProjectExpr is a projection operator.
@@ -86,7 +86,7 @@ func (e *ProjectExpr) Child(nth int) opt.Expr {
 	case 1:
 		return &e.Projections
 	}
-	panic(pgerror.AssertionFailedf("child index out of range"))
+	panic(errors.AssertionFailedf("child index out of range"))
 }
 
 func (e *ProjectExpr) Private() interface{} {
@@ -108,7 +108,7 @@ func (e *ProjectExpr) SetChild(nth int, child opt.Expr) {
 		e.Projections = *child.(*ProjectionsExpr)
 		return
 	}
-	panic(pgerror.AssertionFailedf("child index out of range"))
+	panic(errors.AssertionFailedf("child index out of range"))
 }
 
 func (e *ProjectExpr) Memo() *Memo {
@@ -149,14 +149,14 @@ func (e *ProjectExpr) bestProps() *bestProps {
 
 func (e *ProjectExpr) setNext(member RelExpr) {
 	if e.next != nil {
-		panic(pgerror.AssertionFailedf("expression already has its next defined: %s", e))
+		panic(errors.AssertionFailedf("expression already has its next defined: %s", e))
 	}
 	e.next = member
 }
 
 func (e *ProjectExpr) setGroup(member RelExpr) {
 	if e.grp != nil {
-		panic(pgerror.AssertionFailedf("expression is already in a group: %s", e))
+		panic(errors.AssertionFailedf("expression is already in a group: %s", e))
 	}
 	e.grp = member.group()
 	LastGroupMember(member).setNext(e)
@@ -194,7 +194,7 @@ var EmptyProjectionsExpr = ProjectionsExpr{}
 var _ opt.ScalarExpr = &ProjectionsExpr{}
 
 func (e *ProjectionsExpr) ID() opt.ScalarID {
-	panic(pgerror.AssertionFailedf("lists have no id"))
+	panic(errors.AssertionFailedf("lists have no id"))
 }
 
 func (e *ProjectionsExpr) Op() opt.Operator {
@@ -254,7 +254,7 @@ func (e *ProjectionsItem) Child(nth int) opt.Expr {
 	case 0:
 		return e.Element
 	}
-	panic(pgerror.AssertionFailedf("child index out of range"))
+	panic(errors.AssertionFailedf("child index out of range"))
 }
 
 func (e *ProjectionsItem) Private() interface{} {
@@ -273,7 +273,7 @@ func (e *ProjectionsItem) SetChild(nth int, child opt.Expr) {
 		e.Element = child.(opt.ScalarExpr)
 		return
 	}
-	panic(pgerror.AssertionFailedf("child index out of range"))
+	panic(errors.AssertionFailedf("child index out of range"))
 }
 
 func (e *ProjectionsItem) DataType() *types.T {
@@ -312,7 +312,7 @@ func (e *SortExpr) Child(nth int) opt.Expr {
 	if nth == 0 {
 		return e.Input
 	}
-	panic(pgerror.AssertionFailedf("child index out of range"))
+	panic(errors.AssertionFailedf("child index out of range"))
 }
 
 func (e *SortExpr) Private() interface{} {
@@ -330,7 +330,7 @@ func (e *SortExpr) SetChild(nth int, child opt.Expr) {
 		e.Input = child.(RelExpr)
 		return
 	}
-	panic(pgerror.AssertionFailedf("child index out of range"))
+	panic(errors.AssertionFailedf("child index out of range"))
 }
 
 func (e *SortExpr) Memo() *Memo {
@@ -370,11 +370,11 @@ func (e *SortExpr) group() exprGroup {
 }
 
 func (e *SortExpr) setNext(member RelExpr) {
-	panic(pgerror.AssertionFailedf("setNext cannot be called on enforcers"))
+	panic(errors.AssertionFailedf("setNext cannot be called on enforcers"))
 }
 
 func (e *SortExpr) setGroup(member exprGroup) {
-	panic(pgerror.AssertionFailedf("setGroup cannot be called on enforcers"))
+	panic(errors.AssertionFailedf("setGroup cannot be called on enforcers"))
 }
 
 func (m *Memo) MemoizeProject(
@@ -422,7 +422,7 @@ func (in *interner) InternExpr(e opt.Expr) opt.Expr {
 	case *ProjectionsItem:
 		return in.InternProjectionsItem(t)
 	default:
-		panic(pgerror.AssertionFailedf("unhandled op: %s", e.Op()))
+		panic(errors.AssertionFailedf("unhandled op: %s", e.Op()))
 	}
 }
 
@@ -491,7 +491,7 @@ func (b *logicalPropsBuilder) buildProps(e RelExpr, rel *props.Relational) {
 	case *ProjectExpr:
 		b.buildProjectProps(t, rel)
 	default:
-		panic(pgerror.AssertionFailedf("unhandled type: %s", t.Op()))
+		panic(errors.AssertionFailedf("unhandled type: %s", t.Op()))
 	}
 }
 ----

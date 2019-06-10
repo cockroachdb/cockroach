@@ -479,7 +479,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use panic(pgerror.AssertionFailedf()) instead", s)
+			t.Errorf("\n%s <- forbidden; use panic(errors.AssertionFailedf()) instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -509,7 +509,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use pgerror.AssertionFailedf() instead", s)
+			t.Errorf("\n%s <- forbidden; use errors.AssertionFailedf() instead", s)
 		}); err != nil {
 			t.Error(err)
 		}

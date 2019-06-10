@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // Discard implements the DISCARD statement.
@@ -37,7 +38,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		// DEALLOCATE ALL
 		p.preparedStatements.DeleteAll(ctx)
 	default:
-		return nil, pgerror.AssertionFailedf("unknown mode for DISCARD: %d", s.Mode)
+		return nil, errors.AssertionFailedf("unknown mode for DISCARD: %d", s.Mode)
 	}
 	return newZeroNode(nil /* columns */), nil
 }

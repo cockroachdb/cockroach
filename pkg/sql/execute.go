@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // fillInPlaceholder helps with the EXECUTE foo(args) SQL statement: it takes in
@@ -39,7 +40,7 @@ func fillInPlaceholders(
 
 		typ, ok := ps.ValueType(idx)
 		if !ok {
-			return nil, pgerror.AssertionFailedf("no type for placeholder %s", idx)
+			return nil, errors.AssertionFailedf("no type for placeholder %s", idx)
 		}
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(
 			e, typ, "EXECUTE parameter", /* context */

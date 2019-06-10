@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
 )
 
@@ -378,13 +378,13 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		if tableLookup != nil {
 			other, err := tableLookup(fk.Table)
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"error resolving table %d referenced in foreign key",
 					log.Safe(fk.Table))
 			}
 			otherIdx, err := other.FindIndexByID(fk.Index)
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"error resolving index %d in table %s referenced in foreign key",
 					log.Safe(fk.Index), other.Name)
 			}
@@ -407,13 +407,13 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		if tableLookup != nil {
 			colsUsed, err := c.ColumnsUsed(desc)
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"error computing columns used in check constraint %q", c.Name)
 			}
 			for _, colID := range colsUsed {
 				col, err := desc.FindColumnByID(colID)
 				if err != nil {
-					return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 						"error finding column %d in table %s", log.Safe(colID), desc.Name)
 				}
 				detail.Columns = append(detail.Columns, col.Name)

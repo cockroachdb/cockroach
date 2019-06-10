@@ -15,13 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type csvInputReader struct {
@@ -186,7 +187,7 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 				}
 			}
 			if err := conv.row(ctx, batch.fileIndex, rowNum); err != nil {
-				return wrapRowErr(err, batch.file, rowNum, pgerror.CodeDataExceptionError, "")
+				return wrapRowErr(err, batch.file, rowNum, pgcode.Uncategorized, "")
 			}
 		}
 	}

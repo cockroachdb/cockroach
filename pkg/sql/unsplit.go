@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type unsplitNode struct {
@@ -164,7 +164,7 @@ func (n *unsplitNode) Next(params runParams) (bool, error) {
 	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
 		ctx := tree.NewFmtCtx(tree.FmtSimple)
 		row.Format(ctx)
-		return false, pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "could not UNSPLIT AT %s", ctx)
+		return false, errors.Wrapf(err, "could not UNSPLIT AT %s", ctx)
 	}
 
 	n.run.lastUnsplitKey = rowKey

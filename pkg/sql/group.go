@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // A groupNode implements the planNode interface and handles the grouping logic.
@@ -496,7 +497,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 						var err error
 						arguments[i-1], err = t.Exprs[i].(tree.TypedExpr).Eval(evalContext)
 						if err != nil {
-							v.err = pgerror.AssertionFailedf("can't evaluate %s - %v", t.Exprs[i].String(), err)
+							v.err = errors.AssertionFailedf("can't evaluate %s - %v", t.Exprs[i].String(), err)
 							return false, expr
 						}
 					}

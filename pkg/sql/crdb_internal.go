@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 const crdbInternalName = "crdb_internal"
@@ -599,7 +600,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 		sqlStats := p.statsCollector.SQLStats()
 		if sqlStats == nil {
-			return pgerror.AssertionFailedf(
+			return errors.AssertionFailedf(
 				"cannot access sql statistics from this context")
 		}
 
@@ -1866,7 +1867,7 @@ CREATE TABLE crdb_internal.zones (
 			if entry, ok := namespace[sqlbase.ID(id)]; ok {
 				return uint32(entry.parentID), entry.name, nil
 			}
-			return 0, "", pgerror.AssertionFailedf(
+			return 0, "", errors.AssertionFailedf(
 				"object with ID %d does not exist", log.Safe(id))
 		}
 
@@ -1972,13 +1973,13 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to extract bytes for key %q", key)
 			}
 
 			var d roachpb.NodeDescriptor
 			if err := protoutil.Unmarshal(bytes, &d); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
 			}
 
@@ -2012,13 +2013,13 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		if err := g.IterateInfos(gossip.KeyStorePrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to extract bytes for key %q", key)
 			}
 
 			var desc roachpb.StoreDescriptor
 			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
 			}
 
@@ -2103,13 +2104,13 @@ CREATE TABLE crdb_internal.gossip_liveness (
 		if err := g.IterateInfos(gossip.KeyNodeLivenessPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to extract bytes for key %q", key)
 			}
 
 			var l storagepb.Liveness
 			if err := protoutil.Unmarshal(bytes, &l); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
 			}
 			nodes = append(nodes, nodeInfo{
@@ -2170,18 +2171,18 @@ CREATE TABLE crdb_internal.gossip_alerts (
 		if err := g.IterateInfos(gossip.KeyNodeHealthAlertPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to extract bytes for key %q", key)
 			}
 
 			var d statuspb.HealthCheckResult
 			if err := protoutil.Unmarshal(bytes, &d); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
 			}
 			nodeID, err := gossip.NodeIDFromKey(key, gossip.KeyNodeHealthAlertPrefix)
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse node ID from key %q", key)
 			}
 			results = append(results, resultWithNodeID{nodeID, d})

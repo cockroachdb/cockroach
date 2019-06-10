@@ -18,9 +18,9 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // FmtFlags carries options for the pretty-printer.
@@ -207,7 +207,7 @@ func NewFmtCtx(f FmtFlags) *FmtCtx {
 // NewFmtCtxEx creates a FmtCtx.
 func NewFmtCtxEx(f FmtFlags, ann *Annotations) *FmtCtx {
 	if ann == nil && f&flagsRequiringAnnotations != 0 {
-		panic(pgerror.AssertionFailedf("no Annotations provided"))
+		panic(errors.AssertionFailedf("no Annotations provided"))
 	}
 	ctx := fmtCtxPool.Get().(*FmtCtx)
 	ctx.flags = f
@@ -236,7 +236,7 @@ func (ctx *FmtCtx) WithReformatTableNames(tableNameFmt func(*FmtCtx, *TableName)
 // restores the old flags.
 func (ctx *FmtCtx) WithFlags(flags FmtFlags, fn func()) {
 	if ctx.ann == nil && flags&flagsRequiringAnnotations != 0 {
-		panic(pgerror.AssertionFailedf("no Annotations provided"))
+		panic(errors.AssertionFailedf("no Annotations provided"))
 	}
 	oldFlags := ctx.flags
 	ctx.flags = flags

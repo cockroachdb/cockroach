@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 // ExprFmtInterceptor is a callback that can be set to a custom formatting
@@ -810,7 +810,7 @@ func frameBoundName(b tree.WindowFrameBoundType) string {
 	case tree.OffsetFollowing, tree.OffsetPreceding:
 		return "offset"
 	}
-	panic(pgerror.AssertionFailedf("unexpected bound"))
+	panic(errors.AssertionFailedf("unexpected bound"))
 }
 
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to

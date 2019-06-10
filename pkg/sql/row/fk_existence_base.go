@@ -13,13 +13,13 @@
 package row
 
 import (
-	"errors"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // fkExistenceCheckBaseHelper is an auxiliary struct that facilitates FK existence
@@ -126,7 +126,7 @@ func makeFkExistenceCheckBaseHelper(
 	// Look up the searched table.
 	searchTable := otherTables[ref.Table].Desc
 	if searchTable == nil {
-		return ret, pgerror.AssertionFailedf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
+		return ret, errors.AssertionFailedf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	// Look up the searched index.
 	searchIdx, err := searchTable.FindIndexByID(ref.Index)
@@ -236,7 +236,7 @@ func computeFkCheckColumnIDs(
 		return nil, pgerror.UnimplementedWithIssue(20305, "MATCH PARTIAL not supported")
 
 	default:
-		return nil, pgerror.AssertionFailedf("unknown composite key match type: %v", match)
+		return nil, errors.AssertionFailedf("unknown composite key match type: %v", match)
 	}
 }
 
