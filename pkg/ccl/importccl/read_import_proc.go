@@ -671,7 +671,7 @@ func ingestKvs(
 		for i := range buf {
 			if err := adder.Add(ctx, buf[i].Key, buf[i].Value.RawBytes); err != nil {
 				if _, ok := err.(storagebase.DuplicateKeyError); ok {
-					return errors.Wrap(err, "")
+					return errors.WithStack(err)
 				}
 				return err
 			}
@@ -713,7 +713,7 @@ func ingestKvs(
 
 	if err := adder.Flush(ctx); err != nil {
 		if err, ok := err.(storagebase.DuplicateKeyError); ok {
-			return errors.Wrap(err, "")
+			return errors.WithStack(err)
 		}
 		return err
 	}
