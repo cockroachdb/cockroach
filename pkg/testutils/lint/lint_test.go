@@ -521,51 +521,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestPGErrorWrap", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(
-			pkgDir,
-			"git",
-			"grep",
-			"-nE",
-			`[^[:alnum:]]errors\.Wrap`,
-			`--`,
-			`sql`,
-			// `ccl`,
-			`:!sql/pgwire/pgerror/*`,
-			`:!*_test.go`,
-			`:!*/execgen/*`,
-			`:!*/optgen/*`,
-			`:!*/langgen/*`,
-			`:!sql/logictest/*`,
-			`:!*/testutils/*`,
-			`:!*/workloadccl/*`,
-			`:!*/storageccl/*`,
-			`:!*/baseccl/*`,
-			`:!*/cdctest/*`,
-			`:!*/cliccl/*`,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use pgerror.Wrapf/NewAssertionErrorWithWrappedErrf() instead", s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	t.Run("TestTodoStyle", func(t *testing.T) {
 		t.Parallel()
 		// TODO(tamird): enforce presence of name.
@@ -718,39 +673,6 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(filter, func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'rpc.NewServer' instead", s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
-	t.Run("TestPGErrors", func(t *testing.T) {
-		t.Parallel()
-		// TODO(justin): we should expand the packages this applies to as possible.
-		cmd, stderr, filter, err := dirCmd(pkgDir,
-			"git",
-			"grep",
-			"-nE",
-			`((fmt|errors).Errorf|errors.New)`,
-			"--",
-			"sql/parser/*.go",
-			// "util/ipaddr/*.go", // removed until `roachpb` stops depending on `ipaddr`, see #37075
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'pgerror.NewErrorf' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
