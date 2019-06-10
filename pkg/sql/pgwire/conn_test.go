@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -175,7 +176,7 @@ func TestConn(t *testing.T) {
 	expectSync(ctx, t, &rd)
 
 	// Test that parse error turns into SendError.
-	expectSendError(ctx, t, pgerror.CodeSyntaxError, &rd, conn)
+	expectSendError(ctx, t, pgcode.Syntax, &rd, conn)
 
 	clientWG.Done()
 

@@ -16,6 +16,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -829,6 +830,6 @@ func upsertExprsAndIndex(
 			return false, onConflict.Exprs, &tableDesc.Indexes[i], nil
 		}
 	}
-	return false, nil, nil, pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
+	return false, nil, nil, pgerror.Newf(pgcode.InvalidColumnReference,
 		"there is no unique or exclusion constraint matching the ON CONFLICT specification")
 }

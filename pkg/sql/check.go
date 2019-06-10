@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -54,7 +55,7 @@ func validateCheckExpr(
 		return err
 	}
 	if rows.Len() > 0 {
-		return pgerror.Newf(pgerror.CodeCheckViolationError,
+		return pgerror.Newf(pgcode.CheckViolation,
 			"validation of CHECK %q failed on row: %s",
 			expr.String(), labeledRowValues(tableDesc.Columns, rows))
 	}
@@ -236,7 +237,7 @@ func validateForeignKey(
 			return err
 		}
 		if values.Len() > 0 {
-			return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			return pgerror.Newf(pgcode.ForeignKeyViolation,
 				"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
 				formatValues(colNames, values), srcIdx.ForeignKey.Name,
 			)
@@ -261,7 +262,7 @@ func validateForeignKey(
 		return err
 	}
 	if values.Len() > 0 {
-		return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+		return pgerror.Newf(pgcode.ForeignKeyViolation,
 			"foreign key violation: %q row %s has no match in %q",
 			srcTable.Name, formatValues(colNames, values), targetTable.Name)
 	}

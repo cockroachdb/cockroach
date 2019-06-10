@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -229,10 +230,10 @@ func (s *subquery) buildSubquery(desiredTypes []*types.T) {
 		n := len(outScope.cols)
 		switch s.desiredNumColumns {
 		case 1:
-			panic(pgerror.Newf(pgerror.CodeSyntaxError,
+			panic(pgerror.Newf(pgcode.Syntax,
 				"subquery must return only one column, found %d", n))
 		default:
-			panic(pgerror.Newf(pgerror.CodeSyntaxError,
+			panic(pgerror.Newf(pgcode.Syntax,
 				"subquery must return %d columns, found %d", s.desiredNumColumns, n))
 		}
 	}
@@ -265,7 +266,7 @@ func (b *Builder) buildSubqueryProjection(
 		// This can be obtained with:
 		// CREATE TABLE t(x INT); ALTER TABLE t DROP COLUMN x;
 		// SELECT (SELECT * FROM t) = (SELECT * FROM t);
-		panic(pgerror.Newf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgcode.Syntax,
 			"subquery must return only one column"))
 
 	case 1:

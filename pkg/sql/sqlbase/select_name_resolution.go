@@ -19,6 +19,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -255,7 +256,7 @@ func expandStar(
 	ctx context.Context, src MultiSourceInfo, v tree.VarName, ivarHelper tree.IndexedVarHelper,
 ) (columns ResultColumns, exprs []tree.TypedExpr, err error) {
 	if len(src) == 0 || len(src[0].SourceColumns) == 0 {
-		return nil, nil, pgerror.Newf(pgerror.CodeInvalidNameError,
+		return nil, nil, pgerror.Newf(pgcode.InvalidName,
 			"cannot use %q without a FROM clause", tree.ErrString(v))
 	}
 
@@ -360,7 +361,7 @@ func CheckRenderStar(
 
 	case tree.UnqualifiedStar, *tree.AllColumnsSelector:
 		if target.As != "" {
-			return false, nil, nil, pgerror.Newf(pgerror.CodeSyntaxError,
+			return false, nil, nil, pgerror.Newf(pgcode.Syntax,
 				"%q cannot be aliased", tree.ErrString(v))
 		}
 

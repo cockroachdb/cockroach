@@ -16,6 +16,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -72,7 +73,7 @@ type distSQLExplainable interface {
 func (n *explainDistSQLNode) startExec(params runParams) error {
 	if n.analyze && params.SessionData().DistSQLMode == sessiondata.DistSQLOff {
 		return pgerror.Newf(
-			pgerror.CodeObjectNotInPrerequisiteStateError,
+			pgcode.ObjectNotInPrerequisiteState,
 			"cannot run EXPLAIN ANALYZE while distsql is disabled",
 		)
 	}

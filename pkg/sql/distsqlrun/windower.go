@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -543,7 +544,7 @@ func (w *windower) processPartition(
 				}
 				plusOp, minusOp, found := tree.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
 				if !found {
-					return pgerror.Newf(pgerror.CodeWindowingError,
+					return pgerror.Newf(pgcode.Windowing,
 						"given logical offset cannot be combined with ordering column")
 				}
 				frameRun.PlusOp, frameRun.MinusOp = plusOp, minusOp

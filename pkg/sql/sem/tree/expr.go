@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -779,7 +780,7 @@ func NewPlaceholder(name string) (*Placeholder, error) {
 	// etc), while PlaceholderIdx is 0-based.
 	if uval == 0 || uval > MaxPlaceholderIdx+1 {
 		return nil, pgerror.Newf(
-			pgerror.CodeNumericValueOutOfRangeError,
+			pgcode.NumericValueOutOfRange,
 			"placeholder index must be between 1 and %d", MaxPlaceholderIdx+1,
 		)
 	}

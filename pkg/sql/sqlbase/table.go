@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -36,7 +37,7 @@ func SanitizeVarFreeExpr(
 	allowImpure bool,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
-		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgcode.Syntax,
 			"variable sub-expressions are not allowed in %s", context)
 	}
 
@@ -74,7 +75,7 @@ func ValidateColumnDefType(t *types.T) error {
 	case types.StringFamily, types.CollatedStringFamily:
 		if t.Family() == types.CollatedStringFamily {
 			if _, err := language.Parse(t.Locale()); err != nil {
-				return pgerror.Newf(pgerror.CodeSyntaxError, `invalid locale %s`, t.Locale())
+				return pgerror.Newf(pgcode.Syntax, `invalid locale %s`, t.Locale())
 			}
 		}
 
@@ -104,7 +105,7 @@ func ValidateColumnDefType(t *types.T) error {
 		// These types are OK.
 
 	default:
-		return pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
+		return pgerror.Newf(pgcode.InvalidTableDefinition,
 			"value type %s cannot be used for table columns", t.String())
 	}
 
@@ -134,7 +135,7 @@ func MakeColumnDefDescs(
 		// prior to calling MakeColumnDefDescs. The dependent sequences
 		// must be created, and the SERIAL type eliminated, prior to this
 		// point.
-		return nil, nil, nil, pgerror.New(pgerror.CodeFeatureNotSupportedError,
+		return nil, nil, nil, pgerror.New(pgcode.FeatureNotSupported,
 			"SERIAL cannot be used in this context")
 	}
 
@@ -314,7 +315,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 	for _, index := range indexes {
 		if index.ID == desc.PrimaryIndex.ID {
 			if _, ok := info[index.Name]; ok {
-				return nil, pgerror.Newf(pgerror.CodeDuplicateObjectError,
+				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
 			}
 			colHiddenMap := make(map[ColumnID]bool, len(desc.Columns))
@@ -341,7 +342,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 			info[index.Name] = detail
 		} else if index.Unique {
 			if _, ok := info[index.Name]; ok {
-				return nil, pgerror.Newf(pgerror.CodeDuplicateObjectError,
+				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
 			}
 			detail := ConstraintDetail{Kind: ConstraintTypeUnique}
@@ -361,7 +362,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 			return nil, err
 		}
 		if _, ok := info[fk.Name]; ok {
-			return nil, pgerror.Newf(pgerror.CodeDuplicateObjectError,
+			return nil, pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate constraint name: %q", fk.Name)
 		}
 		detail := ConstraintDetail{Kind: ConstraintTypeFK}

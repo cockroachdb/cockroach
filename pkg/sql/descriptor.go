@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,10 +35,10 @@ import (
 //
 
 var (
-	errEmptyDatabaseName = pgerror.New(pgerror.CodeSyntaxError, "empty database name")
-	errNoDatabase        = pgerror.New(pgerror.CodeInvalidNameError, "no database specified")
-	errNoTable           = pgerror.New(pgerror.CodeInvalidNameError, "no table specified")
-	errNoMatch           = pgerror.New(pgerror.CodeUndefinedObjectError, "no object matched")
+	errEmptyDatabaseName = pgerror.New(pgcode.Syntax, "empty database name")
+	errNoDatabase        = pgerror.New(pgcode.InvalidName, "no database specified")
+	errNoTable           = pgerror.New(pgcode.InvalidName, "no table specified")
+	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
 )
 
 // GenerateUniqueDescID returns the next available Descriptor ID and increments
@@ -175,7 +176,7 @@ func getDescriptorByID(
 	case *sqlbase.TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
-			return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+			return pgerror.Newf(pgcode.WrongObjectType,
 				"%q is not a table", desc.String())
 		}
 		table.MaybeFillInDescriptor()
@@ -187,7 +188,7 @@ func getDescriptorByID(
 	case *sqlbase.DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
-			return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+			return pgerror.Newf(pgcode.WrongObjectType,
 				"%q is not a database", desc.String())
 		}
 

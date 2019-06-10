@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/lib/pq"
@@ -84,7 +84,7 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := sqlDB.Exec(statement); err.(*pq.Error).Code != pgerror.CodeOutOfMemoryError {
+		if _, err := sqlDB.Exec(statement); err.(*pq.Error).Code != pgcode.OutOfMemory {
 			t.Fatalf("Expected \"%s\" to consume too much memory", statement)
 		}
 	}
@@ -109,7 +109,7 @@ func TestEvaluatedMemoryIsChecked(t *testing.T) {
 
 			if _, err := sqlDB.Exec(
 				statement,
-			); err.(*pq.Error).Code != pgerror.CodeProgramLimitExceededError {
+			); err.(*pq.Error).Code != pgcode.ProgramLimitExceeded {
 				t.Errorf("Expected \"%s\" to OOM, but it didn't", statement)
 			}
 		})

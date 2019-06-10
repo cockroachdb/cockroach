@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -35,11 +36,11 @@ func (p *planner) CancelSessions(ctx context.Context, n *tree.CancelSessions) (p
 	}
 	cols := planColumns(rows)
 	if len(cols) != 1 {
-		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgcode.Syntax,
 			"CANCEL SESSIONS expects a single column source, got %d columns", len(cols))
 	}
 	if cols[0].Typ.Family() != types.StringFamily {
-		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 			"CANCEL SESSIONS requires string values, not type %s", cols[0].Typ)
 	}
 
@@ -75,7 +76,7 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 
 	sessionID, err := StringToClusterWideID(string(sessionIDString))
 	if err != nil {
-		return false, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid session ID %s", datum)
+		return false, pgerror.Wrapf(err, pgcode.Syntax, "invalid session ID %s", datum)
 	}
 
 	// Get the lowest 32 bits of the session ID.

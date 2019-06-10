@@ -242,7 +242,7 @@ func (err placeholderTypeAmbiguityErr) Error() string {
 }
 
 func unexpectedTypeError(expr Expr, want, got *types.T) error {
-	return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+	return pgerror.Newf(pgcode.InvalidParameterValue,
 		"expected %s to be of type %s, found type %s", expr, errors.Safe(want), errors.Safe(got))
 }
 
@@ -250,7 +250,7 @@ func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 	if e, ok := errors.UnwrapAll(err).(placeholderTypeAmbiguityErr); ok {
 		return e
 	}
-	return pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError, format, a...)
+	return pgerror.Wrapf(err, pgcode.InvalidParameterValue, format, a...)
 }
 
 // TypeCheck performs type checking on the provided expression tree, returning
@@ -289,7 +289,7 @@ func TypeCheckAndRequire(
 	}
 	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ.Family() == types.UnknownFamily) {
 		return typedExpr, pgerror.Newf(
-			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
+			pgcode.DatatypeMismatch, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
 	return typedExpr, nil
 }
@@ -349,7 +349,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
 		if len(fns) == 0 {
 			return nil,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedBinaryOpErrFmt, sig)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedBinaryOpErrFmt, sig)
 		}
 		fnsStr := formatCandidates(expr.Operator.String(), fns)
 		err = pgerror.Newf(pgcode.AmbiguousFunction, ambiguousBinaryOpErrFmt, sig)
@@ -495,7 +495,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 		return expr, nil
 	}
 
-	return nil, pgerror.Newf(pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", castFrom, expr.Type)
+	return nil, pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, expr.Type)
 }
 
 // TypeCheck implements the Expr interface.
@@ -521,7 +521,7 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Type
 	}
 	typ := subExpr.ResolvedType()
 	if typ.Family() != types.ArrayFamily {
-		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError, "cannot subscript type %s because it is not an array", typ)
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "cannot subscript type %s because it is not an array", typ)
 	}
 	expr.Expr = subExpr
 	expr.typ = typ.ArrayContents()
@@ -544,7 +544,7 @@ func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	_, err := language.Parse(expr.Locale)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 			"invalid locale %s", expr.Locale)
 	}
 	subExpr, err := expr.Expr.TypeCheck(ctx, types.String)
@@ -557,7 +557,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExp
 		expr.typ = types.MakeCollatedString(types.String, expr.Locale)
 		return expr, nil
 	}
-	return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+	return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 		"incompatible type for COLLATE: %s", t)
 }
 
@@ -565,7 +565,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExp
 // when a ColumnAccessExpr or TupleStar is applied to a non-composite
 // type.
 func NewTypeIsNotCompositeError(resolvedType *types.T) error {
-	return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+	return pgerror.Newf(pgcode.WrongObjectType,
 		"type %s is not composite", resolvedType,
 	)
 }
@@ -620,7 +620,7 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 		}
 	}
 	if expr.ColIndex < 0 {
-		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 			"could not identify column %q in %s",
 			ErrNameStringP(&expr.ColName), resolvedType,
 		)
@@ -692,23 +692,23 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typed
 }
 
 var (
-	errOrderByIndexInWindow = pgerror.New(pgerror.CodeFeatureNotSupportedError, "ORDER BY INDEX in window definition is not supported")
-	errStarNotAllowed       = pgerror.New(pgerror.CodeSyntaxError, "cannot use \"*\" in this context")
-	errInvalidDefaultUsage  = pgerror.New(pgerror.CodeSyntaxError, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
-	errInvalidMaxUsage      = pgerror.New(pgerror.CodeSyntaxError, "MAXVALUE can only appear within a range partition expression")
-	errInvalidMinUsage      = pgerror.New(pgerror.CodeSyntaxError, "MINVALUE can only appear within a range partition expression")
-	errPrivateFunction      = pgerror.New(pgerror.CodeReservedNameError, "function reserved for internal use")
+	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
+	errStarNotAllowed       = pgerror.New(pgcode.Syntax, "cannot use \"*\" in this context")
+	errInvalidDefaultUsage  = pgerror.New(pgcode.Syntax, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
+	errInvalidMaxUsage      = pgerror.New(pgcode.Syntax, "MAXVALUE can only appear within a range partition expression")
+	errInvalidMinUsage      = pgerror.New(pgcode.Syntax, "MINVALUE can only appear within a range partition expression")
+	errPrivateFunction      = pgerror.New(pgcode.ReservedName, "function reserved for internal use")
 )
 
 // NewAggInAggError creates an error for the case when an aggregate function is
 // contained within another aggregate function.
 func NewAggInAggError() error {
-	return pgerror.Newf(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
+	return pgerror.Newf(pgcode.Grouping, "aggregate function calls cannot be nested")
 }
 
 // NewInvalidNestedSRFError creates a rejection for a nested SRF.
 func NewInvalidNestedSRFError(context string) error {
-	return pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
+	return pgerror.Newf(pgcode.FeatureNotSupported,
 		"set-returning functions must appear at the top level of %s", context)
 }
 
@@ -719,13 +719,13 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 	switch class {
 	case AggregateClass:
 		cat = "aggregate"
-		code = pgerror.CodeGroupingError
+		code = pgcode.Grouping
 	case WindowClass:
 		cat = "window"
-		code = pgerror.CodeWindowingError
+		code = pgcode.Windowing
 	case GeneratorClass:
 		cat = "generator"
-		code = pgerror.CodeFeatureNotSupportedError
+		code = pgcode.FeatureNotSupported
 	}
 	return pgerror.Newf(code, "%s functions are not allowed in %s", cat, context)
 }
@@ -743,7 +743,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 		return unimplemented.NewWithIssueDetail(def.UnsupportedWithIssue, def.Name, msg)
 	}
 	if def.Private {
-		return pgerror.Wrapf(errPrivateFunction, pgerror.CodeReservedNameError,
+		return pgerror.Wrapf(errPrivateFunction, pgcode.ReservedName,
 			"%s()", errors.Safe(def.Name))
 	}
 	if sc == nil {
@@ -758,7 +758,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 
 		if sc.Properties.Derived.inWindowFunc &&
 			sc.Properties.required.rejectFlags&RejectNestedWindowFunctions != 0 {
-			return pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
+			return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 		}
 		sc.Properties.Derived.SeenWindowApplication = true
 	} else {
@@ -790,7 +790,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 			// The code FeatureNotSupported is a bit misleading here,
 			// because we probably can't support the feature at all. However
 			// this error code matches PostgreSQL's in the same conditions.
-			return pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
+			return pgerror.Newf(pgcode.FeatureNotSupported,
 				"impure functions are not allowed in %s", sc.Properties.required.context)
 		}
 		sc.Properties.Derived.SeenImpure = true
@@ -805,7 +805,7 @@ func CheckIsWindowOrAgg(def *FunctionDefinition) error {
 	case AggregateClass:
 	case WindowClass:
 	default:
-		return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+		return pgerror.Newf(pgcode.WrongObjectType,
 			"OVER specified, but %s() is neither a window function nor an aggregate function",
 			def.Name)
 	}
@@ -824,7 +824,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 	}
 
 	if err := ctx.checkFunctionUsage(expr, def); err != nil {
-		return nil, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 			"%s()", def.Name)
 	}
 	if ctx != nil {
@@ -850,7 +850,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 			"%s()", def.Name)
 	}
 
@@ -880,10 +880,10 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		}
 		sig := fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
 		if len(fns) == 0 {
-			return nil, pgerror.Newf(pgerror.CodeUndefinedFunctionError, "unknown signature: %s", sig)
+			return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", sig)
 		}
 		fnsStr := formatCandidates(expr.Func.String(), fns)
-		return nil, pgerror.Newf(pgerror.CodeAmbiguousFunctionError, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
+		return nil, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
 	}
 	overloadImpl := fns[0].(*Overload)
 
@@ -895,7 +895,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		}
 
 		if expr.Type == DistinctFuncType {
-			return nil, pgerror.Newf(pgerror.CodeFeatureNotSupportedError, "DISTINCT is not implemented for window functions")
+			return nil, pgerror.New(pgcode.FeatureNotSupported, "DISTINCT is not implemented for window functions")
 		}
 
 		for i, partition := range expr.WindowDef.Partitions {
@@ -923,7 +923,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 	} else {
 		// Make sure the window function builtins are used as window function applications.
 		if def.Class == WindowClass {
-			return nil, pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+			return nil, pgerror.Newf(pgcode.WrongObjectType,
 				"window function %s() requires an OVER clause", &expr.Func)
 		}
 	}
@@ -932,7 +932,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		if def.Class != AggregateClass {
 			// Same error message as Postgres. If we have a window function, only
 			// aggregates accept a FILTER clause.
-			return nil, pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+			return nil, pgerror.Newf(pgcode.WrongObjectType,
 				"FILTER specified but %s() is not an aggregate function", &expr.Func)
 		}
 
@@ -955,7 +955,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 			typeNames = append(typeNames, expr.ResolvedType().String())
 		}
 		return nil, pgerror.Newf(
-			pgerror.CodeDatatypeMismatchError,
+			pgcode.DatatypeMismatch,
 			"could not determine polymorphic type: %s(%s)",
 			&expr.Func,
 			strings.Join(typeNames, ", "),
@@ -986,11 +986,11 @@ func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
 			// At least one of the bounds is of type 'value' PRECEDING or 'value' FOLLOWING.
 			// We require ordering on a single column that supports addition/subtraction.
 			if len(windowDef.OrderBy) != 1 {
-				return pgerror.Newf(pgerror.CodeWindowingError, "RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column")
+				return pgerror.Newf(pgcode.Windowing, "RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column")
 			}
 			requiredType = windowDef.OrderBy[0].Expr.(TypedExpr).ResolvedType()
 			if !types.IsAdditiveType(requiredType) {
-				return pgerror.Newf(pgerror.CodeWindowingError, fmt.Sprintf("RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s", requiredType))
+				return pgerror.Newf(pgcode.Windowing, fmt.Sprintf("RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s", requiredType))
 			}
 			if types.IsDateTimeType(requiredType) {
 				// Spec: for datetime ordering columns, the required type is an 'interval'.
@@ -1145,7 +1145,7 @@ func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired *types.T) (TypedExpr, 
 	if _, ok := presetTypesForTesting[name]; ok {
 		return expr, nil
 	}
-	return nil, pgerror.Newf(pgerror.CodeUndefinedColumnError,
+	return nil, pgerror.Newf(pgcode.UndefinedColumn,
 		"column %q does not exist", ErrString(expr))
 }
 
@@ -1165,7 +1165,7 @@ func (expr *UnresolvedName) TypeCheck(s *SemaContext, desired *types.T) (TypedEx
 
 // TypeCheck implements the Expr interface.
 func (expr *AllColumnsSelector) TypeCheck(_ *SemaContext, desired *types.T) (TypedExpr, error) {
-	return nil, pgerror.Newf(pgerror.CodeSyntaxError, "cannot use %q in this context", expr)
+	return nil, pgerror.Newf(pgcode.Syntax, "cannot use %q in this context", expr)
 }
 
 // TypeCheck implements the Expr interface.
@@ -1187,7 +1187,7 @@ func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 // TypeCheck implements the Expr interface.
 func (expr *Subquery) TypeCheck(sc *SemaContext, _ *types.T) (TypedExpr, error) {
 	if sc != nil && sc.Properties.required.rejectFlags&RejectSubqueries != 0 {
-		return nil, pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 			"subqueries are not allowed in %s", sc.Properties.required.context)
 	}
 	expr.assertTyped()
@@ -1223,7 +1223,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 		sig := fmt.Sprintf("%s <%s>%s", expr.Operator, exprReturn, desStr)
 		if len(fns) == 0 {
 			return nil,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedUnaryOpErrFmt, sig)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedUnaryOpErrFmt, sig)
 		}
 		fnsStr := formatCandidates(expr.Operator.String(), fns)
 		err = pgerror.Newf(pgcode.AmbiguousFunction, ambiguousUnaryOpErrFmt, sig)
@@ -1273,7 +1273,7 @@ func (expr *StrVal) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, er
 func (expr *Tuple) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	// Ensure the number of labels matches the number of expressions.
 	if len(expr.Labels) > 0 && len(expr.Labels) != len(expr.Exprs) {
-		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgcode.Syntax,
 			"mismatch in tuple definition: %d expressions, %d labels",
 			len(expr.Exprs), len(expr.Labels),
 		)
@@ -1299,7 +1299,7 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, err
 		for i := range expr.Labels {
 			for j := 0; j < i; j++ {
 				if expr.Labels[i] == expr.Labels[j] {
-					return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+					return nil, pgerror.Newf(pgcode.Syntax,
 						"found duplicate tuple label: %q", ErrNameStringP(&expr.Labels[i]),
 					)
 				}
@@ -1315,7 +1315,7 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, err
 	return expr, nil
 }
 
-var errAmbiguousArrayType = pgerror.Newf(pgerror.CodeIndeterminateDatatypeError, "cannot determine type of empty array. "+
+var errAmbiguousArrayType = pgerror.Newf(pgcode.IndeterminateDatatype, "cannot determine type of empty array. "+
 	"Consider annotating with the desired type, for example ARRAY[]:::int[]")
 
 // TypeCheck implements the Expr interface.
@@ -1536,7 +1536,7 @@ func typeCheckAndRequire(
 		return nil, err
 	}
 	if typ := typedExpr.ResolvedType(); !(typ.Family() == types.UnknownFamily || typ.Equivalent(required)) {
-		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError, "incompatible %s type: %s", op, typ)
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
 }
@@ -1581,7 +1581,7 @@ func typeCheckComparisonOpWithSubOperator(
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right, err)
 			return nil, nil, nil, false,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 
 		// Determine TypedExpr and comparison type for left operand.
@@ -1654,7 +1654,7 @@ func typeCheckComparisonOpWithSubOperator(
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
 				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
-			return nil, nil, nil, false, pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+			return nil, nil, nil, false, pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 	}
 	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)
@@ -1676,11 +1676,11 @@ func typeCheckSubqueryWithIn(left, right *types.T) error {
 		// Subqueries come through as a tuple{T}, so T IN tuple{T} should be
 		// accepted.
 		if len(right.TupleContents()) != 1 {
-			return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+			return pgerror.Newf(pgcode.InvalidParameterValue,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
 		if !left.Equivalent(&right.TupleContents()[0]) {
-			return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+			return pgerror.Newf(pgcode.InvalidParameterValue,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
 	}
@@ -1707,14 +1707,14 @@ func typeCheckComparisonOp(
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, nil, false,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 
 		fn, ok := ops.lookupImpl(retType, types.AnyTuple)
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, retType, op, types.AnyTuple)
 			return nil, nil, nil, false,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
 
 		typedLeft := typedSubExprs[0]
@@ -1735,7 +1735,7 @@ func typeCheckComparisonOp(
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, nil, false,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 
 		typ := typedLeft.ResolvedType()
@@ -1743,7 +1743,7 @@ func typeCheckComparisonOp(
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, typ, op, types.AnyTuple)
 			return nil, nil, nil, false,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
 
 		desired := types.MakeTuple([]types.T{*typ})
@@ -1751,7 +1751,7 @@ func typeCheckComparisonOp(
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, nil, false,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 
 		if err := typeCheckSubqueryWithIn(
@@ -1766,7 +1766,7 @@ func typeCheckComparisonOp(
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, types.AnyTuple, op, types.AnyTuple)
 			return nil, nil, nil, false,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
 		// Using non-folded left and right to avoid having to swap later.
 		typedLeft, typedRight, err := typeCheckTupleComparison(ctx, op, left.(*Tuple), right.(*Tuple))
@@ -1820,7 +1820,7 @@ func typeCheckComparisonOp(
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(fns) == 0 || collationMismatch {
 			return nil, nil, nil, false,
-				pgerror.Newf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
+				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
 		fnsStr := formatCandidates(op.String(), fns)
 		err = pgerror.Newf(pgcode.AmbiguousFunction, ambiguousCompErrFmt, sig)
@@ -2080,7 +2080,7 @@ func typeCheckTupleComparison(
 		leftSubExprTyped, rightSubExprTyped, _, _, err := typeCheckComparisonOp(ctx, op, leftSubExpr, rightSubExpr)
 		if err != nil {
 			exps := Exprs([]Expr{left, right})
-			return nil, nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError, "tuples %s are not comparable at index %d: %s",
+			return nil, nil, pgerror.Newf(pgcode.DatatypeMismatch, "tuples %s are not comparable at index %d: %s",
 				&exps, elemIdx+1, err)
 		}
 		left.Exprs[elemIdx] = leftSubExprTyped
@@ -2129,7 +2129,7 @@ func typeCheckSameTypedTupleExprs(
 		}
 		typedSubExprs, resType, err := TypeCheckSameTypedExprs(ctx, desiredElem, sameTypeExprs...)
 		if err != nil {
-			return nil, nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError, "tuples %s are not the same type: %v", Exprs(exprs), err)
+			return nil, nil, pgerror.Newf(pgcode.DatatypeMismatch, "tuples %s are not the same type: %v", Exprs(exprs), err)
 		}
 		for j, typedExpr := range typedSubExprs {
 			exprs[j].(*Tuple).Exprs[elemIdx] = typedExpr
@@ -2167,7 +2167,7 @@ func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
 
 func checkTupleHasLength(t *Tuple, expectedLen int) error {
 	if len(t.Exprs) != expectedLen {
-		return pgerror.Newf(pgerror.CodeDatatypeMismatchError, "expected tuple %v to have a length of %d", t, expectedLen)
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected tuple %v to have a length of %d", t, expectedLen)
 	}
 	return nil
 }
@@ -2229,7 +2229,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 				// Verify that the annotations are consistent.
 				if !t.Type.Equivalent(v.types[arg.Idx]) {
 					v.setErr(arg.Idx, pgerror.Newf(
-						pgerror.CodeDatatypeMismatchError,
+						pgcode.DatatypeMismatch,
 						"multiple conflicting type annotations around %s",
 						arg.Idx,
 					))
@@ -2239,7 +2239,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 				// Verify that the annotation is consistent with the type hint.
 				if prevType := v.types[arg.Idx]; !t.Type.Equivalent(prevType) {
 					v.setErr(arg.Idx, pgerror.Newf(
-						pgerror.CodeDatatypeMismatchError,
+						pgcode.DatatypeMismatch,
 						"type annotation around %s conflicts with specified type %s",
 						arg.Idx, v.types[arg.Idx],
 					))

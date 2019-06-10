@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -880,7 +881,7 @@ func (p *planner) namesForExprs(
 					"source for a multiple-column UPDATE item must be a sub-SELECT or ROW() expression; not supported: %T", expr.Expr)
 			}
 			if len(expr.Names) != n {
-				return nil, nil, pgerror.Newf(pgerror.CodeSyntaxError,
+				return nil, nil, pgerror.Newf(pgcode.Syntax,
 					"number of columns (%d) does not match number of values (%d)", len(expr.Names), n)
 			}
 		}

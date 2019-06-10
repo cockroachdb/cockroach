@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -49,14 +50,14 @@ import (
 )
 
 var (
-	errIntOutOfRange   = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "integer out of range")
-	errFloatOutOfRange = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "float out of range")
-	errDecOutOfRange   = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "decimal out of range")
+	errIntOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range")
+	errFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
+	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
 
 	// ErrDivByZero is reported on a division by zero.
-	ErrDivByZero = pgerror.New(pgerror.CodeDivisionByZeroError, "division by zero")
+	ErrDivByZero = pgerror.New(pgcode.DivisionByZero, "division by zero")
 	// ErrZeroModulus is reported when computing the rest of a division by zero.
-	ErrZeroModulus = pgerror.New(pgerror.CodeDivisionByZeroError, "zero modulus")
+	ErrZeroModulus = pgerror.New(pgcode.DivisionByZero, "zero modulus")
 
 	big10E6  = big.NewInt(1e6)
 	big10E10 = big.NewInt(1e10)
@@ -358,7 +359,7 @@ func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 }
 
 func newCannotMixBitArraySizesError(op string) error {
-	return pgerror.Newf(pgerror.CodeStringDataLengthMismatchError,
+	return pgerror.Newf(pgcode.StringDataLengthMismatch,
 		"cannot %s bit strings of different sizes", op)
 }
 
@@ -766,7 +767,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l, r := left.(*DDate).Date, right.(*DDate).Date
 				if !l.IsFinite() || !r.IsFinite() {
-					return nil, pgerror.New(pgerror.CodeDatetimeFieldOverflowError, "cannot subtract infinite dates")
+					return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "cannot subtract infinite dates")
 				}
 				a := l.PGEpochDays()
 				b := r.PGEpochDays()
@@ -1376,7 +1377,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				rval := MustBeDInt(right)
 				if rval < 0 || rval >= 64 {
 					telemetry.Inc(sqltelemetry.LargeLShiftArgumentCounter)
-					return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError, "shift argument out of range")
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "shift argument out of range")
 				}
 				return NewDInt(MustBeDInt(left) << uint(rval)), nil
 			},
@@ -1414,7 +1415,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				rval := MustBeDInt(right)
 				if rval < 0 || rval >= 64 {
 					telemetry.Inc(sqltelemetry.LargeRShiftArgumentCounter)
-					return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError, "shift argument out of range")
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "shift argument out of range")
 				}
 				return NewDInt(MustBeDInt(left) >> uint(rval)), nil
 			},
@@ -2326,7 +2327,7 @@ func MatchLikeEscape(
 		var width int
 		escapeRune, width = utf8.DecodeRuneInString(escape)
 		if len(escape) > width {
-			return DBoolFalse, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
+			return DBoolFalse, pgerror.Newf(pgcode.InvalidEscapeSequence, "invalid escape string")
 		}
 	}
 
@@ -2346,7 +2347,7 @@ func MatchLikeEscape(
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, escapeRune)
 	if err != nil {
 		return DBoolFalse, pgerror.Newf(
-			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
 	}
 
 	if like == nil {
@@ -2371,7 +2372,7 @@ func ConvertLikeToRegexp(
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
 		return nil, pgerror.Newf(
-			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
 	}
 	return re, nil
 }
@@ -2393,7 +2394,7 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, '\\')
 	if err != nil {
 		return DBoolFalse, pgerror.Newf(
-			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
 	}
 
 	if like == nil {
@@ -2945,11 +2946,11 @@ type regTypeInfo struct {
 // regTypeInfos maps an oid.Oid to a regTypeInfo that describes the pg_catalog
 // table that contains the entities of the type of the key.
 var regTypeInfos = map[oid.Oid]regTypeInfo{
-	oid.T_regclass:     {"pg_class", "relname", "relation", pgerror.CodeUndefinedTableError},
-	oid.T_regtype:      {"pg_type", "typname", "type", pgerror.CodeUndefinedObjectError},
-	oid.T_regproc:      {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
-	oid.T_regprocedure: {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
-	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgerror.CodeUndefinedObjectError},
+	oid.T_regclass:     {"pg_class", "relname", "relation", pgcode.UndefinedTable},
+	oid.T_regtype:      {"pg_type", "typname", "type", pgcode.UndefinedObject},
+	oid.T_regproc:      {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
+	oid.T_regprocedure: {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
+	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgcode.UndefinedObject},
 }
 
 // queryOidWithJoin looks up the name or OID of an input OID or string in the
@@ -2983,7 +2984,7 @@ func queryOidWithJoin(
 		d)
 	if err != nil {
 		if _, ok := errors.UnwrapAll(err).(*MultipleResultsError); ok {
-			return nil, pgerror.Newf(pgerror.CodeAmbiguousAliasError,
+			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
 				"more than one %s named %s", info.objName, d)
 		}
 		return nil, err
@@ -3527,7 +3528,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 					// at most 3 parts: db.schema.funname.
 					// For example mydb.pg_catalog.max().
 					// Anything longer is always invalid.
-					return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+					return nil, pgerror.Newf(pgcode.Syntax,
 						"invalid function name: %s", s)
 				}
 				name := UnresolvedName{NumParts: len(substrs)}
@@ -3576,7 +3577,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 	}
 
 	return nil, pgerror.Newf(
-		pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", d.ResolvedType(), t)
+		pgcode.CannotCoerce, "invalid cast: %s -> %s", d.ResolvedType(), t)
 }
 
 // Eval implements the TypedExpr interface.
@@ -3637,7 +3638,7 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	case *DCollatedString:
 		return NewDCollatedString(d.Contents, expr.Locale, &ctx.CollationEnv), nil
 	default:
-		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", d)
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible type for COLLATE: %s", d)
 	}
 }
 
@@ -4149,7 +4150,7 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	e, ok := ctx.Placeholders.Value(t.Idx)
 	if !ok {
-		return nil, pgerror.Newf(pgerror.CodeUndefinedParameterError,
+		return nil, pgerror.Newf(pgcode.UndefinedParameter,
 			"no value provided for placeholder: %s", t)
 	}
 	// Placeholder expressions cannot contain other placeholders, so we do
@@ -4181,7 +4182,7 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 		return fn.Fn(ctx, left, right)
 	}
 	return nil, pgerror.Newf(
-		pgerror.CodeUndefinedFunctionError, "unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
+		pgcode.UndefinedFunction, "unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
 }
 
 // foldComparisonExpr folds a given comparison operation and its expressions
@@ -4259,14 +4260,14 @@ func optimizedLikeFunc(
 		switch pattern[0] {
 		case '%':
 			if escape == '%' {
-				return nil, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+				return nil, pgerror.Newf(pgcode.InvalidEscapeSequence, "LIKE pattern must not end with escape character")
 			}
 			return func(s string) (bool, error) {
 				return true, nil
 			}, nil
 		case '_':
 			if escape == '_' {
-				return nil, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+				return nil, pgerror.Newf(pgcode.InvalidEscapeSequence, "LIKE pattern must not end with escape character")
 			}
 			return func(s string) (bool, error) {
 				if len(s) == 0 {
@@ -4439,7 +4440,7 @@ func unescapePattern(
 	for i := 0; i < nEscapes; i++ {
 		nextIdx := strings.Index(pattern, escapeToken)
 		if nextIdx == len(pattern)-len(escapeToken) && emitEscapeCharacterLastError {
-			return "", pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, `LIKE pattern must not end with escape character`)
+			return "", pgerror.Newf(pgcode.InvalidEscapeSequence, `LIKE pattern must not end with escape character`)
 		}
 
 		retWidth += copy(ret[retWidth:], pattern[:nextIdx])
@@ -4711,7 +4712,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 				}
 			} else {
 				// Escape character is the last character in s, so we need to return an error.
-				return false, 0, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+				return false, 0, pgerror.Newf(pgcode.InvalidEscapeSequence, "LIKE pattern must not end with escape character")
 			}
 		} else if s[i] == '\\' {
 			// We encountered a backslash, so we need to look ahead to figure out how
@@ -4719,7 +4720,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 			if i+1 == sLen {
 				// This case should never be reached because the backslash should be
 				// escaping one of regexp metacharacters.
-				return false, 0, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "Unexpected behavior during processing custom escape character.")
+				return false, 0, pgerror.Newf(pgcode.InvalidEscapeSequence, "Unexpected behavior during processing custom escape character.")
 			} else if s[i+1] == '\\' {
 				// We'll want to escape '\\' to `\\\\` for correct processing later by
 				// unescapePattern. See (3) in the comment above replaceCustomEscape.
@@ -4733,7 +4734,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 					// ahead to process it.
 					if i+2 == sLen {
 						// Escape character is the last character in s, so we need to return an error.
-						return false, 0, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+						return false, 0, pgerror.Newf(pgcode.InvalidEscapeSequence, "LIKE pattern must not end with escape character")
 					}
 					if i+4 <= sLen {
 						if s[i+2] == '\\' && string(s[i+3]) == string(escape) {
@@ -4869,7 +4870,7 @@ func SimilarToEscape(ctx *EvalContext, unescaped, pattern, escape string) (Datum
 		var width int
 		escapeRune, width = utf8.DecodeRuneInString(escape)
 		if len(escape) > width {
-			return DBoolFalse, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
+			return DBoolFalse, pgerror.Newf(pgcode.InvalidEscapeSequence, "invalid escape string")
 		}
 	}
 	key := similarToKey{s: pattern, escape: escapeRune}

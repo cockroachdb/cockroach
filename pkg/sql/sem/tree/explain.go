@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -135,7 +136,7 @@ func (node *Explain) ParseOptions() (ExplainOptions, error) {
 		optLower := strings.ToLower(opt)
 		if mode, ok := explainModeStrings[optLower]; ok {
 			if modeSet {
-				return ExplainOptions{}, pgerror.Newf(pgerror.CodeSyntaxError,
+				return ExplainOptions{}, pgerror.Newf(pgcode.Syntax,
 					"cannot set EXPLAIN mode more than once: %s", opt)
 			}
 			res.Mode = mode
@@ -144,7 +145,7 @@ func (node *Explain) ParseOptions() (ExplainOptions, error) {
 		}
 		flag, ok := explainFlagStrings[optLower]
 		if !ok {
-			return ExplainOptions{}, pgerror.Newf(pgerror.CodeSyntaxError,
+			return ExplainOptions{}, pgerror.Newf(pgcode.Syntax,
 				"unsupported EXPLAIN option: %s", opt)
 		}
 		res.Flags.Add(flag)

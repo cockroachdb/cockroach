@@ -32,44 +32,44 @@ const (
 func NewTransactionAbortedError(customMsg string) error {
 	if customMsg != "" {
 		return pgerror.Newf(
-			pgerror.CodeInFailedSQLTransactionError, "%s: %s", customMsg, txnAbortedMsg)
+			pgcode.InFailedSQLTransaction, "%s: %s", customMsg, txnAbortedMsg)
 	}
-	return pgerror.New(pgerror.CodeInFailedSQLTransactionError, txnAbortedMsg)
+	return pgerror.New(pgcode.InFailedSQLTransaction, txnAbortedMsg)
 }
 
 // NewTransactionCommittedError creates an error that signals that the SQL txn
 // is in the COMMIT_WAIT state and that only a COMMIT statement will be accepted.
 func NewTransactionCommittedError() error {
-	return pgerror.New(pgerror.CodeInvalidTransactionStateError, txnCommittedMsg)
+	return pgerror.New(pgcode.InvalidTransactionState, txnCommittedMsg)
 }
 
 // NewNonNullViolationError creates an error for a violation of a non-NULL constraint.
 func NewNonNullViolationError(columnName string) error {
-	return pgerror.Newf(pgerror.CodeNotNullViolationError, "null value in column %q violates not-null constraint", columnName)
+	return pgerror.Newf(pgcode.NotNullViolation, "null value in column %q violates not-null constraint", columnName)
 }
 
 // NewInvalidSchemaDefinitionError creates an error for an invalid schema
 // definition such as a schema definition that doesn't parse.
 func NewInvalidSchemaDefinitionError(err error) error {
-	return pgerror.New(pgerror.CodeInvalidSchemaDefinitionError, err.Error())
+	return pgerror.New(pgcode.InvalidSchemaDefinition, err.Error())
 }
 
 // NewUnsupportedSchemaUsageError creates an error for an invalid
 // schema use, e.g. mydb.someschema.tbl.
 func NewUnsupportedSchemaUsageError(name string) error {
-	return pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
+	return pgerror.Newf(pgcode.InvalidSchemaName,
 		"unsupported schema specification: %q", name)
 }
 
 // NewCCLRequiredError creates an error for when a CCL feature is used in an OSS
 // binary.
 func NewCCLRequiredError(err error) error {
-	return pgerror.WithCandidateCode(err, pgerror.CodeCCLRequired)
+	return pgerror.WithCandidateCode(err, pgcode.CCLRequired)
 }
 
 // IsCCLRequiredError returns whether the error is a CCLRequired error.
 func IsCCLRequiredError(err error) bool {
-	return errHasCode(err, pgerror.CodeCCLRequired)
+	return errHasCode(err, pgcode.CCLRequired)
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.
@@ -80,52 +80,52 @@ func NewUndefinedDatabaseError(name string) error {
 	// not exist. We've chosen to return this code for all cases where the error cause
 	// is a missing database.
 	return pgerror.Newf(
-		pgerror.CodeInvalidCatalogNameError, "database %q does not exist", name)
+		pgcode.InvalidCatalogName, "database %q does not exist", name)
 }
 
 // NewInvalidWildcardError creates an error that represents the result of expanding
 // a table wildcard over an invalid database or schema prefix.
 func NewInvalidWildcardError(name string) error {
 	return pgerror.Newf(
-		pgerror.CodeInvalidCatalogNameError,
+		pgcode.InvalidCatalogName,
 		"%q does not match any valid database or schema", name)
 }
 
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
 func NewUndefinedRelationError(name tree.NodeFormatter) error {
-	return pgerror.Newf(pgerror.CodeUndefinedTableError,
+	return pgerror.Newf(pgcode.UndefinedTable,
 		"relation %q does not exist", tree.ErrString(name))
 }
 
 // NewUndefinedColumnError creates an error that represents a missing database column.
 func NewUndefinedColumnError(name string) error {
-	return pgerror.Newf(pgerror.CodeUndefinedColumnError, "column %q does not exist", name)
+	return pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", name)
 }
 
 // NewDatabaseAlreadyExistsError creates an error for a preexisting database.
 func NewDatabaseAlreadyExistsError(name string) error {
-	return pgerror.Newf(pgerror.CodeDuplicateDatabaseError, "database %q already exists", name)
+	return pgerror.Newf(pgcode.DuplicateDatabase, "database %q already exists", name)
 }
 
 // NewRelationAlreadyExistsError creates an error for a preexisting relation.
 func NewRelationAlreadyExistsError(name string) error {
-	return pgerror.Newf(pgerror.CodeDuplicateRelationError, "relation %q already exists", name)
+	return pgerror.Newf(pgcode.DuplicateRelation, "relation %q already exists", name)
 }
 
 // NewWrongObjectTypeError creates a wrong object type error.
 func NewWrongObjectTypeError(name *tree.TableName, desiredObjType string) error {
-	return pgerror.Newf(pgerror.CodeWrongObjectTypeError, "%q is not a %s",
+	return pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
 		tree.ErrString(name), desiredObjType)
 }
 
 // NewSyntaxError creates a syntax error.
 func NewSyntaxError(msg string) error {
-	return pgerror.New(pgerror.CodeSyntaxError, msg)
+	return pgerror.New(pgcode.Syntax, msg)
 }
 
 // NewDependentObjectError creates a dependent object error.
 func NewDependentObjectError(msg string) error {
-	return pgerror.New(pgerror.CodeDependentObjectsStillExistError, msg)
+	return pgerror.New(pgcode.DependentObjectsStillExist, msg)
 }
 
 // NewDependentObjectErrorWithHint creates a dependent object error with a hint
@@ -138,7 +138,7 @@ func NewDependentObjectErrorWithHint(msg string, hint string) error {
 func NewRangeUnavailableError(
 	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
 ) error {
-	return pgerror.Newf(pgerror.CodeRangeUnavailable,
+	return pgerror.Newf(pgcode.RangeUnavailable,
 		"key range id:%d is unavailable; missing nodes: %s. Original error: %v",
 		rangeID, nodeIDs, origErr)
 }
@@ -146,27 +146,27 @@ func NewRangeUnavailableError(
 // NewWindowInAggError creates an error for the case when a window function is
 // nested within an aggregate function.
 func NewWindowInAggError() error {
-	return pgerror.New(pgerror.CodeGroupingError,
+	return pgerror.New(pgcode.Grouping,
 		"window functions are not allowed in aggregate")
 }
 
 // NewAggInAggError creates an error for the case when an aggregate function is
 // contained within another aggregate function.
 func NewAggInAggError() error {
-	return pgerror.New(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
+	return pgerror.New(pgcode.Grouping, "aggregate function calls cannot be nested")
 }
 
 // QueryCanceledError is an error representing query cancellation.
 var QueryCanceledError = pgerror.New(
-	pgerror.CodeQueryCanceledError, "query execution canceled")
+	pgcode.QueryCanceled, "query execution canceled")
 
 // QueryTimeoutError is an error representing a query timeout.
 var QueryTimeoutError = pgerror.New(
-	pgerror.CodeQueryCanceledError, "query execution canceled due to statement timeout")
+	pgcode.QueryCanceled, "query execution canceled due to statement timeout")
 
 // IsOutOfMemoryError checks whether this is an out of memory error.
 func IsOutOfMemoryError(err error) bool {
-	return errHasCode(err, pgerror.CodeOutOfMemoryError)
+	return errHasCode(err, pgcode.OutOfMemory)
 }
 
 func errHasCode(err error, code ...string) bool {

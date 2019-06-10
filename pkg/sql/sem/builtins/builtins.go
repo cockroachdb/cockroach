@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -58,16 +59,16 @@ import (
 )
 
 var (
-	errEmptyInputString = pgerror.New(pgerror.CodeInvalidParameterValueError, "the input string must not be empty")
-	errAbsOfMinInt64    = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "abs of min integer value (-9223372036854775808) not defined")
-	errSqrtOfNegNumber  = pgerror.New(pgerror.CodeInvalidArgumentForPowerFunctionError, "cannot take square root of a negative number")
-	errLogOfNegNumber   = pgerror.New(pgerror.CodeInvalidArgumentForLogarithmError, "cannot take logarithm of a negative number")
-	errLogOfZero        = pgerror.New(pgerror.CodeInvalidArgumentForLogarithmError, "cannot take logarithm of zero")
-	errZeroIP           = pgerror.New(pgerror.CodeInvalidParameterValueError, "zero length IP")
-	errChrValueTooSmall = pgerror.New(pgerror.CodeInvalidParameterValueError, "input value must be >= 0")
-	errChrValueTooLarge = pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+	errEmptyInputString = pgerror.New(pgcode.InvalidParameterValue, "the input string must not be empty")
+	errAbsOfMinInt64    = pgerror.New(pgcode.NumericValueOutOfRange, "abs of min integer value (-9223372036854775808) not defined")
+	errSqrtOfNegNumber  = pgerror.New(pgcode.InvalidArgumentForPowerFunction, "cannot take square root of a negative number")
+	errLogOfNegNumber   = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of a negative number")
+	errLogOfZero        = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of zero")
+	errZeroIP           = pgerror.New(pgcode.InvalidParameterValue, "zero length IP")
+	errChrValueTooSmall = pgerror.New(pgcode.InvalidParameterValue, "input value must be >= 0")
+	errChrValueTooLarge = pgerror.Newf(pgcode.InvalidParameterValue,
 		"input value must be <= %d (maximum Unicode code point)", utf8.MaxRune)
-	errStringTooLarge = pgerror.Newf(pgerror.CodeProgramLimitExceededError,
+	errStringTooLarge = pgerror.Newf(pgcode.ProgramLimitExceeded,
 		fmt.Sprintf("requested length too large, exceeds %s", humanizeutil.IBytes(maxAllocatedStringSize)))
 )
 
@@ -143,12 +144,12 @@ func makeBuiltin(props tree.FunctionProperties, overloads ...tree.Overload) buil
 }
 
 func newDecodeError(enc string) error {
-	return pgerror.Newf(pgerror.CodeCharacterNotInRepertoireError,
+	return pgerror.Newf(pgcode.CharacterNotInRepertoire,
 		"invalid byte sequence for encoding %q", enc)
 }
 
 func newEncodeError(c rune, enc string) error {
-	return pgerror.Newf(pgerror.CodeUntranslatableCharacterError,
+	return pgerror.Newf(pgcode.UntranslatableCharacter,
 		"character %q has no representation in encoding %q", c, enc)
 }
 
@@ -225,7 +226,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
-					return nil, pgerror.Newf(pgerror.CodeUndefinedFunctionError, errInsufficientArgsFmtString, "concat_ws")
+					return nil, pgerror.Newf(pgcode.UndefinedFunction, errInsufficientArgsFmtString, "concat_ws")
 				}
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -280,7 +281,7 @@ var builtins = map[string]builtinDefinition{
 					}
 					return tree.NewDString(buf.String()), nil
 				}
-				return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"invalid source encoding name %q", enc)
 			},
 			Info: "Decode the bytes in `str` into a string using encoding `enc`. " +
@@ -311,7 +312,7 @@ var builtins = map[string]builtinDefinition{
 					}
 					return tree.NewDBytes(tree.DBytes(res)), nil
 				}
-				return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"invalid destination encoding name %q", enc)
 			},
 			Info: "Encode the string `str` as a byte array using encoding `enc`. " +
@@ -497,7 +498,7 @@ var builtins = map[string]builtinDefinition{
 
 				if !(dIPAddr.Family == ipaddr.IPv4family && mask >= 0 && mask <= 32) && !(dIPAddr.Family == ipaddr.IPv6family && mask >= 0 && mask <= 128) {
 					return nil, pgerror.Newf(
-						pgerror.CodeInvalidParameterValueError, "invalid mask length: %d", mask)
+						pgcode.InvalidParameterValue, "invalid mask length: %d", mask)
 				}
 				return &tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: dIPAddr.Family, Addr: dIPAddr.Addr, Mask: byte(mask)}}, nil
 			},
@@ -620,7 +621,7 @@ var builtins = map[string]builtinDefinition{
 				// ip will be nil.
 				if ip == nil {
 					return nil, pgerror.Newf(
-						pgerror.CodeInvalidParameterValueError, "invalid IP format: %s", ipdstr.String())
+						pgcode.InvalidParameterValue, "invalid IP format: %s", ipdstr.String())
 				}
 				return tree.NewDBytes(tree.DBytes(ip)), nil
 			},
@@ -644,7 +645,7 @@ var builtins = map[string]builtinDefinition{
 
 				if field <= 0 {
 					return nil, pgerror.Newf(
-						pgerror.CodeInvalidParameterValueError, "field position %d must be greater than zero", field)
+						pgcode.InvalidParameterValue, "field position %d must be greater than zero", field)
 				}
 
 				splits := strings.Split(text, sep)
@@ -695,7 +696,7 @@ var builtins = map[string]builtinDefinition{
 				data, format := *args[0].(*tree.DBytes), string(tree.MustBeDString(args[1]))
 				be, ok := sessiondata.BytesEncodeFormatFromString(format)
 				if !ok {
-					return nil, pgerror.New(pgerror.CodeInvalidParameterValueError,
+					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for encode()")
 				}
 				return tree.NewDString(lex.EncodeByteArrayToRawBytes(
@@ -713,7 +714,7 @@ var builtins = map[string]builtinDefinition{
 				data, format := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
 				be, ok := sessiondata.BytesEncodeFormatFromString(format)
 				if !ok {
-					return nil, pgerror.New(pgerror.CodeInvalidParameterValueError,
+					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for decode()")
 				}
 				res, err := lex.DecodeRawBytesToByteArray(data, be)
@@ -1866,7 +1867,7 @@ may increase either contention or retry errors, or both.`,
 
 				default:
 					return nil, pgerror.Newf(
-						pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+						pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
 				}
 			},
 			Info: "Extracts `element` from `input`.\n" +
@@ -2926,7 +2927,7 @@ may increase either contention or retry errors, or both.`,
 					},
 				})
 				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
-					return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError, "message: %s", err)
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "message: %s", err)
 				}
 				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
 
@@ -3122,7 +3123,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 
 			if length < 0 {
 				return nil, pgerror.Newf(
-					pgerror.CodeInvalidParameterValueError, "negative substring length %d not allowed", length)
+					pgcode.InvalidParameterValue, "negative substring length %d not allowed", length)
 			}
 
 			end := start + length
@@ -3281,11 +3282,11 @@ var (
 )
 
 var (
-	errJSONObjectNotEvenNumberOfElements = pgerror.New(pgerror.CodeInvalidParameterValueError,
+	errJSONObjectNotEvenNumberOfElements = pgerror.New(pgcode.InvalidParameterValue,
 		"array must have even number of elements")
-	errJSONObjectNullValueForKey = pgerror.New(pgerror.CodeInvalidParameterValueError,
+	errJSONObjectNullValueForKey = pgerror.New(pgcode.InvalidParameterValue,
 		"null value not allowed for object key")
-	errJSONObjectMismatchedArrayDim = pgerror.New(pgerror.CodeInvalidParameterValueError,
+	errJSONObjectMismatchedArrayDim = pgerror.New(pgcode.InvalidParameterValue,
 		"mismatched array dimensions")
 )
 
@@ -3334,7 +3335,7 @@ func checkHasNulls(ary tree.DArray) error {
 	if ary.HasNulls {
 		for i := range ary.Array {
 			if ary.Array[i] == tree.DNull {
-				return pgerror.Newf(pgerror.CodeNullValueNotAllowedError, "path element at position %d is null", i+1)
+				return pgerror.Newf(pgcode.NullValueNotAllowed, "path element at position %d is null", i+1)
 			}
 		}
 	}
@@ -3480,14 +3481,14 @@ var jsonBuildObjectImpl = tree.Overload{
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		if len(args)%2 != 0 {
-			return nil, pgerror.New(pgerror.CodeInvalidParameterValueError,
+			return nil, pgerror.New(pgcode.InvalidParameterValue,
 				"argument list must have even number of elements")
 		}
 
 		builder := json.NewObjectBuilder(len(args) / 2)
 		for i := 0; i < len(args); i += 2 {
 			if args[i] == tree.DNull {
-				return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"argument %d cannot be null", i+1)
 			}
 
@@ -3518,7 +3519,7 @@ var toJSONImpl = tree.Overload{
 	Info: "Returns the value as JSON or JSONB.",
 }
 
-var prettyPrintNotSupportedError = pgerror.Newf(pgerror.CodeFeatureNotSupportedError, "pretty printing is not supported")
+var prettyPrintNotSupportedError = pgerror.Newf(pgcode.FeatureNotSupported, "pretty printing is not supported")
 
 var arrayToJSONImpls = makeBuiltin(jsonProps(),
 	tree.Overload{
@@ -3640,10 +3641,10 @@ var jsonArrayLengthImpl = tree.Overload{
 		case json.ArrayJSONType:
 			return tree.NewDInt(tree.DInt(j.Len())), nil
 		case json.ObjectJSONType:
-			return nil, pgerror.New(pgerror.CodeInvalidParameterValueError,
+			return nil, pgerror.New(pgcode.InvalidParameterValue,
 				"cannot get array length of a non-array")
 		default:
-			return nil, pgerror.New(pgerror.CodeInvalidParameterValueError,
+			return nil, pgerror.New(pgcode.InvalidParameterValue,
 				"cannot get array length of a scalar")
 		}
 	},
@@ -4065,7 +4066,7 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 			flags &^= syntax.OneLine
 		default:
 			return "", pgerror.Newf(
-				pgerror.CodeInvalidRegularExpressionError, "invalid regexp flag: %q", sqlFlag)
+				pgcode.InvalidRegularExpression, "invalid regexp flag: %q", sqlFlag)
 		}
 	}
 
@@ -4091,7 +4092,7 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 func overlay(s, to string, pos, size int) (tree.Datum, error) {
 	if pos < 1 {
 		return nil, pgerror.Newf(
-			pgerror.CodeInvalidParameterValueError, "non-positive substring length not allowed: %d", pos)
+			pgcode.InvalidParameterValue, "non-positive substring length not allowed: %d", pos)
 	}
 	pos--
 
@@ -4228,7 +4229,7 @@ func extractStringFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, e
 		return tree.NewDInt(tree.DInt(int64(seconds))), nil
 	default:
 		return nil, pgerror.Newf(
-			pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+			pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
 	}
 }
 
@@ -4278,7 +4279,7 @@ func extractStringFromTimestamp(
 		return tree.NewDInt(tree.DInt(fromTime.Unix())), nil
 
 	default:
-		return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
 	}
 }
 
@@ -4305,7 +4306,7 @@ func truncateTime(fromTime *tree.DTime, timeSpan string) (*tree.DTime, error) {
 		micro = (micro / microsPerMilli) * microsPerMilli
 	case "microsecond", "microseconds":
 	default:
-		return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
 	}
 
 	return tree.MakeDTime(timeofday.New(hour, min, sec, micro)), nil
@@ -4397,7 +4398,7 @@ func encodeEscape(input []byte) string {
 	return result.String()
 }
 
-var errInvalidSyntaxForDecode = pgerror.New(pgerror.CodeInvalidParameterValueError, "invalid syntax for decode(..., 'escape')")
+var errInvalidSyntaxForDecode = pgerror.New(pgcode.InvalidParameterValue, "invalid syntax for decode(..., 'escape')")
 
 func isOctalDigit(c byte) bool {
 	return '0' <= c && c <= '7'
@@ -4491,7 +4492,7 @@ func truncateTimestamp(
 		nsec = microseconds
 
 	default:
-		return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
 	}
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
@@ -4502,7 +4503,7 @@ func truncateTimestamp(
 func asJSONBuildObjectKey(d tree.Datum) (string, error) {
 	switch t := d.(type) {
 	case *tree.DJSON, *tree.DArray, *tree.DTuple:
-		return "", pgerror.New(pgerror.CodeInvalidParameterValueError,
+		return "", pgerror.New(pgcode.InvalidParameterValue,
 			"key value must be scalar, not array, tuple, or json")
 	case *tree.DString:
 		return string(*t), nil
@@ -4618,7 +4619,7 @@ func CleanEncodingName(s string) string {
 }
 
 var errInsufficientPriv = pgerror.New(
-	pgerror.CodeInsufficientPrivilegeError, "insufficient privilege",
+	pgcode.InsufficientPrivilege, "insufficient privilege",
 )
 
 func checkPrivilegedUser(ctx *tree.EvalContext) error {
@@ -4636,7 +4637,7 @@ var EvalFollowerReadOffset func(clusterID uuid.UUID, _ *cluster.Settings) (time.
 
 func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 	if EvalFollowerReadOffset == nil {
-		return time.Time{}, pgerror.New(pgerror.CodeFeatureNotSupportedError,
+		return time.Time{}, pgerror.New(pgcode.FeatureNotSupported,
 			tree.FollowerReadTimestampFunctionName+
 				" is only available in ccl distribution")
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1025,7 +1026,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 				if idxLen != tableRowCount {
 					// TODO(vivek): find the offending row and include it in the error.
 					return pgerror.Newf(
-						pgerror.CodeUniqueViolationError,
+						pgcode.UniqueViolation,
 						"%d entries, expected %d violates unique constraint %q",
 						idxLen, tableRowCount, idx.Name,
 					)

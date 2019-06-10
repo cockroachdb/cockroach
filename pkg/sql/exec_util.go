@@ -140,7 +140,7 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	opt.DefaultJoinOrderLimit,
 	func(v int64) error {
 		if v < 0 {
-			return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+			return pgerror.Newf(pgcode.InvalidParameterValue,
 				"cannot set sql.defaults.reorder_joins_limit to a negative value: %d", v)
 		}
 		return nil

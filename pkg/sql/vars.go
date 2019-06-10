@@ -239,7 +239,7 @@ var varGen = map[string]sessionVar{
 				return wrapSetVarError("default_int_size", val, "%v", err)
 			}
 			if i != 4 && i != 8 {
-				return pgerror.New(pgerror.CodeInvalidParameterValueError,
+				return pgerror.New(pgcode.InvalidParameterValue,
 					`only 4 or 8 are supported by default_int_size`)
 			}
 			// Only record when the value has been changed to a non-default
@@ -369,7 +369,7 @@ var varGen = map[string]sessionVar{
 				return err
 			}
 			if b < 0 {
-				return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+				return pgerror.Newf(pgcode.InvalidParameterValue,
 					"cannot set reorder_joins_limit to a negative value: %d", b)
 			}
 			m.SetReorderJoinsLimit(int(b))
@@ -455,7 +455,7 @@ var varGen = map[string]sessionVar{
 			// See also the documentation around (DataConversionConfig).GetFloatPrec()
 			// in session_data.go.
 			if i < -15 || i > 3 {
-				return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+				return pgerror.Newf(pgcode.InvalidParameterValue,
 					`%d is outside the valid range for parameter "extra_float_digits" (-15 .. 3)`, i)
 			}
 			m.SetExtraFloatDigits(int(i))
@@ -804,7 +804,7 @@ func makeCompatBoolVar(varName string, displayValue, anyValAllowed bool) session
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
-				return pgerror.WithCandidateCode(err, pgerror.CodeInvalidParameterValueError)
+				return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 			}
 			if anyValAllowed || b == displayValue {
 				return nil
@@ -916,7 +916,7 @@ func getSessionVar(name string, missingOk bool) (bool, sessionVar, error) {
 		if missingOk {
 			return false, sessionVar{}, nil
 		}
-		return false, sessionVar{}, pgerror.Newf(pgerror.CodeUndefinedObjectError,
+		return false, sessionVar{}, pgerror.Newf(pgcode.UndefinedObject,
 			"unrecognized configuration parameter %q", name)
 	}
 

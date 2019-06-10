@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -147,7 +148,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	// Raise error if mutation op is part of a read-only transaction.
 	if opt.IsMutationOp(e) {
 		if b.evalCtx.TxnReadOnly {
-			return execPlan{}, pgerror.Newf(pgerror.CodeReadOnlySQLTransactionError,
+			return execPlan{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
 		}
 	}

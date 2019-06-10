@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -182,13 +183,13 @@ func importPlanHook(
 			found, descI, err := table.ResolveTarget(ctx,
 				p, p.SessionData().Database, p.SessionData().SearchPath)
 			if err != nil {
-				return pgerror.Wrap(err, pgerror.CodeUndefinedTableError,
+				return pgerror.Wrap(err, pgcode.UndefinedTable,
 					"resolving target import name")
 			}
 			if !found {
 				// Check if database exists right now. It might not after the import is done,
 				// but it's better to fail fast than wait until restore.
-				return pgerror.Newf(pgerror.CodeUndefinedObjectError,
+				return pgerror.Newf(pgcode.UndefinedObject,
 					"database does not exist: %q", table)
 			}
 			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
@@ -197,7 +198,7 @@ func importPlanHook(
 			// database, so it must exist.
 			dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, p.SessionData().Database, true /*required*/)
 			if err != nil {
-				return pgerror.Wrap(err, pgerror.CodeUndefinedObjectError,
+				return pgerror.Wrap(err, pgcode.UndefinedObject,
 					"could not resolve current database")
 			}
 			parentID = dbDesc.ID
@@ -211,7 +212,7 @@ func importPlanHook(
 			if override, ok := opts[csvDelimiter]; ok {
 				comma, err := util.GetSingleRune(override)
 				if err != nil {
-					return pgerror.Wrap(err, pgerror.CodeSyntaxError, "invalid comma value")
+					return pgerror.Wrap(err, pgcode.Syntax, "invalid comma value")
 				}
 				format.Csv.Comma = comma
 			}
@@ -219,7 +220,7 @@ func importPlanHook(
 			if override, ok := opts[csvComment]; ok {
 				comment, err := util.GetSingleRune(override)
 				if err != nil {
-					return pgerror.Wrap(err, pgerror.CodeSyntaxError, "invalid comment value")
+					return pgerror.Wrap(err, pgcode.Syntax, "invalid comment value")
 				}
 				format.Csv.Comment = comment
 			}
@@ -231,10 +232,10 @@ func importPlanHook(
 			if override, ok := opts[csvSkip]; ok {
 				skip, err := strconv.Atoi(override)
 				if err != nil {
-					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %s value", csvSkip)
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid %s value", csvSkip)
 				}
 				if skip < 0 {
-					return pgerror.Newf(pgerror.CodeSyntaxError, "%s must be >= 0", csvSkip)
+					return pgerror.Newf(pgcode.Syntax, "%s must be >= 0", csvSkip)
 				}
 				format.Csv.Skip = uint32(skip)
 			}
@@ -248,7 +249,7 @@ func importPlanHook(
 			if override, ok := opts[mysqlOutfileRowSep]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+					return pgerror.Wrapf(err, pgcode.Syntax,
 						"invalid %q value", mysqlOutfileRowSep)
 				}
 				format.MysqlOut.RowSeparator = c
@@ -257,7 +258,7 @@ func importPlanHook(
 			if override, ok := opts[mysqlOutfileFieldSep]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %q value", mysqlOutfileFieldSep)
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid %q value", mysqlOutfileFieldSep)
 				}
 				format.MysqlOut.FieldSeparator = c
 			}
@@ -265,7 +266,7 @@ func importPlanHook(
 			if override, ok := opts[mysqlOutfileEnclose]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %q value", mysqlOutfileRowSep)
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid %q value", mysqlOutfileRowSep)
 				}
 				format.MysqlOut.Enclose = roachpb.MySQLOutfileOptions_Always
 				format.MysqlOut.Encloser = c
@@ -274,7 +275,7 @@ func importPlanHook(
 			if override, ok := opts[mysqlOutfileEscape]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %q value", mysqlOutfileRowSep)
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid %q value", mysqlOutfileRowSep)
 				}
 				format.MysqlOut.HasEscape = true
 				format.MysqlOut.Escape = c
@@ -292,7 +293,7 @@ func importPlanHook(
 			if override, ok := opts[pgCopyDelimiter]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %q value", pgCopyDelimiter)
+					return pgerror.Wrapf(err, pgcode.Syntax, "invalid %q value", pgCopyDelimiter)
 				}
 				format.PgCopy.Delimiter = c
 			}

@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -41,7 +42,7 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 		}
 
 		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
-			return nil, pgerror.Newf(pgerror.CodeStringDataRightTruncationError,
+			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
 				"value too long for type %s (column %q)",
 				typ.SQLString(), tree.ErrNameStringP(name))
 		}
@@ -54,7 +55,7 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-					return nil, pgerror.Newf(pgerror.CodeNumericValueOutOfRangeError,
+					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange,
 						"integer out of range for type %s (column %q)",
 						typ.Name(), tree.ErrNameStringP(name))
 				}
@@ -67,12 +68,12 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 				switch typ.Oid() {
 				case oid.T_varbit:
 					if bitLen > uint(typ.Width()) {
-						return nil, pgerror.Newf(pgerror.CodeStringDataRightTruncationError,
+						return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
 							"bit string length %d too large for type %s", bitLen, typ.SQLString())
 					}
 				default:
 					if bitLen != uint(typ.Width()) {
-						return nil, pgerror.Newf(pgerror.CodeStringDataLengthMismatchError,
+						return nil, pgerror.Newf(pgcode.StringDataLengthMismatch,
 							"bit string length %d does not match type %s", bitLen, typ.SQLString())
 					}
 				}
@@ -140,7 +141,7 @@ func CheckDatumTypeFitsColumnType(col *ColumnDescriptor, typ *types.T) error {
 		return nil
 	}
 	if !typ.Equivalent(&col.Type) {
-		return pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+		return pgerror.Newf(pgcode.DatatypeMismatch,
 			"value type %s doesn't match type %s of column %q",
 			typ.String(), col.Type.String(), tree.ErrNameString(col.Name))
 	}

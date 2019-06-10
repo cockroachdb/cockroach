@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -528,7 +527,7 @@ func (m *pgDumpReader) readFile(
 				row, err := ps.Next()
 				// We expect an explicit copyDone here. io.EOF is unexpected.
 				if err == io.EOF {
-					return makeRowErr(inputName, count, pgerror.CodeProtocolViolationError,
+					return makeRowErr(inputName, count, pgcode.ProtocolViolation,
 						"unexpected EOF")
 				}
 				if row == errCopyDone {
@@ -544,7 +543,7 @@ func (m *pgDumpReader) readFile(
 				switch row := row.(type) {
 				case copyData:
 					if expected, got := len(conv.visibleCols), len(row); expected != got {
-						return makeRowErr(inputName, count, pgerror.CodeSyntaxError,
+						return makeRowErr(inputName, count, pgcode.Syntax,
 							"expected %d values, got %d", expected, got)
 					}
 					for i, s := range row {
@@ -554,7 +553,7 @@ func (m *pgDumpReader) readFile(
 							conv.datums[i], err = tree.ParseDatumStringAs(conv.visibleColTypes[i], *s, conv.evalCtx)
 							if err != nil {
 								col := conv.visibleCols[i]
-								return wrapRowErr(err, inputName, count, pgerror.CodeSyntaxError,
+								return wrapRowErr(err, inputName, count, pgcode.Syntax,
 									"parse %q as %s", col.Name, col.Type.SQLString())
 							}
 						}

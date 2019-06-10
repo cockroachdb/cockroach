@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -133,7 +134,7 @@ func NewUniquenessConstraintViolationError(
 		valStrs = append(valStrs, val.String())
 	}
 
-	return pgerror.Newf(pgerror.CodeUniqueViolationError,
+	return pgerror.Newf(pgcode.UniqueViolation,
 		"duplicate key value (%s)=(%s) violates unique constraint %q",
 		strings.Join(index.ColumnNames, ","),
 		strings.Join(valStrs, ","),

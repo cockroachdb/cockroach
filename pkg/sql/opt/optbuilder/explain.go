@@ -15,6 +15,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -50,7 +51,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 			telemetry.Inc(sqltelemetry.ExplainDistSQLUseCounter)
 		}
 		if analyze && tree.IsStmtParallelized(explain.Statement) {
-			panic(pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
+			panic(pgerror.Newf(pgcode.FeatureNotSupported,
 				"EXPLAIN ANALYZE does not support RETURNING NOTHING statements"))
 		}
 		cols = sqlbase.ExplainDistSQLColumns
@@ -64,7 +65,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		cols = sqlbase.ExplainOptColumns
 
 	default:
-		panic(pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
 			"EXPLAIN ANALYZE does not support RETURNING NOTHING statements"))
 	}
 	b.synthesizeResultColumns(outScope, cols)

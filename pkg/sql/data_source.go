@@ -16,6 +16,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -149,7 +150,7 @@ func (p *planner) getDataSource(
 		}
 		cols := planColumns(plan)
 		if len(cols) == 0 {
-			return planDataSource{}, pgerror.Newf(pgerror.CodeUndefinedColumnError,
+			return planDataSource{}, pgerror.Newf(pgcode.UndefinedColumn,
 				"statement source \"%v\" does not return any columns", t.Statement)
 		}
 		return planDataSource{
@@ -166,7 +167,7 @@ func (p *planner) getDataSource(
 	case *tree.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
 		if t.Lateral {
-			return planDataSource{}, pgerror.Newf(pgerror.CodeFeatureNotSupportedError, "LATERAL is not supported")
+			return planDataSource{}, pgerror.Newf(pgcode.FeatureNotSupported, "LATERAL is not supported")
 		}
 
 		if t.IndexFlags != nil {
@@ -204,12 +205,12 @@ func (p *planner) getTableScanByRef(
 	}}
 	desc, err := p.Tables().getTableVersionByID(ctx, p.txn, sqlbase.ID(tref.TableID), flags)
 	if err != nil {
-		return planDataSource{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+		return planDataSource{}, pgerror.Wrapf(err, pgcode.Syntax,
 			"%s", tree.ErrString(tref))
 	}
 
 	if tref.Columns != nil && len(tref.Columns) == 0 {
-		return planDataSource{}, pgerror.Newf(pgerror.CodeSyntaxError,
+		return planDataSource{}, pgerror.Newf(pgcode.Syntax,
 			"an explicit list of column IDs must include at least one column")
 	}
 
@@ -289,7 +290,7 @@ func renameSource(
 			if colIdx >= len(src.info.SourceColumns) {
 				srcName := tree.ErrString(&tableAlias)
 				return planDataSource{}, pgerror.Newf(
-					pgerror.CodeInvalidColumnReferenceError,
+					pgcode.InvalidColumnReference,
 					"source %q has %d columns available but %d columns specified",
 					srcName, aliasIdx, len(colAlias))
 			}
@@ -347,7 +348,7 @@ func (p *planner) getViewPlan(
 ) (planDataSource, error) {
 	stmt, err := parser.ParseOne(desc.ViewQuery)
 	if err != nil {
-		return planDataSource{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+		return planDataSource{}, pgerror.Wrapf(err, pgcode.Syntax,
 			"failed to parse underlying query from view %q", tn)
 	}
 	sel, ok := stmt.AST.(*tree.Select)

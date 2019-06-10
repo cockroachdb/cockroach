@@ -15,6 +15,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -37,7 +38,7 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	for _, col := range inScope.ordering {
 		if !private.GroupingCols.Contains(col.ID()) {
 			panic(pgerror.Newf(
-				pgerror.CodeInvalidColumnReferenceError,
+				pgcode.InvalidColumnReference,
 				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
 			))
 		}
@@ -78,7 +79,7 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	for _, col := range inScope.ordering {
 		if !distinctOnCols.Contains(col.ID()) {
 			panic(pgerror.Newf(
-				pgerror.CodeInvalidColumnReferenceError,
+				pgcode.InvalidColumnReference,
 				"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 			))
 		}

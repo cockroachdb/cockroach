@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -141,11 +142,11 @@ func (oc *optCatalog) ResolveSchema(
 	if !found {
 		if !name.ExplicitSchema && !name.ExplicitCatalog {
 			return nil, cat.SchemaName{}, pgerror.New(
-				pgerror.CodeInvalidNameError, "no database specified",
+				pgcode.InvalidName, "no database specified",
 			)
 		}
 		return nil, cat.SchemaName{}, pgerror.Newf(
-			pgerror.CodeInvalidSchemaNameError, "target database or schema does not exist",
+			pgcode.InvalidSchemaName, "target database or schema does not exist",
 		)
 	}
 	return &optSchema{
@@ -836,7 +837,7 @@ func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
 	if ok {
 		return col, nil
 	}
-	return col, pgerror.Newf(pgerror.CodeUndefinedColumnError,
+	return col, pgerror.Newf(pgcode.UndefinedColumn,
 		"column [%d] does not exist", colID)
 }
 
