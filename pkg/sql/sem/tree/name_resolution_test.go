@@ -34,10 +34,10 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`a`, `a`, `""."".a`, ``},
 		{`a.b`, `a.b`, `"".a.b`, ``},
 		{`a.b.c`, `a.b.c`, `a.b.c`, ``},
-		{`a.b.c.d`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.d`, ``, ``, `at or near "\.": syntax error`},
 		{`a.""`, ``, ``, `invalid table name: a\.""`},
 		{`a.b.""`, ``, ``, `invalid table name: a\.b\.""`},
-		{`a.b.c.""`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.""`, ``, ``, `at or near "\.": syntax error`},
 		{`a."".c`, ``, ``, `invalid table name: a\.""\.c`},
 		// CockroachDB extension: empty catalog name.
 		{`"".b.c`, `"".b.c`, `"".b.c`, ``},
@@ -51,10 +51,10 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`*`, `*`, `""."".*`, ``},
 		{`a.*`, `a.*`, `"".a.*`, ``},
 		{`a.b.*`, `a.b.*`, `a.b.*`, ``},
-		{`a.b.c.*`, ``, ``, `syntax error at or near "\."`},
-		{`a.b.*.c`, ``, ``, `syntax error at or near "\."`},
-		{`a.*.b`, ``, ``, `syntax error at or near "\."`},
-		{`*.b`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.*`, ``, ``, `at or near "\.": syntax error`},
+		{`a.b.*.c`, ``, ``, `at or near "\.": syntax error`},
+		{`a.*.b`, ``, ``, `at or near "\.": syntax error`},
+		{`*.b`, ``, ``, `at or near "\.": syntax error`},
 		{`"".*`, ``, ``, `invalid table name: "".\*`},
 		{`a."".*`, ``, ``, `invalid table name: a\.""\.\*`},
 		{`a.b."".*`, ``, ``, `invalid table name: a.b.""`},
@@ -66,7 +66,7 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`"user".x.*`, `"user".x.*`, `"user".x.*`, ``},
 		{`x.user.*`, `x."user".*`, `x."user".*`, ``},
 
-		{`foo@bar`, ``, ``, `syntax error at or near "@"`},
+		{`foo@bar`, ``, ``, `at or near "@": syntax error`},
 	}
 
 	for _, tc := range testCases {
@@ -118,12 +118,12 @@ func TestClassifyColumnName(t *testing.T) {
 		{`a.b`, `a.b`, ``},
 		{`a.b.c`, `a.b.c`, ``},
 		{`a.b.c.d`, `a.b.c.d`, ``},
-		{`a.b.c.d.e`, ``, `syntax error at or near "\."`},
+		{`a.b.c.d.e`, ``, `at or near "\.": syntax error`},
 		{`""`, ``, `invalid column name: ""`},
 		{`a.""`, ``, `invalid column name: a\.""`},
 		{`a.b.""`, ``, `invalid column name: a\.b\.""`},
 		{`a.b.c.""`, ``, `invalid column name: a\.b\.c\.""`},
-		{`a.b.c.d.""`, ``, `syntax error at or near "\."`},
+		{`a.b.c.d.""`, ``, `at or near "\.": syntax error`},
 		{`"".a`, ``, `invalid column name: ""\.a`},
 		{`"".a.b`, ``, `invalid column name: ""\.a\.b`},
 		// CockroachDB extension: empty catalog name.
@@ -142,14 +142,14 @@ func TestClassifyColumnName(t *testing.T) {
 		{`a.*`, `a.*`, ``},
 		{`a.b.*`, `a.b.*`, ``},
 		{`a.b.c.*`, `a.b.c.*`, ``},
-		{`a.b.c.d.*`, ``, `syntax error at or near "\."`},
-		{`a.b.*.c`, ``, `syntax error at or near "\."`},
-		{`a.*.b`, ``, `syntax error at or near "\."`},
-		{`*.b`, ``, `syntax error at or near "\."`},
+		{`a.b.c.d.*`, ``, `at or near "\.": syntax error`},
+		{`a.b.*.c`, ``, `at or near "\.": syntax error`},
+		{`a.*.b`, ``, `at or near "\.": syntax error`},
+		{`*.b`, ``, `at or near "\.": syntax error`},
 		{`"".*`, ``, `invalid column name: "".\*`},
 		{`a."".*`, ``, `invalid column name: a\.""\.\*`},
 		{`a.b."".*`, ``, `invalid column name: a\.b\.""\.\*`},
-		{`a.b.c."".*`, ``, `syntax error at or near "\."`},
+		{`a.b.c."".*`, ``, `at or near "\.": syntax error`},
 
 		{`"".a.*`, ``, `invalid column name: ""\.a.*`},
 		// CockroachDB extension: empty catalog name.
@@ -162,7 +162,7 @@ func TestClassifyColumnName(t *testing.T) {
 		{`"user".x.*`, `"user".x.*`, ``},
 		{`x.user.*`, `x.user.*`, ``},
 
-		{`foo@bar`, ``, `syntax error at or near "@"`},
+		{`foo@bar`, ``, `at or near "@": syntax error`},
 	}
 
 	for _, tc := range testCases {

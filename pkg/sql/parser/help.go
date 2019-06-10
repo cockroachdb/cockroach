@@ -21,9 +21,11 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/errors"
 )
 
 // HelpMessage describes a contextual help message.
@@ -74,7 +76,7 @@ func (h *HelpMessage) Format(w io.Writer) {
 func helpWith(sqllex sqlLexer, helpText string) int {
 	scan := sqllex.(*lexer)
 	if helpText == "" {
-		scan.lastError = pgerror.New(pgerror.CodeSyntaxError, "")
+		scan.lastError = pgerror.WithCandidateCode(errors.New("help upon syntax error"), pgcode.Syntax)
 		scan.populateHelpMsg("help:\n" + AllHelp)
 		return 1
 	}

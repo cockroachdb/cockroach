@@ -481,7 +481,7 @@ var ignoredErrorPatterns = []string{
 	"invalid destination encoding name",
 	"invalid IP format",
 	"invalid format code",
-	`.*val\(\): syntax error at or near`,
+	`.*val\(\): syntax error`,
 	"invalid source encoding name",
 	"strconv.Atoi: parsing .*: invalid syntax",
 	"field position .* must be greater than zero",

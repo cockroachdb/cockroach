@@ -29,10 +29,10 @@ func TestUnresolvedObjectName(t *testing.T) {
 		{`a`, `a`, `""."".a`, ``},
 		{`a.b`, `a.b`, `"".a.b`, ``},
 		{`a.b.c`, `a.b.c`, `a.b.c`, ``},
-		{`a.b.c.d`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.d`, ``, ``, `at or near "\.": syntax error`},
 		{`a.""`, ``, ``, `invalid table name: a\.""`},
 		{`a.b.""`, ``, ``, `invalid table name: a\.b\.""`},
-		{`a.b.c.""`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.""`, ``, ``, `at or near "\.": syntax error`},
 		{`a."".c`, ``, ``, `invalid table name: a\.""\.c`},
 
 		// CockroachDB extension: empty catalog name.
@@ -44,8 +44,8 @@ func TestUnresolvedObjectName(t *testing.T) {
 		{`x.user.y`, `x."user".y`, `x."user".y`, ``},
 		{`x.user`, `x."user"`, `"".x."user"`, ``},
 
-		{`foo@bar`, ``, ``, `syntax error at or near "@"`},
-		{`test.*`, ``, ``, `syntax error at or near "\*"`},
+		{`foo@bar`, ``, ``, `at or near "@": syntax error`},
+		{`test.*`, ``, ``, `at or near "\*": syntax error`},
 	}
 
 	for _, tc := range testCases {

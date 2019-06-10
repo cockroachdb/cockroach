@@ -183,10 +183,10 @@ users       bar         false       2             name         ASC        false 
 statement error precision for type float must be at least 1 bit
 CREATE TABLE test.precision (x FLOAT(0))
 
-statement error scale \(2\) must be between 0 and precision \(0\) at or near "\)"
+statement error at or near "\)": syntax error: scale \(2\) must be between 0 and precision \(0\)
 CREATE TABLE test.precision (x DECIMAL(0, 2))
 
-statement error scale \(4\) must be between 0 and precision \(2\) at or near "\)"
+statement error at or near "\)": syntax error: scale \(4\) must be between 0 and precision \(2\)
 CREATE TABLE test.precision (x DECIMAL(2, 4))
 
 query TT

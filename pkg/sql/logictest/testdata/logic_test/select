@@ -23,7 +23,7 @@ two four
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 
-query error syntax error at or near "from"
+query error at or near "from": syntax error
 SELECT FROM abc
 
 query error could not parse "hello" as type bool
@@ -50,7 +50,7 @@ TABLE abc
 ----
 1 2 3
 
-query error syntax error at or near "*"
+query error at or near "\*": syntax error
 TABLE abc.*
 
 query III colnames
