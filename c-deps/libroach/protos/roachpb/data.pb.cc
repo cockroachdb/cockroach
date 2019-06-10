@@ -3339,7 +3339,6 @@ const int Transaction::kOrigTimestampFieldNumber;
 const int Transaction::kMaxTimestampFieldNumber;
 const int Transaction::kRefreshedTimestampFieldNumber;
 const int Transaction::kObservedTimestampsFieldNumber;
-const int Transaction::kDeprecatedWritingFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
 const int Transaction::kIntentSpansFieldNumber;
 const int Transaction::kInFlightWritesFieldNumber;
@@ -3574,20 +3573,6 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
-      // bool deprecated_writing = 9;
-      case 9: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(72u /* 72 & 0xFF */)) {
-
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &deprecated_writing_)));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       case 11: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(90u /* 90 & 0xFF */)) {
@@ -3730,11 +3715,6 @@ void Transaction::SerializeWithCachedSizes(
       output);
   }
 
-  // bool deprecated_writing = 9;
-  if (this->deprecated_writing() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(9, this->deprecated_writing(), output);
-  }
-
   for (unsigned int i = 0,
       n = static_cast<unsigned int>(this->intent_spans_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
@@ -3861,11 +3841,6 @@ size_t Transaction::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->status());
   }
 
-  // bool deprecated_writing = 9;
-  if (this->deprecated_writing() != 0) {
-    total_size += 1 + 1;
-  }
-
   // bool write_too_old = 12;
   if (this->write_too_old() != 0) {
     total_size += 1 + 1;
@@ -3921,9 +3896,6 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.status() != 0) {
     set_status(from.status());
   }
-  if (from.deprecated_writing() != 0) {
-    set_deprecated_writing(from.deprecated_writing());
-  }
   if (from.write_too_old() != 0) {
     set_write_too_old(from.write_too_old());
   }
@@ -3961,7 +3933,6 @@ void Transaction::InternalSwap(Transaction* other) {
   swap(epoch_zero_timestamp_, other->epoch_zero_timestamp_);
   swap(refreshed_timestamp_, other->refreshed_timestamp_);
   swap(status_, other->status_);
-  swap(deprecated_writing_, other->deprecated_writing_);
   swap(write_too_old_, other->write_too_old_);
   swap(orig_timestamp_was_observed_, other->orig_timestamp_was_observed_);
   _internal_metadata_.Swap(&other->_internal_metadata_);

@@ -936,9 +936,6 @@ func (t *Transaction) Restart(
 	t.UpgradePriority(upgradePriority)
 	t.WriteTooOld = false
 	t.Sequence = 0
-	// Reset Writing. Since we're using a new epoch, we don't care about the abort
-	// cache.
-	t.DeprecatedWriting = false
 }
 
 // BumpEpoch increments the transaction's epoch, allowing for an in-place
@@ -1011,10 +1008,6 @@ func (t *Transaction) Update(o *Transaction) {
 		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
 	}
 	t.UpgradePriority(o.Priority)
-
-	// We can't assert against regression here since it can actually happen
-	// that we update from a transaction which isn't Writing.
-	t.DeprecatedWriting = t.DeprecatedWriting || o.DeprecatedWriting
 
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence

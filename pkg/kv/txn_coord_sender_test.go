@@ -74,24 +74,6 @@ func (tc *TxnCoordSender) isTracking() bool {
 	return tc.interceptorAlloc.txnHeartbeater.mu.txnEnd != nil
 }
 
-// Test that the Transaction.DeprecatedWriting flag is set after performing any
-// writes.
-// TODO(nvanbenschoten): Remove this in 19.2.
-func TestTxnCoordSenderSetWritingFlag(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
-	defer s.Stop()
-	ctx := context.Background()
-
-	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	if err := txn.Put(ctx, roachpb.Key("a"), []byte("value")); err != nil {
-		t.Fatal(err)
-	}
-	if !txn.Serialize().DeprecatedWriting {
-		t.Fatal("txn is not marked as writing")
-	}
-}
-
 // TestTxnCoordSenderBeginTransaction verifies that a command sent with a
 // not-nil Txn with empty ID gets a new transaction initialized.
 func TestTxnCoordSenderBeginTransaction(t *testing.T) {
