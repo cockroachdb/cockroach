@@ -72,7 +72,7 @@ func grantRolePlanHook(
 		return nil, err
 	}
 
-	if err := p.RequireSuperUser(ctx, "grant role"); err != nil {
+	if _, err := p.RequireSuperUser(ctx, "grant role"); err != nil {
 		// Not a superuser: check permissions on each role.
 		allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
 		if err != nil {
@@ -201,7 +201,7 @@ func revokeRolePlanHook(
 		return nil, err
 	}
 
-	if err := p.RequireSuperUser(ctx, "revoke role"); err != nil {
+	if _, err := p.RequireSuperUser(ctx, "revoke role"); err != nil {
 		// Not a superuser: check permissions on each role.
 		allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
 		if err != nil {

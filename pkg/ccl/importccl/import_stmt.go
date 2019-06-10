@@ -157,7 +157,7 @@ func importPlanHook(
 
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
-		if err := p.RequireSuperUser(ctx, "IMPORT"); err != nil {
+		if _, err := p.RequireSuperUser(ctx, "IMPORT"); err != nil {
 			return err
 		}
 

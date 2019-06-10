@@ -48,7 +48,7 @@ type AuthorizationAccessor interface {
 
 	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
 	// or node). Includes the named action in the error message.
-	RequireSuperUser(ctx context.Context, action string) error
+	RequireSuperUser(ctx context.Context, action string) (bool, error)
 
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
@@ -146,27 +146,28 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Desc
 }
 
 // RequireSuperUser implements the AuthorizationAccessor interface.
-func (p *planner) RequireSuperUser(ctx context.Context, action string) error {
+func (p *planner) RequireSuperUser(ctx context.Context, action string) (bool, error) {
 	user := p.SessionData().User
 
 	// Check if user is 'root' or 'node'.
 	if user == security.RootUser || user == security.NodeUser {
-		return nil
+		return true, nil
 	}
 
 	// Expand role memberships.
 	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Check is 'user' is a member of role 'admin'.
 	if _, ok := memberOf[sqlbase.AdminRole]; ok {
-		return nil
+		return true, nil
 	}
 
-	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"only superusers are allowed to %s", action)
+	return false, nil 
+	//pgerror.Newf(pgcode.InsufficientPrivilege,
+	//	"only superusers are allowed to %s", action)
 }
 
 // MemberOfWithAdminOption looks up all the roles 'member' belongs to (direct and indirect) and
