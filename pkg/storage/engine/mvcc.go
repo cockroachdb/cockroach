@@ -840,7 +840,7 @@ func mvccGetInternal(
 		// by this transaction or not an intent at all (so there's no
 		// conflict). Note that when reading the own intent, the timestamp
 		// specified is irrelevant; we always want to see the intent (see
-		// TestMVCCReadWithPushedTimestamp).
+		// TestMVCCGetWithPushedTimestamp).
 		seekKey.Timestamp = metaTimestamp
 
 		// Check for case where we're reading our own txn's intent
@@ -853,7 +853,15 @@ func mvccGetInternal(
 					"failed to read with epoch %d due to a write intent with epoch %d",
 					txn.Epoch, meta.Txn.Epoch)
 			}
-			seekKey = seekKey.Next()
+			// Seek past the intent's timestamp and at least as far
+			// back as the read timestamp. This is necessary if the
+			// intent is at a higher timestamp than we're trying to
+			// read at.
+			if timestamp.Less(metaTimestamp) {
+				seekKey.Timestamp = timestamp
+			} else {
+				seekKey.Timestamp = metaTimestamp.Prev()
+			}
 		}
 	} else if txn != nil && timestamp.Less(txn.MaxTimestamp) {
 		// In this branch, the latest timestamp is ahead, and so the read of an
@@ -879,9 +887,9 @@ func mvccGetInternal(
 		// transaction, or in the absence of future versions that clock uncertainty
 		// would apply to.
 		seekKey.Timestamp = timestamp
-		if seekKey.Timestamp == (hlc.Timestamp{}) {
-			return nil, ignoredIntent, safeValue, nil
-		}
+	}
+	if seekKey.Timestamp == (hlc.Timestamp{}) {
+		return nil, ignoredIntent, safeValue, nil
 	}
 
 	iter.Seek(seekKey)
