@@ -417,12 +417,12 @@ statement ok
 DROP TABLE boundedtable
 
 # Creating multidimensional arrays should be disallowed.
-statement error unimplemented.*\nHINT.*32552
+statement error .*unimplemented.*\nHINT.*\n.*32552
 CREATE TABLE badtable (b INT[][])
 
 # Nested arrays should be disallowed
 
-query error unimplemented: arrays cannot have arrays as element type.*\nHINT.*32552
+query error unimplemented: arrays cannot have arrays as element type.*\nHINT.*\n.*32552
 SELECT ARRAY[ARRAY[1,2,3]]
 
 # The postgres-compat aliases should be disallowed.

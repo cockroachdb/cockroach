@@ -18,7 +18,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -29,6 +31,7 @@ func f(format string, e *Error) string {
 
 // m checks a match against a single regexp.
 func m(t *testing.T, s, re string) {
+	t.Helper()
 	matched, err := regexp.MatchString(re, s)
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +43,7 @@ func m(t *testing.T, s, re string) {
 
 // ml checks a match against an array of regexps.
 func ml(t *testing.T, s string, re []string) {
+	t.Helper()
 	lines := strings.Split(s, "\n")
 	for i := 0; i < len(lines) && i < len(re); i++ {
 		matched, err := regexp.MatchString(re[i], lines[i])
@@ -57,6 +61,7 @@ func ml(t *testing.T, s string, re []string) {
 
 // eq checks a string equality.
 func eq(t *testing.T, s, exp string) {
+	t.Helper()
 	if s != exp {
 		t.Errorf("got %q, expected %q", s, exp)
 	}
@@ -68,7 +73,7 @@ func TestInternalError(t *testing.T) {
 		fn   func(*testing.T, *Error)
 	}
 
-	const ie = internalErrorPrefix
+	const ie = "internal error: "
 
 	testData := []struct {
 		err   error
@@ -90,12 +95,9 @@ func TestInternalError(t *testing.T) {
 
 				// Verify that internal errors carry safe details.
 				{"safedetail", func(t *testing.T, e *Error) {
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go:\d+: woo %s \| string$`)
-					st, _ := log.DecodeStackTrace(e.SafeDetail[0].EncodedStackTrace)
-					sst := log.PrintStackTrace(st)
-					ml(t, sst, []string{
-						`.*internal_errors_test.go.*TestInternalError\(\)`,
-						".*testing.go.*tRunner"})
+					m(t, e.SafeDetail[0].SafeMessage, `.*TestInternalError.*`)
+					m(t, e.SafeDetail[1].SafeMessage, `woo %s`)
+					m(t, e.SafeDetail[2].SafeMessage, `arg 0: string`)
 				}},
 
 				// Verify that formatting works.
@@ -103,19 +105,14 @@ func TestInternalError(t *testing.T) {
 					eq(t, f("%v", e), ie+"woo waa")
 					eq(t, f("%s", e), ie+"woo waa")
 					eq(t, f("%#v", e), "(XX000) "+ie+"woo waa")
-					ml(t,
-						f("%+v", e),
-						[]string{
-							// Heading line: source, code, error message.
-							`.*internal_errors_test.go:\d+ in TestInternalError\(\): \(XX000\) ` +
-								ie + "woo waa",
-							// Safe details follow.
-							"-- detail --",
-							// Safe message.
-							`internal_errors_test.go:\d+: woo %s \| string`,
-							// Stack trace.
-							".*internal_errors_test.go.*TestInternalError.*",
-							".*testing.go.*tRunner.*"})
+					vErr := f("%+v", e)
+					m(t, vErr,
+						// Heading line: source, code, error message.
+						`.*internal_errors_test.go:\d+ in TestInternalError\(\): \(XX000\) `+
+							ie+"woo waa")
+					// Safe message.
+					m(t, vErr, "woo %s")
+					m(t, vErr, "arg 0: string")
 				}},
 			},
 		},
@@ -124,7 +121,8 @@ func TestInternalError(t *testing.T) {
 			[]pred{
 				// Verify that safe details are preserved.
 				{"safedetail", func(t *testing.T, e *Error) {
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go:\d+: safe %s \| waa$`)
+					m(t, e.SafeDetail[1].SafeMessage, `safe %s`)
+					m(t, e.SafeDetail[2].SafeMessage, `arg 0: waa`)
 				}},
 			},
 		},
@@ -139,13 +137,6 @@ func TestInternalError(t *testing.T) {
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
 				}},
-				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
-					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
-				}},
 			},
 		},
 		{
@@ -159,13 +150,6 @@ func TestInternalError(t *testing.T) {
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "makeNormal")
 				}},
-				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
-					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
-				}},
 			},
 		},
 		{
@@ -174,10 +158,7 @@ func TestInternalError(t *testing.T) {
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					eq(t, e.Code, CodeInternalError)
-					// errors.Wrap does not strip the "internal error" prefix
-					// inside the wrapped error. But we're still adding on the
-					// outside.  This is expected.
-					eq(t, e.Message, ie+"wrapB: wrapA: "+ie+"boo")
+					eq(t, e.Message, ie+"wrapB: wrapA: boo")
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "makeBoo")
@@ -188,8 +169,7 @@ func TestInternalError(t *testing.T) {
 						`stack trace:`,
 						`.*makeBoo.*`,
 					})
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go:\d+: boo \| string`)
-					m(t, e.SafeDetail[1].SafeMessage, `.*errors.withMessage`)
+					m(t, e.SafeDetail[0].SafeMessage, pgcode.Syntax)
 				}},
 			},
 		},
@@ -206,13 +186,6 @@ func TestInternalError(t *testing.T) {
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
 				}},
-				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
-					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
-				}},
 			},
 		},
 		{
@@ -227,13 +200,6 @@ func TestInternalError(t *testing.T) {
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
-				}},
-				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
-					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
 				}},
 			},
 		},
@@ -251,11 +217,7 @@ func TestInternalError(t *testing.T) {
 					eq(t, e.Source.Function, "TestInternalError")
 				}},
 				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
 					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
 				}},
 			},
 		},
@@ -275,9 +237,6 @@ func TestInternalError(t *testing.T) {
 				{"no-details", func(t *testing.T, e *Error) {
 					// Simple errors do not store stack trace details.
 					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
 				}},
 			},
 		},
@@ -302,17 +261,12 @@ func TestInternalError(t *testing.T) {
 							".*makeBoo.*",
 							".*TestInternalError.*",
 							".*tRunner.*",
-							"",
-							// Followed by the wrap stack trace underneath.
-							"stack trace:",
-							".*doWrap",
-							".*TestInternalError",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go.*boo \| string`)
-					m(t, e.SafeDetail[0].EncodedStackTrace, "makeBoo")
-					m(t, e.SafeDetail[1].SafeMessage, `internal_errors_test.go.*wrap %s \| string`)
-					m(t, e.SafeDetail[1].EncodedStackTrace, "doWrap")
+					m(t, e.SafeDetail[0].SafeMessage, pgcode.AdminShutdown)
+					m(t, e.SafeDetail[2].SafeMessage, `wrap %s`)
+					m(t, e.SafeDetail[3].SafeMessage, `arg 0: string`)
+					m(t, e.SafeDetail[5].SafeMessage, `boo`)
 				}},
 			},
 		},
@@ -339,8 +293,9 @@ func TestInternalError(t *testing.T) {
 							".*tRunner.*",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go.*iewrap %s \| string`)
-					m(t, e.SafeDetail[0].EncodedStackTrace, "TestInternalError")
+					m(t, e.SafeDetail[0].SafeMessage, "TestInternalError")
+					m(t, e.SafeDetail[1].SafeMessage, `iewrap %s`)
+					m(t, e.SafeDetail[2].SafeMessage, `arg 0: string`)
 				}},
 			},
 		},
@@ -358,26 +313,21 @@ func TestInternalError(t *testing.T) {
 					eq(t, e.Code, CodeInternalError)
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
-					eq(t, e.Source.Function, "makeBoo")
+					// The original cause is masked by the barrier.
+					eq(t, e.Source.Function, "TestInternalError")
 				}},
 				{"retained-details", func(t *testing.T, e *Error) {
 					ml(t, e.Detail,
 						[]string{
 							// Ensure that the assertion catcher is captured in details.
+							// Also makeBoo() is masked here.
 							"stack trace:",
-							".*makeBoo.*",
 							".*TestInternalError.*",
 							".*tRunner.*",
-							"",
-							// Followed by the wrap stack trace underneath.
-							"stack trace:",
-							".*TestInternalError",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go.*boo \| string`)
-					m(t, e.SafeDetail[0].EncodedStackTrace, "makeBoo")
-					m(t, e.SafeDetail[1].SafeMessage, `internal_errors_test.go.*iewrap2 %s \| string`)
-					m(t, e.SafeDetail[1].EncodedStackTrace, "TestInternalError")
+					m(t, e.SafeDetail[0].SafeMessage, "TestInternalError")
+					m(t, e.SafeDetail[1].SafeMessage, `iewrap2`)
 				}},
 			},
 		},
@@ -387,7 +337,12 @@ func TestInternalError(t *testing.T) {
 		t.Run(fmt.Sprintf("%d %s", i, test.err), func(t *testing.T) {
 			for _, pred := range test.preds {
 				t.Run(pred.name, func(t *testing.T) {
-					pred.fn(t, test.err.(*Error))
+					pgErr := Flatten(test.err)
+					pred.fn(t, pgErr)
+					if t.Failed() {
+						t.Logf("input error: %# v", pretty.Formatter(test.err))
+						t.Logf("pg error: %# v", pretty.Formatter(pgErr))
+					}
 				})
 			}
 		})
@@ -395,11 +350,11 @@ func TestInternalError(t *testing.T) {
 }
 
 func makeNormal() error {
-	return New(CodeSyntaxError, "syn")
+	return New(pgcode.Syntax, "syn")
 }
 
 func doWrap(err error) error {
-	return Wrapf(err, CodeAdminShutdownError, "wrap %s", "woo")
+	return Wrapf(err, pgcode.AdminShutdown, "wrap %s", "woo")
 }
 
 func makeBoo() error {

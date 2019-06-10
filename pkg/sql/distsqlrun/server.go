@@ -574,7 +574,7 @@ func (ds *ServerImpl) SetupFlow(
 		// We return flow deployment errors in the response so that they are
 		// packaged correctly over the wire. If we return them directly to this
 		// function, they become part of an rpc error.
-		return &distsqlpb.SimpleResponse{Error: distsqlpb.NewError(err)}, nil
+		return &distsqlpb.SimpleResponse{Error: distsqlpb.NewError(ctx, err)}, nil
 	}
 	return &distsqlpb.SimpleResponse{}, nil
 }

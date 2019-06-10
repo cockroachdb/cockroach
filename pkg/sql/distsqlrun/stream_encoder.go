@@ -77,8 +77,8 @@ func (se *StreamEncoder) init(types []types.T) {
 // that the StreamDecoder will return them first, before the data rows, thus
 // ensuring that rows produced _after_ an error are not received _before_ the
 // error.
-func (se *StreamEncoder) AddMetadata(meta distsqlpb.ProducerMetadata) {
-	se.metadata = append(se.metadata, distsqlpb.LocalMetaToRemoteProducerMeta(meta))
+func (se *StreamEncoder) AddMetadata(ctx context.Context, meta distsqlpb.ProducerMetadata) {
+	se.metadata = append(se.metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta))
 }
 
 // AddRow encodes a message.

@@ -16,7 +16,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
 	"github.com/lib/pq"
 	isatty "github.com/mattn/go-isatty"
@@ -490,8 +490,8 @@ func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliState
 		fmt.Println()
 	} else {
 		_, err := parser.Parse(fmt.Sprintf("select %s(??", funcName))
-		pgerr, ok := pgerror.GetPGCause(err)
-		if !ok || !strings.HasPrefix(pgerr.Hint, "help:") {
+		pgerr := pgerror.Flatten(err)
+		if !strings.HasPrefix(pgerr.Hint, "help:") {
 			fmt.Fprintf(stderr,
 				"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
 			return errState
@@ -1219,7 +1219,8 @@ func maybeShowErrorDetails(w io.Writer, err error, printNewline bool) {
 	var hint, detail string
 	if pqErr, ok := err.(*pq.Error); ok {
 		hint, detail = pqErr.Hint, pqErr.Detail
-	} else if pgErr, ok := pgerror.GetPGCause(err); ok {
+	} else {
+		pgErr := pgerror.Flatten(err)
 		hint, detail = pgErr.Hint, pgErr.Detail
 	}
 	if detail != "" {
@@ -1485,16 +1486,19 @@ func (c *cliState) serverSideParse(sql string) (stmts []string, pgErr *pgerror.E
 		if pgErr, ok := err.(*pgerror.Error); ok {
 			return nil, pgErr
 		} else if pqErr, ok := err.(*pq.Error); ok {
-			return nil, pgerror.New(
-				string(pqErr.Code), pqErr.Message).SetHintf("%s", pqErr.Hint).SetDetailf("%s", pqErr.Detail)
+			err = pgerror.New(string(pqErr.Code), pqErr.Message)
+			err = errors.WithHint(err, pqErr.Hint)
+			err = errors.WithDetail(err, pqErr.Detail)
+			pgErr := pgerror.Flatten(err)
+			return nil, pgErr
 		}
-		return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
-			"unexpected error: %v", err)
+		return nil, pgerror.Flatten(pgerror.Newf(pgerror.CodeDataExceptionError,
+			"unexpected error: %v", err))
 	}
 
 	if len(cols) < 2 {
-		return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
-			"invalid results for SHOW SYNTAX: %q %q", cols, rows)
+		return nil, pgerror.Flatten(pgerror.Newf(pgerror.CodeDataExceptionError,
+			"invalid results for SHOW SYNTAX: %q %q", cols, rows))
 	}
 
 	// If SHOW SYNTAX reports an error, then it does so on the first row.
@@ -1512,15 +1516,18 @@ func (c *cliState) serverSideParse(sql string) (stmts []string, pgErr *pgerror.E
 				code = row[1]
 			}
 		}
-		return nil, pgerror.New(code, message).SetHintf("%s", hint).SetDetailf("%s", detail)
+		err := pgerror.New(code, message)
+		err = errors.WithHint(err, hint)
+		err = errors.WithDetail(err, detail)
+		return nil, pgerror.Flatten(err)
 	}
 
 	// Otherwise, hopefully we got some SQL statements.
 	stmts = make([]string, len(rows))
 	for i := range rows {
 		if rows[i][0] != "sql" {
-			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
-				"invalid results for SHOW SYNTAX: %q %q", cols, rows)
+			return nil, pgerror.Flatten(pgerror.Newf(pgerror.CodeDataExceptionError,
+				"invalid results for SHOW SYNTAX: %q %q", cols, rows))
 		}
 		stmts[i] = rows[i][1]
 	}

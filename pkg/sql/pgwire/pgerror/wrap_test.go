@@ -17,32 +17,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func TestWrap(t *testing.T) {
 	testData := []struct {
-		err        error
-		expectWrap bool
+		err error
 	}{
-		{errors.New("woo"), true},
-		{&roachpb.TransactionRetryWithProtoRefreshError{}, false},
-		{&roachpb.AmbiguousResultError{}, false},
+		{errors.New("woo")},
+		{&roachpb.TransactionRetryWithProtoRefreshError{}},
+		{&roachpb.AmbiguousResultError{}},
 	}
 
 	for i, test := range testData {
 		werr := pgerror.Wrap(test.err, pgerror.CodeSyntaxError, "woo")
 
-		if !test.expectWrap {
-			oerr := errors.Cause(werr)
-			if oerr != test.err {
-				t.Errorf("%d: original error not preserved; expected %+v, got %+v", i, test.err, oerr)
-			}
-		} else {
-			_, ok := pgerror.GetPGCause(werr)
-			if !ok {
-				t.Errorf("%d: original error not wrapped", i)
-			}
+		if !errors.Is(werr, test.err) {
+			t.Errorf("%d: original error not preserved; expected %+v, got %+v", i, test.err, werr)
 		}
 	}
 }

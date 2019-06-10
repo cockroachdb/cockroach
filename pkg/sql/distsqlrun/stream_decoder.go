@@ -13,6 +13,8 @@
 package distsqlrun
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -59,7 +61,7 @@ type StreamDecoder struct {
 // msg.Data.Metadata until all the rows in the message are retrieved with GetRow.
 //
 // If an error is returned, no records have been buffered in the StreamDecoder.
-func (sd *StreamDecoder) AddMessage(msg *distsqlpb.ProducerMessage) error {
+func (sd *StreamDecoder) AddMessage(ctx context.Context, msg *distsqlpb.ProducerMessage) error {
 	if msg.Header != nil {
 		if sd.headerReceived {
 			return errors.Errorf("received multiple headers")
@@ -100,7 +102,7 @@ func (sd *StreamDecoder) AddMessage(msg *distsqlpb.ProducerMessage) error {
 	}
 	if len(msg.Data.Metadata) > 0 {
 		for _, md := range msg.Data.Metadata {
-			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(md)
+			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, md)
 			if !ok {
 				// Unknown metadata, ignore.
 				continue

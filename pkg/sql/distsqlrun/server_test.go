@@ -96,7 +96,7 @@ func TestServer(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		err = decoder.AddMessage(msg)
+		err = decoder.AddMessage(context.TODO(), msg)
 		if err != nil {
 			t.Fatal(err)
 		}

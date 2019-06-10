@@ -248,7 +248,7 @@ func TestClusterFlow(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		err = decoder.AddMessage(msg)
+		err = decoder.AddMessage(ctx, msg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -500,7 +500,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		err = decoder.AddMessage(msg)
+		err = decoder.AddMessage(context.TODO(), msg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -744,7 +744,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 								}
 								b.Fatal(err)
 							}
-							err = decoder.AddMessage(msg)
+							err = decoder.AddMessage(context.TODO(), msg)
 							if err != nil {
 								b.Fatal(err)
 							}
