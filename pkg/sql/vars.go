@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -214,8 +216,9 @@ var varGen = map[string]sessionVar{
 			if strings.TrimSpace(parts[0]) != "iso" ||
 				(len(parts) == 2 && strings.TrimSpace(parts[1]) != "mdy") ||
 				len(parts) > 2 {
-				return newVarValueError("DateStyle", s, "ISO", "ISO, MDY").SetDetailf(
-					"this parameter is currently recognized only for compatibility and has no effect in CockroachDB.")
+				err := newVarValueError("DateStyle", s, "ISO", "ISO, MDY")
+				err = errors.WithDetail(err, compatErrMsg)
+				return err
 			}
 			return nil
 		},
@@ -757,6 +760,8 @@ var varGen = map[string]sessionVar{
 	},
 }
 
+const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
+
 func init() {
 	// Initialize delegate.ValidVars.
 	for v := range varGen {
@@ -808,8 +813,9 @@ func makeCompatBoolVar(varName string, displayValue, anyValAllowed bool) session
 			if anyValAllowed {
 				allowedVals = append(allowedVals, formatBoolAsPostgresSetting(!displayValue))
 			}
-			return newVarValueError(varName, s, allowedVals...).SetDetailf(
-				"this parameter is currently recognized only for compatibility and has no effect in CockroachDB.")
+			err = newVarValueError(varName, s, allowedVals...)
+			err = errors.WithDetail(err, compatErrMsg)
+			return err
 		},
 		GlobalDefault: func(sv *settings.Values) string { return displayValStr },
 	}
@@ -840,8 +846,9 @@ func makeCompatStringVar(varName, displayValue string, extraAllowed ...string) s
 				}
 			}
 			telemetry.Inc(sqltelemetry.UnimplementedSessionVarValueCounter(varName, s))
-			return newVarValueError(varName, s, allowedVals...).SetDetailf(
-				"this parameter is currently recognized only for compatibility and has no effect in CockroachDB.")
+			err := newVarValueError(varName, s, allowedVals...)
+			err = errors.WithDetail(err, compatErrMsg)
+			return err
 		},
 		GlobalDefault: func(sv *settings.Values) string { return displayValue },
 	}
@@ -888,9 +895,11 @@ func getSingleBool(
 	}
 	b, ok := val.(*tree.DBool)
 	if !ok {
-		return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
-			"parameter %q requires a Boolean value", name).SetDetailf(
-			"%s is a %s", values[0], val.ResolvedType())
+		err = pgerror.Newf(pgcode.InvalidParameterValue,
+			"parameter %q requires a Boolean value", name)
+		err = errors.WithDetailf(err,
+			"%s is a %s", values[0], errors.Safe(val.ResolvedType()))
+		return nil, err
 	}
 	return b, nil
 }
