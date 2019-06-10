@@ -119,6 +119,10 @@ type Catalog interface {
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
 	CheckAnyPrivilege(ctx context.Context, o Object) error
 
+	// IsSuperUser checks that the current user has admin privileges. If yes,
+	// returns true. Returns an error if query on the `system.users` table failed
+	IsSuperUser(ctx context.Context, action string) (bool, error)
+
 	// RequireSuperUser checks that the current user has admin privileges. If not,
 	// returns an error.
 	RequireSuperUser(ctx context.Context, action string) error
