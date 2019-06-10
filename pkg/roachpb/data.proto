@@ -394,15 +394,6 @@ message Transaction {
   // slice should be treated as immutable and all updates should be performed
   // on a copy of the slice.
   repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
-  // Writing is true if the transaction has previously sent a Begin transaction
-  // (i.e. if it ever attempted to perform a write, so if it ever attempted to
-  // leave intents (across retries)). The flag will be set even if the BeginTxn
-  // batch failed.
-  // When set, the AbortCache must be checked by reads so that they don't miss
-  // to see the txn's previous writes.
-  // TODO(nvanbenschoten): This comment is only true when interacting with 2.1
-  // nodes. This field can be completely removed in 19.2.
-  bool deprecated_writing = 9;
   // If this is true, the transaction must retry. Relevant only for
   // SNAPSHOT transactions: a SERIALIZABLE transaction would have to
   // retry anyway due to its commit timestamp having moved forward (whenever
@@ -450,7 +441,7 @@ message Transaction {
   // client-side retry.
   bool orig_timestamp_was_observed = 16;
 
-  reserved 3, 13;
+  reserved 3, 9, 13;
 }
 
 // A TransactionRecord message contains the subset of the fields in a
