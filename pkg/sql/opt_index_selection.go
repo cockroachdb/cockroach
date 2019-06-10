@@ -100,7 +100,7 @@ func (p *planner) selectIndex(
 		s.spans, err = unconstrainedSpans(s.desc, s.index, s.isDeleteSource)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"table ID = %d, index ID = %d", log.Safe(s.desc.ID), log.Safe(s.index.ID))
+				"table ID = %d, index ID = %d", errors.Safe(s.desc.ID), errors.Safe(s.index.ID))
 		}
 		return s, nil
 	}
@@ -237,7 +237,7 @@ func (p *planner) selectIndex(
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(
 			err, "constraint = %s, table ID = %d, index ID = %d",
-			constraint, log.Safe(s.desc.ID), log.Safe(s.index.ID),
+			constraint, errors.Safe(s.desc.ID), errors.Safe(s.index.ID),
 		)
 	}
 

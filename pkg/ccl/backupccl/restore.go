@@ -319,7 +319,7 @@ func allocateTableRewrites(
 					parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, parentID)
 					if err != nil {
 						return errors.NewAssertionErrorWithWrappedErrf(err,
-							"failed to lookup parent DB %d", log.Safe(parentID))
+							"failed to lookup parent DB %d", errors.Safe(parentID))
 					}
 
 					if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
@@ -912,7 +912,7 @@ func WriteTableDescs(
 				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tables[i].ParentID)
 				if err != nil {
 					return errors.NewAssertionErrorWithWrappedErrf(err,
-						"failed to lookup parent DB %d", log.Safe(tables[i].ParentID))
+						"failed to lookup parent DB %d", errors.Safe(tables[i].ParentID))
 				}
 				// TODO(mberhault): CheckPrivilege wants a planner.
 				if err := sql.CheckPrivilegeForUser(ctx, user, parentDB, privilege.CREATE); err != nil {
@@ -938,7 +938,7 @@ func WriteTableDescs(
 		for _, table := range tables {
 			if err := table.Validate(ctx, txn, settings); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err,
-					"validate table %d", log.Safe(table.ID))
+					"validate table %d", errors.Safe(table.ID))
 			}
 		}
 		return nil

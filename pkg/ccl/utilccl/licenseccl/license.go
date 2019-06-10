@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // LicensePrefix is a prefix on license strings to make them easily recognized.
@@ -62,7 +62,7 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 		return pgerror.Newf(pgerror.CodeCCLValidLicenseRequired,
 			"use of %s requires an enterprise license. "+
 				"see %s%s for details on how to enable enterprise features",
-			log.Safe(feature),
+			errors.Safe(feature),
 			link,
 			cluster.String(),
 		)
@@ -83,7 +83,7 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 				"Use of %s requires an enterprise license. Your %slicense expired on %s. If you're "+
 					"interested in getting a new license, please contact subscriptions@cockroachlabs.com "+
 					"and we can help you out.",
-				log.Safe(feature),
+				errors.Safe(feature),
 				licensePrefix,
 				expiration.Format("January 2, 2006"),
 			)

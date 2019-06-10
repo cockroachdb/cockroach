@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -207,7 +206,8 @@ func newSorter(
 		// parser ensures this.
 		if post.Limit > math.MaxInt64 || post.Offset > math.MaxInt64 {
 			return nil, errors.AssertionFailedf(
-				"error creating sorter: limit %d offset %d too large", log.Safe(post.Limit), log.Safe(post.Offset))
+				"error creating sorter: limit %d offset %d too large",
+				errors.Safe(post.Limit), errors.Safe(post.Offset))
 		}
 		count = post.Limit + post.Offset
 	}

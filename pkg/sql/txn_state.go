@@ -321,7 +321,7 @@ func (ts *txnState) setReadOnlyMode(mode tree.ReadWriteMode) error {
 		}
 		ts.readOnly = false
 	default:
-		return errors.AssertionFailedf("unknown read mode: %s", log.Safe(mode))
+		return errors.AssertionFailedf("unknown read mode: %s", errors.Safe(mode))
 	}
 	return nil
 }

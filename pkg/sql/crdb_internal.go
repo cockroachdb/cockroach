@@ -1868,7 +1868,7 @@ CREATE TABLE crdb_internal.zones (
 				return uint32(entry.parentID), entry.name, nil
 			}
 			return 0, "", errors.AssertionFailedf(
-				"object with ID %d does not exist", log.Safe(id))
+				"object with ID %d does not exist", errors.Safe(id))
 		}
 
 		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(

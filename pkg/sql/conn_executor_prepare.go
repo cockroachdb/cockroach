@@ -489,7 +489,7 @@ func (ex *connExecutor) execDescribe(
 		}
 	default:
 		return retErr(errors.AssertionFailedf(
-			"unknown describe type: %s", log.Safe(descCmd.Type)))
+			"unknown describe type: %s", errors.Safe(descCmd.Type)))
 	}
 	return nil, nil
 }

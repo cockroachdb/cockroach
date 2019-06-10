@@ -1429,15 +1429,15 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			if advInfo.rewCap.rewindPos != ex.extraTxnState.txnRewindPos {
 				return errors.AssertionFailedf(
 					"unexpected rewind position: %d when txn start is: %d",
-					log.Safe(advInfo.rewCap.rewindPos),
-					log.Safe(ex.extraTxnState.txnRewindPos))
+					errors.Safe(advInfo.rewCap.rewindPos),
+					errors.Safe(ex.extraTxnState.txnRewindPos))
 			}
 			// txnRewindPos stays unchanged.
 			return nil
 		default:
 			return errors.AssertionFailedf(
 				"unexpected advance code when starting a txn: %s",
-				log.Safe(advInfo.code))
+				errors.Safe(advInfo.code))
 		}
 		ex.setTxnRewindPos(ctx, nextPos)
 	} else {
@@ -1726,7 +1726,7 @@ func (ex *connExecutor) setTransactionModes(
 	}
 	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
 		return errors.AssertionFailedf(
-			"unknown isolation level: %s", log.Safe(modes.Isolation))
+			"unknown isolation level: %s", errors.Safe(modes.Isolation))
 	}
 	rwMode := modes.ReadWriteMode
 	if modes.AsOf.Expr != nil && (asOfTs == hlc.Timestamp{}) {
@@ -1754,7 +1754,7 @@ func priorityToProto(mode tree.UserPriority) (roachpb.UserPriority, error) {
 	case tree.High:
 		pri = roachpb.MaxUserPriority
 	default:
-		return roachpb.UserPriority(0), errors.AssertionFailedf("unknown user priority: %s", log.Safe(mode))
+		return roachpb.UserPriority(0), errors.AssertionFailedf("unknown user priority: %s", errors.Safe(mode))
 	}
 	return pri, nil
 }
@@ -1999,7 +1999,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
-			"unexpected event: %v", log.Safe(advInfo.txnEvent))
+			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
 	}
 
 	return advInfo, nil

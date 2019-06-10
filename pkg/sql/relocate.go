@@ -179,7 +179,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 					gossipStoreKey, &storeDesc,
 				); err != nil {
 					return false, errors.NewAssertionErrorWithWrappedErrf(err,
-						"error looking up store %d", log.Safe(storeID))
+						"error looking up store %d", errors.Safe(storeID))
 				}
 				nodeID = storeDesc.Node.NodeID
 				n.run.storeMap[storeID] = nodeID

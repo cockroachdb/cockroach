@@ -42,7 +42,6 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
-	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/util/log\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/errors\"\n")
 	g.w.unnest(")\n\n")
 
@@ -227,7 +226,7 @@ func (g *factoryGen) genReplace() {
 	}
 
 	g.w.writeIndent("}\n")
-	g.w.writeIndent("panic(errors.AssertionFailedf(\"unhandled op %%s\", log.Safe(e.Op())))\n")
+	g.w.writeIndent("panic(errors.AssertionFailedf(\"unhandled op %%s\", errors.Safe(e.Op())))\n")
 	g.w.unnest("}\n\n")
 
 	for _, define := range g.compiled.Defines.WithTag("List") {
@@ -338,7 +337,7 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 	}
 
 	g.w.writeIndent("}\n")
-	g.w.writeIndent("panic(errors.AssertionFailedf(\"unhandled op %%s\", log.Safe(src.Op())))\n")
+	g.w.writeIndent("panic(errors.AssertionFailedf(\"unhandled op %%s\", errors.Safe(src.Op())))\n")
 	g.w.unnest("}\n\n")
 
 	for _, define := range g.compiled.Defines.WithTag("List") {
@@ -430,6 +429,6 @@ func (g *factoryGen) genDynamicConstruct() {
 	}
 
 	g.w.writeIndent("}\n")
-	g.w.writeIndent("panic(errors.AssertionFailedf(\"cannot dynamically construct operator %%s\", log.Safe(op)))\n")
+	g.w.writeIndent("panic(errors.AssertionFailedf(\"cannot dynamically construct operator %%s\", errors.Safe(op)))\n")
 	g.w.unnest("}\n")
 }
