@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -71,7 +72,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	if len(tbNames) > 0 {
 		switch n.DropBehavior {
 		case tree.DropRestrict:
-			return nil, pgerror.Newf(pgerror.CodeDependentObjectsStillExistError,
+			return nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
 				"database %q is not empty and RESTRICT was specified",
 				tree.ErrNameStringP(&dbDesc.Name))
 		case tree.DropDefault:

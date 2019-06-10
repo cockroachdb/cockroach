@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -197,11 +198,11 @@ func (v *subqueryVisitor) extractSubquery(
 		switch desiredColumns {
 		case 1:
 			plan.Close(v.ctx)
-			return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+			return nil, pgerror.Newf(pgcode.Syntax,
 				"subquery must return only one column, found %d", len(cols))
 		default:
 			plan.Close(v.ctx)
-			return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+			return nil, pgerror.Newf(pgcode.Syntax,
 				"subquery must return %d columns, found %d", desiredColumns, len(cols))
 		}
 	}

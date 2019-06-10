@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -150,7 +151,7 @@ func (p *planner) makeJoin(
 				continue
 			}
 			return planDataSource{}, pgerror.Newf(
-				pgerror.CodeDuplicateAliasError,
+				pgcode.DuplicateAlias,
 				"source name %q specified more than once (missing AS clause)",
 				t,
 			)

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -571,7 +572,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 		}
 
 	case *tree.IndexedVar:
-		v.err = pgerror.Newf(pgerror.CodeGroupingError,
+		v.err = pgerror.Newf(pgcode.Grouping,
 			"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
 			t)
 		return false, expr

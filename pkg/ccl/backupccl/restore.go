@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -164,7 +165,7 @@ func selectTargets(
 func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error {
 	stmt, err := parser.ParseOne(table.ViewQuery)
 	if err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+		return pgerror.Wrapf(err, pgcode.Syntax,
 			"failed to parse underlying query from view %q", table.Name)
 	}
 	// Re-format to change all DB names to `newDB`.
@@ -930,7 +931,7 @@ func WriteTableDescs(
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			if _, ok := errors.UnwrapAll(err).(*roachpb.ConditionFailedError); ok {
-				return pgerror.Newf(pgerror.CodeDuplicateObjectError, "table already exists")
+				return pgerror.Newf(pgcode.DuplicateObject, "table already exists")
 			}
 			return err
 		}

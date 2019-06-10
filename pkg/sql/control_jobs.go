@@ -16,6 +16,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -41,12 +42,12 @@ func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNod
 	}
 	cols := planColumns(rows)
 	if len(cols) != 1 {
-		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgcode.Syntax,
 			"%s JOBS expects a single column source, got %d columns",
 			tree.JobCommandToStatement[n.Command], len(cols))
 	}
 	if cols[0].Typ.Family() != types.IntFamily {
-		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 			"%s JOBS requires int values, not type %s",
 			tree.JobCommandToStatement[n.Command], cols[0].Typ)
 	}

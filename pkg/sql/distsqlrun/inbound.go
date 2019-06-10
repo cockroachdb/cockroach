@@ -17,6 +17,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -96,7 +97,7 @@ func processInboundStreamHelper(
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
-					err = pgerror.Newf(pgerror.CodeConnectionFailureError, "communication error: %s", err)
+					err = pgerror.Newf(pgcode.ConnectionFailure, "communication error: %s", err)
 					sendErrToConsumer(err)
 					errChan <- err
 					return

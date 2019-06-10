@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -79,7 +80,7 @@ func grantRolePlanHook(
 		}
 		for _, r := range grant.Roles {
 			if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
-				return nil, pgerror.Newf(pgerror.CodeInsufficientPrivilegeError,
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 					"%s is not a superuser or role admin for role %s", p.User(), r)
 			}
 		}
@@ -99,14 +100,14 @@ func grantRolePlanHook(
 	// Check roles: these have to be roles.
 	for _, r := range grant.Roles {
 		if isRole, ok := users[string(r)]; !ok || !isRole {
-			return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError, "role %s does not exist", r)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "role %s does not exist", r)
 		}
 	}
 
 	// Check grantees: these can be users or roles.
 	for _, m := range grant.Members {
 		if _, ok := users[string(m)]; !ok {
-			return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError, "user or role %s does not exist", m)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "user or role %s does not exist", m)
 		}
 	}
 
@@ -132,12 +133,12 @@ func grantRolePlanHook(
 			m := string(rawM)
 			if r == m {
 				// self-cycle.
-				return nil, pgerror.Newf(pgerror.CodeInvalidGrantOperationError, "%s cannot be a member of itself", m)
+				return nil, pgerror.Newf(pgcode.InvalidGrantOperation, "%s cannot be a member of itself", m)
 			}
 			// Check if grant.Role ∈ ... ∈ grant.Member
 			if memberOf, ok := allRoleMemberships[r]; ok {
 				if _, ok = memberOf[m]; ok {
-					return nil, pgerror.Newf(pgerror.CodeInvalidGrantOperationError,
+					return nil, pgerror.Newf(pgcode.InvalidGrantOperation,
 						"making %s a member of %s would create a cycle", m, r)
 				}
 			}
@@ -208,7 +209,7 @@ func revokeRolePlanHook(
 		}
 		for _, r := range revoke.Roles {
 			if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
-				return nil, pgerror.Newf(pgerror.CodeInsufficientPrivilegeError,
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 					"%s is not a superuser or role admin for role %s", p.User(), r)
 			}
 		}
@@ -225,14 +226,14 @@ func revokeRolePlanHook(
 	// Check roles: these have to be roles.
 	for _, r := range revoke.Roles {
 		if isRole, ok := users[string(r)]; !ok || !isRole {
-			return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError, "role %s does not exist", r)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "role %s does not exist", r)
 		}
 	}
 
 	// Check members: these can be users or roles.
 	for _, m := range revoke.Members {
 		if _, ok := users[string(m)]; !ok {
-			return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError, "user or role %s does not exist", m)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "user or role %s does not exist", m)
 		}
 	}
 
@@ -250,7 +251,7 @@ func revokeRolePlanHook(
 		for _, m := range revoke.Members {
 			if string(r) == sqlbase.AdminRole && string(m) == security.RootUser {
 				// We use CodeObjectInUseError which is what happens if you tried to delete the current user in pg.
-				return nil, pgerror.Newf(pgerror.CodeObjectInUseError,
+				return nil, pgerror.Newf(pgcode.ObjectInUse,
 					"user %s cannot be removed from role %s or lose the ADMIN OPTION",
 					security.RootUser, sqlbase.AdminRole)
 			}

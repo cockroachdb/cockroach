@@ -15,6 +15,7 @@ package rowcontainer
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -162,7 +163,7 @@ func (d *DiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	// mess with key decoding.
 	d.scratchKey = encoding.EncodeUvarintAscending(d.scratchKey, d.rowID)
 	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeOutOfMemoryError,
+		return pgerror.Wrapf(err, pgcode.OutOfMemory,
 			"this query requires additional disk space")
 	}
 	if err := d.bufferedRows.Put(d.scratchKey, d.scratchVal); err != nil {

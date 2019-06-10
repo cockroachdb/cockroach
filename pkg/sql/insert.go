@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -743,7 +744,7 @@ func (p *planner) processColumns(
 		}
 
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+			return nil, pgerror.Newf(pgcode.Syntax,
 				"multiple assignments to the same column %q", &nameList[i])
 		}
 		colIDSet[col.ID] = struct{}{}
@@ -907,7 +908,7 @@ func checkNumExprs(isUpsert bool, numExprs, numCols int, specifiedTargets bool) 
 		if isUpsert {
 			kw = "UPSERT"
 		}
-		return pgerror.Newf(pgerror.CodeSyntaxError,
+		return pgerror.Newf(pgcode.Syntax,
 			"%s has more %s than %s, %d expressions for %d targets",
 			kw, more, less, numExprs, numCols)
 	}

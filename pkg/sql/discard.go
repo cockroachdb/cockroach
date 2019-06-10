@@ -15,6 +15,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -26,7 +27,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 	switch s.Mode {
 	case tree.DiscardModeAll:
 		if !p.autoCommit {
-			return nil, pgerror.New(pgerror.CodeActiveSQLTransactionError,
+			return nil, pgerror.New(pgcode.ActiveSQLTransaction,
 				"DISCARD ALL cannot run inside a transaction block")
 		}
 

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -224,10 +225,10 @@ func AsDBool(e Expr) (DBool, bool) {
 // error string.
 func makeParseError(s string, typ *types.T, err error) error {
 	if err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeInvalidTextRepresentationError,
+		return pgerror.Wrapf(err, pgcode.InvalidTextRepresentation,
 			"could not parse %q as type %s", s, typ)
 	}
-	return pgerror.Newf(pgerror.CodeInvalidTextRepresentationError,
+	return pgerror.Newf(pgcode.InvalidTextRepresentation,
 		"could not parse %q as type %s", s, typ)
 }
 
@@ -286,7 +287,7 @@ func ParseDBool(s string) (*DBool, error) {
 			}
 		}
 	}
-	return nil, makeParseError(s, types.Bool, pgerror.New(pgerror.CodeInvalidTextRepresentationError, "invalid bool value"))
+	return nil, makeParseError(s, types.Bool, pgerror.New(pgcode.InvalidTextRepresentation, "invalid bool value"))
 }
 
 // ParseDByte parses a string representation of hex encoded binary
@@ -472,7 +473,7 @@ func AsDBitArray(e Expr) (*DBitArray, bool) {
 	return nil, false
 }
 
-var errCannotCastNegativeIntToBitArray = pgerror.Newf(pgerror.CodeCannotCoerceError,
+var errCannotCastNegativeIntToBitArray = pgerror.Newf(pgcode.CannotCoerce,
 	"cannot cast negative integer to bit varying with unbounded width")
 
 // NewDBitArrayFromInt creates a bit array from the specified integer
@@ -2397,7 +2398,7 @@ func NewDJSON(j json.JSON) *DJSON {
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "could not parse JSON")
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse JSON")
 	}
 	return NewDJSON(j), nil
 }
@@ -3148,7 +3149,7 @@ func (d *DArray) Size() uintptr {
 	return sz
 }
 
-var errNonHomogeneousArray = pgerror.New(pgerror.CodeArraySubscriptError, "multidimensional arrays must have array expressions with matching dimensions")
+var errNonHomogeneousArray = pgerror.New(pgcode.ArraySubscript, "multidimensional arrays must have array expressions with matching dimensions")
 
 // Append appends a Datum to the array, whose parameterized type must be
 // consistent with the type of the Datum.

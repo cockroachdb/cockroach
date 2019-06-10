@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,7 +67,7 @@ import (
 // become a physical property required of the Update operator).
 func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope) {
 	if upd.OrderBy != nil && upd.Limit == nil {
-		panic(pgerror.Newf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgcode.Syntax,
 			"UPDATE statement requires LIMIT when ORDER BY is used"))
 	}
 
@@ -164,7 +165,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 					"source for a multiple-column UPDATE item must be a sub-SELECT or ROW() expression; not supported: %T", expr.Expr))
 			}
 			if len(expr.Names) != n {
-				panic(pgerror.Newf(pgerror.CodeSyntaxError,
+				panic(pgerror.Newf(pgcode.Syntax,
 					"number of columns (%d) does not match number of values (%d)",
 					len(expr.Names), n))
 			}

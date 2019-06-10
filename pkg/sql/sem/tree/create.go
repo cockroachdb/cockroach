@@ -25,6 +25,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -233,7 +234,7 @@ func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.
 	case types.StringFamily:
 		return types.MakeCollatedString(typ, string(c)), nil
 	case types.CollatedStringFamily:
-		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgcode.Syntax,
 			"multiple COLLATE declarations for column %q", name)
 	case types.ArrayFamily:
 		elemTyp, err := processCollationOnType(name, typ.ArrayContents(), c)
@@ -242,7 +243,7 @@ func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.
 		}
 		return types.MakeArray(elemTyp), nil
 	default:
-		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 			"COLLATE declaration for non-string-typed column %q", name)
 	}
 }
@@ -263,7 +264,7 @@ func NewColumnTableDef(
 			locale := string(t)
 			_, err := language.Parse(locale)
 			if err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid locale %s", locale)
+				return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
 			}
 			d.Type, err = processCollationOnType(name, d.Type, t)
 			if err != nil {
@@ -271,21 +272,21 @@ func NewColumnTableDef(
 			}
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
-				return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+				return nil, pgerror.Newf(pgcode.Syntax,
 					"multiple default values specified for column %q", name)
 			}
 			d.DefaultExpr.Expr = t.Expr
 			d.DefaultExpr.ConstraintName = c.Name
 		case NotNullConstraint:
 			if d.Nullable.Nullability == Null {
-				return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+				return nil, pgerror.Newf(pgcode.Syntax,
 					"conflicting NULL/NOT NULL declarations for column %q", name)
 			}
 			d.Nullable.Nullability = NotNull
 			d.Nullable.ConstraintName = c.Name
 		case NullConstraint:
 			if d.Nullable.Nullability == NotNull {
-				return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+				return nil, pgerror.Newf(pgcode.Syntax,
 					"conflicting NULL/NOT NULL declarations for column %q", name)
 			}
 			d.Nullable.Nullability = Null
@@ -303,7 +304,7 @@ func NewColumnTableDef(
 			})
 		case *ColumnFKConstraint:
 			if d.HasFKConstraint() {
-				return nil, pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
+				return nil, pgerror.Newf(pgcode.InvalidTableDefinition,
 					"multiple foreign key constraints specified for column %q", name)
 			}
 			d.References.Table = &t.Table
@@ -316,7 +317,7 @@ func NewColumnTableDef(
 			d.Computed.Expr = t.Expr
 		case *ColumnFamilyConstraint:
 			if d.HasColumnFamily() {
-				return nil, pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
+				return nil, pgerror.Newf(pgcode.InvalidTableDefinition,
 					"multiple column families specified for column %q", name)
 			}
 			d.Family.Name = t.Family

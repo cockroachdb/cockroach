@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -143,7 +144,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 // execute statistics creation.
 func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, error) {
 	if !n.p.ExecCfg().Settings.Version.IsActive(cluster.VersionCreateStats) {
-		return nil, pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
+		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			`CREATE STATISTICS requires all nodes to be upgraded to %s`,
 			cluster.VersionByKey(cluster.VersionCreateStats),
 		)
@@ -176,13 +177,13 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 
 	if tableDesc.IsVirtualTable() {
 		return nil, pgerror.New(
-			pgerror.CodeWrongObjectTypeError, "cannot create statistics on virtual tables",
+			pgcode.WrongObjectType, "cannot create statistics on virtual tables",
 		)
 	}
 
 	if tableDesc.IsView() {
 		return nil, pgerror.New(
-			pgerror.CodeWrongObjectTypeError, "cannot create statistics on views",
+			pgcode.WrongObjectType, "cannot create statistics on views",
 		)
 	}
 

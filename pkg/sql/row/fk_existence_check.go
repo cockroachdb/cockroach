@@ -15,6 +15,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -71,7 +72,7 @@ outer:
 			}
 			if nulls && notNulls {
 				// TODO(bram): expand this error to show more details.
-				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+				return pgerror.Newf(pgcode.ForeignKeyViolation,
 					"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
 					mutatedRow, fk.ref.Name,
 				)

@@ -42,7 +42,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	if n.Name == "" {
 		// A client has sent the reserved internal syntax SET ROW ...,
 		// or the user entered `SET "" = foo`. Reject it.
-		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgcode.Syntax,
 			"invalid variable name: %q", n.Name)
 	}
 
@@ -333,7 +333,7 @@ func intervalToDuration(interval *tree.DInterval) (time.Duration, error) {
 }
 
 func newSingleArgVarError(varName string) error {
-	return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+	return pgerror.Newf(pgcode.InvalidParameterValue,
 		"SET %s takes only one argument", varName)
 }
 
@@ -353,6 +353,6 @@ func newVarValueError(varName, actualVal string, allowedVals ...string) (err err
 }
 
 func newCannotChangeParameterError(varName string) error {
-	return pgerror.Newf(pgerror.CodeCantChangeRuntimeParamError,
+	return pgerror.Newf(pgcode.CantChangeRuntimeParam,
 		"parameter %q cannot be changed", varName)
 }

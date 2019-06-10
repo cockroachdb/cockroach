@@ -18,6 +18,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -427,7 +428,7 @@ func typeCheckOverloadedExprs(
 		for _, i := range s.resolvableIdxs {
 			typ, err := exprs[i].TypeCheck(ctx, types.Any)
 			if err != nil {
-				return nil, nil, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+				return nil, nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 					"error type checking resolved expression:")
 			}
 			s.typedExprs[i] = typ
@@ -737,7 +738,7 @@ func defaultTypeCheck(ctx *SemaContext, s *typeCheckOverloadState, errorOnPlaceh
 	for _, i := range s.constIdxs {
 		typ, err := s.exprs[i].TypeCheck(ctx, types.Any)
 		if err != nil {
-			return pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+			return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 				"error type checking constant value")
 		}
 		s.typedExprs[i] = typ
@@ -781,7 +782,7 @@ func checkReturn(
 			typ, err := s.exprs[i].TypeCheck(ctx, des)
 			if err != nil {
 				return false, s.typedExprs, nil, pgerror.Wrapf(
-					err, pgerror.CodeInvalidParameterValueError,
+					err, pgcode.InvalidParameterValue,
 					"error type checking constant value",
 				)
 			}

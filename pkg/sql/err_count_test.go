@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,14 +34,14 @@ func TestErrorCounts(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	count1 := telemetry.GetRawFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
+	count1 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax]
 
 	_, err := db.Query("SELECT 1+")
 	if err == nil {
 		t.Fatal("expected error, got no error")
 	}
 
-	count2 := telemetry.GetRawFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
+	count2 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax]
 
 	if count2-count1 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count2-count1)
@@ -57,7 +57,7 @@ func TestErrorCounts(t *testing.T) {
 	}
 	rows.Close()
 
-	count3 := telemetry.GetRawFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
+	count3 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax]
 
 	if count3-count2 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count3-count2)

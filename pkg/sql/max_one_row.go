@@ -15,6 +15,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -57,7 +58,7 @@ func (m *max1RowNode) Next(params runParams) (bool, error) {
 		var secondOk bool
 		secondOk, err = m.plan.Next(params)
 		if secondOk {
-			return false, pgerror.Newf(pgerror.CodeCardinalityViolationError,
+			return false, pgerror.Newf(pgcode.CardinalityViolation,
 				"more than one row returned by a subquery used as an expression")
 		}
 	}

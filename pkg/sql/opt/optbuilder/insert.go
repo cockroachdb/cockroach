@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -402,7 +403,7 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 			continue
 		}
 
-		panic(pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
+		panic(pgerror.Newf(pgcode.InvalidForeignKey,
 			"missing %q primary key column", col.ColName()))
 	}
 }
@@ -464,11 +465,11 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 		case 0:
 			// Do nothing.
 		case 1:
-			panic(pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			panic(pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing value for column %q in multi-part foreign key", missingCols[0]))
 		default:
 			sort.Strings(missingCols)
-			panic(pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			panic(pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing values for columns %q in multi-part foreign key", missingCols))
 		}
 	}
@@ -984,7 +985,7 @@ func (mb *mutationBuilder) ensureUniqueConflictCols(cols tree.NameList) cat.Inde
 			return index
 		}
 	}
-	panic(pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
+	panic(pgerror.Newf(pgcode.InvalidColumnReference,
 		"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 }
 

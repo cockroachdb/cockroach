@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,7 +72,7 @@ func (f *fkExistenceBatchChecker) addCheck(
 // runCheck sends the accumulated batch of foreign key checks to kv, given the
 // old and new values of the row being modified. Either oldRow or newRow can
 // be set to nil in the case of an insert or a delete, respectively.
-// A pgerror.CodeForeignKeyViolationError is returned if a foreign key violation
+// A pgcode.ForeignKeyViolation is returned if a foreign key violation
 // is detected, corresponding to the first foreign key that was violated in
 // order of addition.
 func (f *fkExistenceBatchChecker) runCheck(
@@ -104,7 +105,7 @@ func (f *fkExistenceBatchChecker) runCheck(
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 					fk.valuesScratch[valueIdx] = newRow[fk.ids[colID]]
 				}
-				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+				return pgerror.Newf(pgcode.ForeignKeyViolation,
 					"foreign key violation: value %s not found in %s@%s %s (txn=%s)",
 					fk.valuesScratch, fk.searchTable.Name, fk.searchIdx.Name,
 					fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.ID())
@@ -114,7 +115,7 @@ func (f *fkExistenceBatchChecker) runCheck(
 			// If we're deleting, then there's a violation if the scan found something.
 			if !fk.rf.kvEnd {
 				if oldRow == nil {
-					return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+					return pgerror.Newf(pgcode.ForeignKeyViolation,
 						"foreign key violation: non-empty columns %s referenced in table %q",
 						fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 				}
@@ -122,7 +123,7 @@ func (f *fkExistenceBatchChecker) runCheck(
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 					fk.valuesScratch[valueIdx] = oldRow[fk.ids[colID]]
 				}
-				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+				return pgerror.Newf(pgcode.ForeignKeyViolation,
 					"foreign key violation: values %v in columns %s referenced in table %q",
 					fk.valuesScratch, fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 			}

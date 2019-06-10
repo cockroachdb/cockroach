@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -290,7 +291,7 @@ var seriesValueGeneratorType = types.Int
 
 var seriesTSValueGeneratorType = types.Timestamp
 
-var errStepCannotBeZero = pgerror.New(pgerror.CodeInvalidParameterValueError, "step cannot be 0")
+var errStepCannotBeZero = pgerror.New(pgcode.InvalidParameterValue, "step cannot be 0")
 
 func seriesIntNext(s *seriesValueGenerator) (bool, error) {
 	step := s.step.(int64)
@@ -628,10 +629,10 @@ func jsonAsText(j json.JSON) (tree.Datum, error) {
 }
 
 var (
-	errJSONObjectKeysOnArray         = pgerror.New(pgerror.CodeInvalidParameterValueError, "cannot call json_object_keys on an array")
-	errJSONObjectKeysOnScalar        = pgerror.Newf(pgerror.CodeInvalidParameterValueError, "cannot call json_object_keys on a scalar")
-	errJSONDeconstructArrayAsObject  = pgerror.New(pgerror.CodeInvalidParameterValueError, "cannot deconstruct an array as an object")
-	errJSONDeconstructScalarAsObject = pgerror.Newf(pgerror.CodeInvalidParameterValueError, "cannot deconstruct a scalar")
+	errJSONObjectKeysOnArray         = pgerror.New(pgcode.InvalidParameterValue, "cannot call json_object_keys on an array")
+	errJSONObjectKeysOnScalar        = pgerror.Newf(pgcode.InvalidParameterValue, "cannot call json_object_keys on a scalar")
+	errJSONDeconstructArrayAsObject  = pgerror.New(pgcode.InvalidParameterValue, "cannot deconstruct an array as an object")
+	errJSONDeconstructScalarAsObject = pgerror.Newf(pgcode.InvalidParameterValue, "cannot deconstruct a scalar")
 )
 
 var jsonArrayElementsImpl = makeGeneratorOverload(
@@ -661,7 +662,7 @@ type jsonArrayGenerator struct {
 	buf       [1]tree.Datum
 }
 
-var errJSONCallOnNonArray = pgerror.New(pgerror.CodeInvalidParameterValueError,
+var errJSONCallOnNonArray = pgerror.New(pgcode.InvalidParameterValue,
 	"cannot be called on a non-array")
 
 func makeJSONArrayAsJSONGenerator(

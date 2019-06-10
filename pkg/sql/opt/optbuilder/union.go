@@ -15,6 +15,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -39,7 +40,7 @@ func (b *Builder) buildUnion(
 	// Check that the number of columns matches.
 	if len(leftScope.cols) != len(rightScope.cols) {
 		panic(pgerror.Newf(
-			pgerror.CodeSyntaxError,
+			pgcode.Syntax,
 			"each %v query must have the same number of columns: %d vs %d",
 			clause.Type, len(leftScope.cols), len(rightScope.cols),
 		))
@@ -78,7 +79,7 @@ func (b *Builder) buildUnion(
 		if !(l.typ.Equivalent(r.typ) ||
 			l.typ.Family() == types.UnknownFamily ||
 			r.typ.Family() == types.UnknownFamily) {
-			panic(pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+			panic(pgerror.Newf(pgcode.DatatypeMismatch,
 				"%v types %s and %s cannot be matched", clause.Type, l.typ, r.typ))
 		}
 		if l.hidden != r.hidden {

@@ -955,7 +955,7 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 				}
 				if index.ContainsColumnID(col.ID) {
 					return pgerror.Newf(
-						pgerror.CodeDuplicateColumnError,
+						pgcode.DuplicateColumn,
 						"index %q already contains column %q", index.Name, col.Name)
 				}
 				if indexHasOldStoredColumns {
@@ -2764,7 +2764,7 @@ func (cc *TableDescriptor_CheckConstraint) ColumnsUsed(desc *TableDescriptor) ([
 
 	parsed, err := parser.ParseExpr(cc.Expr)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+		return nil, pgerror.Wrapf(err, pgcode.Syntax,
 			"could not parse check constraint %s", cc.Expr)
 	}
 
@@ -2778,7 +2778,7 @@ func (cc *TableDescriptor_CheckConstraint) ColumnsUsed(desc *TableDescriptor) ([
 			if c, ok := v.(*tree.ColumnItem); ok {
 				col, dropped, err := desc.FindColumnByName(c.ColumnName)
 				if err != nil || dropped {
-					return false, nil, pgerror.Newf(pgerror.CodeUndefinedColumnError,
+					return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 						"column %q not found for constraint %q",
 						c.ColumnName, parsed.String())
 				}
@@ -2949,7 +2949,7 @@ func (desc *ColumnDescriptor) ComputedExprStr() string {
 func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
 	if desc.IsComputed() {
 		return pgerror.Newf(
-			pgerror.CodeInvalidTableDefinitionError,
+			pgcode.InvalidTableDefinition,
 			"computed column %q cannot be a foreign key reference",
 			desc.Name,
 		)
@@ -2990,7 +2990,7 @@ func (desc *TableDescriptor) SetAuditMode(mode tree.AuditMode) (bool, error) {
 	case tree.AuditModeReadWrite:
 		desc.AuditMode = TableDescriptor_READWRITE
 	default:
-		return false, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+		return false, pgerror.Newf(pgcode.InvalidParameterValue,
 			"unknown audit mode: %s (%d)", mode, mode)
 	}
 	return prev != desc.AuditMode, nil
