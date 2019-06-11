@@ -23,6 +23,7 @@
 [Relational, Mutation]
 define Insert {
     Input RelExpr
+    Checks FKChecksExpr
 
     _ MutationPrivate
 }
@@ -136,6 +137,7 @@ define MutationPrivate {
 [Relational, Mutation]
 define Update {
     Input RelExpr
+    Checks FKChecksExpr
 
     _ MutationPrivate
 }
@@ -159,6 +161,7 @@ define Update {
 [Relational, Mutation]
 define Upsert {
     Input RelExpr
+    Checks FKChecksExpr
 
     _ MutationPrivate
 }
@@ -171,8 +174,23 @@ define Upsert {
 [Relational, Mutation]
 define Delete {
     Input RelExpr
+    Checks FKChecksExpr
 
     _ MutationPrivate
+}
+
+# FKChecks is a list of foreign key check queries, to be run after the main
+# query.
+[Scalar, List]
+define FKChecks {
+}
+
+# FKChecksItem is a foreign key check query, to be run after the main query.
+# If the query returns any results, that will generate an execution error.
+[Scalar, ListItem]
+define FKChecksItem {
+    Check RelExpr
+    # TODO(radu): information for making a good error message.
 }
 
 # CreateTable represents a CREATE TABLE statement.

@@ -120,6 +120,9 @@ type mutationBuilder struct {
 	// parsedExprs is a cached set of parsed default and computed expressions
 	// from the table schema. These are parsed once and cached for reuse.
 	parsedExprs []tree.Expr
+
+	// checks contains foreign key check queries; see buildFKChecks.
+	checks memo.FKChecksExpr
 }
 
 func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alias tree.TableName) {
@@ -734,6 +737,147 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 
 	mb.parsedExprs[ord] = expr
 	return expr
+}
+
+// buildFKChecks populates mb.checks with queries that check the integrity of
+// foreign key relations that involve modified rows.
+func (mb *mutationBuilder) buildFKChecks() {
+	if !mb.b.BuildFKChecks {
+		return
+	}
+
+	// TODO(radu): only insert supported for now.
+	if mb.op != opt.InsertOp {
+		return
+	}
+
+	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
+		fk := mb.tab.OutboundForeignKey(i)
+		numCols := fk.ColumnCount()
+
+		// Build an anti-join, with the origin FK columns on the left and the
+		// referenced columns on the right.
+
+		refTab, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, fk.ReferencedTableID())
+		if err != nil {
+			panic(builderError{err})
+		}
+		refOrdinals := make([]int, numCols)
+		for i := range refOrdinals {
+			refOrdinals[i] = fk.ReferencedColumnOrdinal(refTab.(cat.Table), i)
+		}
+
+		scanScope := mb.b.buildScan(
+			refTab.(cat.Table),
+			refTab.Name(),
+			refOrdinals,
+			&tree.IndexFlags{IgnoreForeignKeys: true},
+			includeMutations,
+			mb.b.allocScope(),
+		)
+
+		antiJoinFilters := make(memo.FiltersExpr, numCols)
+
+		var originCols opt.ColSet
+		var nullableOriginCols opt.ColSet
+		for j := 0; j < numCols; j++ {
+			ord := fk.OriginColumnOrdinal(mb.tab, j)
+			inputColID := mb.insertColID(ord)
+			if inputColID == 0 {
+				// There shouldn't be any FK relations involving delete-only mutation
+				// columns.
+				panic(pgerror.AssertionFailedf("no value for FK column %d", ord))
+			}
+			originCols.Add(inputColID)
+
+			// If a table column is not nullable, NULLs cannot be inserted (the
+			// mutation will fail).
+			if mb.tab.Column(ord).IsNullable() &&
+				!mb.outScope.expr.Relational().NotNullCols.Contains(inputColID) {
+				nullableOriginCols.Add(inputColID)
+			}
+
+			antiJoinFilters[j].Condition = mb.b.factory.ConstructEq(
+				mb.b.factory.ConstructVariable(inputColID),
+				mb.b.factory.ConstructVariable(scanScope.cols[j].id),
+			)
+		}
+
+		// TODO(radu): this is a major hack; we should be using a reference to a
+		// buffer instead of reusing the expression directly. This is for
+		// prototyping purposes (should work ok with constant inputs). Note that
+		// the column IDs in the FK check query aren't exposed by the ForeignKeys
+		// operator so using the same column IDs shouldn't cause issues.
+		left := mb.b.factory.ConstructProject(mb.outScope.expr,
+			memo.EmptyProjectionsExpr, originCols)
+
+		if !nullableOriginCols.Empty() {
+			// The columns we are inserting might have NULLs. These require special
+			// handling, depending on the match method:
+			//  - MATCH SIMPLE: allows any column(s) to be NULL and the row doesn't
+			//                  need to have a match in the referenced table.
+			//  - MATCH FULL: only the case where *all* the columns are NULL is
+			//                allowed, and the row doesn't need to have a match in the
+			//                referenced table.
+			//
+			// Note that rows that have NULLs will never have a match in the anti
+			// join and will generate errors. To handle these cases, we filter the
+			// mutated rows (before the anti join) to remove those which don't need a
+			// match.
+			//
+			// For SIMPLE, we filter out any rows which have a NULL. For FULL, we
+			// filter out any rows where all the columns are NULL (rows which have
+			// NULLs a subset of columns are let through and will generate FK errors
+			// because they will never have a match in the anti join).
+			switch m := fk.MatchMethod(); m {
+			case tree.MatchSimple:
+				// Filter out any rows which have a NULL; build filters of the form
+				//   (a IS NOT NULL) AND (b IS NOT NULL) ...
+				filters := make(memo.FiltersExpr, 0, nullableOriginCols.Len())
+				for i, ok := nullableOriginCols.Next(0); ok; i, ok = nullableOriginCols.Next(i + 1) {
+					filters = append(filters, memo.FiltersItem{
+						Condition: mb.b.factory.ConstructIsNot(
+							mb.b.factory.ConstructVariable(opt.ColumnID(i)),
+							memo.NullSingleton,
+						),
+					})
+				}
+				left = mb.b.factory.ConstructSelect(left, filters)
+
+			case tree.MatchFull:
+				// Filter out any rows which have NULLs on all referencing columns.
+				if !nullableOriginCols.Equals(originCols) {
+					// We statically know that some of the referencing columns can't be
+					// NULL. In this case, we don't need to filter anything.
+					break
+				}
+				// Build a filter of the form
+				//   (a IS NOT NULL) OR (b IS NOT NULL) ...
+				var condition opt.ScalarExpr
+				for i, ok := originCols.Next(0); ok; i, ok = originCols.Next(i + 1) {
+					is := mb.b.factory.ConstructIs(
+						mb.b.factory.ConstructVariable(opt.ColumnID(i)),
+						memo.NullSingleton,
+					)
+					if condition == nil {
+						condition = is
+					} else {
+						condition = mb.b.factory.ConstructOr(condition, is)
+					}
+				}
+				left = mb.b.factory.ConstructSelect(left, memo.FiltersExpr{{Condition: condition}})
+
+			default:
+				panic(pgerror.AssertionFailedf("match method %s not supported", m))
+			}
+		}
+
+		expr := mb.b.factory.ConstructAntiJoin(
+			left, scanScope.expr, antiJoinFilters, &memo.JoinPrivate{},
+		)
+
+		mb.checks = append(mb.checks, memo.FKChecksItem{Check: expr})
+	}
 }
 
 // findNotNullIndexCol finds the first not-null column in the given index and

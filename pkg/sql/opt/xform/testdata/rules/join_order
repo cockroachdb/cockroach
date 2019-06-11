@@ -499,7 +499,7 @@ FROM
     JOIN x ON true
     JOIN [UPDATE x SET a = 1 RETURNING 1] ON true
 ----
-memo (optimized, ~55KB, required=[presentation: a:1,?column?:5,a:6,?column?:10])
+memo (optimized, ~56KB, required=[presentation: a:1,?column?:5,a:6,?column?:10])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G4) (inner-join G7 G8 G4) (inner-join G9 G10 G4) (inner-join G11 G12 G4) (inner-join G13 G14 G4) (inner-join G15 G16 G4) (inner-join G11 G17 G4) (inner-join G18 G16 G4) (inner-join G6 G5 G4) (inner-join G11 G19 G4) (inner-join G8 G7 G4) (inner-join G10 G9 G4) (inner-join G12 G11 G4) (inner-join G14 G13 G4) (inner-join G11 G20 G4) (inner-join G16 G15 G4) (inner-join G17 G11 G4) (inner-join G16 G18 G4) (inner-join G19 G11 G4) (inner-join G16 G21 G4) (inner-join G16 G22 G4) (inner-join G20 G11 G4) (inner-join G3 G23 G4) (inner-join G24 G16 G4) (inner-join G21 G16 G4) (inner-join G11 G25 G4) (inner-join G3 G26 G4) (inner-join G22 G16 G4) (inner-join G11 G27 G4) (inner-join G3 G28 G4) (inner-join G3 G29 G4) (inner-join G30 G16 G4) (inner-join G23 G3 G4) (inner-join G16 G24 G4) (inner-join G25 G11 G4) (inner-join G26 G3 G4) (inner-join G27 G11 G4) (inner-join G28 G3 G4) (inner-join G29 G3 G4) (inner-join G16 G30 G4)
  │    └── [presentation: a:1,?column?:5,a:6,?column?:10]
  │         ├── best: (inner-join G3 G2 G4)
@@ -617,38 +617,39 @@ memo (optimized, ~55KB, required=[presentation: a:1,?column?:5,a:6,?column?:10])
  │    └── []
  │         ├── best: (values G33 id=v5)
  │         └── cost: 0.01
- ├── G31: (update G35 x)
+ ├── G31: (update G35 G36 x)
  │    └── []
- │         ├── best: (update G35 x)
+ │         ├── best: (update G35 G36 x)
  │         └── cost: 1040.04
- ├── G32: (projections G36)
+ ├── G32: (projections G37)
  ├── G33: (scalar-list)
- ├── G34: (select G37 G38)
+ ├── G34: (select G38 G39)
  │    └── []
- │         ├── best: (select G37 G38)
+ │         ├── best: (select G38 G39)
  │         └── cost: 1040.05
- ├── G35: (project G39 G32 a)
+ ├── G35: (project G40 G32 a)
  │    └── []
- │         ├── best: (project G39 G32 a)
+ │         ├── best: (project G40 G32 a)
  │         └── cost: 1040.03
- ├── G36: (const 1)
- ├── G37: (insert G40 x)
+ ├── G36: (f-k-checks)
+ ├── G37: (const 1)
+ ├── G38: (insert G41 G36 x)
  │    └── []
- │         ├── best: (insert G40 x)
+ │         ├── best: (insert G41 G36 x)
  │         └── cost: 1030.04
- ├── G38: (filters G41)
- ├── G39: (scan x)
+ ├── G39: (filters G42)
+ ├── G40: (scan x)
  │    └── []
  │         ├── best: (scan x)
  │         └── cost: 1020.02
- ├── G40: (project G42 G43)
+ ├── G41: (project G43 G44)
  │    └── []
- │         ├── best: (project G42 G43)
+ │         ├── best: (project G43 G44)
  │         └── cost: 1030.03
- ├── G41: (false)
- ├── G42: (scan x,cols=())
+ ├── G42: (false)
+ ├── G43: (scan x,cols=())
  │    └── []
  │         ├── best: (scan x,cols=())
  │         └── cost: 1010.02
- ├── G43: (projections G44)
- └── G44: (null)
+ ├── G44: (projections G45)
+ └── G45: (null)
