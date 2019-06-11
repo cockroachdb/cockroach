@@ -615,8 +615,10 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
+	mb.buildFKChecks()
+
 	private := mb.makeMutationPrivate(returning != nil)
-	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, private)
+	mb.outScope.expr = mb.b.factory.ConstructInsert(mb.outScope.expr, mb.checks, private)
 
 	mb.buildReturning(returning)
 }
@@ -869,7 +871,7 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
 	private := mb.makeMutationPrivate(returning != nil)
-	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, private)
+	mb.outScope.expr = mb.b.factory.ConstructUpsert(mb.outScope.expr, mb.checks, private)
 
 	mb.buildReturning(returning)
 }

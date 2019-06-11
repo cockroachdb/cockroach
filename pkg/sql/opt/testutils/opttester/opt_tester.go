@@ -105,6 +105,9 @@ type Flags struct {
 	// the old planning code.
 	AllowUnsupportedExpr bool
 
+	// BuildFKChecks: if set, the optbuilder builds foreign key checks.
+	BuildFKChecks bool
+
 	// FullyQualifyNames if set: when building a query, the optbuilder fully
 	// qualifies all column names before adding them to the metadata. This flag
 	// allows us to test that name resolution works correctly, and avoids
@@ -1198,6 +1201,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
 	b.AllowUnsupportedExpr = ot.Flags.AllowUnsupportedExpr
+	b.BuildFKChecks = ot.Flags.BuildFKChecks
 	return b.Build()
 }
 
