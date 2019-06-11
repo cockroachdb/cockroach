@@ -242,10 +242,11 @@ func (g *factoryGen) genReplace() {
 		g.w.nestIndent("for i := range list {\n")
 		if itemTyp.isGenerated {
 			g.w.writeIndent("before := list[i].%s\n", g.md.fieldName(itemDefine.Fields[0]))
+			g.w.writeIndent("after := replace(before).(%s)\n", g.md.lookupType(string(itemDefine.Fields[0].Type)).fullName)
 		} else {
 			g.w.writeIndent("before := list[i]\n")
+			g.w.writeIndent("after := replace(before).(%s)\n", itemTyp.fullName)
 		}
-		g.w.writeIndent("after := replace(before).(opt.ScalarExpr)\n")
 		g.w.nestIndent("if before != after {\n")
 		g.w.nestIndent("if newList == nil {\n")
 		g.w.writeIndent("newList = make([]%s, len(list))\n", itemTyp.name)
@@ -355,8 +356,9 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 			// field (always the first field). Any other fields must be privates.
 			// And placeholders only need to be assigned for input fields.
 			firstFieldName := g.md.fieldName(itemDefine.Fields[0])
-			g.w.writeIndent("dst[i].%s = f.invokeReplace(src[i].%s, replace).(opt.ScalarExpr)\n",
-				firstFieldName, firstFieldName)
+			firstFieldType := g.md.lookupType(string(itemDefine.Fields[0].Type)).fullName
+			g.w.writeIndent("dst[i].%s = f.invokeReplace(src[i].%s, replace).(%s)\n",
+				firstFieldName, firstFieldName, firstFieldType)
 
 			// Now copy additional exported private fields.
 			for _, field := range expandFields(g.compiled, itemDefine)[1:] {
@@ -366,7 +368,7 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 				}
 			}
 		} else {
-			g.w.writeIndent("dst[i] = f.invokeReplace(src[i], replace).(opt.ScalarExpr)\n")
+			g.w.writeIndent("dst[i] = f.invokeReplace(src[i], replace).(%s)\n", itemType.fullName)
 		}
 		g.w.unnest("}\n")
 		g.w.writeIndent("return dst\n")
