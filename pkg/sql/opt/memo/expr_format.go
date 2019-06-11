@@ -548,6 +548,12 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		f.formatExpr(scalar.Child(1), tp.Child("filter"))
 
 		return
+
+	case opt.FKChecksOp:
+		if scalar.ChildCount() == 0 {
+			// Hide the FK checks field when there are no checks.
+			return
+		}
 	}
 
 	// Don't show scalar-list, as it's redundant with its parent.
