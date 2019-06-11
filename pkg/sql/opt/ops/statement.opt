@@ -175,6 +175,26 @@ define Delete {
     _ MutationPrivate
 }
 
+# ForeignKeys wraps the input of a mutation and contains queries that verify
+# foreign key relations touched by the mutation.
+# Semantically, the operator just passes through the Input; the other queries
+# are passed to execution separately.
+[Relational]
+define ForeignKeys {
+    Input RelExpr
+    Checks FKChecksExpr
+}
+
+[Scalar, List]
+define FKChecks {
+}
+
+[Scalar, ListItem]
+define FKChecksItem {
+    Check RelExpr
+    # TODO(radu): information for making a good error message.
+}
+
 # CreateTable represents a CREATE TABLE statement.
 [Relational, DDL, Mutation]
 define CreateTable {

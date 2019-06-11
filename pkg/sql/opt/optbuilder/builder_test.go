@@ -65,6 +65,7 @@ func TestBuilder(t *testing.T) {
 			var err error
 
 			tester := opttester.New(catalog, d.Input)
+			tester.Flags.BuildFKChecks = true
 			tester.Flags.ExprFormat = memo.ExprFmtHideMiscProps |
 				memo.ExprFmtHideConstraints |
 				memo.ExprFmtHideFuncDeps |

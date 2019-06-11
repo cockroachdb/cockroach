@@ -350,6 +350,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ShowTraceForSessionOp:
 		return sb.colStatShowTrace(colSet, e.(*ShowTraceForSessionExpr))
 
+	case opt.ForeignKeysOp:
+		return sb.colStat(colSet, e.(*ForeignKeysExpr).Input)
+
 	case opt.FakeRelOp:
 		panic(pgerror.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
 	}

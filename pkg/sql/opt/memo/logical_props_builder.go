@@ -1787,6 +1787,10 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 	}
 }
 
+func (b *logicalPropsBuilder) buildForeignKeysProps(fk *ForeignKeysExpr, rel *props.Relational) {
+	*rel = *fk.Input.Relational()
+}
+
 func (b *logicalPropsBuilder) buildFakeRelProps(fake *FakeRelExpr, rel *props.Relational) {
 	*rel = *fake.Props
 }
