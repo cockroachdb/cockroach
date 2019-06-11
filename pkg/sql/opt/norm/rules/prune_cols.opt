@@ -433,6 +433,7 @@
 [PruneMutationFetchCols, Normalize]
 (Update | Upsert | Delete
     $input:*
+    $checks:*
     $mutationPrivate:* &
         (CanPruneMutationFetchCols
             $mutationPrivate
@@ -442,6 +443,7 @@
 =>
 ((OpName)
     $input
+    $checks
     (PruneMutationFetchCols $mutationPrivate $needed)
 )
 
@@ -450,11 +452,13 @@
 [PruneMutationInputCols, Normalize]
 (Insert | Update | Upsert | Delete
     $input:*
+    $checks:*
     $mutationPrivate:* &
         (CanPruneCols $input $needed:(NeededMutationCols $mutationPrivate))
 )
 =>
 ((OpName)
     (PruneCols $input $needed)
+    $checks
     $mutationPrivate
 )

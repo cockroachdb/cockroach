@@ -563,6 +563,12 @@ func (h *hasher) HashZipExpr(val ZipExpr) {
 	}
 }
 
+func (h *hasher) HashFKChecksExpr(val FKChecksExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].Check)
+	}
+}
+
 func (h *hasher) HashPresentation(val physical.Presentation) {
 	for i := range val {
 		col := &val[i]
@@ -862,6 +868,18 @@ func (h *hasher) IsZipExprEqual(l, r ZipExpr) bool {
 	}
 	for i := range l {
 		if !l[i].Cols.Equals(r[i].Cols) || l[i].Func != r[i].Func {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsFKChecksExprEqual(l, r FKChecksExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Check != r[i].Check {
 			return false
 		}
 	}

@@ -330,7 +330,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		originColumnOrdinals:     fromCols,
 		referencedColumnOrdinals: toCols,
 		validated:                true,
-		matchMethod:              tree.MatchSimple,
+		matchMethod:              d.Match,
 	}
 	tab.outboundFKs = append(tab.outboundFKs, fk)
 	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)

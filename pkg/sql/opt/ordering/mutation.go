@@ -27,6 +27,10 @@ func mutationCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingCh
 func mutationBuildChildReqOrdering(
 	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
 ) physical.OrderingChoice {
+	if childIdx != 0 {
+		return physical.OrderingChoice{}
+	}
+
 	// Remap each of the required columns to corresponding input columns.
 	private := parent.Private().(*memo.MutationPrivate)
 
