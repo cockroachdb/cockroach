@@ -13,7 +13,6 @@ import (
 	gosql "database/sql"
 	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,17 +42,9 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
 
-	var usingRangeFeed bool
-	if err := db.QueryRow(
-		`SHOW CLUSTER SETTING changefeed.push.enabled`,
-	).Scan(&usingRangeFeed); err != nil {
-		return nil, err
-	}
-
 	ns := &nemeses{
-		rowCount:    4,
-		db:          db,
-		usingPoller: !usingRangeFeed,
+		rowCount: 4,
+		db:       db,
 		// eventMix does not have to add to 100
 		eventMix: map[fsm.Event]int{
 			// eventTransact opens an UPSERT transaction is there is not one open. If
@@ -172,10 +163,9 @@ const (
 )
 
 type nemeses struct {
-	rowCount    int
-	eventMix    map[fsm.Event]int
-	mixTotal    int
-	usingPoller bool
+	rowCount int
+	eventMix map[fsm.Event]int
+	mixTotal int
 
 	v  *CountValidator
 	db *gosql.DB
@@ -376,28 +366,6 @@ func transact(a fsm.Args) error {
 
 func noteFeedMessage(a fsm.Args) error {
 	ns := a.Extended.(*nemeses)
-
-	// The poller works by continually selecting a timestamp to be the next
-	// high-water and polling for changes between the last high-water and the new
-	// one. It doesn't push any unresolved intents (it would enter the txnwaitq,
-	// which would see the txn as live and hence not try to push it), so if we
-	// have an open transaction, it's possible that the poller is stuck waiting on
-	// it to resolve, which would cause the below call to `Next` to deadlock. This
-	// breaks that deadlock.
-	if ns.usingPoller {
-		nextDone := make(chan struct{})
-		defer close(nextDone)
-		go func() {
-			select {
-			case <-time.After(5 * time.Second):
-				log.Info(a.Ctx, "pushed open txn to break deadlock")
-				if err := push(a); err != nil {
-					panic(err)
-				}
-			case <-nextDone:
-			}
-		}()
-	}
 
 	m, err := ns.f.Next()
 	if err != nil {

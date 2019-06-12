@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
@@ -72,13 +71,6 @@ func distChangefeedFlow(
 		return err
 	}
 
-	execCfg := phs.ExecCfg()
-	if PushEnabled.Get(&execCfg.Settings.SV) {
-		telemetry.Count(`changefeed.run.push.enabled`)
-	} else {
-		telemetry.Count(`changefeed.run.push.disabled`)
-	}
-
 	spansTS := details.StatementTime
 	var initialHighWater hlc.Timestamp
 	if h := progress.GetHighWater(); h != nil && *h != (hlc.Timestamp{}) {
@@ -88,6 +80,7 @@ func distChangefeedFlow(
 		spansTS = initialHighWater
 	}
 
+	execCfg := phs.ExecCfg()
 	trackedSpans, err := fetchSpansForTargets(ctx, execCfg.DB, details.Targets, spansTS)
 	if err != nil {
 		return err
