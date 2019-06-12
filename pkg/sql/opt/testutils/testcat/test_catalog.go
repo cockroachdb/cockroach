@@ -14,6 +14,7 @@ package testcat
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -308,20 +308,14 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", err
 	}
 
-	switch stmt.AST.StatementType() {
-	case tree.DDL, tree.RowsAffected:
-	default:
-		return "", pgerror.AssertionFailedf("statement type is not DDL or RowsAffected: %v", log.Safe(stmt.AST.StatementType()))
-	}
-
 	switch stmt := stmt.AST.(type) {
 	case *tree.CreateTable:
-		tab := tc.CreateTable(stmt)
-		return tab.String(), nil
+		tc.CreateTable(stmt)
+		return "", nil
 
 	case *tree.CreateView:
-		view := tc.CreateView(stmt)
-		return view.String(), nil
+		tc.CreateView(stmt)
+		return "", nil
 
 	case *tree.AlterTable:
 		tc.AlterTable(stmt)
@@ -332,14 +326,20 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", nil
 
 	case *tree.CreateSequence:
-		seq := tc.CreateSequence(stmt)
-		return seq.String(), nil
+		tc.CreateSequence(stmt)
+		return "", nil
 
 	case *tree.SetZoneConfig:
-		zone := tc.SetZoneConfig(stmt)
-		tp := treeprinter.New()
-		cat.FormatZone(zone, tp)
-		return tp.String(), nil
+		tc.SetZoneConfig(stmt)
+		return "", nil
+
+	case *tree.ShowCreate:
+		tn := stmt.Name.ToTableName()
+		ds, _, err := tc.ResolveDataSource(context.Background(), cat.Flags{}, &tn)
+		if err != nil {
+			return "", err
+		}
+		return ds.(fmt.Stringer).String(), nil
 
 	default:
 		return "", pgerror.AssertionFailedf("unsupported statement: %v", stmt)

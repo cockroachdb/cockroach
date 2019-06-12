@@ -1,0 +1,30 @@
+
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p))
+----
+
+exec-ddl
+SHOW CREATE parent
+----
+TABLE parent
+ ├── p int not null
+ ├── INDEX primary
+ │    └── p int not null
+ └── REFERENCED BY CONSTRAINT fk_p_ref_parent FOREIGN KEY t.public.child (p) REFERENCES t.public.parent (p)
+
+exec-ddl
+SHOW CREATE child
+----
+TABLE child
+ ├── c int not null
+ ├── p int
+ ├── INDEX primary
+ │    └── c int not null
+ ├── INDEX child_auto_index_fk_p_ref_parent
+ │    ├── p int
+ │    └── c int not null
+ └── CONSTRAINT fk_p_ref_parent FOREIGN KEY t.public.child (p) REFERENCES t.public.parent (p)
