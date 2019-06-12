@@ -388,12 +388,6 @@ CREATE TABLE uniontest (
   v INT
 )
 ----
-TABLE uniontest
- ├── k int
- ├── v int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT v FROM uniontest WHERE k = 1 UNION SELECT v FROM uniontest WHERE k = 2
@@ -763,12 +757,6 @@ error (42804): UNION types int[] and string[] cannot be matched
 exec-ddl
 CREATE TABLE t.xy (x STRING NOT NULL, y STRING NOT NULL)
 ----
-TABLE xy
- ├── x string not null
- ├── y string not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE t.abc (
@@ -777,13 +765,6 @@ CREATE TABLE t.abc (
   c string NOT NULL
 )
 ----
-TABLE abc
- ├── a string
- ├── b string not null
- ├── c string not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 (SELECT x, x, y FROM xy) UNION (SELECT a, b, c FROM abc)
@@ -976,10 +957,6 @@ union-all
 exec-ddl
 CREATE TABLE a (a INT PRIMARY KEY)
 ----
-TABLE a
- ├── a int not null
- └── INDEX primary
-      └── a int not null
 
 # Regression test for #34524.
 build

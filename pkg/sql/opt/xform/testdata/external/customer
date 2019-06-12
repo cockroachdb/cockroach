@@ -19,11 +19,6 @@ CREATE TABLE nodes (
 	FAMILY "primary" (id, payload)
 )
 ----
-TABLE nodes
- ├── id int not null
- ├── payload string
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 CREATE TABLE edges (
@@ -37,18 +32,6 @@ CREATE TABLE edges (
 	FAMILY "primary" (src, dst, payload)
 )
 ----
-TABLE edges
- ├── src int not null
- ├── dst int not null
- ├── payload string
- ├── INDEX primary
- │    ├── src int not null
- │    └── dst int not null
- ├── INDEX edges_auto_index_fk_dst_ref_nodes
- │    ├── dst int not null
- │    └── src int not null
- ├── CONSTRAINT fk_dst_ref_nodes FOREIGN KEY (dst) REFERENCES t.public.nodes (id)
- └── CONSTRAINT fk_src_ref_nodes FOREIGN KEY (src) REFERENCES t.public.nodes (id)
 
 opt
 select nodes.id,dst from nodes join edges on edges.dst=nodes.id
@@ -91,36 +74,6 @@ CREATE TABLE article (
 	FAMILY "primary" (id, feed, folder, hash, title, summary, content, link, read, date, retrieved)
 ) INTERLEAVE IN PARENT feed (folder, feed)
 ----
-TABLE article
- ├── id int not null
- ├── feed int not null
- ├── folder int not null
- ├── hash string
- ├── title string
- ├── summary string
- ├── content string
- ├── link string
- ├── read bool
- ├── date timestamptz
- ├── retrieved timestamptz
- ├── INDEX primary
- │    ├── folder int not null
- │    ├── feed int not null
- │    └── id int not null
- ├── INDEX article_id_key
- │    ├── id int not null
- │    ├── folder int not null (storing)
- │    └── feed int not null (storing)
- ├── INDEX article_hash_key
- │    ├── hash string
- │    ├── folder int not null (storing)
- │    ├── feed int not null (storing)
- │    └── id int not null (storing)
- └── INDEX article_idx_read_key
-      ├── id int not null
-      ├── folder int not null (storing)
-      ├── feed int not null (storing)
-      └── read bool (storing)
 
 opt
 SELECT id, feed, folder, title, summary, content, link, date
@@ -258,42 +211,6 @@ CREATE TABLE IF NOT EXISTS leaderboard_record (
     INDEX test_idx(leaderboard_id, expires_at, score, updated_at_inverse, id)
 );
 ----
-TABLE leaderboard_record
- ├── id bytes not null
- ├── leaderboard_id bytes not null
- ├── owner_id bytes not null
- ├── handle varchar not null
- ├── lang varchar not null
- ├── location varchar
- ├── timezone varchar
- ├── rank_value int not null
- ├── score int not null
- ├── num_score int not null
- ├── metadata bytes not null
- ├── ranked_at int not null
- ├── updated_at int not null
- ├── updated_at_inverse int not null
- ├── expires_at int not null
- ├── banned_at int not null
- ├── INDEX primary
- │    ├── leaderboard_id bytes not null
- │    ├── expires_at int not null
- │    └── owner_id bytes not null
- ├── INDEX test_idx
- │    ├── leaderboard_id bytes not null
- │    ├── expires_at int not null
- │    ├── score int not null
- │    ├── updated_at_inverse int not null
- │    ├── id bytes not null
- │    └── owner_id bytes not null
- ├── CHECK (rank_value >= 0)
- ├── CHECK (num_score >= 0)
- ├── CHECK (length(metadata) < 16000)
- ├── CHECK (ranked_at >= 0)
- ├── CHECK (updated_at > 0)
- ├── CHECK (updated_at > 0)
- ├── CHECK (expires_at >= 0)
- └── CHECK (expires_at >= 0)
 
 opt
 SELECT score, expires_at
@@ -336,20 +253,6 @@ CREATE TABLE rides (
     end_address, start_time, end_time, revenue)
 )
 ----
-TABLE rides
- ├── id uuid not null
- ├── rider_id uuid
- ├── vehicle_id uuid
- ├── start_address string
- ├── end_address string
- ├── start_time timestamp
- ├── end_time timestamp
- ├── revenue float
- ├── INDEX primary
- │    └── id uuid not null
- └── INDEX rides_vehicle_id_idx
-      ├── vehicle_id uuid
-      └── id uuid not null
 
 exec-ddl
 CREATE TABLE vehicles (
@@ -365,21 +268,6 @@ CREATE TABLE vehicles (
     FAMILY "primary" (id, type, city, owner_id, creation_time, status, ext)
 )
 ----
-TABLE vehicles
- ├── id uuid not null
- ├── type string
- ├── city string not null
- ├── owner_id uuid
- ├── creation_time timestamp
- ├── status string
- ├── ext jsonb
- ├── INDEX primary
- │    ├── city string not null
- │    └── id uuid not null
- └── INDEX vehicles_id_idx
-      ├── id uuid not null
-      ├── city string not null
-      └── owner_id uuid (storing)
 
 opt
 select v.owner_id, count(*) from rides r, vehicles v where v.id = r.vehicle_id group by v.owner_id
@@ -424,26 +312,6 @@ CREATE TABLE data (
   INDEX foo (id ASC) STORING (value)
 )
 ----
-TABLE data
- ├── id uuid
- ├── value int
- ├── col1 int
- ├── col2 int
- ├── col3 int
- ├── col4 int
- ├── col5 int
- ├── col6 int
- ├── col7 int
- ├── col8 int
- ├── col9 int
- ├── col10 int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX foo
-      ├── id uuid
-      ├── rowid int not null (hidden)
-      └── value int (storing)
 
 opt
 SELECT id, sum(value) FROM data GROUP BY id
@@ -489,41 +357,6 @@ CREATE TABLE t_sync_data (
     INDEX index3 (last_sync_id)
 )
 ----
-TABLE t_sync_data
- ├── remote_id uuid not null
- ├── conflict_remote_id uuid
- ├── user_id uuid not null
- ├── last_sync_id int not null
- ├── data_type string not null
- ├── sync_data string
- ├── deleted bool not null
- ├── create_device_id string not null
- ├── original_data_id string not null
- ├── create_time int not null
- ├── last_update_time int not null
- ├── INDEX “primary”
- │    └── remote_id uuid not null
- ├── INDEX t_sync_data_user_id_data_type_idx
- │    ├── user_id uuid not null
- │    ├── data_type string not null
- │    └── remote_id uuid not null
- ├── INDEX t_sync_data_last_sync_id_idx
- │    ├── last_sync_id int not null
- │    └── remote_id uuid not null
- ├── INDEX index1
- │    ├── last_sync_id int not null
- │    ├── user_id uuid not null
- │    ├── data_type string not null
- │    └── remote_id uuid not null
- ├── INDEX index2
- │    ├── user_id uuid not null
- │    ├── data_type string not null
- │    └── remote_id uuid not null
- ├── INDEX index3
- │    ├── last_sync_id int not null
- │    └── remote_id uuid not null
- ├── FAMILY f_meta (remote_id, conflict_remote_id, user_id, last_sync_id, data_type, deleted, create_device_id, original_data_id, create_time, last_update_time)
- └── FAMILY f_data (sync_data)
 
 opt
 SELECT *
@@ -576,15 +409,6 @@ CREATE TABLE test (
     FAMILY "primary" (id, midname, name)
 )
 ----
-TABLE test
- ├── id int not null
- ├── midname string
- ├── name string
- ├── INDEX primary
- │    └── id int not null
- └── INDEX test_name_idx
-      ├── name string
-      └── id int not null
 
 opt
 EXPLAIN SELECT id FROM test ORDER BY id asc LIMIT 10 offset 10000;
@@ -630,28 +454,6 @@ CREATE TABLE orders (
     FAMILY "primary" (o_orderkey, o_custkey, o_orderstatus, o_totalprice, o_orderdate, o_orderpriority, o_clerk, o_shippriority, o_comment, rowid)
 )
 ----
-TABLE orders
- ├── o_orderkey int not null
- ├── o_custkey int not null
- ├── o_orderstatus string not null
- ├── o_totalprice decimal not null
- ├── o_orderdate date not null
- ├── o_orderpriority string not null
- ├── o_clerk string not null
- ├── o_shippriority int not null
- ├── o_comment string not null
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX o_ok
- │    ├── o_orderkey int not null
- │    └── rowid int not null (hidden) (storing)
- ├── INDEX o_ck
- │    ├── o_custkey int not null
- │    └── rowid int not null (hidden)
- └── INDEX o_od
-      ├── o_orderdate date not null
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE lineitem (
@@ -682,52 +484,6 @@ CREATE TABLE lineitem (
     FAMILY "primary" (l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment, rowid)
 )
 ----
-TABLE lineitem
- ├── l_orderkey int not null
- ├── l_partkey int not null
- ├── l_suppkey int not null
- ├── l_linenumber int not null
- ├── l_quantity decimal not null
- ├── l_extendedprice decimal not null
- ├── l_discount decimal not null
- ├── l_tax decimal not null
- ├── l_returnflag string not null
- ├── l_linestatus string not null
- ├── l_shipdate date not null
- ├── l_commitdate date not null
- ├── l_receiptdate date not null
- ├── l_shipinstruct string not null
- ├── l_shipmode string not null
- ├── l_comment string not null
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX l_ok
- │    ├── l_orderkey int not null
- │    └── rowid int not null (hidden)
- ├── INDEX l_pk
- │    ├── l_partkey int not null
- │    └── rowid int not null (hidden)
- ├── INDEX l_sk
- │    ├── l_suppkey int not null
- │    └── rowid int not null (hidden)
- ├── INDEX l_sd
- │    ├── l_shipdate date not null
- │    └── rowid int not null (hidden)
- ├── INDEX l_cd
- │    ├── l_commitdate date not null
- │    └── rowid int not null (hidden)
- ├── INDEX l_rd
- │    ├── l_receiptdate date not null
- │    └── rowid int not null (hidden)
- ├── INDEX l_pk_sk
- │    ├── l_partkey int not null
- │    ├── l_suppkey int not null
- │    └── rowid int not null (hidden)
- └── INDEX l_sk_pk
-      ├── l_suppkey int not null
-      ├── l_partkey int not null
-      └── rowid int not null (hidden)
 
 opt
 SELECT count(l_orderkey) FROM orders, lineitem WHERE orders.o_orderkey = lineitem.l_orderkey
@@ -767,15 +523,6 @@ CREATE TABLE idtable (
   INDEX secondary_id (secondary_id)
 )
 ----
-TABLE idtable
- ├── primary_id uuid not null
- ├── secondary_id uuid not null
- ├── data jsonb not null
- ├── INDEX primary
- │    └── primary_id uuid not null
- └── INDEX secondary_id
-      ├── secondary_id uuid not null
-      └── primary_id uuid not null
 
 opt
 SELECT

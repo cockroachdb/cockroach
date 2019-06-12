@@ -6,11 +6,6 @@ CREATE TABLE kv (
   v INT
 )
 ----
-TABLE kv
- ├── k int not null
- ├── v int
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE kvString (
@@ -18,11 +13,6 @@ CREATE TABLE kvString (
   v STRING
 )
 ----
-TABLE kvstring
- ├── k string not null
- ├── v string
- └── INDEX primary
-      └── k string not null
 
 build
 SELECT * FROM kv WHERE k IN (1, 3)
@@ -179,12 +169,6 @@ select
 exec-ddl
 CREATE TABLE ab (a INT, b INT)
 ----
-TABLE ab
- ├── a int
- ├── b int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM ab WHERE a IN (1, 3, 4)

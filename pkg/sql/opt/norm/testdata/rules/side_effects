@@ -3,32 +3,14 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
-TABLE uv
- ├── u int not null
- ├── v int
- └── INDEX primary
-      └── u int not null
 
 # Don't allow ORDER BY column to be eliminated if it has a side effect.
 opt

@@ -7,20 +7,6 @@ CREATE TABLE abc (
     UNIQUE(b, c)
 )
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX secondary
- │    ├── a int not null
- │    └── rowid int not null (hidden) (storing)
- └── INDEX secondary
-      ├── b int
-      ├── c int
-      └── rowid int not null (hidden) (storing)
 
 exec-ddl
 CREATE TABLE xyz (
@@ -31,20 +17,6 @@ CREATE TABLE xyz (
     UNIQUE (z, y)
 )
 ----
-TABLE xyz
- ├── x int not null
- ├── y int
- ├── z int
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX secondary
- │    ├── y int
- │    ├── z int
- │    └── x int not null (storing)
- └── INDEX secondary
-      ├── z int
-      ├── y int
-      └── x int not null (storing)
 
 # INSERT..ON CONFLICT case. Don't inherit FDs.
 build

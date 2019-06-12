@@ -1,12 +1,10 @@
 exec-ddl
 CREATE SEQUENCE x
 ----
-SEQUENCE t.public.x
 
 exec-ddl
 CREATE SEQUENCE y
 ----
-SEQUENCE t.public.y
 
 build
 SELECT * FROM x
