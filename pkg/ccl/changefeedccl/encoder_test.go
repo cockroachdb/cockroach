@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -363,7 +363,7 @@ func TestAvroLedger(t *testing.T) {
 
 		ctx := context.Background()
 		gen := ledger.FromFlags(`--customers=1`)
-		_, err := workload.Setup(ctx, db, gen, 0, 0)
+		_, err := workloadsql.Setup(ctx, db, gen, 0, 0)
 		require.NoError(t, err)
 
 		ledger := feed(t, f, `CREATE CHANGEFEED FOR customer, transaction, entry, session

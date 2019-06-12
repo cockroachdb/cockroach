@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
 
 const (
@@ -135,7 +136,7 @@ func TestAllRegisteredSetup(t *testing.T) {
 			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
 
 			const batchSize, concurrency = 0, 0
-			if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+			if _, err := workloadsql.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
 				t.Fatalf(`%+v`, err)
 			}
 
