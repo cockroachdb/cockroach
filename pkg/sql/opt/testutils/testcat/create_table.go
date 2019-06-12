@@ -160,6 +160,17 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 		case *tree.FamilyTableDef:
 			tab.addFamily(def)
+
+		case *tree.ColumnTableDef:
+			if def.Unique {
+				tab.addIndex(
+					&tree.IndexTableDef{
+						Name:    tree.Name(fmt.Sprintf("%s_%s_key", stmt.Table.TableName, def.Name)),
+						Columns: tree.IndexElemList{{Column: def.Name}},
+					},
+					uniqueIndex,
+				)
+			}
 		}
 	}
 
