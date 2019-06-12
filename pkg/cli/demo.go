@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -144,7 +145,7 @@ func setupTransientServer(
 
 		ctx := context.TODO()
 		const batchSize, concurrency = 0, 0
-		if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+		if _, err := workloadsql.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
 			return ``, ``, cleanup, err
 		}
 	}
