@@ -118,13 +118,22 @@ func TestAllRegisteredSetup(t *testing.T) {
 			continue
 		}
 
+		gen := meta.New()
 		switch meta.Name {
-		case `roachmart`, `interleavedpartitioned`:
-			// These require a specific node locality setup
+		case `roachmart`:
+			// TODO(dan): It'd be nice to test this with the default flags. For now,
+			// this is better than nothing.
+			if err := gen.(workload.Flagser).Flags().Parse([]string{
+				`--users=10`, `--orders=100`, `--partition=false`,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		case `interleavedpartitioned`:
+			// This require a specific node locality setup
 			continue
 		}
 
-		gen := meta.New()
+
 		t.Run(meta.Name, func(t *testing.T) {
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
