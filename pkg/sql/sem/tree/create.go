@@ -935,9 +935,9 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 	}
 }
 
-// HoistConstraints finds column constraints defined inline with their columns
-// and makes them table-level constraints, stored in n.Defs. For example, the
-// foreign key constraint in
+// HoistConstraints finds column check and foreign key constraints defined
+// inline with their columns and makes them table-level constraints, stored in
+// n.Defs. For example, the foreign key constraint in
 //
 //     CREATE TABLE foo (a INT REFERENCES bar(a))
 //
@@ -960,6 +960,8 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 // CockroachDB and Postgres, but not necessarily other SQL databases:
 //
 //    CREATE TABLE foo (a INT CHECK (a < b), b INT)
+//
+// Unique constraints are not hoisted.
 //
 func (node *CreateTable) HoistConstraints() {
 	for _, d := range node.Defs {
