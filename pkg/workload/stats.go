@@ -14,8 +14,8 @@ package workload
 
 import (
 	"math"
+	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -38,10 +38,8 @@ type JSONStatistic struct {
 // count, and null count.
 func MakeStat(columns []string, rowCount, distinctCount, nullCount uint64) JSONStatistic {
 	return JSONStatistic{
-		Name: AutoStatsName,
-		CreatedAt: tree.AsStringWithFlags(
-			&tree.DTimestamp{Time: timeutil.Now()}, tree.FmtBareStrings,
-		),
+		Name:          AutoStatsName,
+		CreatedAt:     timeutil.Now().Round(time.Microsecond).UTC().Format(timestampOutputFormat),
 		Columns:       columns,
 		RowCount:      rowCount,
 		DistinctCount: distinctCount,

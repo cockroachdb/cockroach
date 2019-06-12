@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -268,7 +269,7 @@ func runInitImpl(
 	// hooked up to a flag directly once once more of run.go moves inside
 	// workload.
 	const concurrency = 16
-	_, err := workload.Setup(ctx, initDB, gen, batchSize, concurrency)
+	_, err := workloadsql.Setup(ctx, initDB, gen, batchSize, concurrency)
 	return err
 }
 
@@ -336,7 +337,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
 	for _, table := range gen.Tables() {
-		if err := workload.Split(ctx, initDB, table, splitConcurrency); err != nil {
+		if err := workloadsql.Split(ctx, initDB, table, splitConcurrency); err != nil {
 			return err
 		}
 	}

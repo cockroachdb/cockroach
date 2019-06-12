@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/pkg/errors"
 )
 
@@ -54,7 +55,7 @@ func toBackup(t testing.TB, data workload.Table, dir string, chunkBytes int64) (
 	fmt.Fprintf(&stmts, "CREATE TABLE %s %s;\n", data.Name, data.Schema)
 	for rowIdx := 0; rowIdx < data.InitialRows.NumBatches; rowIdx++ {
 		for _, row := range data.InitialRows.BatchRows(rowIdx) {
-			rowBatch := strings.Join(workload.StringTuple(row), `,`)
+			rowBatch := strings.Join(workloadsql.StringTuple(row), `,`)
 			fmt.Fprintf(&stmts, "INSERT INTO %s VALUES (%s);\n", data.Name, rowBatch)
 		}
 	}

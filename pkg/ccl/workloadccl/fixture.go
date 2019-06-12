@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"google.golang.org/api/iterator"
@@ -497,7 +498,7 @@ func runPostLoadSteps(ctx context.Context, sqlDB *gosql.DB, gen workload.Generat
 	}
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
 	for _, table := range gen.Tables() {
-		if err := workload.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
+		if err := workloadsql.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
 			return errors.Wrapf(err, `splitting %s`, table.Name)
 		}
 	}
