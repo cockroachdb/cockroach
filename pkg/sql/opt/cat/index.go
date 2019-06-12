@@ -121,7 +121,7 @@ type Index interface {
 	// information will also be inherited.
 	//
 	// NOTE: This zone always applies to the entire index and never to any
-	// partifular partition of the index.
+	// particular partition of the index.
 	Zone() Zone
 
 	// Span returns the KV span associated with the index.
