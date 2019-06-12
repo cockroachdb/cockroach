@@ -320,7 +320,6 @@ func TestAvroEncoder(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
@@ -351,7 +350,6 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestAvroLedger(t *testing.T) {
@@ -389,5 +387,4 @@ func TestAvroLedger(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }

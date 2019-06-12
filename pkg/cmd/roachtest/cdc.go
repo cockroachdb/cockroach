@@ -57,6 +57,12 @@ type cdcTestArgs struct {
 }
 
 func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
+	// Skip the poller test on v19.2. After 19.2 is out, we should likely delete
+	// the test entirely.
+	if !args.rangefeed && t.registry.buildVersion.Compare(version.MustParse(`v19.1.0-0`)) > 0 {
+		t.Skip("no poller in >= v19.2.0", "")
+	}
+
 	crdbNodes := c.Range(1, c.nodes-1)
 	workloadNode := c.Node(c.nodes)
 	kafkaNode := c.Node(c.nodes)

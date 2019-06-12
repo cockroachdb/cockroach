@@ -82,7 +82,6 @@ func TestChangefeedBasics(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
@@ -126,7 +125,6 @@ func TestChangefeedEnvelope(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedMultiTable(t *testing.T) {
@@ -150,7 +148,6 @@ func TestChangefeedMultiTable(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedCursor(t *testing.T) {
@@ -209,7 +206,6 @@ func TestChangefeedCursor(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedTimestamps(t *testing.T) {
@@ -270,9 +266,6 @@ func TestChangefeedTimestamps(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	// Most poller tests use sinklessTest, but this one uses enterpriseTest
-	// because we get an extra assertion out of it.
-	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
 
 func TestChangefeedResolvedFrequency(t *testing.T) {
@@ -303,7 +296,6 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 // Test how Changefeeds react to schema changes that do not require a backfill
@@ -470,7 +462,6 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
@@ -540,7 +531,6 @@ func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 // Test schema changes that require a backfill when the backfill option is
@@ -673,7 +663,6 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 // Regression test for #34314
@@ -696,7 +685,6 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedInterleaved(t *testing.T) {
@@ -747,7 +735,6 @@ func TestChangefeedInterleaved(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedColumnFamily(t *testing.T) {
@@ -781,7 +768,6 @@ func TestChangefeedColumnFamily(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedComputedColumn(t *testing.T) {
@@ -810,7 +796,6 @@ func TestChangefeedComputedColumn(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedUpdatePrimaryKey(t *testing.T) {
@@ -843,7 +828,6 @@ func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedTruncateRenameDrop(t *testing.T) {
@@ -896,7 +880,6 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedMonitoring(t *testing.T) {
@@ -913,9 +896,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 		}
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		var usingRangeFeed bool
-		sqlDB.QueryRow(t, `SHOW CLUSTER SETTING changefeed.push.enabled`, &usingRangeFeed)
-
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
@@ -967,14 +947,11 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
-			if usingRangeFeed {
-				// Only RangeFeed-based changefeeds use this buffer.
-				if c := s.MustGetSQLCounter(`changefeed.buffer_entries.in`); c <= 0 {
-					return errors.Errorf(`expected > 0 got %d`, c)
-				}
-				if c := s.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
-					return errors.Errorf(`expected > 0 got %d`, c)
-				}
+			if c := s.MustGetSQLCounter(`changefeed.buffer_entries.in`); c <= 0 {
+				return errors.Errorf(`expected > 0 got %d`, c)
+			}
+			if c := s.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
+				return errors.Errorf(`expected > 0 got %d`, c)
 			}
 			return nil
 		})
@@ -1037,7 +1014,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedRetryableError(t *testing.T) {
@@ -1108,7 +1084,6 @@ func TestChangefeedRetryableError(t *testing.T) {
 
 	// Only the enterprise version uses jobs.
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
 
 // TestChangefeedDataTTL ensures that changefeeds fail with an error in the case
@@ -1194,7 +1169,6 @@ func TestChangefeedDataTTL(t *testing.T) {
 
 	t.Run("sinkless", sinklessTest(testFn))
 	t.Run("enterprise", enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 // TestChangefeedSchemaTTL ensures that changefeeds fail with an error in the case
@@ -1271,7 +1245,6 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 
 	t.Run("sinkless", sinklessTest(testFn))
 	t.Run("enterprise", enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedErrors(t *testing.T) {
@@ -1500,7 +1473,6 @@ func TestChangefeedPermissions(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedDescription(t *testing.T) {
@@ -1541,7 +1513,6 @@ func TestChangefeedDescription(t *testing.T) {
 
 	// Only the enterprise version uses jobs.
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
 func TestChangefeedPauseUnpause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1584,7 +1555,6 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 
 	// Only the enterprise version uses jobs.
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
 
 func TestManyChangefeedsOneTable(t *testing.T) {
@@ -1637,7 +1607,6 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestUnspecifiedPrimaryKey(t *testing.T) {
@@ -1663,7 +1632,6 @@ func TestUnspecifiedPrimaryKey(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 // TestChangefeedNodeShutdown ensures that an enterprise changefeed continues
@@ -1771,24 +1739,15 @@ func TestChangefeedTelemetry(t *testing.T) {
 			expectedSink = `experimental-sql`
 		}
 
-		var expectedPushEnabled string
-		if strings.Contains(t.Name(), `sinkless`) {
-			expectedPushEnabled = `enabled`
-		} else {
-			expectedPushEnabled = `disabled`
-		}
-
 		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 		require.Equal(t, int32(2), counts[`changefeed.create.sink.`+expectedSink])
 		require.Equal(t, int32(2), counts[`changefeed.create.format.json`])
 		require.Equal(t, int32(1), counts[`changefeed.create.num_tables.1`])
 		require.Equal(t, int32(1), counts[`changefeed.create.num_tables.2`])
-		require.Equal(t, int32(2), counts[`changefeed.run.push.`+expectedPushEnabled])
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
 func TestChangefeedMemBufferCapacity(t *testing.T) {
@@ -1817,11 +1776,6 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'small')`)
-
-		// Force rangefeed, even for the enterprise test.
-		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.push.enabled = true`)
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		defer closeFeed(t, foo)
