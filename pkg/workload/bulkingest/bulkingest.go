@@ -143,7 +143,6 @@ func (w *bulkingest) Tables() []workload.Table {
 		Schema: schema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: w.aCount * w.bCount,
-			NumTotal:   w.aCount * w.bCount * w.cCount,
 			FillBatch: func(ab int, cb coldata.Batch, alloc *bufalloc.ByteAllocator) {
 				a := ab / w.bCount
 				b := ab % w.bCount

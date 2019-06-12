@@ -267,6 +267,7 @@ func loadWorkloadBatches(sqlDB *gosql.DB, table workload.Table) ([]time.Time, in
 	var now time.Time
 	var timestamps []time.Time
 	var benchBytes int64
+	var numRows int
 
 	var insertStmtBuf bytes.Buffer
 	var params []interface{}
@@ -279,6 +280,7 @@ func loadWorkloadBatches(sqlDB *gosql.DB, table workload.Table) ([]time.Time, in
 		insertStmtBuf.Reset()
 		insertStmtBuf.WriteString(`INSERT INTO "` + table.Name + `" VALUES `)
 		for _, row := range table.InitialRows.BatchRows(batchIdx) {
+			numRows++
 			if len(params) != 0 {
 				insertStmtBuf.WriteString(`,`)
 			}
@@ -303,17 +305,14 @@ func loadWorkloadBatches(sqlDB *gosql.DB, table workload.Table) ([]time.Time, in
 		timestamps = append(timestamps, now)
 	}
 
-	if table.InitialRows.NumTotal != 0 {
-		var totalRows int
-		if err := sqlDB.QueryRow(
-			`SELECT count(*) FROM "` + table.Name + `"`,
-		).Scan(&totalRows); err != nil {
-			return nil, 0, err
-		}
-		if table.InitialRows.NumTotal != totalRows {
-			return nil, 0, errors.Errorf(`sanity check failed: expected %d rows got %d`,
-				table.InitialRows.NumTotal, totalRows)
-		}
+	var totalRows int
+	if err := sqlDB.QueryRow(
+		`SELECT count(*) FROM "` + table.Name + `"`,
+	).Scan(&totalRows); err != nil {
+		return nil, 0, err
+	}
+	if numRows != totalRows {
+		return nil, 0, errors.Errorf(`sanity check failed: expected %d rows got %d`, numRows, totalRows)
 	}
 
 	return timestamps, benchBytes, nil
