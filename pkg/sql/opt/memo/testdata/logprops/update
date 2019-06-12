@@ -7,15 +7,6 @@ CREATE TABLE abcde (
     "e:write-only" INT NOT NULL
 )
 ----
-TABLE abcde
- ├── a int not null
- ├── b int
- ├── c int not null
- ├── d int
- ├── rowid int not null (hidden)
- ├── e int not null (mutation)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE xyz (
@@ -24,12 +15,6 @@ CREATE TABLE xyz (
     z FLOAT8
 )
 ----
-TABLE xyz
- ├── x string not null
- ├── y int not null
- ├── z float
- └── INDEX primary
-      └── x string not null
 
 # Properties with no RETURNING clause.
 build

@@ -1,27 +1,10 @@
 exec-ddl
 CREATE TABLE abcd (a INT, b INT, c INT, INDEX (a,b))
 ----
-TABLE abcd
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX secondary
-      ├── a int
-      ├── b int
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE small (m INT, n INT)
 ----
-TABLE small
- ├── m int
- ├── n int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE small INJECT STATISTICS '[

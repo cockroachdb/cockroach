@@ -12,10 +12,6 @@ create table Person (
   primary key (id)
 )
 ----
-TABLE person
- ├── id int not null
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table Phone (
@@ -26,13 +22,6 @@ create table Phone (
   primary key (id)
 )
 ----
-TABLE phone
- ├── id int not null
- ├── number varchar
- ├── since timestamp
- ├── type int4
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table phone_register (
@@ -44,17 +33,6 @@ create table phone_register (
   unique (person_id)
 )
 ----
-TABLE phone_register
- ├── phone_id int not null
- ├── person_id int not null
- ├── INDEX primary
- │    ├── phone_id int not null
- │    └── person_id int not null
- ├── INDEX secondary
- │    ├── person_id int not null
- │    └── phone_id int not null (storing)
- ├── CONSTRAINT fk_person_id_ref_phone FOREIGN KEY (person_id) REFERENCES t.public.phone (id)
- └── CONSTRAINT fk_phone_id_ref_person FOREIGN KEY (phone_id) REFERENCES t.public.person (id)
 
 opt
 select
@@ -122,15 +100,6 @@ create table Person (
     primary key (id)
 )
 ----
-TABLE person
- ├── id int not null
- ├── address varchar
- ├── createdon timestamp
- ├── name varchar
- ├── nickname varchar
- ├── version int4 not null
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table Person_addresses (
@@ -140,13 +109,6 @@ create table Person_addresses (
     primary key (Person_id, addresses_KEY)
 )
 ----
-TABLE person_addresses
- ├── person_id int not null
- ├── addresses varchar
- ├── addresses_key varchar not null
- └── INDEX primary
-      ├── person_id int not null
-      └── addresses_key varchar not null
 
 exec-ddl
 create table Phone (
@@ -158,14 +120,6 @@ create table Phone (
     primary key (id)
 )
 ----
-TABLE phone
- ├── id int not null
- ├── phone_number varchar
- ├── phone_type varchar
- ├── person_id int
- ├── order_id int4
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table phone_call (
@@ -176,13 +130,6 @@ create table phone_call (
     primary key (id)
 )
 ----
-TABLE phone_call
- ├── id int not null
- ├── duration int4 not null
- ├── call_timestamp timestamp
- ├── phone_id int
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table Partner (
@@ -192,12 +139,6 @@ create table Partner (
     primary key (id)
 )
 ----
-TABLE partner
- ├── id int not null
- ├── name varchar
- ├── version int4 not null
- └── INDEX primary
-      └── id int not null
 
 opt
 select
@@ -425,16 +366,6 @@ create table Customer_AUD (
     primary key (id, REV)
 )
 ----
-TABLE customer_aud
- ├── id int not null
- ├── rev int4 not null
- ├── revtype int2
- ├── created_on timestamp
- ├── firstname varchar
- ├── lastname varchar
- └── INDEX primary
-      ├── id int not null
-      └── rev int4 not null
 
 opt
 select
@@ -541,18 +472,6 @@ create table Customer_AUD (
     primary key (id, REV)
 )
 ----
-TABLE customer_aud
- ├── id int not null
- ├── rev int4 not null
- ├── revtype int2
- ├── revend int4
- ├── created_on timestamp
- ├── firstname varchar
- ├── lastname varchar
- ├── address_id int
- └── INDEX primary
-      ├── id int not null
-      └── rev int4 not null
 
 opt
 select
@@ -680,14 +599,6 @@ create table Phone (
     primary key (id)
 )
 ----
-TABLE phone
- ├── id int not null
- ├── phone_number varchar
- ├── phone_type varchar
- ├── person_id int
- ├── order_id int4
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table phone_call (
@@ -698,13 +609,6 @@ create table phone_call (
     primary key (id)
 )
 ----
-TABLE phone_call
- ├── id int not null
- ├── duration int4 not null
- ├── call_timestamp timestamp
- ├── phone_id int
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table Person (
@@ -717,15 +621,6 @@ create table Person (
     primary key (id)
 )
 ----
-TABLE person
- ├── id int not null
- ├── address varchar
- ├── createdon timestamp
- ├── name varchar
- ├── nickname varchar
- ├── version int4 not null
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table Phone_repairTimestamps (
@@ -733,12 +628,6 @@ create table Phone_repairTimestamps (
    repairTimestamps timestamp
 )
 ----
-TABLE phone_repairtimestamps
- ├── phone_id int not null
- ├── repairtimestamps timestamp
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 create table Person_addresses (
@@ -748,13 +637,6 @@ create table Person_addresses (
     primary key (Person_id, addresses_KEY)
 )
 ----
-TABLE person_addresses
- ├── person_id int not null
- ├── addresses varchar
- ├── addresses_key varchar not null
- └── INDEX primary
-      ├── person_id int not null
-      └── addresses_key varchar not null
 
 opt
 select
@@ -1555,12 +1437,6 @@ create table EMPLOYEE (
     primary key (id)
 )
 ----
-TABLE employee
- ├── id int not null
- ├── email varchar
- ├── currentproject_id int
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table Employee_phones (
@@ -1568,12 +1444,6 @@ create table Employee_phones (
     phone_number varchar(255)
 )
 ----
-TABLE employee_phones
- ├── employee_id int not null
- ├── phone_number varchar
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 opt
 select
@@ -1640,11 +1510,6 @@ create table Company (
     primary key (id)
 )
 ----
-TABLE company
- ├── id int not null
- ├── location_id int
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table Company_Employee (
@@ -1653,12 +1518,6 @@ create table Company_Employee (
     primary key (Company_id, employees_id)
 )
 ----
-TABLE company_employee
- ├── company_id int not null
- ├── employees_id int not null
- └── INDEX primary
-      ├── company_id int not null
-      └── employees_id int not null
 
 exec-ddl
 create table Employee (
@@ -1666,10 +1525,6 @@ create table Employee (
     primary key (id)
 )
 ----
-TABLE employee
- ├── id int not null
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table Manager (
@@ -1677,10 +1532,6 @@ create table Manager (
     primary key (id)
 )
 ----
-TABLE manager
- ├── id int not null
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table Location (
@@ -1690,12 +1541,6 @@ create table Location (
     primary key (id)
 )
 ----
-TABLE location
- ├── id int not null
- ├── address varchar
- ├── zip int4 not null
- └── INDEX primary
-      └── id int not null
 
 opt
 select
@@ -1797,12 +1642,6 @@ create table News (
     primary key (news_id)
 )
 ----
-TABLE news
- ├── news_id int4 not null
- ├── detail varchar
- ├── title varchar
- └── INDEX primary
-      └── news_id int4 not null
 
 exec-ddl
 create table Newspaper (
@@ -1811,11 +1650,6 @@ create table Newspaper (
     primary key (id)
 )
 ----
-TABLE newspaper
- ├── id int4 not null
- ├── name varchar
- └── INDEX primary
-      └── id int4 not null
 
 exec-ddl
 create table Newspaper_News (
@@ -1824,12 +1658,6 @@ create table Newspaper_News (
     primary key (Newspaper_id, news_news_id)
 )
 ----
-TABLE newspaper_news
- ├── newspaper_id int4 not null
- ├── news_news_id int4 not null
- └── INDEX primary
-      ├── newspaper_id int4 not null
-      └── news_news_id int4 not null
 
 opt
 select
@@ -1892,13 +1720,6 @@ create table GenerationGroup (
     primary key (id)
 )
 ----
-TABLE generationgroup
- ├── id int4 not null
- ├── age varchar
- ├── culture varchar
- ├── description varchar
- └── INDEX primary
-      └── id int4 not null
 
 exec-ddl
 create table GenerationUser (
@@ -1906,10 +1727,6 @@ create table GenerationUser (
     primary key (id)
 )
 ----
-TABLE generationuser
- ├── id int4 not null
- └── INDEX primary
-      └── id int4 not null
 
 exec-ddl
 create table GenerationUser_GenerationGroup (
@@ -1918,12 +1735,6 @@ create table GenerationUser_GenerationGroup (
     primary key (GenerationUser_id, ref_id)
 )
 ----
-TABLE generationuser_generationgroup
- ├── generationuser_id int4 not null
- ├── ref_id int4 not null
- └── INDEX primary
-      ├── generationuser_id int4 not null
-      └── ref_id int4 not null
 
 opt
 SELECT ref0_.generationuser_id AS generati1_2_0_
@@ -2000,13 +1811,6 @@ create table TAuction2 (
     primary key (id)
 )
 ----
-TABLE tauction2
- ├── id int not null
- ├── description varchar
- ├── enddatetime timestamp
- ├── successfulbid int
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 create table TBid2 (
@@ -2017,13 +1821,6 @@ create table TBid2 (
     primary key (id)
 )
 ----
-TABLE tbid2
- ├── id int not null
- ├── amount decimal
- ├── createddatetime timestamp
- ├── auctionid int
- └── INDEX primary
-      └── id int not null
 
 opt
 select
@@ -2107,12 +1904,6 @@ CREATE TABLE customer (
   PRIMARY KEY (customerid)
 );
 ----
-TABLE customer
- ├── customerid varchar not null
- ├── name varchar not null
- ├── address varchar not null
- └── INDEX primary
-      └── customerid varchar not null
 
 exec-ddl
 CREATE TABLE customerorder (
@@ -2122,13 +1913,6 @@ CREATE TABLE customerorder (
   PRIMARY KEY (customerid, ordernumber)
 );
 ----
-TABLE customerorder
- ├── customerid varchar not null
- ├── ordernumber int4 not null
- ├── orderdate date not null
- └── INDEX primary
-      ├── customerid varchar not null
-      └── ordernumber int4 not null
 
 exec-ddl
 CREATE TABLE lineitem (
@@ -2139,15 +1923,6 @@ CREATE TABLE lineitem (
   PRIMARY KEY (customerid, ordernumber, productid)
 );
 ----
-TABLE lineitem
- ├── customerid varchar not null
- ├── ordernumber int4 not null
- ├── productid varchar not null
- ├── quantity int4
- └── INDEX primary
-      ├── customerid varchar not null
-      ├── ordernumber int4 not null
-      └── productid varchar not null
 
 exec-ddl
 CREATE TABLE product (
@@ -2158,13 +1933,6 @@ CREATE TABLE product (
   PRIMARY KEY (productid)
 );
 ----
-TABLE product
- ├── productid varchar not null
- ├── description varchar not null
- ├── cost decimal
- ├── numberavailable int4
- └── INDEX primary
-      └── productid varchar not null
 
 opt
 SELECT
@@ -2625,14 +2393,6 @@ CREATE TABLE student (
   PRIMARY KEY (studentid)
 );
 ----
-TABLE student
- ├── studentid int not null
- ├── name varchar not null
- ├── address_city varchar
- ├── address_state varchar
- ├── preferredcoursecode varchar
- └── INDEX primary
-      └── studentid int not null
 
 exec-ddl
 CREATE TABLE enrolment (
@@ -2643,14 +2403,6 @@ CREATE TABLE enrolment (
   PRIMARY KEY (studentid, coursecode)
 );
 ----
-TABLE enrolment
- ├── studentid int not null
- ├── coursecode varchar not null
- ├── semester int2 not null
- ├── year int2 not null
- └── INDEX primary
-      ├── studentid int not null
-      └── coursecode varchar not null
 
 opt
 SELECT
@@ -2749,11 +2501,6 @@ drop table student, enrolment
 exec-ddl
 CREATE TABLE t_name (id INT4 NOT NULL, c_name VARCHAR(255), PRIMARY KEY (id));
 ----
-TABLE t_name
- ├── id int4 not null
- ├── c_name varchar
- └── INDEX primary
-      └── id int4 not null
 
 opt
 SELECT

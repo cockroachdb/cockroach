@@ -1,26 +1,14 @@
 exec-ddl
 CREATE TABLE x (a INT PRIMARY KEY)
 ----
-TABLE x
- ├── a int not null
- └── INDEX primary
-      └── a int not null
 
 exec-ddl
 CREATE TABLE y (b INT PRIMARY KEY)
 ----
-TABLE y
- ├── b int not null
- └── INDEX primary
-      └── b int not null
 
 exec-ddl
 CREATE TABLE z (c INT PRIMARY KEY)
 ----
-TABLE z
- ├── c int not null
- └── INDEX primary
-      └── c int not null
 
 build
 SELECT * FROM x, y, z
@@ -180,11 +168,6 @@ CREATE TABLE j (
   j JSONB
 )
 ----
-TABLE j
- ├── id int not null
- ├── j jsonb
- └── INDEX primary
-      └── id int not null
 
 build
 SELECT * FROM j, jsonb_array_elements(j.j->'foo')

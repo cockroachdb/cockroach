@@ -6,13 +6,6 @@ CREATE TABLE abc (
   d DECIMAL
 )
 ----
-TABLE abc
- ├── a char not null
- ├── b float
- ├── c bool
- ├── d decimal
- └── INDEX primary
-      └── a char not null
 
 exec-ddl
 CREATE TABLE xyz (
@@ -24,22 +17,6 @@ CREATE TABLE xyz (
   INDEX yy (y)
 )
 ----
-TABLE xyz
- ├── x int not null
- ├── y int
- ├── z float
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX xy
- │    ├── x int not null
- │    └── y int
- ├── INDEX zyx
- │    ├── z float
- │    ├── y int
- │    └── x int not null
- └── INDEX yy
-      ├── y int
-      └── x int not null
 
 exec-ddl
 CREATE TABLE kuvw (
@@ -54,33 +31,6 @@ CREATE TABLE kuvw (
   INDEX w(w) STORING (u,v)
 )
 ----
-TABLE kuvw
- ├── k int not null
- ├── u int
- ├── v int
- ├── w int
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX uvw
- │    ├── u int
- │    ├── v int
- │    ├── w int
- │    └── k int not null
- ├── INDEX wvu
- │    ├── w int
- │    ├── v int
- │    ├── u int
- │    └── k int not null
- ├── INDEX vw
- │    ├── v int
- │    ├── w int
- │    ├── k int not null
- │    └── u int (storing)
- └── INDEX w
-      ├── w int
-      ├── k int not null
-      ├── u int (storing)
-      └── v int (storing)
 
 # --------------------------------------------------
 # ReplaceMinWithLimit

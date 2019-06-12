@@ -1,28 +1,10 @@
 exec-ddl
 CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
 ----
-TABLE abc
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX ab
-      ├── a int
-      ├── b int
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE def (d INT, e INT, f INT)
 ----
-TABLE def
- ├── d int
- ├── e int
- ├── f int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 expr
 (InnerJoin

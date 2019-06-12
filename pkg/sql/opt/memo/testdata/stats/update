@@ -5,13 +5,6 @@ CREATE TABLE abc (
     c FLOAT AS (a::float) STORED
 )
 ----
-TABLE abc
- ├── a int not null
- ├── b string
- ├── c float
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE abc INJECT STATISTICS '[
@@ -37,12 +30,6 @@ CREATE TABLE xyz (
     z FLOAT8
 )
 ----
-TABLE xyz
- ├── x string not null
- ├── y int not null
- ├── z float
- └── INDEX primary
-      └── x string not null
 
 # Statistics should be derived from UPDATE input columns and transferred to
 # RETURNING columns.

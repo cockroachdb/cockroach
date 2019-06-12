@@ -1,39 +1,14 @@
 exec-ddl
 CREATE TABLE xysd (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
 ----
-TABLE xysd
- ├── x int not null
- ├── y int
- ├── s string
- ├── d decimal not null
- ├── INDEX primary
- │    └── x int not null
- └── INDEX secondary
-      ├── s string desc
-      ├── d decimal not null
-      └── x int not null (storing)
 
 exec-ddl
 CREATE TABLE uv (u INT, v INT NOT NULL)
 ----
-TABLE uv
- ├── u int
- ├── v int not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE mn (m INT PRIMARY KEY, n INT, UNIQUE (n))
 ----
-TABLE mn
- ├── m int not null
- ├── n int
- ├── INDEX primary
- │    └── m int not null
- └── INDEX secondary
-      ├── n int
-      └── m int not null (storing)
 
 # Inner-join.
 build

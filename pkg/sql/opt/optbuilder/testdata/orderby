@@ -7,12 +7,6 @@ CREATE TABLE t (
   c BOOLEAN
 )
 ----
-TABLE t
- ├── a int not null
- ├── b int
- ├── c bool
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT c FROM t ORDER BY c
@@ -596,31 +590,10 @@ CREATE TABLE abc (
   FAMILY (d)
 )
 ----
-TABLE abc
- ├── a int not null
- ├── b int not null
- ├── c int not null
- ├── d char
- ├── INDEX primary
- │    ├── a int not null
- │    ├── b int not null
- │    └── c int not null
- ├── INDEX bc
- │    ├── b int not null
- │    ├── c int not null
- │    └── a int not null (storing)
- ├── INDEX ba
- │    ├── b int not null
- │    ├── a int not null
- │    └── c int not null
- ├── FAMILY family1 (a, b, c)
- └── FAMILY family2 (d)
 
 exec-ddl
 CREATE VIEW abcview AS SELECT * FROM abc
 ----
-VIEW abcview
- └── SELECT * FROM abc
 
 build
 SELECT d FROM abc ORDER BY lower(d)
@@ -795,14 +768,6 @@ error (42809): "abcview" is not a table
 exec-ddl
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 ----
-TABLE bar
- ├── id int not null
- ├── baz string
- ├── INDEX primary
- │    └── id int not null
- └── INDEX i_bar
-      ├── baz string
-      └── id int not null (storing)
 
 build
 SELECT * FROM bar ORDER BY baz, id
@@ -823,22 +788,6 @@ CREATE TABLE abcd (
   INDEX bcd (b, c DESC, d)
 )
 ----
-TABLE abcd
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX abc
- │    ├── a int not null
- │    ├── b int
- │    └── c int
- └── INDEX bcd
-      ├── b int
-      ├── c int desc
-      ├── d int
-      └── a int not null
 
 # Verify that projections after ORDER BY perform correctly (i.e., the outer
 # expression does not guarantee it will apply the ORDER BY).
@@ -903,15 +852,6 @@ CREATE TABLE blocks (
   PRIMARY KEY (block_id, writer_id, block_num)
 )
 ----
-TABLE blocks
- ├── block_id int not null
- ├── writer_id string not null
- ├── block_num int not null
- ├── raw_bytes bytes
- └── INDEX primary
-      ├── block_id int not null
-      ├── writer_id string not null
-      └── block_num int not null
 
 # Regression test for #13696.
 build
@@ -1049,13 +989,6 @@ CREATE TABLE abcd (
   d INT
 )
 ----
-TABLE abcd
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT a, b FROM abcd ORDER BY b, c
