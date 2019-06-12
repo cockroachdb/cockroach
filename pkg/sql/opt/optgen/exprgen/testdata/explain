@@ -1,17 +1,6 @@
 exec-ddl
 CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
 ----
-TABLE abc
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX ab
-      ├── a int
-      ├── b int
-      └── rowid int not null (hidden)
 
 expr
 (Explain

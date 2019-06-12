@@ -1,15 +1,6 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- ├── arr int[]
- └── INDEX primary
-      └── k int not null
 
 # --------------------------------------------------
 # CommuteVar
@@ -667,26 +658,6 @@ CREATE TABLE e
     INDEX (d)
 )
 ----
-TABLE e
- ├── k int not null
- ├── i int
- ├── t timestamp
- ├── tz timestamptz
- ├── d date
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX secondary
- │    ├── i int
- │    └── k int not null
- ├── INDEX secondary
- │    ├── t timestamp
- │    └── k int not null
- ├── INDEX secondary
- │    ├── tz timestamptz
- │    └── k int not null
- └── INDEX secondary
-      ├── d date
-      └── k int not null
 
 ## --------------------------------------------------
 ## INT / FLOAT / DECIMAL

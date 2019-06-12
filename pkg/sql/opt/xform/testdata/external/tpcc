@@ -12,18 +12,6 @@ CREATE TABLE warehouse
     w_ytd       decimal(12,2)
 )
 ----
-TABLE warehouse
- ├── w_id int not null
- ├── w_name varchar
- ├── w_street_1 varchar
- ├── w_street_2 varchar
- ├── w_city varchar
- ├── w_state char
- ├── w_zip char
- ├── w_tax decimal
- ├── w_ytd decimal
- └── INDEX primary
-      └── w_id int not null
 
 exec-ddl
 ALTER TABLE warehouse INJECT STATISTICS '[
@@ -111,22 +99,6 @@ CREATE TABLE district
     foreign key (d_w_id) references warehouse (w_id)
 ) interleave in parent warehouse (d_w_id)
 ----
-TABLE district
- ├── d_id int not null
- ├── d_w_id int not null
- ├── d_name varchar
- ├── d_street_1 varchar
- ├── d_street_2 varchar
- ├── d_city varchar
- ├── d_state char
- ├── d_zip char
- ├── d_tax decimal
- ├── d_ytd decimal
- ├── d_next_o_id int
- ├── INDEX primary
- │    ├── d_w_id int not null
- │    └── d_id int not null
- └── CONSTRAINT fk_d_w_id_ref_warehouse FOREIGN KEY (d_w_id) REFERENCES t.public.warehouse (w_id)
 
 exec-ddl
 ALTER TABLE district INJECT STATISTICS '[
@@ -239,39 +211,6 @@ CREATE TABLE customer
     foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)
 ) interleave in parent district (c_w_id, c_d_id)
 ----
-TABLE customer
- ├── c_id int not null
- ├── c_d_id int not null
- ├── c_w_id int not null
- ├── c_first varchar
- ├── c_middle char
- ├── c_last varchar
- ├── c_street_1 varchar
- ├── c_street_2 varchar
- ├── c_city varchar
- ├── c_state char
- ├── c_zip char
- ├── c_phone char
- ├── c_since timestamp
- ├── c_credit char
- ├── c_credit_lim decimal
- ├── c_discount decimal
- ├── c_balance decimal
- ├── c_ytd_payment decimal
- ├── c_payment_cnt int
- ├── c_delivery_cnt int
- ├── c_data varchar
- ├── INDEX primary
- │    ├── c_w_id int not null
- │    ├── c_d_id int not null
- │    └── c_id int not null
- ├── INDEX customer_idx
- │    ├── c_w_id int not null
- │    ├── c_d_id int not null
- │    ├── c_last varchar
- │    ├── c_first varchar
- │    └── c_id int not null
- └── CONSTRAINT fk_c_w_id_ref_district FOREIGN KEY (c_w_id, c_d_id) REFERENCES t.public.district (d_w_id, d_id)
 
 exec-ddl
 ALTER TABLE customer INJECT STATISTICS '[
@@ -444,31 +383,6 @@ CREATE TABLE history
     foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)
 )
 ----
-TABLE history
- ├── rowid uuid not null
- ├── h_c_id int not null
- ├── h_c_d_id int not null
- ├── h_c_w_id int not null
- ├── h_d_id int not null
- ├── h_w_id int not null
- ├── h_date timestamp
- ├── h_amount decimal
- ├── h_data varchar
- ├── INDEX primary
- │    ├── h_w_id int not null
- │    └── rowid uuid not null
- ├── INDEX history_customer_fk_idx
- │    ├── h_c_w_id int not null
- │    ├── h_c_d_id int not null
- │    ├── h_c_id int not null
- │    ├── h_w_id int not null
- │    └── rowid uuid not null
- ├── INDEX history_district_fk_idx
- │    ├── h_w_id int not null
- │    ├── h_d_id int not null
- │    └── rowid uuid not null
- ├── CONSTRAINT fk_h_c_w_id_ref_customer FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
- └── CONSTRAINT fk_h_w_id_ref_district FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
 
 exec-ddl
 ALTER TABLE history INJECT STATISTICS '[
@@ -554,25 +468,6 @@ CREATE TABLE "order"
     foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)
 ) interleave in parent district (o_w_id, o_d_id)
 ----
-TABLE order
- ├── o_id int not null
- ├── o_d_id int not null
- ├── o_w_id int not null
- ├── o_c_id int
- ├── o_entry_d timestamp
- ├── o_carrier_id int
- ├── o_ol_cnt int
- ├── o_all_local int
- ├── INDEX primary
- │    ├── o_w_id int not null
- │    ├── o_d_id int not null
- │    └── o_id int not null desc
- ├── INDEX order_idx
- │    ├── o_w_id int not null
- │    ├── o_d_id int not null
- │    ├── o_c_id int
- │    └── o_id int not null desc
- └── CONSTRAINT fk_o_w_id_ref_customer FOREIGN KEY (o_w_id, o_d_id, o_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
 
 exec-ddl
 ALTER TABLE "order" INJECT STATISTICS '[
@@ -645,15 +540,6 @@ CREATE TABLE new_order
     foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id)
 ) interleave in parent "order" (no_w_id, no_d_id, no_o_id)
 ----
-TABLE new_order
- ├── no_o_id int not null
- ├── no_d_id int not null
- ├── no_w_id int not null
- ├── INDEX primary
- │    ├── no_w_id int not null
- │    ├── no_d_id int not null
- │    └── no_o_id int not null
- └── CONSTRAINT fk_no_w_id_ref_order FOREIGN KEY (no_w_id, no_d_id, no_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
 
 exec-ddl
 ALTER TABLE new_order INJECT STATISTICS '[
@@ -692,14 +578,6 @@ CREATE TABLE item
     primary key (i_id)
 )
 ----
-TABLE item
- ├── i_id int not null
- ├── i_im_id int
- ├── i_name varchar
- ├── i_price decimal
- ├── i_data varchar
- └── INDEX primary
-      └── i_id int not null
 
 exec-ddl
 ALTER TABLE item INJECT STATISTICS '[
@@ -767,32 +645,6 @@ CREATE TABLE stock
     foreign key (s_i_id) references item (i_id)
 ) interleave in parent warehouse (s_w_id)
 ----
-TABLE stock
- ├── s_i_id int not null
- ├── s_w_id int not null
- ├── s_quantity int
- ├── s_dist_01 char
- ├── s_dist_02 char
- ├── s_dist_03 char
- ├── s_dist_04 char
- ├── s_dist_05 char
- ├── s_dist_06 char
- ├── s_dist_07 char
- ├── s_dist_08 char
- ├── s_dist_09 char
- ├── s_dist_10 char
- ├── s_ytd int
- ├── s_order_cnt int
- ├── s_remote_cnt int
- ├── s_data varchar
- ├── INDEX primary
- │    ├── s_w_id int not null
- │    └── s_i_id int not null
- ├── INDEX stock_item_fk_idx
- │    ├── s_i_id int not null
- │    └── s_w_id int not null
- ├── CONSTRAINT fk_s_w_id_ref_warehouse FOREIGN KEY (s_w_id) REFERENCES t.public.warehouse (w_id)
- └── CONSTRAINT fk_s_i_id_ref_item FOREIGN KEY (s_i_id) REFERENCES t.public.item (i_id)
 
 exec-ddl
 ALTER TABLE stock INJECT STATISTICS '[
@@ -937,31 +789,6 @@ CREATE TABLE order_line
     foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)
 ) interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)
 ----
-TABLE order_line
- ├── ol_o_id int not null
- ├── ol_d_id int not null
- ├── ol_w_id int not null
- ├── ol_number int not null
- ├── ol_i_id int not null
- ├── ol_supply_w_id int
- ├── ol_delivery_d timestamp
- ├── ol_quantity int
- ├── ol_amount decimal
- ├── ol_dist_info char
- ├── INDEX primary
- │    ├── ol_w_id int not null
- │    ├── ol_d_id int not null
- │    ├── ol_o_id int not null desc
- │    └── ol_number int not null
- ├── INDEX order_line_stock_fk_idx
- │    ├── ol_supply_w_id int
- │    ├── ol_i_id int not null
- │    ├── ol_w_id int not null
- │    ├── ol_d_id int not null
- │    ├── ol_o_id int not null
- │    └── ol_number int not null
- ├── CONSTRAINT fk_ol_w_id_ref_order FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
- └── CONSTRAINT fk_ol_supply_w_id_ref_stock FOREIGN KEY (ol_supply_w_id, ol_i_id) REFERENCES t.public.stock (s_w_id, s_i_id)
 
 exec-ddl
 ALTER TABLE order_line INJECT STATISTICS '[

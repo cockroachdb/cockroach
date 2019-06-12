@@ -1,27 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
 ----
-TABLE a
- ├── x int not null
- ├── y int
- ├── s string
- ├── d decimal not null
- ├── INDEX primary
- │    └── x int not null
- └── INDEX secondary
-      ├── s string desc
-      ├── d decimal not null
-      └── x int not null (storing)
 
 exec-ddl
 CREATE TABLE b (x INT, z INT NOT NULL)
 ----
-TABLE b
- ├── x int
- ├── z int not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM a
@@ -119,29 +102,6 @@ CREATE TABLE t (
   FAMILY (d)
 )
 ----
-TABLE t
- ├── a int not null
- ├── b char not null
- ├── c int
- ├── d char
- ├── INDEX primary
- │    ├── a int not null
- │    └── b char not null
- ├── INDEX bc
- │    ├── b char not null
- │    ├── c int
- │    └── a int not null
- ├── INDEX dc
- │    ├── d char
- │    ├── c int
- │    ├── a int not null
- │    └── b char not null
- ├── INDEX a_desc
- │    ├── a int not null desc
- │    └── b char not null
- ├── FAMILY family1 (a, b)
- ├── FAMILY family2 (c)
- └── FAMILY family3 (d)
 
 opt
 SELECT 1 FROM t WHERE a > 1 AND a < 2

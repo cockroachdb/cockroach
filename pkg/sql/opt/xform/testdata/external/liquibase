@@ -31,44 +31,6 @@ CREATE TABLE pg_class (
     INDEX pg_class_tblspc_relfilenode_index (reltablespace, relfilenode)
 );
 ----
-TABLE pg_class
- ├── oid oid not null
- ├── relname string not null
- ├── relnamespace oid not null
- ├── reltype oid not null
- ├── relowner oid not null
- ├── relam oid not null
- ├── relfilenode oid not null
- ├── reltablespace oid not null
- ├── relpages int not null
- ├── reltuples float not null
- ├── relallvisible int not null
- ├── reltoastrelid oid not null
- ├── relhasindex bool not null
- ├── relisshared bool not null
- ├── relpersistence string not null
- ├── relistemp bool not null
- ├── relkind string not null
- ├── relnatts int not null
- ├── relchecks int not null
- ├── relhasoids bool not null
- ├── relhaspkey bool not null
- ├── relhasrules bool not null
- ├── relhastriggers bool not null
- ├── relhassubclass bool not null
- ├── relfrozenxid int not null
- ├── relacl string[]
- ├── reloptions string[]
- ├── INDEX primary
- │    └── oid oid not null
- ├── INDEX pg_class_relname_nsp_index
- │    ├── relname string not null
- │    ├── relnamespace oid not null
- │    └── oid oid not null (storing)
- └── INDEX pg_class_tblspc_relfilenode_index
-      ├── reltablespace oid not null
-      ├── relfilenode oid not null
-      └── oid oid not null
 
 exec-ddl
 CREATE TABLE pg_namespace (
@@ -79,16 +41,6 @@ CREATE TABLE pg_namespace (
     UNIQUE INDEX pg_namespace_nspname_index (nspname)
 );
 ----
-TABLE pg_namespace
- ├── oid oid not null
- ├── nspname string not null
- ├── nspowner oid not null
- ├── nspacl string[]
- ├── INDEX primary
- │    └── oid oid not null
- └── INDEX pg_namespace_nspname_index
-      ├── nspname string not null
-      └── oid oid not null (storing)
 
 exec-ddl
 CREATE TABLE pg_tablespace (
@@ -101,18 +53,6 @@ CREATE TABLE pg_tablespace (
     UNIQUE INDEX pg_tablespace_spcname_index (spcname)
 );
 ----
-TABLE pg_tablespace
- ├── oid oid not null
- ├── spcname string not null
- ├── spcowner oid not null
- ├── spclocation string not null
- ├── spcacl string[]
- ├── spcoptions string[]
- ├── INDEX primary
- │    └── oid oid not null
- └── INDEX pg_tablespace_spcname_index
-      ├── spcname string not null
-      └── oid oid not null (storing)
 
 exec-ddl
 CREATE TABLE pg_inherits (
@@ -123,17 +63,6 @@ CREATE TABLE pg_inherits (
     INDEX pg_inherits_parent_index (inhparent)
 );
 ----
-TABLE pg_inherits
- ├── inhrelid oid not null
- ├── inhparent oid not null
- ├── inhseqno int not null
- ├── INDEX primary
- │    ├── inhrelid oid not null
- │    └── inhseqno int not null
- └── INDEX pg_inherits_parent_index
-      ├── inhparent oid not null
-      ├── inhrelid oid not null
-      └── inhseqno int not null
 
 exec-ddl
 CREATE TABLE pg_index (
@@ -159,31 +88,6 @@ CREATE TABLE pg_index (
     INDEX pg_index_indrelid_index (indrelid)
 )
 ----
-TABLE pg_index
- ├── indexrelid oid not null
- ├── indrelid oid not null
- ├── indnatts int not null
- ├── indisunique bool not null
- ├── indisprimary bool not null
- ├── indisexclusion bool not null
- ├── indimmediate bool not null
- ├── indisclustered bool not null
- ├── indisvalid bool not null
- ├── indcheckxmin bool not null
- ├── indisready bool not null
- ├── indislive bool not null
- ├── indisreplident bool not null
- ├── indkey int[] not null
- ├── indcollation int not null
- ├── indclass int not null
- ├── indoption int not null
- ├── indexprs string
- ├── indpred string
- ├── INDEX primary
- │    └── indexrelid oid not null
- └── INDEX pg_index_indrelid_index
-      ├── indrelid oid not null
-      └── indexrelid oid not null
 
 exec-ddl
 CREATE TABLE pg_foreign_table (
@@ -192,12 +96,6 @@ CREATE TABLE pg_foreign_table (
     ftoptions text[]
 );
 ----
-TABLE pg_foreign_table
- ├── ftrelid oid not null
- ├── ftserver oid not null
- ├── ftoptions string[]
- └── INDEX primary
-      └── ftrelid oid not null
 
 exec-ddl
 CREATE TABLE pg_foreign_server (
@@ -212,20 +110,6 @@ CREATE TABLE pg_foreign_server (
     UNIQUE INDEX pg_foreign_server_name_index (srvname)
 );
 ----
-TABLE pg_foreign_server
- ├── oid oid not null
- ├── srvname string not null
- ├── srvowner oid not null
- ├── srvfdw oid not null
- ├── srvtype string
- ├── srvversion string
- ├── srvacl string[]
- ├── srvoptions string[]
- ├── INDEX primary
- │    └── oid oid not null
- └── INDEX pg_foreign_server_name_index
-      ├── srvname string not null
-      └── oid oid not null (storing)
 
 opt
 SELECT c.oid,

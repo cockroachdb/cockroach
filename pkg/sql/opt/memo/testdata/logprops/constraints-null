@@ -1,13 +1,6 @@
 exec-ddl
 CREATE TABLE t (a INT, b BOOL, c STRING)
 ----
-TABLE t
- ├── a int
- ├── b bool
- ├── c string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 opt
 SELECT * FROM t WHERE a = NULL
@@ -99,12 +92,6 @@ CREATE TABLE xy (
   y INT
 )
 ----
-TABLE xy
- ├── x int
- ├── y int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Test that we get a not-NULL constraint on x.
 opt

@@ -1,15 +1,6 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- ├── arr int[]
- └── INDEX primary
-      └── k int not null
 
 # --------------------------------------------------
 # EliminateAggDistinct

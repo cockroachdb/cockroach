@@ -7,20 +7,6 @@ CREATE TABLE abc (
     UNIQUE(b, c)
 )
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX secondary
- │    ├── a int not null
- │    └── rowid int not null (hidden) (storing)
- └── INDEX secondary
-      ├── b int
-      ├── c int
-      └── rowid int not null (hidden) (storing)
 
 exec-ddl
 CREATE TABLE xyz (
@@ -32,23 +18,6 @@ CREATE TABLE xyz (
     INDEX (y DESC)
 )
 ----
-TABLE xyz
- ├── x int not null
- ├── y int
- ├── z int
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX secondary
- │    ├── y int
- │    ├── z int
- │    └── x int not null (storing)
- ├── INDEX secondary
- │    ├── z int
- │    ├── y int
- │    └── x int not null (storing)
- └── INDEX secondary
-      ├── y int desc
-      └── x int not null
 
 exec-ddl
 CREATE TABLE uv (
@@ -57,12 +26,6 @@ CREATE TABLE uv (
     PRIMARY KEY (u, v)
 )
 ----
-TABLE uv
- ├── u int not null
- ├── v int not null
- └── INDEX primary
-      ├── u int not null
-      └── v int not null
 
 exec-ddl
 CREATE TABLE noindex (
@@ -71,12 +34,6 @@ CREATE TABLE noindex (
     z INT
 )
 ----
-TABLE noindex
- ├── x int not null
- ├── y int
- ├── z int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE mutation (
@@ -88,15 +45,6 @@ CREATE TABLE mutation (
     CHECK (m > 0)
 )
 ----
-TABLE mutation
- ├── m int not null
- ├── n int
- ├── o int (mutation)
- ├── p int (mutation)
- ├── q int (mutation)
- ├── INDEX primary
- │    └── m int not null
- └── CHECK (m > 0)
 
 exec-ddl
 CREATE TABLE checks (
@@ -107,15 +55,6 @@ CREATE TABLE checks (
     CHECK (checks.b < d)
 )
 ----
-TABLE checks
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── INDEX primary
- │    └── a int not null
- ├── CHECK (checks.b < d)
- └── CHECK (a > 0)
 
 exec-ddl
 CREATE TABLE decimals (
@@ -125,15 +64,6 @@ CREATE TABLE decimals (
     d DECIMAL(10,1) AS (a+c) STORED
 )
 ----
-TABLE decimals
- ├── a decimal not null
- ├── b decimal[]
- ├── c decimal
- ├── d decimal
- ├── INDEX primary
- │    └── a decimal not null
- ├── CHECK (round(a) = a)
- └── CHECK (b[0] > 1)
 
 # ------------------------------------------------------------------------------
 # Basic tests.

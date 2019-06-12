@@ -1,17 +1,6 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
 ----
-TABLE a
- ├── x int not null
- ├── y int
- ├── s string
- ├── d decimal not null
- ├── INDEX primary
- │    └── x int not null
- └── INDEX secondary
-      ├── s string desc
-      ├── d decimal not null
-      └── x int not null (storing)
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[

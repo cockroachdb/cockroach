@@ -12,22 +12,6 @@ CREATE TABLE xyz (
   FAMILY (z)
 )
 ----
-TABLE xyz
- ├── x int not null
- ├── y int
- ├── z float
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX xy
- │    ├── x int not null
- │    └── y int
- ├── INDEX zyx
- │    ├── z float
- │    ├── y int
- │    └── x int not null
- ├── FAMILY family1 (x)
- ├── FAMILY family2 (y)
- └── FAMILY family3 (z)
 
 build
 SELECT y, z FROM xyz
@@ -335,20 +319,6 @@ CREATE TABLE abcd (
   UNIQUE INDEX (d, b)
 )
 ----
-TABLE abcd
- ├── a int not null
- ├── b int not null
- ├── c int not null
- ├── d int not null
- ├── INDEX primary
- │    ├── a int not null
- │    ├── b int not null
- │    └── c int not null
- └── INDEX secondary
-      ├── d int not null
-      ├── b int not null
-      ├── a int not null (storing)
-      └── c int not null (storing)
 
 build
 SELECT DISTINCT 1 AS x, d, b FROM abcd ORDER BY d, b

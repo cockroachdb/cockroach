@@ -3,20 +3,6 @@
 exec-ddl
 CREATE TABLE abc (a INT, b INT, c INT, INDEX (a, b), UNIQUE INDEX (c))
 ----
-TABLE abc
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX secondary
- │    ├── a int
- │    ├── b int
- │    └── rowid int not null (hidden)
- └── INDEX secondary
-      ├── c int
-      └── rowid int not null (hidden) (storing)
 
 # Scan operator.
 opt
@@ -267,20 +253,6 @@ offset
 exec-ddl
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z), UNIQUE INDEX(x,y))
 ----
-TABLE xyz
- ├── x int
- ├── y int
- ├── z int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX secondary
- │    ├── z int
- │    └── rowid int not null (hidden)
- └── INDEX secondary
-      ├── x int
-      ├── y int
-      └── rowid int not null (hidden) (storing)
 
 # Join operator.
 opt

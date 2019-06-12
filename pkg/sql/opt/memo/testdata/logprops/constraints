@@ -1,22 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT, y INT)
 ----
-TABLE a
- ├── x int
- ├── y int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
 ----
-TABLE kuv
- ├── k int not null
- ├── u float
- ├── v string
- └── INDEX primary
-      └── k int not null
 
 opt
 SELECT * FROM a WHERE x > 1
@@ -491,13 +479,6 @@ select
 exec-ddl
 CREATE TABLE abc (a INT, b BOOL, c STRING)
 ----
-TABLE abc
- ├── a int
- ├── b bool
- ├── c string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 opt
 SELECT * FROM abc WHERE a != 5
@@ -685,16 +666,6 @@ CREATE TABLE c
     INDEX v (v, u)
 )
 ----
-TABLE c
- ├── k int not null
- ├── u int
- ├── v int
- ├── INDEX primary
- │    └── k int not null
- └── INDEX v
-      ├── v int
-      ├── u int
-      └── k int not null
 
 opt
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, 100))
@@ -906,12 +877,6 @@ CREATE TABLE d
     q INT
 )
 ----
-TABLE d
- ├── k int not null
- ├── p int
- ├── q int
- └── INDEX primary
-      └── k int not null
 
 opt format=hide-qual
 SELECT * FROM d WHERE (p, q) IN ((1, 2), (1, 3), (1, 4))
@@ -993,18 +958,6 @@ CREATE TABLE e
     INDEX (d)
 )
 ----
-TABLE e
- ├── k int not null
- ├── t timestamp
- ├── d timestamp
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX secondary
- │    ├── t timestamp
- │    └── k int not null
- └── INDEX secondary
-      ├── d timestamp
-      └── k int not null
 
 opt
 SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w'::INTERVAL

@@ -7,20 +7,6 @@ CREATE TABLE abc (
     UNIQUE INDEX bc2 (b, c)
 )
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c string
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX bc1
- │    ├── b int
- │    ├── c string
- │    └── a int not null (storing)
- └── INDEX bc2
-      ├── b int
-      ├── c string
-      └── a int not null (storing)
 
 exec-ddl
 CREATE TABLE xy (
@@ -30,17 +16,6 @@ CREATE TABLE xy (
     INDEX y2 (y)
 )
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX y1
- │    ├── y int
- │    └── x int not null
- └── INDEX y2
-      ├── y int
-      └── x int not null
 
 # --------------------------------------------------
 # Single constraints.
@@ -49,20 +24,14 @@ TABLE xy
 exec-ddl
 ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=central]'
 ----
-ZONE
- └── constraints: [+region=central]
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=east]'
 ----
-ZONE
- └── constraints: [+region=east]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=west]'
 ----
-ZONE
- └── constraints: [+region=west]
 
 # With locality in central, use primary index.
 opt format=show-all locality=(region=central)
@@ -154,21 +123,15 @@ scan t.public.abc@bc1
 exec-ddl
 ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=us,+dc=central,+rack=1]'
 ----
-ZONE
- └── constraints: [+region=us,+dc=central,+rack=1]
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east,+rack=1]'
 ----
-ZONE
- └── constraints: [+region=us,+dc=east,+rack=1]
 
 # Do not specify region constraint.
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+dc=west]'
 ----
-ZONE
- └── constraints: [+dc=west]
 
 # With locality in us + central, use primary index.
 opt format=show-all locality=(region=us,dc=central)
@@ -233,16 +196,10 @@ scan t.public.abc@bc2
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='{"+region=us,+dc=east":2, "+region=us,+dc=west":1}'
 ----
-ZONE
- └── replica constraints
-      ├── 2 replicas: [+region=us,+dc=east]
-      └── 1 replicas: [+region=us,+dc=west]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+dc=east]'
 ----
-ZONE
- └── constraints: [+dc=east]
 
 # With locality in us, use bc1 index, since only one tier matches in case of
 # both indexes.
@@ -281,14 +238,10 @@ scan t.public.abc@bc2
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,-region=eu,+region=ap]'
 ----
-ZONE
- └── constraints: [+region=us,-region=eu,+region=ap]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=eu,+region=us,+dc=east]'
 ----
-ZONE
- └── constraints: [+region=eu,+region=us,+dc=east]
 
 # With locality in us, use bc1, since it's first in order.
 opt format=show-all locality=(region=us)
@@ -351,14 +304,10 @@ scan t.public.abc@bc1
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[-region=eu,+dc=east]'
 ----
-ZONE
- └── constraints: [-region=eu,+dc=east]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+dc=east]'
 ----
-ZONE
- └── constraints: [+dc=east]
 
 # With locality in us + east, use bc1, since it's first in order.
 opt format=show-all locality=(region=us,dc=east)
@@ -395,26 +344,18 @@ scan t.public.abc@bc2
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east]'
 ----
-ZONE
- └── constraints: [+region=us,+dc=east]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=us,+dc=west]'
 ----
-ZONE
- └── constraints: [+region=us,+dc=west]
 
 exec-ddl
 ALTER INDEX xy@y1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east]'
 ----
-ZONE
- └── constraints: [+region=us,+dc=east]
 
 exec-ddl
 ALTER INDEX xy@y2 CONFIGURE ZONE USING constraints='[+region=us,+dc=west]'
 ----
-ZONE
- └── constraints: [+region=us,+dc=west]
 
 # Ensure that both indexes involved in the lookup join are selected from the
 # "west" data center.
@@ -450,14 +391,10 @@ inner-join (lookup xy@y2)
 exec-ddl
 ALTER INDEX xy@y1 CONFIGURE ZONE USING constraints='[+region=us,+dc=west]'
 ----
-ZONE
- └── constraints: [+region=us,+dc=west]
 
 exec-ddl
 ALTER INDEX xy@y2 CONFIGURE ZONE USING constraints='[+region=us,+dc=east]'
 ----
-ZONE
- └── constraints: [+region=us,+dc=east]
 
 # Should use other index now.
 opt format=show-all locality=(region=us,dc=west)
@@ -494,20 +431,14 @@ inner-join (lookup xy@y1)
 exec-ddl
 ALTER TABLE abc CONFIGURE ZONE USING lease_preferences='[[+region=central]]'
 ----
-ZONE
- └── lease preference: [+region=central]
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING lease_preferences='[[+region=east]]'
 ----
-ZONE
- └── lease preference: [+region=east]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING lease_preferences='[[+region=west]]'
 ----
-ZONE
- └── lease preference: [+region=west]
 
 # With locality in us + central, use primary index.
 opt format=show-all locality=(region=central)
@@ -571,20 +502,14 @@ scan t.public.abc@bc2
 exec-ddl
 ALTER TABLE abc CONFIGURE ZONE USING lease_preferences='[[+region=us,+dc=central,+rack=1]]'
 ----
-ZONE
- └── lease preference: [+region=us,+dc=central,+rack=1]
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING lease_preferences='[[+region=us,+dc=east,+rack=1]]'
 ----
-ZONE
- └── lease preference: [+region=us,+dc=east,+rack=1]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE USING lease_preferences='[[+region=us,+dc=west,+rack=1]]'
 ----
-ZONE
- └── lease preference: [+region=us,+dc=west,+rack=1]
 
 # With locality in us + central, use primary index.
 opt format=show-all locality=(region=us,dc=central)
@@ -649,25 +574,16 @@ exec-ddl
 ALTER TABLE abc CONFIGURE ZONE
 USING constraints='[+region=us]', lease_preferences='[[+region=us,+dc=central]]'
 ----
-ZONE
- ├── constraints: [+region=us]
- └── lease preference: [+region=us,+dc=central]
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE
 USING constraints='[+region=us]', lease_preferences='[[+region=us,+dc=east]]'
 ----
-ZONE
- ├── constraints: [+region=us]
- └── lease preference: [+region=us,+dc=east]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE
 USING constraints='[+region=us]', lease_preferences='[[+region=us,+dc=west]]'
 ----
-ZONE
- ├── constraints: [+region=us]
- └── lease preference: [+region=us,+dc=west]
 
 # With locality in us + central, use primary index.
 opt format=show-all locality=(region=us,dc=central)
@@ -727,23 +643,16 @@ scan t.public.abc@bc2
 exec-ddl
 ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=us]'
 ----
-ZONE
- └── constraints: [+region=us]
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE
 USING constraints='[+region=us]', lease_preferences='[[+region=us,+dc=east]]'
 ----
-ZONE
- ├── constraints: [+region=us]
- └── lease preference: [+region=us,+dc=east]
 
 exec-ddl
 ALTER INDEX abc@bc2 CONFIGURE ZONE
 USING constraints='[+region=us,+dc=east]'
 ----
-ZONE
- └── constraints: [+region=us,+dc=east]
 
 # With locality in the east, prefer the index with the constraints over the
 # index with just the lease preferences.

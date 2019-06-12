@@ -1,21 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE t.b (x INT, y FLOAT)
 ----
-TABLE b
- ├── x int
- ├── y float
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Scan operator.
 opt

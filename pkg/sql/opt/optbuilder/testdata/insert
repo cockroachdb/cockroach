@@ -7,15 +7,6 @@ CREATE TABLE abcde (
     e INT AS (a) STORED
 )
 ----
-TABLE abcde
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── e int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE xyz (
@@ -24,12 +15,6 @@ CREATE TABLE xyz (
     z FLOAT8
 )
 ----
-TABLE xyz
- ├── x string not null
- ├── y int
- ├── z float
- └── INDEX primary
-      └── x string not null
 
 exec-ddl
 CREATE TABLE uv (
@@ -37,12 +22,6 @@ CREATE TABLE uv (
     v BYTES
 )
 ----
-TABLE uv
- ├── u decimal
- ├── v bytes
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE mutation (
@@ -54,15 +33,6 @@ CREATE TABLE mutation (
     CHECK (m > 0)
 )
 ----
-TABLE mutation
- ├── m int not null
- ├── n int
- ├── o int (mutation)
- ├── p int (mutation)
- ├── q int (mutation)
- ├── INDEX primary
- │    └── m int not null
- └── CHECK (m > 0)
 
 exec-ddl
 CREATE TABLE checks (
@@ -73,15 +43,6 @@ CREATE TABLE checks (
     CHECK (checks.b < d)
 )
 ----
-TABLE checks
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── INDEX primary
- │    └── a int not null
- ├── CHECK (checks.b < d)
- └── CHECK (a > 0)
 
 exec-ddl
 CREATE TABLE decimals (
@@ -91,15 +52,6 @@ CREATE TABLE decimals (
     d DECIMAL(10,1) AS (a+c) STORED
 )
 ----
-TABLE decimals
- ├── a decimal not null
- ├── b decimal[]
- ├── c decimal
- ├── d decimal
- ├── INDEX primary
- │    └── a decimal not null
- ├── CHECK (round(a) = a)
- └── CHECK (b[0] > 1)
 
 # Unknown target table.
 build

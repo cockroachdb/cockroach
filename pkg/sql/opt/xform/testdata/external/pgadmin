@@ -24,29 +24,6 @@ CREATE TABLE pg_stat_activity (
     query STRING NULL
 )
 ----
-TABLE pg_stat_activity
- ├── datid oid
- ├── datname name
- ├── pid int
- ├── usesysid oid
- ├── username name
- ├── application_name string
- ├── client_addr inet
- ├── client_hostname string
- ├── client_port int
- ├── backend_start timestamptz
- ├── xact_start timestamptz
- ├── query_start timestamptz
- ├── state_change timestamptz
- ├── wait_event_type string
- ├── wait_event string
- ├── state string
- ├── backend_xid int
- ├── backend_xmin int
- ├── query string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE pg_roles (
@@ -66,24 +43,6 @@ CREATE TABLE pg_roles (
     rolconfig STRING[] NULL
 )
 ----
-TABLE pg_roles
- ├── oid oid
- ├── rolname name
- ├── rolsuper bool
- ├── rolinherit bool
- ├── rolcreaterole bool
- ├── rolcreatedb bool
- ├── rolcatupdate bool
- ├── rolcanlogin bool
- ├── rolreplication bool
- ├── rolconnlimit int
- ├── rolpassword string
- ├── rolvaliduntil timestamptz
- ├── rolbypassrls bool
- ├── rolconfig string[]
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 opt
 SELECT

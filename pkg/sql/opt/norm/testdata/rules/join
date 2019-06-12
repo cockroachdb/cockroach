@@ -1,73 +1,26 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT NOT NULL, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float not null
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
 ----
-TABLE b
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE c (x INT PRIMARY KEY, y INT NOT NULL REFERENCES a(k), z INT NOT NULL, UNIQUE (x,z))
 ----
-TABLE c
- ├── x int not null
- ├── y int not null
- ├── z int not null
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX secondary
- │    ├── x int not null
- │    └── z int not null
- ├── INDEX c_auto_index_fk_y_ref_a
- │    ├── y int not null
- │    └── x int not null
- └── CONSTRAINT fk_y_ref_a FOREIGN KEY (y) REFERENCES t.public.a (k)
 
 exec-ddl
 CREATE TABLE d (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FOREIGN KEY (y,z) REFERENCES c(x,z))
 ----
-TABLE d
- ├── x int not null
- ├── y int not null
- ├── z int not null
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX d_auto_index_fk_y_ref_c
- │    ├── y int not null
- │    ├── z int not null
- │    └── x int not null
- └── CONSTRAINT fk_y_ref_c FOREIGN KEY (y, z) REFERENCES t.public.c (x, z)
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
-TABLE uv
- ├── u int not null
- ├── v int
- └── INDEX primary
-      └── u int not null
 
 opt
 SELECT * FROM a INNER JOIN b ON a.s='foo' OR b.y<10
@@ -991,20 +944,10 @@ project
 exec-ddl
 CREATE TABLE t1 (a DATE)
 ----
-TABLE t1
- ├── a date
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE t2 (b TIMESTAMPTZ)
 ----
-TABLE t2
- ├── b timestamptz
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Make sure that we do not create invalid filters due to substituting columns
 # with different types.

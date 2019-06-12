@@ -1,13 +1,6 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── s string
- ├── d decimal not null
- └── INDEX primary
-      └── k int not null
 
 opt
 SELECT k, i, s || 'foo' FROM a

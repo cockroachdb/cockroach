@@ -1,11 +1,6 @@
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 build
 SELECT * FROM xy WITH ORDINALITY

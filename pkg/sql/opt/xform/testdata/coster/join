@@ -1,23 +1,10 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── s string
- ├── d decimal not null
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE b (x INT, z INT NOT NULL)
 ----
-TABLE b
- ├── x int
- ├── z int not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 opt
 SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
@@ -128,15 +115,6 @@ inner-join
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX c_idx (c))
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c int
- ├── INDEX primary
- │    └── a int not null
- └── INDEX c_idx
-      ├── c int
-      └── a int not null
 
 exec-ddl
 ALTER TABLE abc INJECT STATISTICS '[
@@ -182,26 +160,6 @@ CREATE TABLE abcde (
   UNIQUE INDEX idx_abcd (a, b, c, d)
 )
 ----
-TABLE abcde
- ├── a string not null
- ├── b uuid not null
- ├── c uuid not null
- ├── d varchar not null
- ├── e string not null
- ├── INDEX primary
- │    ├── a string not null
- │    ├── b uuid not null
- │    └── c uuid not null
- ├── INDEX idx_abd
- │    ├── a string not null
- │    ├── b uuid not null
- │    ├── d varchar not null
- │    └── c uuid not null (storing)
- └── INDEX idx_abcd
-      ├── a string not null
-      ├── b uuid not null
-      ├── c uuid not null
-      └── d varchar not null
 
 exec-ddl
 ALTER TABLE abcde INJECT STATISTICS '[
@@ -236,16 +194,6 @@ CREATE TABLE wxyz (
   CONSTRAINT "foreign" FOREIGN KEY (w, x, y) REFERENCES abcde (a, b, c)
 )
 ----
-TABLE wxyz
- ├── w string not null
- ├── x uuid not null
- ├── y uuid not null
- ├── z string not null
- ├── INDEX primary
- │    ├── w string not null
- │    ├── x uuid not null
- │    └── y uuid not null
- └── CONSTRAINT foreign FOREIGN KEY (w, x, y) REFERENCES t.public.abcde (a, b, c)
 
 exec-ddl
 ALTER TABLE wxyz INJECT STATISTICS '[
