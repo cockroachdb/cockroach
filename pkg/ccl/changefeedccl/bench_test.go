@@ -303,17 +303,16 @@ func loadWorkloadBatches(sqlDB *gosql.DB, table workload.Table) ([]time.Time, in
 		timestamps = append(timestamps, now)
 	}
 
-	if table.InitialRows.NumTotal != 0 {
-		var totalRows int
-		if err := sqlDB.QueryRow(
-			`SELECT count(*) FROM "` + table.Name + `"`,
-		).Scan(&totalRows); err != nil {
-			return nil, 0, err
-		}
-		if table.InitialRows.NumTotal != totalRows {
-			return nil, 0, errors.Errorf(`sanity check failed: expected %d rows got %d`,
-				table.InitialRows.NumTotal, totalRows)
-		}
+	var totalRows int
+	if err := sqlDB.QueryRow(
+		`SELECT count(*) FROM "` + table.Name + `"`,
+	).Scan(&totalRows); err != nil {
+		return nil, 0, err
+	}
+	// There happens to be 1 row per batch in bank.
+	if table.InitialRows.NumBatches != totalRows {
+		return nil, 0, errors.Errorf(`sanity check failed: expected %d rows got %d`,
+			table.InitialRows.NumBatches, totalRows)
 	}
 
 	return timestamps, benchBytes, nil

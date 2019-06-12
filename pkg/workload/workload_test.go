@@ -74,9 +74,10 @@ func TestSetup(t *testing.T) {
 			for _, table := range gen.Tables() {
 				var c int
 				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s`, table.Name)).Scan(&c)
-				if c != table.InitialRows.NumTotal {
+				// There happens to be 1 row per batch in bank.
+				if c != table.InitialRows.NumBatches {
 					t.Errorf(`%s: got %d rows expected %d`,
-						table.Name, c, table.InitialRows.NumTotal)
+						table.Name, c, table.InitialRows.NumBatches)
 				}
 			}
 		})
