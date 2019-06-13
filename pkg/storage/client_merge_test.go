@@ -1773,6 +1773,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 // the range descriptor has changed between when the snapshot is sent and when
 // the replica-change transaction starts.
 func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
+	t.Skip(`WIP`)
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -1853,6 +1854,7 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 // sequence of splits AND merges can result in an unchanged end key, and merges
 // always increment the generation counter.
 func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
+	t.Skip(`WIP`)
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -2327,6 +2329,7 @@ func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 }
 
 func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
+	t.Skip(`WIP`)
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -2437,6 +2440,7 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 }
 
 func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
+	t.Skip(`WIP`)
 	defer leaktest.AfterTest(t)()
 
 	run := func(t *testing.T, withMerge bool) {

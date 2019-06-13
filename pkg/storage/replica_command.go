@@ -45,7 +45,7 @@ import (
 var useLearnerReplicas = settings.RegisterBoolSetting(
 	"kv.learner_replicas.enabled",
 	"use learner replicas for replica addition",
-	false)
+	true)
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(

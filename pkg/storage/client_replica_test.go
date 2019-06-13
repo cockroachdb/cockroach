@@ -706,6 +706,7 @@ func (l *leaseTransferTest) ensureLeaderAndRaftState(
 }
 
 func TestRangeTransferLeaseExpirationBased(t *testing.T) {
+	t.Skip(`WIP`)
 	defer leaktest.AfterTest(t)()
 
 	t.Run("Transfer", func(t *testing.T) {

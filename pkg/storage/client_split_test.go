@@ -459,6 +459,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 // snapshots are observed. As a nice side effect, this also verifies that log
 // truncations don't cause any Raft snapshots in this test.
 func TestSplitTriggerRaftSnapshotRace(t *testing.T) {
+	t.Skip(`WIP`)
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
