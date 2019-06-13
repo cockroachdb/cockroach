@@ -47,7 +47,7 @@ func SucceedsSoonError(t testing.TB, fn func() error) error {
 	wrappedFn := func() error {
 		err := fn()
 		if timeutil.Since(tBegin) > 3*time.Second && err != nil {
-			log.InfoDepth(context.Background(), 3, errors.Wrap(err, "SucceedsSoon"))
+			log.InfoDepth(context.Background(), 4, errors.Wrap(err, "SucceedsSoon"))
 		}
 		return err
 	}

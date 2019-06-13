@@ -65,8 +65,16 @@ func (rq *raftSnapshotQueue) shouldQueue(
 	// If a follower needs a snapshot, enqueue at the highest priority.
 	if status := repl.RaftStatus(); status != nil {
 		// raft.Status.Progress is only populated on the Raft group leader.
-		for _, p := range status.Progress {
+		for id, p := range status.Progress {
 			if p.State == raft.ProgressStateSnapshot {
+				// We refuse to send a snapshot of type RAFT to a learner for reasons
+				// described in processRaftSnapshot, so don't bother queueing.
+				for _, r := range repl.Desc().Replicas().Learners() {
+					if r.ReplicaID == roachpb.ReplicaID(id) {
+						continue
+					}
+				}
+
 				if log.V(2) {
 					log.Infof(ctx, "raft snapshot needed, enqueuing")
 				}
@@ -105,6 +113,15 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
+
+	// A learner replica is either getting a snapshot of type LEARNER by the node
+	// that's adding it or it's been orphaned and it's about to be cleaned up.
+	// Either way, no point in also sending it a snapshot of type RAFT.
+	if repDesc.GetType() == roachpb.ReplicaType_LEARNER {
+		log.Eventf(ctx, "not sending snapshot type RAFT to learner: %s", repDesc)
+		return nil
+	}
+
 	err := repl.sendSnapshot(ctx, repDesc, SnapshotRequest_RAFT, SnapshotRequest_RECOVERY)
 
 	// NB: if the snapshot fails because of an overlapping replica on the
