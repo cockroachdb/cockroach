@@ -1715,6 +1715,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   table_name           STRING NOT NULL,
   index_name           STRING NOT NULL,
 	replicas             INT[] NOT NULL,
+	non_quorum_replicas  INT[] NOT NULL,
   split_enforced_until TIMESTAMP
 )
 `,
@@ -1768,17 +1769,25 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				return nil, err
 			}
 
-			// TODO(dan): We're trying to treat learners as a far-behind replica as
-			// much as possible, so just include them in the list of replicas. We can
-			// add a separate column for them if we get feedback about it.
-			var replicas []int
+			var voterReplicas, nonVoterReplicas []int
 			for _, rd := range desc.Replicas().All() {
-				replicas = append(replicas, int(rd.StoreID))
+				if rd.GetType() == roachpb.ReplicaType_VOTER {
+					voterReplicas = append(voterReplicas, int(rd.StoreID))
+				} else {
+					nonVoterReplicas = append(nonVoterReplicas, int(rd.StoreID))
+				}
 			}
-			sort.Ints(replicas)
-			arr := tree.NewDArray(types.Int)
-			for _, replica := range replicas {
-				if err := arr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
+			sort.Ints(voterReplicas)
+			sort.Ints(nonVoterReplicas)
+			votersArr := tree.NewDArray(types.Int)
+			for _, replica := range voterReplicas {
+				if err := votersArr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
+					return nil, err
+				}
+			}
+			nonVotersArr := tree.NewDArray(types.Int)
+			for _, replica := range nonVoterReplicas {
+				if err := nonVotersArr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
 					return nil, err
 				}
 			}
@@ -1811,7 +1820,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(dbName),
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
-				arr,
+				votersArr,
+				nonVotersArr,
 				splitEnforcedUntil,
 			}, nil
 		}, nil
