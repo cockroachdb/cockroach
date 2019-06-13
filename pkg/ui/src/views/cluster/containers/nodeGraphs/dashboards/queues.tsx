@@ -65,6 +65,7 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.queue.replicate.addreplica" title="Replicas Added / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.removereplica" title="Replicas Removed / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.removedeadreplica" title="Dead Replicas Removed / sec" nonNegativeRate />
+        <Metric name="cr.store.queue.replicate.removelearnerreplica" title="Learner Replicas Removed / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.rebalancereplica" title="Replicas Rebalanced / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.transferlease" title="Leases Transferred / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.purgatory" title="Replicas in Purgatory" downsampleMax />
