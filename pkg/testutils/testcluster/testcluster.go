@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -44,6 +45,7 @@ type TestCluster struct {
 	Conns           []*gosql.DB
 	stopper         *stop.Stopper
 	replicationMode base.TestClusterReplicationMode
+	scratchRangeID  roachpb.RangeID
 	mu              struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
@@ -333,6 +335,16 @@ func (tc *TestCluster) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, er
 	return tc.Servers[0].LookupRange(key)
 }
 
+// LookupRangeOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) LookupRangeOrFatal(t testing.TB, key roachpb.Key) roachpb.RangeDescriptor {
+	t.Helper()
+	desc, err := tc.LookupRange(key)
+	if err != nil {
+		t.Fatalf(`looking up range for %s: %+v`, key, err)
+	}
+	return desc
+}
+
 // SplitRange splits the range containing splitKey.
 // The right range created by the split starts at the split key and extends to the
 // original range's end key.
@@ -418,6 +430,19 @@ func (tc *TestCluster) AddReplicas(
 	}
 }
 
+// AddReplicasOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) AddReplicasOrFatal(
+	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) roachpb.RangeDescriptor {
+	t.Helper()
+	desc, err := tc.AddReplicas(startKey, targets...)
+	if err != nil {
+		t.Fatalf(`could not add %v replicas to range containing %s: %+v`,
+			targets, startKey, err)
+	}
+	return desc
+}
+
 // RemoveReplicas is part of the TestServerInterface.
 func (tc *TestCluster) RemoveReplicas(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
@@ -493,6 +518,22 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 	}
 	replicaDesc := lease.Replica
 	return roachpb.ReplicationTarget{NodeID: replicaDesc.NodeID, StoreID: replicaDesc.StoreID}, nil
+}
+
+// ScratchRange returns the start key of a span of keyspace suitable for use as
+// kv scratch space (it doesn't overlap system spans or SQL tables). The range
+// is lazily split off on the first call to ScratchRange.
+func (tc *TestCluster) ScratchRange(t testing.TB) roachpb.Key {
+	scratchKey := keys.MakeTablePrefix(math.MaxUint32)
+	if tc.scratchRangeID > 0 {
+		return scratchKey
+	}
+	_, right, err := tc.SplitRange(scratchKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc.scratchRangeID = right.RangeID
+	return scratchKey
 }
 
 // WaitForSplitAndReplication waits for a range which starts with

@@ -181,6 +181,15 @@ type StoreTestingKnobs struct {
 	// TraceAllRaftEvents enables raft event tracing even when the current
 	// vmodule would not have enabled it.
 	TraceAllRaftEvents bool
+
+	// ReceiveSnapshot is run after receiving a snapshot header but before
+	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
+	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
+	ReceiveSnapshot func(*SnapshotRequest_Header) error
+	// ReplicaAddStopAfterLearner, if true, causes replica adding to return early:
+	// after the learner txn is successful, but before starting the LEARNER type
+	// snapshot or promoting it to a voter.
+	ReplicaAddStopAfterLearner func() bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

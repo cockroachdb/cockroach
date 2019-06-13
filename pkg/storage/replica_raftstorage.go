@@ -539,6 +539,8 @@ func snapshot(
 	for _, rep := range desc.Replicas().All() {
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
+	// WIP pretty sure the learners need to go in cs.Learners, but no test seems
+	// to be catching this right now.
 
 	term, err := term(ctx, rsl, snap, rangeID, eCache, appliedIndex)
 	if err != nil {

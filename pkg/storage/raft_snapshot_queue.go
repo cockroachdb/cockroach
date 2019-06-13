@@ -105,6 +105,18 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
+
+	// A learner replica is either getting a snapshot of type LEARNER by the node
+	// that's adding it or it's been orphaned and it's about to be cleaned up.
+	// Either way, no point in also sending it a snapshot of type RAFT.
+	//
+	// WIP this raft snapshot was causing the *Replica to be instantiated, which
+	// all the tests block on, so uncommenting this breaks all the learner tests
+	//
+	// if repDesc.GetType() == roachpb.ReplicaType_LEARNER {
+	//  return nil
+	// }
+
 	err := repl.sendSnapshot(ctx, repDesc, SnapshotRequest_RAFT, SnapshotRequest_RECOVERY)
 
 	// NB: if the snapshot fails because of an overlapping replica on the
