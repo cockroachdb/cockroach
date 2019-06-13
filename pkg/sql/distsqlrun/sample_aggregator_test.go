@@ -178,7 +178,7 @@ func TestSampleAggregator(t *testing.T) {
 			name:          "a",
 			colIDs:        "{100}",
 			rowCount:      11,
-			distinctCount: 2,
+			distinctCount: 3,
 			nullCount:     2,
 		},
 		{
@@ -186,7 +186,7 @@ func TestSampleAggregator(t *testing.T) {
 			name:          "<NULL>",
 			colIDs:        "{101}",
 			rowCount:      11,
-			distinctCount: 8,
+			distinctCount: 9,
 			nullCount:     1,
 			buckets: []resultBucket{
 				{numEq: 2, numRange: 0, upper: 1},

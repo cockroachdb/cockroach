@@ -272,8 +272,8 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 // colStat gets a column statistic for the given set of columns if it exists.
 // If the column statistic is not available in the current expression, colStat
 // recursively tries to find it in the children of the expression, lazily
-// populating either s.ColStats or s.MultiColStats with the statistic as it
-// gets passed up the expression tree.
+// populating s.ColStats with the statistic as it gets passed up the expression
+// tree.
 func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.ColumnStatistic {
 	for opt.IsEnforcerOp(e) {
 		e = e.Child(0).(RelExpr)
@@ -391,7 +391,8 @@ func (sb *statisticsBuilder) colStatLeaf(
 				colStat.NullCount = colStatLeaf.NullCount
 			}
 		}
-		colStat.DistinctCount = s.RowCount - colStat.NullCount
+		// Only one of the null values counts towards the distinct count.
+		colStat.DistinctCount = s.RowCount - max(colStat.NullCount-1, 0)
 		return colStat
 	}
 
@@ -744,11 +745,10 @@ func (sb *statisticsBuilder) colStatProject(
 		}
 	} else {
 		// There are no columns in this expression, so it must be a constant.
+		colStat.DistinctCount = 1
 		if nullOpFound {
-			colStat.DistinctCount = 0
 			colStat.NullCount = s.RowCount
 		} else {
-			colStat.DistinctCount = 1
 			colStat.NullCount = 0
 		}
 	}
@@ -1398,10 +1398,6 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 		colStat := sb.copyColStatFromChild(groupingColSet, groupNode, s)
 		s.RowCount = colStat.DistinctCount
 
-		// TODO(rytaft): take this out once null count is included in distinct
-		// count.
-		s.RowCount += min(1, colStat.NullCount)
-
 		// Non-scalar GroupBy should never increase the number of rows.
 		inputStats := &groupNode.Child(0).(RelExpr).Relational().Stats
 		s.RowCount = min(s.RowCount, inputStats.RowCount)
@@ -1442,14 +1438,13 @@ func (sb *statisticsBuilder) colStatGroupBy(
 
 	// For null counts - we either only have 1 possible null value (if we're
 	// grouping on a single column), or we have as many nulls as in the grouping
-	// col set, multiplied by (DistinctCount+1)/RowCount - an inverse of a rough
-	// duplicate factor. The + 1 accounts for the fact that nulls are not
-	// counted in distinct counts.
+	// col set, multiplied by DistinctCount/RowCount - an inverse of a rough
+	// duplicate factor.
 	if groupingColSet.Len() == 1 {
 		colStat.NullCount = min(1, inputColStat.NullCount)
 	} else {
 		inputRowCount := sb.statsFromChild(groupNode, 0 /* childIdx */).RowCount
-		colStat.NullCount = ((colStat.DistinctCount + 1) / inputRowCount) * inputColStat.NullCount
+		colStat.NullCount = (colStat.DistinctCount / inputRowCount) * inputColStat.NullCount
 	}
 
 	if colSet.SubsetOf(relProps.NotNullCols) {
@@ -1489,12 +1484,11 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 	switch setNode.Op() {
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
 		// Since UNION, INTERSECT and EXCEPT eliminate duplicate rows, the row
-		// count will equal the distinct count of the set of output columns, plus
-		// any null values.
+		// count will equal the distinct count of the set of output columns.
 		setPrivate := setNode.Private().(*SetPrivate)
 		outputCols := setPrivate.OutCols.ToSet()
 		colStat := sb.colStatSetNodeImpl(outputCols, setNode, relProps)
-		s.RowCount = min(colStat.DistinctCount+colStat.NullCount, s.RowCount)
+		s.RowCount = colStat.DistinctCount
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -1543,12 +1537,6 @@ func (sb *statisticsBuilder) colStatSetNodeImpl(
 	case opt.IntersectOp, opt.IntersectAllOp:
 		colStat.DistinctCount = min(leftColStat.DistinctCount, rightColStat.DistinctCount)
 		colStat.NullCount = min(leftNullCount, rightNullCount)
-
-		// Ensure that at least one of the distinct count or null count is non-zero
-		// to avoid calculating zero rows.
-		if colStat.DistinctCount == 0 && colStat.NullCount == 0 {
-			colStat.DistinctCount = max(leftColStat.DistinctCount, rightColStat.DistinctCount)
-		}
 
 	case opt.ExceptOp, opt.ExceptAllOp:
 		colStat.DistinctCount = leftColStat.DistinctCount
@@ -1602,7 +1590,6 @@ func (sb *statisticsBuilder) colStatValues(
 			if colSet.Contains(int(values.Cols[i])) {
 				if elem.Op() == opt.NullOp {
 					hasNull = true
-					break
 				}
 				// Use the pointer value of the scalar expression, since it's already
 				// been interned. Therefore, two expressions with the same pointer
@@ -1614,9 +1601,8 @@ func (sb *statisticsBuilder) colStatValues(
 		}
 		if hasNull {
 			nullCount++
-		} else {
-			distinct[hash] = struct{}{}
 		}
+		distinct[hash] = struct{}{}
 	}
 
 	// Update the column statistics.
@@ -2215,10 +2201,9 @@ func (sb *statisticsBuilder) finalizeFromCardinality(relProps *props.Relational)
 func (sb *statisticsBuilder) finalizeFromRowCount(
 	colStat *props.ColumnStatistic, rowCount float64,
 ) {
-	// We should always have at least one distinct or null value if
-	// row count > 0.
-	if rowCount > 0 && colStat.DistinctCount == 0 && colStat.NullCount == 0 {
-		panic(pgerror.AssertionFailedf("estimated distinct and/or null count must be non-zero"))
+	// We should always have at least one distinct value if row count > 0.
+	if rowCount > 0 && colStat.DistinctCount == 0 {
+		panic(pgerror.AssertionFailedf("estimated distinct count must be non-zero"))
 	}
 
 	// The distinct and null counts should be no larger than the row count.
@@ -2451,13 +2436,6 @@ func (sb *statisticsBuilder) updateNullCountsFromProps(
 			if s.Selectivity != 1.0 {
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
-		}
-		if colStat.DistinctCount == 0 {
-			// Transfer the null count to the distinct count since we now know that
-			// the column is not null. We want to make sure that either the null
-			// count or the distinct count is non-zero, since we always ensure that
-			// the row count is non-zero to avoid creating inefficient plans.
-			colStat.DistinctCount = min(colStat.NullCount, 1)
 		}
 		colStat.NullCount = 0
 	})
