@@ -87,6 +87,10 @@ func (sw *slidingWindow) string() string {
 	return builder.String()
 }
 
+func (sw *slidingWindow) reset() {
+	sw.values.Reset()
+}
+
 type slidingWindowFunc struct {
 	sw      *slidingWindow
 	prevEnd int
@@ -147,6 +151,12 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *slidingWindowFunc) Reset(context.Context) {
+	w.prevEnd = 0
+	w.sw.reset()
 }
 
 // Close implements WindowFunc interface.
@@ -264,6 +274,13 @@ func (w *slidingWindowSumFunc) Compute(
 	return w.agg.Result()
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *slidingWindowSumFunc) Reset(ctx context.Context) {
+	w.prevStart = 0
+	w.prevEnd = 0
+	w.agg.Reset(ctx)
+}
+
 // Close implements WindowFunc interface.
 func (w *slidingWindowSumFunc) Close(ctx context.Context, _ *tree.EvalContext) {
 	w.agg.Close(ctx)
@@ -337,6 +354,11 @@ func (w *avgWindowFunc) Compute(
 	default:
 		return nil, pgerror.AssertionFailedf("unexpected SUM result type: %s", t)
 	}
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *avgWindowFunc) Reset(ctx context.Context) {
+	w.sum.Reset(ctx)
 }
 
 // Close implements WindowFunc interface.

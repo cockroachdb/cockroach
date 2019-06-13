@@ -131,6 +131,7 @@ type windower struct {
 	partition                  *rowcontainer.DiskBackedIndexedRowContainer
 	orderOfWindowFnsProcessing []int
 	windowFns                  []*windowFunc
+	builtins                   []tree.WindowFunc
 
 	populated           bool
 	partitionIdx        int
@@ -189,6 +190,7 @@ func newWindower(
 	}
 
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
+	w.builtins = make([]tree.WindowFunc, 0, len(windowFns))
 	// windower passes through all of its input columns and appends an output
 	// column for each of window functions it is computing.
 	w.outputTypes = make([]types.T, len(w.inputTypes)+len(windowFns))
@@ -205,8 +207,8 @@ func newWindower(
 		}
 		w.outputTypes[windowFn.OutputColIdx] = *outputType
 
+		w.builtins = append(w.builtins, windowConstructor(evalCtx))
 		wf := &windowFunc{
-			create:       windowConstructor,
 			ordering:     windowFn.Ordering,
 			argsIdxs:     windowFn.ArgsIdxs,
 			frame:        windowFn.Frame,
@@ -284,6 +286,9 @@ func (w *windower) close() {
 		w.allRowsPartitioned.Close(w.Ctx)
 		if w.partition != nil {
 			w.partition.Close(w.Ctx)
+		}
+		for _, builtin := range w.builtins {
+			builtin.Close(w.Ctx, w.evalCtx)
 		}
 		w.acc.Close(w.Ctx)
 		w.MemMonitor.Stop(w.Ctx)
@@ -545,8 +550,8 @@ func (w *windower) processPartition(
 			}
 		}
 
-		builtin := windowFn.create(evalCtx)
-		defer builtin.Close(ctx, evalCtx)
+		builtin := w.builtins[windowFnIdx]
+		builtin.Reset(ctx)
 
 		usage = datumSliceOverhead + sizeOfDatum*int64(partition.Len())
 		if err := w.growMemAccount(&w.acc, usage); err != nil {
@@ -765,7 +770,6 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 }
 
 type windowFunc struct {
-	create       func(*tree.EvalContext) tree.WindowFunc
 	ordering     distsqlpb.Ordering
 	argsIdxs     []uint32
 	frame        *distsqlpb.WindowerSpec_Frame
