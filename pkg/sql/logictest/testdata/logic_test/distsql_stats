@@ -223,8 +223,8 @@ FROM [SHOW STATISTICS FOR TABLE simple]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 default_stat2    {rowid}       1          1               0
-default_stat2    {y}           1          0               1
-default_stat2    {x}           1          0               1
+default_stat2    {y}           1          1               1
+default_stat2    {x}           1          1               1
 
 #
 # Test numeric references
@@ -431,4 +431,4 @@ FROM [SHOW STATISTICS FOR TABLE arr] ORDER BY statistics_name, column_names::STR
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
 arr_stats        {rowid}       4          4               0
-arr_stats        {x}           4          2               1
+arr_stats        {x}           4          3               1

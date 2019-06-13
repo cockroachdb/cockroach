@@ -712,7 +712,7 @@ union
  ├── columns: x:9(int)
  ├── left columns: b.x:1(int)
  ├── right columns: c.x:5(int)
- ├── stats: [rows=10002, distinct(9)=10000, null(9)=2]
+ ├── stats: [rows=10000, distinct(9)=10000, null(9)=2]
  ├── key: (9)
  ├── project
  │    ├── columns: b.x:1(int)
@@ -738,7 +738,7 @@ intersect
  ├── columns: x:1(int)
  ├── left columns: b.x:1(int)
  ├── right columns: c.x:5(int)
- ├── stats: [rows=5001, distinct(1)=5000, null(1)=1]
+ ├── stats: [rows=5000, distinct(1)=5000, null(1)=1]
  ├── key: (1)
  ├── project
  │    ├── columns: b.x:1(int)
@@ -764,7 +764,7 @@ except
  ├── columns: x:1(int)
  ├── left columns: b.x:1(int)
  ├── right columns: c.x:5(int)
- ├── stats: [rows=5001, distinct(1)=5000, null(1)=1]
+ ├── stats: [rows=5000, distinct(1)=5000, null(1)=1]
  ├── key: (1)
  ├── project
  │    ├── columns: b.x:1(int)
@@ -869,12 +869,12 @@ except
  ├── left columns: column1:5(int) column2:2(bool)
  ├── right columns: column1:3(int) column2:6(bool)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1, distinct(2,5)=0, null(2,5)=1]
+ ├── stats: [rows=1, distinct(2,5)=1, null(2,5)=1]
  ├── key: (2,5)
  ├── values
  │    ├── columns: column2:2(bool) column1:5(int)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(2,5)=0, null(2,5)=1]
+ │    ├── stats: [rows=1, distinct(2,5)=1, null(2,5)=1]
  │    ├── key: ()
  │    ├── fd: ()-->(2,5)
  │    └── (true, NULL) [type=tuple{bool, int}]
@@ -896,17 +896,17 @@ except
  ├── left columns: column1:1(int) column2:2(int)
  ├── right columns: column1:3(int) column2:4(int)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=3, distinct(1,2)=0, null(1,2)=3]
+ ├── stats: [rows=1.25, distinct(1,2)=1.25, null(1,2)=1.25]
  ├── key: (1,2)
  ├── select
  │    ├── columns: column1:1(int) column2:2(int)
  │    ├── cardinality: [0 - 3]
- │    ├── stats: [rows=3, distinct(1)=1, null(1)=2, distinct(1,2)=0, null(1,2)=3]
+ │    ├── stats: [rows=1.25, distinct(1)=1, null(1)=1.25, distinct(1,2)=1.25, null(1,2)=1.25]
  │    ├── fd: ()-->(1)
  │    ├── values
  │    │    ├── columns: column1:1(int) column2:2(int)
  │    │    ├── cardinality: [3 - 3]
- │    │    ├── stats: [rows=3, distinct(1)=1, null(1)=2, distinct(1,2)=0, null(1,2)=3]
+ │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=2, distinct(1,2)=3, null(1,2)=3]
  │    │    ├── (NULL, NULL) [type=tuple{int, int}]
  │    │    ├── (NULL, 1) [type=tuple{int, int}]
  │    │    └── (2, NULL) [type=tuple{int, int}]
@@ -954,7 +954,7 @@ sort
       └── values
            ├── columns: column1:3(int)
            ├── cardinality: [1 - 1]
-           ├── stats: [rows=1, distinct(3)=0, null(3)=1]
+           ├── stats: [rows=1, distinct(3)=1, null(3)=1]
            ├── key: ()
            ├── fd: ()-->(3)
            └── (NULL,) [type=tuple{int}]
