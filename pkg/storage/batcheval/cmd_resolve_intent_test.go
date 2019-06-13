@@ -34,6 +34,7 @@ import (
 type mockEvalCtx struct {
 	clusterSettings  *cluster.Settings
 	desc             *roachpb.RangeDescriptor
+	storeID          roachpb.StoreID
 	clock            *hlc.Clock
 	stats            enginepb.MVCCStats
 	qps              float64
@@ -74,7 +75,7 @@ func (m *mockEvalCtx) NodeID() roachpb.NodeID {
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) StoreID() roachpb.StoreID {
-	panic("unimplemented")
+	return m.storeID
 }
 func (m *mockEvalCtx) GetRangeID() roachpb.RangeID {
 	return m.desc.RangeID

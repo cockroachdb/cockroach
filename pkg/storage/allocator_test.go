@@ -43,6 +43,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/tracker"
 )
@@ -4768,6 +4769,40 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 			continue
 		}
 	}
+}
+
+func TestAllocatorRemoveLearner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	zone := config.ZoneConfig{
+		NumReplicas: proto.Int32(3),
+	}
+	learnerType := roachpb.ReplicaType_LEARNER
+	rangeWithLearnerDesc := roachpb.RangeDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				StoreID:   1,
+				NodeID:    1,
+				ReplicaID: 1,
+			},
+			{
+				StoreID:   2,
+				NodeID:    2,
+				ReplicaID: 2,
+				Type:      &learnerType,
+			},
+		},
+	}
+
+	// Removing a learner is prioritized over adding a new replica to an under
+	// replicated range.
+	stopper, _, sp, a, _ := createTestAllocator(10, false /* deterministic */)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	live, dead := []roachpb.StoreID{1, 2}, []roachpb.StoreID{3}
+	mockStorePool(sp, live, nil, dead, nil, nil)
+	action, _ := a.ComputeAction(ctx, &zone, RangeInfo{Desc: &rangeWithLearnerDesc})
+	require.Equal(t, AllocatorRemoveLearner, action)
 }
 
 func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {

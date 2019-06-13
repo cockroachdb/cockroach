@@ -588,6 +588,12 @@ func (s *Store) shouldAcceptSnapshotData(
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
+	if fn := s.cfg.TestingKnobs.ReceiveSnapshot; fn != nil {
+		if err := fn(header); err != nil {
+			return sendSnapshotError(stream, err)
+		}
+	}
+
 	cleanup, rejectionMsg, err := s.reserveSnapshot(ctx, header)
 	if err != nil {
 		return err

@@ -158,7 +158,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		tableStartKey.Store(keys.MakeTablePrefix(tableID))
 
 		// Wait for new table to split & replication.
-		if err := tc.WaitForSplitAndReplication(tableStartKey.Load().([]byte)); err != nil {
+		if err := tc.WaitForSplitAndInitialization(tableStartKey.Load().([]byte)); err != nil {
 			t.Fatal(err)
 		}
 

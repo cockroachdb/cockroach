@@ -69,6 +69,12 @@ var (
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReplicateQueueRemoveLearnerReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.removelearnerreplica",
+		Help:        "Number of learner replica removals attempted by the replicate queue (typically due to internal race conditions)",
+		Measurement: "Replica Removals",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaReplicateQueueRebalanceReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.rebalancereplica",
 		Help:        "Number of replica rebalancer-initiated additions attempted by the replicate queue",
@@ -104,20 +110,22 @@ func (*quorumError) purgatoryErrorMarker() {}
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
 type ReplicateQueueMetrics struct {
-	AddReplicaCount        *metric.Counter
-	RemoveReplicaCount     *metric.Counter
-	RemoveDeadReplicaCount *metric.Counter
-	RebalanceReplicaCount  *metric.Counter
-	TransferLeaseCount     *metric.Counter
+	AddReplicaCount           *metric.Counter
+	RemoveReplicaCount        *metric.Counter
+	RemoveDeadReplicaCount    *metric.Counter
+	RemoveLearnerReplicaCount *metric.Counter
+	RebalanceReplicaCount     *metric.Counter
+	TransferLeaseCount        *metric.Counter
 }
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 	return ReplicateQueueMetrics{
-		AddReplicaCount:        metric.NewCounter(metaReplicateQueueAddReplicaCount),
-		RemoveReplicaCount:     metric.NewCounter(metaReplicateQueueRemoveReplicaCount),
-		RemoveDeadReplicaCount: metric.NewCounter(metaReplicateQueueRemoveDeadReplicaCount),
-		RebalanceReplicaCount:  metric.NewCounter(metaReplicateQueueRebalanceReplicaCount),
-		TransferLeaseCount:     metric.NewCounter(metaReplicateQueueTransferLeaseCount),
+		AddReplicaCount:           metric.NewCounter(metaReplicateQueueAddReplicaCount),
+		RemoveReplicaCount:        metric.NewCounter(metaReplicateQueueRemoveReplicaCount),
+		RemoveDeadReplicaCount:    metric.NewCounter(metaReplicateQueueRemoveDeadReplicaCount),
+		RemoveLearnerReplicaCount: metric.NewCounter(metaReplicateQueueRemoveLearnerReplicaCount),
+		RebalanceReplicaCount:     metric.NewCounter(metaReplicateQueueRebalanceReplicaCount),
+		TransferLeaseCount:        metric.NewCounter(metaReplicateQueueTransferLeaseCount),
 	}
 }
 
@@ -526,6 +534,25 @@ func (rq *replicateQueue) processOneChange(
 		); err != nil {
 			return false, err
 		}
+	case AllocatorRemoveLearner:
+		learnerReplicas := desc.Replicas().Learners()
+		if len(learnerReplicas) == 0 {
+			log.VEventf(ctx, 1, "range of replica %s was identified as having learner replicas, "+
+				"but no learner replicas were found", repl)
+			break
+		}
+		learnerReplica := learnerReplicas[0]
+		rq.metrics.RemoveLearnerReplicaCount.Inc(1)
+		log.VEventf(ctx, 1, "removing learner replica %+v from store", learnerReplica)
+		target := roachpb.ReplicationTarget{
+			NodeID:  learnerReplica.NodeID,
+			StoreID: learnerReplica.StoreID,
+		}
+		if err := rq.removeReplica(
+			ctx, repl, target, desc, storagepb.ReasonAbandonedLearner, "", dryRun,
+		); err != nil {
+			return false, err
+		}
 	case AllocatorConsiderRebalance:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
@@ -660,7 +687,7 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
-	if _, err := repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details); err != nil {
+	if _, err := repl.addReplica(ctx, target, desc, priority, reason, details); err != nil {
 		return err
 	}
 	rangeInfo := rangeInfoForRepl(repl, desc)
