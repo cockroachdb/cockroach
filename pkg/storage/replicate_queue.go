@@ -538,6 +538,25 @@ func (rq *replicateQueue) processOneChange(
 		); err != nil {
 			return false, err
 		}
+	case AllocatorRemoveLearner:
+		learnerReplicas := desc.Replicas().Learners()
+		if len(learnerReplicas) == 0 {
+			log.VEventf(ctx, 1, "range of replica %s was identified as having learner replicas, "+
+				"but no learner replicas were found", repl)
+			break
+		}
+		learnerReplica := learnerReplicas[0]
+		rq.metrics.RemoveReplicaCount.Inc(1)
+		log.VEventf(ctx, 1, "removing learner replica %+v from store", learnerReplica)
+		target := roachpb.ReplicationTarget{
+			NodeID:  learnerReplica.NodeID,
+			StoreID: learnerReplica.StoreID,
+		}
+		if err := rq.removeReplica(
+			ctx, repl, target, desc, storagepb.ReasonAbandonedLearner, "", dryRun,
+		); err != nil {
+			return false, err
+		}
 	case AllocatorConsiderRebalance:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
@@ -670,7 +689,7 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
-	if _, err := repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details); err != nil {
+	if _, err := repl.addReplica(ctx, target, desc, priority, reason, details); err != nil {
 		return err
 	}
 	rangeInfo := rangeInfoForRepl(repl, desc)

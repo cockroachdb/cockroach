@@ -24,4 +24,5 @@ const (
 	ReasonStoreDecommissioning RangeLogEventReason = "store decommissioning"
 	ReasonRebalance            RangeLogEventReason = "rebalance"
 	ReasonAdminRequest         RangeLogEventReason = "admin request"
+	ReasonAbandonedLearner     RangeLogEventReason = "abandoned learner replica"
 )

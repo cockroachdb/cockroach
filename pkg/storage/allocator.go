@@ -53,6 +53,7 @@ const (
 	addMissingReplicaPriority             float64 = 10000
 	addDecommissioningReplacementPriority float64 = 5000
 	removeDeadReplicaPriority             float64 = 1000
+	removeLearnerReplicaPriority          float64 = 300
 	removeDecommissioningReplicaPriority  float64 = 200
 	removeExtraReplicaPriority            float64 = 100
 )
@@ -100,6 +101,7 @@ const (
 	AllocatorAdd
 	AllocatorRemoveDead
 	AllocatorRemoveDecommissioning
+	AllocatorRemoveLearner
 	AllocatorConsiderRebalance
 )
 
@@ -109,6 +111,7 @@ var allocatorActionNames = map[AllocatorAction]string{
 	AllocatorAdd:                   "add",
 	AllocatorRemoveDead:            "remove dead",
 	AllocatorRemoveDecommissioning: "remove decommissioning",
+	AllocatorRemoveLearner:         "remove learner",
 	AllocatorConsiderRebalance:     "consider rebalance",
 }
 
@@ -296,8 +299,38 @@ func (a *Allocator) ComputeAction(
 		// Do nothing if storePool is nil for some unittests.
 		return AllocatorNoop, 0
 	}
-	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 
+	// Seeing a learner replica at this point is unexpected because learners are a
+	// short-lived (ish) transient state in a learner+snapshot+voter cycle, which
+	// is always done atomically. Only two places could have added a learner: the
+	// replicate queue or AdminChangeReplicas request.
+	//
+	// The replicate queue only operates on leaseholders, which means that only
+	// one node at a time is operating on a given range except in rare cases (old
+	// leaseholder could start the operation, and a new leaseholder steps up and
+	// also starts an overlapping operation). Combined with the above atomicity,
+	// this means that if the replicate queue sees a learner, either the node that
+	// was adding it crashed somewhere in the learner+snapshot+voter cycle and
+	// we're the new leaseholder or we caught a race with AdminChangeReplicas.
+	//
+	// In the first case, we could assume the node that was adding it knew what it
+	// was doing and finish the addition. Or we could leave it and do higher
+	// priority operations first if there are any. However, this comes with code
+	// complexity and concept complexity (computing old vs new quorum sizes
+	// becomes ambiguous, the learner isn't in the quorum but it likely will be
+	// soon, so do you count it?). Instead, we do the simplest thing and remove it
+	// before doing any other operations to the range and we'll revisit this
+	// decision if and when the complexity becomes necessary.
+	//
+	// TODO(dan): Address the race with the AdminChangeReplicas request.
+	if learners := rangeInfo.Desc.Replicas().Learners(); len(learners) > 0 {
+		// TODO(dan): Since this goes before anything else, the priority here should
+		// be influenced by whatever operations would happen right after the learner
+		// is removed.
+		return AllocatorRemoveLearner, removeLearnerReplicaPriority
+	}
+
+	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	have := len(rangeInfo.Desc.Replicas().Unwrap())
 	decommissioningReplicas := a.storePool.decommissioningReplicas(
 		rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas().Unwrap())

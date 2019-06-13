@@ -417,16 +417,20 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 			return err
 		}
 
+		confChange := raftpb.ConfChange{
+			Type:    changeTypeInternalToRaft[crt.ChangeType],
+			NodeID:  uint64(crt.Replica.ReplicaID),
+			Context: encodedCtx,
+		}
+		if confChange.Type == raftpb.ConfChangeAddNode &&
+			crt.Replica.Type == roachpb.ReplicaType_LEARNER {
+			confChange.Type = raftpb.ConfChangeAddLearnerNode
+		}
 		return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 			// We're proposing a command here so there is no need to wake the
 			// leader if we were quiesced.
 			r.unquiesceLocked()
-			return false, /* unquiesceAndWakeLeader */
-				raftGroup.ProposeConfChange(raftpb.ConfChange{
-					Type:    changeTypeInternalToRaft[crt.ChangeType],
-					NodeID:  uint64(crt.Replica.ReplicaID),
-					Context: encodedCtx,
-				})
+			return false /* unquiesceAndWakeLeader */, raftGroup.ProposeConfChange(confChange)
 		})
 	}
 
