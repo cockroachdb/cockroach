@@ -143,15 +143,15 @@ func (r *RangeDescriptor) AddReplica(toAdd ReplicaDescriptor) {
 	r.SetReplicas(rs)
 }
 
-// RemoveReplica removes the given replica from this range's set. If it wasn't
-// found to remove, false is returned.
-func (r *RangeDescriptor) RemoveReplica(toRemove ReplicaDescriptor) bool {
+// RemoveReplica removes the matching replica from this range's set and returns
+// it. If it wasn't found to remove, false is returned.
+func (r *RangeDescriptor) RemoveReplica(nodeID NodeID, storeID StoreID) (ReplicaDescriptor, bool) {
 	rs := r.Replicas()
-	found := rs.RemoveReplica(toRemove)
+	removed, found := rs.RemoveReplica(nodeID, storeID)
 	if found {
 		r.SetReplicas(rs)
 	}
-	return found
+	return removed, found
 }
 
 // GetReplicaDescriptor returns the replica which matches the specified store

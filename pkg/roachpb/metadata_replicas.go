@@ -89,23 +89,24 @@ func (d *ReplicaDescriptors) AddReplica(r ReplicaDescriptor) {
 	d.wrapped = append(d.wrapped, r)
 }
 
-// RemoveReplica removes the given replica from this set. If it wasn't found to
-// remove, false is returned.
-func (d *ReplicaDescriptors) RemoveReplica(r ReplicaDescriptor) bool {
+// RemoveReplica removes the matching replica from this set. If it wasn't found
+// to remove, false is returned.
+func (d *ReplicaDescriptors) RemoveReplica(nodeID NodeID, storeID StoreID) (ReplicaDescriptor, bool) {
 	idx := -1
 	for i := range d.wrapped {
-		if d.wrapped[i].Equal(r) {
+		if d.wrapped[i].NodeID == nodeID && d.wrapped[i].StoreID == storeID {
 			idx = i
 			break
 		}
 	}
 	if idx == -1 {
-		return false
+		return ReplicaDescriptor{}, false
 	}
 	// Swap with the last element so we can simply truncate the slice.
 	d.wrapped[idx], d.wrapped[len(d.wrapped)-1] = d.wrapped[len(d.wrapped)-1], d.wrapped[idx]
+	removed := d.wrapped[len(d.wrapped)-1]
 	d.wrapped = d.wrapped[:len(d.wrapped)-1]
-	return true
+	return removed, true
 }
 
 // QuorumSize returns the number of voter replicas required for quorum in a raft
