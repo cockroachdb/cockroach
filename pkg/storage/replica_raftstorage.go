@@ -384,7 +384,7 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 // replica. If this method returns without error, callers must eventually call
 // OutgoingSnapshot.Close.
 func (r *Replica) GetSnapshot(
-	ctx context.Context, snapType string,
+	ctx context.Context, snapType SnapshotRequest_Type,
 ) (_ *OutgoingSnapshot, err error) {
 	snapUUID := uuid.MakeV4()
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
@@ -461,7 +461,7 @@ type OutgoingSnapshot struct {
 	// sideloaded storage in the meantime.
 	WithSideloaded func(func(SideloadStorage) error) error
 	RaftEntryCache *raftentry.Cache
-	snapType       string
+	snapType       SnapshotRequest_Type
 	onClose        func()
 }
 
@@ -496,7 +496,7 @@ type IncomingSnapshot struct {
 	// point).
 	// See the comment on VersionUnreplicatedRaftTruncatedState for details.
 	UsesUnreplicatedTruncatedState bool
-	snapType                       string
+	snapType                       SnapshotRequest_Type
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the
@@ -505,7 +505,7 @@ func snapshot(
 	ctx context.Context,
 	snapUUID uuid.UUID,
 	rsl stateloader.StateLoader,
-	snapType string,
+	snapType SnapshotRequest_Type,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
@@ -664,11 +664,6 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	return nil
 }
 
-const (
-	snapTypeRaft       = "Raft"
-	snapTypePreemptive = "preemptive"
-)
-
 func clearRangeData(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -765,9 +760,12 @@ func (r *Replica) applySnapshot(
 	snapType := inSnap.snapType
 	defer func() {
 		if err == nil {
-			if snapType == snapTypeRaft {
+			switch snapType {
+			case SnapshotRequest_RAFT:
 				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
-			} else {
+			case SnapshotRequest_LEARNER:
+				r.store.metrics.RangeSnapshotsLearnerApplied.Inc(1)
+			case SnapshotRequest_PREEMPTIVE:
 				r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
 			}
 		}

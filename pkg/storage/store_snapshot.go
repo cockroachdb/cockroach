@@ -106,7 +106,7 @@ type kvBatchSnapshotStrategy struct {
 	newBatch  func() engine.Batch
 }
 
-// Send implements the snapshotStrategy interface.
+// Receive implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Receive(
 	ctx context.Context, stream incomingSnapshotStream, header SnapshotRequest_Header,
 ) (IncomingSnapshot, error) {
@@ -143,11 +143,19 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				Batches:                        batches,
 				LogEntries:                     logEntries,
 				State:                          &header.State,
-				snapType:                       snapTypeRaft,
+				snapType:                       header.Type,
 			}
-			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
-				inSnap.snapType = snapTypePreemptive
+
+			// 19.1 nodes don't set this field, so it may default to RAFT. If it is
+			// RAFT and the replica is a placeholder (ID = 0), then this came from a
+			// 19.1 node and it's actually PREEMPTIVE. LEARNER starting being set
+			// after this field was populated, so if it's a learner snap, it will
+			// always be set to that. This adjustment can be removed after 19.2.
+			if inSnap.snapType == SnapshotRequest_RAFT &&
+				header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
+				inSnap.snapType = SnapshotRequest_PREEMPTIVE
 			}
+
 			kvSS.status = fmt.Sprintf("kv batches: %d, log entries: %d", len(batches), len(logEntries))
 			return inSnap, nil
 		}
@@ -229,7 +237,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		if err == nil {
 			logEntries = append(logEntries, bytes)
 			raftLogBytes += int64(len(bytes))
-			if snap.snapType == snapTypePreemptive &&
+			if snap.snapType == SnapshotRequest_PREEMPTIVE &&
 				raftLogBytes > 4*kvSS.raftCfg.RaftLogTruncationThreshold {
 				// If the raft log is too large, abort the snapshot instead of
 				// potentially running out of memory. However, if this is a
