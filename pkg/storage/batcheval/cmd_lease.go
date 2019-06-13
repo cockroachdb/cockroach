@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/errors"
 )
 
 func declareKeysRequestLease(
@@ -39,6 +40,17 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 		trigger.Local.Metrics.LeaseRequestError = 1
 	}
 	return trigger
+}
+
+func checkNotLearnerReplica(rec EvalContext) error {
+	repDesc, ok := rec.Desc().GetReplicaDescriptor(rec.StoreID())
+	if !ok {
+		return errors.AssertionFailedf(
+			`could not find replica for store %s in %s`, rec.StoreID(), rec.Desc())
+	} else if t := repDesc.GetType(); t == roachpb.ReplicaType_LEARNER {
+		return errors.Errorf(`cannot transfer lease to replica of type %s`, t)
+	}
+	return nil
 }
 
 // evalNewLease checks that the lease contains a valid interval and that
