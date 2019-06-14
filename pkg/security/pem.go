@@ -100,6 +100,9 @@ func PEMToCertificates(contents []byte) ([]*pem.Block, error) {
 		var block *pem.Block
 		block, contents = pem.Decode(contents)
 		if block == nil {
+			if len(contents) > 0 {
+				return nil, errors.Errorf("block #%d could not be parsed", len(certs))
+			}
 			break
 		}
 		if block.Type != "CERTIFICATE" {
