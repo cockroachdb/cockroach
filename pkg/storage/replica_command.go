@@ -846,7 +846,7 @@ func (r *Replica) changeReplicas(
 		// operation is processed. This is important to allow other ranges to make
 		// progress which might be required for this ChangeReplicas operation to
 		// complete. See #10409.
-		if err := r.sendSnapshot(ctx, repDesc, snapTypePreemptive, priority); err != nil {
+		if err := r.sendSnapshot(ctx, repDesc, SnapshotRequest_PREEMPTIVE, priority); err != nil {
 			return nil, err
 		}
 
@@ -860,7 +860,7 @@ func (r *Replica) changeReplicas(
 		if repDescIdx == -1 {
 			return nil, errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
 		}
-		if !updatedDesc.RemoveReplica(repDesc) {
+		if _, ok := updatedDesc.RemoveReplica(repDesc.NodeID, repDesc.StoreID); !ok {
 			return nil, errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
 		}
 	}
@@ -960,7 +960,7 @@ func (r *Replica) changeReplicas(
 func (r *Replica) sendSnapshot(
 	ctx context.Context,
 	repDesc roachpb.ReplicaDescriptor,
-	snapType string,
+	snapType SnapshotRequest_Type,
 	priority SnapshotRequest_Priority,
 ) error {
 	snap, err := r.GetSnapshot(ctx, snapType)
@@ -1033,9 +1033,10 @@ func (r *Replica) sendSnapshot(
 		},
 		RangeSize: r.GetMVCCStats().Total(),
 		// Recipients can choose to decline preemptive snapshots.
-		CanDecline: snapType == snapTypePreemptive,
+		CanDecline: snapType == SnapshotRequest_PREEMPTIVE,
 		Priority:   priority,
 		Strategy:   SnapshotRequest_KV_BATCH,
+		Type:       snapType,
 	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)

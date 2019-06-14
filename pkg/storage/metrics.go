@@ -403,6 +403,12 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeSnapshotsLearnerApplied = metric.Metadata{
+		Name:        "range.snapshots.learner-applied",
+		Help:        "Number of applied learner snapshots",
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeSnapshotsPreemptiveApplied = metric.Metadata{
 		Name:        "range.snapshots.preemptive-applied",
 		Help:        "Number of applied pre-emptive snapshots",
@@ -1044,6 +1050,7 @@ type StoreMetrics struct {
 	RangeRemoves                    *metric.Counter
 	RangeSnapshotsGenerated         *metric.Counter
 	RangeSnapshotsNormalApplied     *metric.Counter
+	RangeSnapshotsLearnerApplied    *metric.Counter
 	RangeSnapshotsPreemptiveApplied *metric.Counter
 	RangeRaftLeaderTransfers        *metric.Counter
 
@@ -1253,6 +1260,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeRemoves:                    metric.NewCounter(metaRangeRemoves),
 		RangeSnapshotsGenerated:         metric.NewCounter(metaRangeSnapshotsGenerated),
 		RangeSnapshotsNormalApplied:     metric.NewCounter(metaRangeSnapshotsNormalApplied),
+		RangeSnapshotsLearnerApplied:    metric.NewCounter(metaRangeSnapshotsLearnerApplied),
 		RangeSnapshotsPreemptiveApplied: metric.NewCounter(metaRangeSnapshotsPreemptiveApplied),
 		RangeRaftLeaderTransfers:        metric.NewCounter(metaRangeRaftLeaderTransfers),
 
