@@ -856,6 +856,9 @@ func splitTrigger(
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }
 
+// splitTriggerHelper continues the work begun by splitTrigger, but has a
+// reduced scope that has all stats-related concerns bundled into a
+// splitStatsHelper.
 func splitTriggerHelper(
 	ctx context.Context,
 	rec EvalContext,
