@@ -133,6 +133,40 @@ public class MainTest extends CockroachDBTest {
     }
 
     @Test
+    public void testIntTypes() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a SMALLINT, b INT4, c INT, d BIGINT)");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO x VALUES (1, 1, 1, 1)");
+        stmt.execute();
+        stmt = conn.prepareStatement("SELECT a, b, c, d FROM x");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Short s = rs.getShort(1);
+        Assert.assertEquals(1, (short)s);
+        Integer i = rs.getInt(2);
+        Assert.assertEquals(1, (int)i);
+        Long l = rs.getLong(3);
+        Assert.assertEquals(1L, (long)l);
+        l = rs.getLong(4);
+        Assert.assertEquals(1L, (long)l);
+    }
+
+    @Test
+    public void testFloatTypes() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a FLOAT4, b FLOAT8)");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO x VALUES (1.2, 1.2)");
+        stmt.execute();
+        stmt = conn.prepareStatement("SELECT a, b FROM x");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Float f = rs.getFloat(1);
+        Assert.assertEquals((float)1.2, (float)f, 0.0001);
+        Double d = rs.getDouble(2);
+        Assert.assertEquals(1.2, (double)d, 0.0001);
+    }
+
+    @Test
     public void testTime() throws Exception {
         PreparedStatement stmt = conn.prepareStatement("SELECT '01:02:03.456'::TIME");
         ResultSet rs = stmt.executeQuery();
@@ -165,17 +199,23 @@ public class MainTest extends CockroachDBTest {
 
     @Test
     public void testArrayWithProps() throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a SMALLINT[])");
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a SMALLINT[], b INT4[], c BIGINT[])");
         stmt.execute();
-        stmt = conn.prepareStatement("INSERT INTO x VALUES (ARRAY[123])");
+        stmt = conn.prepareStatement("INSERT INTO x VALUES (ARRAY[123], ARRAY[123], ARRAY[123])");
         stmt.execute();
-        stmt = conn.prepareStatement("SELECT a FROM x");
+        stmt = conn.prepareStatement("SELECT a, b, c FROM x");
         ResultSet rs = stmt.executeQuery();
         rs.next();
 
         Array ar = rs.getArray(1);
-        Long[] fs = (Long[]) ar.getArray();
-        Assert.assertArrayEquals(new Long[]{123L}, fs);
+        Integer[] fs = (Integer[]) ar.getArray();
+        Assert.assertArrayEquals(new Integer[]{123}, fs);
+        ar = rs.getArray(2);
+        fs = (Integer[]) ar.getArray();
+        Assert.assertArrayEquals(new Integer[]{123}, fs);
+        ar = rs.getArray(3);
+        Long[] longs = (Long[]) ar.getArray();
+        Assert.assertArrayEquals(new Long[]{123L}, longs);
     }
 
     @Test
