@@ -411,26 +411,30 @@ func MachineTypeToCPUs(s string) int {
 	return -1
 }
 
-func awsMachineType(cpus int) string {
+func awsMachineType(cpus int, localSSD bool) (machineType string) {
 	switch {
 	case cpus <= 2:
-		return "c5d.large"
+		machineType = "c5d.large"
 	case cpus <= 4:
-		return "c5d.xlarge"
+		machineType = "c5d.xlarge"
 	case cpus <= 8:
-		return "c5d.2xlarge"
+		machineType = "c5d.2xlarge"
 	case cpus <= 16:
-		return "c5d.4xlarge"
+		machineType = "c5d.4xlarge"
 	case cpus <= 36:
-		return "c5d.9xlarge"
+		machineType = "c5d.9xlarge"
 	case cpus <= 72:
-		return "c5d.18xlarge"
+		machineType = "c5d.18xlarge"
 	case cpus <= 96:
 		// There is no c5d.24xlarge.
-		return "m5d.24xlarge"
+		machineType = "m5d.24xlarge"
 	default:
 		panic(fmt.Sprintf("no aws machine type with %d cpus", cpus))
 	}
+	if !localSSD {
+		machineType = strings.Replace(machineType, "d.", ".", 1)
+	}
+	return machineType
 }
 
 func gceMachineType(cpus int) string {
@@ -534,6 +538,17 @@ type clusterSpec struct {
 	Zones    string
 	Geo      bool
 	Lifetime time.Duration
+	LocalSSD bool
+
+	awsClusterSpecOptions
+}
+
+var zeroAwsClusterSpecOptions awsClusterSpecOptions
+
+type awsClusterSpecOptions struct {
+	EBSType string
+	EBSSize int // GB
+	EBSIOPs int
 }
 
 func makeClusterSpec(nodeCount int, opts ...createOption) clusterSpec {
@@ -555,27 +570,44 @@ func (s clusterSpec) String() string {
 	return str
 }
 
-func (s *clusterSpec) args() []string {
+func (s *clusterSpec) args() ([]string, error) {
 	var args []string
 
 	switch cloud {
 	case "aws":
 		if s.Zones != "" {
-			fmt.Fprintf(os.Stderr, "zones spec not yet supported on AWS: %s\n", s.Zones)
-			os.Exit(1)
+			return nil, fmt.Errorf("zones spec not yet supported on AWS: %s", s.Zones)
 		}
 		if s.Geo {
-			fmt.Fprintf(os.Stderr, "geo-distributed clusters not yet supported on AWS\n")
-			os.Exit(1)
+			return nil, fmt.Errorf("geo-distributed clusters not yet supported on AWS")
 		}
-
 		args = append(args, "--clouds=aws")
+	default:
+		if s.awsClusterSpecOptions != zeroAwsClusterSpecOptions {
+			return nil, fmt.Errorf("non-empty AWS options % #v for non-aws cloud %v",
+				s.awsClusterSpecOptions, cloud)
+		}
 	}
-
 	if !local && s.CPUs != 0 {
+		if !s.LocalSSD {
+			args = append(args, "--local-ssd=false")
+		}
 		switch cloud {
 		case "aws":
-			args = append(args, "--aws-machine-type-ssd="+awsMachineType(s.CPUs))
+			if s.LocalSSD {
+				args = append(args, "--aws-machine-type-ssd="+awsMachineType(s.CPUs, s.LocalSSD))
+			} else {
+				args = append(args, "--aws-machine-type="+awsMachineType(s.CPUs, s.LocalSSD))
+				if s.EBSType != "" {
+					args = append(args, "--aws-ebs-volume-type="+s.EBSType)
+				}
+				if s.EBSSize != 0 {
+					args = append(args, "--aws-ebs-volume-size="+strconv.Itoa(s.EBSSize))
+				}
+				if s.EBSIOPs != 0 {
+					args = append(args, "--aws-ebs-iops="+strconv.Itoa(s.EBSIOPs))
+				}
+			}
 		case "gce":
 			args = append(args, "--gce-machine-type="+gceMachineType(s.CPUs))
 		}
@@ -589,7 +621,7 @@ func (s *clusterSpec) args() []string {
 	if s.Lifetime != 0 {
 		args = append(args, "--lifetime="+s.Lifetime.String())
 	}
-	return args
+	return args, nil
 }
 
 func (s *clusterSpec) expiration() time.Time {
@@ -630,6 +662,36 @@ type nodeZonesOption string
 
 func (o nodeZonesOption) apply(spec *clusterSpec) {
 	spec.Zones = string(o)
+}
+
+type nodeAWSio1EBSOption struct {
+	size int
+	iops int
+}
+
+func (o nodeAWSio1EBSOption) apply(spec *clusterSpec) {
+	spec.LocalSSD = false
+	spec.EBSType = "io1"
+	spec.EBSSize = o.size
+	spec.EBSIOPs = o.iops
+}
+
+func io1EBS(size, iops int) nodeAWSio1EBSOption {
+	return nodeAWSio1EBSOption{size: size, iops: iops}
+}
+
+type nodeAWSgp2EBSOption struct {
+	size int
+}
+
+func gp2EBS(size int) nodeAWSgp2EBSOption {
+	return nodeAWSgp2EBSOption{size: size}
+}
+
+func (o nodeAWSgp2EBSOption) apply(spec *clusterSpec) {
+	spec.LocalSSD = false
+	spec.EBSType = "gp2"
+	spec.EBSSize = o.size
 }
 
 // zones is a node option which requests geo-distributed nodes. Note that this
@@ -771,12 +833,13 @@ func newCluster(
 	}
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
-	sargs = append(sargs, cfg.nodes.args()...)
+	args, err := cfg.nodes.args()
+	if err != nil {
+		return nil, err
+	}
+	sargs = append(sargs, args...)
 	if !local && zonesF != "" && cfg.nodes.Zones == "" {
 		sargs = append(sargs, "--gce-zones="+zonesF)
-	}
-	if !cfg.useIOBarrier {
-		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
 
 	c.status("creating cluster")
