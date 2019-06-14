@@ -218,7 +218,7 @@ func evalEndTransaction(
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, batch, ms, args, reply.Txn, externalIntents,
+					ctx, batch, ms, key, args, reply.Txn, externalIntents,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -289,7 +289,7 @@ func evalEndTransaction(
 
 			reply.Txn.Status = roachpb.STAGING
 			reply.StagingTimestamp = reply.Txn.Timestamp
-			if err := updateStagingTxn(ctx, batch, ms, args, reply.Txn); err != nil {
+			if err := updateStagingTxn(ctx, batch, ms, key, args, reply.Txn); err != nil {
 				return result.Result{}, err
 			}
 			return result.Result{}, nil
@@ -332,7 +332,7 @@ func evalEndTransaction(
 	if err != nil {
 		return result.Result{}, err
 	}
-	if err := updateFinalizedTxn(ctx, batch, ms, args, reply.Txn, externalIntents); err != nil {
+	if err := updateFinalizedTxn(ctx, batch, ms, key, args, reply.Txn, externalIntents); err != nil {
 		return result.Result{}, err
 	}
 
@@ -540,10 +540,10 @@ func updateStagingTxn(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
+	key []byte,
 	args *roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
 ) error {
-	key := keys.TransactionKey(txn.Key, txn.ID)
 	txn.IntentSpans = args.IntentSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
@@ -558,11 +558,11 @@ func updateFinalizedTxn(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
+	key []byte,
 	args *roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
 	externalIntents []roachpb.Span,
 ) error {
-	key := keys.TransactionKey(txn.Key, txn.ID)
 	if TxnAutoGC && len(externalIntents) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
