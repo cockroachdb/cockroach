@@ -72,12 +72,6 @@ var resultOidMap = map[oid.Oid]oid.Oid{
 	oid.T__bpchar:  oid.T__text,
 	oid.T_char:     oid.T_text,
 	oid.T__char:    oid.T__text,
-	oid.T_float4:   oid.T_float8,
-	oid.T__float4:  oid.T__float8,
-	oid.T_int2:     oid.T_int8,
-	oid.T__int2:    oid.T__int8,
-	oid.T_int4:     oid.T_int8,
-	oid.T__int4:    oid.T__int8,
 	oid.T_varchar:  oid.T_text,
 	oid.T__varchar: oid.T__text,
 }
