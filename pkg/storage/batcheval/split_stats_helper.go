@@ -14,7 +14,7 @@ package batcheval
 
 import "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 
-// SplitStatsHelper codifies and explains the stats computations related to a
+// splitStatsHelper codifies and explains the stats computations related to a
 // split. The quantities known during a split (i.e. while the split trigger
 // is evaluating) are
 //
@@ -103,14 +103,14 @@ import "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 // nonzero, we effectively have one more unknown in our linear system and we
 // need to recompute AbsPostSplitRight from scratch. (As fallout, we can in
 // principle compute CombinedError, but we don't care).
-type SplitStatsHelper struct {
-	in SplitStatsHelperInput
+type splitStatsHelper struct {
+	in splitStatsHelperInput
 
 	absPostSplitRight *enginepb.MVCCStats
 }
 
-// SplitStatsHelperInput is passed to MakeSplitStatsHelper.
-type SplitStatsHelperInput struct {
+// splitStatsHelperInput is passed to makeSplitStatsHelper.
+type splitStatsHelperInput struct {
 	AbsPreSplitBothEstimated enginepb.MVCCStats
 	DeltaBatchEstimated      enginepb.MVCCStats
 	AbsPostSplitLeft         enginepb.MVCCStats
@@ -121,13 +121,13 @@ type SplitStatsHelperInput struct {
 	AbsPostSplitRightFn func() (enginepb.MVCCStats, error)
 }
 
-// MakeSplitStatsHelper initializes a SplitStatsHelper. The values in the input
+// makeSplitStatsHelper initializes a splitStatsHelper. The values in the input
 // are assumed to not change outside of the helper and must no longer be used.
 // The provided AbsPostSplitRightFn recomputes the right hand side of the split
 // after accounting for the split trigger batch. This is only invoked at most
 // once, and only when necessary.
-func MakeSplitStatsHelper(input SplitStatsHelperInput) (SplitStatsHelper, error) {
-	h := SplitStatsHelper{
+func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error) {
+	h := splitStatsHelper{
 		in: input,
 	}
 
@@ -145,7 +145,7 @@ func MakeSplitStatsHelper(input SplitStatsHelperInput) (SplitStatsHelper, error)
 	// AbsPostSplitRight().
 	ms, err := input.AbsPostSplitRightFn()
 	if err != nil {
-		return SplitStatsHelper{}, err
+		return splitStatsHelper{}, err
 	}
 	h.absPostSplitRight = &ms
 	return h, nil
@@ -156,9 +156,9 @@ func MakeSplitStatsHelper(input SplitStatsHelperInput) (SplitStatsHelper, error)
 // modify it, assuming they're adding only stats corresponding to mutations that
 // they know only affect the right hand side. (If estimates are introduced in
 // the process, the right hand side will start out with estimates). Implicitly
-// this changes the DeltaBatchEstimated supplied to MakeSplitStatsHelper, but
+// this changes the DeltaBatchEstimated supplied to makeSplitStatsHelper, but
 // the contract assumes that that value will no longer be used.
-func (h SplitStatsHelper) AbsPostSplitRight() *enginepb.MVCCStats {
+func (h splitStatsHelper) AbsPostSplitRight() *enginepb.MVCCStats {
 	return h.absPostSplitRight
 }
 
@@ -166,7 +166,7 @@ func (h SplitStatsHelper) AbsPostSplitRight() *enginepb.MVCCStats {
 // as the result of the split. It accounts for the data moved to the right hand
 // side as well as any mutations to the left hand side carried out during the
 // split, and additionally removes any estimates present in the pre-split stats.
-func (h SplitStatsHelper) DeltaPostSplitLeft() enginepb.MVCCStats {
+func (h splitStatsHelper) DeltaPostSplitLeft() enginepb.MVCCStats {
 	// NB: if we ever wanted to also write to the left hand side after init'ing
 	// the helper, we can make that work, too.
 	// NB: note how none of this depends on mutations to absPostSplitRight.

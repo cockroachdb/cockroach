@@ -839,7 +839,7 @@ func splitTrigger(
 	}
 	log.Event(ctx, "computed stats for left hand side range")
 
-	h := SplitStatsHelperInput{
+	h := splitStatsHelperInput{
 		AbsPreSplitBothEstimated: rec.GetMVCCStats(),
 		DeltaBatchEstimated:      bothDeltaMS,
 		AbsPostSplitLeft:         leftMS,
@@ -860,7 +860,7 @@ func splitTriggerHelper(
 	ctx context.Context,
 	rec EvalContext,
 	batch engine.Batch,
-	statsInput SplitStatsHelperInput,
+	statsInput splitStatsHelperInput,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
 ) (enginepb.MVCCStats, result.Result, error) {
@@ -882,7 +882,7 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
-	h, err := MakeSplitStatsHelper(statsInput)
+	h, err := makeSplitStatsHelper(statsInput)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
