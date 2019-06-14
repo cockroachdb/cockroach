@@ -416,11 +416,13 @@ func parseCertificate(ci *CertInfo) error {
 			return makeErrorf(err, "failed to parse certificate %d in file %s", i, ci.Filename)
 		}
 
-		if err := validateCockroachCertificate(ci, x509Cert); err != nil {
-			return makeErrorf(err, "failed to validate certificate %d in file %s", i, ci.Filename)
-		}
 		if i == 0 {
-			// The first certificate is the effective one; use its expiration time.
+			// Only check details of the first certificate.
+			if err := validateCockroachCertificate(ci, x509Cert); err != nil {
+				return makeErrorf(err, "failed to validate certificate %d in file %s", i, ci.Filename)
+			}
+
+			// Expiration from the first certificate.
 			expires = x509Cert.NotAfter
 		}
 		certs[i] = x509Cert
