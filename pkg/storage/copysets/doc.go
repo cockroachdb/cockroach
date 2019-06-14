@@ -11,7 +11,7 @@
 // https://www.apache.org/licenses/LICENSE-2.0
 
 /*
-Package copysets proves an implementation of copysets presented in
+Package copysets provides an implementation of copysets presented in
 https://web.stanford.edu/~skatti/pubs/usenix13-copysets.pdf.
 
 Stores are divided into sets of nodes of size replication factor (for each
