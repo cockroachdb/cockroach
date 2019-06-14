@@ -654,7 +654,7 @@ func (a Allocator) RebalanceTarget(
 
 		log.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
 			target.store.StoreID, removeDetails)
-		rangeInfo.Desc.RemoveReplica(newReplica)
+		rangeInfo.Desc.RemoveReplica(newReplica.NodeID, newReplica.StoreID)
 	}
 
 	// Compile the details entry that will be persisted into system.rangelog for

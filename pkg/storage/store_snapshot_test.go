@@ -57,8 +57,8 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 		bytesWritten += int64(len(blob))
 	}
 
-	for _, snapType := range []string{snapTypePreemptive, snapTypeRaft} {
-		t.Run(snapType, func(t *testing.T) {
+	for _, snapType := range []SnapshotRequest_Type{SnapshotRequest_PREEMPTIVE, SnapshotRequest_RAFT} {
+		t.Run(snapType.String(), func(t *testing.T) {
 			lastIndex, err := (*replicaRaftStorage)(repl).LastIndex()
 			if err != nil {
 				t.Fatal(err)
@@ -91,7 +91,7 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 			}
 
 			err = ss.Send(ctx, stream, header, outSnap)
-			if snapType == snapTypePreemptive {
+			if snapType == SnapshotRequest_PREEMPTIVE {
 				if !testutils.IsError(err, "aborting snapshot because raft log is too large") {
 					t.Fatalf("unexpected error: %v", err)
 				}

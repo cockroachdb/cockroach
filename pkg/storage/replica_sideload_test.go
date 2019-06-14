@@ -876,7 +876,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 	// Run a happy case snapshot. Check that it properly inlines the payload in
 	// the contained log entries.
 	inlinedEntry := func() raftpb.Entry {
-		os, err := tc.repl.GetSnapshot(ctx, "testing-will-succeed")
+		os, err := tc.repl.GetSnapshot(ctx, SnapshotRequest_RAFT)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -987,7 +987,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 	// (engine) snapshot. We didn't run this before because we wanted the file
 	// to stay in sideloaded storage for the previous test.
 	func() {
-		failingOS, err := tc.repl.GetSnapshot(ctx, "testing-will-fail")
+		failingOS, err := tc.repl.GetSnapshot(ctx, SnapshotRequest_RAFT)
 		if err != nil {
 			t.Fatal(err)
 		}

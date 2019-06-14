@@ -120,6 +120,12 @@ message SnapshotRequest {
     KV_BATCH = 0;
   }
 
+  enum Type {
+    RAFT = 0;
+    LEARNER = 1;
+    PREEMPTIVE = 2;
+  }
+
   message Header {
     reserved 1;
 
@@ -146,6 +152,9 @@ message SnapshotRequest {
 
     // The strategy of the snapshot.
     optional Strategy strategy = 7 [(gogoproto.nullable) = false];
+
+    // The type of the snapshot.
+    optional Type type = 9 [(gogoproto.nullable) = false];
 
     // Whether the snapshot uses the unreplicated RaftTruncatedState or not.
     // This is generally always true at 2.2 and above outside of the migration
