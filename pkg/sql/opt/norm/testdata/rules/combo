@@ -8,28 +8,10 @@ CREATE TABLE a (
     UNIQUE INDEX (s DESC, f) STORING (j)
 )
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- ├── INDEX primary
- │    └── k int not null
- └── INDEX secondary
-      ├── s string desc
-      ├── f float
-      ├── k int not null (storing)
-      └── j jsonb (storing)
 
 exec-ddl
 CREATE TABLE t.xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 # --------------------------------------------------
 # Use optsteps.

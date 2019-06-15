@@ -1,22 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT, f FLOAT, s STRING)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- ├── f float
- ├── s string
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x INT PRIMARY KEY, z INT)
 ----
-TABLE b
- ├── x int not null
- ├── z int
- └── INDEX primary
-      └── x int not null
 
 # --------------------------------------------------
 # EliminateProject

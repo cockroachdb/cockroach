@@ -3,15 +3,6 @@
 exec-ddl
 CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
 ----
-TABLE t
- ├── k int not null
- ├── v int
- ├── w int
- ├── INDEX primary
- │    └── k int not null
- └── INDEX secondary
-      ├── v int
-      └── k int not null
 
 build
 SELECT k, v FROM t ORDER BY k LIMIT 5

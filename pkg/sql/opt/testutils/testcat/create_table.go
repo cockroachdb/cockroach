@@ -160,6 +160,17 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 		case *tree.FamilyTableDef:
 			tab.addFamily(def)
+
+		case *tree.ColumnTableDef:
+			if def.Unique {
+				tab.addIndex(
+					&tree.IndexTableDef{
+						Name:    tree.Name(fmt.Sprintf("%s_%s_key", stmt.Table.TableName, def.Name)),
+						Columns: tree.IndexElemList{{Column: def.Name}},
+					},
+					uniqueIndex,
+				)
+			}
 		}
 	}
 
@@ -262,10 +273,10 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	// columns. If strict is false, it is acceptable if the given columns are a
 	// prefix of the index key columns.
 	matches := func(idx *Index, cols []int, strict bool) bool {
-		if idx.KeyColumnCount() < len(cols) {
+		if idx.LaxKeyColumnCount() < len(cols) {
 			return false
 		}
-		if strict && idx.KeyColumnCount() > len(cols) {
+		if strict && idx.LaxKeyColumnCount() > len(cols) {
 			return false
 		}
 		for i := range cols {

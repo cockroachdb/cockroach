@@ -1,21 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
 ----
-TABLE a
- ├── x int not null
- ├── y float
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x INT, y FLOAT)
 ----
-TABLE b
- ├── x int
- ├── y float
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT 5 r
@@ -166,12 +155,6 @@ project
 exec-ddl
 CREATE TABLE c (x INT, y FLOAT)
 ----
-TABLE c
- ├── x int
- ├── y float
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT rowid FROM b, c
@@ -222,12 +205,6 @@ error (42846): invalid cast: int -> int[]
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c int
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT c FROM (SELECT a FROM abc)
@@ -252,11 +229,6 @@ error (42P01): no data source matches prefix: t.kv
 exec-ddl
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 ----
-TABLE kv
- ├── k int not null
- ├── v int
- └── INDEX primary
-      └── k int not null
 
 build fully-qualify-names
 SELECT t.kv.k FROM kv

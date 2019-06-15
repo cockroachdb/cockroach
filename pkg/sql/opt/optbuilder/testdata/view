@@ -1,20 +1,10 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE VIEW av AS SELECT k, i, s FROM a
 ----
-VIEW av
- └── SELECT k, i, s FROM a
 
 build
 SELECT * FROM av
@@ -62,8 +52,6 @@ project
 exec-ddl
 CREATE VIEW av2 (x, y) AS SELECT k, f FROM a WHERE i=10 ORDER BY s
 ----
-VIEW av2 (x, y)
- └── SELECT k, f FROM a WHERE i = 10 ORDER BY s
 
 # Result is not ordered.
 build

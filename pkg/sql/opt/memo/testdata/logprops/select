@@ -1,21 +1,10 @@
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
 ----
-TABLE kuv
- ├── k int not null
- ├── u float
- ├── v string
- └── INDEX primary
-      └── k int not null
 
 build
 SELECT * FROM xy WHERE x=1
@@ -167,14 +156,6 @@ ordinality
 exec-ddl
 CREATE TABLE abcd (a INT NOT NULL, b INT NOT NULL, c INT, d INT)
 ----
-TABLE abcd
- ├── a int not null
- ├── b int not null
- ├── c int
- ├── d int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM abcd WHERE true
@@ -361,7 +342,6 @@ project
 exec-ddl
 CREATE SEQUENCE x
 ----
-SEQUENCE t.public.x
 
 build
 SELECT * FROM x

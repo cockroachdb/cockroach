@@ -5,27 +5,10 @@
 exec-ddl
 CREATE TABLE numeric_references (a INT PRIMARY KEY, y INT, b INT, c INT, INDEX bc (b,c))
 ----
-TABLE numeric_references
- ├── a int not null
- ├── y int
- ├── b int
- ├── c int
- ├── INDEX primary
- │    └── a int not null
- └── INDEX bc
-      ├── b int
-      ├── c int
-      └── a int not null
 
 exec-ddl
 CREATE TABLE num_ref_hidden (x INT, y INT)
 ----
-TABLE num_ref_hidden
- ├── x int
- ├── y int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # SELECT with no table.
 
@@ -65,12 +48,6 @@ project
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c int
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT * FROM abc WHERE 'hello'
@@ -187,11 +164,6 @@ project
 exec-ddl
 CREATE TABLE kv (k CHAR PRIMARY KEY, v CHAR)
 ----
-TABLE kv
- ├── k char not null
- ├── v char
- └── INDEX primary
-      └── k char not null
 
 build
 SELECT * FROM kv
@@ -322,10 +294,6 @@ project
 exec-ddl
 CREATE TABLE kw ("from" INT PRIMARY KEY)
 ----
-TABLE kw
- ├── from int not null
- └── INDEX primary
-      └── from int not null
 
 build
 SELECT *, "from", kw."from" FROM kw
@@ -342,17 +310,6 @@ CREATE TABLE xyzw (
   INDEX foo (z, y)
 )
 ----
-TABLE xyzw
- ├── x int not null
- ├── y int
- ├── z int
- ├── w int
- ├── INDEX primary
- │    └── x int not null
- └── INDEX foo
-      ├── z int
-      ├── y int
-      └── x int not null
 
 # SELECT with index hints.
 
@@ -602,11 +559,6 @@ CREATE TABLE boolean_table (
   value BOOLEAN
 )
 ----
-TABLE boolean_table
- ├── id int not null
- ├── value bool
- └── INDEX primary
-      └── id int not null
 
 build
 SELECT value FROM boolean_table
@@ -1016,11 +968,6 @@ project
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
 ----
-TABLE a
- ├── x int not null
- ├── y float
- └── INDEX primary
-      └── x int not null
 
 build
 SELECT * FROM a
@@ -1263,10 +1210,6 @@ scan t
 exec-ddl
 CREATE TABLE no_cols_table ()
 ----
-TABLE no_cols_table
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM no_cols_table

@@ -8,23 +8,6 @@ CREATE TABLE abc
     INDEX bc (b,c) STORING (a)
 )
 ----
-TABLE abc
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX ab
- │    ├── a int
- │    ├── b int
- │    ├── rowid int not null (hidden)
- │    └── c int (storing)
- └── INDEX bc
-      ├── b int
-      ├── c int
-      ├── rowid int not null (hidden)
-      └── a int (storing)
 
 exec-ddl
 CREATE TABLE stu
@@ -36,18 +19,6 @@ CREATE TABLE stu
     INDEX uts (u,t,s)
 )
 ----
-TABLE stu
- ├── s int not null
- ├── t int not null
- ├── u int not null
- ├── INDEX primary
- │    ├── s int not null
- │    ├── t int not null
- │    └── u int not null
- └── INDEX uts
-      ├── u int not null
-      ├── t int not null
-      └── s int not null
 
 exec-ddl
 CREATE TABLE xyz
@@ -59,23 +30,6 @@ CREATE TABLE xyz
     INDEX yz (y,z) STORING (x)
 )
 ----
-TABLE xyz
- ├── x int
- ├── y int
- ├── z int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX xy
- │    ├── x int
- │    ├── y int
- │    ├── rowid int not null (hidden)
- │    └── z int (storing)
- └── INDEX yz
-      ├── y int
-      ├── z int
-      ├── rowid int not null (hidden)
-      └── x int (storing)
 
 exec-ddl
 CREATE TABLE pqr
@@ -92,32 +46,6 @@ CREATE TABLE pqr
     INDEX ts (t,s)
 )
 ----
-TABLE pqr
- ├── p int not null
- ├── q int
- ├── r int
- ├── s string
- ├── t string
- ├── INDEX primary
- │    └── p int not null
- ├── INDEX q
- │    ├── q int
- │    └── p int not null
- ├── INDEX r
- │    ├── r int
- │    └── p int not null
- ├── INDEX s
- │    ├── s string
- │    ├── p int not null
- │    └── r int (storing)
- ├── INDEX rs
- │    ├── r int
- │    ├── s string
- │    └── p int not null
- └── INDEX ts
-      ├── t string
-      ├── s string
-      └── p int not null
 
 exec-ddl
 CREATE TABLE zz (
@@ -128,18 +56,6 @@ CREATE TABLE zz (
     CONSTRAINT idx_c UNIQUE (c)
 )
 ----
-TABLE zz
- ├── a int not null
- ├── b int
- ├── c int
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX idx_b
- │    ├── b int
- │    └── a int not null
- └── INDEX idx_c
-      ├── c int
-      └── a int not null (storing)
 
 # --------------------------------------------------
 # CommuteJoin
@@ -769,10 +685,6 @@ memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
 exec-ddl
 CREATE TABLE kfloat (k FLOAT PRIMARY KEY)
 ----
-TABLE kfloat
- ├── k float not null
- └── INDEX primary
-      └── k float not null
 
 memo
 SELECT * FROM abc JOIN kfloat ON a=k
@@ -875,27 +787,10 @@ left-join (merge)
 exec-ddl
 CREATE TABLE abcd (a INT, b INT, c INT, INDEX (a,b))
 ----
-TABLE abcd
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX secondary
-      ├── a int
-      ├── b int
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE small (m INT, n INT)
 ----
-TABLE small
- ├── m int
- ├── n int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE small INJECT STATISTICS '[
@@ -1883,15 +1778,6 @@ CREATE TABLE t5 (
     INVERTED INDEX b_idx(b)
 )
 ----
-TABLE t5
- ├── a int not null
- ├── b jsonb
- ├── c int
- ├── INDEX primary
- │    └── a int not null
- └── INVERTED INDEX b_idx
-      ├── b jsonb
-      └── a int not null
 
 # One path. Should generate a scan constrained on the inverted index.
 opt

@@ -1,21 +1,10 @@
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE uv (u INT, v INT NOT NULL)
 ----
-TABLE uv
- ├── u int
- ├── v int not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 opt
 SELECT generate_series(0,1) FROM (SELECT * FROM xy LIMIT 0)

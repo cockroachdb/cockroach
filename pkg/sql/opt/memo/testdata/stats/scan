@@ -1,18 +1,6 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, b BOOL, UNIQUE (s DESC, d))
 ----
-TABLE a
- ├── x int not null
- ├── y int
- ├── s string
- ├── d decimal not null
- ├── b bool
- ├── INDEX primary
- │    └── x int not null
- └── INDEX secondary
-      ├── s string desc
-      ├── d decimal not null
-      └── x int not null (storing)
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
@@ -433,23 +421,6 @@ CREATE TABLE abcde (
   INDEX good(b, c, d)
 )
 ----
-TABLE abcde
- ├── a int not null
- ├── b int
- ├── c string
- ├── d int
- ├── e int
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX bad
- │    ├── b int
- │    ├── d int
- │    └── a int not null
- └── INDEX good
-      ├── b int
-      ├── c string
-      ├── d int
-      └── a int not null
 
 # Regression test for #31929. Ensure that the good index is chosen.
 opt
@@ -470,7 +441,6 @@ index-join abcde
 exec-ddl
 CREATE SEQUENCE seq
 ----
-SEQUENCE t.public.seq
 
 opt
 SELECT * FROM seq
@@ -485,11 +455,6 @@ sequence-select t.public.seq
 exec-ddl
 CREATE TABLE empty (x INT)
 ----
-TABLE empty
- ├── x int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE empty INJECT STATISTICS '[
@@ -538,20 +503,6 @@ CREATE TABLE t37953 (
     j FLOAT8 NOT NULL
 )
 ----
-TABLE t37953
- ├── a uuid not null
- ├── b float not null
- ├── c time not null
- ├── d uuid not null
- ├── e varchar
- ├── f "char"
- ├── g int4 not null
- ├── h varchar
- ├── i regproc
- ├── j float not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 norm
 WITH

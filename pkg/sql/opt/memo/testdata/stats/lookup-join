@@ -1,27 +1,10 @@
 exec-ddl
 CREATE TABLE abcd (a INT, b INT, c INT, INDEX (a,b))
 ----
-TABLE abcd
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX secondary
-      ├── a int
-      ├── b int
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE small (m INT, n INT)
 ----
-TABLE small
- ├── m int
- ├── n int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE small INJECT STATISTICS '[
@@ -150,28 +133,10 @@ inner-join (lookup abcd)
 exec-ddl
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c int not null
- └── INDEX primary
-      ├── a int not null
-      └── c int not null
 
 exec-ddl
 CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e), INDEX e_idx (e) STORING (d))
 ----
-TABLE def
- ├── d int
- ├── e int not null
- ├── f int not null
- ├── INDEX primary
- │    ├── f int not null
- │    └── e int not null
- └── INDEX e_idx
-      ├── e int not null
-      ├── f int not null
-      └── d int (storing)
 
 # Set up the statistics as if the first table is much smaller than the second.
 exec-ddl

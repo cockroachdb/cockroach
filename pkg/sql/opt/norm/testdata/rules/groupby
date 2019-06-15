@@ -10,23 +10,6 @@ CREATE TABLE a
     UNIQUE INDEX fi_idx (f, i)
 )
 ----
-TABLE a
- ├── k int not null
- ├── i int not null
- ├── f float
- ├── s string not null
- ├── j jsonb
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX si_idx
- │    ├── s string not null desc
- │    ├── i int not null
- │    ├── k int not null (storing)
- │    └── j jsonb (storing)
- └── INDEX fi_idx
-      ├── f float
-      ├── i int not null
-      └── k int not null (storing)
 
 exec-ddl
 CREATE TABLE xy
@@ -35,11 +18,6 @@ CREATE TABLE xy
     y INT
 )
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE abc
@@ -50,14 +28,6 @@ CREATE TABLE abc
     PRIMARY KEY (a,b,c)
 )
 ----
-TABLE abc
- ├── a int not null
- ├── b int not null
- ├── c int not null
- └── INDEX primary
-      ├── a int not null
-      ├── b int not null
-      └── c int not null
 
 exec-ddl
 CREATE TABLE uvwz
@@ -71,32 +41,12 @@ CREATE TABLE uvwz
     UNIQUE INDEX (v,w)
 )
 ----
-TABLE uvwz
- ├── u int not null
- ├── v int not null
- ├── w int not null
- ├── z int not null
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX secondary
- │    ├── u int not null
- │    ├── v int not null
- │    └── rowid int not null (hidden) (storing)
- └── INDEX secondary
-      ├── v int not null
-      ├── w int not null
-      └── rowid int not null (hidden) (storing)
 
 exec-ddl
 CREATE TABLE s (
     s STRING PRIMARY KEY
 )
 ----
-TABLE s
- ├── s string not null
- └── INDEX primary
-      └── s string not null
 
 # --------------------------------------------------
 # ConvertGroupByToDistinct

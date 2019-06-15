@@ -1,33 +1,14 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE computed (a INT PRIMARY KEY, b INT, c INT AS (a+b+1) STORED)
 ----
-TABLE computed
- ├── a int not null
- ├── b int
- ├── c int
- └── INDEX primary
-      └── a int not null
 
 # --------------------------------------------------
 # InlineProjectConstants
@@ -401,14 +382,6 @@ CREATE TABLE crdb_internal.zones (
     config_protobuf BYTES NOT NULL
 )
 ----
-TABLE zones
- ├── zone_id int not null
- ├── cli_specifier string
- ├── config_yaml bytes not null
- ├── config_protobuf bytes not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Regression test for #28827. Ensure that inlining is not applied when there
 # is a correlated subquery in the filter.

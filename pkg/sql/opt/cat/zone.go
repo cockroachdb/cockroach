@@ -89,6 +89,9 @@ type Constraint interface {
 // FormatZone nicely formats a catalog zone using a treeprinter for debugging
 // and testing.
 func FormatZone(zone Zone, tp treeprinter.Node) {
+	if zone.ReplicaConstraintsCount() == 0 && zone.LeasePreferenceCount() == 0 {
+		return
+	}
 	zoneChild := tp.Childf("ZONE")
 
 	replicaChild := zoneChild

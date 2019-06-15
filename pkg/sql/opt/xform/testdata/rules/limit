@@ -10,24 +10,6 @@ CREATE TABLE a
     INDEX si_idx (s DESC, i) STORING (j)
 )
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX s_idx
- │    ├── s string
- │    ├── k int not null
- │    ├── i int (storing)
- │    └── f float (storing)
- └── INDEX si_idx
-      ├── s string desc
-      ├── i int
-      ├── k int not null
-      └── j jsonb (storing)
 
 # --------------------------------------------------
 # PushLimitIntoScan
@@ -144,15 +126,6 @@ memo (optimized, ~6KB, required=[presentation: s:4])
 exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u INT, v INT, INDEX (u))
 ----
-TABLE kuv
- ├── k int not null
- ├── u int
- ├── v int
- ├── INDEX primary
- │    └── k int not null
- └── INDEX secondary
-      ├── u int
-      └── k int not null
 
 opt
 SELECT * FROM kuv ORDER BY u LIMIT 5
@@ -209,25 +182,6 @@ CREATE TABLE abcd (
   UNIQUE INDEX bcd (b,c,d)
 )
 ----
-TABLE abcd
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX b
- │    ├── b int
- │    └── a int not null
- ├── INDEX cd
- │    ├── c int
- │    ├── d int
- │    └── a int not null
- └── INDEX bcd
-      ├── b int
-      ├── c int
-      ├── d int
-      └── a int not null (storing)
 
 opt
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30 ORDER BY b DESC LIMIT 5

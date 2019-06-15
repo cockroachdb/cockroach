@@ -1,22 +1,10 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE abcde (
@@ -28,18 +16,6 @@ CREATE TABLE abcde (
     UNIQUE INDEX bc (b, c)
 )
 ----
-TABLE abcde
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── e int
- ├── INDEX primary
- │    └── a int not null
- └── INDEX bc
-      ├── b int
-      ├── c int
-      └── a int not null (storing)
 
 exec-ddl
 CREATE TABLE mutation (
@@ -52,21 +28,6 @@ CREATE TABLE mutation (
     INDEX "idx2:delete-only" (e)
 )
 ----
-TABLE mutation
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int (mutation)
- ├── e int (mutation)
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX idx1 (mutation)
- │    ├── b int
- │    ├── d int
- │    └── a int not null (storing)
- └── INDEX idx2 (mutation)
-      ├── e int
-      └── a int not null
 
 exec-ddl
 CREATE TABLE family (
@@ -81,20 +42,6 @@ CREATE TABLE family (
     INDEX (d)
 )
 ----
-TABLE family
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── e int
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX secondary
- │    ├── d int
- │    └── a int not null
- ├── FAMILY family1 (a, b)
- ├── FAMILY family2 (c, d)
- └── FAMILY family3 (e)
 
 # --------------------------------------------------
 # PruneProjectCols

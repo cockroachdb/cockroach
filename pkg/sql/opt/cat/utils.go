@@ -142,19 +142,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 		child.Child(buf.String())
 	}
 
-	for i := 0; i < tab.DeletableIndexCount(); i++ {
-		formatCatalogIndex(tab, i, child)
-	}
-
-	for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
-		formatCatalogFKRef(cat, tab, tab.OutboundForeignKey(i), child)
-	}
-
-	for i := 0; i < tab.CheckCount(); i++ {
-		child.Childf("CHECK (%s)", tab.Check(i).Constraint)
-	}
-
-	// Don't print the primary family, since it's implied.
+	// If we only have one primary family (the default), don't print it.
 	if tab.FamilyCount() > 1 || tab.Family(0).Name() != "primary" {
 		for i := 0; i < tab.FamilyCount(); i++ {
 			buf.Reset()
@@ -162,6 +150,24 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 			child.Child(buf.String())
 		}
 	}
+
+	for i := 0; i < tab.CheckCount(); i++ {
+		child.Childf("CHECK (%s)", tab.Check(i).Constraint)
+	}
+
+	for i := 0; i < tab.DeletableIndexCount(); i++ {
+		formatCatalogIndex(tab, i, child)
+	}
+
+	for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
+		formatCatalogFKRef(cat, false /* inbound */, tab.OutboundForeignKey(i), child)
+	}
+
+	for i := 0; i < tab.InboundForeignKeyCount(); i++ {
+		formatCatalogFKRef(cat, true /* inbound */, tab.InboundForeignKey(i), child)
+	}
+
+	// TODO(radu): show stats.
 }
 
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
@@ -200,6 +206,8 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 
 		child.Child(buf.String())
 	}
+
+	FormatZone(idx.Zone(), child)
 }
 
 // formatColPrefix returns a string representation of a list of columns. The
@@ -221,20 +229,30 @@ func formatCols(tab Table, numCols int, colOrdinal func(tab Table, i int) int) s
 
 // formatCatalogFKRef nicely formats a catalog foreign key reference using a
 // treeprinter for debugging and testing.
-func formatCatalogFKRef(cat Catalog, tab Table, fkRef ForeignKeyConstraint, tp treeprinter.Node) {
-	ds, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.ReferencedTableID())
+func formatCatalogFKRef(
+	cat Catalog, inbound bool, fkRef ForeignKeyConstraint, tp treeprinter.Node,
+) {
+	originDS, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.OriginTableID())
 	if err != nil {
 		panic(err)
 	}
-
-	fkTable := ds.(Table)
+	refDS, err := cat.ResolveDataSourceByID(context.TODO(), fkRef.ReferencedTableID())
+	if err != nil {
+		panic(err)
+	}
+	title := "CONSTRAINT"
+	if inbound {
+		title = "REFERENCED BY " + title
+	}
 
 	tp.Childf(
-		"CONSTRAINT %s FOREIGN KEY %s REFERENCES %v %s",
+		"%s %s FOREIGN KEY %v %s REFERENCES %v %s",
+		title,
 		fkRef.Name(),
-		formatCols(tab, fkRef.ColumnCount(), fkRef.OriginColumnOrdinal),
-		ds.Name(),
-		formatCols(fkTable, fkRef.ColumnCount(), fkRef.ReferencedColumnOrdinal),
+		originDS.Name(),
+		formatCols(originDS.(Table), fkRef.ColumnCount(), fkRef.OriginColumnOrdinal),
+		refDS.Name(),
+		formatCols(refDS.(Table), fkRef.ColumnCount(), fkRef.ReferencedColumnOrdinal),
 	)
 }
 
@@ -243,11 +261,17 @@ func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
 	if !col.IsNullable() {
 		fmt.Fprintf(buf, " not null")
 	}
+	if col.IsComputed() {
+		fmt.Fprintf(buf, " as (%s) stored", col.ComputedExprStr())
+	}
+	if col.HasDefault() {
+		fmt.Fprintf(buf, " default (%s)", col.DefaultExprStr())
+	}
 	if col.IsHidden() {
-		fmt.Fprintf(buf, " (hidden)")
+		fmt.Fprintf(buf, " [hidden]")
 	}
 	if isMutationCol {
-		fmt.Fprintf(buf, " (mutation)")
+		fmt.Fprintf(buf, " [mutation]")
 	}
 }
 

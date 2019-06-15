@@ -7,18 +7,6 @@ CREATE TABLE abc
     INDEX ab (a,b) STORING (c)
 )
 ----
-TABLE abc
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX ab
-      ├── a int
-      ├── b int
-      ├── rowid int not null (hidden)
-      └── c int (storing)
 
 exec-ddl
 CREATE TABLE xyz
@@ -29,18 +17,6 @@ CREATE TABLE xyz
     INDEX xy (x,y) STORING (z)
 )
 ----
-TABLE xyz
- ├── x int
- ├── y int
- ├── z int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX xy
-      ├── x int
-      ├── y int
-      ├── rowid int not null (hidden)
-      └── z int (storing)
 
 # --------------------------------------------------
 # Use exploretrace.
