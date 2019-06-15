@@ -1,21 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x INT, z INT NOT NULL)
 ----
-TABLE b
- ├── x int
- ├── z int not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
@@ -181,16 +170,6 @@ project
 exec-ddl
 CREATE TABLE idx (x INT PRIMARY KEY, y INT, z INT, INDEX yz (y DESC, z))
 ----
-TABLE idx
- ├── x int not null
- ├── y int
- ├── z int
- ├── INDEX primary
- │    └── x int not null
- └── INDEX yz
-      ├── y int desc
-      ├── z int
-      └── x int not null
 
 opt
 SELECT y FROM idx WHERE y < 5 AND z < 10
@@ -212,16 +191,6 @@ project
 exec-ddl
 CREATE TABLE tab0(pk INTEGER PRIMARY KEY, col0 INTEGER, col1 FLOAT, col2 TEXT, col3 INTEGER, col4 FLOAT, col5 TEXT)
 ----
-TABLE tab0
- ├── pk int not null
- ├── col0 int
- ├── col1 float
- ├── col2 string
- ├── col3 int
- ├── col4 float
- ├── col5 string
- └── INDEX primary
-      └── pk int not null
 
 # Note: it's not clear that this still tests the above issue, but I have left
 # it here anyway as an interesting test case. I've added another query below
@@ -286,35 +255,14 @@ project
 exec-ddl
 CREATE TABLE customers (id INT PRIMARY KEY, name STRING, state STRING)
 ----
-TABLE customers
- ├── id int not null
- ├── name string
- ├── state string
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 CREATE TABLE order_history (order_id INT, item_id INT, customer_id INT, year INT)
 ----
-TABLE order_history
- ├── order_id int
- ├── item_id int
- ├── customer_id int
- ├── year int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE district (d_id INT, d_w_id INT, d_name STRING, PRIMARY KEY(d_id, d_w_id))
 ----
-TABLE district
- ├── d_id int not null
- ├── d_w_id int not null
- ├── d_name string
- └── INDEX primary
-      ├── d_id int not null
-      └── d_w_id int not null
 
 exec-ddl
 ALTER TABLE district INJECT STATISTICS '[
@@ -599,15 +547,6 @@ select
 exec-ddl
 CREATE TABLE c (x INT, z INT NOT NULL, UNIQUE INDEX x_idx (x))
 ----
-TABLE c
- ├── x int
- ├── z int not null
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX x_idx
-      ├── x int
-      └── rowid int not null (hidden) (storing)
 
 # Test that the distinct and null counts for x are estimated correctly (since it's a weak
 # key).
@@ -630,13 +569,6 @@ select
 exec-ddl
 CREATE TABLE uvw (u INT, v INT, w INT)
 ----
-TABLE uvw
- ├── u int
- ├── v int
- ├── w int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Test selectivity calculations by applying the two constraints in different
 # orders.
@@ -722,59 +654,6 @@ CREATE TABLE lineitem
     INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC)
 );
 ----
-TABLE lineitem
- ├── l_orderkey int not null
- ├── l_partkey int not null
- ├── l_suppkey int not null
- ├── l_linenumber int not null
- ├── l_quantity float not null
- ├── l_extendedprice float not null
- ├── l_discount float not null
- ├── l_tax float not null
- ├── l_returnflag char not null
- ├── l_linestatus char not null
- ├── l_shipdate date not null
- ├── l_commitdate date not null
- ├── l_receiptdate date not null
- ├── l_shipinstruct char not null
- ├── l_shipmode char not null
- ├── l_comment varchar not null
- ├── INDEX primary
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_ok
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_pk
- │    ├── l_partkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_sk
- │    ├── l_suppkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_sd
- │    ├── l_shipdate date not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_cd
- │    ├── l_commitdate date not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_rd
- │    ├── l_receiptdate date not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_pk_sk
- │    ├── l_partkey int not null
- │    ├── l_suppkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- └── INDEX l_sk_pk
-      ├── l_suppkey int not null
-      ├── l_partkey int not null
-      ├── l_orderkey int not null
-      └── l_linenumber int not null
 
 # We can determine that there are exactly 30 days for this range.
 opt
@@ -924,15 +803,6 @@ select
 exec-ddl
 CREATE TABLE tjson (a INT PRIMARY KEY, b JSON, c JSON, INVERTED INDEX b_idx (b))
 ----
-TABLE tjson
- ├── a int not null
- ├── b jsonb
- ├── c jsonb
- ├── INDEX primary
- │    └── a int not null
- └── INVERTED INDEX b_idx
-      ├── b jsonb
-      └── a int not null
 
 exec-ddl
 ALTER TABLE tjson INJECT STATISTICS '[
@@ -1284,12 +1154,6 @@ select
 exec-ddl
 CREATE TABLE nulls (x INT, y INT);
 ----
-TABLE nulls
- ├── x int
- ├── y int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE nulls INJECT STATISTICS '[
@@ -1422,19 +1286,6 @@ CREATE TABLE date_test (
     INDEX d2_idx (d2 DESC)
 )
 ----
-TABLE date_test
- ├── k int not null
- ├── d1 date not null
- ├── d2 date not null
- ├── d3 date not null
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX d1_idx
- │    ├── d1 date not null
- │    └── k int not null
- └── INDEX d2_idx
-      ├── d2 date not null desc
-      └── k int not null
 
 opt
 SELECT d1 FROM date_test WHERE d1 > DATE '1995-10-01' AND d1 < DATE '1995-11-01'

@@ -8,20 +8,6 @@ CREATE TABLE a
     UNIQUE INDEX v(v) STORING (u)
 )
 ----
-TABLE a
- ├── k int not null
- ├── u int
- ├── v int
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX u
- │    ├── u int
- │    ├── k int not null
- │    └── v int (storing)
- └── INDEX v
-      ├── v int
-      ├── k int not null (storing)
-      └── u int (storing)
 
 exec-ddl
 CREATE TABLE b
@@ -35,22 +21,6 @@ CREATE TABLE b
     INVERTED INDEX inv_idx(j)
 )
 ----
-TABLE b
- ├── k int not null
- ├── u int
- ├── v int
- ├── j jsonb
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX u
- │    ├── u int
- │    └── k int not null
- ├── INDEX v
- │    ├── v int
- │    └── k int not null (storing)
- └── INVERTED INDEX inv_idx
-      ├── j jsonb
-      └── k int not null
 
 # --------------------------------------------------
 # GenerateConstrainedScans

@@ -11,27 +11,6 @@ CREATE TABLE a
     INVERTED INDEX inv_idx_j (j)
 )
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX s_idx
- │    ├── s string
- │    ├── k int not null
- │    ├── i int (storing)
- │    └── f float (storing)
- ├── INDEX si_idx
- │    ├── s string desc
- │    ├── i int desc
- │    ├── k int not null
- │    └── j jsonb (storing)
- └── INVERTED INDEX inv_idx_j
-      ├── j jsonb
-      └── k int not null
 
 # --------------------------------------------------
 # GenerateIndexScans
@@ -359,25 +338,6 @@ CREATE TABLE abc (
   FAMILY (d)
 )
 ----
-TABLE abc
- ├── a int not null
- ├── b int not null
- ├── c int not null
- ├── d char
- ├── INDEX primary
- │    ├── a int not null
- │    ├── b int not null
- │    └── c int not null
- ├── INDEX bc
- │    ├── b int not null
- │    ├── c int not null
- │    └── a int not null (storing)
- ├── INDEX ba
- │    ├── b int not null
- │    ├── a int not null
- │    └── c int not null
- ├── FAMILY family1 (a, b, c)
- └── FAMILY family2 (d)
 
 memo
 SELECT d FROM abc ORDER BY lower(d)
@@ -519,10 +479,6 @@ memo (optimized, ~5KB, required=[presentation: i:2,k:1])
 exec-ddl
 CREATE TABLE x (s STRING COLLATE en_u_ks_level1 PRIMARY KEY)
 ----
-TABLE x
- ├── s collatedstring{en_u_ks_level1} not null
- └── INDEX primary
-      └── s collatedstring{en_u_ks_level1} not null
 
 opt
 SELECT s FROM x WHERE s < 'hello' COLLATE en_u_ks_level1
@@ -567,20 +523,6 @@ CREATE TABLE "orders" (
   CHECK (region IN ('us-east1', 'us-west1', 'europe-west2'))
 )
 ----
-TABLE orders
- ├── region string not null
- ├── id int not null
- ├── total decimal not null
- ├── created_at timestamp not null
- ├── INDEX primary
- │    ├── region string not null
- │    └── id int not null
- ├── INDEX orders_by_created_at
- │    ├── region string not null
- │    ├── created_at timestamp not null
- │    ├── id int not null
- │    └── total decimal not null (storing)
- └── CHECK (region IN ('us-east1', 'us-west1', 'europe-west2'))
 
 exec-ddl
 ALTER TABLE "orders" INJECT STATISTICS '[
@@ -641,22 +583,6 @@ CREATE TABLE xyz (
   INDEX secondary (y, x),
   INDEX tertiary (z, y, x))
 ----
-TABLE xyz
- ├── x int not null
- ├── y int not null
- ├── z string not null
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX secondary
- │    ├── y int not null
- │    └── x int not null
- ├── INDEX tertiary
- │    ├── z string not null
- │    ├── y int not null
- │    └── x int not null
- ├── CHECK ((x < 10) AND (x > 1))
- ├── CHECK ((y < 10) AND (y > 1))
- └── CHECK (z IN ('first', 'second'))
 
 opt
 SELECT x, y  FROM xyz WHERE x > 5
@@ -699,18 +625,6 @@ CREATE TABLE xy (
   CHECK (y < 10 AND y > 1),
   INDEX secondary (y, x))
 ----
-TABLE xy
- ├── x int
- ├── y int not null
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX secondary
- │    ├── y int not null
- │    ├── x int
- │    └── rowid int not null (hidden)
- ├── CHECK ((x < 10) AND (x > 1))
- └── CHECK ((y < 10) AND (y > 1))
 
 opt
 SELECT x, y FROM xy WHERE x > 5
@@ -730,15 +644,6 @@ CREATE TABLE null_constraint (
   CHECK (y IN (1, 2, NULL)),
   INDEX index_1 (y))
 ----
-TABLE null_constraint
- ├── y int not null
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX index_1
- │    ├── y int not null
- │    └── rowid int not null (hidden)
- └── CHECK (y IN (1, 2, NULL))
 
 opt
 SELECT y FROM null_constraint WHERE y > 0
@@ -754,16 +659,6 @@ CREATE TABLE null_constraint_2 (
   CHECK (y < 15),
   INDEX index_1 (y))
 ----
-TABLE null_constraint_2
- ├── y int not null
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX index_1
- │    ├── y int not null
- │    └── rowid int not null (hidden)
- ├── CHECK ((y IN (1, 2, NULL)) AND (y > 10))
- └── CHECK (y < 15)
 
 opt
 SELECT y FROM null_constraint_2 WHERE y > 0
@@ -780,16 +675,6 @@ CREATE TABLE check_constraint_validity (
  CONSTRAINT "check:unvalidated" CHECK (a < 10),
  CONSTRAINT "check:validated" CHECK (a < 20))
 ----
-TABLE check_constraint_validity
- ├── a int not null
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX secondary
- │    ├── a int not null
- │    └── rowid int not null (hidden)
- ├── CHECK (a < 10)
- └── CHECK (a < 20)
 
 opt
 SELECT * FROM check_constraint_validity WHERE a > 6
@@ -806,13 +691,6 @@ CREATE TABLE check_test.alias_test (
   CHECK (check_test.alias_test.a > 4)
 )
 ----
-TABLE alias_test
- ├── a int not null
- ├── INDEX primary
- │    └── a int not null
- ├── CHECK (a > 0)
- ├── CHECK (alias_test.a > 2)
- └── CHECK (check_test.alias_test.a > 4)
 
 opt
 SELECT * FROM check_test.alias_test WHERE a < 10

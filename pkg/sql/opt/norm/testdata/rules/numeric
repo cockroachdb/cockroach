@@ -1,14 +1,6 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, d DECIMAL, t TIME)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── d decimal
- ├── t time
- └── INDEX primary
-      └── k int not null
 
 # --------------------------------------------------
 # FoldPlusZero, FoldZeroPlus

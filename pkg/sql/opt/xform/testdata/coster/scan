@@ -1,13 +1,6 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── s string
- ├── d decimal not null
- └── INDEX primary
-      └── k int not null
 
 opt
 SELECT k, s FROM a
@@ -23,10 +16,6 @@ scan a
 exec-ddl
 CREATE TABLE speed_test (id INT PRIMARY KEY DEFAULT unique_rowid())
 ----
-TABLE speed_test
- ├── id int not null
- └── INDEX primary
-      └── id int not null
 
 opt
 SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 1000 AND ((id % 16) = 0)

@@ -25,35 +25,6 @@ CREATE TABLE pg_attribute (
     UNIQUE INDEX pg_attribute_relid_attnam_index (attrelid, attname)
 );
 ----
-TABLE pg_attribute
- ├── attrelid oid not null
- ├── attname string not null
- ├── atttypid oid not null
- ├── attstattarget int not null
- ├── attlen int not null
- ├── attnum int not null
- ├── attndims int not null
- ├── attcacheoff int not null
- ├── atttypmod int not null
- ├── attbyval bool not null
- ├── attstorage string not null
- ├── attalign string not null
- ├── attnotnull bool not null
- ├── atthasdef bool not null
- ├── attisdropped bool not null
- ├── attislocal bool not null
- ├── attinhcount int not null
- ├── attcollation oid not null
- ├── attacl string[]
- ├── attoptions string[]
- ├── attfdwoptions string[]
- ├── INDEX primary
- │    ├── attrelid oid not null
- │    └── attnum int not null
- └── INDEX pg_attribute_relid_attnam_index
-      ├── attrelid oid not null
-      ├── attname string not null
-      └── attnum int not null (storing)
 
 exec-ddl
 CREATE TABLE pg_attrdef (
@@ -65,18 +36,6 @@ CREATE TABLE pg_attrdef (
     UNIQUE INDEX pg_attrdef_adrelid_adnum_index (adrelid, adnum)
 );
 ----
-TABLE pg_attrdef
- ├── oid oid not null
- ├── adrelid oid not null
- ├── adnum int not null
- ├── adbin string
- ├── adsrc string
- ├── INDEX primary
- │    └── oid oid not null
- └── INDEX pg_attrdef_adrelid_adnum_index
-      ├── adrelid oid not null
-      ├── adnum int not null
-      └── oid oid not null (storing)
 
 exec-ddl
 CREATE TABLE pg_collation (
@@ -90,21 +49,6 @@ CREATE TABLE pg_collation (
     UNIQUE INDEX pg_collation_name_enc_nsp_index (collname, collencoding, collnamespace)
 );
 ----
-TABLE pg_collation
- ├── oid oid not null
- ├── collname string not null
- ├── collnamespace oid not null
- ├── collowner oid not null
- ├── collencoding int not null
- ├── collcollate string not null
- ├── collctype string not null
- ├── INDEX primary
- │    └── oid oid not null
- └── INDEX pg_collation_name_enc_nsp_index
-      ├── collname string not null
-      ├── collencoding int not null
-      ├── collnamespace oid not null
-      └── oid oid not null (storing)
 
 exec-ddl
 CREATE TABLE pg_type (
@@ -142,44 +86,6 @@ CREATE TABLE pg_type (
     UNIQUE INDEX pg_type_typname_nsp_index (typname, typnamespace)
 );
 ----
-TABLE pg_type
- ├── oid oid not null
- ├── typname string not null
- ├── typnamespace oid not null
- ├── typowner oid not null
- ├── typlen int not null
- ├── typbyval bool not null
- ├── typtype string not null
- ├── typcategory string not null
- ├── typispreferred bool not null
- ├── typisdefined bool not null
- ├── typdelim string not null
- ├── typrelid oid not null
- ├── typelem oid not null
- ├── typarray oid not null
- ├── typinput oid not null
- ├── typoutput oid not null
- ├── typreceive oid not null
- ├── typsend oid not null
- ├── typmodin oid not null
- ├── typmodout oid not null
- ├── typanalyze oid not null
- ├── typalign string not null
- ├── typstorage string not null
- ├── typnotnull bool not null
- ├── typbasetype oid not null
- ├── typtypmod int not null
- ├── typndims int not null
- ├── typcollation oid not null
- ├── typdefaultbin string
- ├── typdefault string
- ├── typacl string[]
- ├── INDEX primary
- │    └── oid oid not null
- └── INDEX pg_type_typname_nsp_index
-      ├── typname string not null
-      ├── typnamespace oid not null
-      └── oid oid not null (storing)
 
 opt
 SELECT a.attname,

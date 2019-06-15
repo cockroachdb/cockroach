@@ -1,20 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x STRING PRIMARY KEY, z DECIMAL NOT NULL)
 ----
-TABLE b
- ├── x string not null
- ├── z decimal not null
- └── INDEX primary
-      └── x string not null
 
 build
 SELECT y, b.x, y+1 AS c

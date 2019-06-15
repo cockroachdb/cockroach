@@ -8,14 +8,6 @@ CREATE TABLE t.a
     PRIMARY KEY (k, f DESC)
 )
 ----
-TABLE a
- ├── k int not null
- ├── f float not null
- ├── z decimal
- ├── s string not null
- └── INDEX primary
-      ├── k int not null
-      └── f float not null desc
 
 opt
 SELECT f FROM a ORDER BY f DESC

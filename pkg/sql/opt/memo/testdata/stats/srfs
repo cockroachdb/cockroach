@@ -1,11 +1,6 @@
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=5
 SELECT a.*, b.*, c.* FROM upper('abc') a
@@ -154,18 +149,6 @@ CREATE TABLE articles (
   updated_at TIMESTAMP
 )
 ----
-TABLE articles
- ├── id int not null
- ├── body string
- ├── description string
- ├── title string
- ├── slug string
- ├── tag_list string[]
- ├── user_id string
- ├── created_at timestamp
- ├── updated_at timestamp
- └── INDEX primary
-      └── id int not null
 
 # The following queries test the statistics for four different types of Zip
 # functions:

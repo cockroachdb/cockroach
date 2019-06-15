@@ -1,12 +1,6 @@
 exec-ddl
 CREATE TABLE t (a INT, b INT, k INT PRIMARY KEY)
 ----
-TABLE t
- ├── a int
- ├── b int
- ├── k int not null
- └── INDEX primary
-      └── k int not null
 
 opt format=show-all
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a

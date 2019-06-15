@@ -6,12 +6,6 @@ CREATE TABLE public.region
     r_comment varchar(152)
 );
 ----
-TABLE region
- ├── r_regionkey int not null
- ├── r_name char not null
- ├── r_comment varchar
- └── INDEX primary
-      └── r_regionkey int not null
 
 exec-ddl
 ALTER TABLE region INJECT STATISTICS '[
@@ -50,17 +44,6 @@ CREATE TABLE public.nation
     CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) references public.region (r_regionkey)
 );
 ----
-TABLE nation
- ├── n_nationkey int not null
- ├── n_name char not null
- ├── n_regionkey int not null
- ├── n_comment varchar
- ├── INDEX primary
- │    └── n_nationkey int not null
- ├── INDEX n_rk
- │    ├── n_regionkey int not null
- │    └── n_nationkey int not null
- └── CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) REFERENCES t.public.region (r_regionkey)
 
 exec-ddl
 ALTER TABLE nation INJECT STATISTICS '[
@@ -109,20 +92,6 @@ CREATE TABLE public.supplier
     CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) references public.nation (n_nationkey)
 );
 ----
-TABLE supplier
- ├── s_suppkey int not null
- ├── s_name char not null
- ├── s_address varchar not null
- ├── s_nationkey int not null
- ├── s_phone char not null
- ├── s_acctbal float not null
- ├── s_comment varchar not null
- ├── INDEX primary
- │    └── s_suppkey int not null
- ├── INDEX s_nk
- │    ├── s_nationkey int not null
- │    └── s_suppkey int not null
- └── CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) REFERENCES t.public.nation (n_nationkey)
 
 exec-ddl
 ALTER TABLE supplier INJECT STATISTICS '[
@@ -192,18 +161,6 @@ CREATE TABLE public.part
     p_comment varchar(23) NOT NULL
 );
 ----
-TABLE part
- ├── p_partkey int not null
- ├── p_name varchar not null
- ├── p_mfgr char not null
- ├── p_brand char not null
- ├── p_type varchar not null
- ├── p_size int not null
- ├── p_container char not null
- ├── p_retailprice float not null
- ├── p_comment varchar not null
- └── INDEX primary
-      └── p_partkey int not null
 
 exec-ddl
 ALTER TABLE part INJECT STATISTICS '[
@@ -287,20 +244,6 @@ CREATE TABLE public.partsupp
     CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) references public.supplier (s_suppkey)
 );
 ----
-TABLE partsupp
- ├── ps_partkey int not null
- ├── ps_suppkey int not null
- ├── ps_availqty int not null
- ├── ps_supplycost float not null
- ├── ps_comment varchar not null
- ├── INDEX primary
- │    ├── ps_partkey int not null
- │    └── ps_suppkey int not null
- ├── INDEX ps_sk
- │    ├── ps_suppkey int not null
- │    └── ps_partkey int not null
- ├── CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) REFERENCES t.public.part (p_partkey)
- └── CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) REFERENCES t.public.supplier (s_suppkey)
 
 exec-ddl
 ALTER TABLE partsupp INJECT STATISTICS '[
@@ -357,21 +300,6 @@ CREATE TABLE public.customer
     CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) references public.nation (n_nationkey)
 );
 ----
-TABLE customer
- ├── c_custkey int not null
- ├── c_name varchar not null
- ├── c_address varchar not null
- ├── c_nationkey int not null
- ├── c_phone char not null
- ├── c_acctbal float not null
- ├── c_mktsegment char not null
- ├── c_comment varchar not null
- ├── INDEX primary
- │    └── c_custkey int not null
- ├── INDEX c_nk
- │    ├── c_nationkey int not null
- │    └── c_custkey int not null
- └── CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) REFERENCES t.public.nation (n_nationkey)
 
 exec-ddl
 ALTER TABLE customer INJECT STATISTICS '[
@@ -451,25 +379,6 @@ CREATE TABLE public.orders
     CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) references public.customer (c_custkey)
 );
 ----
-TABLE orders
- ├── o_orderkey int not null
- ├── o_custkey int not null
- ├── o_orderstatus char not null
- ├── o_totalprice float not null
- ├── o_orderdate date not null
- ├── o_orderpriority char not null
- ├── o_clerk char not null
- ├── o_shippriority int not null
- ├── o_comment varchar not null
- ├── INDEX primary
- │    └── o_orderkey int not null
- ├── INDEX o_ck
- │    ├── o_custkey int not null
- │    └── o_orderkey int not null
- ├── INDEX o_od
- │    ├── o_orderdate date not null
- │    └── o_orderkey int not null
- └── CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) REFERENCES t.public.customer (c_custkey)
 
 exec-ddl
 ALTER TABLE orders INJECT STATISTICS '[
@@ -573,63 +482,6 @@ CREATE TABLE public.lineitem
     CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) references public.partsupp (ps_partkey, ps_suppkey)
 );
 ----
-TABLE lineitem
- ├── l_orderkey int not null
- ├── l_partkey int not null
- ├── l_suppkey int not null
- ├── l_linenumber int not null
- ├── l_quantity float not null
- ├── l_extendedprice float not null
- ├── l_discount float not null
- ├── l_tax float not null
- ├── l_returnflag char not null
- ├── l_linestatus char not null
- ├── l_shipdate date not null
- ├── l_commitdate date not null
- ├── l_receiptdate date not null
- ├── l_shipinstruct char not null
- ├── l_shipmode char not null
- ├── l_comment varchar not null
- ├── INDEX primary
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_ok
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_pk
- │    ├── l_partkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_sk
- │    ├── l_suppkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_sd
- │    ├── l_shipdate date not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_cd
- │    ├── l_commitdate date not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_rd
- │    ├── l_receiptdate date not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_pk_sk
- │    ├── l_partkey int not null
- │    ├── l_suppkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_sk_pk
- │    ├── l_suppkey int not null
- │    ├── l_partkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) REFERENCES t.public.orders (o_orderkey)
- ├── CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) REFERENCES t.public.part (p_partkey)
- ├── CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) REFERENCES t.public.supplier (s_suppkey)
- └── CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) REFERENCES t.public.partsupp (ps_partkey, ps_suppkey)
 
 exec-ddl
 ALTER TABLE lineitem INJECT STATISTICS '[
@@ -5274,8 +5126,6 @@ CREATE VIEW revenue0 (supplier_no, total_revenue) AS
     GROUP BY
         l_suppkey;
 ----
-VIEW revenue0 (supplier_no, total_revenue)
- └── SELECT l_suppkey, sum(l_extendedprice * (1 - l_discount)) FROM lineitem WHERE (l_shipdate >= DATE '1996-01-01') AND (l_shipdate < (DATE '1996-01-01' + '3 mons':::INTERVAL)) GROUP BY l_suppkey
 
 save-tables database=tpch save-tables-prefix=q15
 SELECT

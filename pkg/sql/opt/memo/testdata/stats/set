@@ -1,34 +1,14 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- ├── s string
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x INT, z INT NOT NULL, s STRING)
 ----
-TABLE b
- ├── x int
- ├── z int not null
- ├── s string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE c (x INT, z INT NOT NULL, s STRING)
 ----
-TABLE c
- ├── x int
- ├── z int not null
- ├── s string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[

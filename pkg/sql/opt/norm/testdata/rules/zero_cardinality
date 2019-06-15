@@ -1,14 +1,6 @@
 exec-ddl
 CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
 ----
-TABLE b
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string not null
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 # --------------------------------------------------
 # SimplifyZeroCardinalityGroup

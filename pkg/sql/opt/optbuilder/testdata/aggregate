@@ -8,13 +8,6 @@ CREATE TABLE kv (
   s STRING
 )
 ----
-TABLE kv
- ├── k int not null
- ├── v int
- ├── w int
- ├── s string
- └── INDEX primary
-      └── k int not null
 
 build
 SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1),
@@ -1249,13 +1242,6 @@ CREATE TABLE abc (
   d DECIMAL
 )
 ----
-TABLE abc
- ├── a char not null
- ├── b float
- ├── c bool
- ├── d decimal
- └── INDEX primary
-      └── a char not null
 
 build
 SELECT min(a), min(b), min(c), min(d) FROM abc
@@ -1316,10 +1302,6 @@ CREATE TABLE intervals (
   a INTERVAL PRIMARY KEY
 )
 ----
-TABLE intervals
- ├── a interval not null
- └── INDEX primary
-      └── a interval not null
 
 build
 SELECT sum(a) FROM intervals
@@ -1374,22 +1356,6 @@ CREATE TABLE xyz (
   FAMILY (z)
 )
 ----
-TABLE xyz
- ├── x int not null
- ├── y int
- ├── z float
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX xy
- │    ├── x int not null
- │    └── y int
- ├── INDEX zyx
- │    ├── z float
- │    ├── y int
- │    └── x int not null
- ├── FAMILY family1 (x)
- ├── FAMILY family2 (y)
- └── FAMILY family3 (z)
 
 build
 SELECT min(x) FROM xyz
@@ -1803,11 +1769,6 @@ limit
 exec-ddl
 CREATE TABLE bools (b BOOL)
 ----
-TABLE bools
- ├── b bool
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT bool_and(b), bool_or(b) FROM bools
@@ -1842,13 +1803,6 @@ project
 exec-ddl
 CREATE TABLE xor_bytes (a bytes, b int, c int)
 ----
-TABLE xor_bytes
- ├── a bytes
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT to_hex(xor_agg(a)), xor_agg(c) FROM xor_bytes
@@ -1984,23 +1938,10 @@ CREATE TABLE ab (
   FAMILY (b)
 )
 ----
-TABLE ab
- ├── a int not null
- ├── b int
- ├── INDEX primary
- │    └── a int not null
- ├── FAMILY family1 (a)
- └── FAMILY family2 (b)
 
 exec-ddl
 CREATE TABLE xy(x STRING, y STRING);
 ----
-TABLE xy
- ├── x string
- ├── y string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Grouping and rendering tuples.
 build
@@ -2323,12 +2264,6 @@ error (42803): column "k" must appear in the GROUP BY clause or be used in an ag
 exec-ddl
 CREATE TABLE foo (bar JSON, baz JSON)
 ----
-TABLE foo
- ├── bar jsonb
- ├── baz jsonb
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT a.bar @> b.baz AND b.baz @> b.baz AS r FROM foo AS a, foo AS b GROUP BY a.bar @> b.baz, b.baz
@@ -2394,10 +2329,6 @@ project
 exec-ddl
 CREATE TABLE times (t time PRIMARY KEY)
 ----
-TABLE times
- ├── t time not null
- └── INDEX primary
-      └── t time not null
 
 build
 SELECT date_trunc('second', a.t) - date_trunc('minute', b.t) AS r FROM times a, times b

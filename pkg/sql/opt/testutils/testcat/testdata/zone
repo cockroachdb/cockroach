@@ -1,0 +1,171 @@
+exec-ddl
+CREATE TABLE abc (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    UNIQUE INDEX bc1 (b, c),
+    UNIQUE INDEX bc2 (b, c)
+)
+----
+
+exec-ddl
+ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=central]'
+----
+
+exec-ddl
+SHOW CREATE abc
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    └── ZONE
+ │         └── constraints: [+region=central]
+ ├── INDEX bc1
+ │    ├── b int
+ │    ├── c string
+ │    └── a int not null (storing)
+ └── INDEX bc2
+      ├── b int
+      ├── c string
+      └── a int not null (storing)
+
+exec-ddl
+ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=east]'
+----
+
+exec-ddl
+SHOW CREATE abc
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    └── ZONE
+ │         └── constraints: [+region=central]
+ ├── INDEX bc1
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=east]
+ └── INDEX bc2
+      ├── b int
+      ├── c string
+      └── a int not null (storing)
+
+exec-ddl
+ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=west]'
+----
+
+exec-ddl
+SHOW CREATE abc
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    └── ZONE
+ │         └── constraints: [+region=central]
+ ├── INDEX bc1
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=east]
+ └── INDEX bc2
+      ├── b int
+      ├── c string
+      ├── a int not null (storing)
+      └── ZONE
+           └── constraints: [+region=west]
+
+exec-ddl
+ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=us,+dc=central,+rack=1]'
+----
+
+exec-ddl
+SHOW CREATE abc
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    └── ZONE
+ │         └── constraints: [+region=us,+dc=central,+rack=1]
+ ├── INDEX bc1
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=east]
+ └── INDEX bc2
+      ├── b int
+      ├── c string
+      ├── a int not null (storing)
+      └── ZONE
+           └── constraints: [+region=west]
+
+exec-ddl
+ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east,+rack=1]'
+----
+
+exec-ddl
+SHOW CREATE abc
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    └── ZONE
+ │         └── constraints: [+region=us,+dc=central,+rack=1]
+ ├── INDEX bc1
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=us,+dc=east,+rack=1]
+ └── INDEX bc2
+      ├── b int
+      ├── c string
+      ├── a int not null (storing)
+      └── ZONE
+           └── constraints: [+region=west]
+
+exec-ddl
+ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+dc=west]'
+----
+
+exec-ddl
+SHOW CREATE abc
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    └── ZONE
+ │         └── constraints: [+region=us,+dc=central,+rack=1]
+ ├── INDEX bc1
+ │    ├── b int
+ │    ├── c string
+ │    ├── a int not null (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=us,+dc=east,+rack=1]
+ └── INDEX bc2
+      ├── b int
+      ├── c string
+      ├── a int not null (storing)
+      └── ZONE
+           └── constraints: [+dc=west]

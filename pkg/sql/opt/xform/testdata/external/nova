@@ -23,30 +23,6 @@ create table flavors
 	unique (name)
 )
 ----
-TABLE flavors
- ├── id int not null
- ├── name string not null
- ├── memory_mb int not null
- ├── vcpus int not null
- ├── root_gb int
- ├── ephemeral_gb int
- ├── flavorid string not null
- ├── swap int not null
- ├── rxtx_factor float
- ├── vcpu_weight int
- ├── disabled bool
- ├── is_public bool
- ├── description string
- ├── created_at timestamp
- ├── updated_at timestamp
- ├── INDEX primary
- │    └── id int not null
- ├── INDEX secondary
- │    ├── flavorid string not null
- │    └── id int not null (storing)
- └── INDEX secondary
-      ├── name string not null
-      └── id int not null (storing)
 
 exec-ddl
 create table flavor_projects
@@ -60,19 +36,6 @@ create table flavor_projects
     unique (flavor_id, project_id)
 )
 ----
-TABLE flavor_projects
- ├── id int not null
- ├── flavor_id int not null
- ├── project_id string not null
- ├── created_at timestamp
- ├── updated_at timestamp
- ├── INDEX primary
- │    └── id int not null
- ├── INDEX secondary
- │    ├── flavor_id int not null
- │    ├── project_id string not null
- │    └── id int not null (storing)
- └── CONSTRAINT fk_flavor_id_ref_flavors FOREIGN KEY (flavor_id) REFERENCES t.public.flavors (id)
 
 exec-ddl
 create table flavor_extra_specs
@@ -87,20 +50,6 @@ create table flavor_extra_specs
     unique index flavor_extra_specs_flavor_id_key_idx (flavor_id, key)
 )
 ----
-TABLE flavor_extra_specs
- ├── id int not null
- ├── key string not null
- ├── value string
- ├── flavor_id int not null
- ├── created_at timestamp
- ├── updated_at timestamp
- ├── INDEX primary
- │    └── id int not null
- ├── INDEX flavor_extra_specs_flavor_id_key_idx
- │    ├── flavor_id int not null
- │    ├── key string not null
- │    └── id int not null (storing)
- └── CONSTRAINT fk_flavor_id_ref_flavors FOREIGN KEY (flavor_id) REFERENCES t.public.flavors (id)
 
 exec-ddl
 create table instance_types
@@ -125,33 +74,6 @@ create table instance_types
     unique (name, deleted)
 )
 ----
-TABLE instance_types
- ├── id int not null
- ├── name string
- ├── memory_mb int not null
- ├── vcpus int not null
- ├── root_gb int
- ├── ephemeral_gb int
- ├── flavorid string
- ├── swap int not null
- ├── rxtx_factor float
- ├── vcpu_weight int
- ├── disabled bool
- ├── is_public bool
- ├── deleted bool
- ├── deleted_at timestamp
- ├── created_at timestamp
- ├── updated_at timestamp
- ├── INDEX primary
- │    └── id int not null
- ├── INDEX secondary
- │    ├── flavorid string
- │    ├── deleted bool
- │    └── id int not null (storing)
- └── INDEX secondary
-      ├── name string
-      ├── deleted bool
-      └── id int not null (storing)
 
 exec-ddl
 create table instance_type_projects
@@ -167,22 +89,6 @@ create table instance_type_projects
     unique (instance_type_id, project_id, deleted)
 )
 ----
-TABLE instance_type_projects
- ├── id int not null
- ├── instance_type_id int not null
- ├── project_id string
- ├── deleted bool
- ├── deleted_at timestamp
- ├── created_at timestamp
- ├── updated_at timestamp
- ├── INDEX primary
- │    └── id int not null
- ├── INDEX secondary
- │    ├── instance_type_id int not null
- │    ├── project_id string
- │    ├── deleted bool
- │    └── id int not null (storing)
- └── CONSTRAINT fk_instance_type_id_ref_instance_types FOREIGN KEY (instance_type_id) REFERENCES t.public.instance_types (id)
 
 exec-ddl
 create table instance_type_extra_specs
@@ -200,27 +106,6 @@ create table instance_type_extra_specs
     unique (instance_type_id, key, deleted)
 )
 ----
-TABLE instance_type_extra_specs
- ├── id int not null
- ├── key string
- ├── value string
- ├── instance_type_id int not null
- ├── deleted bool
- ├── deleted_at timestamp
- ├── created_at timestamp
- ├── updated_at timestamp
- ├── INDEX primary
- │    └── id int not null
- ├── INDEX instance_type_extra_specs_instance_type_id_key_idx
- │    ├── instance_type_id int not null
- │    ├── key string
- │    └── id int not null
- ├── INDEX secondary
- │    ├── instance_type_id int not null
- │    ├── key string
- │    ├── deleted bool
- │    └── id int not null (storing)
- └── CONSTRAINT fk_instance_type_id_ref_instance_types FOREIGN KEY (instance_type_id) REFERENCES t.public.instance_types (id)
 
 opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,

@@ -37,41 +37,6 @@ CREATE TABLE pg_type (
     typacl STRING[] NULL
 )
 ----
-TABLE pg_type
- ├── oid oid
- ├── typname name not null
- ├── typnamespace oid
- ├── typowner oid
- ├── typlen int
- ├── typbyval bool
- ├── typtype string
- ├── typcategory string
- ├── typispreferred bool
- ├── typisdefined bool
- ├── typdelim string
- ├── typrelid oid
- ├── typelem oid
- ├── typarray oid
- ├── typinput oid
- ├── typoutput oid
- ├── typreceive oid
- ├── typsend oid
- ├── typmodin oid
- ├── typmodout oid
- ├── typanalyze oid
- ├── typalign string
- ├── typstorage string
- ├── typnotnull bool
- ├── typbasetype oid
- ├── typtypmod int
- ├── typndims int
- ├── typcollation oid
- ├── typdefaultbin string
- ├── typdefault string
- ├── typacl string[]
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE pg_namespace (
@@ -81,14 +46,6 @@ CREATE TABLE pg_namespace (
     nspacl STRING[] NULL
 )
 ----
-TABLE pg_namespace
- ├── oid oid
- ├── nspname name not null
- ├── nspowner oid
- ├── nspacl string[]
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 opt
 SELECT
