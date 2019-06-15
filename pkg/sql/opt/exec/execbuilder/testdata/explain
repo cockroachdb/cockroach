@@ -632,7 +632,7 @@ query T
 EXPLAIN (OPT,TYPES) SELECT 1 AS r
 ----
 values
- ├── columns: r:1(int)
+ ├── columns: r:1(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.02

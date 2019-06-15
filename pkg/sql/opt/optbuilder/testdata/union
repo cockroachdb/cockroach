@@ -4,11 +4,11 @@ build
 VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)
 ----
 union
- ├── columns: column1:3(int)
+ ├── columns: column1:3(int!null)
  ├── left columns: column1:1(int)
  ├── right columns: column1:2(int)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -20,7 +20,7 @@ union
  │    └── tuple [type=tuple{int}]
  │         └── const: 2 [type=int]
  └── values
-      ├── columns: column1:2(int)
+      ├── columns: column1:2(int!null)
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
       ├── tuple [type=tuple{int}]
@@ -32,11 +32,11 @@ build
 VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)
 ----
 union-all
- ├── columns: column1:3(int)
+ ├── columns: column1:3(int!null)
  ├── left columns: column1:1(int)
  ├── right columns: column1:2(int)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -48,7 +48,7 @@ union-all
  │    └── tuple [type=tuple{int}]
  │         └── const: 2 [type=int]
  └── values
-      ├── columns: column1:2(int)
+      ├── columns: column1:2(int!null)
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
       ├── tuple [type=tuple{int}]
@@ -60,11 +60,11 @@ build
 VALUES (1), (1), (1), (2), (2) INTERSECT VALUES (1), (3), (1)
 ----
 intersect
- ├── columns: column1:1(int)
- ├── left columns: column1:1(int)
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
  ├── right columns: column1:2(int)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -76,7 +76,7 @@ intersect
  │    └── tuple [type=tuple{int}]
  │         └── const: 2 [type=int]
  └── values
-      ├── columns: column1:2(int)
+      ├── columns: column1:2(int!null)
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
       ├── tuple [type=tuple{int}]
@@ -88,11 +88,11 @@ build
 VALUES (1), (1), (1), (2), (2) INTERSECT ALL VALUES (1), (3), (1)
 ----
 intersect-all
- ├── columns: column1:1(int)
- ├── left columns: column1:1(int)
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
  ├── right columns: column1:2(int)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -104,7 +104,7 @@ intersect-all
  │    └── tuple [type=tuple{int}]
  │         └── const: 2 [type=int]
  └── values
-      ├── columns: column1:2(int)
+      ├── columns: column1:2(int!null)
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
       ├── tuple [type=tuple{int}]
@@ -116,11 +116,11 @@ build
 VALUES (1), (1), (1), (2), (2) EXCEPT VALUES (1), (3), (1)
 ----
 except
- ├── columns: column1:1(int)
- ├── left columns: column1:1(int)
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
  ├── right columns: column1:2(int)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -132,7 +132,7 @@ except
  │    └── tuple [type=tuple{int}]
  │         └── const: 2 [type=int]
  └── values
-      ├── columns: column1:2(int)
+      ├── columns: column1:2(int!null)
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
       ├── tuple [type=tuple{int}]
@@ -144,11 +144,11 @@ build
 VALUES (1), (1), (1), (2), (2) EXCEPT ALL VALUES (1), (3), (1)
 ----
 except-all
- ├── columns: column1:1(int)
- ├── left columns: column1:1(int)
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
  ├── right columns: column1:2(int)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -160,7 +160,7 @@ except-all
  │    └── tuple [type=tuple{int}]
  │         └── const: 2 [type=int]
  └── values
-      ├── columns: column1:2(int)
+      ├── columns: column1:2(int!null)
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
       ├── tuple [type=tuple{int}]
@@ -172,11 +172,11 @@ build
 VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)
 ----
 union
- ├── columns: column1:5(int) column2:6(int)
+ ├── columns: column1:5(int!null) column2:6(int!null)
  ├── left columns: column1:1(int) column2:2(int)
  ├── right columns: column1:3(int) column2:4(int)
  ├── values
- │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── columns: column1:1(int!null) column2:2(int!null)
  │    ├── tuple [type=tuple{int, int}]
  │    │    ├── const: 1 [type=int]
  │    │    └── const: 2 [type=int]
@@ -193,7 +193,7 @@ union
  │         ├── const: 2 [type=int]
  │         └── const: 1 [type=int]
  └── values
-      ├── columns: column1:3(int) column2:4(int)
+      ├── columns: column1:3(int!null) column2:4(int!null)
       ├── tuple [type=tuple{int, int}]
       │    ├── const: 1 [type=int]
       │    └── const: 3 [type=int]
@@ -208,18 +208,18 @@ build
 (VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
 ----
 limit
- ├── columns: column1:3(int)
+ ├── columns: column1:3(int!null)
  ├── internal-ordering: -3
  ├── ordering: -3
  ├── sort
- │    ├── columns: column1:3(int)
+ │    ├── columns: column1:3(int!null)
  │    ├── ordering: -3
  │    └── union-all
- │         ├── columns: column1:3(int)
+ │         ├── columns: column1:3(int!null)
  │         ├── left columns: column1:1(int)
  │         ├── right columns: column1:2(int)
  │         ├── values
- │         │    ├── columns: column1:1(int)
+ │         │    ├── columns: column1:1(int!null)
  │         │    ├── tuple [type=tuple{int}]
  │         │    │    └── const: 1 [type=int]
  │         │    ├── tuple [type=tuple{int}]
@@ -231,7 +231,7 @@ limit
  │         │    └── tuple [type=tuple{int}]
  │         │         └── const: 2 [type=int]
  │         └── values
- │              ├── columns: column1:2(int)
+ │              ├── columns: column1:2(int!null)
  │              ├── tuple [type=tuple{int}]
  │              │    └── const: 1 [type=int]
  │              ├── tuple [type=tuple{int}]
@@ -245,18 +245,18 @@ build
 VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
 ----
 limit
- ├── columns: column1:3(int)
+ ├── columns: column1:3(int!null)
  ├── internal-ordering: -3
  ├── ordering: -3
  ├── sort
- │    ├── columns: column1:3(int)
+ │    ├── columns: column1:3(int!null)
  │    ├── ordering: -3
  │    └── union-all
- │         ├── columns: column1:3(int)
+ │         ├── columns: column1:3(int!null)
  │         ├── left columns: column1:1(int)
  │         ├── right columns: column1:2(int)
  │         ├── values
- │         │    ├── columns: column1:1(int)
+ │         │    ├── columns: column1:1(int!null)
  │         │    ├── tuple [type=tuple{int}]
  │         │    │    └── const: 1 [type=int]
  │         │    ├── tuple [type=tuple{int}]
@@ -268,7 +268,7 @@ limit
  │         │    └── tuple [type=tuple{int}]
  │         │         └── const: 2 [type=int]
  │         └── values
- │              ├── columns: column1:2(int)
+ │              ├── columns: column1:2(int!null)
  │              ├── tuple [type=tuple{int}]
  │              │    └── const: 1 [type=int]
  │              ├── tuple [type=tuple{int}]
@@ -298,7 +298,7 @@ sort
       │         └── cast: INT8 [type=int]
       │              └── variable: column1 [type=unknown]
       └── values
-           ├── columns: column1:2(int)
+           ├── columns: column1:2(int!null)
            └── tuple [type=tuple{int}]
                 └── const: 1 [type=int]
 
@@ -672,21 +672,21 @@ build
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
 ----
 left-join
- ├── columns: column1:1(int) column1:4(int)
+ ├── columns: column1:1(int!null) column1:4(int)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    └── tuple [type=tuple{int}]
  │         └── const: 1 [type=int]
  ├── union
- │    ├── columns: column1:4(int)
+ │    ├── columns: column1:4(int!null)
  │    ├── left columns: column1:2(int)
  │    ├── right columns: column1:3(int)
  │    ├── values
- │    │    ├── columns: column1:2(int)
+ │    │    ├── columns: column1:2(int!null)
  │    │    └── tuple [type=tuple{int}]
  │    │         └── const: 1 [type=int]
  │    └── values
- │         ├── columns: column1:3(int)
+ │         ├── columns: column1:3(int!null)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
  └── filters
@@ -698,21 +698,21 @@ build
 SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1;
 ----
 left-join
- ├── columns: column1:1(int) column1:4(int)
+ ├── columns: column1:1(int!null) column1:4(int)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    └── tuple [type=tuple{int}]
  │         └── const: 1 [type=int]
  ├── union
- │    ├── columns: column1:4(int)
+ │    ├── columns: column1:4(int!null)
  │    ├── left columns: column1:2(int)
  │    ├── right columns: column1:3(int)
  │    ├── values
- │    │    ├── columns: column1:2(int)
+ │    │    ├── columns: column1:2(int!null)
  │    │    └── tuple [type=tuple{int}]
  │    │         └── const: 1 [type=int]
  │    └── values
- │         ├── columns: column1:3(int)
+ │         ├── columns: column1:3(int!null)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
  └── filters
@@ -878,7 +878,7 @@ union
  │         └── cast: INT8 [type=int]
  │              └── variable: column1 [type=unknown]
  └── values
-      ├── columns: column1:3(int) column2:4(string)
+      ├── columns: column1:3(int!null) column2:4(string!null)
       ├── tuple [type=tuple{int, string}]
       │    ├── const: 1 [type=int]
       │    └── const: 'a' [type=string]
@@ -902,9 +902,9 @@ intersect
  │         ├── null [type=unknown]
  │         └── const: 'x' [type=string]
  └── project
-      ├── columns: column2:5(string) column1:3(int)
+      ├── columns: column2:5(string) column1:3(int!null)
       ├── values
-      │    ├── columns: column1:3(int) column2:4(unknown)
+      │    ├── columns: column1:3(int!null) column2:4(unknown)
       │    ├── tuple [type=tuple{int, unknown}]
       │    │    ├── const: 1 [type=int]
       │    │    └── null [type=unknown]
@@ -936,9 +936,9 @@ union-all
  │         └── cast: INT8 [type=int]
  │              └── variable: column1 [type=unknown]
  └── project
-      ├── columns: column2:8(string) column1:3(int)
+      ├── columns: column2:8(string) column1:3(int!null)
       ├── values
-      │    ├── columns: column1:3(int) column2:4(unknown)
+      │    ├── columns: column1:3(int!null) column2:4(unknown)
       │    ├── tuple [type=tuple{int, unknown}]
       │    │    ├── const: 1 [type=int]
       │    │    └── null [type=unknown]

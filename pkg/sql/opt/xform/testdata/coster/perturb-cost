@@ -59,7 +59,7 @@ opt perturb-cost=(0.9)
 SELECT 1
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.02
@@ -71,7 +71,7 @@ opt perturb-cost=(2.5)
 SELECT 1
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.02

@@ -300,7 +300,7 @@ select
                 ├── key: ()
                 ├── fd: ()-->(13)
                 ├── values
-                │    ├── columns: s:10(string)
+                │    ├── columns: s:10(string!null)
                 │    ├── cardinality: [0 - 0]
                 │    ├── key: ()
                 │    └── fd: ()-->(10)
@@ -468,7 +468,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE 1 WHEN 1 THEN 'one' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -478,7 +478,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE WHEN 1 = 1 THEN 'one' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -488,7 +488,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE false WHEN 0 = 1 THEN 'one' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -582,7 +582,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE 1 WHEN 2 THEN 'one' ELSE 'three' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -617,7 +617,7 @@ SELECT
     END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -633,7 +633,7 @@ SELECT
     END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -643,7 +643,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE WHEN false THEN 'one' WHEN true THEN 'two' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -904,7 +904,7 @@ opt
 SELECT k FROM e WHERE tz > NULL::TIMESTAMP
 ----
 values
- ├── columns: k:1(int)
+ ├── columns: k:1(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
@@ -938,7 +938,7 @@ opt expect=SimplifyEqualsAnyTuple
 SELECT k FROM a WHERE k = ANY ()
 ----
 values
- ├── columns: k:1(int)
+ ├── columns: k:1(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
@@ -1004,7 +1004,7 @@ opt expect=(SimplifyAnyScalarArray,SimplifyEqualsAnyTuple)
 SELECT k FROM a WHERE k = ANY ARRAY[]:::INT[]
 ----
 values
- ├── columns: k:1(int)
+ ├── columns: k:1(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
@@ -1026,7 +1026,7 @@ norm expect=FoldCollate
 SELECT 'hello' COLLATE en_u_ks_level1
 ----
 values
- ├── columns: "?column?":1(collatedstring{en_u_ks_level1})
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -1036,7 +1036,7 @@ norm expect=FoldCollate
 SELECT ('hello' COLLATE en_u_ks_level1) COLLATE en_u_ks_level1
 ----
 values
- ├── columns: "?column?":1(collatedstring{en_u_ks_level1})
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -1046,7 +1046,7 @@ norm expect=FoldCollate
 SELECT ('hello' COLLATE en) COLLATE en_u_ks_level1
 ----
 values
- ├── columns: "?column?":1(collatedstring{en_u_ks_level1})
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)

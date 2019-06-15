@@ -377,7 +377,7 @@ limit
  │         │    └── scan onecolumn
  │         │         └── columns: x:1(int) rowid:2(int!null)
  │         ├── values
- │         │    ├── columns: column1:3(int)
+ │         │    ├── columns: column1:3(int!null)
  │         │    └── tuple [type=tuple{int}]
  │         │         └── const: 42 [type=int]
  │         └── filters
@@ -1089,7 +1089,7 @@ project
       ├── scan onecolumn
       │    └── columns: x:1(int) rowid:2(int!null)
       ├── values
-      │    ├── columns: column1:3(int)
+      │    ├── columns: column1:3(int!null)
       │    ├── tuple [type=tuple{int}]
       │    │    └── const: 41 [type=int]
       │    ├── tuple [type=tuple{int}]
@@ -1349,14 +1349,14 @@ SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
 sort
- ├── columns: k:2(int!null) u:1(int) w:4(int)
+ ├── columns: k:2(int!null) u:1(int!null) w:4(int!null)
  ├── ordering: +1
  └── project
-      ├── columns: column1:1(int) column2:2(int!null) column2:4(int)
+      ├── columns: column1:1(int!null) column2:2(int!null) column2:4(int!null)
       └── inner-join
-           ├── columns: column1:1(int) column2:2(int!null) column1:3(int!null) column2:4(int)
+           ├── columns: column1:1(int!null) column2:2(int!null) column1:3(int!null) column2:4(int!null)
            ├── values
-           │    ├── columns: column1:1(int) column2:2(int)
+           │    ├── columns: column1:1(int!null) column2:2(int!null)
            │    ├── tuple [type=tuple{int, int}]
            │    │    ├── const: 9 [type=int]
            │    │    └── const: 1 [type=int]
@@ -1364,7 +1364,7 @@ sort
            │         ├── const: 8 [type=int]
            │         └── const: 2 [type=int]
            ├── values
-           │    ├── columns: column1:3(int) column2:4(int)
+           │    ├── columns: column1:3(int!null) column2:4(int!null)
            │    ├── tuple [type=tuple{int, int}]
            │    │    ├── const: 1 [type=int]
            │    │    └── const: 1 [type=int]
@@ -3118,7 +3118,7 @@ project
       │    │         ├── null [type=unknown]
       │    │         └── null [type=unknown]
       │    ├── values
-      │    │    ├── columns: column1:3(int) column2:4(int)
+      │    │    ├── columns: column1:3(int!null) column2:4(int!null)
       │    │    └── tuple [type=tuple{int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 1 [type=int]
@@ -3161,7 +3161,7 @@ project
  │         │    │         ├── null [type=unknown]
  │         │    │         └── null [type=unknown]
  │         │    ├── values
- │         │    │    ├── columns: column1:3(int) column2:4(int)
+ │         │    │    ├── columns: column1:3(int!null) column2:4(int!null)
  │         │    │    └── tuple [type=tuple{int, int}]
  │         │    │         ├── const: 1 [type=int]
  │         │    │         └── const: 1 [type=int]

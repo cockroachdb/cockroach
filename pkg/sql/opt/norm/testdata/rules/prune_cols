@@ -1461,7 +1461,7 @@ opt expect=PruneValuesCols
 SELECT column1 FROM (VALUES (1, 2), (3, 4)) a
 ----
 values
- ├── columns: column1:1(int)
+ ├── columns: column1:1(int!null)
  ├── cardinality: [2 - 2]
  ├── (1,) [type=tuple{int}]
  └── (3,) [type=tuple{int}]
@@ -1471,7 +1471,7 @@ opt expect=PruneValuesCols
 SELECT column2 FROM (VALUES (1, 2, 3), (4, 5, 6)) a
 ----
 values
- ├── columns: column2:2(int)
+ ├── columns: column2:2(int!null)
  ├── cardinality: [2 - 2]
  ├── (2,) [type=tuple{int}]
  └── (5,) [type=tuple{int}]
@@ -1481,7 +1481,7 @@ opt expect=PruneValuesCols
 SELECT column3 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
 ----
 values
- ├── columns: column3:3(string)
+ ├── columns: column3:3(string!null)
  ├── cardinality: [2 - 2]
  ├── ('baz',) [type=tuple{string}]
  └── ('cherry',) [type=tuple{string}]
@@ -2038,17 +2038,17 @@ upsert a
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_i:15(int) column1:5(int) column2:6(string) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
+      ├── columns: upsert_i:15(int) column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(5-12,15)
       ├── left-join
-      │    ├── columns: column1:5(int) column2:6(string) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
+      │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(5-12)
       │    ├── values
-      │    │    ├── columns: column1:5(int) column2:6(string) column7:7(int) column8:8(float)
+      │    │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(5-8)
@@ -2089,17 +2089,17 @@ upsert a
  ├── key: ()
  ├── fd: ()-->(1-4)
  └── project
-      ├── columns: upsert_k:14(int) upsert_i:15(int) upsert_f:16(float) upsert_s:17(string) column1:5(int) column2:6(string) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
+      ├── columns: upsert_k:14(int) upsert_i:15(int) upsert_f:16(float) upsert_s:17(string) column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(5-12,14-17)
       ├── left-join
-      │    ├── columns: column1:5(int) column2:6(string) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
+      │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(5-12)
       │    ├── values
-      │    │    ├── columns: column1:5(int) column2:6(string) column7:7(int) column8:8(float)
+      │    │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(5-8)
@@ -2136,12 +2136,12 @@ upsert "family"
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── left-join
-      ├── columns: column1:6(int) column2:7(int) column8:8(int) a:9(int) b:10(int)
+      ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int) a:9(int) b:10(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-10)
       ├── values
-      │    ├── columns: column1:6(int) column2:7(int) column8:8(int)
+      │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6-8)
@@ -2186,17 +2186,17 @@ project
       ├── key: ()
       ├── fd: ()-->(1-5)
       └── project
-           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_d:20(int) upsert_e:21(int) column1:6(int) column2:7(int) column3:8(int) column4:9(int) column5:10(int) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
+           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_d:20(int) upsert_e:21(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column5:10(int!null) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
            ├── cardinality: [1 - 1]
            ├── key: ()
            ├── fd: ()-->(6-15,17-21)
            ├── left-join
-           │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column5:10(int) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
+           │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column5:10(int!null) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
            │    ├── cardinality: [1 - 1]
            │    ├── key: ()
            │    ├── fd: ()-->(6-15)
            │    ├── values
-           │    │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column5:10(int)
+           │    │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column5:10(int!null)
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(6-10)
@@ -2236,17 +2236,17 @@ upsert "family"
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_d:20(int) column1:6(int) column2:7(int) column3:8(int) column4:9(int) column10:10(int) a:11(int) c:13(int) d:14(int)
+      ├── columns: upsert_d:20(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column10:10(int) a:11(int) c:13(int) d:14(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-11,13,14,20)
       ├── left-join
-      │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column10:10(int) a:11(int) c:13(int) d:14(int)
+      │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column10:10(int) a:11(int) c:13(int) d:14(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6-11,13,14)
       │    ├── values
-      │    │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column10:10(int)
+      │    │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column10:10(int)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(6-10)
@@ -2279,17 +2279,17 @@ upsert mutation
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_b:17(int) column1:6(int) column2:7(int) column3:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
+      ├── columns: upsert_b:17(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-14,17)
       ├── left-join
-      │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
+      │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6-14)
       │    ├── values
-      │    │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column9:9(int)
+      │    │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column9:9(int)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(6-9)

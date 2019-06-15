@@ -720,7 +720,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── values
-           │    ├── columns: column1:1(int)
+           │    ├── columns: column1:1(int!null)
            │    └── tuple [type=tuple{int}]
            │         └── const: 1 [type=int]
            └── cast: INT8 [type=int]
@@ -738,7 +738,7 @@ project
            ├── project
            │    ├── columns: column3:3(tuple{int, int})
            │    ├── values
-           │    │    ├── columns: column1:1(int) column2:2(int)
+           │    │    ├── columns: column1:1(int!null) column2:2(int!null)
            │    │    └── tuple [type=tuple{int, int}]
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 1 [type=int]
@@ -762,7 +762,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── values
-                │    ├── columns: column1:1(int)
+                │    ├── columns: column1:1(int!null)
                 │    └── tuple [type=tuple{int}]
                 │         └── const: 1 [type=int]
                 └── cast: INT8 [type=int]
@@ -781,7 +781,7 @@ project
                 ├── project
                 │    ├── columns: column3:3(tuple{int, int})
                 │    ├── values
-                │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    └── tuple [type=tuple{int, int}]
                 │    │         ├── const: 1 [type=int]
                 │    │         └── const: 1 [type=int]
@@ -807,7 +807,7 @@ project
            ├── select
            │    ├── columns: column1:1(int!null)
            │    ├── values
-           │    │    ├── columns: column1:1(int)
+           │    │    ├── columns: column1:1(int!null)
            │    │    └── tuple [type=tuple{int}]
            │    │         └── const: 1 [type=int]
            │    └── filters
@@ -829,9 +829,9 @@ project
            ├── project
            │    ├── columns: column3:3(tuple{int, int})
            │    ├── select
-           │    │    ├── columns: column1:1(int!null) column2:2(int)
+           │    │    ├── columns: column1:1(int!null) column2:2(int!null)
            │    │    ├── values
-           │    │    │    ├── columns: column1:1(int) column2:2(int)
+           │    │    │    ├── columns: column1:1(int!null) column2:2(int!null)
            │    │    │    └── tuple [type=tuple{int, int}]
            │    │    │         ├── const: 1 [type=int]
            │    │    │         └── const: 1 [type=int]
@@ -861,7 +861,7 @@ project
                 ├── select
                 │    ├── columns: column1:1(int!null)
                 │    ├── values
-                │    │    ├── columns: column1:1(int)
+                │    │    ├── columns: column1:1(int!null)
                 │    │    └── tuple [type=tuple{int}]
                 │    │         └── const: 1 [type=int]
                 │    └── filters
@@ -884,9 +884,9 @@ project
                 ├── project
                 │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
-                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    ├── values
-                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    │    └── tuple [type=tuple{int, int}]
                 │    │    │         ├── const: 1 [type=int]
                 │    │    │         └── const: 1 [type=int]
@@ -916,7 +916,7 @@ project
                 ├── select
                 │    ├── columns: column1:1(int!null)
                 │    ├── values
-                │    │    ├── columns: column1:1(int)
+                │    │    ├── columns: column1:1(int!null)
                 │    │    └── tuple [type=tuple{int}]
                 │    │         └── const: 1 [type=int]
                 │    └── filters
@@ -939,9 +939,9 @@ project
                 ├── project
                 │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
-                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    ├── values
-                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    │    └── tuple [type=tuple{int, int}]
                 │    │    │         ├── const: 1 [type=int]
                 │    │    │         └── const: 1 [type=int]
@@ -971,7 +971,7 @@ project
                 ├── select
                 │    ├── columns: column1:1(int!null)
                 │    ├── values
-                │    │    ├── columns: column1:1(int)
+                │    │    ├── columns: column1:1(int!null)
                 │    │    └── tuple [type=tuple{int}]
                 │    │         └── const: 1 [type=int]
                 │    └── filters
@@ -994,9 +994,9 @@ project
                 ├── project
                 │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
-                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    ├── values
-                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    │    └── tuple [type=tuple{int, int}]
                 │    │    │         ├── const: 1 [type=int]
                 │    │    │         └── const: 1 [type=int]

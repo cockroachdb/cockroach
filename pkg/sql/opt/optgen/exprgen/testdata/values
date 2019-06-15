@@ -8,7 +8,7 @@ expr
 )
 ----
 values
- ├── columns: a:1(int) b:2(int)
+ ├── columns: a:1(int!null) b:2(int!null)
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
  ├── cost: 0.03
@@ -31,7 +31,7 @@ expr
 )
 ----
 project
- ├── columns: y:2(int) x:1(int)
+ ├── columns: y:2(int) x:1(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.05
@@ -39,7 +39,7 @@ project
  ├── fd: ()-->(1,2)
  ├── prune: (1,2)
  ├── values
- │    ├── columns: x:1(int)
+ │    ├── columns: x:1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── cost: 0.02
