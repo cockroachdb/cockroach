@@ -65,7 +65,7 @@ project
       └── indirection [type=int]
            ├── array-flatten [type=int[]]
            │    └── values
-           │         ├── columns: column1:1(int)
+           │         ├── columns: column1:1(int!null)
            │         ├── tuple [type=tuple{int}]
            │         │    └── const: 1 [type=int]
            │         └── tuple [type=tuple{int}]
@@ -797,7 +797,7 @@ build
 VALUES (1, (SELECT (2) AS a))
 ----
 values
- ├── columns: column1:2(int) column2:3(int)
+ ├── columns: column1:2(int!null) column2:3(int)
  └── tuple [type=tuple{int, int}]
       ├── const: 1 [type=int]
       └── subquery [type=int]
@@ -992,7 +992,7 @@ build
 SELECT * FROM (VALUES (1, 2)) AS foo
 ----
 values
- ├── columns: column1:1(int) column2:2(int)
+ ├── columns: column1:1(int!null) column2:2(int!null)
  └── tuple [type=tuple{int, int}]
       ├── const: 1 [type=int]
       └── const: 2 [type=int]
@@ -1001,7 +1001,7 @@ build
 SELECT * FROM (VALUES (1, 2))
 ----
 values
- ├── columns: column1:1(int) column2:2(int)
+ ├── columns: column1:1(int!null) column2:2(int!null)
  └── tuple [type=tuple{int, int}]
       ├── const: 1 [type=int]
       └── const: 2 [type=int]
@@ -1010,7 +1010,7 @@ build
 SELECT * FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo
 ----
 values
- ├── columns: column1:1(int) column2:2(string)
+ ├── columns: column1:1(int!null) column2:2(string!null)
  ├── tuple [type=tuple{int, string}]
  │    ├── const: 1 [type=int]
  │    └── const: 'one' [type=string]
@@ -1025,7 +1025,7 @@ build
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo
 ----
 values
- ├── columns: column1:1(int) column2:2(int) column3:3(int)
+ ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
  ├── tuple [type=tuple{int, int, int}]
  │    ├── const: 1 [type=int]
  │    ├── const: 2 [type=int]
@@ -1039,7 +1039,7 @@ build
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2, foo3)
 ----
 values
- ├── columns: foo1:1(int) foo2:2(int) foo3:3(int)
+ ├── columns: foo1:1(int!null) foo2:2(int!null) foo3:3(int!null)
  ├── tuple [type=tuple{int, int, int}]
  │    ├── const: 1 [type=int]
  │    ├── const: 2 [type=int]
@@ -1053,7 +1053,7 @@ build
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2)
 ----
 values
- ├── columns: foo1:1(int) foo2:2(int) column3:3(int)
+ ├── columns: foo1:1(int!null) foo2:2(int!null) column3:3(int!null)
  ├── tuple [type=tuple{int, int, int}]
  │    ├── const: 1 [type=int]
  │    ├── const: 2 [type=int]
@@ -1130,9 +1130,9 @@ build
 SELECT * FROM (SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS moo (moo1, moo2, moo3) WHERE moo1 = 4) as foo (foo1)
 ----
 select
- ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
+ ├── columns: foo1:1(int!null) moo2:2(int!null) moo3:3(int!null)
  ├── values
- │    ├── columns: column1:1(int) column2:2(int) column3:3(int)
+ │    ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
  │    ├── tuple [type=tuple{int, int, int}]
  │    │    ├── const: 1 [type=int]
  │    │    ├── const: 2 [type=int]
@@ -1150,10 +1150,10 @@ build
 SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
 sort
- ├── columns: foo1:1(int) moo2:2(int) moo3:3(int)
+ ├── columns: foo1:1(int!null) moo2:2(int!null) moo3:3(int!null)
  ├── ordering: +1
  └── values
-      ├── columns: column1:1(int) column2:2(int) column3:3(int)
+      ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
       ├── tuple [type=tuple{int, int, int}]
       │    ├── const: 1 [type=int]
       │    ├── const: 8 [type=int]
@@ -1171,11 +1171,11 @@ build
 SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
 ----
 project
- ├── columns: a:1(int) b:2(int)
+ ├── columns: a:1(int!null) b:2(int!null)
  └── select
-      ├── columns: column1:1(int) column2:2(int) column3:3(int)
+      ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
       ├── values
-      │    ├── columns: column1:1(int) column2:2(int) column3:3(int)
+      │    ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
       │    ├── tuple [type=tuple{int, int, int}]
       │    │    ├── const: 1 [type=int]
       │    │    ├── const: 2 [type=int]
@@ -1199,7 +1199,7 @@ build
 SELECT foo.a FROM (VALUES (1), (2), (3)) AS foo (a)
 ----
 values
- ├── columns: a:1(int)
+ ├── columns: a:1(int!null)
  ├── tuple [type=tuple{int}]
  │    └── const: 1 [type=int]
  ├── tuple [type=tuple{int}]
@@ -1211,7 +1211,7 @@ build
 SELECT foo.a, a, column2, foo.column2 FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo (a)
 ----
 values
- ├── columns: a:1(int) a:1(int) column2:2(string) column2:2(string)
+ ├── columns: a:1(int!null) a:1(int!null) column2:2(string!null) column2:2(string!null)
  ├── tuple [type=tuple{int, string}]
  │    ├── const: 1 [type=int]
  │    └── const: 'one' [type=string]

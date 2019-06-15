@@ -101,7 +101,7 @@ norm
 SELECT * FROM xysd JOIN uv ON false
 ----
 values
- ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int)
+ ├── columns: x:1(int!null) y:2(int!null) s:3(string!null) d:4(decimal!null) u:5(int!null) v:6(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -950,7 +950,7 @@ norm
 SELECT * FROM (SELECT 1) JOIN (SELECT 1 WHERE false) ON true
 ----
 values
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -960,20 +960,20 @@ norm
 SELECT * FROM (SELECT 1) LEFT JOIN (SELECT 1 WHERE false) ON true
 ----
 left-join
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1,) [type=tuple{int}]
  ├── values
- │    ├── columns: "?column?":2(int)
+ │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── stats: [rows=0]
  │    ├── key: ()
@@ -984,7 +984,7 @@ norm
 SELECT * FROM (SELECT 1) RIGHT JOIN (SELECT 1 WHERE false) ON true
 ----
 values
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -994,20 +994,20 @@ norm
 SELECT * FROM (SELECT 1) FULL JOIN (SELECT 1 WHERE false) ON true
 ----
 left-join
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1,) [type=tuple{int}]
  ├── values
- │    ├── columns: "?column?":2(int)
+ │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── stats: [rows=0]
  │    ├── key: ()
@@ -1018,7 +1018,7 @@ norm
 SELECT * FROM (SELECT 1 WHERE false) JOIN (SELECT 1) ON true
 ----
 values
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -1028,7 +1028,7 @@ norm
 SELECT * FROM (SELECT 1 WHERE false) LEFT JOIN (SELECT 1) ON true
 ----
 values
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -1038,19 +1038,19 @@ norm
 SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
 ----
 right-join
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── stats: [rows=0]
  │    ├── key: ()
  │    └── fd: ()-->(1)
  ├── values
- │    ├── columns: "?column?":2(int)
+ │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
@@ -1062,19 +1062,19 @@ norm
 SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
 ----
 right-join
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── stats: [rows=0]
  │    ├── key: ()
  │    └── fd: ()-->(1)
  ├── values
- │    ├── columns: "?column?":2(int)
+ │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
@@ -1086,19 +1086,19 @@ norm
 SELECT * FROM (SELECT 1) FULL JOIN (VALUES (1), (2)) ON true
 ----
 inner-join
- ├── columns: "?column?":1(int) column1:2(int)
+ ├── columns: "?column?":1(int!null) column1:2(int!null)
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
  ├── fd: ()-->(1)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1,) [type=tuple{int}]
  ├── values
- │    ├── columns: column1:2(int)
+ │    ├── columns: column1:2(int!null)
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2]
  │    ├── (1,) [type=tuple{int}]

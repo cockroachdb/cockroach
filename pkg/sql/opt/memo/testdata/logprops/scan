@@ -147,7 +147,7 @@ opt
 SELECT 1 FROM t WHERE a > 1 AND a < 2
 ----
 values
- ├── columns: "?column?":5(int)
+ ├── columns: "?column?":5(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  ├── fd: ()-->(5)

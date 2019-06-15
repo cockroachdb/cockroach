@@ -70,7 +70,7 @@ norm
 SELECT * FROM a WHERE false
 ----
 values
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -234,7 +234,7 @@ SELECT pk FROM tab0 WHERE
   (col0 = 1 OR col0 IN (SELECT col3 FROM tab0))
 ----
 values
- ├── columns: pk:1(int)
+ ├── columns: pk:1(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -1398,7 +1398,7 @@ project
  │    │    ├── key: (2,3)
  │    │    ├── fd: (2,3)-->(4)
  │    │    ├── values
- │    │    │    ├── columns: column1:1(bool) column2:2(string) column3:3(varbit)
+ │    │    │    ├── columns: column1:1(bool!null) column2:2(string) column3:3(varbit)
  │    │    │    ├── cardinality: [2 - 2]
  │    │    │    ├── stats: [rows=2, distinct(2,3)=2, null(2,3)=2]
  │    │    │    ├── (true, NULL, B'001000101101110') [type=tuple{bool, string, varbit}]
