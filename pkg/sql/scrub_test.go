@@ -45,16 +45,16 @@ func TestScrubIndexMissingIndexEntry(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-CREATE INDEX secondary ON t.test (v);
-INSERT INTO t.test VALUES (10, 20);
+CREATE TABLE t."tEst" ("K" INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t."tEst" (v);
+INSERT INTO t."tEst" VALUES (10, 20);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "tEst")
 	secondaryIndex := &tableDesc.Indexes[0]
 
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
@@ -79,7 +79,7 @@ INSERT INTO t.test VALUES (10, 20);
 	}
 
 	// Run SCRUB and find the index errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t."tEst" WITH OPTIONS INDEX ALL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -97,8 +97,8 @@ INSERT INTO t.test VALUES (10, 20);
 			scrub.MissingIndexEntryError, result.ErrorType)
 	} else if result.Database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.Database)
-	} else if result.Table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.Table != "tEst" {
+		t.Fatalf("expected table %q, got %q", "tEst", result.Table)
 	} else if result.PrimaryKey != "(10)" {
 		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
 	} else if result.Repaired {

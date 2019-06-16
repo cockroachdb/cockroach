@@ -314,16 +314,17 @@ func createIndexCheckQuery(
 					ON %[6]s
 				WHERE (%[7]s) OR
 							(%[8]s)`
+	columnNamesList := fmt.Sprintf(`"%s"`, strings.Join(columnNames, `","`))
 	return fmt.Sprintf(checkIndexQuery,
 		tableColumnsProjection("leftside", columnNames),  // 1
 		tableColumnsProjection("rightside", columnNames), // 2
-		tableName.String(),             // 3
-		indexDesc.ID,                   // 4
-		strings.Join(columnNames, ","), // 5
+		tableName.String(), // 3
+		indexDesc.ID,       // 4
+		columnNamesList,    // 5
 		tableColumnsEQ("leftside", "rightside", columnNames, columnNames),                                      // 6
 		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */),  // 7
 		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */), // 8
-		strings.Join(columnNames, ","), // 9
-		asOfClauseStr,                  // 10
+		columnNamesList, // 9
+		asOfClauseStr,   // 10
 	)
 }
