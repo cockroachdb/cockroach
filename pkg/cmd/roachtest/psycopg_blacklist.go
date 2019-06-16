@@ -284,7 +284,6 @@ var psycopgBlackList19_1 = blacklist{
 	"tests.test_types_basic.TypesBasicTests.testArrayOfNulls":                                                "32552",
 	"tests.test_types_basic.TypesBasicTests.testEmptyArray":                                                  "23299",
 	"tests.test_types_basic.TypesBasicTests.testEmptyArrayRegression":                                        "36179",
-	"tests.test_types_basic.TypesBasicTests.testGenericArrayNull":                                            "25123",
 	"tests.test_types_basic.TypesBasicTests.testNestedArrays":                                                "32552",
 	"tests.test_types_basic.TypesBasicTests.testNestedEmptyArray":                                            "32552",
 	"tests.test_types_basic.TypesBasicTests.testNetworkArray":                                                "18846",
