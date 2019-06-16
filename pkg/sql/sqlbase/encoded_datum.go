@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -216,7 +217,7 @@ func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
 		return nil
 	}
 	if ed.encoded == nil {
-		panic("decoding unset EncDatum")
+		return pgerror.NewAssertionErrorf("decoding unset EncDatum")
 	}
 	datType := typ.ToDatumType()
 	var err error
