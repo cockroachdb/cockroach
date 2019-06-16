@@ -350,7 +350,7 @@ func tableColumnsIsNullPredicate(
 			buf.WriteString(conjunction)
 			buf.WriteByte(' ')
 		}
-		fmt.Fprintf(&buf, "%[1]s.%[2]s IS %[3]s", tableName, col, nullCheck)
+		fmt.Fprintf(&buf, "%[1]q.%[2]q IS %[3]s", tableName, col, nullCheck)
 	}
 	return buf.String()
 }
@@ -377,7 +377,7 @@ func tableColumnsEQ(
 		if i > 0 {
 			buf.WriteString(" AND ")
 		}
-		fmt.Fprintf(&buf, `%[1]s.%[3]s = %[2]s.%[4]s`,
+		fmt.Fprintf(&buf, `%[1]q.%[3]q = %[2]q.%[4]q`,
 			tableName, otherTableName, columns[i], otherColumns[i])
 	}
 	return buf.String()
@@ -395,7 +395,7 @@ func tableColumnsProjection(tableName string, columns []string) string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%[1]s.%[2]s", tableName, col)
+		fmt.Fprintf(&buf, "%[1]q.%[2]q", tableName, col)
 	}
 	return buf.String()
 }
