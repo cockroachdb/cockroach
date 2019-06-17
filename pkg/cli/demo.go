@@ -173,6 +173,8 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 `, adminURL)
 	}
 
+	checkTzDatabaseAvailability(context.Background())
+
 	conn := makeSQLConn(connURL)
 	defer conn.Close()
 
