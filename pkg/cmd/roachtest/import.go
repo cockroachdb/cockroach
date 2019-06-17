@@ -93,6 +93,7 @@ func registerImportTPCC(r *registry) {
 		Cluster: makeClusterSpec(8, cpu(16), geo(), zones(geoZones)),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			t.Skip("#37349 - OOMing", "" /* details */)
 			runImportTPCC(ctx, t, c, geoWarehouses)
 		},
 	})
