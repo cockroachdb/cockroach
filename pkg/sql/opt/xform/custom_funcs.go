@@ -170,7 +170,7 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 	var notNullCols opt.ColSet
 	for i := 0; i < tab.ColumnCount(); i++ {
 		if !tab.Column(i).IsNullable() {
-			notNullCols.Add(int(tabID.ColumnID(i)))
+			notNullCols.Add(tabID.ColumnID(i))
 		}
 	}
 
@@ -407,7 +407,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 		colID := tabID.ColumnID(col.Ordinal)
 		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
 		if !col.IsNullable() {
-			notNullCols.Add(int(colID))
+			notNullCols.Add(colID)
 		}
 	}
 
@@ -484,7 +484,7 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 		// If the filter involves the first index column, then the index can
 		// possibly be constrained.
 		firstIndexCol := tabID.ColumnID(index.Column(0).Ordinal)
-		if filterProps.OuterCols.Contains(int(firstIndexCol)) {
+		if filterProps.OuterCols.Contains(firstIndexCol) {
 			return true
 		}
 
@@ -856,7 +856,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		indexCols := iter.indexCols()
 		lookupJoin.Cols = scanPrivate.Cols.Intersection(indexCols)
 		for i := range pkCols {
-			lookupJoin.Cols.Add(int(pkCols[i]))
+			lookupJoin.Cols.Add(pkCols[i])
 		}
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
@@ -951,13 +951,13 @@ func eqColsForZigzag(
 	j, rightCnt := 0, rightIndex.LaxKeyColumnCount()
 	for ; i < leftCnt; i++ {
 		colID := tabID.ColumnID(leftIndex.Column(i).Ordinal)
-		if !fixedCols.Contains(int(colID)) {
+		if !fixedCols.Contains(colID) {
 			break
 		}
 	}
 	for ; j < rightCnt; j++ {
 		colID := tabID.ColumnID(rightIndex.Column(j).Ordinal)
-		if !fixedCols.Contains(int(colID)) {
+		if !fixedCols.Contains(colID) {
 			break
 		}
 	}
@@ -1077,7 +1077,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		}
 		// Short-circuit quickly if the first column in the index is not a fixed
 		// column.
-		if !fixedCols.Contains(int(scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal))) {
+		if !fixedCols.Contains(scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)) {
 			continue
 		}
 
@@ -1086,7 +1086,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		iter2.indexOrdinal = iter.indexOrdinal
 
 		for iter2.next() {
-			if !fixedCols.Contains(int(scanPrivate.Table.ColumnID(iter2.index.Column(0).Ordinal))) {
+			if !fixedCols.Contains(scanPrivate.Table.ColumnID(iter2.index.Column(0).Ordinal)) {
 				continue
 			}
 			// Columns that are in both indexes are, by definition, equal.
@@ -1215,7 +1215,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			// Ensure the zigzag join returns pk columns.
 			zigzagJoin.Cols = scanPrivate.Cols.Intersection(zigzagCols)
 			for i := range pkCols {
-				zigzagJoin.Cols.Add(int(pkCols[i]))
+				zigzagJoin.Cols.Add(pkCols[i])
 			}
 
 			if c.FiltersBoundBy(zigzagJoin.On, zigzagCols) {
@@ -1356,7 +1356,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		zigzagCols := iter.indexCols()
 		for i, cnt := 0, iter.index.KeyColumnCount(); i < cnt; i++ {
 			colID := scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal)
-			zigzagCols.Remove(int(colID))
+			zigzagCols.Remove(colID)
 		}
 
 		pkIndex := iter.tab.Index(cat.PrimaryIndex)
@@ -1365,7 +1365,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
 			// Ensure primary key columns are always retrieved from the zigzag
 			// join.
-			zigzagCols.Add(int(pkCols[i]))
+			zigzagCols.Add(pkCols[i])
 		}
 
 		// Case 1 (zigzagged indexes contain all requested columns).
@@ -1385,7 +1385,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// Ensure the zigzag join returns pk columns.
 		zigzagJoin.Cols = scanPrivate.Cols.Intersection(zigzagCols)
 		for i := range pkCols {
-			zigzagJoin.Cols.Add(int(pkCols[i]))
+			zigzagJoin.Cols.Add(pkCols[i])
 		}
 
 		if c.FiltersBoundBy(zigzagJoin.On, zigzagCols) {
@@ -1480,13 +1480,13 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 		oIdx, intraIdx := 0, 0
 		for ; oIdx < len(o); oIdx++ {
 			oCol := o[oIdx].ID()
-			if private.GroupingCols.Contains(int(oCol)) || intraOrd.Optional.Contains(int(oCol)) {
+			if private.GroupingCols.Contains(oCol) || intraOrd.Optional.Contains(oCol) {
 				// Grouping or optional column.
 				continue
 			}
 
 			if intraIdx < len(intraOrd.Columns) &&
-				intraOrd.Columns[intraIdx].Group.Contains(int(oCol)) &&
+				intraOrd.Columns[intraIdx].Group.Contains(oCol) &&
 				intraOrd.Columns[intraIdx].Descending == o[oIdx].Descending() {
 				// Column matches the one in the ordering.
 				intraIdx++

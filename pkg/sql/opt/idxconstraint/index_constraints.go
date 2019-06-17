@@ -1211,7 +1211,7 @@ func (c *indexConstraintCtx) isIndexColumn(nd opt.Expr, offset int) bool {
 
 // isNullable returns true if the index column <offset> is nullable.
 func (c *indexConstraintCtx) isNullable(offset int) bool {
-	return !c.notNullCols.Contains(int(c.columns[offset].ID()))
+	return !c.notNullCols.Contains(c.columns[offset].ID())
 }
 
 // colType returns the type of the index column <offset>.

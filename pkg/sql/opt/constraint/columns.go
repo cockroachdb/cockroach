@@ -116,9 +116,9 @@ func (c *Columns) IsStrictSuffixOf(other *Columns) bool {
 // ColSet returns the columns as a ColSet.
 func (c *Columns) ColSet() opt.ColSet {
 	var r opt.ColSet
-	r.Add(int(c.firstCol.ID()))
+	r.Add(c.firstCol.ID())
 	for _, c := range c.otherCols {
-		r.Add(int(c.ID()))
+		r.Add(c.ID())
 	}
 	return r
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -399,6 +400,15 @@ func (h *hasher) HashColumnID(val opt.ColumnID) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashFastIntSet(val util.FastIntSet) {
+	hash := h.hash
+	for c, ok := val.Next(0); ok; c, ok = val.Next(c + 1) {
+		hash ^= internHash(c)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
 func (h *hasher) HashColSet(val opt.ColSet) {
 	hash := h.hash
 	for c, ok := val.Next(0); ok; c, ok = val.Next(c + 1) {
@@ -469,7 +479,7 @@ func (h *hasher) HashJoinFlags(val JoinFlags) {
 }
 
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
-	h.HashColSet(val.Flags)
+	h.HashFastIntSet(val.Flags)
 	h.HashUint64(uint64(val.Mode))
 }
 

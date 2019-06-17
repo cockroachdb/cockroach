@@ -119,7 +119,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 					b.buildScalar(e, inScope, nil, nil, nil),
 				)
 			}
-			partitions[i].Add(int(col.id))
+			partitions[i].Add(col.id)
 		}
 
 		ord := make(opt.Ordering, 0, len(def.OrderBy))

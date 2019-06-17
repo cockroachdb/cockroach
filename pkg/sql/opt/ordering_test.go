@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestOrdering(t *testing.T) {
@@ -44,7 +43,7 @@ func TestOrdering(t *testing.T) {
 		t.Error("ordering should provide the empty ordering")
 	}
 
-	if !ordering.ColSet().Equals(util.MakeFastIntSet(1, 5)) {
+	if !ordering.ColSet().Equals(opt.MakeColSet(1, 5)) {
 		t.Error("ordering colset should equal the ordering columns")
 	}
 
@@ -112,22 +111,22 @@ func TestOrderingSet(t *testing.T) {
 	expect(s2, "")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(util.MakeFastIntSet(1, 2, 3, 5))
+	s2.RestrictToCols(opt.MakeColSet(1, 2, 3, 5))
 	expect(s2, "(+1,+2,+5) (+1,-2,+3)")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(util.MakeFastIntSet(1, 2, 3))
+	s2.RestrictToCols(opt.MakeColSet(1, 2, 3))
 	expect(s2, "(+1,+2) (+1,-2,+3)")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(util.MakeFastIntSet(1, 2))
+	s2.RestrictToCols(opt.MakeColSet(1, 2))
 	expect(s2, "(+1,+2) (+1,-2)")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(util.MakeFastIntSet(1, 3))
+	s2.RestrictToCols(opt.MakeColSet(1, 3))
 	expect(s2, "(+1)")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(util.MakeFastIntSet(2, 3))
+	s2.RestrictToCols(opt.MakeColSet(2, 3))
 	expect(s2, "")
 }

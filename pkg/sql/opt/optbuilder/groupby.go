@@ -137,7 +137,7 @@ func (b *Builder) constructGroupBy(
 	// multiple times.
 	colSet := opt.ColSet{}
 	for i := range aggCols {
-		if id, scalar := aggCols[i].id, aggCols[i].scalar; !colSet.Contains(int(id)) {
+		if id, scalar := aggCols[i].id, aggCols[i].scalar; !colSet.Contains(id) {
 			if scalar == nil {
 				// A "pass through" column (i.e. a VariableOp) is not legal as an
 				// aggregation.
@@ -147,7 +147,7 @@ func (b *Builder) constructGroupBy(
 				Agg:        scalar,
 				ColPrivate: memo.ColPrivate{Col: id},
 			})
-			colSet.Add(int(id))
+			colSet.Add(id)
 		}
 	}
 
@@ -290,7 +290,7 @@ func (b *Builder) buildAggregation(
 
 	var groupingColSet opt.ColSet
 	for i := range groupingCols {
-		groupingColSet.Add(int(groupingCols[i].id))
+		groupingColSet.Add(groupingCols[i].id)
 	}
 
 	aggOutScope.expr = b.constructGroupBy(

@@ -226,7 +226,7 @@ func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
 func (n AggregationsExpr) OutputCols() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
-		colSet.Add(int(n[i].Col))
+		colSet.Add(n[i].Col)
 	}
 	return colSet
 }
@@ -246,7 +246,7 @@ func (n ZipExpr) OutputCols() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
 		for _, col := range n[i].Cols {
-			colSet.Add(int(col))
+			colSet.Add(col)
 		}
 	}
 	return colSet
@@ -381,12 +381,12 @@ func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
 // input columns using the MapToInputID function.
 func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 	var inCols opt.ColSet
-	tabCols.ForEach(func(t int) {
-		id := m.MapToInputID(opt.ColumnID(t))
+	tabCols.ForEach(func(t opt.ColumnID) {
+		id := m.MapToInputID(t)
 		if id == 0 {
 			panic(pgerror.AssertionFailedf("could not find input column for %d", log.Safe(t)))
 		}
-		inCols.Add(int(id))
+		inCols.Add(id)
 	})
 	return inCols
 }
@@ -417,7 +417,7 @@ func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncD
 func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 	switch t := e.(type) {
 	case *VariableExpr:
-		return notNullCols.Contains(int(t.Col))
+		return notNullCols.Contains(t.Col)
 
 	case *TrueExpr, *FalseExpr, *ConstExpr, *IsExpr, *IsNotExpr:
 		return true

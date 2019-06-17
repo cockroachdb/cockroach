@@ -731,8 +731,8 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 	}
 
 	var equiv opt.ColSet
-	equiv.Add(int(a))
-	equiv.Add(int(b))
+	equiv.Add(a)
+	equiv.Add(b)
 	f.addEquivalency(equiv)
 }
 
@@ -811,12 +811,12 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 //   ()-->(c)
 //
 func (f *FuncDepSet) AddSynthesizedCol(from opt.ColSet, col opt.ColumnID) {
-	if from.Contains(int(col)) {
+	if from.Contains(col) {
 		panic(pgerror.AssertionFailedf("synthesized column cannot depend upon itself"))
 	}
 
 	var colSet opt.ColSet
-	colSet.Add(int(col))
+	colSet.Add(col)
 	f.addDependency(from, colSet, true /* strict */, false /* equiv */)
 }
 
@@ -937,7 +937,7 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 				if id, foundAll = equivMap[opt.ColumnID(c)]; !foundAll {
 					break
 				}
-				afterCols.Add(int(id))
+				afterCols.Add(id)
 			}
 			if foundAll {
 				// Dependency can be remapped using equivalencies.
@@ -1204,7 +1204,7 @@ func (f *FuncDepSet) EquivReps() opt.ColSet {
 // ComputeEquivGroup returns the group of columns that are equivalent to the
 // given column. See ComputeEquivClosure for more details.
 func (f *FuncDepSet) ComputeEquivGroup(rep opt.ColumnID) opt.ColSet {
-	return f.ComputeEquivClosure(util.MakeFastIntSet(int(rep)))
+	return f.ComputeEquivClosure(opt.MakeColSet(rep))
 }
 
 // ensureKeyClosure checks whether the closure for this FD set's key (if there
