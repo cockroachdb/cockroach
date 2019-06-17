@@ -156,6 +156,9 @@ func TestSortRandomized(t *testing.T) {
 							// Small range so we can test partitioning
 							tups[i][j] = rng.Int63() % 2048
 						}
+						// Enforce that the last ordering column is always unique. Otherwise
+						// there would be multiple valid sort orders.
+						tups[i][ordCols[nOrderingCols-1].ColIdx] = int64(i)
 					}
 
 					expected := make(tuples, nTups)
