@@ -336,8 +336,12 @@ ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i);
 							var ba roachpb.BatchRequest
 							ba.RangeID = r.RangeID
 							ba.Add(truncate)
-							if _, err := s.DB().NonTransactionalSender().Send(ctx, ba); err != nil {
-								t.Fatal(err)
+							if _, pErr := s.DB().NonTransactionalSender().Send(ctx, ba); pErr != nil {
+								// The index may no longer be around if the system decided to truncate the
+								// logs after we read it. Don't fail the test when that happens.
+								if !testutils.IsPError(pErr, "requested entry at index is unavailable") {
+									t.Fatal(err)
+								}
 							}
 						}
 						return true // want more
