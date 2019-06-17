@@ -14,6 +14,7 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestIndexSkipTableReader(t *testing.T) {
@@ -176,4 +178,136 @@ func TestIndexSkipTableReader(t *testing.T) {
 		})
 	}
 
+}
+
+func BenchmarkIndexScanTableReader(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	logScope := log.Scope(b)
+	defer logScope.Close(b)
+
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	defer evalCtx.Stop(ctx)
+
+	const numCols = 2
+
+	// test for number of rows in the table
+	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16, 1 << 18} {
+		// test for a ratio of values from 1 unique value of the first column
+		// of the primary key to x values of the second column
+		for _, valueRatio := range []int{1, 100, 500, 1000, 5000, 10000} {
+			if valueRatio > numRows {
+				continue
+			}
+			tableName := fmt.Sprintf("t_%d_%d", numRows, valueRatio)
+			xFn := func(row int) tree.Datum {
+				return tree.NewDInt(tree.DInt(row / valueRatio))
+			}
+			yFn := func(row int) tree.Datum {
+				return tree.NewDInt(tree.DInt(row % valueRatio))
+			}
+
+			sqlutils.CreateTable(
+				b, sqlDB, tableName,
+				"x INT, y INT, PRIMARY KEY (x, y)",
+				numRows,
+				sqlutils.ToRowFn(xFn, yFn))
+
+			expectedCount := (numRows / valueRatio)
+			if valueRatio != 1 {
+				expectedCount++
+			}
+
+			tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
+
+			runner := func(reader RowSource, b *testing.B) {
+				reader.Start(ctx)
+				count := 0
+				for {
+					row, meta := reader.Next()
+					if meta != nil && meta.TxnCoordMeta == nil {
+						b.Fatalf("unexpected metadata: %+v", meta)
+					}
+					if row == nil {
+						break
+					}
+					count++
+				}
+				if count != expectedCount {
+					b.Fatalf("found %d rows, expected %d", count, expectedCount)
+				}
+			}
+
+			flowCtxTableReader := FlowCtx{
+				EvalCtx:  &evalCtx,
+				Settings: s.ClusterSettings(),
+				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				nodeID:   s.NodeID(),
+			}
+
+			b.Run(fmt.Sprintf("TableReader+Distinct-rows=%d-ratio=%d", numRows, valueRatio), func(b *testing.B) {
+				spec := distsqlpb.TableReaderSpec{
+					Table: *tableDesc,
+					Spans: []distsqlpb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+				}
+				post := distsqlpb.PostProcessSpec{
+					Projection:    true,
+					OutputColumns: []uint32{0},
+				}
+
+				specDistinct := distsqlpb.DistinctSpec{
+					OrderedColumns:  []uint32{0},
+					DistinctColumns: []uint32{0},
+				}
+				postDistinct := distsqlpb.PostProcessSpec{}
+
+				// b.SetBytes(int64(numRows * numCols * 8))
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					tr, err := newTableReader(&flowCtxTableReader, 0, &spec, &post, nil)
+					if err != nil {
+						b.Fatal(err)
+					}
+					dist, err := NewDistinct(&flowCtxTableReader, 0, &specDistinct, tr, &postDistinct, nil)
+					if err != nil {
+						b.Fatal(err)
+					}
+					runner(dist, b)
+				}
+			})
+
+			flowCtxIndexSkipTableReader := FlowCtx{
+				EvalCtx:  &evalCtx,
+				Settings: s.ClusterSettings(),
+				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				nodeID:   s.NodeID(),
+			}
+
+			// run the index skip table reader
+			b.Run(fmt.Sprintf("IndexSkipTableReader-rows=%d-ratio=%d", numRows, valueRatio), func(b *testing.B) {
+				spec := distsqlpb.IndexSkipTableReaderSpec{
+					Table: *tableDesc,
+					Spans: []distsqlpb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+				}
+				post := distsqlpb.PostProcessSpec{
+					OutputColumns: []uint32{0},
+					Projection:    true,
+				}
+				// b.SetBytes(int64)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					it, err := newIndexSkipTableReader(&flowCtxIndexSkipTableReader, 0, &spec, &post, nil)
+					if err != nil {
+						b.Fatal(err)
+					}
+					runner(it, b)
+				}
+			})
+		}
+	}
 }
