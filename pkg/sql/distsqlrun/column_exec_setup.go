@@ -785,6 +785,7 @@ func (f *Flow) setupVectorizedRouter(
 	output *distsqlpb.OutputRouterSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
 	streamIDToInputOp map[distsqlpb.StreamID]exec.Operator,
+	recordingStats bool,
 ) error {
 	if output.Type == distsqlpb.OutputRouterSpec_PASS_THROUGH {
 		// Nothing to do.
@@ -815,6 +816,9 @@ func (f *Flow) setupVectorizedRouter(
 		}),
 	)
 
+	// Append the router to the metadata sources.
+	metadataSourcesQueue = append(metadataSourcesQueue, router)
+
 	consumedMetadataSources := false
 	for i, op := range outputs {
 		stream := &output.Streams[i]
@@ -831,6 +835,18 @@ func (f *Flow) setupVectorizedRouter(
 			metadataSourcesQueue = nil
 			consumedMetadataSources = true
 		case distsqlpb.StreamEndpointSpec_LOCAL:
+			if recordingStats {
+				// Wrap local outputs with vectorized stats collectors when recording
+				// stats. This is mostly for compatibility but will provide some useful
+				// information (e.g. output stall time).
+				var err error
+				op, err = wrapWithVectorizedStatsCollector(
+					op, nil /* inputs */, &distsqlpb.ProcessorSpec{ProcessorID: -1},
+				)
+				if err != nil {
+					return err
+				}
+			}
 			streamIDToInputOp[stream.StreamID] = op
 		}
 	}
@@ -993,7 +1009,12 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		output := &pspec.Output[0]
 		if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
 			if err := f.setupVectorizedRouter(
-				op, outputTypes, output, append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...), streamIDToInputOp,
+				op,
+				outputTypes,
+				output,
+				append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
+				streamIDToInputOp,
+				recordingStats,
 			); err != nil {
 				return err
 			}
