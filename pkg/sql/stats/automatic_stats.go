@@ -309,7 +309,11 @@ func (r *Refresher) ensureAllTables(
 
 	// Use a historical read so as to disable txn contention resolution.
 	getAllTablesQuery := fmt.Sprintf(
-		`SELECT table_id FROM crdb_internal.tables AS OF SYSTEM TIME '-%s' WHERE schema_name = 'public'`,
+		`
+SELECT table_id FROM crdb_internal.tables AS OF SYSTEM TIME '-%s'
+WHERE schema_name = 'public'
+AND drop_time IS NULL
+`,
 		initialTableCollectionDelay)
 
 	rows, err := r.ex.Query(
