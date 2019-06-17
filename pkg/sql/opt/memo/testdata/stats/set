@@ -845,21 +845,21 @@ SELECT * FROM
 WHERE a IS NULL and b
 ----
 except
- ├── columns: a:5(int) b:2(bool)
- ├── left columns: column1:5(int) column2:2(bool)
+ ├── columns: a:5(int) b:2(bool!null)
+ ├── left columns: column1:5(int) column2:2(bool!null)
  ├── right columns: column1:3(int) column2:6(bool)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(2,5)=1, null(2,5)=1]
  ├── key: (2,5)
  ├── values
- │    ├── columns: column2:2(bool) column1:5(int)
+ │    ├── columns: column2:2(bool!null) column1:5(int)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1, distinct(2,5)=1, null(2,5)=1]
  │    ├── key: ()
  │    ├── fd: ()-->(2,5)
  │    └── (true, NULL) [type=tuple{bool, int}]
  └── values
-      ├── columns: column1:3(int) column2:6(bool)
+      ├── columns: column1:3(int!null) column2:6(bool!null)
       ├── cardinality: [0 - 0]
       ├── stats: [rows=0, distinct(3,6)=0, null(3,6)=0]
       ├── key: ()
@@ -893,14 +893,14 @@ except
  │    └── filters
  │         └── column1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
  └── select
-      ├── columns: column1:3(int) column2:4(int)
+      ├── columns: column1:3(int!null) column2:4(int!null)
       ├── cardinality: [0 - 3]
-      ├── stats: [rows=1, distinct(3)=1, null(3)=0, distinct(3,4)=1, null(3,4)=0]
+      ├── stats: [rows=1, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(3,4)=1, null(3,4)=0]
       ├── fd: ()-->(3)
       ├── values
-      │    ├── columns: column1:3(int) column2:4(int)
+      │    ├── columns: column1:3(int!null) column2:4(int!null)
       │    ├── cardinality: [3 - 3]
-      │    ├── stats: [rows=3, distinct(3)=3, null(3)=0, distinct(3,4)=3, null(3,4)=0]
+      │    ├── stats: [rows=3, distinct(3)=3, null(3)=0, distinct(4)=3, null(4)=0, distinct(3,4)=3, null(3,4)=0]
       │    ├── (1, 2) [type=tuple{int, int}]
       │    ├── (2, 3) [type=tuple{int, int}]
       │    └── (3, 4) [type=tuple{int, int}]
@@ -925,7 +925,7 @@ sort
       ├── stats: [rows=1, distinct(1)=1, null(1)=0]
       ├── key: (1)
       ├── values
-      │    ├── columns: column1:1(int)
+      │    ├── columns: column1:1(int!null)
       │    ├── cardinality: [1 - 1]
       │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
       │    ├── key: ()

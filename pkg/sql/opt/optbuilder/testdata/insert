@@ -77,11 +77,11 @@ insert abcde
  │    ├──  column1:7 => e:5
  │    └──  column10:10 => rowid:6
  └── project
-      ├── columns: column11:11(int) column1:7(int) column2:8(int) column3:9(int) column10:10(int)
+      ├── columns: column11:11(int) column1:7(int!null) column2:8(int!null) column3:9(int!null) column10:10(int)
       ├── project
-      │    ├── columns: column10:10(int) column1:7(int) column2:8(int) column3:9(int)
+      │    ├── columns: column10:10(int) column1:7(int!null) column2:8(int!null) column3:9(int!null)
       │    ├── values
-      │    │    ├── columns: column1:7(int) column2:8(int) column3:9(int)
+      │    │    ├── columns: column1:7(int!null) column2:8(int!null) column3:9(int!null)
       │    │    └── tuple [type=tuple{int, int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         ├── const: 2 [type=int]
@@ -109,11 +109,11 @@ insert abcde
  │    ├──  column1:7 => e:5
  │    └──  column10:10 => rowid:6
  └── project
-      ├── columns: column11:11(int) column1:7(int) column8:8(int) column9:9(int!null) column10:10(int)
+      ├── columns: column11:11(int) column1:7(int!null) column8:8(int) column9:9(int!null) column10:10(int)
       ├── project
-      │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int)
+      │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int!null)
       │    ├── values
-      │    │    ├── columns: column1:7(int)
+      │    │    ├── columns: column1:7(int!null)
       │    │    └── tuple [type=tuple{int}]
       │    │         └── const: 1 [type=int]
       │    └── projections
@@ -232,11 +232,11 @@ insert abcde
  │    ├──  column1:7 => e:5
  │    └──  column10:10 => rowid:6
  └── project
-      ├── columns: column11:11(int) column1:7(int) column2:8(int) column3:9(int) column10:10(int)
+      ├── columns: column11:11(int) column1:7(int!null) column2:8(int) column3:9(int) column10:10(int)
       ├── project
-      │    ├── columns: column10:10(int) column1:7(int) column2:8(int) column3:9(int)
+      │    ├── columns: column10:10(int) column1:7(int!null) column2:8(int) column3:9(int)
       │    ├── values
-      │    │    ├── columns: column1:7(int) column2:8(int) column3:9(int)
+      │    │    ├── columns: column1:7(int!null) column2:8(int) column3:9(int)
       │    │    └── tuple [type=tuple{int, int, int}]
       │    │         ├── const: 2 [type=int]
       │    │         ├── cast: INT8 [type=int]
@@ -322,11 +322,11 @@ insert abcde
  │    ├──  column1:7 => e:5
  │    └──  column10:10 => rowid:6
  └── project
-      ├── columns: column11:11(int) column1:7(int) column2:8(int) column3:9(int) column10:10(int)
+      ├── columns: column11:11(int) column1:7(int!null) column2:8(int) column3:9(int!null) column10:10(int)
       ├── project
-      │    ├── columns: column10:10(int) column1:7(int) column2:8(int) column3:9(int)
+      │    ├── columns: column10:10(int) column1:7(int!null) column2:8(int) column3:9(int!null)
       │    ├── values
-      │    │    ├── columns: column1:7(int) column2:8(int) column3:9(int)
+      │    │    ├── columns: column1:7(int!null) column2:8(int) column3:9(int!null)
       │    │    ├── tuple [type=tuple{int, int, int}]
       │    │    │    ├── const: 1 [type=int]
       │    │    │    ├── cast: INT8 [type=int]
@@ -452,9 +452,9 @@ build
 SELECT * FROM [INSERT INTO abcde VALUES (1) RETURNING *]
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null)
  └── insert abcde
-      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
       ├── insert-mapping:
       │    ├──  column1:7 => a:1
       │    ├──  column8:8 => b:2
@@ -463,11 +463,11 @@ project
       │    ├──  column1:7 => e:5
       │    └──  column10:10 => rowid:6
       └── project
-           ├── columns: column11:11(int) column1:7(int) column8:8(int) column9:9(int!null) column10:10(int)
+           ├── columns: column11:11(int) column1:7(int!null) column8:8(int) column9:9(int!null) column10:10(int)
            ├── project
-           │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int)
+           │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int!null)
            │    ├── values
-           │    │    ├── columns: column1:7(int)
+           │    │    ├── columns: column1:7(int!null)
            │    │    └── tuple [type=tuple{int}]
            │    │         └── const: 1 [type=int]
            │    └── projections
@@ -661,11 +661,11 @@ insert abcde
  │    ├──  column3:9 => e:5
  │    └──  column10:10 => rowid:6
  └── project
-      ├── columns: column11:11(int) column1:7(int) column2:8(int) column3:9(int) column10:10(int)
+      ├── columns: column11:11(int) column1:7(int!null) column2:8(int!null) column3:9(int!null) column10:10(int)
       ├── project
-      │    ├── columns: column10:10(int) column1:7(int) column2:8(int) column3:9(int)
+      │    ├── columns: column10:10(int) column1:7(int!null) column2:8(int!null) column3:9(int!null)
       │    ├── values
-      │    │    ├── columns: column1:7(int) column2:8(int) column3:9(int)
+      │    │    ├── columns: column1:7(int!null) column2:8(int!null) column3:9(int!null)
       │    │    └── tuple [type=tuple{int, int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         ├── const: 2 [type=int]
@@ -693,11 +693,11 @@ insert abcde
  │    ├──  column1:7 => e:5
  │    └──  column10:10 => rowid:6
  └── project
-      ├── columns: column11:11(int) column1:7(int) column8:8(int) column9:9(int!null) column10:10(int)
+      ├── columns: column11:11(int) column1:7(int!null) column8:8(int) column9:9(int!null) column10:10(int)
       ├── project
-      │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int)
+      │    ├── columns: column8:8(int) column9:9(int!null) column10:10(int) column1:7(int!null)
       │    ├── values
-      │    │    ├── columns: column1:7(int)
+      │    │    ├── columns: column1:7(int!null)
       │    │    └── tuple [type=tuple{int}]
       │    │         └── const: 1 [type=int]
       │    └── projections
@@ -717,9 +717,9 @@ build
 INSERT INTO abcde (a, rowid) VALUES (1, 2) RETURNING *
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null)
  └── insert abcde
-      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
+      ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
       ├── insert-mapping:
       │    ├──  column1:7 => a:1
       │    ├──  column9:9 => b:2
@@ -728,11 +728,11 @@ project
       │    ├──  column1:7 => e:5
       │    └──  column2:8 => rowid:6
       └── project
-           ├── columns: column11:11(int) column1:7(int) column2:8(int) column9:9(int) column10:10(int!null)
+           ├── columns: column11:11(int) column1:7(int!null) column2:8(int!null) column9:9(int) column10:10(int!null)
            ├── project
-           │    ├── columns: column9:9(int) column10:10(int!null) column1:7(int) column2:8(int)
+           │    ├── columns: column9:9(int) column10:10(int!null) column1:7(int!null) column2:8(int!null)
            │    ├── values
-           │    │    ├── columns: column1:7(int) column2:8(int)
+           │    │    ├── columns: column1:7(int!null) column2:8(int!null)
            │    │    └── tuple [type=tuple{int, int}]
            │    │         ├── const: 1 [type=int]
            │    │         └── const: 2 [type=int]
@@ -754,7 +754,7 @@ VALUES (DEFAULT, DEFAULT, 1, DEFAULT), (3, 2, 1, DEFAULT), (DEFAULT, DEFAULT, 2,
 RETURNING *, rowid
 ----
 insert abcde
- ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
  ├── insert-mapping:
  │    ├──  column3:9 => a:1
  │    ├──  column2:8 => b:2
@@ -763,9 +763,9 @@ insert abcde
  │    ├──  column3:9 => e:5
  │    └──  column4:10 => rowid:6
  └── project
-      ├── columns: column11:11(int) column1:7(int) column2:8(int) column3:9(int) column4:10(int)
+      ├── columns: column11:11(int) column1:7(int!null) column2:8(int) column3:9(int!null) column4:10(int)
       ├── values
-      │    ├── columns: column1:7(int) column2:8(int) column3:9(int) column4:10(int)
+      │    ├── columns: column1:7(int!null) column2:8(int) column3:9(int!null) column4:10(int)
       │    ├── tuple [type=tuple{int, int, int, int}]
       │    │    ├── const: 10 [type=int]
       │    │    ├── cast: INT8 [type=int]
@@ -908,7 +908,7 @@ build
 INSERT INTO abcde (rowid, a) VALUES (1, 2) RETURNING *, rowid
 ----
 insert abcde
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) rowid:6(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) rowid:6(int!null)
  ├── insert-mapping:
  │    ├──  column2:8 => a:1
  │    ├──  column9:9 => b:2
@@ -917,11 +917,11 @@ insert abcde
  │    ├──  column2:8 => e:5
  │    └──  column1:7 => rowid:6
  └── project
-      ├── columns: column11:11(int) column1:7(int) column2:8(int) column9:9(int) column10:10(int!null)
+      ├── columns: column11:11(int) column1:7(int!null) column2:8(int!null) column9:9(int) column10:10(int!null)
       ├── project
-      │    ├── columns: column9:9(int) column10:10(int!null) column1:7(int) column2:8(int)
+      │    ├── columns: column9:9(int) column10:10(int!null) column1:7(int!null) column2:8(int!null)
       │    ├── values
-      │    │    ├── columns: column1:7(int) column2:8(int)
+      │    │    ├── columns: column1:7(int!null) column2:8(int!null)
       │    │    └── tuple [type=tuple{int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 2 [type=int]
@@ -1160,13 +1160,13 @@ insert mutation
  │    └──  column9:9 => p:4
  ├── check columns: check1:10(bool)
  └── project
-      ├── columns: check1:10(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int)
+      ├── columns: check1:10(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int)
       ├── project
-      │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    ├── columns: column9:9(int) column1:6(int!null) column2:7(int!null) column8:8(int!null)
       │    ├── project
-      │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
       │    │    ├── values
-      │    │    │    ├── columns: column1:6(int) column2:7(int)
+      │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
       │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │         ├── const: 1 [type=int]
       │    │    │         └── const: 2 [type=int]
@@ -1186,7 +1186,7 @@ build
 INSERT INTO mutation (m, n) VALUES (1, 2) RETURNING *
 ----
 insert mutation
- ├── columns: m:1(int!null) n:2(int)
+ ├── columns: m:1(int!null) n:2(int!null)
  ├── insert-mapping:
  │    ├──  column1:6 => m:1
  │    ├──  column2:7 => n:2
@@ -1194,13 +1194,13 @@ insert mutation
  │    └──  column9:9 => p:4
  ├── check columns: check1:10(bool)
  └── project
-      ├── columns: check1:10(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int)
+      ├── columns: check1:10(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int)
       ├── project
-      │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    ├── columns: column9:9(int) column1:6(int!null) column2:7(int!null) column8:8(int!null)
       │    ├── project
-      │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
       │    │    ├── values
-      │    │    │    ├── columns: column1:6(int) column2:7(int)
+      │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
       │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │         ├── const: 1 [type=int]
       │    │    │         └── const: 2 [type=int]
@@ -1250,11 +1250,11 @@ insert checks
  │    └──  column8:8 => d:4
  ├── check columns: check1:9(bool) check2:10(bool)
  └── project
-      ├── columns: check1:9(bool) check2:10(bool) column1:5(int) column2:6(int) column3:7(int) column8:8(int)
+      ├── columns: check1:9(bool) check2:10(bool) column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int)
       ├── project
-      │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column3:7(int)
+      │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column3:7(int!null)
       │    ├── values
-      │    │    ├── columns: column1:5(int) column2:6(int) column3:7(int)
+      │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null)
       │    │    └── tuple [type=tuple{int, int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         ├── const: 2 [type=int]

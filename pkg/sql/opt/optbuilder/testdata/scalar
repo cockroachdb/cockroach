@@ -839,7 +839,7 @@ project
  └── projections
       └── array-flatten [type=string[]]
            └── values
-                ├── columns: column1:1(string)
+                ├── columns: column1:1(string!null)
                 ├── tuple [type=tuple{string}]
                 │    └── const: 'foo' [type=string]
                 ├── tuple [type=tuple{string}]

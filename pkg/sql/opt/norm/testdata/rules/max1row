@@ -60,7 +60,7 @@ values
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── values
-           │         ├── columns: i:2(int)
+           │         ├── columns: i:2(int!null)
            │         ├── cardinality: [0 - 0]
            │         ├── key: ()
            │         └── fd: ()-->(2)

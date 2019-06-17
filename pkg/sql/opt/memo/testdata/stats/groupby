@@ -489,7 +489,7 @@ project
  │    │    │    ├── stats: [rows=1.5, distinct(1)=1, null(1)=0, distinct(2)=1.29289322, null(2)=1]
  │    │    │    ├── fd: ()-->(1)
  │    │    │    ├── values
- │    │    │    │    ├── columns: column1:1(bool) column2:2(int)
+ │    │    │    │    ├── columns: column1:1(bool!null) column2:2(int)
  │    │    │    │    ├── cardinality: [3 - 3]
  │    │    │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=2]
  │    │    │    │    ├── (true, NULL) [type=tuple{bool, int}]
