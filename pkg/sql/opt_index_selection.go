@@ -320,10 +320,10 @@ func calculateMaxResults(
 		if col, err := t.FindColumnByID(id); err != nil {
 			return 0
 		} else if !col.IsNullable() {
-			notNullCols.Add(int(id))
+			notNullCols.Add(opt.ColumnID(id))
 		}
 
-		indexCols.Add(int(id))
+		indexCols.Add(opt.ColumnID(id))
 	}
 
 	return c.CalculateMaxResults(evalCtx, indexCols, notNullCols)
@@ -504,7 +504,7 @@ func (v *indexInfo) makeIndexConstraints(
 		col := opt.MakeOrderingColumn(opt.ColumnID(idx+1), dir == encoding.Descending)
 		columns = append(columns, col)
 		if !v.desc.Columns[idx].Nullable {
-			notNullCols.Add(idx + 1)
+			notNullCols.Add(opt.ColumnID(idx + 1))
 		}
 	}
 	v.ic.Init(filters, columns, notNullCols, isInverted, evalCtx, optimizer.Factory())

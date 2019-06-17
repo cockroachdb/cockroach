@@ -188,14 +188,14 @@ func (c *CustomFuncs) CandidateKey(input memo.RelExpr) (key opt.ColSet, ok bool)
 
 // IsColNotNull returns true if the given input column is never null.
 func (c *CustomFuncs) IsColNotNull(col opt.ColumnID, input memo.RelExpr) bool {
-	return input.Relational().NotNullCols.Contains(int(col))
+	return input.Relational().NotNullCols.Contains(col)
 }
 
 // IsColNotNull2 returns true if the given column is part of the left or right
 // expressions' set of not-null columns.
 func (c *CustomFuncs) IsColNotNull2(col opt.ColumnID, left, right memo.RelExpr) bool {
-	return left.Relational().NotNullCols.Contains(int(col)) ||
-		right.Relational().NotNullCols.Contains(int(col))
+	return left.Relational().NotNullCols.Contains(col) ||
+		right.Relational().NotNullCols.Contains(col)
 }
 
 // OuterCols returns the set of outer columns associated with the given
@@ -589,7 +589,7 @@ func (c *CustomFuncs) CanConsolidateFilters(filters memo.FiltersExpr) bool {
 // x IS NULL. If the filter can be consolidated, canConsolidateFilter returns
 // the column ID of the variable and ok=true. Otherwise, canConsolidateFilter
 // returns ok=false.
-func (c *CustomFuncs) canConsolidateFilter(filter *memo.FiltersItem) (col int, ok bool) {
+func (c *CustomFuncs) canConsolidateFilter(filter *memo.FiltersItem) (col opt.ColumnID, ok bool) {
 	if !filter.ScalarProps(c.mem).TightConstraints {
 		return 0, false
 	}
@@ -632,7 +632,7 @@ func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersE
 	var rangeMap util.FastIntMap
 	i := 0
 	for col, ok := seenTwice.Next(0); ok; col, ok = seenTwice.Next(col + 1) {
-		rangeMap.Set(col, i)
+		rangeMap.Set(int(col), i)
 		i++
 	}
 
@@ -649,7 +649,7 @@ func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersE
 				// If it is already a range expression, unwrap it.
 				cond = t.And
 			}
-			rangeIdx, _ := rangeMap.Get(col)
+			rangeIdx, _ := rangeMap.Get(int(col))
 			rangeItem := &newFilters[rangeIdx]
 			if rangeItem.Condition == nil {
 				// This is the first condition.
@@ -733,7 +733,7 @@ func (c *CustomFuncs) MergeProjections(
 	copy(newProjections, outer)
 	for i := range inner {
 		item := &inner[i]
-		if passthrough.Contains(int(item.Col)) {
+		if passthrough.Contains(item.Col) {
 			newProjections = append(newProjections, *item)
 		}
 	}
@@ -762,7 +762,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	values := input.(*memo.ValuesExpr)
 	tuple := values.Rows[0].(*memo.TupleExpr)
 	for i, colID := range values.Cols {
-		if passthrough.Contains(int(colID)) {
+		if passthrough.Contains(colID) {
 			newExprs = append(newExprs, tuple.Elems[i])
 			newTypes = append(newTypes, *tuple.Elems[i].DataType())
 			newCols = append(newCols, colID)
@@ -789,7 +789,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 func (c *CustomFuncs) ProjectionCols(projections memo.ProjectionsExpr) opt.ColSet {
 	var colSet opt.ColSet
 	for i := range projections {
-		colSet.Add(int(projections[i].Col))
+		colSet.Add(projections[i].Col)
 	}
 	return colSet
 }
@@ -951,7 +951,7 @@ func (c *CustomFuncs) GroupingAndConstCols(
 		if constAgg, ok := item.Agg.(*memo.ConstAggExpr); ok {
 			// Verify that the input and output column IDs match.
 			if item.Col == constAgg.Input.(*memo.VariableExpr).Col {
-				result.Add(int(item.Col))
+				result.Add(item.Col)
 			}
 		}
 	}

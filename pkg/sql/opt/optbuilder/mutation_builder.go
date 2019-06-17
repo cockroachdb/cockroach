@@ -247,11 +247,11 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 
 	// Ensure that the name list does not contain duplicates.
 	colID := mb.tabID.ColumnID(ord)
-	if mb.targetColSet.Contains(int(colID)) {
+	if mb.targetColSet.Contains(colID) {
 		panic(pgerror.Newf(pgerror.CodeSyntaxError,
 			"multiple assignments to the same column %q", tabCol.ColName()))
 	}
-	mb.targetColSet.Add(int(colID))
+	mb.targetColSet.Add(colID)
 
 	mb.targetColList = append(mb.targetColList, colID)
 }
@@ -393,7 +393,7 @@ func (mb *mutationBuilder) addSynthesizedCols(
 
 		// Add corresponding target column.
 		mb.targetColList = append(mb.targetColList, tabColID)
-		mb.targetColSet.Add(int(tabColID))
+		mb.targetColSet.Add(tabColID)
 	}
 
 	if projectionsScope != nil {

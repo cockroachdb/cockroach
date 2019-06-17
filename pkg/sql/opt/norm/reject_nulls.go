@@ -55,7 +55,7 @@ func (c *CustomFuncs) NullRejectAggVar(
 	aggs memo.AggregationsExpr, nullRejectCols opt.ColSet,
 ) *memo.VariableExpr {
 	for i := range aggs {
-		if nullRejectCols.Contains(int(aggs[i].Col)) {
+		if nullRejectCols.Contains(aggs[i].Col) {
 			return memo.ExtractVarFromAggInput(aggs[i].Agg.Child(0).(opt.ScalarExpr))
 		}
 	}
@@ -159,7 +159,7 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 		}
 		savedInColID = inColID
 
-		if !DeriveRejectNullCols(input).Contains(int(inColID)) {
+		if !DeriveRejectNullCols(input).Contains(inColID) {
 			// Input has not requested null rejection on the input column.
 			return opt.ColSet{}
 		}
@@ -167,7 +167,7 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 		// Can possibly reject column, but keep searching, since if
 		// multiple columns are used by aggregate functions, then nulls
 		// can't be rejected on any column.
-		rejectNullCols.Add(int(aggs[i].Col))
+		rejectNullCols.Add(aggs[i].Col)
 	}
 	return rejectNullCols
 }

@@ -539,7 +539,7 @@ func (b *Builder) checkSubqueryOuterCols(
 	if b.semaCtx.Properties.IsSet(tree.RejectAggregates) && inScope.groupby.aggOutScope != nil {
 		aggCols := inScope.groupby.aggOutScope.getAggregateCols()
 		for i := range aggCols {
-			if subqueryOuterCols.Contains(int(aggCols[i].id)) {
+			if subqueryOuterCols.Contains(aggCols[i].id) {
 				panic(builderError{
 					tree.NewInvalidFunctionUsageError(tree.AggregateClass, inScope.context),
 				})

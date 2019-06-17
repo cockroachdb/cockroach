@@ -295,9 +295,9 @@ func TestInterner(t *testing.T) {
 		}},
 
 		{hashFn: in.hasher.HashColSet, eqFn: in.hasher.IsColSetEqual, variations: []testVariation{
-			{val1: util.MakeFastIntSet(), val2: util.MakeFastIntSet(), equal: true},
-			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(3, 2, 1), equal: true},
-			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(1, 2), equal: false},
+			{val1: opt.MakeColSet(), val2: opt.MakeColSet(), equal: true},
+			{val1: opt.MakeColSet(1, 2, 3), val2: opt.MakeColSet(3, 2, 1), equal: true},
+			{val1: opt.MakeColSet(1, 2, 3), val2: opt.MakeColSet(1, 2), equal: false},
 		}},
 
 		{hashFn: in.hasher.HashColList, eqFn: in.hasher.IsColListEqual, variations: []testVariation{

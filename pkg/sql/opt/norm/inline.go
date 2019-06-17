@@ -28,14 +28,14 @@ func (c *CustomFuncs) FindInlinableConstants(input memo.RelExpr) opt.ColSet {
 		for i := range project.Projections {
 			item := &project.Projections[i]
 			if opt.IsConstValueOp(item.Element) {
-				cols.Add(int(item.Col))
+				cols.Add(item.Col)
 			}
 		}
 	} else if values, ok := input.(*memo.ValuesExpr); ok && len(values.Rows) == 1 {
 		tup := values.Rows[0].(*memo.TupleExpr)
 		for i, scalar := range tup.Elems {
 			if opt.IsConstValueOp(scalar) {
-				cols.Add(int(values.Cols[i]))
+				cols.Add(values.Cols[i])
 			}
 		}
 	}
@@ -81,7 +81,7 @@ func (c *CustomFuncs) inlineConstants(
 	replace = func(e opt.Expr) opt.Expr {
 		switch t := e.(type) {
 		case *memo.VariableExpr:
-			if constCols.Contains(int(t.Col)) {
+			if constCols.Contains(t.Col) {
 				return c.extractColumn(input, t.Col)
 			}
 			return t
@@ -145,15 +145,15 @@ func (c *CustomFuncs) HasDuplicateRefs(
 			switch t := e.(type) {
 			case *memo.VariableExpr:
 				// Ignore references to non-target columns.
-				if !targetCols.Contains(int(t.Col)) {
+				if !targetCols.Contains(t.Col) {
 					return false
 				}
 
 				// Count Variable references.
-				if refs.Contains(int(t.Col)) {
+				if refs.Contains(t.Col) {
 					return true
 				}
-				refs.Add(int(t.Col))
+				refs.Add(t.Col)
 				return false
 
 			case memo.RelExpr:
@@ -249,9 +249,9 @@ func (c *CustomFuncs) InlineProjectProject(
 	if !newPassthrough.Empty() {
 		for i := range innerProjections {
 			item := &innerProjections[i]
-			if newPassthrough.Contains(int(item.Col)) {
+			if newPassthrough.Contains(item.Col) {
 				newProjections = append(newProjections, *item)
-				newPassthrough.Remove(int(item.Col))
+				newPassthrough.Remove(item.Col)
 			}
 		}
 	}

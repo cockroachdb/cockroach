@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestLookupJoinProvided(t *testing.T) {
@@ -45,8 +44,8 @@ func TestLookupJoinProvided(t *testing.T) {
 		t.Fatalf("unexpected ID for column c1: %d\n", c1)
 	}
 
-	c := func(cols ...int) opt.ColSet {
-		return util.MakeFastIntSet(cols...)
+	c := func(cols ...opt.ColumnID) opt.ColSet {
+		return opt.MakeColSet(cols...)
 	}
 
 	testCases := []struct {

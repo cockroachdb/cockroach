@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -459,67 +459,67 @@ func TestExtractNotNullCols(t *testing.T) {
 
 	testData := []struct {
 		c string
-		e []int
+		e []opt.ColumnID
 	}{
 		{ // 0
 			c: "/1: [/2 - ]",
-			e: []int{1},
+			e: []opt.ColumnID{1},
 		},
 		{ // 1
 			c: "/1: [ - /2]",
-			e: []int{},
+			e: []opt.ColumnID{},
 		},
 		{ // 2
 			c: "/1: [/NULL - /4]",
-			e: []int{},
+			e: []opt.ColumnID{},
 		},
 		{ // 3
 			c: "/1: (/NULL - /4]",
-			e: []int{1},
+			e: []opt.ColumnID{1},
 		},
 		{ // 4
 			c: "/-1: [ - /2]",
-			e: []int{1},
+			e: []opt.ColumnID{1},
 		},
 		{ // 5
 			c: "/-1: [/2 - ]",
-			e: []int{},
+			e: []opt.ColumnID{},
 		},
 		{ // 6
 			c: "/-1: [/4 - /NULL]",
-			e: []int{},
+			e: []opt.ColumnID{},
 		},
 		{ // 7
 			c: "/-1: [/4 - /NULL)",
-			e: []int{1},
+			e: []opt.ColumnID{1},
 		},
 		{ // 8
 			c: "/1/2/3: [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]",
-			e: []int{1, 2, 3},
+			e: []opt.ColumnID{1, 2, 3},
 		},
 		{ // 9
 			c: "/1/2/3/4: [/1/1/1/1 - /1/1/2/1] [/3/3/3/1 - /3/3/4/1]",
-			e: []int{1, 2, 3},
+			e: []opt.ColumnID{1, 2, 3},
 		},
 		{ // 10
 			c: "/1/2/3: [/1/1 - /1/1/2] [/3/3/3 - /3/3/4]",
-			e: []int{1, 2},
+			e: []opt.ColumnID{1, 2},
 		},
 		{ // 11
 			c: "/1/-2/-3: [/1/1/2 - /1/1] [/3/3/4 - /3/3/3]",
-			e: []int{1, 2},
+			e: []opt.ColumnID{1, 2},
 		},
 		{ // 12
 			c: "/1/2/3: [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4] [/4/4/1 - /5]",
-			e: []int{1},
+			e: []opt.ColumnID{1},
 		},
 		{ // 13
 			c: "/1/2/3: [/1/1/NULL - /1/1/2] [/3/3/3 - /3/3/4]",
-			e: []int{1, 2},
+			e: []opt.ColumnID{1, 2},
 		},
 		{ // 13
 			c: "/1/2/3: [/1/1/1 - /1/1/1] [/2/NULL/2 - /2/NULL/3]",
-			e: []int{1, 3},
+			e: []opt.ColumnID{1, 3},
 		},
 	}
 
@@ -527,7 +527,7 @@ func TestExtractNotNullCols(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			c := ParseConstraint(&evalCtx, tc.c)
 			cols := c.ExtractNotNullCols(&evalCtx)
-			if exp := util.MakeFastIntSet(tc.e...); !cols.Equals(exp) {
+			if exp := opt.MakeColSet(tc.e...); !cols.Equals(exp) {
 				t.Errorf("expected %s; got %s", exp, cols)
 			}
 		})

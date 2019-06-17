@@ -467,7 +467,7 @@ func (c *CustomFuncs) EnsureCanaryCol(in memo.RelExpr, aggs memo.AggregationsExp
 //
 // See the TryDecorrelateScalarGroupBy rule comment for more details.
 func (c *CustomFuncs) EnsureCanary(in memo.RelExpr, canaryCol opt.ColumnID) memo.RelExpr {
-	if canaryCol == 0 || c.OutputCols(in).Contains(int(canaryCol)) {
+	if canaryCol == 0 || c.OutputCols(in).Contains(canaryCol) {
 		return in
 	}
 	result := c.ProjectExtraCol(in, c.f.ConstructTrue(), canaryCol)
@@ -479,7 +479,7 @@ func (c *CustomFuncs) EnsureCanary(in memo.RelExpr, canaryCol opt.ColumnID) memo
 func (c *CustomFuncs) CanaryColSet(canaryCol opt.ColumnID) opt.ColSet {
 	var colSet opt.ColSet
 	if canaryCol != 0 {
-		colSet.Add(int(canaryCol))
+		colSet.Add(canaryCol)
 	}
 	return colSet
 }
@@ -538,7 +538,7 @@ func (c *CustomFuncs) TranslateNonIgnoreAggs(
 ) memo.RelExpr {
 	var aggCanaryVar opt.ScalarExpr
 	passthrough := c.OutputCols(newIn).Copy()
-	passthrough.Remove(int(canaryCol))
+	passthrough.Remove(canaryCol)
 
 	var projections memo.ProjectionsExpr
 	for i := range newAggs {
@@ -573,7 +573,7 @@ func (c *CustomFuncs) TranslateNonIgnoreAggs(
 				Element:    c.constructCanaryChecker(aggCanaryVar, newAggs[i].Col),
 				ColPrivate: memo.ColPrivate{Col: oldAggs[i].Col},
 			})
-			passthrough.Remove(int(newAggs[i].Col))
+			passthrough.Remove(newAggs[i].Col)
 		}
 	}
 

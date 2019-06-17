@@ -309,7 +309,7 @@ func parseIndexColumns(
 				if len(fields) < 2 || strings.ToLower(fields[1]) != "null" {
 					tb.Fatalf("unknown column attribute %s", fields)
 				}
-				notNullCols.Add(id)
+				notNullCols.Add(opt.ColumnID(id))
 				fields = fields[2:]
 			default:
 				tb.Fatalf("unknown column attribute %s", fields)

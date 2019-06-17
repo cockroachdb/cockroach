@@ -122,14 +122,14 @@ func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 	arg := e.Child(0)
 	var res opt.ColSet
 	if filter, ok := arg.(*AggFilterExpr); ok {
-		res.Add(int(filter.Filter.(*VariableExpr).Col))
+		res.Add(filter.Filter.(*VariableExpr).Col)
 		arg = filter.Input
 	}
 	if distinct, ok := arg.(*AggDistinctExpr); ok {
 		arg = distinct.Input
 	}
 	if variable, ok := arg.(*VariableExpr); ok {
-		res.Add(int(variable.Col))
+		res.Add(variable.Col)
 		return res
 	}
 	panic(pgerror.AssertionFailedf("unhandled aggregate input %T", log.Safe(arg)))
@@ -204,10 +204,10 @@ func isJoinEquality(
 		return false, 0, 0
 	}
 
-	if leftCols.Contains(int(lvar.Col)) && rightCols.Contains(int(rvar.Col)) {
+	if leftCols.Contains(lvar.Col) && rightCols.Contains(rvar.Col) {
 		return true, lvar.Col, rvar.Col
 	}
-	if leftCols.Contains(int(rvar.Col)) && rightCols.Contains(int(lvar.Col)) {
+	if leftCols.Contains(rvar.Col) && rightCols.Contains(lvar.Col) {
 		return true, rvar.Col, lvar.Col
 	}
 
@@ -276,7 +276,7 @@ func ExtractValuesFromFilter(on FiltersExpr, cols opt.ColSet) map[opt.ColumnID]t
 
 // extractConstEquality extracts a column that's being equated to a constant
 // value if possible.
-func extractConstEquality(condition opt.ScalarExpr) (bool, int, tree.Datum) {
+func extractConstEquality(condition opt.ScalarExpr) (bool, opt.ColumnID, tree.Datum) {
 	// TODO(justin): this is error-prone because this logic is different from the
 	// constraint logic. Extract these values directly from the constraints.
 	switch condition.(type) {
@@ -285,7 +285,7 @@ func extractConstEquality(condition opt.ScalarExpr) (bool, int, tree.Datum) {
 		// due to the CommuteVar norm rule.
 		if leftVar, ok := condition.Child(0).(*VariableExpr); ok {
 			if CanExtractConstDatum(condition.Child(1)) {
-				return true, int(leftVar.Col), ExtractConstDatum(condition.Child(1))
+				return true, leftVar.Col, ExtractConstDatum(condition.Child(1))
 			}
 		}
 	}
