@@ -34,6 +34,11 @@ func LoadLocation(name string) (*time.Location, error) {
 	switch strings.ToLower(name) {
 	case "local", "default":
 		name = "UTC"
+	case "utc":
+		// TODO(knz): See #36864. This code is a crutch, and should be
+		// removed in favor of a cache of available locations with
+		// case-insensitive lookup.
+		name = "UTC"
 	}
 	l, err := time.LoadLocation(name)
 	if err != nil && strings.Contains(err.Error(), "zoneinfo.zip") {
