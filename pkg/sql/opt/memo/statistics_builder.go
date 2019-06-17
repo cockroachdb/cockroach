@@ -916,7 +916,8 @@ func (sb *statisticsBuilder) buildJoin(
 		s.RowCount = leftJoinRowCount + rightJoinRowCount - innerJoinRowCount
 	}
 
-	// Loop through all colSets added in this step, and adjust null counts.
+	// Loop through all colSets added in this step, and adjust null counts and
+	// distinct counts.
 	for i := 0; i < s.ColStats.Count(); i++ {
 		colStat := s.ColStats.Get(i)
 		leftSideCols := leftCols.Intersection(colStat.Cols)
@@ -957,6 +958,9 @@ func (sb *statisticsBuilder) buildJoin(
 					innerJoinRowCount,
 				)
 			}
+
+			// Ensure distinct count is non-zero.
+			colStat.DistinctCount = min(s.RowCount, max(colStat.DistinctCount, 1))
 		}
 	}
 
