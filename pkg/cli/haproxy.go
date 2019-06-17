@@ -242,6 +242,7 @@ defaults
     timeout connect     10s
     timeout client      1m
     timeout server      1m
+    timeout check       5s
     # TCP keep-alive on client side. Server already enables them.
     option              clitcpka
 
