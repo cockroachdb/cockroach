@@ -769,7 +769,11 @@ func (r *importResumer) Resume(
 		}
 	}
 
-	{
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// If the cluster supports sticky bits, then we don't have to worry about the
+	// merge queue automatically merging the splits performed during IMPORT.
+	stickyBitEnabled := r.settings.Version.IsActive(cluster.VersionStickyBit)
+	if !stickyBitEnabled {
 		// Disable merging for the table IDs being imported into. We don't want the
 		// merge queue undoing the splits performed during IMPORT.
 		tableIDs := make([]uint32, 0, len(tables))

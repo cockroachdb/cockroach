@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -147,6 +148,13 @@ func (sp *sstWriter) Run(ctx context.Context) {
 			return err
 		}
 
+		// TODO(jeffreyxiao): Remove this check in 20.1.
+		stickyBitEnabled := sp.flowCtx.Settings.Version.IsActive(cluster.VersionStickyBit)
+		expirationTime := hlc.Timestamp{}
+		if stickyBitEnabled {
+			expirationTime = sp.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+		}
+
 		// Fetch all the keys in each span and write them to storage.
 		iter := store.NewIterator()
 		defer iter.Close()
@@ -177,7 +185,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 						end = sst.span.EndKey
 					}
 
-					if err := sp.db.AdminSplit(ctx, end, end, hlc.Timestamp{} /* expirationTime */); err != nil {
+					if err := sp.db.AdminSplit(ctx, end, end, expirationTime); err != nil {
 						return err
 					}
 
