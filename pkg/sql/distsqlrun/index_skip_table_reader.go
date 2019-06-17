@@ -20,9 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
 
@@ -52,11 +50,7 @@ type indexSkipTableReader struct {
 	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
 
-	decodedDatums tree.Datums
-
-	tableInfo sqlbase.TableDescriptor
-	indexInfo *sqlbase.IndexDescriptor
-	colIdxMap map[sqlbase.ColumnID]int
+	indexLen int
 }
 
 const indexSkipTableReaderProcName = "index skip table reader"
@@ -86,7 +80,6 @@ func newIndexSkipTableReader(
 	t := istrPool.Get().(*indexSkipTableReader)
 
 	t.currentSpan = 0
-	t.tableInfo = spec.Table
 
 	// hardcode right now to just get size 1 batches
 	t.limitHint = limitHint(1, post)
@@ -114,21 +107,18 @@ func newIndexSkipTableReader(
 	t.keyPrefixLen = neededColumns.Len()
 
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
-	t.colIdxMap = columnIdxMap
 
 	immutDesc := sqlbase.NewImmutableTableDescriptor(spec.Table)
 	index, isSecondaryIndex, err := immutDesc.FindIndexByIndexIdx(int(spec.IndexIdx))
 	if err != nil {
 		return nil, err
 	}
-	t.indexInfo = index
+	t.indexLen = len(index.ColumnIDs)
 
 	cols := immutDesc.Columns
 	if returnMutations {
 		cols = immutDesc.ReadableColumns
 	}
-
-	t.decodedDatums = make(tree.Datums, len(cols))
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:             immutDesc,
@@ -202,57 +192,15 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 
-		// decode the datum row here
-		for i, encDatum := range row {
-			if encDatum.IsUnset() {
-				t.decodedDatums[i] = tree.DNull
-				continue
-			}
-			if err := encDatum.EnsureDecoded(&t.tableInfo.Columns[i].Type, &t.alloc); err != nil {
-				t.MoveToDraining(err)
-				return nil, &distsqlpb.ProducerMetadata{Err: err}
-			}
-			t.decodedDatums[i] = encDatum.Datum
+		// 0xff is the largest prefix marker for any encoded key. To ensure that
+		// our new key is larger than any value with the same prefix, we place
+		// 0xff at all other index column values, and one more to gaurd against
+		// 0xff present as a value in the table (0xff encodes a type of null)
+		for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
+			key = append(key, 0xff)
 		}
+		t.spans[t.currentSpan].Key = key
 
-		keyColIdx := t.keyPrefixLen - 1
-		direction := encoding.Ascending
-		if t.indexInfo.ColumnDirections[keyColIdx] == sqlbase.IndexDescriptor_DESC {
-			direction = encoding.Descending
-		}
-		colID := t.indexInfo.ColumnIDs[keyColIdx]
-		ordinal := t.colIdxMap[colID]
-
-		datum := t.decodedDatums[ordinal]
-
-		// TODO: deal with getting next or previous depending on the
-		// direction
-		newDatum, nextExists := datum.Next(t.evalCtx)
-
-		// only construct a new span if the next value exists,
-		// otherwise move onto the next span
-		if nextExists {
-			decomposedKey, _, err := encoding.DecomposeKeyTokens(key)
-			if err != nil {
-				t.MoveToDraining(err)
-				return nil, &distsqlpb.ProducerMetadata{Err: err}
-			}
-			newEncDatum, err := sqlbase.EncodeTableKey([]byte{}, newDatum, direction)
-			if err != nil {
-				t.MoveToDraining(err)
-				return nil, &distsqlpb.ProducerMetadata{Err: err}
-			}
-			var newKey roachpb.Key
-			for i, kp := range decomposedKey {
-				if i != len(decomposedKey)-1 {
-					newKey = append(newKey, kp...)
-				}
-			}
-			newKey = append(newKey, newEncDatum...)
-			t.spans[t.currentSpan].Key = newKey
-		} else {
-			t.currentSpan++
-		}
 		if outRow := t.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
