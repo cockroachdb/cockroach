@@ -247,19 +247,19 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
 
-	readStmt, err := db.Prepare(`SELECT * FROM ycsb.usertable WHERE ycsb_key = $1`)
+	readStmt, err := db.Prepare(`SELECT * FROM usertable WHERE ycsb_key = $1`)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
-	scanStmt, err := db.Prepare(`SELECT * FROM ycsb.usertable WHERE ycsb_key >= $1 LIMIT $2`)
+	scanStmt, err := db.Prepare(`SELECT * FROM usertable WHERE ycsb_key >= $1 LIMIT $2`)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
 	var insertStmt *gosql.Stmt
 	if g.json {
-		insertStmt, err = db.Prepare(`INSERT INTO ycsb.usertable VALUES ($1, json_build_object(
+		insertStmt, err = db.Prepare(`INSERT INTO usertable VALUES ($1, json_build_object(
 			'field0',  $2:::text,
 			'field1',  $3:::text,
 			'field2',  $4:::text,
@@ -272,7 +272,7 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			'field9',  $11:::text
 		))`)
 	} else {
-		insertStmt, err = db.Prepare(`INSERT INTO ycsb.usertable VALUES (
+		insertStmt, err = db.Prepare(`INSERT INTO usertable VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 		)`)
 	}
@@ -282,14 +282,14 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 	updateStmts := make([]*gosql.Stmt, numTableFields)
 	if g.json {
-		stmt, err := db.Prepare(`UPDATE ycsb.usertable SET field = field || $2 WHERE ycsb_key = $1`)
+		stmt, err := db.Prepare(`UPDATE usertable SET field = field || $2 WHERE ycsb_key = $1`)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
 		updateStmts[0] = stmt
 	} else {
 		for i := 0; i < numTableFields; i++ {
-			q := fmt.Sprintf(`UPDATE ycsb.usertable SET field%d = $2 WHERE ycsb_key = $1`, i)
+			q := fmt.Sprintf(`UPDATE usertable SET field%d = $2 WHERE ycsb_key = $1`, i)
 			stmt, err := db.Prepare(q)
 			if err != nil {
 				return workload.QueryLoad{}, err
