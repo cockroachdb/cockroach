@@ -91,7 +91,7 @@ const (
 )
 
 const (
-	encodedTsSize      = int(unsafe.Sizeof(hlc.Timestamp{}))
+	encodedTsSize      = int(unsafe.Sizeof(int64(0)) + unsafe.Sizeof(int32(0)))
 	encodedTxnIDSize   = int(unsafe.Sizeof(uuid.UUID{}))
 	encodedValSize     = encodedTsSize + encodedTxnIDSize
 	defaultMinSklPages = 2
