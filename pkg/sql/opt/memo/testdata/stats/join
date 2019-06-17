@@ -1073,3 +1073,66 @@ inner-join
  │    ├── (1,) [type=tuple{int}]
  │    └── (2,) [type=tuple{int}]
  └── filters (true)
+
+exec-ddl
+CREATE TABLE table0 (
+    col0 INT4,
+    col1 BOOL NULL,
+    col2 BIT(40) NOT NULL
+)
+----
+
+exec-ddl
+CREATE TABLE table1 (
+    col0 BIT(23) NULL,
+    col1 INET NULL
+)
+----
+
+# Regression test for #38091.
+norm
+SELECT (
+        SELECT 1
+          FROM table1
+               LEFT JOIN table1 AS t1
+                INNER JOIN table0 ON false ON t0.col1
+       )
+  FROM table0 AS t0
+----
+project
+ ├── columns: "?column?":16(int)
+ ├── stats: [rows=1000]
+ ├── left-join-apply
+ │    ├── columns: t0.col1:2(bool) "?column?":15(int)
+ │    ├── stats: [rows=1000]
+ │    ├── scan t0
+ │    │    ├── columns: t0.col1:2(bool)
+ │    │    └── stats: [rows=1000]
+ │    ├── max1-row
+ │    │    ├── columns: "?column?":15(int!null)
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(15)
+ │    │    └── project
+ │    │         ├── columns: "?column?":15(int!null)
+ │    │         ├── outer: (2)
+ │    │         ├── stats: [rows=1000]
+ │    │         ├── fd: ()-->(15)
+ │    │         ├── left-join
+ │    │         │    ├── outer: (2)
+ │    │         │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+ │    │         │    ├── scan table1
+ │    │         │    │    └── stats: [rows=1000]
+ │    │         │    ├── values
+ │    │         │    │    ├── cardinality: [0 - 0]
+ │    │         │    │    ├── stats: [rows=0]
+ │    │         │    │    └── key: ()
+ │    │         │    └── filters
+ │    │         │         └── variable: t0.col1 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ │    │         └── projections
+ │    │              └── const: 1 [type=int]
+ │    └── filters (true)
+ └── projections
+      └── variable: ?column? [type=int, outer=(15)]
