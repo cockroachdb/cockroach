@@ -15,6 +15,7 @@ package cloudinfo
 import (
 	"encoding/json"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"regexp"
 	"time"
@@ -91,8 +92,15 @@ type metadataReqHeader struct {
 }
 
 func getInstanceMetadata(url string, headers []metadataReqHeader) ([]byte, error) {
+	const timeout = 500 * time.Millisecond
 	client := http.Client{
-		Timeout: 500 * time.Millisecond,
+		Timeout: timeout,
+		Transport: &http.Transport{
+			// Don't leak a goroutine on OSX (the TCP level timeout is probably
+			// much higher than on linux).
+			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+			DisableKeepAlives: true,
+		},
 	}
 
 	req, err := http.NewRequest("GET", url, nil)

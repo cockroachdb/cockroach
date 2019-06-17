@@ -19,6 +19,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -454,7 +455,20 @@ func (s *Server) reportDiagnostics(ctx context.Context) {
 		return
 	}
 	addInfoToURL(ctx, reportingURL, s, report.Node)
-	res, err := http.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
+
+	const timeout = 3 * time.Second
+	client := &http.Client{
+		Transport: &http.Transport{
+			// Don't leak a goroutine on OSX (the TCP level timeout is probably
+			// much higher than on linux) when the connection fails in weird ways.
+			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+			DisableKeepAlives: true,
+		},
+		Timeout: timeout,
+	}
+	defer client.CloseIdleConnections()
+
+	res, err := client.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
 	if err != nil {
 		if log.V(2) {
 			// This is probably going to be relatively common in production
@@ -464,9 +478,8 @@ func (s *Server) reportDiagnostics(ctx context.Context) {
 		return
 	}
 	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(res.Body)
+	b, err = ioutil.ReadAll(res.Body)
+	if err != nil || res.StatusCode != http.StatusOK {
 		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s, "+
 			"error: %v", res.Status, b, err)
 	}
