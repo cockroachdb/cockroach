@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/logtags"
 )
 
 // formatTags appends the tags to a strings.Builder. If there are no tags,

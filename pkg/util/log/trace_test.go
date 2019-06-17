@@ -18,8 +18,8 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/trace"
 )
