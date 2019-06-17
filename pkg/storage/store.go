@@ -379,6 +379,9 @@ type raftRequestInfo struct {
 type raftRequestQueue struct {
 	syncutil.Mutex
 	infos []raftRequestInfo
+	// TODO(nvanbenschoten): consider recycling []raftRequestInfo slices. This
+	// could be done without any new mutex locking by storing two slices here
+	// and swapping them under lock in processRequestQueue.
 }
 
 // A Store maintains a map of ranges by start key. A Store corresponds
@@ -3291,9 +3294,16 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		req:        req,
 		respStream: respStream,
 	})
+	first := len(q.infos) == 1
 	q.Unlock()
 
-	s.scheduler.EnqueueRaftRequest(req.RangeID)
+	// processRequestQueue will process all infos in the slice each time it
+	// runs, so we only need to schedule a Raft request event if we added the
+	// first info in the slice. Everyone else can rely on the request that added
+	// the first info already having scheduled a Raft request event.
+	if first {
+		s.scheduler.EnqueueRaftRequest(req.RangeID)
+	}
 	return nil
 }
 
