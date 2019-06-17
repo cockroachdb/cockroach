@@ -1502,6 +1502,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	var expectedAttempts int32 = 3
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			NoOnFailureReleaseDelay: true,
 			AsyncExecNotification: func() error {
 				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
 					return errors.New("async schema changes are disabled")
@@ -1733,6 +1734,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	var enableAsyncSchemaChanges uint32
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			NoOnFailureReleaseDelay: true,
 			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
 			},
@@ -2178,8 +2180,9 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	const maxValue = (expectedColumnBackfillAttempts/2+1)*chunkSize + 1
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			AsyncExecNotification: asyncSchemaChangerDisabled,
-			BackfillChunkSize:     chunkSize,
+			NoOnFailureReleaseDelay: true,
+			AsyncExecNotification:   asyncSchemaChangerDisabled,
+			BackfillChunkSize:       chunkSize,
 			// Aggressively checkpoint, so that a schema change
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
@@ -3580,6 +3583,7 @@ func TestCancelSchemaChange(t *testing.T) {
 	var enableAsyncSchemaChanges uint32
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			NoOnFailureReleaseDelay: true,
 			WriteCheckpointInterval: time.Nanosecond, // checkpoint after every chunk.
 			AsyncExecNotification: func() error {
 				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {

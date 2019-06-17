@@ -60,6 +60,12 @@ var schemaChangeLeaseRenewFraction = settings.RegisterFloatSetting(
 	0.5,
 )
 
+var schemaChangeFailureReleaseDelay = settings.RegisterNonNegativeDurationSetting(
+	"schemachanger.lease.failure_release_delay",
+	"amount of time to delay releasing a schema change lease after a failure",
+	time.Second*10,
+)
+
 // This is a delay [0.9 * asyncSchemaChangeDelay, 1.1 * asyncSchemaChangeDelay)
 // added to an attempt to run a schema change via the asynchronous path.
 // This delay allows the synchronous path to execute the schema change
@@ -544,6 +550,7 @@ func (sc *SchemaChanger) maybeDropTable(
 		if !needRelease {
 			return
 		}
+		sc.failureReleaseDelay(ctx)
 		if err := sc.ReleaseLease(ctx, lease); err != nil {
 			log.Warning(ctx, err)
 		}
@@ -560,6 +567,18 @@ func (sc *SchemaChanger) maybeDropTable(
 	// The descriptor was deleted.
 	needRelease = false
 	return nil
+}
+
+func (sc *SchemaChanger) failureReleaseDelay(ctx context.Context) {
+	return
+	if sc.testingKnobs.NoOnFailureReleaseDelay {
+		return
+	}
+	delay := schemaChangeFailureReleaseDelay.Get(&sc.settings.SV)
+	select {
+	case <-ctx.Done():
+	case <-time.After(delay):
+	}
 }
 
 // maybe make a table PUBLIC if it's in the ADD state.
@@ -643,8 +662,12 @@ func (sc *SchemaChanger) maybeGCMutations(
 	if err != nil {
 		return err
 	}
+	failed := true
 	// Always try to release lease.
 	defer func() {
+		if failed {
+			sc.failureReleaseDelay(ctx)
+		}
 		if err := sc.ReleaseLease(ctx, lease); err != nil {
 			log.Warning(ctx, err)
 		}
@@ -681,7 +704,7 @@ func (sc *SchemaChanger) maybeGCMutations(
 			return job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn)
 		},
 	)
-
+	failed = err != nil
 	return err
 }
 
@@ -850,8 +873,12 @@ func (sc *SchemaChanger) exec(
 	if err != nil {
 		return err
 	}
+	failed := true
 	// Always try to release lease.
 	defer func() {
+		if failed {
+			sc.failureReleaseDelay(ctx)
+		}
 		if err := sc.ReleaseLease(ctx, lease); err != nil {
 			log.Warning(ctx, err)
 		}
@@ -874,6 +901,7 @@ func (sc *SchemaChanger) exec(
 	if !foundJobID {
 		// No job means we've already run and completed this schema change
 		// successfully, so we can just exit.
+		failed = false
 		return nil
 	}
 
@@ -903,6 +931,7 @@ func (sc *SchemaChanger) exec(
 		}
 	}
 
+	failed = err != nil
 	return err
 }
 
@@ -1641,6 +1670,9 @@ type SchemaChangerTestingKnobs struct {
 	// OnError is called with all the errors seen by the
 	// synchronous code path.
 	OnError func(err error)
+
+	// NoOnFailureReleaseDelay causes immediate release of the lease on failure.
+	NoOnFailureReleaseDelay bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -1706,6 +1738,9 @@ func (s *SchemaChangeManager) newTimer(changers map[sqlbase.ID]SchemaChanger) *t
 // for tables received in the latest system configuration via gossip.
 func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 	stopper.RunWorker(s.ambientCtx.AnnotateCtx(context.Background()), func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 		k := keys.MakeTablePrefix(uint32(keys.ZonesTableID))
