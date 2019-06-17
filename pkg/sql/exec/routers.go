@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -261,6 +262,8 @@ type HashRouter struct {
 	unblockedEventsChan <-chan struct{}
 	numBlockedOutputs   int
 
+	bufferedMeta []distsqlpb.ProducerMetadata
+
 	scratch struct {
 		// buckets is scratch space for the computed hash value of a group of columns
 		// with the same index in the current coldata.Batch.
@@ -321,7 +324,8 @@ func newHashRouterWithOutputs(
 // early.
 func (r *HashRouter) Run(ctx context.Context) {
 	r.input.Init()
-	cancelOutputs := func() {
+	cancelOutputs := func(err error) {
+		r.bufferedMeta = append(r.bufferedMeta, distsqlpb.ProducerMetadata{Err: err})
 		for _, o := range r.outputs {
 			o.cancel()
 		}
@@ -330,7 +334,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 		// Check for cancellation.
 		select {
 		case <-ctx.Done():
-			cancelOutputs()
+			cancelOutputs(ctx.Err())
 			return
 		default:
 		}
@@ -353,7 +357,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			case <-r.unblockedEventsChan:
 				r.numBlockedOutputs--
 			case <-ctx.Done():
-				cancelOutputs()
+				cancelOutputs(ctx.Err())
 				return
 			}
 		}
@@ -362,9 +366,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 		if err := CatchVectorizedRuntimeError(func() {
 			done = r.processNextBatch(ctx)
 		}); err != nil {
-			// TODO(asubiotto): Propagate this error through metadata. Think about
-			// semantics.
-			cancelOutputs()
+			cancelOutputs(err)
 			return
 		}
 		if done {
@@ -440,4 +442,11 @@ func (r *HashRouter) reset() {
 	for _, o := range r.outputs {
 		o.(resetter).reset()
 	}
+}
+
+// DrainMeta is part of the MetadataGenerator interface.
+func (r *HashRouter) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+	meta := r.bufferedMeta
+	r.bufferedMeta = r.bufferedMeta[:0]
+	return meta
 }
