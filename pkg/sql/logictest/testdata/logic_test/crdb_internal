@@ -325,7 +325,7 @@ node_id  store_id  attrs  used
 1        1         []     0
 
 statement ok
-CREATE TABLE foo (a INT PRIMARY KEY); INSERT INTO foo VALUES(1)
+CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)
 
 statement ok
 ALTER TABLE foo SPLIT AT VALUES(2)
@@ -485,3 +485,56 @@ ORDER BY key, f
 SELECT crdb_internal.force_retry(_)  true  false
 SELECT crdb_internal.force_retry(_)  true  true
 SET application_name = DEFAULT       false false
+
+
+# Testing split_enforced_until when truncating and dropping.
+statement ok
+ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
+
+statement ok
+ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
+
+statement ok
+TRUNCATE TABLE foo
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+----
+start_pretty   end_pretty
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL
+----
+start_pretty   end_pretty
+
+statement ok
+ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
+
+statement ok
+DROP INDEX foo@idx
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+----
+start_pretty   end_pretty
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL
+----
+start_pretty   end_pretty
+
+statement ok
+ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
+
+statement ok
+DROP TABLE foo
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+----
+start_pretty   end_pretty
+
+query TT colnames
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL
+----
+start_pretty   end_pretty
