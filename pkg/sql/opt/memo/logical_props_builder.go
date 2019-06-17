@@ -647,7 +647,23 @@ func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Re
 
 	// Not Null Columns
 	// ----------------
-	// All columns are assumed to be nullable.
+	// All columns are assumed to be nullable, unless they contain only constant
+	// non-null values.
+
+	for colIdx, col := range values.Cols {
+		notNull := true
+		for rowIdx := range values.Rows {
+			val := values.Rows[rowIdx].(*TupleExpr).Elems[colIdx]
+			if !opt.IsConstValueOp(val) || val.Op() == opt.NullOp {
+				// Null or not a constant.
+				notNull = false
+				break
+			}
+		}
+		if notNull {
+			rel.NotNullCols.Add(int(col))
+		}
+	}
 
 	// Outer Columns
 	// -------------

@@ -1856,7 +1856,7 @@ SELECT xor_agg(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
 scalar-group-by
  ├── columns: xor_agg:2(bytes)
  ├── values
- │    ├── columns: column1:1(bytes)
+ │    ├── columns: column1:1(bytes!null)
  │    ├── tuple [type=tuple{bytes}]
  │    │    └── const: '\x01' [type=bytes]
  │    └── tuple [type=tuple{bytes}]

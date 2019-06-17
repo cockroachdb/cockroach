@@ -379,19 +379,19 @@ sort
            │    ├──  upsert_c:17 => c:3
            │    └──  upsert_rowid:18 => rowid:4
            └── project
-                ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int)
+                ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int)
                 ├── project
-                │    ├── columns: column14:14(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null)
+                │    ├── columns: column14:14(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null)
                 │    ├── project
-                │    │    ├── columns: column13:13(int!null) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+                │    │    ├── columns: column13:13(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
                 │    │    ├── left-join
-                │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+                │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
                 │    │    │    ├── project
-                │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+                │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
                 │    │    │    │    ├── project
-                │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+                │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
                 │    │    │    │    │    ├── values
-                │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+                │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
                 │    │    │    │    │    │    ├── tuple [type=tuple{int, int}]
                 │    │    │    │    │    │    │    ├── const: 1 [type=int]
                 │    │    │    │    │    │    │    └── const: 2 [type=int]
@@ -470,19 +470,19 @@ upsert tab
  │    ├──  upsert_a:15 => a:1
  │    └──  upsert_c:17 => c:3
  └── project
-      ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int)
+      ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int)
       ├── project
-      │    ├── columns: column14:14(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
+      │    ├── columns: column14:14(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
       │    ├── project
-      │    │    ├── columns: column13:13(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    ├── columns: column13:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    ├── left-join
-      │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │    │         └── const: 2 [type=int]
@@ -584,25 +584,25 @@ insert xyz
  │    ├──  column2:5 => y:2
  │    └──  column3:6 => z:3
  └── project
-      ├── columns: column1:4(int) column2:5(int) column3:6(int)
+      ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
       └── select
-           ├── columns: column1:4(int) column2:5(int) column3:6(int) x:13(int) y:14(int) z:15(int)
+           ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:13(int) y:14(int) z:15(int)
            ├── left-join
-           │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:13(int) y:14(int) z:15(int)
+           │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:13(int) y:14(int) z:15(int)
            │    ├── project
-           │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
+           │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
            │    │    └── select
-           │    │         ├── columns: column1:4(int) column2:5(int) column3:6(int) x:10(int) y:11(int) z:12(int)
+           │    │         ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:10(int) y:11(int) z:12(int)
            │    │         ├── left-join
-           │    │         │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:10(int) y:11(int) z:12(int)
+           │    │         │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:10(int) y:11(int) z:12(int)
            │    │         │    ├── project
-           │    │         │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
+           │    │         │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
            │    │         │    │    └── select
-           │    │         │    │         ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+           │    │         │    │         ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
            │    │         │    │         ├── left-join
-           │    │         │    │         │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+           │    │         │    │         │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
            │    │         │    │         │    ├── values
-           │    │         │    │         │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
+           │    │         │    │         │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
            │    │         │    │         │    │    ├── tuple [type=tuple{int, int, int}]
            │    │         │    │         │    │    │    ├── const: 1 [type=int]
            │    │         │    │         │    │    │    ├── const: 2 [type=int]
@@ -661,13 +661,13 @@ insert xyz
  │    ├──  column2:5 => y:2
  │    └──  column3:6 => z:3
  └── project
-      ├── columns: column1:4(int) column2:5(int) column3:6(int)
+      ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
       └── select
-           ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+           ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
            ├── left-join
-           │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+           │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
            │    ├── values
-           │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
+           │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
            │    │    ├── tuple [type=tuple{int, int, int}]
            │    │    │    ├── const: 1 [type=int]
            │    │    │    ├── const: 2 [type=int]
@@ -721,15 +721,15 @@ project
  │    │    ├──  upsert_y:14 => y:2
  │    │    └──  upsert_z:15 => z:3
  │    └── project
- │         ├── columns: upsert_x:13(int) upsert_y:14(int) upsert_z:15(int) column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int) column10:10(int) column11:11(int) column12:12(int)
+ │         ├── columns: upsert_x:13(int) upsert_y:14(int) upsert_z:15(int) column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int) column10:10(int) column11:11(int) column12:12(int)
  │         ├── project
- │         │    ├── columns: column10:10(int) column11:11(int) column12:12(int) column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+ │         │    ├── columns: column10:10(int) column11:11(int) column12:12(int) column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
  │         │    ├── select
- │         │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+ │         │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
  │         │    │    ├── left-join
- │         │    │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+ │         │    │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
  │         │    │    │    ├── values
- │         │    │    │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
+ │         │    │    │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
  │         │    │    │    │    ├── tuple [type=tuple{int, int, int}]
  │         │    │    │    │    │    ├── const: 1 [type=int]
  │         │    │    │    │    │    ├── const: 2 [type=int]
@@ -842,19 +842,19 @@ upsert abc
  │    ├──  upsert_b:19 => b:2
  │    └──  upsert_c:20 => c:3
  └── project
-      ├── columns: upsert_a:18(int) upsert_b:19(int) upsert_c:20(int) upsert_rowid:21(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int) column17:17(int)
+      ├── columns: upsert_a:18(int) upsert_b:19(int) upsert_c:20(int) upsert_rowid:21(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int) column17:17(int)
       ├── project
-      │    ├── columns: column17:17(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
+      │    ├── columns: column17:17(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
       │    ├── left-join-apply
-      │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
+      │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
       │    │    ├── left-join
-      │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │    │         └── const: 2 [type=int]
@@ -946,19 +946,19 @@ upsert abc
  │    ├──  upsert_b:17 => b:2
  │    └──  upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null) column15:15(int)
+      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null) column15:15(int)
       ├── project
-      │    ├── columns: column15:15(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null)
+      │    ├── columns: column15:15(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null)
       │    ├── project
-      │    │    ├── columns: column13:13(int) column14:14(int!null) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    ├── columns: column13:13(int) column14:14(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    ├── left-join
-      │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │    │         └── const: 2 [type=int]
@@ -1040,21 +1040,21 @@ upsert mutation
  │    └──  upsert_p:20 => p:4
  ├── check columns: check1:21(bool)
  └── project
-      ├── columns: check1:21(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int) upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int)
+      ├── columns: check1:21(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int) upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int)
       ├── project
-      │    ├── columns: upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int)
+      │    ├── columns: upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int)
       │    ├── project
-      │    │    ├── columns: column16:16(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
+      │    │    ├── columns: column16:16(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
       │    │    ├── project
-      │    │    │    ├── columns: column15:15(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    ├── left-join
-      │    │    │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    │    │    │    │    ├── columns: column9:9(int) column1:6(int!null) column2:7(int!null) column8:8(int!null)
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
       │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:6(int) column2:7(int)
+      │    │    │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
       │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │    │    │         └── const: 2 [type=int]
@@ -1136,13 +1136,13 @@ upsert xyz
  │    ├──  column5:5 => y:2
  │    └──  column5:5 => z:3
  └── project
-      ├── columns: upsert_x:9(int) column1:4(int) column5:5(int) x:6(int) y:7(int) z:8(int)
+      ├── columns: upsert_x:9(int) column1:4(int!null) column5:5(int) x:6(int) y:7(int) z:8(int)
       ├── left-join
-      │    ├── columns: column1:4(int) column5:5(int) x:6(int) y:7(int) z:8(int)
+      │    ├── columns: column1:4(int!null) column5:5(int) x:6(int) y:7(int) z:8(int)
       │    ├── project
-      │    │    ├── columns: column5:5(int) column1:4(int)
+      │    │    ├── columns: column5:5(int) column1:4(int!null)
       │    │    ├── values
-      │    │    │    ├── columns: column1:4(int)
+      │    │    │    ├── columns: column1:4(int!null)
       │    │    │    └── tuple [type=tuple{int}]
       │    │    │         └── const: 1 [type=int]
       │    │    └── projections
@@ -1174,7 +1174,7 @@ upsert uv
  │    ├──  column1:3 => u:1
  │    └──  column2:4 => v:2
  └── values
-      ├── columns: column1:3(int) column2:4(int)
+      ├── columns: column1:3(int!null) column2:4(int!null)
       └── tuple [type=tuple{int, int}]
            ├── const: 1 [type=int]
            └── const: 2 [type=int]
@@ -1184,9 +1184,9 @@ build
 SELECT * FROM [UPSERT INTO abc VALUES (1, 2) RETURNING *]
 ----
 project
- ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
  └── upsert abc
-      ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int) rowid:4(int!null)
       ├── canary column: 12
       ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:12(int)
       ├── insert-mapping:
@@ -1204,15 +1204,15 @@ project
       │    ├──  column8:8 => c:3
       │    └──  upsert_rowid:13 => rowid:4
       └── project
-           ├── columns: upsert_rowid:13(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+           ├── columns: upsert_rowid:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
            ├── left-join
-           │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+           │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
            │    ├── project
-           │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+           │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
            │    │    ├── project
-           │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+           │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
            │    │    │    ├── values
-           │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+           │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
            │    │    │    │    └── tuple [type=tuple{int, int}]
            │    │    │    │         ├── const: 1 [type=int]
            │    │    │    │         └── const: 2 [type=int]
@@ -1255,11 +1255,11 @@ upsert xyz
  │    ├──  column3:6 => y:2
  │    └──  column1:4 => z:3
  └── project
-      ├── columns: upsert_x:10(int) column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+      ├── columns: upsert_x:10(int) column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
       ├── left-join
-      │    ├── columns: column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+      │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
       │    ├── values
-      │    │    ├── columns: column1:4(int) column2:5(int) column3:6(int)
+      │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
       │    │    └── tuple [type=tuple{int, int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         ├── const: 2 [type=int]
@@ -1292,7 +1292,7 @@ upsert noindex
  │    ├──  column2:5 => y:2
  │    └──  column3:6 => z:3
  └── values
-      ├── columns: column1:4(int) column2:5(int) column3:6(int)
+      ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null)
       └── tuple [type=tuple{int, int, int}]
            ├── const: 1 [type=int]
            ├── const: 2 [type=int]
@@ -1319,15 +1319,15 @@ upsert checks
  │    └──  column8:8 => d:4
  ├── check columns: check1:14(bool) check2:15(bool)
  └── project
-      ├── columns: check1:14(bool) check2:15(bool) column1:5(int) column2:6(int) column3:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) upsert_a:13(int)
+      ├── columns: check1:14(bool) check2:15(bool) column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) upsert_a:13(int)
       ├── project
-      │    ├── columns: upsert_a:13(int) column1:5(int) column2:6(int) column3:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    ├── columns: upsert_a:13(int) column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    ├── left-join
-      │    │    ├── columns: column1:5(int) column2:6(int) column3:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    ├── project
-      │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column3:7(int)
+      │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column3:7(int!null)
       │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:5(int) column2:6(int) column3:7(int)
+      │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null)
       │    │    │    │    └── tuple [type=tuple{int, int, int}]
       │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │         ├── const: 2 [type=int]
@@ -1378,19 +1378,19 @@ upsert mutation
  │    └──  upsert_p:18 => p:4
  ├── check columns: check1:19(bool)
  └── project
-      ├── columns: check1:19(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
+      ├── columns: check1:19(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
       ├── project
-      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
+      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
       │    ├── project
-      │    │    ├── columns: column15:15(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    ├── left-join
-      │    │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    │    │    │    ├── columns: column9:9(int) column1:6(int!null) column2:7(int!null) column8:8(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
       │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:6(int) column2:7(int)
+      │    │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
       │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │    │         └── const: 2 [type=int]
@@ -1459,19 +1459,19 @@ upsert mutation
  │    └──  upsert_p:18 => p:4
  ├── check columns: check1:19(bool)
  └── project
-      ├── columns: check1:19(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
+      ├── columns: check1:19(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
       ├── project
-      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
+      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
       │    ├── project
-      │    │    ├── columns: column15:15(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    ├── left-join
-      │    │    │    ├── columns: column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    │    │    │    ├── columns: column9:9(int) column1:6(int!null) column2:7(int!null) column8:8(int!null)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
       │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:6(int) column2:7(int)
+      │    │    │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null)
       │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │    │         └── const: 2 [type=int]
@@ -1550,21 +1550,21 @@ upsert checks
  │    └──  upsert_d:19 => d:4
  ├── check columns: check1:20(bool) check2:21(bool)
  └── project
-      ├── columns: check1:20(bool) check2:21(bool) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int) upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int)
+      ├── columns: check1:20(bool) check2:21(bool) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int) upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int)
       ├── project
-      │    ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int)
+      │    ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int)
       │    ├── project
-      │    │    ├── columns: column15:15(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null)
+      │    │    ├── columns: column15:15(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null)
       │    │    ├── project
-      │    │    │    ├── columns: column13:13(int!null) column14:14(int!null) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    │    │    ├── columns: column13:13(int!null) column14:14(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    │    ├── left-join
-      │    │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+      │    │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │    │    │         └── const: 2 [type=int]
@@ -1642,19 +1642,19 @@ insert checks
  │    └──  column8:8 => d:4
  ├── check columns: check1:13(bool) check2:14(bool)
  └── project
-      ├── columns: check1:13(bool) check2:14(bool) column1:5(int) column2:6(int) column7:7(int) column8:8(int)
+      ├── columns: check1:13(bool) check2:14(bool) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int)
       ├── project
-      │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int)
+      │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int)
       │    └── select
-      │         ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │         ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │         ├── left-join
-      │         │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │         │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │         │    ├── project
-      │         │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │         │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
       │         │    │    ├── project
-      │         │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+      │         │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │         │    │    │    ├── values
-      │         │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+      │         │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
       │         │    │    │    │    └── tuple [type=tuple{int, int}]
       │         │    │    │    │         ├── const: 1 [type=int]
       │         │    │    │    │         └── const: 2 [type=int]
@@ -1701,19 +1701,19 @@ upsert checks
  │    └──  upsert_d:16 => d:4
  ├── check columns: check1:17(bool) check2:18(bool)
  └── project
-      ├── columns: check1:17(bool) check2:18(bool) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int) upsert_a:14(int) upsert_c:15(int) upsert_d:16(int)
+      ├── columns: check1:17(bool) check2:18(bool) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int) upsert_a:14(int) upsert_c:15(int) upsert_d:16(int)
       ├── project
-      │    ├── columns: upsert_a:14(int) upsert_c:15(int) upsert_d:16(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int)
+      │    ├── columns: upsert_a:14(int) upsert_c:15(int) upsert_d:16(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int)
       │    ├── project
-      │    │    ├── columns: column13:13(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    │    ├── columns: column13:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    ├── left-join
-      │    │    │    ├── columns: column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int) column1:5(int) column2:6(int) column7:7(int)
+      │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int) column2:6(int)
+      │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:5(int) column2:6(int)
+      │    │    │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    │    └── tuple [type=tuple{int, int}]
       │    │    │    │    │    │         ├── const: 1 [type=int]
       │    │    │    │    │    │         └── const: 2 [type=int]

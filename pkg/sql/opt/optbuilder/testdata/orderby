@@ -820,10 +820,10 @@ build
 SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
 ----
 sort
- ├── columns: x:1(string)
+ ├── columns: x:1(string!null)
  ├── ordering: +1
  └── values
-      ├── columns: column1:1(string)
+      ├── columns: column1:1(string!null)
       ├── tuple [type=tuple{string}]
       │    └── const: 'a' [type=string]
       ├── tuple [type=tuple{string}]
@@ -835,7 +835,7 @@ build
 SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
 values
- ├── columns: x:1(string)
+ ├── columns: x:1(string!null)
  ├── tuple [type=tuple{string}]
  │    └── const: 'a' [type=string]
  ├── tuple [type=tuple{string}]

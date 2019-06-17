@@ -111,7 +111,7 @@ project
  ├── columns: "?column?":3(int)
  ├── cardinality: [2 - 2]
  ├── values
- │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── columns: column1:1(int!null) column2:2(int!null)
  │    ├── cardinality: [2 - 2]
  │    ├── (1, 2) [type=tuple{int, int}]
  │    └── (3, 4) [type=tuple{int, int}]
@@ -140,13 +140,13 @@ FROM (VALUES ($1:::int, 1, $2:::float, 2)) AS t(one, two, three, four)
 WHERE one = two OR three = four
 ----
 select
- ├── columns: one:1(int) two:2(int) three:3(float) four:4(int)
+ ├── columns: one:1(int) two:2(int!null) three:3(float) four:4(int!null)
  ├── cardinality: [0 - 1]
  ├── has-placeholder
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── values
- │    ├── columns: column1:1(int) column2:2(int) column3:3(float) column4:4(int)
+ │    ├── columns: column1:1(int) column2:2(int!null) column3:3(float) column4:4(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── has-placeholder
  │    ├── key: ()
@@ -191,7 +191,7 @@ select
  ├── cardinality: [0 - 2]
  ├── fd: (1)==(2), (2)==(1)
  ├── values
- │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── columns: column1:1(int!null) column2:2(int!null)
  │    ├── cardinality: [2 - 2]
  │    ├── (1, 2) [type=tuple{int, int}]
  │    └── (3, 4) [type=tuple{int, int}]
@@ -205,12 +205,12 @@ opt expect=InlineJoinConstantsLeft
 SELECT * FROM (SELECT 1 AS one) LEFT JOIN a ON k=one
 ----
 left-join
- ├── columns: one:1(int) k:2(int) i:3(int) f:4(float) s:5(string) j:6(jsonb)
+ ├── columns: one:1(int!null) k:2(int) i:3(int) f:4(float) s:5(string) j:6(jsonb)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-6)
  ├── values
- │    ├── columns: one:1(int)
+ │    ├── columns: one:1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
@@ -227,7 +227,7 @@ opt expect=InlineJoinConstantsRight
 SELECT * FROM a RIGHT JOIN (SELECT 1 AS one) ON k=one
 ----
 right-join
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) one:6(int)
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) one:6(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-6)
@@ -238,7 +238,7 @@ right-join
  │    ├── key: ()
  │    └── fd: ()-->(1-5)
  ├── values
- │    ├── columns: one:6(int)
+ │    ├── columns: one:6(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(6)
@@ -249,7 +249,7 @@ opt expect=(InlineJoinConstantsLeft,InlineJoinConstantsRight)
 SELECT * FROM (SELECT 1 AS one) INNER JOIN (SELECT 2 AS two) ON one=two
 ----
 values
- ├── columns: one:1(int) two:2(int)
+ ├── columns: one:1(int!null) two:2(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1,2)
