@@ -17,11 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -276,7 +275,9 @@ func (t *indexSkipTableReader) ConsumerClosed() {
 	t.InternalClose()
 }
 
-func (t *indexSkipTableReader) generateTrailingMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (t *indexSkipTableReader) generateTrailingMeta(
+	ctx context.Context,
+) []distsqlpb.ProducerMetadata {
 	trailingMeta := t.generateMeta(ctx)
 	t.InternalClose()
 	return trailingMeta
