@@ -491,6 +491,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// registered.
 	reportConfiguration(ctx)
 
+	// Until/unless CockroachDB embeds its own tz database, we want
+	// an early sanity check. It's better to inform the user early
+	// than to get surprising errors during SQL queries.
+	checkTzDatabaseAvailability(ctx)
+
 	// ReadyFn will be called when the server has started listening on
 	// its network sockets, but perhaps before it has done bootstrapping
 	// and thus before Start() completes.
@@ -914,6 +919,15 @@ func clientFlags() string {
 		flags = append(flags, "--certs-dir="+startCtx.serverSSLCertsDir)
 	}
 	return strings.Join(flags, " ")
+}
+
+func checkTzDatabaseAvailability(ctx context.Context) {
+	if _, err := timeutil.LoadLocation("America/New_York"); err != nil {
+		log.Shout(ctx, log.Severity_ERROR,
+			"unable to load named time zones, time zone support will be degraded.\n"+
+				"Hint: check that the time zone database is installed on your system, or\n"+
+				"set the ZONEINFO environment variable to a Go time zone .zip archive.")
+	}
 }
 
 func reportConfiguration(ctx context.Context) {
