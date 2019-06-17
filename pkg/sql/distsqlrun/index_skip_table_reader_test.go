@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -33,7 +32,6 @@ import (
 
 func TestIndexSkipTableReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Log("Beginning test run\n")
 	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -120,60 +118,42 @@ func TestIndexSkipTableReader(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
-				ts := c.spec
-				ts.Table = *td
+			ts := c.spec
+			ts.Table = *td
 
-				evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-				defer evalCtx.Stop(ctx)
-				flowCtx := FlowCtx{
-					EvalCtx:  &evalCtx,
-					Settings: s.ClusterSettings(),
-					txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-					nodeID:   s.NodeID(),
-				}
+			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+			defer evalCtx.Stop(ctx)
+			flowCtx := FlowCtx{
+				EvalCtx:  &evalCtx,
+				Settings: s.ClusterSettings(),
+				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				nodeID:   s.NodeID(),
+			}
 
-				var out RowReceiver
-				var buf *RowBuffer
-				if !rowSource {
-					buf = &RowBuffer{}
-					out = buf
-				}
+			tr, err := newIndexSkipTableReader(&flowCtx, 0 /* processorID */, &ts, &c.post, nil)
 
-				tr, err := newIndexSkipTableReader(&flowCtx, 0 /* processorID */, &ts, &c.post, out)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-				if err != nil {
-					t.Fatal(err)
-				}
+			var results RowSource
+			tr.Start(ctx)
+			results = tr
 
-				var results RowSource
-				if rowSource {
-					tr.Start(ctx)
-					results = tr
-				} else {
-					tr.Run(ctx)
-					if !buf.ProducerClosed() {
-						t.Fatalf("output RowReceiver not closed")
-					}
-					buf.Start(ctx)
-					results = buf
+			var res sqlbase.EncDatumRows
+			for {
+				row, meta := results.Next()
+				if meta != nil && meta.TxnCoordMeta == nil {
+					t.Fatalf("unexpected metadata: %+v", meta)
 				}
-
-				var res sqlbase.EncDatumRows
-				for {
-					row, meta := results.Next()
-					if meta != nil && meta.TxnCoordMeta == nil {
-						t.Fatalf("unexpected metadata: %+v", meta)
-					}
-					if row == nil {
-						break
-					}
-					res = append(res, row.Copy())
+				if row == nil {
+					break
 				}
-				if result := res.String(tr.OutputTypes()); result != c.expected {
-					t.Errorf("invalid results: %s, expected %s'", result, c.expected)
-				}
-			})
+				res = append(res, row.Copy())
+			}
+			if result := res.String(tr.OutputTypes()); result != c.expected {
+				t.Errorf("invalid results: %s, expected %s'", result, c.expected)
+			}
 
 		})
 	}

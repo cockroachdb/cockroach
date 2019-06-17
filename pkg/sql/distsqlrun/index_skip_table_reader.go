@@ -24,17 +24,19 @@ import (
 	"github.com/pkg/errors"
 )
 
+// indexSkipTableReader is another start of a computation flow; it performs
+// KV operations to retrieve some distinct rows from a table, using the index
+// to skip reading some rows while scanning. It then runs a filter and passes
+// rows to an output RowReceiver.
 type indexSkipTableReader struct {
 	ProcessorBase
 
 	spans roachpb.Spans
 
-	// maintains which span we are currently
-	// getting rows from
+	// maintains which span we are currently getting rows from
 	currentSpan int
 
-	// how much of the primary key prefix we are
-	// doing the distinct over
+	// how much of the primary key prefix we are doing the distinct over
 	keyPrefixLen int
 
 	limitHint int64
@@ -78,8 +80,6 @@ func newIndexSkipTableReader(
 	}
 
 	t := istrPool.Get().(*indexSkipTableReader)
-
-	t.currentSpan = 0
 
 	// hardcode right now to just get size 1 batches
 	t.limitHint = limitHint(1, post)
@@ -160,14 +160,10 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			t.MoveToDraining(nil)
 			return nil, t.DrainHelper()
 		}
-		if !t.spans[t.currentSpan].Valid() {
-			t.currentSpan++
-			continue
-		}
 
 		// do a scan
 		err := t.fetcher.StartScan(
-			t.Ctx, t.flowCtx.txn, []roachpb.Span{t.spans[t.currentSpan]},
+			t.Ctx, t.flowCtx.txn, t.spans[t.currentSpan:t.currentSpan+1],
 			true, t.limitHint, t.flowCtx.traceKV,
 		)
 		if err != nil {
@@ -182,14 +178,14 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		}
 
 		row, _, _, err := t.fetcher.NextRow(t.Ctx)
+		if err != nil {
+			t.MoveToDraining(err)
+			return nil, &distsqlpb.ProducerMetadata{Err: err}
+		}
 		if row == nil {
 			// no more rows in this span, so move to the next one!
 			t.currentSpan++
 			continue
-		}
-		if err != nil {
-			t.MoveToDraining(err)
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 
 		// 0xff is the largest prefix marker for any encoded key. To ensure that
@@ -199,7 +195,12 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
 			key = append(key, 0xff)
 		}
+
 		t.spans[t.currentSpan].Key = key
+		if !t.spans[t.currentSpan].Valid() {
+			t.currentSpan++
+			continue
+		}
 
 		if outRow := t.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
@@ -215,6 +216,7 @@ func (t *indexSkipTableReader) Release() {
 		ProcessorBase: t.ProcessorBase,
 		fetcher:       t.fetcher,
 		spans:         t.spans[:0],
+		currentSpan:   0,
 	}
 	istrPool.Put(t)
 }
