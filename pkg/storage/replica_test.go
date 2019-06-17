@@ -1575,13 +1575,17 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 }
 
 func cPutArgs(key roachpb.Key, value, expValue []byte) roachpb.ConditionalPutRequest {
-	expV := roachpb.MakeValueFromBytes(expValue)
+	var optExpV *roachpb.Value
+	if expValue != nil {
+		expV := roachpb.MakeValueFromBytes(expValue)
+		optExpV = &expV
+	}
 	return roachpb.ConditionalPutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Value:    roachpb.MakeValueFromBytes(value),
-		ExpValue: &expV,
+		ExpValue: optExpV,
 	}
 }
 
@@ -2794,71 +2798,76 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	// Set clock to time 1s and do the conditional put.
-	t0 := 1 * time.Second
-	tc.manualClock.Set(t0.Nanoseconds())
+	// Set clock to time 2s and do the conditional put.
+	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
+	t2 := makeTS(2*time.Second.Nanoseconds(), 0)
+	t2Next := t2.Next()
+	tc.manualClock.Set(t2.WallTime)
 
 	// CPut args which expect value "1" to write "0".
 	key := []byte("a")
-	cpArgs := cPutArgs(key, []byte("1"), []byte("0"))
-	_, pErr := tc.SendWrapped(&cpArgs)
-	cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError)
-	if !ok {
+	cpArgs1 := cPutArgs(key, []byte("1"), []byte("0"))
+	_, pErr := tc.SendWrapped(&cpArgs1)
+	if cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 		t.Errorf("expected ConditionFailedError; got %v", pErr)
-	}
-	if cfErr.ActualValue != nil {
+	} else if cfErr.ActualValue != nil {
 		t.Errorf("expected empty actual value; got %s", cfErr.ActualValue)
 	}
 
-	// Try a transactional put at a lower timestamp and ensure it is pushed.
-	var ba roachpb.BatchRequest
-	txn := newTransaction("test", key, 1, tc.Clock())
-	txn.OrigTimestamp, txn.Timestamp = makeTS(1, 0), makeTS(1, 0)
-	pArgs := putArgs(key, []byte("value"))
-	ba.Header = roachpb.Header{Txn: txn}
-	ba.Add(&pArgs)
-	assignSeqNumsForReqs(txn, &pArgs)
-	br, pErr := tc.Sender().Send(context.Background(), ba)
+	// Try a transactional conditional put at a lower timestamp and
+	// ensure it is pushed.
+	txnEarly := newTransaction("test", key, 1, tc.Clock())
+	txnEarly.OrigTimestamp, txnEarly.Timestamp = t1, t1
+	cpArgs2 := cPutArgs(key, []byte("value"), nil)
+	resp, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &cpArgs2)
 	if pErr != nil {
 		t.Fatal(pErr)
-	}
-	if br.Txn.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %s", br.Txn.Timestamp)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 
 	// Try a conditional put at a later timestamp which will fail
 	// because there's now a transaction intent. This failure will
 	// not update the timestamp cache.
-	t1 := 2 * time.Second
-	tc.manualClock.Set(t1.Nanoseconds())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	_, pErr = tc.SendWrapped(&cpArgs)
+	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
+	tc.manualClock.Set(t3.WallTime)
+	_, pErr = tc.SendWrapped(&cpArgs1)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected WriteIntentError; got %v", pErr)
 	}
 
-	// Abort the intent and try to write again to ensure the timestamp
-	// cache wasn't updated by the second failed conditional put.
-	rArgs := &roachpb.ResolveIntentRequest{
-		RequestHeader: pArgs.Header(),
-		IntentTxn:     txn.TxnMeta,
-		Status:        roachpb.ABORTED,
+	// Abort the intent and try a transactional conditional put at
+	// a later timestamp. This should succeed and should not update
+	// the timestamp cache.
+	abortIntent := func(s roachpb.Span, abortTxn *roachpb.Transaction) {
+		if _, pErr = tc.SendWrapped(&roachpb.ResolveIntentRequest{
+			RequestHeader: roachpb.RequestHeaderFromSpan(s),
+			IntentTxn:     abortTxn.TxnMeta,
+			Status:        roachpb.ABORTED,
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
-	h := roachpb.Header{Timestamp: txn.Timestamp}
-	if _, pErr = tc.SendWrappedWith(h, rArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	ba = roachpb.BatchRequest{}
-	ba.Header = h
-	ba.Add(&pArgs)
-	br, pErr = tc.Sender().Send(context.Background(), ba)
+	abortIntent(cpArgs2.Span(), txnEarly)
+	txnLater := *txnEarly
+	txnLater.OrigTimestamp, txnLater.Timestamp = t3, t3
+	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &txnLater}, &cpArgs2)
 	if pErr != nil {
 		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t3 {
+		t.Errorf("expected write timestamp to be %s; got %s", t3, respTS)
 	}
-	if br.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to succeed at 1s; got %s", br.Timestamp)
+
+	// Abort the intent again and try to write again to ensure the timestamp
+	// cache wasn't updated by the second (successful), third (unsuccessful),
+	// or fourth (successful) conditional put. Only the conditional put that
+	// hit a ConditionFailedError should update the timestamp cache.
+	abortIntent(cpArgs2.Span(), &txnLater)
+	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &cpArgs2)
+	if pErr != nil {
+		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 }
 
@@ -2869,79 +2878,85 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	// Set clock to time 1s and do the init put.
-	t0 := 1 * time.Second
-	tc.manualClock.Set(t0.Nanoseconds())
-
 	// InitPut args to write "0". Should succeed.
 	key := []byte("a")
-	ipArgs := iPutArgs(key, []byte("0"))
-	_, pErr := tc.SendWrapped(&ipArgs)
+	value := []byte("0")
+	ipArgs1 := iPutArgs(key, value)
+	_, pErr := tc.SendWrapped(&ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
+
+	// Set clock to time 2s and do other init puts.
+	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
+	t2 := makeTS(2*time.Second.Nanoseconds(), 0)
+	t2Next := t2.Next()
+	tc.manualClock.Set(t2.WallTime)
 
 	// InitPut args to write "1" to same key. Should fail.
-	ipArgs = iPutArgs(key, []byte("1"))
-	_, pErr = tc.SendWrapped(&ipArgs)
-	cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError)
-	if !ok {
+	ipArgs2 := iPutArgs(key, []byte("1"))
+	_, pErr = tc.SendWrapped(&ipArgs2)
+	if cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 		t.Errorf("expected ConditionFailedError; got %v", pErr)
-	}
-	zeroVal := roachpb.MakeValueFromString("0")
-	if cfErr.ActualValue == nil || !bytes.Equal(cfErr.ActualValue.RawBytes, zeroVal.RawBytes) {
-		t.Errorf("expected value %s; got %s", &zeroVal, cfErr.ActualValue)
+	} else if valueBytes, err := cfErr.ActualValue.GetBytes(); err != nil {
+		t.Fatal(err)
+	} else if cfErr.ActualValue == nil || !bytes.Equal(valueBytes, value) {
+		t.Errorf("expected value %q; got %+v", value, valueBytes)
 	}
 
-	// Try a transactional put at a lower timestamp and ensure it is pushed.
-	var ba roachpb.BatchRequest
-	txn := newTransaction("test", key, 1, tc.Clock())
-	txn.OrigTimestamp, txn.Timestamp = makeTS(1, 0), makeTS(1, 0)
-	pArgs := putArgs(key, []byte("value"))
-	ba.Header = roachpb.Header{Txn: txn}
-	ba.Add(&pArgs)
-	assignSeqNumsForReqs(txn, &pArgs)
-	br, pErr := tc.Sender().Send(context.Background(), ba)
+	// Try a transactional init put at a lower timestamp and
+	// ensure it is pushed.
+	txnEarly := newTransaction("test", key, 1, tc.Clock())
+	txnEarly.OrigTimestamp, txnEarly.Timestamp = t1, t1
+	resp, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
-	}
-	if br.Txn.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %s", br.Txn.Timestamp)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 
 	// Try an init put at a later timestamp which will fail
 	// because there's now a transaction intent. This failure
 	// will not update the timestamp cache.
-	t1 := 2 * time.Second
-	tc.manualClock.Set(t1.Nanoseconds())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	_, pErr = tc.SendWrapped(&ipArgs)
+	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
+	tc.manualClock.Set(t3.WallTime)
+	_, pErr = tc.SendWrapped(&ipArgs2)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected WriteIntentError; got %v", pErr)
 	}
 
-	// Abort the intent and try to write again to ensure the timestamp
-	// cache wasn't updated by the second failed init put.
-	rArgs := &roachpb.ResolveIntentRequest{
-		RequestHeader: pArgs.Header(),
-		IntentTxn:     txn.TxnMeta,
-		Status:        roachpb.ABORTED,
+	// Abort the intent and try a transactional init put at a later
+	// timestamp. This should succeed and should not update the
+	// timestamp cache.
+	abortIntent := func(s roachpb.Span, abortTxn *roachpb.Transaction) {
+		if _, pErr = tc.SendWrapped(&roachpb.ResolveIntentRequest{
+			RequestHeader: roachpb.RequestHeaderFromSpan(s),
+			IntentTxn:     abortTxn.TxnMeta,
+			Status:        roachpb.ABORTED,
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
-	h := roachpb.Header{Timestamp: txn.Timestamp}
-	if _, pErr = tc.SendWrappedWith(h, rArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	ba = roachpb.BatchRequest{}
-	ba.Header = h
-	ba.Add(&pArgs)
-	br, pErr = tc.Sender().Send(context.Background(), ba)
+	abortIntent(ipArgs1.Span(), txnEarly)
+	txnLater := *txnEarly
+	txnLater.OrigTimestamp, txnLater.Timestamp = t3, t3
+	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &txnLater}, &ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t3 {
+		t.Errorf("expected write timestamp to be %s; got %s", t3, respTS)
 	}
-	if br.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to succeed at 1s; got %s", br.Timestamp)
+
+	// Abort the intent again and try to write again to ensure the timestamp
+	// cache wasn't updated by the second (successful), third (unsuccessful),
+	// or fourth (successful) init put. Only the init put that hit a
+	// ConditionFailedError should update the timestamp cache.
+	abortIntent(ipArgs1.Span(), &txnLater)
+	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &ipArgs1)
+	if pErr != nil {
+		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 }
 
@@ -5826,29 +5841,18 @@ func TestConditionFailedError(t *testing.T) {
 	key := []byte("k")
 	value := []byte("quack")
 	pArgs := putArgs(key, value)
-
 	if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	val := roachpb.MakeValueFromString("moo")
-	args := roachpb.ConditionalPutRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: key,
-		},
-		Value:    roachpb.MakeValueFromBytes(value),
-		ExpValue: &val,
-	}
 
-	_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: hlc.Timestamp{}}, &args)
-
+	cpArgs := cPutArgs(key, value, []byte("moo"))
+	_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: hlc.MinTimestamp}, &cpArgs)
 	if cErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); pErr == nil || !ok {
-		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
-			pErr, pErr)
+		t.Fatalf("expected ConditionFailedError, got %T with content %+v", pErr, pErr)
 	} else if valueBytes, err := cErr.ActualValue.GetBytes(); err != nil {
 		t.Fatal(err)
 	} else if cErr.ActualValue == nil || !bytes.Equal(valueBytes, value) {
-		t.Errorf("ConditionFailedError with bytes %q expected, but got %+v",
-			value, cErr.ActualValue)
+		t.Errorf("ConditionFailedError with bytes %q expected, but got %+v", value, cErr.ActualValue)
 	}
 }
 
@@ -9375,11 +9379,10 @@ func TestReplicaLocalRetries(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name             string
-		setupFn          func() (hlc.Timestamp, error) // returns expected batch execution timestamp
-		batchFn          func(hlc.Timestamp) (roachpb.BatchRequest, hlc.Timestamp)
-		expErr           string
-		expTSCUpdateKeys []string
+		name    string
+		setupFn func() (hlc.Timestamp, error) // returns expected batch execution timestamp
+		batchFn func(hlc.Timestamp) (roachpb.BatchRequest, hlc.Timestamp)
+		expErr  string
 	}{
 		{
 			name: "local retry of write too old on put",
@@ -9410,7 +9413,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				ba.Add(&cput)
 				return
 			},
-			expTSCUpdateKeys: []string{"b"},
 		},
 		{
 			name: "local retry of write too old on initput",
@@ -9428,7 +9430,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				ba.Add(&iput)
 				return
 			},
-			expTSCUpdateKeys: []string{"b-iput"},
 		},
 		{
 			name: "serializable push without retry",
@@ -9511,7 +9512,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &bt, &cput, &et)
 				return
 			},
-			expTSCUpdateKeys: []string{"e"},
 		},
 		// Handle multiple write too old errors.
 		{
@@ -9534,11 +9534,10 @@ func TestReplicaLocalRetries(t *testing.T) {
 				}
 				return
 			},
-			expTSCUpdateKeys: []string{"f1", "f2", "f3"},
 		},
 		// Handle multiple write too old errors in 1PC transaction.
 		{
-			name: "local retry with multiple write too old errors",
+			name: "local retry with multiple write too old errors on 1PC txn",
 			setupFn: func() (hlc.Timestamp, error) {
 				if _, err := put("g1", "put"); err != nil {
 					return hlc.Timestamp{}, err
@@ -9565,7 +9564,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &et)
 				return
 			},
-			expTSCUpdateKeys: []string{"g1", "g2", "g3"},
 		},
 		// Serializable transaction will commit with forwarded timestamp if no refresh spans.
 		{
@@ -9598,7 +9596,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
 			},
-			expTSCUpdateKeys: []string{"h"},
 		},
 		// Serializable 1PC transaction will commit with forwarded timestamp
 		// using the 1PC path if no refresh spans.
@@ -9664,12 +9661,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 			}
 			if actualTS != expTS {
 				t.Fatalf("expected ts=%s; got %s", expTS, actualTS)
-			}
-			for _, k := range test.expTSCUpdateKeys {
-				rTS, _ := tc.repl.store.tsCache.GetMaxRead(roachpb.Key(k), nil)
-				if rTS != expTS {
-					t.Fatalf("expected timestamp cache update for %s to %s; got %s", k, expTS, rTS)
-				}
 			}
 		})
 	}
