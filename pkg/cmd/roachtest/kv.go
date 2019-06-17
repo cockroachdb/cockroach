@@ -34,6 +34,7 @@ func registerKV(r *registry) {
 		batchSize   int
 		blockSize   int
 		encryption  bool
+		sequential  bool
 	}
 	runKV := func(ctx context.Context, t *test, c *cluster, opts kvOptions) {
 		nodes := c.nodes - 1
@@ -45,6 +46,7 @@ func registerKV(r *registry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+			splits := " --splits=1000"
 			duration := " --duration=" + ifLocal("10s", "10m")
 			readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
 
@@ -59,10 +61,15 @@ func registerKV(r *registry) {
 					opts.blockSize, opts.blockSize)
 			}
 
-			cmd := fmt.Sprintf(
-				"./workload run kv --init --splits=1000 --histograms=logs/stats.json"+
-					concurrency+duration+readPercent+batchSize+blockSize+" {pgurl:1-%d}",
-				nodes)
+			var sequential string
+			if opts.sequential {
+				splits = "" // no splits
+				sequential = " --sequential"
+			}
+
+			cmd := fmt.Sprintf("./workload run kv --init --histograms=logs/stats.json"+
+				concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+
+				" {pgurl:1-%d}", nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
 		})
@@ -104,6 +111,10 @@ func registerKV(r *registry) {
 		{nodes: 1, cpus: 8, readPercent: 95, encryption: true},
 		{nodes: 3, cpus: 8, readPercent: 0, encryption: true},
 		{nodes: 3, cpus: 8, readPercent: 95, encryption: true},
+
+		// Configs with a sequential access pattern.
+		{nodes: 3, cpus: 32, readPercent: 0, sequential: true},
+		{nodes: 3, cpus: 32, readPercent: 95, sequential: true},
 	} {
 		opts := opts
 
@@ -119,6 +130,9 @@ func registerKV(r *registry) {
 		}
 		if opts.blockSize != 0 { // support legacy test name which didn't include block size
 			nameParts = append(nameParts, fmt.Sprintf("size=%dkb", opts.blockSize>>10))
+		}
+		if opts.sequential {
+			nameParts = append(nameParts, fmt.Sprintf("seq"))
 		}
 
 		minVersion := "v2.0.0"
