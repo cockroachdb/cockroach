@@ -191,7 +191,7 @@ func (c *CustomFuncs) MapJoinOpFilter(
 		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(srcCol), filters)
 		eqCols.IntersectionWith(c.OutputCols(dst))
 		if eqCols.Contains(srcCol) {
-			colMap.Set(srcCol, srcCol)
+			colMap.Set(int(srcCol), int(srcCol))
 		} else {
 			dstCol, ok := eqCols.Next(0)
 			if !ok {
@@ -200,7 +200,7 @@ func (c *CustomFuncs) MapJoinOpFilter(
 					src, dst,
 				))
 			}
-			colMap.Set(srcCol, dstCol)
+			colMap.Set(int(srcCol), int(dstCol))
 		}
 	}
 
@@ -264,19 +264,19 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 	// Don't bother looking for equivalent columns if colType has a composite
 	// key encoding.
 	if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
-		res.Add(int(col))
+		res.Add(col)
 		return res
 	}
 
 	// Compute all equivalent columns.
-	eqCols := util.MakeFastIntSet(int(col))
+	eqCols := opt.MakeColSet(col)
 	for i := range filters {
 		eqCols = filters[i].ScalarProps(c.mem).FuncDeps.ComputeEquivClosure(eqCols)
 	}
 
-	eqCols.ForEach(func(i int) {
+	eqCols.ForEach(func(i opt.ColumnID) {
 		// Only include columns that have the same type as col.
-		eqColType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+		eqColType := c.f.Metadata().ColumnMeta(i).Type
 		if colType.Equivalent(eqColType) {
 			res.Add(i)
 		}
@@ -305,7 +305,7 @@ func (c *CustomFuncs) eqConditionsToColMap(
 			continue
 		}
 
-		if leftCols.Contains(int(leftVarExpr.Col)) {
+		if leftCols.Contains(leftVarExpr.Col) {
 			eqColMap[leftVarExpr.Col] = rightVarExpr.Col
 		} else {
 			eqColMap[rightVarExpr.Col] = leftVarExpr.Col
@@ -373,16 +373,16 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		rightColID := rightVar.Col
 
 		// Normalize leftColID to come from leftColIDs.
-		if !leftColIDs.Contains(int(leftColID)) {
+		if !leftColIDs.Contains(leftColID) {
 			leftColID, rightColID = rightColID, leftColID
 		}
-		if !leftColIDs.Contains(int(leftColID)) || !rightColIDs.Contains(int(rightColID)) {
+		if !leftColIDs.Contains(leftColID) || !rightColIDs.Contains(rightColID) {
 			// Condition #1: columns don't come from both sides of join, or
 			// columns are nullable.
 			return false
 		}
 
-		if !unfilteredCols.Contains(int(rightColID)) {
+		if !unfilteredCols.Contains(rightColID) {
 			// Condition #3: right column doesn't contain values from every row.
 			return false
 		}
@@ -412,7 +412,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 			}
 		} else {
 			// Column could be a potential foreign key match so save it.
-			remainingLeftColIDs.Add(int(leftColID))
+			remainingLeftColIDs.Add(leftColID)
 		}
 	}
 
@@ -446,7 +446,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		numCols := fkRef.ColumnCount()
 		for j := 0; j < numCols; j++ {
 			ord := fkRef.OriginColumnOrdinal(leftTabMeta.Table, j)
-			leftIndexCols.Add(int(leftTab.ColumnID(ord)))
+			leftIndexCols.Add(leftTab.ColumnID(ord))
 		}
 
 		if !remainingLeftColIDs.SubsetOf(leftIndexCols) {
@@ -471,7 +471,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 			indexLeftCol := leftTab.ColumnID(fkRef.OriginColumnOrdinal(leftTabMeta.Table, j))
 
 			// Not every fk column needs to be in the equality conditions.
-			if !remainingLeftColIDs.Contains(int(indexLeftCol)) {
+			if !remainingLeftColIDs.Contains(indexLeftCol) {
 				continue
 			}
 

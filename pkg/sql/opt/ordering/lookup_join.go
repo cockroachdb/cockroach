@@ -66,7 +66,7 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoic
 	// First check if we need to.
 	needsRemap := false
 	for i := range childProvided {
-		if !lookupJoin.Cols.Contains(int(childProvided[i].ID())) {
+		if !lookupJoin.Cols.Contains(childProvided[i].ID()) {
 			needsRemap = true
 			break
 		}

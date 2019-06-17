@@ -77,7 +77,7 @@ func TestExprIsNeverNull(t *testing.T) {
 						for i := 0; i < len(vals); i++ {
 							if strings.HasSuffix(strings.ToLower(vals[i]), "!null") {
 								vals[i] = strings.TrimSuffix(strings.ToLower(vals[i]), "!null")
-								notNullCols.Add(i + 1)
+								notNullCols.Add(opt.ColumnID(i + 1))
 							}
 						}
 						varTypes, err = exprgen.ParseTypes(vals)

@@ -51,7 +51,7 @@ func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColS
 	addCols := func(list opt.ColList) {
 		for _, id := range list {
 			if id != 0 {
-				cols.Add(int(id))
+				cols.Add(id)
 			}
 		}
 	}
@@ -62,7 +62,7 @@ func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColS
 	addCols(private.CheckCols)
 	addCols(private.ReturnCols)
 	if private.CanaryCol != 0 {
-		cols.Add(int(private.CanaryCol))
+		cols.Add(private.CanaryCol)
 	}
 
 	return cols
@@ -84,7 +84,7 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		var colSet opt.ColSet
 		for i, n := 0, fam.ColumnCount(); i < n; i++ {
 			id := tabMeta.MetaID.ColumnID(fam.Column(i).Ordinal)
-			colSet.Add(int(id))
+			colSet.Add(id)
 		}
 		return colSet
 	}
@@ -114,7 +114,7 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 	for ord, col := range private.ReturnCols {
 		if col != 0 {
 			if op == opt.DeleteOp || len(private.UpdateCols) == 0 || private.UpdateCols[ord] == 0 {
-				cols.Add(int(tabMeta.MetaID.ColumnID(ord)))
+				cols.Add(tabMeta.MetaID.ColumnID(ord))
 			}
 		}
 	}
@@ -125,7 +125,7 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		var updateCols opt.ColSet
 		for ord, col := range private.UpdateCols {
 			if col != 0 {
-				updateCols.Add(int(tabMeta.MetaID.ColumnID(ord)))
+				updateCols.Add(tabMeta.MetaID.ColumnID(ord))
 			}
 		}
 
@@ -192,7 +192,7 @@ func (c *CustomFuncs) CanPruneMutationFetchCols(
 ) bool {
 	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 	for ord, col := range private.FetchCols {
-		if col != 0 && !neededCols.Contains(int(tabMeta.MetaID.ColumnID(ord))) {
+		if col != 0 && !neededCols.Contains(tabMeta.MetaID.ColumnID(ord)) {
 			return true
 		}
 	}
@@ -219,7 +219,7 @@ func (c *CustomFuncs) PruneCols(target memo.RelExpr, neededCols opt.ColSet) memo
 		projections := make(memo.ProjectionsExpr, 0, len(t.Projections))
 		for i := range t.Projections {
 			item := &t.Projections[i]
-			if neededCols.Contains(int(item.Col)) {
+			if neededCols.Contains(item.Col) {
 				projections = append(projections, *item)
 			}
 		}
@@ -245,7 +245,7 @@ func (c *CustomFuncs) PruneAggCols(
 	aggs := make(memo.AggregationsExpr, 0, len(target))
 	for i := range target {
 		item := &target[i]
-		if neededCols.Contains(int(item.Col)) {
+		if neededCols.Contains(item.Col) {
 			aggs = append(aggs, *item)
 		}
 	}
@@ -273,7 +273,7 @@ func (c *CustomFuncs) filterMutationList(
 ) opt.ColList {
 	newList := make(opt.ColList, len(inList))
 	for i, c := range inList {
-		if !neededCols.Contains(int(tabID.ColumnID(i))) {
+		if !neededCols.Contains(tabID.ColumnID(i)) {
 			newList[i] = 0
 		} else {
 			newList[i] = c
@@ -298,7 +298,7 @@ func (c *CustomFuncs) pruneValuesCols(values *memo.ValuesExpr, neededCols opt.Co
 	// Create new list of columns that only contains needed columns.
 	newCols := make(opt.ColList, 0, neededCols.Len())
 	for _, colID := range values.Cols {
-		if !neededCols.Contains(int(colID)) {
+		if !neededCols.Contains(colID) {
 			continue
 		}
 		newCols = append(newCols, colID)
@@ -313,7 +313,7 @@ func (c *CustomFuncs) pruneValuesCols(values *memo.ValuesExpr, neededCols opt.Co
 		newElems := make(memo.ScalarListExpr, len(newCols))
 		nelem := 0
 		for ielem, elem := range tuple.Elems {
-			if !neededCols.Contains(int(values.Cols[ielem])) {
+			if !neededCols.Contains(values.Cols[ielem]) {
 				continue
 			}
 			newContents[nelem] = typ.TupleContents()[ielem]
@@ -378,7 +378,7 @@ func (c *CustomFuncs) NeededWindowCols(windows memo.WindowsExpr, p *memo.WindowP
 // which is not included in needed, meaning that it can be pruned.
 func (c *CustomFuncs) CanPruneWindows(needed opt.ColSet, windows memo.WindowsExpr) bool {
 	for _, w := range windows {
-		if !needed.Contains(int(w.Col)) {
+		if !needed.Contains(w.Col) {
 			return true
 		}
 	}
@@ -391,7 +391,7 @@ func (c *CustomFuncs) CanPruneWindows(needed opt.ColSet, windows memo.WindowsExp
 func (c *CustomFuncs) PruneWindows(needed opt.ColSet, windows memo.WindowsExpr) memo.WindowsExpr {
 	result := make(memo.WindowsExpr, 0, len(windows))
 	for _, w := range windows {
-		if needed.Contains(int(w.Col)) {
+		if needed.Contains(w.Col) {
 			result = append(result, w)
 		}
 	}
@@ -499,7 +499,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		relProps.Rule.PruneCols.DifferenceWith(win.Partition)
 		relProps.Rule.PruneCols.DifferenceWith(win.Ordering.ColSet())
 		for _, w := range win.Windows {
-			relProps.Rule.PruneCols.Add(int(w.Col))
+			relProps.Rule.PruneCols.Add(w.Col)
 			relProps.Rule.PruneCols.DifferenceWith(w.ScalarProps(e.Memo()).OuterCols)
 		}
 

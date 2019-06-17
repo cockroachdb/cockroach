@@ -337,7 +337,7 @@ func (b *Builder) buildScan(
 
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
-		tabColIDs.Add(int(colID))
+		tabColIDs.Add(colID)
 		name := col.ColName()
 		isMutation := cat.IsMutationColumn(tab, ord)
 		outScope.cols = append(outScope.cols, scopeColumn{

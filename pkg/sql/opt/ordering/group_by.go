@@ -67,7 +67,7 @@ func groupByBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) 
 	// longest prefix of grouping columns (or columns equivalent to any of them).
 	groupingCols := inputFDs.ComputeEquivClosure(groupBy.GroupingCols)
 	for i := range provided {
-		if !groupingCols.Contains(int(provided[i].ID())) {
+		if !groupingCols.Contains(provided[i].ID()) {
 			provided = provided[:i]
 			break
 		}

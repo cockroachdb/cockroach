@@ -217,7 +217,7 @@ func (c *CustomFuncs) hasRemovableAggDistinct(
 	}
 
 	cols := groupingCols.Copy()
-	cols.Add(int(v.Col))
+	cols.Add(v.Col)
 	if !inputFDs.ColsAreStrictKey(cols) {
 		return false, nil
 	}
@@ -248,7 +248,7 @@ func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
 		inputCol := varExpr.Col
 		outputCol := aggs[i].Col
 		if inputCol == outputCol {
-			passthrough.Add(int(inputCol))
+			passthrough.Add(inputCol)
 		} else {
 			projections = append(projections, memo.ProjectionsItem{
 				Element:    varExpr,

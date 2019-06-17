@@ -61,7 +61,7 @@ func (p *Required) Defined() bool {
 func (p *Required) ColSet() opt.ColSet {
 	colSet := p.Ordering.ColSet()
 	for _, col := range p.Presentation {
-		colSet.Add(int(col.ID))
+		colSet.Add(col.ID)
 	}
 	return colSet
 }

@@ -43,16 +43,16 @@ func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.
 	colSet := opt.ColSet{}
 	for i := range cols {
 		id, scalar := cols[i].id, cols[i].scalar
-		if !colSet.Contains(int(id)) {
+		if !colSet.Contains(id) {
 			if scalar == nil {
-				passthrough.Add(int(id))
+				passthrough.Add(id)
 			} else {
 				projections = append(projections, memo.ProjectionsItem{
 					Element:    scalar,
 					ColPrivate: memo.ColPrivate{Col: id},
 				})
 			}
-			colSet.Add(int(id))
+			colSet.Add(id)
 		}
 	}
 
@@ -249,13 +249,13 @@ func (b *Builder) finishBuildScalarRef(
 ) (out opt.ScalarExpr) {
 	// Update the sets of column references and outer columns if needed.
 	if colRefs != nil {
-		colRefs.Add(int(col.id))
+		colRefs.Add(col.id)
 	}
 
 	// Collect the outer columns of the current subquery, if any.
 	isOuterColumn := inScope == nil || inScope.isOuterColumn(col.id)
 	if isOuterColumn && b.subquery != nil {
-		b.subquery.outerCols.Add(int(col.id))
+		b.subquery.outerCols.Add(col.id)
 	}
 
 	// If this is not a projection context, then wrap the column reference with
