@@ -18,12 +18,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -56,6 +58,15 @@ func TestIndexSkipTableReader(t *testing.T) {
 
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
+	makeIndexSpan := func(start, end int) distsqlpb.TableReaderSpan {
+		var span roachpb.Span
+		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td, td.PrimaryIndex.ID))
+		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
+		span.EndKey = append(span.EndKey, prefix...)
+		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
+		return distsqlpb.TableReaderSpan{Span: span}
+	}
+
 	testCases := []struct {
 		spec     distsqlpb.IndexSkipTableReaderSpec
 		post     distsqlpb.PostProcessSpec
@@ -70,6 +81,27 @@ func TestIndexSkipTableReader(t *testing.T) {
 				OutputColumns: []uint32{0},
 			},
 			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
+		},
+		{
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(0, 3), makeIndexSpan(5, 8)},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[0] [1] [2] [5] [6] [7]]",
+		},
+		{
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(0, 3), makeIndexSpan(5, 8)},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[5] [6]]",
 		},
 		{
 			spec: distsqlpb.IndexSkipTableReaderSpec{
