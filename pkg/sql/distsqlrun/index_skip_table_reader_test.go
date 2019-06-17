@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,12 +48,6 @@ func TestIndexSkipTableReader(t *testing.T) {
 	yfn := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row % 10))
 	}
-	// xfn := func(row int) tree.Datum {
-	// 	return tree.NewDInt(tree.DInt(1))
-	// }
-	// yfn := func(row int) tree.Datum {
-	// 	return tree.NewDInt(tree.DInt(row % 100))
-	// }
 
 	sqlutils.CreateTable(t, sqlDB, "t",
 		"x INT, y INT, PRIMARY KEY (x, y)",
@@ -76,69 +71,76 @@ func TestIndexSkipTableReader(t *testing.T) {
 				OutputColumns: []uint32{0},
 			},
 			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
-			// expected: "[[1]]",
+		},
+		{
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[4] [5] [6]]",
 		},
 	}
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			//testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
-			ts := c.spec
-			ts.Table = *td
+			testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
+				ts := c.spec
+				ts.Table = *td
 
-			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-			defer evalCtx.Stop(ctx)
-			flowCtx := FlowCtx{
-				EvalCtx:  &evalCtx,
-				Settings: s.ClusterSettings(),
-				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				nodeID:   s.NodeID(),
-			}
-
-			var out RowReceiver
-			// var buf *RowBuffer
-			// if !rowSource {
-			// 	buf = &RowBuffer{}
-			// out = buf
-			// }
-
-			tr, err := newIndexSkipTableReader(&flowCtx, 0 /* processorID */, &ts, &c.post, out)
-
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// var results RowSource
-			// if rowSource {
-			// 	tr.Start(ctx)
-			// 	results = tr
-			// } else {
-			// 	tr.Run(ctx)
-			// 	if !buf.ProducerClosed() {
-			// 		t.Fatalf("output RowReceiver not closed")
-			// 	}
-			// 	buf.Start(ctx)
-			// 	results = buf
-			// }
-
-			tr.Start(ctx)
-			results := tr
-
-			var res sqlbase.EncDatumRows
-			for {
-				row, meta := results.Next()
-				if meta != nil && meta.TxnCoordMeta == nil {
-					t.Fatalf("unexpected metadata: %+v", meta)
+				evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+				defer evalCtx.Stop(ctx)
+				flowCtx := FlowCtx{
+					EvalCtx:  &evalCtx,
+					Settings: s.ClusterSettings(),
+					txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+					nodeID:   s.NodeID(),
 				}
-				if row == nil {
-					break
+
+				var out RowReceiver
+				var buf *RowBuffer
+				if !rowSource {
+					buf = &RowBuffer{}
+					out = buf
 				}
-				res = append(res, row.Copy())
-			}
-			if result := res.String(tr.OutputTypes()); result != c.expected {
-				t.Errorf("invalid results: %s, expected %s'", result, c.expected)
-			}
-			//})
+
+				tr, err := newIndexSkipTableReader(&flowCtx, 0 /* processorID */, &ts, &c.post, out)
+
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				var results RowSource
+				if rowSource {
+					tr.Start(ctx)
+					results = tr
+				} else {
+					tr.Run(ctx)
+					if !buf.ProducerClosed() {
+						t.Fatalf("output RowReceiver not closed")
+					}
+					buf.Start(ctx)
+					results = buf
+				}
+
+				var res sqlbase.EncDatumRows
+				for {
+					row, meta := results.Next()
+					if meta != nil && meta.TxnCoordMeta == nil {
+						t.Fatalf("unexpected metadata: %+v", meta)
+					}
+					if row == nil {
+						break
+					}
+					res = append(res, row.Copy())
+				}
+				if result := res.String(tr.OutputTypes()); result != c.expected {
+					t.Errorf("invalid results: %s, expected %s'", result, c.expected)
+				}
+			})
 
 		})
 	}

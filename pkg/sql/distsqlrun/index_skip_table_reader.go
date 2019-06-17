@@ -14,15 +14,15 @@ package distsqlrun
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
@@ -34,7 +34,10 @@ type indexSkipTableReader struct {
 
 	// maintains which span we are currently
 	// getting rows from
-	currentSpan  int
+	currentSpan int
+
+	// how much of the primary key prefix we are
+	// doing the distinct over
 	keyPrefixLen int
 
 	limitHint int64
@@ -47,13 +50,14 @@ type indexSkipTableReader struct {
 	// unsure how to take this into account as of now
 	ignoreMisplannedRanges bool
 
-	// need to figure out how to use the below
-	input   RowSource
 	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
 
-	// used for debug
-	count int
+	decodedDatums tree.Datums
+
+	tableInfo sqlbase.TableDescriptor
+	indexInfo *sqlbase.IndexDescriptor
+	colIdxMap map[sqlbase.ColumnID]int
 }
 
 const indexSkipTableReaderProcName = "index skip table reader"
@@ -81,7 +85,9 @@ func newIndexSkipTableReader(
 	}
 
 	t := istrPool.Get().(*indexSkipTableReader)
+
 	t.currentSpan = 0
+	t.tableInfo = spec.Table
 
 	// hardcode right now to just get size 1 batches
 	t.limitHint = limitHint(1, post)
@@ -98,9 +104,8 @@ func newIndexSkipTableReader(
 		output,
 		nil, /* memMonitor */
 		ProcStateOpts{
-			InputsToDrain: nil,
-			// TODO: update this function call
-			TrailingMetaCallback: nil,
+			InputsToDrain:        nil,
+			TrailingMetaCallback: t.generateTrailingMeta,
 		},
 	); err != nil {
 		return nil, err
@@ -108,21 +113,23 @@ func newIndexSkipTableReader(
 
 	neededColumns := t.out.neededColumns()
 	t.keyPrefixLen = neededColumns.Len()
-	t.count = 0
 
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
+	t.colIdxMap = columnIdxMap
 
 	immutDesc := sqlbase.NewImmutableTableDescriptor(spec.Table)
 	index, isSecondaryIndex, err := immutDesc.FindIndexByIndexIdx(int(spec.IndexIdx))
 	if err != nil {
-		// TODO
 		return nil, err
 	}
+	t.indexInfo = index
 
 	cols := immutDesc.Columns
 	if returnMutations {
 		cols = immutDesc.ReadableColumns
 	}
+
+	t.decodedDatums = make(tree.Datums, len(cols))
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:             immutDesc,
@@ -153,114 +160,100 @@ func newIndexSkipTableReader(
 	return t, nil
 }
 
-// TODO: implement
 func (t *indexSkipTableReader) Start(ctx context.Context) context.Context {
 	t.StartInternal(ctx, indexSkipTableReaderProcName)
 	return ctx
 }
 
-// TODO: implement
-// TODO: move this logic into a row fetcher like the table reader?
 func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	if t.State == StateRunning {
-
-		// if our current span is invalid, bump up current span
-		if t.currentSpan < len(t.spans) &&
-			!t.spans[t.currentSpan].Valid() {
-			t.currentSpan++
-		}
-
-		// if we have no more spans to look at
-		// return nil and start draining
+	for t.State == StateRunning {
 		if t.currentSpan >= len(t.spans) {
-			t.MoveToDraining(nil /* err */)
+			t.MoveToDraining(nil)
 			return nil, t.DrainHelper()
 		}
+		if !t.spans[t.currentSpan].Valid() {
+			t.currentSpan++
+			continue
+		}
 
-		oldSpan := t.spans[t.currentSpan]
-
-		// start a scan on the fetcher for our span
-		// TODO: not worrying about inconsistent scans right now
+		// do a scan
 		err := t.fetcher.StartScan(
 			t.Ctx, t.flowCtx.txn, []roachpb.Span{t.spans[t.currentSpan]},
-			true /* limitBatches */, t.limitHint, t.flowCtx.traceKV,
+			true, t.limitHint, t.flowCtx.traceKV,
 		)
-
 		if err != nil {
-			// TODO: !!
 			t.MoveToDraining(err)
-			return nil, t.DrainHelper()
+			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 
-		// use the fetcher to get the next key + row in our span
-		var key roachpb.Key
-		var row sqlbase.EncDatumRow
-		for t.State == StateRunning {
-			key, err = t.fetcher.PartialKey(t.keyPrefixLen)
-			// key, err = t.fetcher.PartialKey(1)
-			// key = t.fetcher.Key()
-			// fmt.Println("testpartial", tkey.String())
-			if err != nil {
-				// TODO: if the key is nil, do we move along
-				// to the next span?
-				// maybe need to restructure this loop then...
-				t.MoveToDraining(nil /* err */)
-				return nil, t.DrainHelper()
-			}
+		key, err := t.fetcher.PartialKey(t.keyPrefixLen)
+		if err != nil {
+			t.MoveToDraining(err)
+			return nil, &distsqlpb.ProducerMetadata{Err: err}
+		}
 
-			row, _, _, err = t.fetcher.NextRow(t.Ctx)
-			if row == nil {
-				// TODO: if the row is nil, do we move along
-				// to the next span?
-				// maybe need to restructure this loop then...
-				// TODO: deal with this when we have many spans
-				t.MoveToDraining(nil /* err */)
-				return nil, t.DrainHelper()
+		row, _, _, err := t.fetcher.NextRow(t.Ctx)
+		if row == nil {
+			// no more rows in this span, so move to the next one!
+			t.currentSpan++
+			continue
+		}
+		if err != nil {
+			t.MoveToDraining(err)
+			return nil, &distsqlpb.ProducerMetadata{Err: err}
+		}
+
+		// decode the datum row here
+		for i, encDatum := range row {
+			if encDatum.IsUnset() {
+				t.decodedDatums[i] = tree.DNull
+				continue
 			}
-			if err != nil {
+			if err := encDatum.EnsureDecoded(&t.tableInfo.Columns[i].Type, &t.alloc); err != nil {
+				t.MoveToDraining(err)
 				return nil, &distsqlpb.ProducerMetadata{Err: err}
 			}
-			if row != nil && err == nil {
-				// fmt.Println(row.String(t.OutputTypes()))
-				break
+			t.decodedDatums[i] = encDatum.Datum
+		}
+
+		keyColIdx := t.keyPrefixLen - 1
+		direction := encoding.Ascending
+		if t.indexInfo.ColumnDirections[keyColIdx] == sqlbase.IndexDescriptor_DESC {
+			direction = encoding.Descending
+		}
+		colID := t.indexInfo.ColumnIDs[keyColIdx]
+		ordinal := t.colIdxMap[colID]
+
+		datum := t.decodedDatums[ordinal]
+
+		// TODO: deal with getting next or previous depending on the
+		// direction
+		newDatum, nextExists := datum.Next(t.evalCtx)
+
+		// only construct a new span if the next value exists,
+		// otherwise move onto the next span
+		if nextExists {
+			decomposedKey, _, err := encoding.DecomposeKeyTokens(key)
+			if err != nil {
+				t.MoveToDraining(err)
+				return nil, &distsqlpb.ProducerMetadata{Err: err}
 			}
-		}
-
-		// use Key.NextKey to get the next largest key for us
-		newKey := key.Next()
-		_ = newKey
-		t.count++
-
-		test, _, err := encoding.DecomposeKeyTokens(key)
-		if err != nil {
-			panic(err)
-		}
-		var d sqlbase.DatumAlloc
-		ty := types.Int
-		last := test[len(test)-1]
-		data, _, _ := sqlbase.DecodeTableKey(&d, ty, last, encoding.Ascending)
-		fmt.Println("DATUM VALUE", data.String())
-		newDatum, _ := data.Next(nil)
-
-		var newKeyDatum roachpb.Key
-		for i, kp := range test {
-			if i != len(test)-1 {
-				newKeyDatum = append(newKeyDatum, kp...)
+			newEncDatum, err := sqlbase.EncodeTableKey([]byte{}, newDatum, direction)
+			if err != nil {
+				t.MoveToDraining(err)
+				return nil, &distsqlpb.ProducerMetadata{Err: err}
 			}
+			var newKey roachpb.Key
+			for i, kp := range decomposedKey {
+				if i != len(decomposedKey)-1 {
+					newKey = append(newKey, kp...)
+				}
+			}
+			newKey = append(newKey, newEncDatum...)
+			t.spans[t.currentSpan].Key = newKey
+		} else {
+			t.currentSpan++
 		}
-
-		encDatum, _ := sqlbase.EncodeTableKey([]byte{}, newDatum, encoding.Ascending)
-		newKeyDatum = append(newKeyDatum, encDatum...)
-
-		// adjust our span to have the same end key, but the next largest key
-		t.spans[t.currentSpan].Key = newKeyDatum
-		fmt.Printf("Old key %s, new key %s\n", key.String(), newKeyDatum.String())
-		fmt.Printf("Old span %s, new span %s\n", oldSpan.String(), t.spans[t.currentSpan].String())
-
-		// if t.count == 5 {
-		// 	panic("wei!")
-		// }
-
 		if outRow := t.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
@@ -279,14 +272,14 @@ func (t *indexSkipTableReader) Release() {
 	istrPool.Put(t)
 }
 
-// TODO: implement
-func (t *indexSkipTableReader) ConsumerDone() {
-
+func (t *indexSkipTableReader) ConsumerClosed() {
+	t.InternalClose()
 }
 
-// TODO: implement
-func (t *indexSkipTableReader) ConsumerClosed() {
-
+func (t *indexSkipTableReader) generateTrailingMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+	trailingMeta := t.generateMeta(ctx)
+	t.InternalClose()
+	return trailingMeta
 }
 
 func (t *indexSkipTableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
