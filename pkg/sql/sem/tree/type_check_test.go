@@ -211,7 +211,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`NOT 1`, `incompatible NOT argument type: int`},
 		{`lower()`, `unknown signature: lower()`},
 		{`lower(1, 2)`, `unknown signature: lower(int, int)`},
-		{`lower(1)`, `unknown signature: lower(int)`},
+		{`lower(1::int)`, `unknown signature: lower(int)`},
 		{`lower('FOO') OVER ()`, `OVER specified, but lower() is neither a window function nor an aggregate function`},
 		{`count(1) FILTER (WHERE 1) OVER ()`, `incompatible FILTER expression type: int`},
 		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
