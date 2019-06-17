@@ -118,7 +118,7 @@ type QuotaPool struct {
 		// acquisition context has been canceled, the goroutine is responsible for
 		// blocking subsequent notifications to the channel by filling up the
 		// channel buffer.
-		queue []chan struct{}
+		q notifyQueue
 
 		// closed is set to true when the quota pool is closed (see
 		// QuotaPool.Close).
@@ -140,6 +140,7 @@ func New(name string, initialResource Resource, options ...Option) *QuotaPool {
 	for _, o := range options {
 		o.apply(&qp.config)
 	}
+	initializeNotifyQueue(&qp.mu.q)
 	qp.quota <- initialResource
 	return qp
 }
@@ -177,9 +178,9 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 	if qp.mu.closed {
 		closeErr = qp.closeErr
 	} else {
-		qp.mu.queue = append(qp.mu.queue, notifyCh)
+		qp.mu.q.enqueue(notifyCh)
 		// If we're first in line, we notify ourself immediately.
-		if len(qp.mu.queue) == 1 {
+		if qp.mu.q.len == 1 {
 			notifyCh <- struct{}{}
 		}
 	}
@@ -216,7 +217,7 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 			// Else we simply 'unregister' ourselves from the queue by filling
 			// up the channel buffer. This is what is checked when a goroutine
 			// wishes to notify the next in line.
-			if qp.mu.queue[0] == notifyCh {
+			if qp.mu.q.peek() == notifyCh {
 				// It is possible that we were notified before we grabbed the mutex but
 				// after the context cancellation in which case we must clear notifyCh
 				// so that qp.notifyNextLocked() can put it back into the pool.
@@ -293,7 +294,7 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 func (qp *QuotaPool) notifyNextLocked() {
 	// We're at the head of the queue. In all cases we ensure that the channel
 	// at the head of the queue has already been notified.
-	qp.chanSyncPool.Put(qp.mu.queue[0])
+	qp.chanSyncPool.Put(qp.mu.q.dequeue())
 	// We traverse until we find a goroutine waiting to be notified, notify the
 	// goroutine and truncate our queue so to ensure the said goroutine is at the
 	// head of the queue. Normally the next lined up waiter is the one waiting for
@@ -302,8 +303,7 @@ func (qp *QuotaPool) notifyNextLocked() {
 	//
 	// If we determine there are no goroutines waiting, we simply truncate the
 	// queue to reflect this.
-	qp.mu.queue = qp.mu.queue[1:]
-	for _, ch := range qp.mu.queue {
+	for ch := qp.mu.q.peek(); ch != nil; ch = qp.mu.q.peek() {
 		select {
 		case ch <- struct{}{}:
 		default:
@@ -313,8 +313,7 @@ func (qp *QuotaPool) notifyNextLocked() {
 			// by clearing the channel before putting it back in the pool and then
 			// shifting the queue.
 			<-ch
-			qp.chanSyncPool.Put(ch)
-			qp.mu.queue = qp.mu.queue[1:]
+			qp.chanSyncPool.Put(qp.mu.q.dequeue())
 			continue
 		}
 		break
