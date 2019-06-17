@@ -465,42 +465,6 @@ func processAbortSpan(
 	return gcKeys
 }
 
-// process iterates through all keys in a replica's range, calling the garbage
-// collector for each key and associated set of values. GC'd keys are batched
-// into GC calls. Extant intents are resolved if intents are older than
-// intentAgeThreshold. The transaction and AbortSpan records are also
-// scanned and old entries evicted. During normal operation, both of these
-// records are cleaned up when their respective transaction finishes, so the
-// amount of work done here is expected to be small.
-//
-// Some care needs to be taken to avoid cyclic recreation of entries during GC:
-// * a Push initiated due to an intent may recreate a transaction entry
-// * resolving an intent may write a new AbortSpan entry
-// * obtaining the transaction for a AbortSpan entry requires a Push
-//
-// The following order is taken below:
-// 1) collect all intents with sufficiently old txn record
-// 2) collect these intents' transactions
-// 3) scan the transaction table, collecting abandoned or completed txns
-// 4) push all of these transactions (possibly recreating entries)
-// 5) resolve all intents (unless the txn is not yet finalized), which
-//    will recreate AbortSpan entries (but with the txn timestamp; i.e.
-//    likely GC'able)
-// 6) scan the AbortSpan table for old entries
-// 7) push these transactions (again, recreating txn entries).
-// 8) send a GCRequest.
-func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
-	now := repl.store.Clock().Now()
-	r := makeGCQueueScore(ctx, repl, now, sysCfg)
-	if !r.ShouldQueue {
-		log.Eventf(ctx, "skipping replica; low score %s", r)
-		return nil
-	}
-
-	log.Eventf(ctx, "processing replica with score %s", r)
-	return gcq.processImpl(ctx, repl, sysCfg, now)
-}
-
 // NoopGCer implements GCer by doing nothing.
 type NoopGCer struct{}
 
@@ -562,9 +526,35 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 	return r.send(ctx, req)
 }
 
-func (gcq *gcQueue) processImpl(
-	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig, now hlc.Timestamp,
-) error {
+// process iterates through all keys in a replica's range, calling the garbage
+// collector for each key and associated set of values. GC'd keys are batched
+// into GC calls. Extant intents are resolved if intents are older than
+// intentAgeThreshold. The transaction and AbortSpan records are also
+// scanned and old entries evicted. During normal operation, both of these
+// records are cleaned up when their respective transaction finishes, so the
+// amount of work done here is expected to be small.
+//
+// Some care needs to be taken to avoid cyclic recreation of entries during GC:
+// * a Push initiated due to an intent may recreate a transaction entry
+// * resolving an intent may write a new AbortSpan entry
+// * obtaining the transaction for a AbortSpan entry requires a Push
+//
+// The following order is taken below:
+// 1) collect all intents with sufficiently old txn record
+// 2) collect these intents' transactions
+// 3) scan the transaction table, collecting abandoned or completed txns
+// 4) push all of these transactions (possibly recreating entries)
+// 5) resolve all intents (unless the txn is not yet finalized), which
+//    will recreate AbortSpan entries (but with the txn timestamp; i.e.
+//    likely GC'able)
+// 6) scan the AbortSpan table for old entries
+// 7) push these transactions (again, recreating txn entries).
+// 8) send a GCRequest.
+func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
+	now := repl.store.Clock().Now()
+	r := makeGCQueueScore(ctx, repl, now, sysCfg)
+	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
+
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
 

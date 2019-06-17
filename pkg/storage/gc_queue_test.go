@@ -366,9 +366,10 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 // scales and verifies that scan queue process properly GCs test data.
 func TestGCQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	tc.manualClock.Increment(48 * 60 * 60 * 1E9) // 2d past the epoch
@@ -502,7 +503,6 @@ func TestGCQueueProcess(t *testing.T) {
 			t.Fatalf("could not find zone config for range %s: %s", tc.repl, err)
 		}
 
-		ctx := context.Background()
 		now := tc.Clock().Now()
 		return RunGC(ctx, desc, snap, now, *zone.GC,
 			NoopGCer{},
@@ -525,7 +525,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
+	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -566,9 +566,7 @@ func TestGCQueueProcess(t *testing.T) {
 			return err
 		}
 		for i, kv := range kvs {
-			if log.V(1) {
-				log.Infof(context.Background(), "%d: %s", i, kv.Key)
-			}
+			log.VEventf(ctx, 1, "%d: %s", i, kv.Key)
 		}
 		if len(kvs) != len(expKVs) {
 			return fmt.Errorf("expected length %d; got %d", len(expKVs), len(kvs))
@@ -580,9 +578,7 @@ func TestGCQueueProcess(t *testing.T) {
 			if kv.Key.Timestamp != expKVs[i].ts {
 				return fmt.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, kv.Key.Timestamp)
 			}
-			if log.V(1) {
-				log.Infof(context.Background(), "%d: %s", i, kv.Key)
-			}
+			log.VEventf(ctx, 2, "%d: %s", i, kv.Key)
 		}
 		return nil
 	})
@@ -590,6 +586,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 func TestGCQueueTransactionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	manual := hlc.NewManualClock(123)
 	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
@@ -728,7 +725,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		}
 	tc := testContext{manualClock: manual}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	outsideKey := tc.repl.Desc().EndKey.Next().AsRawKey()
@@ -747,12 +744,12 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
-			if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, nil, txn); err != nil {
+			if err := engine.MVCCPutProto(ctx, tc.engine, nil, key, hlc.Timestamp{}, nil, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
 		entry := roachpb.AbortSpanEntry{Key: txn.Key, Timestamp: txn.LastActive()}
-		if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
+		if err := tc.repl.abortSpan.Put(ctx, tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -764,7 +761,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
+	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -772,7 +769,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		for strKey, sp := range testCases {
 			txn := &roachpb.Transaction{}
 			key := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
-			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, key, hlc.Timestamp{}, txn,
+			ok, err := engine.MVCCGetProto(ctx, tc.engine, key, hlc.Timestamp{}, txn,
 				engine.MVCCGetOptions{})
 			if err != nil {
 				return err
@@ -797,7 +794,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s", strKey, expIntents, spans)
 			}
 			entry := &roachpb.AbortSpanEntry{}
-			abortExists, err := tc.repl.abortSpan.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
+			abortExists, err := tc.repl.abortSpan.Get(ctx, tc.store.Engine(), txns[strKey].ID, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -811,7 +808,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.UUID{})
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
-	if _, err := engine.MVCCIterate(context.Background(), tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
+	if _, err := engine.MVCCIterate(ctx, tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
 		engine.MVCCScanOptions{}, func(roachpb.KeyValue) (bool, error) {
 			count++
 			return false, nil
@@ -827,7 +824,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	defer batch.Close()
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
-	tc.repl.assertStateLocked(context.TODO(), batch) // check that in-mem and on-disk state were updated
+	tc.repl.assertStateLocked(ctx, batch) // check that in-mem and on-disk state were updated
 	tc.repl.mu.Unlock()
 	tc.repl.raftMu.Unlock()
 
@@ -846,9 +843,10 @@ func TestGCQueueTransactionTable(t *testing.T) {
 // intents spanning just two transactions.
 func TestGCQueueIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	tc.manualClock.Set(48 * 60 * 60 * 1E9) // 2d past the epoch
@@ -884,7 +882,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		t.Fatal("config not set")
 	}
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
+	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -910,9 +908,10 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	// Create two last processed times both at the range start key and
@@ -930,7 +929,7 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	ts := tc.Clock().Now()
 	for _, lpv := range lastProcessedVals {
-		if err := engine.MVCCPutProto(context.Background(), tc.engine, nil, lpv.key, hlc.Timestamp{}, nil, &ts); err != nil {
+		if err := engine.MVCCPutProto(ctx, tc.engine, nil, lpv.key, hlc.Timestamp{}, nil, &ts); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -942,14 +941,14 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
+	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify GC.
 	testutils.SucceedsSoon(t, func() error {
 		for _, lpv := range lastProcessedVals {
-			ok, err := engine.MVCCGetProto(context.Background(), tc.engine, lpv.key, hlc.Timestamp{}, &ts,
+			ok, err := engine.MVCCGetProto(ctx, tc.engine, lpv.key, hlc.Timestamp{}, &ts,
 				engine.MVCCGetOptions{})
 			if err != nil {
 				return err
@@ -967,6 +966,7 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 // keys and also for many different versions of keys.
 func TestGCQueueChunkRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	var gcRequests int32
 	manual := hlc.NewManualClock(123)
@@ -981,7 +981,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 		}
 	tc := testContext{manualClock: manual}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	const keyCount = 100
@@ -1006,11 +1006,11 @@ func TestGCQueueChunkRequests(t *testing.T) {
 		ba2.Add(&pArgs)
 	}
 	ba1.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
-	if _, pErr := tc.Sender().Send(context.Background(), ba1); pErr != nil {
+	if _, pErr := tc.Sender().Send(ctx, ba1); pErr != nil {
 		t.Fatal(pErr)
 	}
 	ba2.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
-	if _, pErr := tc.Sender().Send(context.Background(), ba2); pErr != nil {
+	if _, pErr := tc.Sender().Send(ctx, ba2); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1030,7 +1030,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 		pArgs2 := putArgs(key2, []byte(fmt.Sprintf("value%04d", i)))
 		ba.Add(&pArgs2)
 		ba.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
-		if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+		if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -1046,7 +1046,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	}
 	tc.manualClock.Increment(int64(zone.GC.TTLSeconds)*1E9 + 1)
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
+	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
