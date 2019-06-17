@@ -392,6 +392,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:0f1b41c35d031b62b1882c85325cb6516f1768b6cd5545dab29d0fe43e2106c9"
+  name = "github.com/cockroachdb/logtags"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "eb05cc24525fa45bcdbaaeec3e431a82099f9ad4"
+
+[[projects]]
+  branch = "master"
   digest = "1:7fd6f030a3e71e62c6a04a74b7d1777995b39730cd5cc905aab2b726f3455863"
   name = "github.com/cockroachdb/returncheck"
   packages = ["."]
@@ -1863,6 +1871,7 @@
     "github.com/cockroachdb/datadriven",
     "github.com/cockroachdb/gostdlib/cmd/gofmt",
     "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
+    "github.com/cockroachdb/logtags",
     "github.com/cockroachdb/returncheck",
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
