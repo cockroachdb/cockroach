@@ -22,9 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // getDataAndFullSelection is a test helper that generates tuples representing
@@ -534,6 +536,10 @@ func TestHashRouterCancellation(t *testing.T) {
 		if numAddBatches != 0 {
 			t.Fatalf("detected %d addBatch calls but expected 0", numAddBatches)
 		}
+
+		meta := r.DrainMeta(ctx)
+		require.Equal(t, 1, len(meta))
+		require.True(t, testutils.IsError(meta[0].Err, "context canceled"), meta[0].Err)
 	})
 
 	testCases := []struct {
@@ -567,6 +573,9 @@ func TestHashRouterCancellation(t *testing.T) {
 			doneCh := make(chan struct{})
 			go func() {
 				r.Run(ctx)
+				meta := r.DrainMeta(ctx)
+				require.Equal(t, 1, len(meta))
+				require.True(t, testutils.IsError(meta[0].Err, "context canceled"), meta[0].Err)
 				close(doneCh)
 			}()
 
