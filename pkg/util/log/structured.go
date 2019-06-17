@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/logtags"
 )
 
 // formatTags appends the tags to a strings.Builder. If there are no tags,
@@ -30,22 +30,7 @@ func formatTags(ctx context.Context, buf *strings.Builder) bool {
 		return false
 	}
 	buf.WriteByte('[')
-	for i, t := range tags.Get() {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-
-		buf.WriteString(t.Key())
-		if v := t.Value(); v != nil && v != "" {
-			// For tags that have a value and are longer than a character,
-			// we output "tag=value". For one character tags we don't use a
-			// separator (e.g. "n1").
-			if len(t.Key()) > 1 {
-				buf.WriteByte('=')
-			}
-			fmt.Fprint(buf, v)
-		}
-	}
+	tags.FormatToString(buf)
 	buf.WriteString("] ")
 	return true
 }

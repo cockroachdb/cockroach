@@ -15,7 +15,7 @@ package tracing
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 )
