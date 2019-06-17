@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // OrderingChoice defines the set of possible row orderings that are provided or
@@ -154,7 +153,7 @@ func ParseOrderingChoice(s string) OrderingChoice {
 		if len(ordColMatches[1]) != 0 {
 			// Single column in equivalence group.
 			id, _ := strconv.Atoi(ordColMatches[1])
-			colChoice.Group.Add(id)
+			colChoice.Group.Add(opt.ColumnID(id))
 		} else {
 			// Split multiple columns in equivalence group by pipe:
 			//   1|2:
@@ -162,7 +161,7 @@ func ParseOrderingChoice(s string) OrderingChoice {
 			//     2
 			for _, idStr := range strings.Split(ordColMatches[2], "|") {
 				id, _ := strconv.Atoi(idStr)
-				colChoice.Group.Add(id)
+				colChoice.Group.Add(opt.ColumnID(id))
 			}
 		}
 
@@ -176,7 +175,7 @@ func ParseOrderingChoice(s string) OrderingChoice {
 	if len(matches[2]) != 0 {
 		for _, idStr := range strings.Split(matches[2], ",") {
 			id, _ := strconv.Atoi(idStr)
-			ordering.Optional.Add(id)
+			ordering.Optional.Add(opt.ColumnID(id))
 		}
 	}
 
@@ -207,10 +206,10 @@ func (oc *OrderingChoice) Any() bool {
 
 // FromOrdering sets this OrderingChoice to the given opt.Ordering.
 func (oc *OrderingChoice) FromOrdering(ord opt.Ordering) {
-	oc.Optional = util.FastIntSet{}
+	oc.Optional = opt.ColSet{}
 	oc.Columns = make([]OrderingColumnChoice, len(ord))
 	for i := range ord {
-		oc.Columns[i].Group.Add(int(ord[i].ID()))
+		oc.Columns[i].Group.Add(ord[i].ID())
 		oc.Columns[i].Descending = ord[i].Descending()
 	}
 }
@@ -222,9 +221,9 @@ func (oc *OrderingChoice) FromOrderingWithOptCols(ord opt.Ordering, optCols opt.
 	oc.Optional = optCols.Copy()
 	oc.Columns = make([]OrderingColumnChoice, 0, len(ord))
 	for i := range ord {
-		if !oc.Optional.Contains(int(ord[i].ID())) {
+		if !oc.Optional.Contains(ord[i].ID()) {
 			oc.Columns = append(oc.Columns, OrderingColumnChoice{
-				Group:      util.MakeFastIntSet(int(ord[i].ID())),
+				Group:      opt.MakeColSet(ord[i].ID()),
 				Descending: ord[i].Descending(),
 			})
 		}
@@ -456,14 +455,14 @@ func (oc *OrderingChoice) CanProjectCols(cs opt.ColSet) bool {
 // instance matches the given column. The column matches if its id is part of
 // the equivalence group and if it has the same direction.
 func (oc *OrderingChoice) MatchesAt(index int, col opt.OrderingColumn) bool {
-	if oc.Optional.Contains(int(col.ID())) {
+	if oc.Optional.Contains(col.ID()) {
 		return true
 	}
 	choice := &oc.Columns[index]
 	if choice.Descending != col.Descending() {
 		return false
 	}
-	if !choice.Group.Contains(int(col.ID())) {
+	if !choice.Group.Contains(col.ID()) {
 		return false
 	}
 	return true
@@ -474,7 +473,7 @@ func (oc *OrderingChoice) MatchesAt(index int, col opt.OrderingColumn) bool {
 // the only ordering choice.
 func (oc *OrderingChoice) AppendCol(id opt.ColumnID, descending bool) {
 	ordCol := OrderingColumnChoice{Descending: descending}
-	ordCol.Group.Add(int(id))
+	ordCol.Group.Add(id)
 	oc.Columns = append(oc.Columns, ordCol)
 }
 

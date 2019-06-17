@@ -95,8 +95,8 @@ func (ep *execPlan) getColumnOrdinal(col opt.ColumnID) exec.ColumnOrdinal {
 
 func (ep *execPlan) getColumnOrdinalSet(cols opt.ColSet) exec.ColumnOrdinalSet {
 	var res exec.ColumnOrdinalSet
-	cols.ForEach(func(colID int) {
-		res.Add(int(ep.getColumnOrdinal(opt.ColumnID(colID))))
+	cols.ForEach(func(colID opt.ColumnID) {
+		res.Add(int(ep.getColumnOrdinal(colID)))
 	})
 	return res
 }
@@ -265,7 +265,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		optCols := e.Relational().OutputCols
 		var execCols opt.ColSet
 		ep.outputCols.ForEach(func(key, val int) {
-			execCols.Add(key)
+			execCols.Add(opt.ColumnID(key))
 		})
 		if !execCols.Equals(optCols) {
 			return execPlan{}, pgerror.AssertionFailedf(
@@ -345,7 +345,7 @@ func (b *Builder) getColumns(
 	n := 0
 	for i := 0; i < columnCount; i++ {
 		colID := tableID.ColumnID(i)
-		if cols.Contains(int(colID)) {
+		if cols.Contains(colID) {
 			needed.Add(i)
 			output.Set(int(colID), n)
 			n++
@@ -367,7 +367,7 @@ func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) uint64 {
 	numCols := c.Columns.Count()
 	var indexCols opt.ColSet
 	for i := 0; i < numCols; i++ {
-		indexCols.Add(int(c.Columns.Get(i).ID()))
+		indexCols.Add(c.Columns.Get(i).ID())
 	}
 	rel := scan.Relational()
 	if !rel.FuncDeps.ColsAreLaxKey(indexCols) {
@@ -458,9 +458,9 @@ func (b *Builder) applySimpleProject(
 	// We have only pass-through columns.
 	colList := make([]exec.ColumnOrdinal, 0, cols.Len())
 	var res execPlan
-	cols.ForEach(func(i int) {
-		res.outputCols.Set(i, len(colList))
-		colList = append(colList, input.getColumnOrdinal(opt.ColumnID(i)))
+	cols.ForEach(func(i opt.ColumnID) {
+		res.outputCols.Set(int(i), len(colList))
+		colList = append(colList, input.getColumnOrdinal(i))
 	})
 	var err error
 	res.root, err = b.factory.ConstructSimpleProject(
@@ -498,9 +498,8 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 		exprs = append(exprs, expr)
 		colNames = append(colNames, md.ColumnMeta(item.Col).Alias)
 	}
-	prj.Passthrough.ForEach(func(i int) {
-		colID := opt.ColumnID(i)
-		res.outputCols.Set(i, len(exprs))
+	prj.Passthrough.ForEach(func(colID opt.ColumnID) {
+		res.outputCols.Set(int(colID), len(exprs))
 		exprs = append(exprs, b.indexedVar(&ctx, md, colID))
 		colNames = append(colNames, md.ColumnMeta(colID).Alias)
 	})
@@ -554,8 +553,8 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	var f norm.Factory
 	f.Init(b.evalCtx)
 	fakeBindings := make(map[opt.ColumnID]tree.Datum)
-	rightExpr.Relational().OuterCols.ForEach(func(k int) {
-		fakeBindings[opt.ColumnID(k)] = tree.DNull
+	rightExpr.Relational().OuterCols.ForEach(func(k opt.ColumnID) {
+		fakeBindings[k] = tree.DNull
 	})
 	ReplaceVars(&f, rightExpr, rightExpr.RequiredPhysical(), fakeBindings)
 
@@ -590,11 +589,11 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	// in the left side that contains the binding.
 	var leftBoundColMap opt.ColMap
 	for k, ok := leftBoundCols.Next(0); ok; k, ok = leftBoundCols.Next(k + 1) {
-		v, ok := left.outputCols.Get(k)
+		v, ok := left.outputCols.Get(int(k))
 		if !ok {
 			return execPlan{}, fmt.Errorf("couldn't find binding column %d in output columns", k)
 		}
-		leftBoundColMap.Set(k, v)
+		leftBoundColMap.Set(int(k), v)
 	}
 
 	allCols := joinOutputMap(left.outputCols, fakeRight.outputCols)
@@ -802,7 +801,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 	groupingCols := groupBy.Private().(*memo.GroupingPrivate).GroupingCols
 	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
-		ep.outputCols.Set(i, len(groupingColIdx))
+		ep.outputCols.Set(int(i), len(groupingColIdx))
 		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(opt.ColumnID(i)))
 	}
 
@@ -945,7 +944,7 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 	// In this case we can't project the column away as it is still needed by
 	// distsql to maintain the desired ordering.
 	for _, c := range groupByInput.ProvidedPhysical().Ordering {
-		neededCols.Add(int(c.ID()))
+		neededCols.Add(c.ID())
 	}
 
 	if neededCols.Equals(groupByInput.Relational().OutputCols) {
@@ -957,11 +956,11 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 	cols := make([]exec.ColumnOrdinal, 0, neededCols.Len())
 	var newOutputCols opt.ColMap
 	for colID, ok := neededCols.Next(0); ok; colID, ok = neededCols.Next(colID + 1) {
-		ordinal, ordOk := input.outputCols.Get(colID)
+		ordinal, ordOk := input.outputCols.Get(int(colID))
 		if !ordOk {
 			panic(pgerror.AssertionFailedf("needed column not produced by group-by input"))
 		}
-		newOutputCols.Set(colID, len(cols))
+		newOutputCols.Set(int(colID), len(cols))
 		cols = append(cols, exec.ColumnOrdinal(ordinal))
 	}
 
@@ -1445,8 +1444,8 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	passthrough := w.Input.Relational().OutputCols
 
 	desiredCols := opt.ColList{}
-	passthrough.ForEach(func(i int) {
-		desiredCols = append(desiredCols, opt.ColumnID(i))
+	passthrough.ForEach(func(i opt.ColumnID) {
+		desiredCols = append(desiredCols, i)
 	})
 
 	// TODO(justin): this call to ensureColumns is kind of unfortunate because it
@@ -1477,10 +1476,10 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	partitionExprs := make(tree.Exprs, w.Partition.Len())
 
 	i := 0
-	w.Partition.ForEach(func(col int) {
-		ordinal, _ := input.outputCols.Get(col)
+	w.Partition.ForEach(func(col opt.ColumnID) {
+		ordinal, _ := input.outputCols.Get(int(col))
 		partitionIdxs[i] = exec.ColumnOrdinal(ordinal)
-		partitionExprs[i] = b.indexedVar(&ctx, b.mem.Metadata(), opt.ColumnID(col))
+		partitionExprs[i] = b.indexedVar(&ctx, b.mem.Metadata(), col)
 		i++
 	})
 
@@ -1544,14 +1543,14 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	resultCols := make(sqlbase.ResultColumns, w.Relational().OutputCols.Len())
 
 	// All the passthrough cols will keep their ordinal index.
-	passthrough.ForEach(func(col int) {
-		ordinal, _ := input.outputCols.Get(col)
-		resultCols[ordinal] = b.resultColumn(opt.ColumnID(col))
+	passthrough.ForEach(func(col opt.ColumnID) {
+		ordinal, _ := input.outputCols.Get(int(col))
+		resultCols[ordinal] = b.resultColumn(col)
 	})
 
 	var outputCols opt.ColMap
 	input.outputCols.ForEach(func(key, val int) {
-		if passthrough.Contains(key) {
+		if passthrough.Contains(opt.ColumnID(key)) {
 			outputCols.Set(key, val)
 		}
 	})
@@ -1903,8 +1902,8 @@ func (b *Builder) applySaveTable(
 	colNames := make([]string, outputCols.Len())
 	colNameGen := memo.NewColumnNameGenerator(e)
 	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
-		ord, _ := input.outputCols.Get(col)
-		colNames[ord] = colNameGen.GenerateName(opt.ColumnID(col))
+		ord, _ := input.outputCols.Get(int(col))
+		colNames[ord] = colNameGen.GenerateName(col)
 	}
 
 	var err error
@@ -2115,7 +2114,7 @@ func appendColsWhenPresent(dst, src opt.ColList) opt.ColList {
 // maintain lists that correspond to the target table, with zero column IDs
 // indicating columns that are not involved in the mutation.
 func ordinalSetFromColList(colList opt.ColList) exec.ColumnOrdinalSet {
-	var res opt.ColSet
+	var res util.FastIntSet
 	for i, col := range colList {
 		if col != 0 {
 			res.Add(i)
@@ -2135,9 +2134,9 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 	var colMap opt.ColMap
 	ord := 0
 	for i, n := 0, tab.DeletableColumnCount(); i < n; i++ {
-		colID := int(private.Table.ColumnID(i))
+		colID := private.Table.ColumnID(i)
 		if outCols.Contains(colID) {
-			colMap.Set(colID, ord)
+			colMap.Set(int(colID), ord)
 			ord++
 		}
 	}

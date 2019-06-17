@@ -28,9 +28,6 @@ func (c ColumnID) index() int {
 	return int(c - 1)
 }
 
-// ColSet efficiently stores an unordered set of column ids.
-type ColSet = util.FastIntSet
-
 // ColList is a list of column ids.
 //
 // TODO(radu): perhaps implement a FastIntList with the same "small"
@@ -62,7 +59,7 @@ type ColumnMeta struct {
 func (cl ColList) ToSet() ColSet {
 	var r ColSet
 	for _, col := range cl {
-		r.Add(int(col))
+		r.Add(col)
 	}
 	return r
 }
@@ -95,8 +92,8 @@ func (cl ColList) Equals(other ColList) bool {
 // ColSetToList converts a column id set to a list, in column id order.
 func ColSetToList(set ColSet) ColList {
 	res := make(ColList, 0, set.Len())
-	set.ForEach(func(x int) {
-		res = append(res, ColumnID(x))
+	set.ForEach(func(x ColumnID) {
+		res = append(res, x)
 	})
 	return res
 }

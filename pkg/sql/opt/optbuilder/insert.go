@@ -396,7 +396,7 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 		}
 
 		colID := mb.tabID.ColumnID(col.Ordinal)
-		if mb.targetColSet.Contains(int(colID)) {
+		if mb.targetColSet.Contains(colID) {
 			// The column is explicitly specified in the target name list.
 			continue
 		}
@@ -447,7 +447,7 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 			}
 
 			colID := mb.tabID.ColumnID(ord)
-			if mb.targetColSet.Contains(int(colID)) {
+			if mb.targetColSet.Contains(colID) {
 				// The column is explicitly specified in the target name list.
 				allMissing = false
 				continue
