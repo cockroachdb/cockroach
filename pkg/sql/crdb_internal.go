@@ -1953,8 +1953,8 @@ CREATE TABLE crdb_internal.gossip_nodes (
   network         		STRING NOT NULL,
   address         		STRING NOT NULL,
   advertise_address   STRING NOT NULL,
-  attrs           		JSON NOT NULL,
-  locality        		JSON NOT NULL,
+  attrs           		STRING NOT NULL,
+  locality        		STRING NOT NULL,
   server_version  		STRING NOT NULL,
   build_tag       		STRING NOT NULL,
   started_at     	 		TIMESTAMP NOT NULL,
@@ -2033,16 +2033,6 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		}
 
 		for _, d := range descriptors {
-			attrs := json.NewArrayBuilder(len(d.Attrs.Attrs))
-			for _, a := range d.Attrs.Attrs {
-				attrs.Add(json.FromString(a))
-			}
-
-			locality := json.NewObjectBuilder(len(d.Locality.Tiers))
-			for _, t := range d.Locality.Tiers {
-				locality.Add(t.Key, json.FromString(t.Value))
-			}
-
 			addr, err := g.GetNodeIDAddress(d.NodeID)
 			if err != nil {
 				return err
@@ -2053,8 +2043,8 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				tree.NewDString(d.Address.NetworkField),
 				tree.NewDString(d.Address.AddressField),
 				tree.NewDString(addr.String()),
-				tree.NewDJSON(attrs.Build()),
-				tree.NewDJSON(locality.Build()),
+				tree.NewDString(d.Attrs.String()),
+				tree.NewDString(d.Locality.String()),
 				tree.NewDString(d.ServerVersion.String()),
 				tree.NewDString(d.BuildTag),
 				tree.MakeDTimestamp(timeutil.Unix(0, d.StartedAt), time.Microsecond),
@@ -2321,8 +2311,8 @@ CREATE TABLE crdb_internal.kv_node_status (
   node_id        INT NOT NULL,
   network        STRING NOT NULL,
   address        STRING NOT NULL,
-  attrs          JSON NOT NULL,
-  locality       JSON NOT NULL,
+  attrs          STRING NOT NULL,
+  locality       STRING NOT NULL,
   server_version STRING NOT NULL,
   go_version     STRING NOT NULL,
   tag            STRING NOT NULL,
@@ -2352,16 +2342,6 @@ CREATE TABLE crdb_internal.kv_node_status (
 		}
 
 		for _, n := range response.Nodes {
-			attrs := json.NewArrayBuilder(len(n.Desc.Attrs.Attrs))
-			for _, a := range n.Desc.Attrs.Attrs {
-				attrs.Add(json.FromString(a))
-			}
-
-			locality := json.NewObjectBuilder(len(n.Desc.Locality.Tiers))
-			for _, t := range n.Desc.Locality.Tiers {
-				locality.Add(t.Key, json.FromString(t.Value))
-			}
-
 			var dependencies string
 			if n.BuildInfo.Dependencies == nil {
 				dependencies = ""
@@ -2401,8 +2381,8 @@ CREATE TABLE crdb_internal.kv_node_status (
 				tree.NewDInt(tree.DInt(n.Desc.NodeID)),
 				tree.NewDString(n.Desc.Address.NetworkField),
 				tree.NewDString(n.Desc.Address.AddressField),
-				tree.NewDJSON(attrs.Build()),
-				tree.NewDJSON(locality.Build()),
+				tree.NewDString(n.Desc.Attrs.String()),
+				tree.NewDString(n.Desc.Locality.String()),
 				tree.NewDString(n.Desc.ServerVersion.String()),
 				tree.NewDString(n.BuildInfo.GoVersion),
 				tree.NewDString(n.BuildInfo.Tag),
@@ -2436,7 +2416,7 @@ var crdbInternalKVStoreStatusTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.kv_store_status (
   node_id            INT NOT NULL,
   store_id           INT NOT NULL,
-  attrs              JSON NOT NULL,
+  attrs              STRING NOT NULL,
   capacity           INT NOT NULL,
   available          INT NOT NULL,
   used               INT NOT NULL,
@@ -2461,11 +2441,6 @@ CREATE TABLE crdb_internal.kv_store_status (
 
 		for _, n := range response.Nodes {
 			for _, s := range n.StoreStatuses {
-				attrs := json.NewArrayBuilder(len(s.Desc.Attrs.Attrs))
-				for _, a := range s.Desc.Attrs.Attrs {
-					attrs.Add(json.FromString(a))
-				}
-
 				metrics := json.NewObjectBuilder(len(s.Metrics))
 				for k, v := range s.Metrics {
 					metric, err := json.FromFloat64(v)
@@ -2522,7 +2497,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 				if err := addRow(
 					tree.NewDInt(tree.DInt(s.Desc.Node.NodeID)),
 					tree.NewDInt(tree.DInt(s.Desc.StoreID)),
-					tree.NewDJSON(attrs.Build()),
+					tree.NewDString(s.Desc.Attrs.String()),
 					tree.NewDInt(tree.DInt(s.Desc.Capacity.Capacity)),
 					tree.NewDInt(tree.DInt(s.Desc.Capacity.Available)),
 					tree.NewDInt(tree.DInt(s.Desc.Capacity.Used)),

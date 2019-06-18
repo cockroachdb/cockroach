@@ -98,7 +98,7 @@ func (a Attributes) Equals(b Attributes) bool {
 
 // String implements the fmt.Stringer interface.
 func (a Attributes) String() string {
-	return strings.Join(a.Attrs, ",")
+	return strings.Join(a.Attrs, ":")
 }
 
 // RSpan returns the RangeDescriptor's resolved span.
