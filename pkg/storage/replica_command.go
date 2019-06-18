@@ -922,6 +922,7 @@ func (r *Replica) changeReplicas(
 			return nil, errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
 		}
 	}
+	updatedDesc.IncrementGeneration()
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 

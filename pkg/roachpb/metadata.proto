@@ -111,12 +111,13 @@ message RangeDescriptor {
   optional int32 next_replica_id = 5 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
 
-  // generation is incremented on every split and every merge, i.e., whenever
-  // the end_key of this range changes. It is initialized to zero when the range
-  // is first created. The generation counter was first introduced to allow the
-  // range descriptor resulting from a split and then merge to be distinguishable
-  // from the initial range descriptor. This is important since changes to the
-  // range descriptors use CPuts to ensure mutual exclusion.
+  // generation is incremented on every split, merge, and every replica change,
+  // i.e., whenever the span of the range or replica set changes. It is
+  // initialized to zero when the range is first created. The generation
+  // counter was first introduced to allow the range descriptor resulting from
+  // a split and then merge to be distinguishable from the initial range
+  // descriptor. This is important since changes to the range descriptors use
+  // CPuts to ensure mutual exclusion.
   //
   // See #28071 for details on the above.
   //
