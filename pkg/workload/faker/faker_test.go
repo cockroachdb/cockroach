@@ -24,27 +24,27 @@ func TestFaker(t *testing.T) {
 	f := NewFaker()
 
 	names := []string{
-		`Tony Johnson`,
-		`Jennifer Shaw`,
-		`Dr. Andrew Roberts`,
+		`Daniel Nixon`,
+		`Whitney Jimenez`,
+		`Brandon Carr`,
 	}
 	for i, name := range names {
 		assert.Equal(t, name, f.Name(rng), `testcase %d`, i)
 	}
 
 	streetAddresses := []string{
-		`87890 Coffey Via Apt. 51`,
-		`67941 Andrew Station Suite 21`,
-		`75031 Samuel Trail`,
+		`8339 Gary Burgs Apt. 6`,
+		`67941 Lawrence Station Suite 29`,
+		`29657 Ware Haven`,
 	}
 	for i, streetAddress := range streetAddresses {
 		assert.Equal(t, streetAddress, f.StreetAddress(rng), `testcase %d`, i)
 	}
 
 	wordsets := [][]string{
-		{`fly`},
-		{`until`, `figure`},
-		{`after`, `suddenly`, `heavy`},
+		{`until`},
+		{`figure`, `after`},
+		{`suddenly`, `heavy`, `time`},
 	}
 	for i, words := range wordsets {
 		assert.Equal(t, words, f.Words(rng, i+1), `testcase %d`, i)
@@ -52,11 +52,11 @@ func TestFaker(t *testing.T) {
 
 	sentences := [][]string{
 		{
-			`Back especially claim rather town human bag.`,
+			`Especially claim rather town.`,
 		},
 		{
-			`Follow play agreement develop.`,
-			`Mind deal great national yard various mouth.`,
+			`Bag other follow play agreement develop sing.`,
+			`Deal great national yard various mouth.`,
 		},
 		{
 			`During talk direction set clear direction.`,
