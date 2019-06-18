@@ -3052,3 +3052,195 @@ func TestCanSendToFollower(t *testing.T) {
 		}
 	}
 }
+
+// TestEvictMetaRange tests that a query on a stale meta2 range should evict it
+// from the cache.
+func TestEvictMetaRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	testutils.RunTrueAndFalse(t, "hasSuggestedRange", func(t *testing.T, hasSuggestedRange bool) {
+		splitKey := keys.RangeMetaKey(roachpb.RKey("b"))
+
+		testMeta1RangeDescriptor := testMetaRangeDescriptor
+		testMeta1RangeDescriptor.EndKey = roachpb.RKey(keys.Meta2Prefix)
+
+		testMeta2RangeDescriptor1 := testMetaRangeDescriptor
+		testMeta2RangeDescriptor1.RangeID = 2
+		testMeta2RangeDescriptor1.StartKey = roachpb.RKey(keys.Meta2Prefix)
+
+		testMeta2RangeDescriptor2 := testMetaRangeDescriptor
+		testMeta2RangeDescriptor2.RangeID = 3
+		testMeta2RangeDescriptor2.StartKey = roachpb.RKey(keys.Meta2Prefix)
+
+		testUserRangeDescriptor1 := roachpb.RangeDescriptor{
+			RangeID:  4,
+			StartKey: roachpb.RKey("a"),
+			EndKey:   roachpb.RKey("b"),
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{
+					NodeID:  1,
+					StoreID: 1,
+				},
+			},
+		}
+
+		testUserRangeDescriptor2 := roachpb.RangeDescriptor{
+			RangeID:  5,
+			StartKey: roachpb.RKey("b"),
+			EndKey:   roachpb.RKey("c"),
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{
+					NodeID:  1,
+					StoreID: 1,
+				},
+			},
+		}
+
+		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+		rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+		g := makeGossip(t, stopper, rpcContext)
+		if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testMeta1RangeDescriptor, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+
+		isStale := false
+
+		var testFn simpleSendFn = func(
+			_ context.Context,
+			_ SendOptions,
+			_ ReplicaSlice,
+			ba roachpb.BatchRequest,
+		) (*roachpb.BatchResponse, error) {
+			rs, err := keys.Range(ba)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !client.TestingIsRangeLookup(ba) {
+				return ba.CreateReply(), nil
+			}
+
+			if bytes.HasPrefix(rs.Key, keys.Meta1Prefix) {
+				// Querying meta 1 range.
+				br := &roachpb.BatchResponse{}
+				r := &roachpb.ScanResponse{}
+				var kv roachpb.KeyValue
+				if rs.Key.Equal(keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKey("a")).Next()).Next()) {
+					// Scan request is [/Meta1/a - /Meta2), so return the first meta1
+					// range.
+					if err := kv.Value.SetProto(&testMeta2RangeDescriptor1); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					// Scan request is [/Meta1/b - /Meta2), so return the second meta1
+					// range. This is needed when no SuggestedRange is returned from the
+					// RangeKeyMismatch error and an additional lookup is needed to
+					// determine the correct meta2 range descriptor.
+					if err := kv.Value.SetProto(&testMeta2RangeDescriptor2); err != nil {
+						t.Fatal(err)
+					}
+				}
+				r.Rows = append(r.Rows, kv)
+				br.Add(r)
+				return br, nil
+			}
+			// Querying meta2 range.
+			br := &roachpb.BatchResponse{}
+			r := &roachpb.ScanResponse{}
+			var kv roachpb.KeyValue
+			if rs.Key.Equal(keys.RangeMetaKey(roachpb.RKey("a")).Next()) {
+				// Scan request is [/Meta2/a - /Meta2/b), so return the first
+				// user range descriptor.
+				if err := kv.Value.SetProto(&testUserRangeDescriptor1); err != nil {
+					t.Fatal(err)
+				}
+			} else if isStale {
+				// Scan request is [/Meta2/b - /Meta2/c). Since we simulate a split of
+				// [/Meta2 - /System) into [/Meta2 - /Meta2/a) and [/Meta2/b - /System)
+				// and we sent the batch request to the stale cached meta2 range
+				// descriptor [/Meta2 - /Meta2/a), we return a RangeKeyMismatchError. We
+				// test for two cases here:
+				// 1) The SuggestedRange is supplied and the correct meta2 range is
+				//    directly inserted into the cache.
+				// 2) The SuggestedRange is not supplied and we have to an additional
+				//    lookup in meta1 to determine the correct meta2 range.
+
+				// Simulate a split.
+				testMeta2RangeDescriptor1.EndKey = splitKey
+				testMeta2RangeDescriptor2.StartKey = splitKey
+				isStale = false
+
+				reply := ba.CreateReply()
+				// Return a RangeKeyMismatchError to simulate the range being stale.
+				err := &roachpb.RangeKeyMismatchError{
+					RequestStartKey: rs.Key.AsRawKey(),
+					RequestEndKey:   rs.EndKey.AsRawKey(),
+					MismatchedRange: &testMeta2RangeDescriptor1,
+				}
+				if hasSuggestedRange {
+					err.SuggestedRange = &testMeta2RangeDescriptor2
+				}
+				reply.Error = roachpb.NewError(err)
+				// Relative index is always 0, since we send batches of size 1.
+				reply.Error.Index = &roachpb.ErrPosition{Index: 0}
+				return reply, nil
+			} else {
+				// Scan request is [/Meta2/b - /Meta2/c) and the range descriptor is
+				// not stale, so return the second user range descriptor.
+				if err := kv.Value.SetProto(&testUserRangeDescriptor2); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r.Rows = append(r.Rows, kv)
+			br.Add(r)
+			return br, nil
+		}
+
+		cfg := DistSenderConfig{
+			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+			Clock:      clock,
+			RPCContext: rpcContext,
+			TestingKnobs: ClientTestingKnobs{
+				TransportFactory: adaptSimpleTransport(testFn),
+			},
+			NodeDialer: nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		}
+		ds := NewDistSender(cfg, g)
+
+		scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("b"))
+		if _, pErr := client.SendWrapped(context.Background(), ds, scan); pErr != nil {
+			t.Fatalf("scan encountered error: %s", pErr)
+		}
+
+		// Verify that there is one meta2 cached range.
+		if cachedRange, err := ds.rangeCache.GetCachedRangeDescriptor(keys.RangeMetaKey(roachpb.RKey("a")), false); err != nil {
+			t.Fatal(err)
+		} else if !cachedRange.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.EndKey.Equal(testMetaEndKey) {
+			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
+				keys.Meta2Prefix, testMetaEndKey, cachedRange.StartKey, cachedRange.EndKey)
+		}
+
+		// Simulate a split on the meta2 range and mark it as stale.
+		isStale = true
+
+		scan = roachpb.NewScan(roachpb.Key("b"), roachpb.Key("c"))
+		if _, pErr := client.SendWrapped(context.Background(), ds, scan); pErr != nil {
+			t.Errorf("scan encountered error: %s", pErr)
+		}
+
+		// Verify that there are two meta2 cached ranges.
+		if cachedRange, err := ds.rangeCache.GetCachedRangeDescriptor(keys.RangeMetaKey(roachpb.RKey("a")), false); err != nil {
+			t.Fatal(err)
+		} else if !cachedRange.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.EndKey.Equal(splitKey) {
+			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
+				keys.Meta2Prefix, splitKey, cachedRange.StartKey, cachedRange.EndKey)
+		}
+		if cachedRange, err := ds.rangeCache.GetCachedRangeDescriptor(keys.RangeMetaKey(roachpb.RKey("b")), false); err != nil {
+			t.Fatal(err)
+		} else if !cachedRange.StartKey.Equal(splitKey) || !cachedRange.EndKey.Equal(testMetaEndKey) {
+			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
+				splitKey, testMetaEndKey, cachedRange.StartKey, cachedRange.EndKey)
+		}
+	})
+}
