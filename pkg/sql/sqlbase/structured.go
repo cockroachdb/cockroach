@@ -2388,6 +2388,18 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return err
 				}
 				idx.ForeignKey.Validity = ConstraintValidity_Validated
+			case ConstraintToUpdate_NOT_NULL:
+				// Remove the dummy check constraint that was in place during validation
+				for i, c := range desc.Checks {
+					if c.Name == t.Constraint.Check.Name {
+						desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
+					}
+				}
+				col, err := desc.FindColumnByID(t.Constraint.NotNullColumn)
+				if err != nil {
+					return err
+				}
+				col.Nullable = false
 			default:
 				return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
 			}
@@ -2430,6 +2442,71 @@ func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(
 				Name:            fk.Name,
 				ForeignKey:      *fk,
 				ForeignKeyIndex: idx,
+			},
+		},
+		Direction: DescriptorMutation_ADD,
+	}
+	desc.addMutation(m)
+}
+
+// makeNotNullCheckConstraint creates a dummy check constraint equivalent to a
+// NOT NULL constraint on a column, so that NOT NULL constraints can be added
+// and dropped correctly in the schema changer. This function mutates inuseNames
+// to add the new constraint name.
+func makeNotNullCheckConstraint(
+	colName string, colID ColumnID, inuseNames map[string]struct{},
+) *TableDescriptor_CheckConstraint {
+	name := fmt.Sprintf("%s_auto_not_null", colName)
+	// If generated name isn't unique, attempt to add a number to the end to
+	// get a unique name, as in generateNameForCheckConstraint().
+	if _, ok := inuseNames[name]; ok {
+		i := 1
+		for {
+			appended := fmt.Sprintf("%s%d", name, i)
+			if _, ok := inuseNames[appended]; !ok {
+				name = appended
+				break
+			}
+			i++
+		}
+	}
+	if inuseNames != nil {
+		inuseNames[name] = struct{}{}
+	}
+
+	expr := &tree.ComparisonExpr{
+		Operator: tree.IsDistinctFrom,
+		Left:     &tree.ColumnItem{ColumnName: tree.Name(colName)},
+		Right:    tree.DNull,
+	}
+
+	return &TableDescriptor_CheckConstraint{
+		Name:                name,
+		Expr:                tree.Serialize(expr),
+		Validity:            ConstraintValidity_Validating,
+		ColumnIDs:           []ColumnID{colID},
+		IsNonNullConstraint: true,
+	}
+}
+
+// AddNotNullValidationMutation adds a not null constraint validation mutation
+// to desc.Mutations. Similarly to other schema elements, adding a non-null
+// constraint requires a multi-state schema change, including a bulk validation
+// step, before the Nullable flag can be set to false on the descriptor. This is
+// done by adding a dummy check constraint of the form "x IS NOT NULL" that is
+// treated like other check constraints being added, until the completion of the
+// schema change, at which the check constraint is deleted. This function
+// mutates inuseNames to add the new constraint name.
+func (desc *MutableTableDescriptor) AddNotNullValidationMutation(
+	colName string, colID ColumnID, inuseNames map[string]struct{},
+) {
+	ck := makeNotNullCheckConstraint(colName, colID, inuseNames)
+	m := DescriptorMutation{
+		Descriptor_: &DescriptorMutation_Constraint{
+			Constraint: &ConstraintToUpdate{
+				ConstraintType: ConstraintToUpdate_NOT_NULL,
+				NotNullColumn:  colID,
+				Check:          *ck,
 			},
 		},
 		Direction: DescriptorMutation_ADD,
@@ -2484,12 +2561,24 @@ func (desc *MutableTableDescriptor) addMutation(m DescriptorMutation) {
 	desc.Mutations = append(desc.Mutations, m)
 }
 
+// IgnoreConstraints is used in MakeFirstMutationPublic to indicate that the
+// table descriptor returned should not include newly added constraints, which
+// is useful when passing the returned table descriptor to be used in
+// validating constraints to be added.
+const IgnoreConstraints = false
+
+// IncludeConstraints is used in MakeFirstMutationPublic to indicate that the
+// table descriptor returned should include newly added constraints.
+const IncludeConstraints = true
+
 // MakeFirstMutationPublic creates a MutableTableDescriptor from the
 // ImmutableTableDescriptor by making the first mutation public.
 // This is super valuable when trying to run SQL over data associated
 // with a schema mutation that is still not yet public: Data validation,
 // error reporting.
-func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic() (*MutableTableDescriptor, error) {
+func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic(
+	includeConstraints bool,
+) (*MutableTableDescriptor, error) {
 	// Clone the ImmutableTable descriptor because we want to create an Immutable one.
 	table := NewMutableExistingTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*TableDescriptor))
 	mutationID := desc.Mutations[0].MutationID
@@ -2500,8 +2589,10 @@ func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic() (*MutableTableDe
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		if err := table.MakeMutationComplete(mutation); err != nil {
-			return nil, err
+		if includeConstraints || mutation.GetConstraint() == nil {
+			if err := table.MakeMutationComplete(mutation); err != nil {
+				return nil, err
+			}
 		}
 		i++
 	}

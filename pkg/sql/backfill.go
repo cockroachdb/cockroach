@@ -254,7 +254,7 @@ func (sc *SchemaChanger) AddConstraints(
 		for i := range constraints {
 			added := &constraints[i]
 			switch added.ConstraintType {
-			case sqlbase.ConstraintToUpdate_CHECK:
+			case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 				found := false
 				for _, c := range desc.Checks {
 					if c.Name == added.Name {
@@ -377,7 +377,7 @@ func (sc *SchemaChanger) validateConstraints(
 				// (the validation can take many minutes). So we pretend that the schema
 				// has been updated and actually update it in a separate transaction that
 				// follows this one.
-				desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic()
+				desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
 				if err != nil {
 					return err
 				}
@@ -386,12 +386,19 @@ func (sc *SchemaChanger) validateConstraints(
 				newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.ieFactory)
 				switch c.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Name); err != nil {
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
 						return err
 					}
 				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
 					if err := validateFkInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Name); err != nil {
 						return err
+					}
+				case sqlbase.ConstraintToUpdate_NOT_NULL:
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+						// TODO (lucy): This should distinguish between constraint
+						// validation errors and other types of unexpected errors, and
+						// return a different error code in the former case
+						return errors.Wrap(err, "validation of NOT NULL constraint failed")
 					}
 				default:
 					return errors.Errorf("unsupported constraint type: %d", c.ConstraintType)
@@ -1028,7 +1035,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			// (the validation can take many minutes). So we pretend that the schema
 			// has been updated and actually update it in a separate transaction that
 			// follows this one.
-			desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic()
+			desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
 			if err != nil {
 				return err
 			}
@@ -1200,7 +1207,7 @@ func runSchemaChangesInTxn(
 
 			case *sqlbase.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK:
+				case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
 					idx, err := tableDesc.FindIndexByID(t.Constraint.ForeignKeyIndex)
@@ -1255,8 +1262,8 @@ func runSchemaChangesInTxn(
 	// mutations applied, it can be used for validating check constraints
 	for _, c := range constraintsToValidate {
 		switch c.ConstraintType {
-		case sqlbase.ConstraintToUpdate_CHECK:
-			if err := validateCheckInTxn(ctx, tc.leaseMgr, evalCtx, tableDesc, txn, c.Name); err != nil {
+		case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
+			if err := validateCheckInTxn(ctx, tc.leaseMgr, evalCtx, tableDesc, txn, c.Check.Name); err != nil {
 				return err
 			}
 		case sqlbase.ConstraintToUpdate_FOREIGN_KEY:

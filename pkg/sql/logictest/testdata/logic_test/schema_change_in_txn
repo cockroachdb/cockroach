@@ -1405,3 +1405,67 @@ COMMIT
 
 statement ok
 DROP TABLE t
+
+# Test adding NOT NULL constraints on a new column.
+subtest not_null_new_column
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN b INT AS (a) STORED
+
+statement ok
+ALTER TABLE t ALTER COLUMN b SET NOT NULL
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT
+
+statement ok
+ALTER TABLE t ALTER COLUMN c SET NOT NULL
+
+statement error pgcode XXA00 validation of NOT NULL constraint failed: validation of CHECK "c IS NOT NULL" failed
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Test adding CHECK and NOT NULL constraints in the same transaction.
+subtest check_and_not_null
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD CHECK (a > 0)
+
+# Check for name collisions with the auto-generated NOT NULL check constraint name
+statement ok
+ALTER TABLE t ADD CONSTRAINT a_auto_not_null CHECK (a IS NOT NULL)
+
+statement ok
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t
