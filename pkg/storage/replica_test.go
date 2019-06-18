@@ -10419,6 +10419,106 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn:   txnWithStagingStatusAndInFlightWrites,
 		},
 		{
+			// The pushee attempted a parallel commit that failed, so it is now
+			// re-writing new intents at higher timestamps. The push should not
+			// consider the pushee to be staging.
+			name: "push transaction (timestamp) after end transaction (stage) with outdated timestamp",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.InFlightWrites = inFlightWrites
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Timestamp = clone.Timestamp.Add(0, 1)
+				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.Timestamp.Forward(pushTs)
+				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
+		},
+		{
+			// The pushee attempted a parallel commit that failed, so it is now
+			// re-writing new intents at higher timestamps. The push should not
+			// consider the pushee to be staging.
+			name: "push transaction (abort) after end transaction (stage) with outdated timestamp",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.InFlightWrites = inFlightWrites
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Timestamp.Forward(now)
+				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
+				record.Timestamp.Forward(pushTs)
+				record.LastHeartbeat.Forward(pushTs)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
+		},
+		{
+			// The pushee attempted a parallel commit that failed, so it is now
+			// writing new intents in a new epoch. The push should not consider
+			// the pushee to be staging.
+			name: "push transaction (timestamp) after end transaction (stage) with outdated epoch",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.InFlightWrites = inFlightWrites
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Restart(-1, 0, clone.Timestamp.Add(0, 1))
+				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.Epoch = txn.Epoch + 1
+				record.Timestamp.Forward(pushTs)
+				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
+		},
+		{
+			// The pushee attempted a parallel commit that failed, so it is now
+			// writing new intents in a new epoch. The push should not consider
+			// the pushee to be staging.
+			name: "push transaction (abort) after end transaction (stage) with outdated epoch",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.InFlightWrites = inFlightWrites
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Restart(-1, 0, clone.Timestamp.Add(0, 1))
+				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
+				record.Epoch = txn.Epoch + 1
+				record.Timestamp.Forward(pushTs)
+				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
+		},
+		{
 			name: "begin transaction after end transaction (abort)",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
