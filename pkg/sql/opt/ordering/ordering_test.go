@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestTrimProvided(t *testing.T) {
@@ -68,8 +67,8 @@ func TestTrimProvided(t *testing.T) {
 
 func TestRemapProvided(t *testing.T) {
 	emptyFD, equivFD, constFD := testFDs()
-	c := func(cols ...int) opt.ColSet {
-		return util.MakeFastIntSet(cols...)
+	c := func(cols ...opt.ColumnID) opt.ColSet {
+		return opt.MakeColSet(cols...)
 	}
 	testCases := []struct {
 		prov string
@@ -127,7 +126,7 @@ func testFDs() (emptyFD, equivFD, constFD props.FuncDepSet) {
 	equivFD.AddEquivalency(1, 2)
 	equivFD.AddEquivalency(3, 4)
 
-	constFD.AddConstants(util.MakeFastIntSet(1, 2))
+	constFD.AddConstants(opt.MakeColSet(1, 2))
 
 	return emptyFD, equivFD, constFD
 }

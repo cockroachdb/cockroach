@@ -184,7 +184,7 @@ func (s *scope) appendColumn(col *scopeColumn) {
 func (s *scope) addExtraColumns(cols []scopeColumn) {
 	existing := s.colSetWithExtraCols()
 	for i := range cols {
-		if !existing.Contains(int(cols[i].id)) {
+		if !existing.Contains(cols[i].id) {
 			s.extraCols = append(s.extraCols, cols[i])
 		}
 	}
@@ -207,7 +207,7 @@ func (s *scope) copyOrdering(src *scope) {
 	// Copy any columns that the scope doesn't already have.
 	existing := s.colSetWithExtraCols()
 	for _, ordCol := range src.ordering {
-		if !existing.Contains(int(ordCol.ID())) {
+		if !existing.Contains(ordCol.ID()) {
 			col := *src.getColumn(ordCol.ID())
 			// We want to reset the group, as this becomes a pass-through column in
 			// the new scope.
@@ -375,7 +375,7 @@ func (s *scope) isOuterColumn(id opt.ColumnID) bool {
 func (s *scope) colSet() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range s.cols {
-		colSet.Add(int(s.cols[i].id))
+		colSet.Add(s.cols[i].id)
 	}
 	return colSet
 }
@@ -385,7 +385,7 @@ func (s *scope) colSet() opt.ColSet {
 func (s *scope) colSetWithExtraCols() opt.ColSet {
 	colSet := s.colSet()
 	for i := range s.extraCols {
-		colSet.Add(int(s.extraCols[i].id))
+		colSet.Add(s.extraCols[i].id)
 	}
 	return colSet
 }

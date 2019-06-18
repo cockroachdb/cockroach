@@ -78,7 +78,7 @@ func (m *Memo) checkExpr(e opt.Expr) {
 			}
 
 			// Check that column is not both passthrough and synthesized.
-			if t.Passthrough.Contains(int(item.Col)) {
+			if t.Passthrough.Contains(item.Col) {
 				panic(pgerror.AssertionFailedf("both passthrough and synthesized have column %d", log.Safe(item.Col)))
 			}
 
@@ -235,7 +235,7 @@ func (m *Memo) checkMutationExpr(rel RelExpr, private *MutationPrivate) {
 	tab := m.Metadata().Table(private.Table)
 	var mutCols opt.ColSet
 	for i, n := tab.ColumnCount(), tab.DeletableColumnCount(); i < n; i++ {
-		mutCols.Add(int(private.Table.ColumnID(i)))
+		mutCols.Add(private.Table.ColumnID(i))
 	}
 	if rel.Relational().OutputCols.Intersects(mutCols) {
 		panic(pgerror.AssertionFailedf("output columns cannot include mutation columns"))

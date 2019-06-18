@@ -96,7 +96,7 @@ func (o Ordering) Format(buf *bytes.Buffer) {
 func (o Ordering) ColSet() ColSet {
 	var colSet ColSet
 	for _, col := range o {
-		colSet.Add(int(col.ID()))
+		colSet.Add(col.ID())
 	}
 	return colSet
 }
@@ -193,7 +193,7 @@ func (os *OrderingSet) RestrictToCols(cols ColSet) {
 		// only columns in the set.
 		prefix := 0
 		for _, c := range o {
-			if !cols.Contains(int(c.ID())) {
+			if !cols.Contains(c.ID()) {
 				break
 			}
 			prefix++

@@ -129,7 +129,7 @@ func (m *ColStatsMap) Lookup(cols opt.ColSet) (colStat *ColumnStatistic, ok bool
 
 	// Use the prefix tree index to look up the column statistic.
 	val := colStatVal{prefix: 0, pos: -1}
-	curr := 0
+	curr := opt.ColumnID(0)
 	for {
 		curr, ok = cols.Next(curr + 1)
 		if !ok {
@@ -246,7 +246,7 @@ func (m *ColStatsMap) addToIndex(cols opt.ColSet, pos int) {
 	}
 
 	prefix := prefixID(0)
-	prev := 0
+	prev := opt.ColumnID(0)
 	curr, _ := cols.Next(prev)
 	for {
 		key := colStatKey{prefix: prefix, id: opt.ColumnID(curr)}

@@ -295,12 +295,12 @@ func (jb *usingJoinBuilder) buildUsingJoin(using *tree.UsingJoinCond) {
 		if leftCol == nil {
 			jb.raiseUndefinedColError(name, "left")
 		}
-		if seenCols.Contains(int(leftCol.id)) {
+		if seenCols.Contains(leftCol.id) {
 			// Same name exists more than once in USING column name list.
 			panic(pgerror.Newf(pgerror.CodeDuplicateColumnError,
 				"column %q appears more than once in USING clause", tree.ErrString(&name)))
 		}
-		seenCols.Add(int(leftCol.id))
+		seenCols.Add(leftCol.id)
 
 		rightCol := jb.findUsingColumn(jb.rightScope.cols, name)
 		if rightCol == nil {
@@ -324,10 +324,10 @@ func (jb *usingJoinBuilder) buildNaturalJoin(natural tree.NaturalJoinCond) {
 		if leftCol.hidden {
 			continue
 		}
-		if seenCols.Contains(int(leftCol.id)) {
+		if seenCols.Contains(leftCol.id) {
 			jb.raiseDuplicateColError(leftCol.name)
 		}
-		seenCols.Add(int(leftCol.id))
+		seenCols.Add(leftCol.id)
 
 		rightCol := jb.findUsingColumn(jb.rightScope.cols, leftCol.name)
 		if rightCol != nil {
@@ -358,7 +358,7 @@ func (jb *usingJoinBuilder) finishBuild() {
 		// remaining columns are passed through unchanged.
 		for i := range jb.outScope.cols {
 			col := &jb.outScope.cols[i]
-			if !jb.ifNullCols.Contains(int(col.id)) {
+			if !jb.ifNullCols.Contains(col.id) {
 				// Mark column as passthrough.
 				col.scalar = nil
 			}
@@ -380,11 +380,11 @@ func (jb *usingJoinBuilder) addRemainingCols(cols []scopeColumn) {
 	for i := range cols {
 		col := &cols[i]
 		switch {
-		case jb.hideCols.Contains(int(col.id)):
+		case jb.hideCols.Contains(col.id):
 			jb.outScope.cols = append(jb.outScope.cols, *col)
 			jb.outScope.cols[len(jb.outScope.cols)-1].hidden = true
 
-		case !jb.showCols.Contains(int(col.id)):
+		case !jb.showCols.Contains(col.id):
 			jb.outScope.cols = append(jb.outScope.cols, *col)
 		}
 	}
@@ -433,15 +433,15 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		// The merged column is the same as the corresponding column from the
 		// left side.
 		jb.outScope.cols = append(jb.outScope.cols, *leftCol)
-		jb.showCols.Add(int(leftCol.id))
-		jb.hideCols.Add(int(rightCol.id))
+		jb.showCols.Add(leftCol.id)
+		jb.hideCols.Add(rightCol.id)
 	} else if jb.joinType == sqlbase.RightOuterJoin &&
 		!sqlbase.DatumTypeHasCompositeKeyEncoding(leftCol.typ) {
 		// The merged column is the same as the corresponding column from the
 		// right side.
 		jb.outScope.cols = append(jb.outScope.cols, *rightCol)
-		jb.showCols.Add(int(rightCol.id))
-		jb.hideCols.Add(int(leftCol.id))
+		jb.showCols.Add(rightCol.id)
+		jb.hideCols.Add(leftCol.id)
 	} else {
 		// Construct a new merged column to represent IFNULL(left, right).
 		var typ *types.T
@@ -453,9 +453,9 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		texpr := tree.NewTypedCoalesceExpr(tree.TypedExprs{leftCol, rightCol}, typ)
 		merged := jb.b.factory.ConstructCoalesce(memo.ScalarListExpr{leftVar, rightVar})
 		col := jb.b.synthesizeColumn(jb.outScope, string(leftCol.name), typ, texpr, merged)
-		jb.ifNullCols.Add(int(col.id))
-		jb.hideCols.Add(int(leftCol.id))
-		jb.hideCols.Add(int(rightCol.id))
+		jb.ifNullCols.Add(col.id)
+		jb.hideCols.Add(leftCol.id)
+		jb.hideCols.Add(rightCol.id)
 	}
 }
 

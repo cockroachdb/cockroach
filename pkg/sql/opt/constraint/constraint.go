@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Constraint specifies the possible set of values that one or more columns
@@ -502,7 +501,7 @@ func (c *Constraint) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
 	var res opt.ColSet
 	pre := c.ExactPrefix(evalCtx)
 	for i := 0; i < pre; i++ {
-		res.Add(int(c.Columns.Get(i).ID()))
+		res.Add(c.Columns.Get(i).ID())
 	}
 	return res
 }
@@ -536,7 +535,7 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 			hasNull = hasNull || start.Value(i) == tree.DNull
 		}
 		if !hasNull {
-			res.Add(int(c.Columns.Get(i).ID()))
+			res.Add(c.Columns.Get(i).ID())
 		}
 	}
 	if prefix == c.Columns.Count() {
@@ -561,7 +560,7 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 		}
 	}
 	// All spans constrain col to be not-null.
-	res.Add(int(col.ID()))
+	res.Add(col.ID())
 	return res
 }
 
@@ -579,7 +578,7 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 // planner and optimizer need this logic, due to the heuristic planner planning
 // mutations. Once the optimizer plans mutations, this method can go away.
 func (c *Constraint) CalculateMaxResults(
-	evalCtx *tree.EvalContext, indexCols util.FastIntSet, notNullCols util.FastIntSet,
+	evalCtx *tree.EvalContext, indexCols opt.ColSet, notNullCols opt.ColSet,
 ) uint64 {
 	// Ensure that if we have nullable columns, we are only reading non-null
 	// values, given that a unique index allows an arbitrary number of duplicate

@@ -231,7 +231,7 @@ func (eg *exprGen) castToDesiredType(arg interface{}, desiredType reflect.Type) 
 				if !ok {
 					return nil
 				}
-				set.Add(int(col))
+				set.Add(col)
 			}
 			return set
 		}

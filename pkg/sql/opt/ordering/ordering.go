@@ -225,7 +225,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 	closure := fds.ComputeClosure(opt.ColSet{})
 	for i := range provided {
 		col := provided[i].ID()
-		if closure.Contains(int(col)) {
+		if closure.Contains(col) {
 			// At the level of the new operator, this column is redundant.
 			if result == nil {
 				result = make(opt.Ordering, i, len(provided))
@@ -233,12 +233,12 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 			}
 			continue
 		}
-		if outCols.Contains(int(col)) {
+		if outCols.Contains(col) {
 			if result != nil {
 				result = append(result, provided[i])
 			}
 		} else {
-			equivCols := fds.ComputeEquivClosure(util.MakeFastIntSet(int(col)))
+			equivCols := fds.ComputeEquivClosure(opt.MakeColSet(col))
 			remappedCol, ok := equivCols.Intersection(outCols).Next(0)
 			if !ok {
 				panic(pgerror.AssertionFailedf("no output column equivalent to %d", log.Safe(col)))
@@ -251,7 +251,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 				opt.ColumnID(remappedCol), provided[i].Descending(),
 			))
 		}
-		closure.Add(int(col))
+		closure.Add(col)
 		closure = fds.ComputeClosure(closure)
 	}
 	if result == nil {
@@ -281,7 +281,7 @@ func trimProvided(
 		// Consume columns from the provided ordering until their closure intersects
 		// the required group.
 		for !closure.Intersects(c.Group) {
-			closure.Add(int(provided[provIdx].ID()))
+			closure.Add(provided[provIdx].ID())
 			closure = fds.ComputeClosure(closure)
 			provIdx++
 			if provIdx == len(provided) {

@@ -586,7 +586,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			if err != nil {
 				return fmt.Errorf("invalid colstat column %v", v)
 			}
-			cols.Add(col)
+			cols.Add(opt.ColumnID(col))
 		}
 		f.ColStats = append(f.ColStats, cols)
 
@@ -1127,7 +1127,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 		}
 
 		// Make sure we have estimated stats for this column.
-		colSet := util.MakeFastIntSet(col)
+		colSet := opt.MakeColSet(col)
 		memo.RequestColStat(&ot.evalCtx, rel, colSet)
 		stat, ok := relProps.Stats.ColStats.Lookup(colSet)
 		if !ok {
