@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -876,8 +877,12 @@ func (r *Replica) changeReplicas(
 		}
 	}
 
+	generationComparableEnabled := r.store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable)
 	rangeID := desc.RangeID
 	updatedDesc := *desc
+	if generationComparableEnabled {
+		updatedDesc.IncrementGeneration()
+	}
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
 	switch changeType {
