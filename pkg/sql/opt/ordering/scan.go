@@ -88,12 +88,12 @@ func ScanPrivateCanProvide(
 		}
 		indexCol := index.Column(left)
 		indexColID := s.Table.ColumnID(indexCol.Ordinal)
-		if required.Optional.Contains(int(indexColID)) {
+		if required.Optional.Contains(indexColID) {
 			left++
 			continue
 		}
 		reqCol := &required.Columns[right]
-		if !reqCol.Group.Contains(int(indexColID)) {
+		if !reqCol.Group.Contains(indexColID) {
 			return false, false
 		}
 		// The directions of the index column and the required column impose either
@@ -133,11 +133,11 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	for i := 0; i < numCols; i++ {
 		indexCol := index.Column(i)
 		colID := scan.Table.ColumnID(indexCol.Ordinal)
-		if !scan.Cols.Contains(int(colID)) {
+		if !scan.Cols.Contains(colID) {
 			// Column not in output; we are done.
 			break
 		}
-		if constCols.Contains(int(colID)) {
+		if constCols.Contains(colID) {
 			// Column constrained to a constant, ignore.
 			continue
 		}

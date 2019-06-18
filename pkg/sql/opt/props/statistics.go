@@ -182,7 +182,7 @@ func (c ColumnStatistics) Less(i, j int) bool {
 		return c[i].Cols.Len() < c[j].Cols.Len()
 	}
 
-	prev := 0
+	prev := opt.ColumnID(0)
 	for {
 		nextI, ok := c[i].Cols.Next(prev)
 		if !ok {

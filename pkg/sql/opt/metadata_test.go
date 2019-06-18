@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestMetadata(t *testing.T) {
@@ -197,17 +196,17 @@ func TestIndexColumns(t *testing.T) {
 	var md opt.Metadata
 	a := md.AddTable(cat.Table(tree.NewUnqualifiedTableName("a")))
 
-	k := int(a.ColumnID(0))
-	i := int(a.ColumnID(1))
-	s := int(a.ColumnID(2))
-	f := int(a.ColumnID(3))
+	k := a.ColumnID(0)
+	i := a.ColumnID(1)
+	s := a.ColumnID(2)
+	f := a.ColumnID(3)
 
 	testCases := []struct {
 		index        int
 		expectedCols opt.ColSet
 	}{
-		{1, util.MakeFastIntSet(k, i)},
-		{2, util.MakeFastIntSet(s, f, k)},
+		{1, opt.MakeColSet(k, i)},
+		{2, opt.MakeColSet(s, f, k)},
 	}
 
 	for _, tc := range testCases {

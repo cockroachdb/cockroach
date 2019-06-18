@@ -371,7 +371,7 @@ func (b *Builder) buildWindowPartition(
 				b.buildScalar(e, inScope, nil, nil, nil),
 			)
 		}
-		windowPartition.Add(int(col.id))
+		windowPartition.Add(col.id)
 	}
 	return windowPartition
 }
@@ -559,7 +559,7 @@ func (b *Builder) constructScalarWindowGroup(
 			Agg:        varExpr,
 			ColPrivate: memo.ColPrivate{Col: aggregateCol.id},
 		})
-		passthrough.Add(int(aggInfos[i].col.id))
+		passthrough.Add(aggInfos[i].col.id)
 
 		// Add projection to replace default NULL value.
 		if requiresProjection {
@@ -570,7 +570,7 @@ func (b *Builder) constructScalarWindowGroup(
 					defaultNullVal),
 				ColPrivate: memo.ColPrivate{Col: aggInfos[i].col.id},
 			})
-			passthrough.Remove(int(aggInfos[i].col.id))
+			passthrough.Remove(aggInfos[i].col.id)
 		}
 	}
 

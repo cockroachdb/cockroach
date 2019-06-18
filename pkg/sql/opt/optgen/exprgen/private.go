@@ -202,7 +202,7 @@ func (eg *exprGen) statsFromStr(str string) props.Statistics {
 	for i := range stats {
 		var cols opt.ColSet
 		for _, colStr := range stats[i].Columns {
-			cols.Add(int(eg.LookupColumn(colStr)))
+			cols.Add(eg.LookupColumn(colStr))
 		}
 		s, added := result.ColStats.Add(cols)
 		if !added {

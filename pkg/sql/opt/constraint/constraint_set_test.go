@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestConstraintSetIntersect(t *testing.T) {
@@ -231,7 +230,7 @@ func TestExtractCols(t *testing.T) {
 		expected    opt.ColSet
 	}
 
-	cols := util.MakeFastIntSet
+	cols := opt.MakeColSet
 
 	cases := []testCase{
 		{
@@ -278,7 +277,7 @@ func TestExtractConstCols(t *testing.T) {
 		expected    opt.ColSet
 	}
 
-	cols := util.MakeFastIntSet
+	cols := opt.MakeColSet
 
 	cases := []testCase{
 		{[]string{`/1: [/10 - /10]`}, cols(1)},

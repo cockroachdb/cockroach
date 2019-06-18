@@ -218,8 +218,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 		// Add pass-through columns.
-		t.Passthrough.ForEach(func(i int) {
-			colList = append(colList, opt.ColumnID(i))
+		t.Passthrough.ForEach(func(i opt.ColumnID) {
+			colList = append(colList, i)
 		})
 
 	case *ValuesExpr:
@@ -700,13 +700,13 @@ func (f *ExprFmtCtx) formatColumns(
 	f.Buffer.Reset()
 	f.Buffer.WriteString("columns:")
 	for _, col := range presentation {
-		hidden.Remove(int(col.ID))
+		hidden.Remove(col.ID)
 		formatCol(f, col.Alias, col.ID, notNullCols, false /* omitType */)
 	}
 	if !hidden.Empty() {
 		f.Buffer.WriteString("  [hidden:")
 		for _, col := range cols {
-			if hidden.Contains(int(col)) {
+			if hidden.Contains(col) {
 				formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
 			}
 		}
@@ -794,7 +794,7 @@ func formatCol(
 		f.Buffer.WriteByte('(')
 		f.Buffer.WriteString(colMeta.Type.String())
 
-		if notNullCols.Contains(int(id)) {
+		if notNullCols.Contains(id) {
 			f.Buffer.WriteString("!null")
 		}
 		f.Buffer.WriteByte(')')

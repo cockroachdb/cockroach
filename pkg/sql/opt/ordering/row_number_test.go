@@ -16,13 +16,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestOrdinalityProvided(t *testing.T) {
@@ -78,7 +78,7 @@ func TestOrdinalityProvided(t *testing.T) {
 			var f norm.Factory
 			f.Init(evalCtx)
 			input := &testexpr.Instance{
-				Rel: &props.Relational{OutputCols: util.MakeFastIntSet(1, 2, 3, 4, 5)},
+				Rel: &props.Relational{OutputCols: opt.MakeColSet(1, 2, 3, 4, 5)},
 				Provided: &physical.Provided{
 					Ordering: physical.ParseOrdering(tc.input),
 				},
