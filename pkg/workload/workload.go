@@ -156,9 +156,6 @@ type Table struct {
 type BatchedTuples struct {
 	// NumBatches is the number of batches of tuples.
 	NumBatches int
-	// NumTotal is the total number of tuples in all batches. Not all generators
-	// will know this, it's set to 0 when unknown.
-	NumTotal int
 	// FillBatch is a function to deterministically compute a columnar-batch of
 	// tuples given its index.
 	//
@@ -193,7 +190,6 @@ func TypedTuples(count int, colTypes []types.T, fn func(int) []interface{}) Batc
 
 	t := BatchedTuples{
 		NumBatches: count,
-		NumTotal:   count,
 	}
 	if fn != nil {
 		t.FillBatch = func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {

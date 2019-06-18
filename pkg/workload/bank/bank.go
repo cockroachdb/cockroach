@@ -125,7 +125,6 @@ func (b *bank) Tables() []workload.Table {
 		Schema: bankSchema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: b.rows,
-			NumTotal:   b.rows,
 			FillBatch: func(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 				rng := rand.NewSource(b.seed + uint64(rowIdx))
 				var payload []byte
