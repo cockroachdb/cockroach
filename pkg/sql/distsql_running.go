@@ -839,3 +839,115 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	dsp.FinalizePlan(planCtx, &physPlan)
 	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
+
+// PlanAndRunDeferredSubqueries returns false if an error was encountered and
+// sets that error in the provided receiver.
+func (dsp *DistSQLPlanner) PlanAndRunDeferredSubqueries(
+	ctx context.Context,
+	planner *planner,
+	evalCtxFactory func() *extendedEvalContext,
+	deferredSubqueryPlans []deferredSubquery,
+	recv *DistSQLReceiver,
+	maybeDistribute bool,
+) bool {
+	for _, deferredSubqueryPlan := range deferredSubqueryPlans {
+		if err := dsp.planAndRunDeferredSubquery(
+			ctx,
+			deferredSubqueryPlan,
+			planner,
+			evalCtxFactory(),
+			recv,
+			maybeDistribute,
+		); err != nil {
+			recv.SetError(err)
+			return false
+		}
+	}
+
+	return true
+}
+
+func (dsp *DistSQLPlanner) planAndRunDeferredSubquery(
+	ctx context.Context,
+	deferredSubqueryPlan deferredSubquery,
+	planner *planner,
+	evalCtx *extendedEvalContext,
+	recv *DistSQLReceiver,
+	maybeDistribute bool,
+) error {
+	deferredSubqueryMonitor := mon.MakeMonitor(
+		"deferred subquery",
+		mon.MemoryResource,
+		dsp.distSQLSrv.Metrics.CurBytesCount,
+		dsp.distSQLSrv.Metrics.MaxBytesHist,
+		-1, /* use default block size */
+		noteworthyMemoryUsageBytes,
+		dsp.distSQLSrv.Settings,
+	)
+	deferredSubqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+	defer deferredSubqueryMonitor.Stop(ctx)
+
+	deferredSubqueryMemAccount := deferredSubqueryMonitor.MakeBoundAccount()
+	defer deferredSubqueryMemAccount.Close(ctx)
+
+	var deferredSubqueryPlanCtx *PlanningCtx
+	var distributeDeferredSubquery bool
+	if maybeDistribute {
+		distributeDeferredSubquery = shouldDistributePlan(
+			ctx, planner.SessionData().DistSQLMode, dsp, deferredSubqueryPlan.plan)
+	}
+	if distributeDeferredSubquery {
+		deferredSubqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
+	} else {
+		deferredSubqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
+	}
+
+	deferredSubqueryPlanCtx.isLocal = !distributeDeferredSubquery
+	deferredSubqueryPlanCtx.planner = planner
+	deferredSubqueryPlanCtx.stmtType = tree.Rows
+	// Don't close the top-level plan from deferred subqueries - someone else
+	// will handle that.
+	deferredSubqueryPlanCtx.ignoreClose = true
+
+	deferredSubqueryPhysPlan, err := dsp.createPlanForNode(deferredSubqueryPlanCtx, deferredSubqueryPlan.plan)
+	if err != nil {
+		return err
+	}
+	dsp.FinalizePlan(deferredSubqueryPlanCtx, &deferredSubqueryPhysPlan)
+
+	deferredSubqueryRecv := recv.clone()
+	var deferredSubqueryRowReceiver deferredSubqueryRowResultWriter
+	deferredSubqueryRecv.resultWriter = &deferredSubqueryRowReceiver
+	dsp.Run(deferredSubqueryPlanCtx, planner.txn, &deferredSubqueryPhysPlan, deferredSubqueryRecv, evalCtx, nil /* finishedSetupFn */)
+	if deferredSubqueryRecv.commErr != nil {
+		return deferredSubqueryRecv.commErr
+	}
+	return deferredSubqueryRowReceiver.Err()
+}
+
+// deferredSubqueryRowResultWriter is a lightweight version of RowResultWriter
+// that can only write errors. It is used only for executing deferred
+// subqueries and is sufficient for that case since those can only return
+// errors.
+type deferredSubqueryRowResultWriter struct {
+	err error
+}
+
+var _ rowResultWriter = &deferredSubqueryRowResultWriter{}
+
+func (r *deferredSubqueryRowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	// TODO(yuzefovich): should we panic here since this should never be called?
+	return nil
+}
+
+func (r *deferredSubqueryRowResultWriter) IncrementRowsAffected(n int) {
+	// TODO(yuzefovich): should we panic here since this should never be called?
+}
+
+func (r *deferredSubqueryRowResultWriter) SetError(err error) {
+	r.err = err
+}
+
+func (r *deferredSubqueryRowResultWriter) Err() error {
+	return r.err
+}
