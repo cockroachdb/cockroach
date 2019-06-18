@@ -183,7 +183,7 @@ func registerImportTPCH(r *registry) {
 				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.8'
 				) WITH  delimiter='|'
 			`)
-					return err
+					return errors.Wrap(err, "import failed")
 				})
 
 				t.Status("waiting")
