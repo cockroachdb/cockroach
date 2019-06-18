@@ -14,7 +14,6 @@ package distsqlrun
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -123,7 +122,7 @@ func newIndexSkipTableReader(
 	}
 
 	// TODO: support reverse scans
-	if err := t.fetcher.Init(false /* reverseScan */, true, /* returnRangeInfo */
+	if err := t.fetcher.Init(t.reverse, true, /* returnRangeInfo */
 		false /* isCheck */, &t.alloc, tableArgs); err != nil {
 		return nil, err
 	}
@@ -135,8 +134,17 @@ func newIndexSkipTableReader(
 	} else {
 		t.spans = make(roachpb.Spans, nSpans)
 	}
-	for i, s := range spec.Spans {
-		t.spans[i] = s.Span
+
+	// if we are scanning in reverse, then copy the spans in backwards
+	if t.reverse {
+		for i, s := range spec.Spans {
+			t.spans[len(spec.Spans)-i-1] = s.Span
+		}
+	} else {
+		for i, s := range spec.Spans {
+			t.spans[i] = s.Span
+		}
+
 	}
 
 	return t, nil
@@ -153,8 +161,6 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			t.MoveToDraining(nil)
 			return nil, t.DrainHelper()
 		}
-
-		fmt.Println(t.spans[t.currentSpan])
 
 		// Start a scan to get the smallest value within this span
 		err := t.fetcher.StartScan(
@@ -194,19 +200,26 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			continue
 		}
 
-		// 0xff is the largest prefix marker for any encoded key. To ensure that
-		// our new key is larger than any value with the same prefix, we place
-		// 0xff at all other index column values, and one more to guard against
-		// 0xff present as a value in the table (0xff encodes a type of null)
-		// In the reverse case, a similar strategy can be used using 0x00
-		for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
-			key = append(key, 0xff)
+		if !t.reverse {
+			// 0xff is the largest prefix marker for any encoded key. To ensure that
+			// our new key is larger than any value with the same prefix, we place
+			// 0xff at all other index column values, and one more to guard against
+			// 0xff present as a value in the table (0xff encodes a type of null)
+			for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
+				key = append(key, 0xff)
+			}
+			t.spans[t.currentSpan].Key = key
+		} else {
+			// In the case of reverse, this is much easier. The reverse batcher
+			// gives us the key that we got. Since ranges are exclusive, we just
+			// have to set the key we got back as the end key for the scan
+			t.spans[t.currentSpan].EndKey = key
 		}
 
-		t.spans[t.currentSpan].Key = key
+		// if the changes we made turned our current span invalid, mark that
+		// we should move on to the next span before returning the row
 		if !t.spans[t.currentSpan].Valid() {
 			t.currentSpan++
-			continue
 		}
 
 		if outRow := t.ProcessRowHelper(row); outRow != nil {

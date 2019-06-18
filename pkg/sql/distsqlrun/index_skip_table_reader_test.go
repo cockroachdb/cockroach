@@ -151,18 +151,18 @@ func TestIndexSkipTableReaderCorrectness(t *testing.T) {
 		post      distsqlpb.PostProcessSpec
 		expected  string
 	}{
-		// {
-		// 	desc:      "Distinct scan simple",
-		// 	tableDesc: td1,
-		// 	spec: distsqlpb.IndexSkipTableReaderSpec{
-		// 		Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
-		// 	},
-		// 	post: distsqlpb.PostProcessSpec{
-		// 		Projection:    true,
-		// 		OutputColumns: []uint32{0},
-		// 	},
-		// 	expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
-		// },
+		{
+			desc:      "Distinct scan simple",
+			tableDesc: td1,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
+		},
 		{
 			desc:      "Distinct reverse scan simple",
 			tableDesc: td1,
@@ -176,81 +176,108 @@ func TestIndexSkipTableReaderCorrectness(t *testing.T) {
 			},
 			expected: "[[9] [8] [7] [6] [5] [4] [3] [2] [1] [0]]",
 		},
-		// {
-		// 	desc:      "Distinct scan with multiple spans",
-		// 	tableDesc: td1,
-		// 	spec: distsqlpb.IndexSkipTableReaderSpec{
-		// 		Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
-		// 	},
-		// 	post: distsqlpb.PostProcessSpec{
-		// 		Projection:    true,
-		// 		OutputColumns: []uint32{0},
-		// 	},
-		// 	expected: "[[0] [1] [2] [5] [6] [7]]",
-		// },
-		// {
-		// 	desc:      "Distinct scan with multiple spans and filter",
-		// 	tableDesc: td1,
-		// 	spec: distsqlpb.IndexSkipTableReaderSpec{
-		// 		Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
-		// 	},
-		// 	post: distsqlpb.PostProcessSpec{
-		// 		Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
-		// 		Projection:    true,
-		// 		OutputColumns: []uint32{0},
-		// 	},
-		// 	expected: "[[5] [6]]",
-		// },
-		// {
-		// 	desc:      "Distinct scan with filter",
-		// 	tableDesc: td1,
-		// 	spec: distsqlpb.IndexSkipTableReaderSpec{
-		// 		Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
-		// 	},
-		// 	post: distsqlpb.PostProcessSpec{
-		// 		Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
-		// 		Projection:    true,
-		// 		OutputColumns: []uint32{0},
-		// 	},
-		// 	expected: "[[4] [5] [6]]",
-		// },
-		// {
-		// 	desc:      "Distinct scan with multiple requested columns",
-		// 	tableDesc: td2,
-		// 	spec: distsqlpb.IndexSkipTableReaderSpec{
-		// 		Spans: []distsqlpb.TableReaderSpan{{Span: td2.PrimaryIndexSpan()}},
-		// 	},
-		// 	post: distsqlpb.PostProcessSpec{
-		// 		Projection:    true,
-		// 		OutputColumns: []uint32{0, 1},
-		// 	},
-		// 	expected: "[[0 1] [1 2] [2 3] [3 4]]",
-		// },
-		// {
-		// 	desc:      "Distinct scan on table with NULLs",
-		// 	tableDesc: td3,
-		// 	spec: distsqlpb.IndexSkipTableReaderSpec{
-		// 		Spans: []distsqlpb.TableReaderSpan{{Span: td3.PrimaryIndexSpan()}},
-		// 	},
-		// 	post: distsqlpb.PostProcessSpec{
-		// 		Projection:    true,
-		// 		OutputColumns: []uint32{0},
-		// 	},
-		// 	expected: "[[0] [1] [2] [3]]",
-		// },
-		// {
-		// 	desc:      "Distinct scan on secondary index",
-		// 	tableDesc: td4,
-		// 	spec: distsqlpb.IndexSkipTableReaderSpec{
-		// 		Spans:    []distsqlpb.TableReaderSpan{{Span: td4.IndexSpan(2)}},
-		// 		IndexIdx: 1,
-		// 	},
-		// 	post: distsqlpb.PostProcessSpec{
-		// 		Projection:    true,
-		// 		OutputColumns: []uint32{1},
-		// 	},
-		// 	expected: "[[1] [2] [3] [4] [5] [6] [7] [8] [9] [10]]",
-		// },
+		{
+			desc:      "Distinct scan with multiple spans",
+			tableDesc: td1,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[0] [1] [2] [5] [6] [7]]",
+		},
+		{
+			desc:      "Distinct reverse scan with multiple spans",
+			tableDesc: td1,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+				Reverse: true,
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[7] [6] [5] [2] [1] [0]]",
+		},
+		{
+			desc:      "Distinct scan with multiple spans and filter",
+			tableDesc: td1,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[5] [6]]",
+		},
+		{
+			desc:      "Distinct reverse scan with multiple spans and filter",
+			tableDesc: td1,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans:   []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
+				Reverse: true,
+			},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[6] [5]]",
+		},
+		{
+			desc:      "Distinct scan with filter",
+			tableDesc: td1,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[4] [5] [6]]",
+		},
+		{
+			desc:      "Distinct scan with multiple requested columns",
+			tableDesc: td2,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td2.PrimaryIndexSpan()}},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			expected: "[[0 1] [1 2] [2 3] [3 4]]",
+		},
+		{
+			desc:      "Distinct scan on table with NULLs",
+			tableDesc: td3,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td3.PrimaryIndexSpan()}},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[0] [1] [2] [3]]",
+		},
+		{
+			desc:      "Distinct scan on secondary index",
+			tableDesc: td4,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans:    []distsqlpb.TableReaderSpan{{Span: td4.IndexSpan(2)}},
+				IndexIdx: 1,
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{1},
+			},
+			expected: "[[1] [2] [3] [4] [5] [6] [7] [8] [9] [10]]",
+		},
 	}
 
 	for _, c := range testCases {
