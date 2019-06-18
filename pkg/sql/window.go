@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -184,7 +185,7 @@ func (p *planner) constructWindowDefinitions(
 	for _, windowDef := range sc.Window {
 		name := string(windowDef.Name)
 		if _, ok := namedWindowSpecs[name]; ok {
-			return pgerror.Newf(pgerror.CodeWindowingError, "window %q is already defined", name)
+			return pgerror.Newf(pgcode.Windowing, "window %q is already defined", name)
 		}
 		namedWindowSpecs[name] = windowDef
 	}
@@ -215,7 +216,7 @@ func (p *planner) constructWindowDefinitions(
 				return err
 			}
 			if renderExpr.ResolvedType().Family() != types.BoolFamily {
-				return pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+				return pgerror.Newf(pgcode.DatatypeMismatch,
 					"argument of FILTER must be type boolean, not type %s", renderExpr.ResolvedType(),
 				)
 			}
@@ -225,7 +226,7 @@ func (p *planner) constructWindowDefinitions(
 		// Validate PARTITION BY clause.
 		for _, partition := range windowDef.Partitions {
 			if containsWindowVisitor.ContainsWindowFunc(partition) {
-				return pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
+				return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: partition}, types.Any, s.sourceInfo, s.ivarHelper,
@@ -241,7 +242,7 @@ func (p *planner) constructWindowDefinitions(
 		// Validate ORDER BY clause.
 		for _, orderBy := range windowDef.OrderBy {
 			if containsWindowVisitor.ContainsWindowFunc(orderBy.Expr) {
-				return pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
+				return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: orderBy.Expr}, types.Any, s.sourceInfo, s.ivarHelper,
@@ -309,7 +310,7 @@ func constructWindowDef(
 
 	referencedSpec, ok := namedWindowSpecs[refName]
 	if !ok {
-		return def, pgerror.Newf(pgerror.CodeUndefinedObjectError, "window %q does not exist", refName)
+		return def, pgerror.Newf(pgcode.UndefinedObject, "window %q does not exist", refName)
 	}
 	if !modifyRef {
 		return *referencedSpec, nil
@@ -549,7 +550,7 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			// Make sure this window function does not contain another window function.
 			for _, argExpr := range t.Exprs {
 				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-					v.err = pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
+					v.err = pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 					return false, expr
 				}
 			}

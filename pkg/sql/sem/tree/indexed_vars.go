@@ -13,9 +13,11 @@
 package tree
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
@@ -63,7 +65,7 @@ func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, e
 		// used a column reference in a place where it's not allowed by
 		// the docs, so just say that instead.
 		return nil, pgerror.Newf(
-			pgerror.CodeUndefinedColumnError, "column reference @%d not allowed in this context", v.Idx+1)
+			pgcode.UndefinedColumn, "column reference @%d not allowed in this context", v.Idx+1)
 	}
 	v.typ = ctx.IVarContainer.IndexedVarResolvedType(v.Idx)
 	return v, nil
@@ -72,7 +74,7 @@ func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, e
 // Eval is part of the TypedExpr interface.
 func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
 	if ctx.IVarContainer == nil || ctx.IVarContainer == unboundContainer {
-		return nil, pgerror.AssertionFailedf(
+		return nil, errors.AssertionFailedf(
 			"indexed var must be bound to a container before evaluation")
 	}
 	return ctx.IVarContainer.IndexedVarEval(v.Idx, ctx)
@@ -81,7 +83,7 @@ func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
 // ResolvedType is part of the TypedExpr interface.
 func (v *IndexedVar) ResolvedType() *types.T {
 	if v.typ == nil {
-		panic(pgerror.AssertionFailedf("indexed var must be type checked first"))
+		panic(errors.AssertionFailedf("indexed var must be type checked first"))
 	}
 	return v.typ
 }
@@ -149,7 +151,7 @@ func (h *IndexedVarHelper) BindIfUnbound(ivar *IndexedVar) (*IndexedVar, error) 
 	// across containers.
 	if ivar.Idx < 0 || ivar.Idx >= len(h.vars) {
 		return ivar, pgerror.Newf(
-			pgerror.CodeUndefinedColumnError, "invalid column ordinal: @%d", ivar.Idx+1)
+			pgcode.UndefinedColumn, "invalid column ordinal: @%d", ivar.Idx+1)
 	}
 
 	if !ivar.Used {
@@ -179,7 +181,7 @@ func (h *IndexedVarHelper) AppendSlot() int {
 
 func (h *IndexedVarHelper) checkIndex(idx int) {
 	if idx < 0 || idx >= len(h.vars) {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"invalid var index %d (columns: %d)", log.Safe(idx), log.Safe(len(h.vars))))
 	}
 }
@@ -284,17 +286,17 @@ var unboundContainer = &unboundContainerType{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (*unboundContainerType) IndexedVarEval(idx int, _ *EvalContext) (Datum, error) {
-	return nil, pgerror.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1))
+	return nil, errors.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1))
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (*unboundContainerType) IndexedVarResolvedType(idx int) *types.T {
-	panic(pgerror.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1)))
+	panic(errors.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1)))
 }
 
 // IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
 func (*unboundContainerType) IndexedVarNodeFormatter(idx int) NodeFormatter {
-	panic(pgerror.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1)))
+	panic(errors.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1)))
 }
 
 type typeContainer struct {
@@ -305,7 +307,7 @@ var _ IndexedVarContainer = &typeContainer{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (tc *typeContainer) IndexedVarEval(idx int, ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.AssertionFailedf("no eval allowed in typeContainer")
+	return nil, errors.AssertionFailedf("no eval allowed in typeContainer")
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.

@@ -738,7 +738,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
 		ev := eventNonRetriableErr{IsCommit: fsm.FromBool(true)}
-		payload := eventNonRetriableErrPayload{err: pgerror.Newf(pgerror.CodeAdminShutdownError,
+		payload := eventNonRetriableErrPayload{err: pgerror.Newf(pgcode.AdminShutdown,
 			"connExecutor closing")}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
@@ -1214,7 +1214,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[tcmd.Name]
 		if !ok {
 			err := pgerror.Newf(
-				pgerror.CodeInvalidCursorNameError, "unknown portal %q", tcmd.Name)
+				pgcode.InvalidCursorName, "unknown portal %q", tcmd.Name)
 			ev = eventNonRetriableErr{IsCommit: fsm.False}
 			payload = eventNonRetriableErrPayload{err: err}
 			res = ex.clientComm.CreateErrorResult(pos)
@@ -1427,17 +1427,17 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			nextPos = pos + 1
 		case rewind:
 			if advInfo.rewCap.rewindPos != ex.extraTxnState.txnRewindPos {
-				return pgerror.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"unexpected rewind position: %d when txn start is: %d",
-					log.Safe(advInfo.rewCap.rewindPos),
-					log.Safe(ex.extraTxnState.txnRewindPos))
+					errors.Safe(advInfo.rewCap.rewindPos),
+					errors.Safe(ex.extraTxnState.txnRewindPos))
 			}
 			// txnRewindPos stays unchanged.
 			return nil
 		default:
-			return pgerror.AssertionFailedf(
+			return errors.AssertionFailedf(
 				"unexpected advance code when starting a txn: %s",
-				log.Safe(advInfo.code))
+				errors.Safe(advInfo.code))
 		}
 		ex.setTxnRewindPos(ctx, nextPos)
 	} else {
@@ -1725,12 +1725,12 @@ func (ex *connExecutor) setTransactionModes(
 		}
 	}
 	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
-		return pgerror.AssertionFailedf(
-			"unknown isolation level: %s", log.Safe(modes.Isolation))
+		return errors.AssertionFailedf(
+			"unknown isolation level: %s", errors.Safe(modes.Isolation))
 	}
 	rwMode := modes.ReadWriteMode
 	if modes.AsOf.Expr != nil && (asOfTs == hlc.Timestamp{}) {
-		return pgerror.AssertionFailedf("expected an evaluated AS OF timestamp")
+		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
 	if (asOfTs != hlc.Timestamp{}) {
 		ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs)
@@ -1754,7 +1754,7 @@ func priorityToProto(mode tree.UserPriority) (roachpb.UserPriority, error) {
 	case tree.High:
 		pri = roachpb.MaxUserPriority
 	default:
-		return roachpb.UserPriority(0), pgerror.AssertionFailedf("unknown user priority: %s", log.Safe(mode))
+		return roachpb.UserPriority(0), errors.AssertionFailedf("unknown user priority: %s", errors.Safe(mode))
 	}
 	return pri, nil
 }
@@ -1998,8 +1998,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			return advanceInfo{}, err
 		}
 	default:
-		return advanceInfo{}, pgerror.AssertionFailedf(
-			"unexpected event: %v", log.Safe(advInfo.txnEvent))
+		return advanceInfo{}, errors.AssertionFailedf(
+			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
 	}
 
 	return advInfo, nil

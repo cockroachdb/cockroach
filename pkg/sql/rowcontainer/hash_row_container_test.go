@@ -176,7 +176,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		err := rc.AddRow(ctx, rows[0])
 		if code := pgerror.GetPGCode(err); code != pgcode.DiskFull {
 			t.Fatalf(
-				"unexpected error %v, expected disk full error %s", err, pgerror.CodeDiskFullError,
+				"unexpected error %v, expected disk full error %s", err, pgcode.DiskFull,
 			)
 		}
 		if !rc.UsingDisk() {

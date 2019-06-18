@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -803,7 +804,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 				subqueryPlans[planIdx].result = &tree.DTuple{D: rows.At(0)}
 			}
 		default:
-			return pgerror.Newf(pgerror.CodeCardinalityViolationError,
+			return pgerror.Newf(pgcode.CardinalityViolation,
 				"more than one row returned by a subquery used as an expression")
 		}
 	default:

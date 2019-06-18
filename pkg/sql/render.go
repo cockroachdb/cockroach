@@ -16,11 +16,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -99,7 +101,7 @@ func (p *planner) Select(
 		wrapped = s.Select.Select
 		if s.Select.With != nil {
 			if with != nil {
-				return nil, pgerror.UnimplementedWithIssue(24303,
+				return nil, unimplemented.NewWithIssue(24303,
 					"multiple WITH clauses in parentheses")
 			}
 			with = s.Select.With
@@ -107,7 +109,7 @@ func (p *planner) Select(
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
 				return nil, pgerror.Newf(
-					pgerror.CodeSyntaxError, "multiple ORDER BY clauses not allowed",
+					pgcode.Syntax, "multiple ORDER BY clauses not allowed",
 				)
 			}
 			orderBy = s.Select.OrderBy
@@ -115,7 +117,7 @@ func (p *planner) Select(
 		if s.Select.Limit != nil {
 			if limit != nil {
 				return nil, pgerror.Newf(
-					pgerror.CodeSyntaxError, "multiple LIMIT clauses not allowed",
+					pgcode.Syntax, "multiple LIMIT clauses not allowed",
 				)
 			}
 			limit = s.Select.Limit
@@ -282,7 +284,7 @@ func (p *planner) SelectClause(
 
 			if !distinct.distinctOnColIdxs.Contains(order.ColIdx) {
 				return nil, pgerror.Newf(
-					pgerror.CodeSyntaxError,
+					pgcode.Syntax,
 					"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 				)
 			}
@@ -475,7 +477,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		// would not be set globally for the entire txn.
 		if p.semaCtx.AsOfTimestamp == nil {
 			return hlc.MaxTimestamp, false,
-				pgerror.Newf(pgerror.CodeSyntaxError,
+				pgerror.Newf(pgcode.Syntax,
 					"AS OF SYSTEM TIME must be provided on a top-level statement")
 		}
 
@@ -489,7 +491,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		}
 		if ts != *p.semaCtx.AsOfTimestamp {
 			return hlc.MaxTimestamp, false,
-				pgerror.UnimplementedWithIssue(35712,
+				unimplemented.NewWithIssue(35712,
 					"cannot specify AS OF SYSTEM TIME with different timestamps")
 		}
 		return ts, true, nil
@@ -637,7 +639,7 @@ func (r *renderNode) colIdxByRenderAlias(
 						// reject with an ambiguity error.
 						if r == nil || !r.equivalentRenders(j, index) {
 							return 0, pgerror.Newf(
-								pgerror.CodeAmbiguousAliasError,
+								pgcode.AmbiguousAlias,
 								"%s \"%s\" is ambiguous", op, target,
 							)
 						}

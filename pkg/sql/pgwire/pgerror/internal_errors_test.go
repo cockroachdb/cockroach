@@ -19,9 +19,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 )
 
 // f formats an error.
@@ -80,12 +79,12 @@ func TestInternalError(t *testing.T) {
 		preds []pred
 	}{
 		{
-			AssertionFailedf("woo %s", "waa"),
+			errors.AssertionFailedf("woo %s", "waa"),
 			[]pred{
 				// Verify that the information is captured.
 				{"basefields", func(t *testing.T, e *Error) {
 					eq(t, e.Message, ie+"woo waa")
-					eq(t, e.Code, CodeInternalError)
+					eq(t, e.Code, pgcode.Internal)
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
 					ml(t, e.Detail, []string{"stack trace:",
@@ -117,7 +116,7 @@ func TestInternalError(t *testing.T) {
 			},
 		},
 		{
-			AssertionFailedf("safe %s", log.Safe("waa")),
+			errors.AssertionFailedf("safe %s", errors.Safe("waa")),
 			[]pred{
 				// Verify that safe details are preserved.
 				{"safedetail", func(t *testing.T, e *Error) {
@@ -129,11 +128,11 @@ func TestInternalError(t *testing.T) {
 		{
 			// Check that the non-formatting constructor preserves the
 			// format spec without making a mess.
-			New(CodeSyntaxError, "syn %s"),
+			New(pgcode.Syntax, "syn %s"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					eq(t, e.Message, "syn %s")
-					eq(t, e.Code, CodeSyntaxError)
+					eq(t, e.Code, pgcode.Syntax)
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
 				}},
@@ -141,10 +140,10 @@ func TestInternalError(t *testing.T) {
 		},
 		{
 			// Check that a wrapped pgerr with errors.Wrap is wrapped properly.
-			Wrap(errors.Wrap(makeNormal(), "wrapA"), CodeSyntaxError, "wrapB"),
+			Wrap(errors.Wrap(makeNormal(), "wrapA"), pgcode.Syntax, "wrapB"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
-					eq(t, e.Code, CodeSyntaxError)
+					eq(t, e.Code, pgcode.Syntax)
 					eq(t, e.Message, "wrapB: wrapA: syn")
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
@@ -154,10 +153,10 @@ func TestInternalError(t *testing.T) {
 		},
 		{
 			// Check that a wrapped internal error with errors.Wrap is wrapped properly.
-			Wrap(errors.Wrap(makeBoo(), "wrapA"), CodeSyntaxError, "wrapB"),
+			Wrap(errors.Wrap(makeBoo(), "wrapA"), pgcode.Syntax, "wrapB"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
-					eq(t, e.Code, CodeInternalError)
+					eq(t, e.Code, pgcode.Internal)
 					eq(t, e.Message, ie+"wrapB: wrapA: boo")
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
@@ -175,13 +174,13 @@ func TestInternalError(t *testing.T) {
 		},
 		{
 			// Check that Wrapf respects the original code for regular errors.
-			Wrapf(New(CodeSyntaxError, "syn foo"), CodeAdminShutdownError, "wrap %s", "waa"),
+			Wrapf(New(pgcode.Syntax, "syn foo"), pgcode.AdminShutdown, "wrap %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrap waa: syn foo")
 					// Original code is preserved.
-					eq(t, e.Code, CodeSyntaxError)
+					eq(t, e.Code, pgcode.Syntax)
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -190,13 +189,13 @@ func TestInternalError(t *testing.T) {
 		},
 		{
 			// Check that Wrapf around a regular fmt.Error makes sense.
-			Wrapf(fmt.Errorf("fmt err"), CodeAdminShutdownError, "wrap %s", "waa"),
+			Wrapf(fmt.Errorf("fmt err"), pgcode.AdminShutdown, "wrap %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrap waa: fmt err")
 					// New code was added.
-					eq(t, e.Code, CodeAdminShutdownError)
+					eq(t, e.Code, pgcode.AdminShutdown)
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -205,13 +204,13 @@ func TestInternalError(t *testing.T) {
 		},
 		{
 			// Check that Wrap does the same thing
-			Wrap(fmt.Errorf("fmt err"), CodeAdminShutdownError, "wrapx waa"),
+			Wrap(fmt.Errorf("fmt err"), pgcode.AdminShutdown, "wrapx waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrapx waa: fmt err")
 					// New code was added.
-					eq(t, e.Code, CodeAdminShutdownError)
+					eq(t, e.Code, pgcode.AdminShutdown)
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -223,13 +222,13 @@ func TestInternalError(t *testing.T) {
 		},
 		{
 			// Check that Wrapf around an error.Wrap extracts something useful.
-			Wrapf(errors.Wrap(fmt.Errorf("fmt"), "wrap1"), CodeAdminShutdownError, "wrap2 %s", "waa"),
+			Wrapf(errors.Wrap(fmt.Errorf("fmt"), "wrap1"), pgcode.AdminShutdown, "wrap2 %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrap2 waa: wrap1: fmt")
 					// New code was added.
-					eq(t, e.Code, CodeAdminShutdownError)
+					eq(t, e.Code, pgcode.AdminShutdown)
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -248,7 +247,7 @@ func TestInternalError(t *testing.T) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, ie+"wrap woo: boo")
 					// Internal error was preserved.
-					eq(t, e.Code, CodeInternalError)
+					eq(t, e.Code, pgcode.Internal)
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "makeBoo")
@@ -273,13 +272,13 @@ func TestInternalError(t *testing.T) {
 		{
 			// Check that an internal error Wrap around a regular error
 			// creates internal error details.
-			NewAssertionErrorWithWrappedErrf(New(CodeSyntaxError, "syn err"), "iewrap %s", "waa"),
+			errors.NewAssertionErrorWithWrappedErrf(New(pgcode.Syntax, "syn err"), "iewrap %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, ie+"iewrap waa: syn err")
 					// Internal error was preserved.
-					eq(t, e.Code, CodeInternalError)
+					eq(t, e.Code, pgcode.Internal)
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -303,14 +302,14 @@ func TestInternalError(t *testing.T) {
 			// Check that an internal error Wrap around another internal
 			// error creates internal error details and a sane error
 			// message.
-			NewAssertionErrorWithWrappedErrf(
+			errors.NewAssertionErrorWithWrappedErrf(
 				makeBoo(), "iewrap2 %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Ensure the "internal error" prefix only occurs once.
 					eq(t, e.Message, ie+"iewrap2 waa: boo")
 					// Internal error was preserved.
-					eq(t, e.Code, CodeInternalError)
+					eq(t, e.Code, pgcode.Internal)
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					// The original cause is masked by the barrier.
@@ -358,5 +357,5 @@ func doWrap(err error) error {
 }
 
 func makeBoo() error {
-	return AssertionFailedf("boo")
+	return errors.AssertionFailedf("boo")
 }

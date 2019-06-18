@@ -17,12 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // irjState represents the state of the processor.
@@ -280,13 +279,13 @@ func newInterleavedReaderJoiner(
 	output RowReceiver,
 ) (*interleavedReaderJoiner, error) {
 	if flowCtx.nodeID == 0 {
-		return nil, pgerror.AssertionFailedf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
+		return nil, errors.AssertionFailedf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
 	}
 
 	// TODO(richardwu): We can relax this to < 2 (i.e. permit 2+ tables).
 	// This will require modifying joinerBase init logic.
 	if len(spec.Tables) != 2 {
-		return nil, pgerror.AssertionFailedf("interleavedReaderJoiner only reads from two tables in an interleaved hierarchy")
+		return nil, errors.AssertionFailedf("interleavedReaderJoiner only reads from two tables in an interleaved hierarchy")
 	}
 
 	// Ensure the column orderings of all tables being merged are in the
@@ -294,7 +293,7 @@ func newInterleavedReaderJoiner(
 	for i, c := range spec.Tables[0].Ordering.Columns {
 		for _, table := range spec.Tables[1:] {
 			if table.Ordering.Columns[i].Direction != c.Direction {
-				return nil, pgerror.AssertionFailedf("unmatched column orderings")
+				return nil, errors.AssertionFailedf("unmatched column orderings")
 			}
 		}
 	}
@@ -326,7 +325,7 @@ func newInterleavedReaderJoiner(
 		if err := tables[i].post.Init(
 			&table.Post, table.Desc.ColumnTypes(), flowCtx.NewEvalCtx(), nil, /*output*/
 		); err != nil {
-			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"failed to initialize post-processing helper")
 		}
 
@@ -339,7 +338,7 @@ func newInterleavedReaderJoiner(
 	}
 
 	if len(spec.Tables[0].Ordering.Columns) != numAncestorPKCols {
-		return nil, pgerror.AssertionFailedf(
+		return nil, errors.AssertionFailedf(
 			"interleavedReaderJoiner only supports joins on the entire interleaved prefix")
 	}
 

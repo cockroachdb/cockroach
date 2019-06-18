@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -30,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
@@ -487,19 +488,19 @@ func (w *windower) processPartition(
 				case distsqlpb.WindowerSpec_Frame_RANGE:
 					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &startBound.OffsetType.Type, startBound.TypedOffset)
 					if err != nil {
-						return pgerror.NewAssertionErrorWithWrappedErrf(err,
-							"error decoding %d bytes", log.Safe(len(startBound.TypedOffset)))
+						return errors.NewAssertionErrorWithWrappedErrf(err,
+							"error decoding %d bytes", errors.Safe(len(startBound.TypedOffset)))
 					}
 					if len(rem) != 0 {
-						return pgerror.AssertionFailedf(
-							"%d trailing bytes in encoded value", log.Safe(len(rem)))
+						return errors.AssertionFailedf(
+							"%d trailing bytes in encoded value", errors.Safe(len(rem)))
 					}
 					frameRun.StartBoundOffset = datum
 				case distsqlpb.WindowerSpec_Frame_GROUPS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				default:
-					return pgerror.AssertionFailedf(
-						"unexpected WindowFrameMode: %d", log.Safe(windowFn.frame.Mode))
+					return errors.AssertionFailedf(
+						"unexpected WindowFrameMode: %d", errors.Safe(windowFn.frame.Mode))
 				}
 			}
 			if endBound != nil {
@@ -511,19 +512,19 @@ func (w *windower) processPartition(
 					case distsqlpb.WindowerSpec_Frame_RANGE:
 						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &endBound.OffsetType.Type, endBound.TypedOffset)
 						if err != nil {
-							return pgerror.NewAssertionErrorWithWrappedErrf(err,
-								"error decoding %d bytes", log.Safe(len(endBound.TypedOffset)))
+							return errors.NewAssertionErrorWithWrappedErrf(err,
+								"error decoding %d bytes", errors.Safe(len(endBound.TypedOffset)))
 						}
 						if len(rem) != 0 {
-							return pgerror.AssertionFailedf(
-								"%d trailing bytes in encoded value", log.Safe(len(rem)))
+							return errors.AssertionFailedf(
+								"%d trailing bytes in encoded value", errors.Safe(len(rem)))
 						}
 						frameRun.EndBoundOffset = datum
 					case distsqlpb.WindowerSpec_Frame_GROUPS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					default:
-						return pgerror.AssertionFailedf("unexpected WindowFrameMode: %d",
-							log.Safe(windowFn.frame.Mode))
+						return errors.AssertionFailedf("unexpected WindowFrameMode: %d",
+							errors.Safe(windowFn.frame.Mode))
 					}
 				}
 			}
@@ -543,7 +544,7 @@ func (w *windower) processPartition(
 				}
 				plusOp, minusOp, found := tree.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
 				if !found {
-					return pgerror.Newf(pgerror.CodeWindowingError,
+					return pgerror.Newf(pgcode.Windowing,
 						"given logical offset cannot be combined with ordering column")
 				}
 				frameRun.PlusOp, frameRun.MinusOp = plusOp, minusOp
@@ -688,8 +689,8 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			w.scratch = w.scratch[:0]
 			for _, col := range w.partitionBy {
 				if int(col) >= len(row) {
-					return pgerror.AssertionFailedf(
-						"hash column %d, row with only %d columns", log.Safe(col), log.Safe(len(row)))
+					return errors.AssertionFailedf(
+						"hash column %d, row with only %d columns", errors.Safe(col), errors.Safe(len(row)))
 				}
 				var err error
 				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, preferredEncoding, w.scratch)

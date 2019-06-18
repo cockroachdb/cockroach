@@ -15,11 +15,10 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // resultsNeeded determines whether a statement that might have a
@@ -79,6 +78,6 @@ func (p *planner) Returning(
 		return r, nil
 
 	default:
-		return nil, pgerror.AssertionFailedf("unexpected ReturningClause type: %T", t)
+		return nil, errors.AssertionFailedf("unexpected ReturningClause type: %T", t)
 	}
 }

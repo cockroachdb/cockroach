@@ -40,9 +40,11 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // groupby information stored in scopes.
@@ -139,7 +141,7 @@ func (a aggregateInfo) isCommutative() bool {
 
 // Eval is part of the tree.TypedExpr interface.
 func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.AssertionFailedf("aggregateInfo must be replaced before evaluation"))
+	panic(errors.AssertionFailedf("aggregateInfo must be replaced before evaluation"))
 }
 
 var _ tree.Expr = &aggregateInfo{}
@@ -170,7 +172,7 @@ func (b *Builder) constructGroupBy(
 			if scalar == nil {
 				// A "pass through" column (i.e. a VariableOp) is not legal as an
 				// aggregation.
-				panic(pgerror.AssertionFailedf("variable as aggregation"))
+				panic(errors.AssertionFailedf("variable as aggregation"))
 			}
 			aggs = append(aggs, memo.AggregationsItem{
 				Agg:        scalar,
@@ -620,7 +622,7 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		}
 		return b.factory.ConstructStringAgg(args[0], args[1])
 	}
-	panic(pgerror.AssertionFailedf("unhandled aggregate: %s", name))
+	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {
@@ -636,7 +638,7 @@ func isGenerator(def *tree.FunctionDefinition) bool {
 }
 
 func newGroupingError(name *tree.Name) error {
-	return pgerror.Newf(pgerror.CodeGroupingError,
+	return pgerror.Newf(pgcode.Grouping,
 		"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
 		tree.ErrString(name),
 	)

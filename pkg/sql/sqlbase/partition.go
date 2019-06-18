@@ -16,11 +16,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // PartitionSpecialValCode identifies a special value.
@@ -126,7 +125,7 @@ func DecodePartitionTuple(
 			return nil, nil, err
 		}
 		if _, dataOffset, _, typ, err := encoding.DecodeValueTag(valueEncBuf); err != nil {
-			return nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "decoding")
+			return nil, nil, errors.Wrapf(err, "decoding")
 		} else if typ == encoding.NotNull {
 			// NOT NULL signals that a PartitionSpecialValCode follows
 			var valCode uint64
@@ -136,8 +135,7 @@ func DecodePartitionTuple(
 			}
 			nextSpecial := PartitionSpecialValCode(valCode)
 			if t.SpecialCount > 0 && t.Special != nextSpecial {
-				return nil, nil, pgerror.Newf(pgerror.CodeDataExceptionError,
-					"non-%[1]s value (%[2]s) not allowed after %[1]s",
+				return nil, nil, errors.Newf("non-%[1]s value (%[2]s) not allowed after %[1]s",
 					t.Special, nextSpecial)
 			}
 			t.Special = nextSpecial
@@ -146,11 +144,10 @@ func DecodePartitionTuple(
 			var datum tree.Datum
 			datum, valueEncBuf, err = DecodeTableValue(a, &col.Type, valueEncBuf)
 			if err != nil {
-				return nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "decoding")
+				return nil, nil, errors.Wrapf(err, "decoding")
 			}
 			if t.SpecialCount > 0 {
-				return nil, nil, pgerror.Newf(pgerror.CodeDataExceptionError,
-					"non-%[1]s value (%[2]s) not allowed after %[1]s",
+				return nil, nil, errors.Newf("non-%[1]s value (%[2]s) not allowed after %[1]s",
 					t.Special, datum)
 			}
 			t.Datums = append(t.Datums, datum)

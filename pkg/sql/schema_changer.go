@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -217,10 +218,10 @@ func isPermanentSchemaChangeError(err error) bool {
 	}
 
 	switch pgerror.GetPGCode(err) {
-	case pgerror.CodeSerializationFailureError, pgerror.CodeConnectionFailureError:
+	case pgcode.SerializationFailure, pgcode.ConnectionFailure:
 		return false
 
-	case pgerror.CodeInternalError, pgerror.CodeRangeUnavailable:
+	case pgcode.Internal, pgcode.RangeUnavailable:
 		if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
 			return false
 		}
@@ -230,11 +231,11 @@ func isPermanentSchemaChangeError(err error) bool {
 }
 
 var (
-	errExistingSchemaChangeLease  = pgerror.Newf(pgerror.CodeDataExceptionError, "an outstanding schema change lease exists")
-	errExpiredSchemaChangeLease   = pgerror.Newf(pgerror.CodeDataExceptionError, "the schema change lease has expired")
-	errSchemaChangeNotFirstInLine = pgerror.Newf(pgerror.CodeDataExceptionError, "schema change not first in line")
-	errNotHitGCTTLDeadline        = pgerror.Newf(pgerror.CodeDataExceptionError, "not hit gc ttl deadline")
-	errSchemaChangeDuringDrain    = pgerror.Newf(pgerror.CodeDataExceptionError, "a schema change ran during the drain phase, re-increment")
+	errExistingSchemaChangeLease  = errors.Newf("an outstanding schema change lease exists")
+	errExpiredSchemaChangeLease   = errors.Newf("the schema change lease has expired")
+	errSchemaChangeNotFirstInLine = errors.Newf("schema change not first in line")
+	errNotHitGCTTLDeadline        = errors.Newf("not hit gc ttl deadline")
+	errSchemaChangeDuringDrain    = errors.Newf("a schema change ran during the drain phase, re-increment")
 )
 
 func shouldLogSchemaChangeError(err error) bool {
@@ -306,7 +307,7 @@ func (sc *SchemaChanger) findTableWithLease(
 		return nil, err
 	}
 	if tableDesc.Lease == nil {
-		return nil, pgerror.AssertionFailedf("no lease present for tableID: %d", log.Safe(sc.tableID))
+		return nil, errors.AssertionFailedf("no lease present for tableID: %d", errors.Safe(sc.tableID))
 	}
 	if *tableDesc.Lease != lease {
 		log.Errorf(ctx, "table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
@@ -415,8 +416,8 @@ func (sc *SchemaChanger) DropTableDesc(
 					b.DelRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 					return nil
 				}); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to update job %d", log.Safe(tableDesc.GetDropJobID()))
+				return errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update job %d", errors.Safe(tableDesc.GetDropJobID()))
 			}
 		}
 		return txn.Run(ctx, b)
@@ -630,7 +631,7 @@ func (sc *SchemaChanger) maybeGCMutations(
 		}
 	}
 	if !found {
-		return pgerror.AssertionFailedf("no GC mutation for index %d", log.Safe(sc.dropIndexTimes[0].indexID))
+		return errors.AssertionFailedf("no GC mutation for index %d", errors.Safe(sc.dropIndexTimes[0].indexID))
 	}
 
 	// Check if the deadline for GC'd dropped index expired because
@@ -704,7 +705,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 
 	schemaDetails, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return pgerror.AssertionFailedf("unexpected details for job %d: %T", log.Safe(*job.ID()), job.Details())
+		return errors.AssertionFailedf("unexpected details for job %d: %T", errors.Safe(*job.ID()), job.Details())
 	}
 
 	lowestStatus := jobspb.Status_DONE
@@ -731,7 +732,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 			return onSuccess(ctx, txn, job)
 		})
 	default:
-		return pgerror.AssertionFailedf("unexpected dropped table status %d", log.Safe(lowestStatus))
+		return errors.AssertionFailedf("unexpected dropped table status %d", errors.Safe(lowestStatus))
 	}
 
 	if err := job.WithTxn(txn).SetDetails(ctx, schemaDetails); err != nil {
@@ -956,8 +957,8 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 				ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 					return runStatus, nil
 				}); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
+				return errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
 			}
 		}
 		return nil
@@ -1059,8 +1060,8 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return runStatus, nil
 			}); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
+				return errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
 			}
 		}
 		return nil
@@ -1150,15 +1151,15 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	}, func(txn *client.Txn) error {
 		if jobSucceeded {
 			if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to mark job %d as successful", log.Safe(*sc.job.ID()))
+				return errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to mark job %d as successful", errors.Safe(*sc.job.ID()))
 			}
 		} else {
 			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return RunningStatusWaitingGC, nil
 			}); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
+				return errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
 			}
 		}
 
@@ -1274,7 +1275,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			if mutation.Rollback {
 				// Can actually never happen. This prevents a rollback of
 				// an already rolled back mutation.
-				return pgerror.AssertionFailedf("mutation already rolled back: %v", mutation)
+				return errors.AssertionFailedf("mutation already rolled back: %v", mutation)
 			}
 
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
@@ -1463,7 +1464,7 @@ func (sc *SchemaChanger) createRollbackJob(
 		}
 	}
 	// Cannot get here.
-	return nil, pgerror.AssertionFailedf("no job found for table %d mutation %d", log.Safe(sc.tableID), log.Safe(sc.mutationID))
+	return nil, errors.AssertionFailedf("no job found for table %d mutation %d", errors.Safe(sc.tableID), errors.Safe(sc.mutationID))
 }
 
 func (sc *SchemaChanger) maybeDropValidatingConstraint(
@@ -1501,7 +1502,7 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			}
 		}
 	default:
-		return pgerror.AssertionFailedf("unsupported constraint type: %d", log.Safe(constraint.ConstraintType))
+		return errors.AssertionFailedf("unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
 	}
 	return nil
 }

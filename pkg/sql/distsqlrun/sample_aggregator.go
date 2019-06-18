@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -28,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // A sample aggregator processor aggregates results from multiple sampler
@@ -212,7 +211,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 			// This must be a sampled row.
 			rank, err := row[s.rankCol].GetInt()
 			if err != nil {
-				return false, pgerror.NewAssertionErrorWithWrappedErrf(err, "decoding rank column")
+				return false, errors.NewAssertionErrorWithWrappedErrf(err, "decoding rank column")
 			}
 			// Retain the rows with the top ranks.
 			if err := s.sr.SampleRow(row[:s.rankCol], uint64(rank)); err != nil {
@@ -247,13 +246,13 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		}
 		d := row[s.sketchCol].Datum
 		if d == tree.DNull {
-			return false, pgerror.AssertionFailedf("NULL sketch data")
+			return false, errors.AssertionFailedf("NULL sketch data")
 		}
 		if err := tmpSketch.UnmarshalBinary([]byte(*d.(*tree.DBytes))); err != nil {
 			return false, err
 		}
 		if err := s.sketches[sketchIdx].sketch.Merge(&tmpSketch); err != nil {
-			return false, pgerror.NewAssertionErrorWithWrappedErrf(err, "merging sketch data")
+			return false, errors.NewAssertionErrorWithWrappedErrf(err, "merging sketch data")
 		}
 	}
 	// Report progress one last time so we don't write results if the job was

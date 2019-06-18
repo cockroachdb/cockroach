@@ -15,10 +15,10 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -78,7 +78,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			}
 			n.indexDesc.Partitioning = partitioning
 		default:
-			return pgerror.AssertionFailedf(
+			return errors.AssertionFailedf(
 				"unsupported alter command: %T", cmd)
 		}
 	}

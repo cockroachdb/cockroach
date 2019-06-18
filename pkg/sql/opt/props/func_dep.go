@@ -17,9 +17,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // FuncDepSet is a set of functional dependencies (FDs) that encode useful
@@ -615,7 +615,7 @@ func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
 // the new key is adopted in its place.
 func (f *FuncDepSet) AddStrictKey(keyCols, allCols opt.ColSet) {
 	if !keyCols.SubsetOf(allCols) {
-		panic(pgerror.AssertionFailedf("allCols does not include keyCols"))
+		panic(errors.AssertionFailedf("allCols does not include keyCols"))
 	}
 
 	// Ensure we have candidate key (i.e. has no columns that are functionally
@@ -637,7 +637,7 @@ func (f *FuncDepSet) AddStrictKey(keyCols, allCols opt.ColSet) {
 //
 func (f *FuncDepSet) AddLaxKey(keyCols, allCols opt.ColSet) {
 	if !keyCols.SubsetOf(allCols) {
-		panic(pgerror.AssertionFailedf("allCols does not include keyCols"))
+		panic(errors.AssertionFailedf("allCols does not include keyCols"))
 	}
 
 	// Ensure we have candidate key (i.e. has no columns that are functionally
@@ -812,7 +812,7 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 //
 func (f *FuncDepSet) AddSynthesizedCol(from opt.ColSet, col opt.ColumnID) {
 	if from.Contains(col) {
-		panic(pgerror.AssertionFailedf("synthesized column cannot depend upon itself"))
+		panic(errors.AssertionFailedf("synthesized column cannot depend upon itself"))
 	}
 
 	var colSet opt.ColSet
@@ -1241,45 +1241,45 @@ func (f *FuncDepSet) Verify() {
 		fd := &f.deps[i]
 
 		if fd.from.Intersects(fd.to) {
-			panic(pgerror.AssertionFailedf("expected FD determinant and dependants to be disjoint: %s (%d)", log.Safe(f), log.Safe(i)))
+			panic(errors.AssertionFailedf("expected FD determinant and dependants to be disjoint: %s (%d)", log.Safe(f), log.Safe(i)))
 		}
 
 		if fd.strict && fd.from.Empty() {
 			if i != 0 {
-				panic(pgerror.AssertionFailedf("expected strict constant FD to be first FD in set: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected strict constant FD to be first FD in set: %s (%d)", log.Safe(f), log.Safe(i)))
 			}
 		}
 
 		if fd.equiv {
 			if !fd.strict {
-				panic(pgerror.AssertionFailedf("unexpected lax equivalency: %s (%d)", f, i))
+				panic(errors.AssertionFailedf("unexpected lax equivalency: %s (%d)", f, i))
 			}
 
 			if fd.from.Len() != 1 {
-				panic(pgerror.AssertionFailedf("expected equivalence determinant to be single col: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected equivalence determinant to be single col: %s (%d)", log.Safe(f), log.Safe(i)))
 			}
 
 			if !f.ComputeEquivClosure(fd.from).Equals(fd.from.Union(fd.to)) {
-				panic(pgerror.AssertionFailedf("expected equivalence dependants to be its closure: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected equivalence dependants to be its closure: %s (%d)", log.Safe(f), log.Safe(i)))
 			}
 		}
 	}
 
 	if f.hasKey != noKey {
 		if reduced := f.ReduceCols(f.key); !reduced.Equals(f.key) {
-			panic(pgerror.AssertionFailedf("expected FD to have candidate key: %s", f))
+			panic(errors.AssertionFailedf("expected FD to have candidate key: %s", f))
 		}
 
 		if f.hasKey == strictKey {
 			allCols := f.ColSet()
 			allCols.UnionWith(f.key)
 			if !f.ComputeClosure(f.key).Equals(allCols) {
-				panic(pgerror.AssertionFailedf("expected closure of FD key to include all known cols: %s", log.Safe(f)))
+				panic(errors.AssertionFailedf("expected closure of FD key to include all known cols: %s", log.Safe(f)))
 			}
 		}
 	} else {
 		if !f.key.Empty() {
-			panic(pgerror.AssertionFailedf("expected empty key columns since no key: %s", f))
+			panic(errors.AssertionFailedf("expected empty key columns since no key: %s", f))
 		}
 	}
 }
@@ -1318,7 +1318,7 @@ func (f FuncDepSet) formatFDs(b *strings.Builder) {
 		}
 		if fd.equiv {
 			if !fd.strict {
-				panic(pgerror.AssertionFailedf("lax equivalent columns are not supported"))
+				panic(errors.AssertionFailedf("lax equivalent columns are not supported"))
 			}
 			fmt.Fprintf(b, "%s==%s", fd.from, fd.to)
 		} else {

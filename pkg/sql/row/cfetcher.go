@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -33,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Only unique secondary indexes have extra columns to decode (namely the
@@ -232,7 +231,7 @@ func (rf *CFetcher) Init(
 	returnRangeInfo bool, isCheck bool, tables ...FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
-		return pgerror.AssertionFailedf("no tables to fetch from")
+		return errors.AssertionFailedf("no tables to fetch from")
 	}
 
 	rf.reverse = reverse
@@ -329,7 +328,7 @@ func (rf *CFetcher) Init(
 		} else {
 			table.indexColOrdinals[i] = -1
 			if neededCols.Contains(int(id)) {
-				return pgerror.AssertionFailedf("needed column %d not in colIdxMap", id)
+				return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
 			}
 		}
 
@@ -410,7 +409,7 @@ func (rf *CFetcher) StartScan(
 	traceKV bool,
 ) error {
 	if len(spans) == 0 {
-		return pgerror.AssertionFailedf("no spans")
+		return errors.AssertionFailedf("no spans")
 	}
 
 	rf.traceKV = traceKV

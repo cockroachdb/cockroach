@@ -40,14 +40,17 @@ run build/builder.sh make -Otarget c-deps GOFLAGS=-race
 tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests under race detector"
-run build/builder.sh env \
-    COCKROACH_LOGIC_TESTS_SKIP=true \
-    stdbuf -oL -eL \
-    make testrace \
-    PKG="$pkgspec" \
-    TESTTIMEOUT=45m \
-    TESTFLAGS='-v' \
-    USE_ROCKSDB_ASSERTIONS=1 2>&1 \
-	| tee artifacts/testrace.log \
-	| go-test-teamcity
+true >artifacts/testrace.log
+for pkg in $pkgspec; do
+	run build/builder.sh env \
+		COCKROACH_LOGIC_TESTS_SKIP=true \
+		stdbuf -oL -eL \
+		make testrace \
+		PKG="$pkg" \
+		TESTTIMEOUT=45m \
+		TESTFLAGS='-v' \
+		USE_ROCKSDB_ASSERTIONS=1 2>&1 \
+		| tee -a artifacts/testrace.log \
+		| go-test-teamcity
+done
 tc_end_block "Run Go tests under race detector"

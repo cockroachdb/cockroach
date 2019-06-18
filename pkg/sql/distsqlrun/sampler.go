@@ -19,16 +19,16 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // sketchInfo contains the specification and run-time state for each sketch.
@@ -97,7 +97,7 @@ func newSamplerProcessor(
 			return nil, errors.Errorf("unsupported sketch type %s", s.SketchType)
 		}
 		if len(s.Columns) != 1 {
-			return nil, pgerror.UnimplementedWithIssue(34422, "multi-column statistics are not supported yet.")
+			return nil, unimplemented.NewWithIssue(34422, "multi-column statistics are not supported yet.")
 		}
 	}
 

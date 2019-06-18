@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/gogo/protobuf/proto"
@@ -210,7 +211,7 @@ func ResolveZoneSpecifier(
 
 	tn := &zs.TableOrIndex.Table
 	if tn.SchemaName != tree.PublicSchemaName {
-		return 0, pgerror.Newf(pgerror.CodeReservedNameError,
+		return 0, pgerror.Newf(pgcode.ReservedName,
 			"only schema \"public\" is supported: %q", tree.ErrString(tn))
 	}
 	databaseID, err := resolveName(keys.RootNamespaceID, tn.Catalog())

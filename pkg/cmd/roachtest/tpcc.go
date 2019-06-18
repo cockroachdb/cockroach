@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -587,7 +587,7 @@ func loadTPCCBench(
 		c.Wipe(ctx, roachNodes)
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 	} else if pqErr, ok := err.(*pq.Error); !ok ||
-		string(pqErr.Code) != pgerror.CodeInvalidCatalogNameError {
+		string(pqErr.Code) != pgcode.InvalidCatalogName {
 		return err
 	}
 
