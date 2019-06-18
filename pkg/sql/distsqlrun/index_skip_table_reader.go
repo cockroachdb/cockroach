@@ -67,7 +67,6 @@ var _ Processor = &indexSkipTableReader{}
 var _ RowSource = &indexSkipTableReader{}
 var _ distsqlpb.MetadataSource = &indexSkipTableReader{}
 
-// TODO: implement
 func newIndexSkipTableReader(
 	flowCtx *FlowCtx,
 	processorID int32,
@@ -130,13 +129,13 @@ func newIndexSkipTableReader(
 		ValNeededForCol:  neededColumns,
 	}
 
-	// we aren't supporting reverse scans right now using this method
+	// TODO: support reverse scans
 	if err := t.fetcher.Init(false /* reverseScan */, true, /* returnRangeInfo */
 		false /* isCheck */, &t.alloc, tableArgs); err != nil {
 		return nil, err
 	}
 
-	// add spans to this tableReader
+	// Make a copy of the spans for this reader, as we will modify them
 	nSpans := len(spec.Spans)
 	if cap(t.spans) >= nSpans {
 		t.spans = t.spans[:nSpans]
@@ -162,7 +161,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			return nil, t.DrainHelper()
 		}
 
-		// do a scan
+		// Start a scan to get the smallest value within this span
 		var err error
 		if t.maxTimestampAge == 0 {
 			err = t.fetcher.StartScan(
