@@ -14,6 +14,7 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -32,6 +33,8 @@ type indexSkipTableReader struct {
 	ProcessorBase
 
 	spans roachpb.Spans
+
+	reverse bool
 
 	// maintains which span we are currently getting rows from
 	currentSpan int
@@ -86,6 +89,7 @@ func newIndexSkipTableReader(
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
 	t.ignoreMisplannedRanges = flowCtx.local
+	t.reverse = spec.Reverse
 
 	if err := t.Init(
 		t,
@@ -161,6 +165,8 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			return nil, t.DrainHelper()
 		}
 
+		fmt.Println(t.spans[t.currentSpan])
+
 		// Start a scan to get the smallest value within this span
 		var err error
 		if t.maxTimestampAge == 0 {
@@ -213,6 +219,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		// our new key is larger than any value with the same prefix, we place
 		// 0xff at all other index column values, and one more to guard against
 		// 0xff present as a value in the table (0xff encodes a type of null)
+		// In the reverse case, a similar strategy can be used using 0x00
 		for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
 			key = append(key, 0xff)
 		}

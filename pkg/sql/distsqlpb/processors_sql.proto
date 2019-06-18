@@ -131,15 +131,15 @@ message IndexSkipTableReaderSpec {
   // i.e. table.indexes[index_idx-1]
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
-  // TODO(rohany): support reverse in the future
-  // optional bool reverse = 3 [(gogoproto.nullable) = false];
-  repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
+  optional bool reverse = 3 [(gogoproto.nullable) = false];
+
+  repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
 
   // Indicates the visibility level of the columns that should be returned.
   // Normally, will be set to public. Will be set to publicAndNotPublic if the
   // consumer of this TableReader expects to be able to see in-progress schema
   // changes.
-  optional ScanVisibility visibility = 4 [(gogoproto.nullable) = false];
+  optional ScanVisibility visibility = 5 [(gogoproto.nullable) = false];
 
   // TODO(rohany): include support for these fields
 
@@ -147,7 +147,7 @@ message IndexSkipTableReaderSpec {
   // // will read. If 0, the number of results is unbounded.
   // optional uint64 max_results = 8 [(gogoproto.nullable) = false];
 
-  optional uint64 max_timestamp_age_nanos = 5 [(gogoproto.nullable) = false];
+  optional uint64 max_timestamp_age_nanos = 6 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
