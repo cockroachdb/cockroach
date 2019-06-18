@@ -876,8 +876,12 @@ func (r *Replica) changeReplicas(
 		}
 	}
 
+	generationComparableEnabled := r.store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable)
 	rangeID := desc.RangeID
 	updatedDesc := *desc
+	if generationComparableEnabled {
+		updatedDesc.IncrementGeneration()
+	}
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
 	switch changeType {
@@ -980,7 +984,7 @@ func (r *Replica) changeReplicas(
 			UpdatedReplicas: updatedDesc.Replicas().Unwrap(),
 			NextReplicaID:   updatedDesc.NextReplicaID,
 		}
-		if r.store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable) {
+		if generationComparableEnabled {
 			trigger.Desc = &updatedDesc
 		}
 
