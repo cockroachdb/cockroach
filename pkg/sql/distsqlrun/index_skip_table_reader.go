@@ -15,6 +15,7 @@ package distsqlrun
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -44,7 +45,7 @@ type indexSkipTableReader struct {
 	// maxResults uint64
 
 	// TODO(rohany): add support for this field
-	// maxTimestampAge time.Duration
+	maxTimestampAge time.Duration
 
 	// TODO(rohany): add support for this field
 	// ignoreMisplannedRanges bool
@@ -81,8 +82,8 @@ func newIndexSkipTableReader(
 
 	t := istrPool.Get().(*indexSkipTableReader)
 
-	// hardcode right now to just get size 1 batches
 	t.limitHint = limitHint(1, post)
+	t.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
@@ -162,10 +163,20 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		}
 
 		// do a scan
-		err := t.fetcher.StartScan(
-			t.Ctx, t.flowCtx.txn, t.spans[t.currentSpan:t.currentSpan+1],
-			true, t.limitHint, t.flowCtx.traceKV,
-		)
+		var err error
+		if t.maxTimestampAge == 0 {
+			err = t.fetcher.StartScan(
+				t.Ctx, t.flowCtx.txn, t.spans[t.currentSpan:t.currentSpan+1],
+				true, t.limitHint, t.flowCtx.traceKV,
+			)
+		} else {
+			initialTS := t.flowCtx.txn.GetTxnCoordMeta(t.Ctx).Txn.OrigTimestamp
+			err = t.fetcher.StartInconsistentScan(
+				t.Ctx, t.flowCtx.ClientDB, initialTS,
+				t.maxTimestampAge, t.spans[t.currentSpan:t.currentSpan+1],
+				true, t.limitHint, t.flowCtx.traceKV,
+			)
+		}
 		if err != nil {
 			t.MoveToDraining(err)
 			return nil, &distsqlpb.ProducerMetadata{Err: err}

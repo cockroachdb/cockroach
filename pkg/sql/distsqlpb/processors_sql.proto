@@ -147,7 +147,7 @@ message IndexSkipTableReaderSpec {
   // // will read. If 0, the number of results is unbounded.
   // optional uint64 max_results = 8 [(gogoproto.nullable) = false];
 
-  // optional uint64 max_timestamp_age_nanos = 9 [(gogoproto.nullable) = false];
+  optional uint64 max_timestamp_age_nanos = 5 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
