@@ -225,6 +225,7 @@ func TestCBOReportUsage(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	// Stopper will wait for the update/report loop to finish too.
 	defer s.Stopper().Stop(context.TODO())
+	defer db.Close()
 	ts := s.(*TestServer)
 
 	// make sure the test's generated activity is the only activity we measure.
@@ -396,11 +397,15 @@ func TestReportUsage(t *testing.T) {
 		{"DATABASE system", fmt.Sprintf(`constraints: {"+zone=%[1]s,+%[1]s": 2, +%[1]s: 1}`, elemName)},
 		{"DATABASE system", fmt.Sprintf(`experimental_lease_preferences: [[+zone=%[1]s,+%[1]s], [+%[1]s]]`, elemName)},
 	} {
-		if _, err := db.Exec(
-			fmt.Sprintf(`ALTER %s CONFIGURE ZONE = '%s'`, cmd.resource, cmd.config),
-		); err != nil {
-			t.Fatalf("error applying zone config %q to %q: %v", cmd.config, cmd.resource, err)
-		}
+		testutils.SucceedsSoon(t, func() error {
+			if _, err := db.Exec(
+				fmt.Sprintf(`ALTER %s CONFIGURE ZONE = '%s'`, cmd.resource, cmd.config),
+			); err != nil {
+				// Work around gossip asynchronicity.
+				return errors.Errorf("error applying zone config %q to %q: %v", cmd.config, cmd.resource, err)
+			}
+			return nil
+		})
 	}
 	if _, err := db.Exec(`INSERT INTO system.zones (id, config) VALUES (10000, null)`); err != nil {
 		t.Fatal(err)
