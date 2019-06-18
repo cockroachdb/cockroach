@@ -291,8 +291,6 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 
-	const numCols = 2
-
 	// test for number of rows in the table
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16, 1 << 18} {
 		// test for a ratio of values from 1 unique value of the first column
@@ -363,7 +361,6 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 				}
 				postDistinct := distsqlpb.PostProcessSpec{}
 
-				// b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					tr, err := newTableReader(&flowCtxTableReader, 0, &spec, &post, nil)
@@ -395,7 +392,6 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 					OutputColumns: []uint32{0},
 					Projection:    true,
 				}
-				// b.SetBytes(int64)
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					it, err := newIndexSkipTableReader(&flowCtxIndexSkipTableReader, 0, &spec, &post, nil)

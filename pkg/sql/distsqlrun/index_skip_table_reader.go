@@ -15,7 +15,6 @@ package distsqlrun
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -41,13 +40,14 @@ type indexSkipTableReader struct {
 
 	limitHint int64
 
-	maxResults uint64
+	// TODO(rohany): add support for this field
+	// maxResults uint64
 
-	// unsure how to take this into account as of now
-	maxTimestampAge time.Duration
+	// TODO(rohany): add support for this field
+	// maxTimestampAge time.Duration
 
-	// unsure how to take this into account as of now
-	ignoreMisplannedRanges bool
+	// TODO(rohany): add support for this field
+	// ignoreMisplannedRanges bool
 
 	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
