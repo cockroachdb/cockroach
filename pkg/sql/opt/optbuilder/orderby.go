@@ -15,6 +15,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -91,7 +92,7 @@ func (b *Builder) findIndexByName(table cat.Table, name tree.UnrestrictedName) (
 		}
 	}
 
-	return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
+	return nil, pgerror.Newf(pgcode.UndefinedObject,
 		`index %q not found`, name)
 }
 

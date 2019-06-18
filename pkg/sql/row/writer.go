@@ -17,9 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // This file contains common functions for the three writers, Inserter, Deleter
@@ -136,7 +136,7 @@ func prepareInsertOrUpdateBatch(
 		var lastColID sqlbase.ColumnID
 		familySortedColumnIDs, ok := helper.sortedColumnFamily(family.ID)
 		if !ok {
-			return nil, pgerror.AssertionFailedf("invalid family sorted column id map")
+			return nil, errors.AssertionFailedf("invalid family sorted column id map")
 		}
 		for _, colID := range familySortedColumnIDs {
 			idx, ok := valColIDMapping[colID]
@@ -153,7 +153,7 @@ func prepareInsertOrUpdateBatch(
 
 			col := &fetchedCols[idx]
 			if lastColID > col.ID {
-				return nil, pgerror.AssertionFailedf("cannot write column id %d after %d", col.ID, lastColID)
+				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.ID, lastColID)
 			}
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID

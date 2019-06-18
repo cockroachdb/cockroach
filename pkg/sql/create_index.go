@@ -15,6 +15,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -55,19 +56,19 @@ func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) 
 
 	if n.Inverted {
 		if n.Interleave != nil {
-			return nil, pgerror.New(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support interleaved tables")
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support interleaved tables")
 		}
 
 		if n.PartitionBy != nil {
-			return nil, pgerror.New(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support partitioning")
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support partitioning")
 		}
 
 		if len(indexDesc.StoreColumnNames) > 0 {
-			return nil, pgerror.New(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support stored columns")
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns")
 		}
 
 		if n.Unique {
-			return nil, pgerror.New(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique")
 		}
 		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
 	}
@@ -82,7 +83,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
 		if dropped {
-			return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"index %q being dropped, try again later", string(n.n.Name))
 		}
 		if n.n.IfNotExists {

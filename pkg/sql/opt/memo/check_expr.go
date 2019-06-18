@@ -16,10 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // CheckExpr does sanity checking on an Expr. This code is called in testrace
@@ -62,30 +62,30 @@ func (m *Memo) checkExpr(e opt.Expr) {
 	switch t := e.(type) {
 	case *ScanExpr:
 		if t.Flags.NoIndexJoin && t.Flags.ForceIndex {
-			panic(pgerror.AssertionFailedf("NoIndexJoin and ForceIndex set"))
+			panic(errors.AssertionFailedf("NoIndexJoin and ForceIndex set"))
 		}
 
 	case *ProjectExpr:
 		for _, item := range t.Projections {
 			// Check that list items are not nested.
 			if opt.IsListItemOp(item.Element) {
-				panic(pgerror.AssertionFailedf("projections list item cannot contain another list item"))
+				panic(errors.AssertionFailedf("projections list item cannot contain another list item"))
 			}
 
 			// Check that column id is set.
 			if item.Col == 0 {
-				panic(pgerror.AssertionFailedf("projections column cannot have id of 0"))
+				panic(errors.AssertionFailedf("projections column cannot have id of 0"))
 			}
 
 			// Check that column is not both passthrough and synthesized.
 			if t.Passthrough.Contains(item.Col) {
-				panic(pgerror.AssertionFailedf("both passthrough and synthesized have column %d", log.Safe(item.Col)))
+				panic(errors.AssertionFailedf("both passthrough and synthesized have column %d", log.Safe(item.Col)))
 			}
 
 			// Check that columns aren't passed through in projection expressions.
 			if v, ok := item.Element.(*VariableExpr); ok {
 				if v.Col == item.Col {
-					panic(pgerror.AssertionFailedf("projection passes through column %d", log.Safe(item.Col)))
+					panic(errors.AssertionFailedf("projection passes through column %d", log.Safe(item.Col)))
 				}
 			}
 		}
@@ -104,7 +104,7 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 			default:
 				if !opt.IsAggregateOp(scalar) {
-					panic(pgerror.AssertionFailedf("aggregate contains illegal op: %s", log.Safe(scalar.Op())))
+					panic(errors.AssertionFailedf("aggregate contains illegal op: %s", log.Safe(scalar.Op())))
 				}
 			}
 		}
@@ -114,12 +114,12 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 			// Check that column id is set.
 			if item.Col == 0 {
-				panic(pgerror.AssertionFailedf("aggregations column cannot have id of 0"))
+				panic(errors.AssertionFailedf("aggregations column cannot have id of 0"))
 			}
 
 			// Check that we don't have any bare variables as aggregations.
 			if item.Agg.Op() == opt.VariableOp {
-				panic(pgerror.AssertionFailedf("aggregation contains bare variable"))
+				panic(errors.AssertionFailedf("aggregation contains bare variable"))
 			}
 		}
 
@@ -130,7 +130,7 @@ func (m *Memo) checkExpr(e opt.Expr) {
 			case opt.FirstAggOp, opt.ConstAggOp:
 
 			default:
-				panic(pgerror.AssertionFailedf("distinct-on contains %s", log.Safe(item.Agg.Op())))
+				panic(errors.AssertionFailedf("distinct-on contains %s", log.Safe(item.Agg.Op())))
 			}
 		}
 
@@ -139,24 +139,24 @@ func (m *Memo) checkExpr(e opt.Expr) {
 		for _, item := range *t.Child(1).(*AggregationsExpr) {
 			switch item.Agg.Op() {
 			case opt.FirstAggOp:
-				panic(pgerror.AssertionFailedf("group-by contains %s", log.Safe(item.Agg.Op())))
+				panic(errors.AssertionFailedf("group-by contains %s", log.Safe(item.Agg.Op())))
 			}
 		}
 
 	case *IndexJoinExpr:
 		if t.Cols.Empty() {
-			panic(pgerror.AssertionFailedf("index join with no columns"))
+			panic(errors.AssertionFailedf("index join with no columns"))
 		}
 
 	case *LookupJoinExpr:
 		if len(t.KeyCols) == 0 {
-			panic(pgerror.AssertionFailedf("lookup join with no key columns"))
+			panic(errors.AssertionFailedf("lookup join with no key columns"))
 		}
 		if t.Cols.Empty() {
-			panic(pgerror.AssertionFailedf("lookup join with no output columns"))
+			panic(errors.AssertionFailedf("lookup join with no output columns"))
 		}
 		if t.Cols.SubsetOf(t.Input.Relational().OutputCols) {
-			panic(pgerror.AssertionFailedf("lookup join with no lookup columns"))
+			panic(errors.AssertionFailedf("lookup join with no lookup columns"))
 		}
 
 	case *InsertExpr:
@@ -169,7 +169,7 @@ func (m *Memo) checkExpr(e opt.Expr) {
 		// mutation columns (which do not need to be part of INSERT).
 		for i, n := 0, tab.WritableColumnCount(); i < n; i++ {
 			if t.InsertCols[i] == 0 {
-				panic(pgerror.AssertionFailedf("insert values not provided for all table columns"))
+				panic(errors.AssertionFailedf("insert values not provided for all table columns"))
 			}
 		}
 
@@ -184,17 +184,17 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 	case *ZigzagJoinExpr:
 		if len(t.LeftEqCols) != len(t.RightEqCols) {
-			panic(pgerror.AssertionFailedf("zigzag join with mismatching eq columns"))
+			panic(errors.AssertionFailedf("zigzag join with mismatching eq columns"))
 		}
 
 	case *AggDistinctExpr:
 		if t.Input.Op() == opt.AggFilterOp {
-			panic(pgerror.AssertionFailedf("AggFilter should always be on top of AggDistinct"))
+			panic(errors.AssertionFailedf("AggFilter should always be on top of AggDistinct"))
 		}
 
 	case *ConstExpr:
 		if t.Value == tree.DNull {
-			panic(pgerror.AssertionFailedf("NULL values should always use NullExpr, not ConstExpr"))
+			panic(errors.AssertionFailedf("NULL values should always use NullExpr, not ConstExpr"))
 		}
 
 	default:
@@ -202,13 +202,13 @@ func (m *Memo) checkExpr(e opt.Expr) {
 			for i := 0; i < e.ChildCount(); i++ {
 				child := e.Child(i)
 				if opt.IsListItemOp(child) {
-					panic(pgerror.AssertionFailedf("non-list op contains item op: %s", log.Safe(child.Op())))
+					panic(errors.AssertionFailedf("non-list op contains item op: %s", log.Safe(child.Op())))
 				}
 			}
 		}
 
 		if e.Op() == opt.StringAggOp && !CanExtractConstDatum(e.Child(1)) {
-			panic(pgerror.AssertionFailedf(
+			panic(errors.AssertionFailedf(
 				"second argument to StringAggOp must always be constant, but got %s",
 				log.Safe(e.Child(1).Op()),
 			))
@@ -225,7 +225,7 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 func (m *Memo) checkColListLen(colList opt.ColList, expectedLen int, listName string) {
 	if len(colList) != expectedLen {
-		panic(pgerror.AssertionFailedf("column list %s expected length = %d, actual length = %d",
+		panic(errors.AssertionFailedf("column list %s expected length = %d, actual length = %d",
 			listName, log.Safe(expectedLen), len(colList)))
 	}
 }
@@ -238,7 +238,7 @@ func (m *Memo) checkMutationExpr(rel RelExpr, private *MutationPrivate) {
 		mutCols.Add(private.Table.ColumnID(i))
 	}
 	if rel.Relational().OutputCols.Intersects(mutCols) {
-		panic(pgerror.AssertionFailedf("output columns cannot include mutation columns"))
+		panic(errors.AssertionFailedf("output columns cannot include mutation columns"))
 	}
 }
 
@@ -258,7 +258,7 @@ func checkExprOrdering(e opt.Expr) {
 		return
 	}
 	if outCols := e.(RelExpr).Relational().OutputCols; !ordering.SubsetOfCols(outCols) {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"invalid ordering %v (op: %s, outcols: %v)",
 			log.Safe(ordering), log.Safe(e.Op()), log.Safe(outCols),
 		))
@@ -268,14 +268,14 @@ func checkExprOrdering(e opt.Expr) {
 func checkFilters(filters FiltersExpr) {
 	for _, item := range filters {
 		if opt.IsListItemOp(item.Condition) {
-			panic(pgerror.AssertionFailedf("filters list item cannot contain another list item"))
+			panic(errors.AssertionFailedf("filters list item cannot contain another list item"))
 		}
 		if item.Condition.Op() == opt.RangeOp {
 			if !item.scalar.TightConstraints {
-				panic(pgerror.AssertionFailedf("Range operator should always have tight constraints"))
+				panic(errors.AssertionFailedf("Range operator should always have tight constraints"))
 			}
 			if item.scalar.OuterCols.Len() != 1 {
-				panic(pgerror.AssertionFailedf("Range operator should have exactly one outer col"))
+				panic(errors.AssertionFailedf("Range operator should have exactly one outer col"))
 			}
 		}
 	}

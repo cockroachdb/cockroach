@@ -1223,10 +1223,10 @@ SELECT uuid_v4() != uuid_v4(), length(uuid_v4())
 ----
 true 16
 
-query error syntax error at or near.*
+query error at or near.*: syntax error
 SELECT greatest()
 
-query error syntax error at or near.*
+query error at or near.*: syntax error
 SELECT least()
 
 query I

@@ -34,9 +34,33 @@ type Error struct {
 	Source  *Error_Source `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
 	// a telemetry key, used as telemetry counter name.
 	// Typically of the form [<prefix>.]#issuenum[.details]
+	//
+	// Note: this field is obsolete. It is preserved for compatibility
+	// with nodes running 19.1:
+	//
+	// - when an error with this field populated is received on a
+	//   post-19.1 node, the field is replaced by uses of
+	//   errors.WithTelemetryKey. This data is then subsequently used for
+	//   troubleshooting reports and telemetry.
+	// - Conversely, errors sent towards a 19.1 node will get this field
+	//   populated with the first key found in errors.GetTelemetryKeys().
+	//
+	// TODO(knz): Remove in 19.3.
 	TelemetryKey string `protobuf:"bytes,6,opt,name=telemetry_key,json=telemetryKey,proto3" json:"telemetry_key,omitempty"`
 	// complement to the detail field that can be reported
 	// in sentry reports. This is scrubbed of PII.
+	//
+	// Note: this field is obsolete. It is preserved for compatibility
+	// with nodes running 19.1:
+	//
+	// - when an error with this field populated is received on a
+	//   post-19.1 node, the field is replaced by uses of
+	//   errors.WithSafeDetail. This data is then subsequently used for
+	//   troubleshooting reports.
+	// - Conversely, errors sent towards a 19.1 node will get this field
+	//   populated with the data from errors.GetSafeDetails().
+	//
+	// TODO(knz): Remove in 19.3.
 	SafeDetail           []*Error_SafeDetail `protobuf:"bytes,7,rep,name=safe_detail,json=safeDetail,proto3" json:"safe_detail,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
 	XXX_sizecache        int32               `json:"-"`
@@ -46,7 +70,7 @@ func (m *Error) Reset()         { *m = Error{} }
 func (m *Error) String() string { return proto.CompactTextString(m) }
 func (*Error) ProtoMessage()    {}
 func (*Error) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_fd8ce6c252fe715b, []int{0}
+	return fileDescriptor_errors_9195de41db612630, []int{0}
 }
 func (m *Error) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -83,7 +107,7 @@ func (m *Error_Source) Reset()         { *m = Error_Source{} }
 func (m *Error_Source) String() string { return proto.CompactTextString(m) }
 func (*Error_Source) ProtoMessage()    {}
 func (*Error_Source) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_fd8ce6c252fe715b, []int{0, 0}
+	return fileDescriptor_errors_9195de41db612630, []int{0, 0}
 }
 func (m *Error_Source) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -119,7 +143,7 @@ func (m *Error_SafeDetail) Reset()         { *m = Error_SafeDetail{} }
 func (m *Error_SafeDetail) String() string { return proto.CompactTextString(m) }
 func (*Error_SafeDetail) ProtoMessage()    {}
 func (*Error_SafeDetail) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_fd8ce6c252fe715b, []int{0, 1}
+	return fileDescriptor_errors_9195de41db612630, []int{0, 1}
 }
 func (m *Error_SafeDetail) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -982,10 +1006,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_fd8ce6c252fe715b)
+	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_9195de41db612630)
 }
 
-var fileDescriptor_errors_fd8ce6c252fe715b = []byte{
+var fileDescriptor_errors_9195de41db612630 = []byte{
 	// 346 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x51, 0xb1, 0x4e, 0x2a, 0x41,
 	0x14, 0x65, 0x1f, 0xb0, 0xbc, 0x77, 0xe1, 0x15, 0x8c, 0x89, 0x99, 0x50, 0x2c, 0x20, 0x0d, 0xd5,

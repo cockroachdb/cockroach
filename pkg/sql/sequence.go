@@ -20,13 +20,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // IncrementSequence implements the tree.SequenceOperators interface.
@@ -84,7 +86,7 @@ func boundsExceededError(descriptor *sqlbase.ImmutableTableDescriptor) error {
 		value = seqOpts.MinValue
 	}
 	return pgerror.Newf(
-		pgerror.CodeSequenceGeneratorLimitExceeded,
+		pgcode.SequenceGeneratorLimitExceeded,
 		`reached %s value of sequence %q (%d)`, word,
 		tree.ErrString((*tree.Name)(&descriptor.Name)), value)
 }
@@ -101,7 +103,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 	val, ok := p.SessionData().SequenceState.GetLastValueByID(uint32(descriptor.ID))
 	if !ok {
 		return 0, pgerror.Newf(
-			pgerror.CodeObjectNotInPrerequisiteStateError,
+			pgcode.ObjectNotInPrerequisiteState,
 			`currval of sequence %q is not yet defined in this session`, tree.ErrString(seqName))
 	}
 
@@ -130,7 +132,7 @@ func (p *planner) SetSequenceValue(
 		// clients don't expect it, we may need to make this a no-op
 		// instead.
 		return pgerror.Newf(
-			pgerror.CodeObjectNotInPrerequisiteStateError,
+			pgcode.ObjectNotInPrerequisiteState,
 			`cannot set the value of virtual sequence %q`, tree.ErrString(seqName))
 	}
 
@@ -153,7 +155,7 @@ func MakeSequenceKeyVal(
 	opts := sequence.SequenceOpts
 	if newVal > opts.MaxValue || newVal < opts.MinValue {
 		return nil, 0, pgerror.Newf(
-			pgerror.CodeNumericValueOutOfRangeError,
+			pgcode.NumericValueOutOfRange,
 			`value %d is out of bounds for sequence "%s" (%d..%d)`,
 			newVal, sequence.Name, opts.MinValue, opts.MaxValue,
 		)
@@ -181,7 +183,7 @@ func (p *planner) GetSequenceValue(
 }
 
 func readOnlyError(s string) error {
-	return pgerror.Newf(pgerror.CodeReadOnlySQLTransactionError,
+	return pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 		"cannot execute %s in a read-only transaction", s)
 }
 
@@ -199,7 +201,7 @@ func assignSequenceOptions(
 	}
 	if opts.Increment == 0 {
 		return pgerror.New(
-			pgerror.CodeInvalidParameterValueError, "INCREMENT must not be zero")
+			pgcode.InvalidParameterValue, "INCREMENT must not be zero")
 	}
 	isAscending := opts.Increment > 0
 
@@ -222,13 +224,13 @@ func assignSequenceOptions(
 		// Error on duplicate options.
 		_, seenBefore := optionsSeen[option.Name]
 		if seenBefore {
-			return pgerror.New(pgerror.CodeSyntaxError, "conflicting or redundant options")
+			return pgerror.New(pgcode.Syntax, "conflicting or redundant options")
 		}
 		optionsSeen[option.Name] = true
 
 		switch option.Name {
 		case tree.SeqOptCycle:
-			return pgerror.UnimplementedWithIssue(20961,
+			return unimplemented.NewWithIssue(20961,
 				"CYCLE option is not supported")
 		case tree.SeqOptNoCycle:
 			// Do nothing; this is the default.
@@ -236,12 +238,12 @@ func assignSequenceOptions(
 			v := *option.IntVal
 			switch {
 			case v < 1:
-				return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+				return pgerror.Newf(pgcode.InvalidParameterValue,
 					"CACHE (%d) must be greater than zero", v)
 			case v == 1:
 				// Do nothing; this is the default.
 			case v > 1:
-				return pgerror.UnimplementedWithIssuef(32567,
+				return unimplemented.NewWithIssuef(32567,
 					"CACHE values larger than 1 are not supported, found %d", v)
 			}
 		case tree.SeqOptIncrement:
@@ -275,12 +277,12 @@ func assignSequenceOptions(
 
 	if opts.Start > opts.MaxValue {
 		return pgerror.Newf(
-			pgerror.CodeInvalidParameterValueError,
+			pgcode.InvalidParameterValue,
 			"START value (%d) cannot be greater than MAXVALUE (%d)", opts.Start, opts.MaxValue)
 	}
 	if opts.Start < opts.MinValue {
 		return pgerror.Newf(
-			pgerror.CodeInvalidParameterValueError,
+			pgcode.InvalidParameterValue,
 			"START value (%d) cannot be less than MINVALUE (%d)", opts.Start, opts.MinValue)
 	}
 
@@ -357,7 +359,7 @@ func removeSequenceDependencies(
 			}
 		}
 		if refIdx == -1 {
-			return pgerror.AssertionFailedf("couldn't find reference from sequence to this column")
+			return errors.AssertionFailedf("couldn't find reference from sequence to this column")
 		}
 		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy[:refIdx], seqDesc.DependedOnBy[refIdx+1:]...)
 		if err := params.p.writeSchemaChange(params.ctx, seqDesc, sqlbase.InvalidMutationID); err != nil {

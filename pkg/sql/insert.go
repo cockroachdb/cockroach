@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -24,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 var insertNodePool = sync.Pool{
@@ -661,8 +664,7 @@ func GenerateInsertRow(
 			// available.
 			d, err := computeExprs[i].Eval(evalCtx)
 			if err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-					"computed column %s", tree.ErrString((*tree.Name)(&computedCols[i].Name)))
+				return nil, errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&computedCols[i].Name)))
 			}
 			rowVals[rowContainerForComputedVals.Mapping[computedCols[i].ID]] = d
 		}
@@ -742,7 +744,7 @@ func (p *planner) processColumns(
 		}
 
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+			return nil, pgerror.Newf(pgcode.Syntax,
 				"multiple assignments to the same column %q", &nameList[i])
 		}
 		colIDSet[col.ID] = struct{}{}
@@ -771,7 +773,7 @@ func extractInsertSource(
 				// (WITH ... (WITH ...))
 				// Currently we are unable to nest the scopes inside ParenSelect so we
 				// must refuse the syntax so that the query does not get invalid results.
-				return nil, nil, pgerror.UnimplementedWithIssue(24303,
+				return nil, nil, unimplemented.NewWithIssue(24303,
 					"multiple WITH clauses in parentheses")
 			}
 			with = s.Select.With
@@ -906,7 +908,7 @@ func checkNumExprs(isUpsert bool, numExprs, numCols int, specifiedTargets bool) 
 		if isUpsert {
 			kw = "UPSERT"
 		}
-		return pgerror.Newf(pgerror.CodeSyntaxError,
+		return pgerror.Newf(pgcode.Syntax,
 			"%s has more %s than %s, %d expressions for %d targets",
 			kw, more, less, numExprs, numCols)
 	}

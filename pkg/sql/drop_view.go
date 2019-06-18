@@ -16,12 +16,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type dropViewNode struct {
@@ -226,8 +225,7 @@ func (p *planner) getViewDescForCascade(
 	viewDesc, err := p.Tables().getMutableTableVersionByID(ctx, viewID, p.txn)
 	if err != nil {
 		log.Warningf(ctx, "unable to retrieve descriptor for view %d: %v", viewID, err)
-		return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"error resolving dependent view ID %d", viewID)
+		return nil, errors.Wrapf(err, "error resolving dependent view ID %d", viewID)
 	}
 	if behavior != tree.DropCascade {
 		viewName := viewDesc.Name

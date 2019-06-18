@@ -86,13 +86,13 @@ SELECT NULL::JSON
 ----
 NULL
 
-statement error arrays of jsonb not allowed.*\nHINT:.*23468
+statement error arrays of jsonb not allowed.*\nHINT:.*\n.*23468
 SELECT ARRAY['"hello"'::JSON]
 
-statement error arrays of jsonb not allowed.*\nHINT:.*23468
+statement error arrays of jsonb not allowed.*\nHINT:.*\n.*23468
 SELECT '{}'::JSONB[]
 
-statement error arrays of jsonb not allowed.*\nHINT:.*23468
+statement error arrays of jsonb not allowed.*\nHINT:.*\n.*23468
 CREATE TABLE x (y JSONB[])
 
 statement ok
@@ -185,7 +185,7 @@ SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON
 ----
 {"a": "b"}
 
-statement error pgcode 0A000 can't order by column type jsonb.*\nHINT.*32706
+statement error pgcode 0A000 can't order by column type jsonb.*\nHINT.*\n.*32706
 SELECT bar FROM foo ORDER BY bar
 
 statement error pgcode 0A000 column k is of type jsonb and thus is not indexable

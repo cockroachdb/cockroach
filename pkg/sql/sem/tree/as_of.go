@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -79,7 +80,7 @@ func EvalAsOfTimestamp(
 
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
 	ts, err := DatumToHLC(evalCtx, stmtTimestamp, d)
-	return ts, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "AS OF SYSTEM TIME")
+	return ts, errors.Wrap(err, "AS OF SYSTEM TIME")
 }
 
 // DatumToHLC performs the conversion from a Datum to an HLC timestamp.
@@ -143,7 +144,7 @@ func DecimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 	parts := strings.SplitN(s, ".", 2)
 	nanos, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		return hlc.Timestamp{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "parsing argument")
+		return hlc.Timestamp{}, pgerror.Wrapf(err, pgcode.Syntax, "parsing argument")
 	}
 	var logical int64
 	if len(parts) > 1 {
@@ -153,13 +154,13 @@ func DecimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 		const logicalLength = 10
 		p := parts[1]
 		if lp := len(p); lp > logicalLength {
-			return hlc.Timestamp{}, pgerror.Newf(pgerror.CodeSyntaxError, "logical part has too many digits")
+			return hlc.Timestamp{}, pgerror.Newf(pgcode.Syntax, "logical part has too many digits")
 		} else if lp < logicalLength {
 			p += strings.Repeat("0", logicalLength-lp)
 		}
 		logical, err = strconv.ParseInt(p, 10, 32)
 		if err != nil {
-			return hlc.Timestamp{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "parsing argument")
+			return hlc.Timestamp{}, pgerror.Wrapf(err, pgcode.Syntax, "parsing argument")
 		}
 	}
 	return hlc.Timestamp{

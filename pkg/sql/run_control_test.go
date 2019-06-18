@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
 
@@ -353,11 +355,8 @@ func TestCancelIfExists(t *testing.T) {
 }
 
 func isClientsideQueryCanceledErr(err error) bool {
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return pgErr.Code == pgerror.CodeQueryCanceledError
+	if pqErr, ok := errors.UnwrapAll(err).(*pq.Error); ok {
+		return pqErr.Code == pgcode.QueryCanceled
 	}
-	if pqErr, ok := err.(*pq.Error); ok {
-		return pqErr.Code == pgerror.CodeQueryCanceledError
-	}
-	return false
+	return pgerror.GetPGCode(err) == pgcode.QueryCanceled
 }

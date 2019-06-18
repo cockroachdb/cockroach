@@ -93,7 +93,7 @@ a c
 statement ok
 BEGIN
 
-query error syntax error at or near ","
+query error at or near ",": syntax error
 SELECT count(*, 1) FROM kv
 
 statement error pgcode 25P02 current transaction is aborted, commands ignored until end of transaction block

@@ -22,11 +22,12 @@
 package tree
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // SelectStatement represents any SELECT statement.
@@ -769,20 +770,20 @@ const (
 func OverrideWindowDef(base *WindowDef, override WindowDef) (WindowDef, error) {
 	// referencedSpec.Partitions is always used.
 	if len(override.Partitions) > 0 {
-		return WindowDef{}, pgerror.Newf(pgerror.CodeWindowingError, "cannot override PARTITION BY clause of window %q", base.Name)
+		return WindowDef{}, pgerror.Newf(pgcode.Windowing, "cannot override PARTITION BY clause of window %q", base.Name)
 	}
 	override.Partitions = base.Partitions
 
 	// referencedSpec.OrderBy is used if set.
 	if len(base.OrderBy) > 0 {
 		if len(override.OrderBy) > 0 {
-			return WindowDef{}, pgerror.Newf(pgerror.CodeWindowingError, "cannot override ORDER BY clause of window %q", base.Name)
+			return WindowDef{}, pgerror.Newf(pgcode.Windowing, "cannot override ORDER BY clause of window %q", base.Name)
 		}
 		override.OrderBy = base.OrderBy
 	}
 
 	if base.Frame != nil {
-		return WindowDef{}, pgerror.Newf(pgerror.CodeWindowingError, "cannot copy window %q because it has a frame clause", base.Name)
+		return WindowDef{}, pgerror.Newf(pgcode.Windowing, "cannot copy window %q because it has a frame clause", base.Name)
 	}
 
 	return override, nil
@@ -849,7 +850,7 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 	case UnboundedFollowing:
 		ctx.WriteString("UNBOUNDED FOLLOWING")
 	default:
-		panic(pgerror.AssertionFailedf("unhandled case: %d", log.Safe(node.BoundType)))
+		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node.BoundType)))
 	}
 }
 
@@ -863,7 +864,7 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 	case GROUPS:
 		ctx.WriteString("GROUPS ")
 	default:
-		panic(pgerror.AssertionFailedf("unhandled case: %d", log.Safe(node.Mode)))
+		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node.Mode)))
 	}
 	if node.Bounds.EndBound != nil {
 		ctx.WriteString("BETWEEN ")

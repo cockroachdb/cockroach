@@ -13,6 +13,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -218,7 +219,7 @@ func makePredicate(
 			// First, check if the comparison would even be valid.
 			_, found := tree.FindEqualComparisonFunction(uc.leftType, uc.rightType)
 			if !found {
-				return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+				return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 					"JOIN/USING types %s for left and %s for right cannot be matched for column %s",
 					uc.leftType, uc.rightType, uc.name,
 				)
@@ -338,7 +339,7 @@ func makeUsingColumns(
 	for _, syntaxColName := range usingColNames {
 		colName := string(syntaxColName)
 		if _, ok := seenNames[colName]; ok {
-			return nil, pgerror.Newf(pgerror.CodeDuplicateColumnError,
+			return nil, pgerror.Newf(pgcode.DuplicateColumn,
 				"column %q appears more than once in USING clause", colName)
 		}
 		seenNames[colName] = struct{}{}
@@ -380,7 +381,7 @@ func pickUsingColumn(
 		}
 	}
 	if idx == invalidColIdx {
-		return idx, nil, pgerror.Newf(pgerror.CodeUndefinedColumnError,
+		return idx, nil, pgerror.Newf(pgcode.UndefinedColumn,
 			"column \"%s\" specified in USING clause does not exist in %s table", colName, context)
 	}
 	return idx, cols[idx].Typ, nil

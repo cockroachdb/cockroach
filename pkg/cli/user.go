@@ -16,7 +16,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/lib/pq"
 	"github.com/spf13/cobra"
@@ -154,7 +154,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		if err := runQueryAndFormatResults(conn, os.Stdout,
 			makeQuery(`CREATE USER $1 PASSWORD $2`, args[0], pwdString),
 		); err != nil {
-			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == pgerror.CodeDuplicateObjectError {
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == pgcode.DuplicateObject {
 				return runQueryAndFormatResults(conn, os.Stdout,
 					makeQuery(`ALTER USER $1 WITH PASSWORD $2`, args[0], pwdString))
 			}

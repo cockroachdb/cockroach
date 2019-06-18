@@ -858,12 +858,12 @@ project
 build
 SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM kv
 ----
-error (42601): syntax error: frame end cannot be UNBOUNDED PRECEDING at or near "preceding"
+error (42601): at or near "preceding": syntax error: frame end cannot be UNBOUNDED PRECEDING
 
 build
 SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM kv
 ----
-error (42601): syntax error: frame start cannot be UNBOUNDED FOLLOWING at or near "following"
+error (42601): at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
 
 build
 SELECT

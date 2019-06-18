@@ -792,10 +792,10 @@ query error pq: could not identify column "x" in tuple{int AS a, int AS b, int A
 SELECT (((1,2,3) AS a,b,c)).x FROM tb
 
 # Missing extra parentheses
-query error pq: syntax error at or near "."
+query error at or near ".": syntax error
 SELECT ((1,2,3) AS a,b,c).x FROM tb
 
-query error pq: syntax error at or near "."
+query error at or near ".": syntax error
 SELECT ((1,2,3) AS a,b,c).* FROM tb
 
 # No labels

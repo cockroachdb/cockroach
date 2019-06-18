@@ -75,7 +75,7 @@ func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 		Typing: v.columns,
 		Header: &distsqlpb.ProducerHeader{},
 	}
-	if err := v.sd.AddMessage(m); err != nil {
+	if err := v.sd.AddMessage(ctx, m); err != nil {
 		v.MoveToDraining(err)
 		return ctx
 	}
@@ -115,7 +115,7 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetada
 				m.Data.RawBytes = v.data[0]
 				v.data = v.data[1:]
 			}
-			if err := v.sd.AddMessage(m); err != nil {
+			if err := v.sd.AddMessage(context.TODO(), m); err != nil {
 				v.MoveToDraining(err)
 				break
 			}

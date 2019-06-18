@@ -418,7 +418,7 @@ SELECT 3 FROM kv GROUP BY k HAVING v > 2
 query error column "k" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT k FROM kv HAVING k > 7
 
-query error syntax error at or near ","
+query error at or near ",": syntax error
 SELECT count(*, 1) FROM kv
 
 query I
@@ -928,7 +928,7 @@ NULL true 0 1 5
 query error FILTER specified but abs\(\) is not an aggregate function
 SELECT k, abs(k) FILTER (WHERE k=1) FROM kv
 
-query error syntax error at or near "filter"
+query error at or near "filter": syntax error
 SELECT k FILTER (WHERE k=1) FROM kv GROUP BY k
 
 query error aggregate functions are not allowed in FILTER

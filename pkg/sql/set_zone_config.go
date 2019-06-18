@@ -23,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -114,7 +116,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		case types.StringFamily:
 		case types.BytesFamily:
 		default:
-			return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 				"zone config must be of type string or bytes, not %s", typ)
 		}
 	}
@@ -128,12 +130,12 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		options = make(map[tree.Name]optionValue)
 		for _, opt := range n.Options {
 			if _, alreadyExists := options[opt.Key]; alreadyExists {
-				return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
 			}
 			req, ok := supportedZoneConfigOptions[opt.Key]
 			if !ok {
-				return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
 			}
 			if opt.Value == nil {
@@ -220,7 +222,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 			if datum == tree.DNull {
-				return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+				return pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported NULL value for %q", tree.ErrString(name))
 			}
 			setter := supportedZoneConfigOptions[*name].setter
@@ -251,11 +253,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 	if targetID != keys.SystemDatabaseID && sqlbase.IsSystemConfigID(targetID) {
-		return pgerror.Newf(pgerror.CodeCheckViolationError,
+		return pgerror.Newf(pgcode.CheckViolation,
 			`cannot set zone configs for system config tables; `+
 				`try setting your config on the entire "system" database instead`)
 	} else if targetID == keys.RootNamespaceID && deleteZone {
-		return pgerror.Newf(pgerror.CodeCheckViolationError,
+		return pgerror.Newf(pgcode.CheckViolation,
 			"cannot remove default zone")
 	}
 
@@ -365,13 +367,13 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// empty, in which case the unmarshaling will be a no-op. This is
 		// innocuous.
 		if err := yaml.UnmarshalStrict([]byte(yamlConfig), &newZone); err != nil {
-			return pgerror.Newf(pgerror.CodeCheckViolationError,
+			return pgerror.Newf(pgcode.CheckViolation,
 				"could not parse zone config: %v", err)
 		}
 
 		// Load settings from YAML into the partial zone as well.
 		if err := yaml.UnmarshalStrict([]byte(yamlConfig), &finalZone); err != nil {
-			return pgerror.Newf(pgerror.CodeCheckViolationError,
+			return pgerror.Newf(pgcode.CheckViolation,
 				"could not parse zone config: %v", err)
 		}
 
@@ -453,7 +455,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		// Finally revalidate everything. Validate only the completeZone config.
 		if err := completeZone.Validate(); err != nil {
-			return pgerror.Newf(pgerror.CodeCheckViolationError,
+			return pgerror.Newf(pgcode.CheckViolation,
 				"could not validate zone config: %v", err)
 		}
 	}
@@ -475,9 +477,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// LeasePreferences cannot be set unless Constraints are explicitly set
 	// Per-replica constraints cannot be set unless num_replicas is explicitly set
 	if err := zoneToWrite.ValidateTandemFields(); err != nil {
-		return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
-			"could not validate zone config: %v", err).SetHintf(
+		err = errors.Wrap(err, "could not validate zone config")
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		err = errors.WithHint(err,
 			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] so populate the field")
+		return err
 	}
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
 		targetID, table, zoneToWrite, execConfig, hasNewSubzones)
@@ -588,7 +592,7 @@ func validateZoneAttrsAndLocalities(
 			}
 		}
 		if !found {
-			return pgerror.Newf(pgerror.CodeCheckViolationError,
+			return pgerror.Newf(pgcode.CheckViolation,
 				"constraint %q matches no existing nodes within the cluster - did you enter it correctly?",
 				constraint)
 		}
@@ -625,7 +629,7 @@ func writeZoneConfig(
 
 	buf, err := protoutil.Marshal(zone)
 	if err != nil {
-		return 0, pgerror.Newf(pgerror.CodeCheckViolationError,
+		return 0, pgerror.Newf(pgcode.CheckViolation,
 			"could not marshal zone config: %v", err)
 	}
 	return execCfg.InternalExecutor.Exec(ctx, "update-zone", txn,

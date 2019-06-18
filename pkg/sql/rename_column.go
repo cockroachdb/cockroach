@@ -17,13 +17,14 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-var errEmptyColumnName = pgerror.New(pgerror.CodeSyntaxError, "empty column name")
+var errEmptyColumnName = pgerror.New(pgcode.Syntax, "empty column name")
 
 type renameColumnNode struct {
 	n         *tree.RenameColumn

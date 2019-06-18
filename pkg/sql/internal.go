@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -467,10 +467,10 @@ func (ie *internalExecutorImpl) execInternal(
 		// case we need to leave the error intact so that it can be retried at a
 		// higher level.
 		if retErr != nil && !errIsRetriable(retErr) {
-			retErr = pgerror.Wrapf(retErr, pgerror.CodeDataExceptionError, opName)
+			retErr = errors.Wrapf(retErr, opName)
 		}
 		if retRes.err != nil && !errIsRetriable(retRes.err) {
-			retRes.err = pgerror.Wrapf(retRes.err, pgerror.CodeDataExceptionError, opName)
+			retRes.err = errors.Wrapf(retRes.err, opName)
 		}
 	}()
 
@@ -505,7 +505,7 @@ func (ie *internalExecutorImpl) execInternal(
 				return
 			}
 		}
-		resCh <- result{err: pgerror.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
+		resCh <- result{err: errors.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
 	}
 	errCallback := func(err error) {
 		if resultsReceived {

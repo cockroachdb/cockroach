@@ -16,11 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type buildScalarCtx struct {
@@ -143,11 +142,11 @@ func (b *Builder) indexedVar(
 		if b.nullifyMissingVarExprs > 0 {
 			expr, err := tree.ReType(tree.DNull, md.ColumnMeta(colID).Type)
 			if err != nil {
-				panic(pgerror.AssertionFailedf("unexpected failure during ReType: %v", err))
+				panic(errors.AssertionFailedf("unexpected failure during ReType: %v", err))
 			}
 			return expr
 		}
-		panic(pgerror.AssertionFailedf("cannot map variable %d to an indexed var", log.Safe(colID)))
+		panic(errors.AssertionFailedf("cannot map variable %d to an indexed var", log.Safe(colID)))
 	}
 	return ctx.ivh.IndexedVarWithType(idx, md.ColumnMeta(colID).Type)
 }
@@ -216,7 +215,7 @@ func (b *Builder) buildBoolean(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree
 		return b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
 
 	default:
-		panic(pgerror.AssertionFailedf("invalid op %s", log.Safe(scalar.Op())))
+		panic(errors.AssertionFailedf("invalid op %s", log.Safe(scalar.Op())))
 	}
 }
 
@@ -429,7 +428,7 @@ func (b *Builder) buildArrayFlatten(
 	// The subquery here should always be uncorrelated: if it were not, we would
 	// have converted it to an aggregation.
 	if !af.Input.Relational().OuterCols.Empty() {
-		panic(pgerror.AssertionFailedf("input to ArrayFlatten should be uncorrelated"))
+		panic(errors.AssertionFailedf("input to ArrayFlatten should be uncorrelated"))
 	}
 
 	root, err := b.buildRelational(af.Input)
@@ -657,7 +656,7 @@ func isVar(expr tree.Expr) bool {
 	case tree.VariableExpr:
 		return true
 	case *tree.Placeholder:
-		panic(pgerror.AssertionFailedf("placeholder should have been replaced"))
+		panic(errors.AssertionFailedf("placeholder should have been replaced"))
 	}
 	return false
 }

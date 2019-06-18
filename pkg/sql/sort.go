@@ -15,13 +15,15 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // sortNode represents a node that sorts the rows returned by its
@@ -226,10 +228,10 @@ func (n *sortNode) Close(ctx context.Context) {
 
 func ensureColumnOrderable(c sqlbase.ResultColumn) error {
 	if c.Typ.Family() == types.ArrayFamily {
-		return pgerror.UnimplementedWithIssuef(32707, "can't order by column type %s", c.Typ)
+		return unimplemented.NewWithIssuef(32707, "can't order by column type %s", c.Typ)
 	}
 	if c.Typ.Family() == types.JsonFamily {
-		return pgerror.UnimplementedWithIssue(32706, "can't order by column type jsonb")
+		return unimplemented.NewWithIssue(32706, "can't order by column type jsonb")
 	}
 	return nil
 }
@@ -366,7 +368,7 @@ func (p *planner) rewriteIndexOrderings(
 			for _, id := range idxDesc.ExtraColumnIDs {
 				col, err := desc.FindColumnByID(id)
 				if err != nil {
-					return nil, pgerror.AssertionFailedf("column with ID %d not found", id)
+					return nil, errors.AssertionFailedf("column with ID %d not found", id)
 				}
 
 				newOrderBy = append(newOrderBy, &tree.Order{
@@ -412,7 +414,7 @@ func (p *planner) colIndex(numOriginalCols int, expr tree.Expr, context string) 
 			ord = val
 		} else {
 			return -1, pgerror.Newf(
-				pgerror.CodeSyntaxError,
+				pgcode.Syntax,
 				"non-integer constant in %s: %s", context, expr,
 			)
 		}
@@ -422,17 +424,17 @@ func (p *planner) colIndex(numOriginalCols int, expr tree.Expr, context string) 
 		}
 	case *tree.StrVal:
 		return -1, pgerror.Newf(
-			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
+			pgcode.Syntax, "non-integer constant in %s: %s", context, expr,
 		)
 	case tree.Datum:
 		return -1, pgerror.Newf(
-			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
+			pgcode.Syntax, "non-integer constant in %s: %s", context, expr,
 		)
 	}
 	if ord != -1 {
 		if ord < 1 || ord > int64(numOriginalCols) {
 			return -1, pgerror.Newf(
-				pgerror.CodeInvalidColumnReferenceError,
+				pgcode.InvalidColumnReference,
 				"%s position %s is not in select list", context, expr,
 			)
 		}

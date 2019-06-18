@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -335,7 +336,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *distsqlpb.P
 			h.storedSide = side
 			if sqlbase.IsOutOfMemoryError(err) {
 				if !h.useTempStorage {
-					err = pgerror.Wrapf(err, pgerror.CodeOutOfMemoryError,
+					err = pgerror.Wrapf(err, pgcode.OutOfMemory,
 						"error while attempting hashJoiner disk spill: temp storage disabled")
 				} else {
 					if err := h.initStoredRows(); err != nil {
@@ -346,7 +347,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *distsqlpb.P
 					if addErr == nil {
 						return hjConsumingStoredSide, nil, nil
 					}
-					err = pgerror.Wrapf(addErr, pgerror.CodeOutOfMemoryError, "while spilling: %v", err)
+					err = pgerror.Wrapf(addErr, pgcode.OutOfMemory, "while spilling: %v", err)
 				}
 			}
 			h.MoveToDraining(err)

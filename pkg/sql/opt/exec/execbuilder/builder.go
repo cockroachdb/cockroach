@@ -16,10 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
@@ -74,11 +73,13 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 			// error checks everywhere throughout the code. This is only possible
 			// because the code does not update shared state and does not manipulate
 			// locks.
-			if pgErr, ok := r.(*pgerror.Error); ok {
-				err = pgErr
-			} else {
-				panic(r)
+			if e, ok := r.(error); ok {
+				err = e
+				return
 			}
+			// Other panic objects can't be considered "safe" and thus are
+			// propagated as crashes that terminate the session.
+			panic(r)
 		}
 	}()
 
@@ -92,7 +93,7 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 func (b *Builder) build(e opt.Expr) (exec.Node, error) {
 	rel, ok := e.(memo.RelExpr)
 	if !ok {
-		return nil, pgerror.AssertionFailedf("building execution for non-relational operator %s", log.Safe(e.Op()))
+		return nil, errors.AssertionFailedf("building execution for non-relational operator %s", log.Safe(e.Op()))
 	}
 	plan, err := b.buildRelational(rel)
 	if err != nil {
@@ -107,7 +108,7 @@ func (b *Builder) build(e opt.Expr) (exec.Node, error) {
 func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
 	scalar, ok := b.e.(opt.ScalarExpr)
 	if !ok {
-		return nil, pgerror.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", log.Safe(b.e.Op()))
+		return nil, errors.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", log.Safe(b.e.Op()))
 	}
 	ctx := buildScalarCtx{ivh: *ivh}
 	for i := 0; i < ivh.NumVars(); i++ {

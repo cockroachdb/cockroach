@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -133,14 +133,13 @@ func (b *Builder) Build() (err error) {
 			// adding lots of checks for `if err != nil` throughout the code. This is
 			// only possible because the code does not update shared state and does
 			// not manipulate locks.
-			switch e := r.(type) {
-			case builderError:
-				err = e.error
-			case *pgerror.Error:
+			if e, ok := r.(error); ok {
 				err = e
-			default:
-				panic(r)
+				return
 			}
+			// Other panic objects can't be considered "safe" and thus are
+			// propagated as crashes that terminate the session.
+			panic(r)
 		}
 	}()
 
@@ -161,18 +160,24 @@ func (b *Builder) Build() (err error) {
 
 // builderError is used to wrap errors returned by various external APIs that
 // occur during the build process. It exists for us to be able to panic on these
-// errors and then catch them inside Builder.Build even if they are not
-// pgerror.Error.
+// errors and then catch them inside Builder.Build.
 type builderError struct {
-	error
+	error error
 }
+
+// builderError are errors.
+func (b builderError) Error() string { return b.error.Error() }
+
+// Cause implements the causer interface. This is used so that builderErrors
+// can be peeked through by the common error facilities.
+func (b builderError) Cause() error { return b.error }
 
 // unimplementedWithIssueDetailf formats according to a format
 // specifier and returns a Postgres error with the
 // pg code FeatureNotSupported, wrapped in a
 // builderError.
 func unimplementedWithIssueDetailf(issue int, detail, format string, args ...interface{}) error {
-	return pgerror.UnimplementedWithIssueDetailf(issue, detail, format, args...)
+	return unimplemented.NewWithIssueDetailf(issue, detail, format, args...)
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL

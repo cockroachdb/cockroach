@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -39,7 +41,7 @@ func (ex *connExecutor) execPrepare(
 	if parseCmd.Name != "" {
 		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[parseCmd.Name]; ok {
 			err := pgerror.Newf(
-				pgerror.CodeDuplicatePreparedStatementError,
+				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", parseCmd.Name,
 			)
 			return retErr(err)
@@ -272,7 +274,7 @@ func (ex *connExecutor) execBind(
 	if portalName != "" {
 		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
 			return retErr(pgerror.Newf(
-				pgerror.CodeDuplicateCursorError, "portal %q already exists", portalName))
+				pgcode.DuplicateCursor, "portal %q already exists", portalName))
 		}
 	} else {
 		// Deallocate the unnamed portal, if it exists.
@@ -282,7 +284,7 @@ func (ex *connExecutor) execBind(
 	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
 	if !ok {
 		return retErr(pgerror.Newf(
-			pgerror.CodeInvalidSQLStatementNameError,
+			pgcode.InvalidSQLStatementName,
 			"unknown prepared statement %q", bindCmd.PreparedStatementName))
 	}
 
@@ -342,12 +344,8 @@ func (ex *connExecutor) execBind(
 			} else {
 				d, err := pgwirebase.DecodeOidDatum(ptCtx, t, qArgFormatCodes[i], arg)
 				if err != nil {
-					if _, ok := pgerror.GetPGCause(err); ok {
-						return retErr(err)
-					}
-					return retErr(pgerror.Wrapf(err, pgerror.CodeProtocolViolationError,
+					return retErr(pgerror.Wrapf(err, pgcode.ProtocolViolation,
 						"error in argument for %s", k))
-
 				}
 				qargs[k] = d
 			}
@@ -467,7 +465,7 @@ func (ex *connExecutor) execDescribe(
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[descCmd.Name]
 		if !ok {
 			return retErr(pgerror.Newf(
-				pgerror.CodeInvalidSQLStatementNameError,
+				pgcode.InvalidSQLStatementName,
 				"unknown prepared statement %q", descCmd.Name))
 		}
 
@@ -482,7 +480,7 @@ func (ex *connExecutor) execDescribe(
 		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[descCmd.Name]
 		if !ok {
 			return retErr(pgerror.Newf(
-				pgerror.CodeInvalidCursorNameError, "unknown portal %q", descCmd.Name))
+				pgcode.InvalidCursorName, "unknown portal %q", descCmd.Name))
 		}
 
 		if stmtHasNoData(portal.Stmt.AST) {
@@ -491,8 +489,8 @@ func (ex *connExecutor) execDescribe(
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)
 		}
 	default:
-		return retErr(pgerror.AssertionFailedf(
-			"unknown describe type: %s", log.Safe(descCmd.Type)))
+		return retErr(errors.AssertionFailedf(
+			"unknown describe type: %s", errors.Safe(descCmd.Type)))
 	}
 	return nil, nil
 }

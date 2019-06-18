@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -140,7 +140,7 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		if err != nil {
 			if pqerr, ok := err.(*pq.Error); ok {
 				// Output Postgres error code if it's available.
-				if pqerr.Code == pgerror.CodeCrashShutdownError {
+				if pqerr.Code == pgcode.CrashShutdown {
 					return crasher{
 						sql:    sql,
 						err:    err,
@@ -481,7 +481,7 @@ var ignoredErrorPatterns = []string{
 	"invalid destination encoding name",
 	"invalid IP format",
 	"invalid format code",
-	`.*val\(\): syntax error at or near`,
+	`.*val\(\): syntax error`,
 	"invalid source encoding name",
 	"strconv.Atoi: parsing .*: invalid syntax",
 	"field position .* must be greater than zero",

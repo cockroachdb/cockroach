@@ -20,19 +20,17 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"runtime/debug"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -45,9 +43,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -530,9 +528,15 @@ func (c *conn) processCommandsAsync(
 			if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
 				if r := recover(); r != nil {
 					// Catch the panic and return it to the client as an error.
-					pge := pgerror.Newf(pgerror.CodeCrashShutdownError, "caught fatal error: %v", r)
-					pge.Detail = string(debug.Stack())
-					retErr = pge
+					if err, ok := r.(error); ok {
+						// Mask the cause but keep the details.
+						retErr = errors.Handled(err)
+					} else {
+						retErr = errors.Newf("%+v", r)
+					}
+					retErr = pgerror.WithCandidateCode(retErr, pgcode.CrashShutdown)
+					// Add a prefix. This also adds a stack trace.
+					retErr = errors.Wrap(retErr, "caught fatal error")
 					_ = writeErr(
 						ctx, &sqlServer.GetExecutorConfig().Settings.SV, retErr,
 						&c.msgBuilder, &c.writerState.buf)
@@ -1029,36 +1033,6 @@ func (fi *flushInfo) registerCmd(pos sql.CmdPos) {
 	fi.cmdStarts[pos] = fi.buf.Len()
 }
 
-// convertToErrWithPGCode recognizes errs that should have SQL error codes to be
-// reported to the client and converts err to them. If this doesn't apply, err
-// is returned.
-// Note that this returns a new error, and details from the original error are
-// not preserved in any way (except possibly the message).
-//
-// TODO(andrei): sqlbase.ConvertBatchError() seems to serve similar purposes, but
-// it's called from more specialized contexts. Consider unifying the two.
-func convertToErrWithPGCode(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	// If the error was wrapped, get to the cause. Otherwise the cast
-	// below will not see what's really happening.
-	wrappedErr := errors.Cause(err)
-
-	switch wrappedErr.(type) {
-	case *roachpb.TransactionRetryWithProtoRefreshError:
-		return sqlbase.NewRetryError(err)
-	case *roachpb.AmbiguousResultError:
-		// TODO(andrei): Once DistSQL starts executing writes, we'll need a
-		// different mechanism to marshal AmbiguousResultErrors from the executing
-		// nodes.
-		return sqlbase.NewStatementCompletionUnknownError(err)
-	default:
-		return err
-	}
-}
-
 func cookTag(tagStr string, buf []byte, stmtType tree.StatementType, rowsAffected int) []byte {
 	if tagStr == "INSERT" {
 		// From the postgres docs (49.5. Message Formats):
@@ -1184,44 +1158,31 @@ func (c *conn) bufferEmptyQueryResponse() {
 func writeErr(
 	ctx context.Context, sv *settings.Values, err error, msgBuilder *writeBuffer, w io.Writer,
 ) error {
+	// Record telemetry for the error.
 	sqltelemetry.RecordError(ctx, err, sv)
+
+	// Now send the error to the client.
+	pgErr := pgerror.Flatten(err)
+
 	msgBuilder.initMsg(pgwirebase.ServerMsgErrorResponse)
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
 	msgBuilder.writeTerminatedString("ERROR")
 
-	pgErr, ok := pgerror.GetPGCause(err)
-	var code string
-	if ok {
-		code = pgErr.Code
-	} else {
-		// The error was not decorated as an pgerror.Error. We don't know
-		// its code, in fact we don't know pretty much anything about it.
-		// We're going to let it flow to the user as a XXUUU error.
-		// We don't use CodeInternalError here (XX000) because internal
-		// errors have gain special status "please tell us about it
-		// ASAP" in CockroachDB.
-		code = pgerror.CodeUncategorizedError
-		// However, we'll keep track of the number of occurrences in
-		// telemetry. Over time, we'll want this count to go down
-		// (i.e. more errors becoming qualified).
-		telemetry.Inc(sqltelemetry.UncategorizedErrorCounter)
-	}
-
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSQLState)
-	msgBuilder.writeTerminatedString(code)
+	msgBuilder.writeTerminatedString(pgErr.Code)
 
-	if ok && pgErr.Detail != "" {
+	if pgErr.Detail != "" {
 		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFileldDetail)
 		msgBuilder.writeTerminatedString(pgErr.Detail)
 	}
 
-	if ok && pgErr.Hint != "" {
+	if pgErr.Hint != "" {
 		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFileldHint)
 		msgBuilder.writeTerminatedString(pgErr.Hint)
 	}
 
-	if ok && pgErr.Source != nil {
+	if pgErr.Source != nil {
 		errCtx := pgErr.Source
 		if errCtx.File != "" {
 			msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSrcFile)
@@ -1240,7 +1201,7 @@ func writeErr(
 	}
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldMsgPrimary)
-	msgBuilder.writeTerminatedString(err.Error())
+	msgBuilder.writeTerminatedString(pgErr.Message)
 
 	msgBuilder.nullTerminate()
 	return msgBuilder.finishMsg(w)

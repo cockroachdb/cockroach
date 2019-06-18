@@ -16,6 +16,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -76,7 +77,7 @@ func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 
 // CannotWriteToComputedColError constructs a write error for a computed column.
 func CannotWriteToComputedColError(colName string) error {
-	return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
+	return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 		"cannot write directly to computed column %q", tree.ErrNameString(colName))
 }
 

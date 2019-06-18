@@ -19,11 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // excludedTableName is the name of a special Upsert data source. When a row
@@ -367,7 +369,7 @@ func (mb *mutationBuilder) needExistingRows() bool {
 // list of table columns that are the target of the Insert operation.
 func (mb *mutationBuilder) addTargetNamedColsForInsert(names tree.NameList) {
 	if len(mb.targetColList) != 0 {
-		panic(pgerror.AssertionFailedf("addTargetNamedColsForInsert cannot be called more than once"))
+		panic(errors.AssertionFailedf("addTargetNamedColsForInsert cannot be called more than once"))
 	}
 
 	// Add target table columns by the names specified in the Insert statement.
@@ -401,7 +403,7 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 			continue
 		}
 
-		panic(pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
+		panic(pgerror.Newf(pgcode.InvalidForeignKey,
 			"missing %q primary key column", col.ColName()))
 	}
 }
@@ -463,11 +465,11 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 		case 0:
 			// Do nothing.
 		case 1:
-			panic(pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			panic(pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing value for column %q in multi-part foreign key", missingCols[0]))
 		default:
 			sort.Strings(missingCols)
-			panic(pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			panic(pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing values for columns %q in multi-part foreign key", missingCols))
 		}
 	}
@@ -485,7 +487,7 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 // columns.
 func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	if len(mb.targetColList) != 0 {
-		panic(pgerror.AssertionFailedf("addTargetTableColsForInsert cannot be called more than once"))
+		panic(errors.AssertionFailedf("addTargetTableColsForInsert cannot be called more than once"))
 	}
 
 	// Only consider non-mutation columns, since mutation columns are hidden from
@@ -983,7 +985,7 @@ func (mb *mutationBuilder) ensureUniqueConflictCols(cols tree.NameList) cat.Inde
 			return index
 		}
 	}
-	panic(pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
+	panic(pgerror.Newf(pgcode.InvalidColumnReference,
 		"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 }
 
