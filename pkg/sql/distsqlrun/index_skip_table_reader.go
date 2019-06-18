@@ -164,7 +164,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		// the range info we get after each scan
 		if !t.ignoreMisplannedRanges {
 			ranges := misplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.flowCtx.nodeID)
-			if ranges != nil {
+			if len(ranges) != 0 {
 				for _, r := range ranges {
 					t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
 				}
@@ -237,7 +237,7 @@ func (t *indexSkipTableReader) generateTrailingMeta(
 func (t *indexSkipTableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !t.ignoreMisplannedRanges {
-		if len(t.misplannedRanges) != 0 {
+		if t.misplannedRanges != nil && len(t.misplannedRanges) != 0 {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: t.misplannedRanges})
 		}
 	}
