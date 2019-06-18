@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -175,7 +176,7 @@ func TestConn(t *testing.T) {
 	expectSync(ctx, t, &rd)
 
 	// Test that parse error turns into SendError.
-	expectSendError(ctx, t, pgerror.CodeSyntaxError, &rd, conn)
+	expectSendError(ctx, t, pgcode.Syntax, &rd, conn)
 
 	clientWG.Done()
 
@@ -547,12 +548,8 @@ func expectSendError(
 		t.Fatalf("%s: expected command SendError, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
 	}
 
-	pg, ok := se.Err.(*pgerror.Error)
-	if !ok {
-		t.Fatalf("expected pgerror, got %T (%s)", se.Err, se.Err)
-	}
-	if pg.Code != pgErrCode {
-		t.Fatalf("expected code %s, got: %s", pgErrCode, pg.Code)
+	if code := pgerror.GetPGCode(se.Err); code != pgErrCode {
+		t.Fatalf("expected code %s, got: %s", pgErrCode, code)
 	}
 
 	if err := finishQuery(execPortal, c); err != nil {

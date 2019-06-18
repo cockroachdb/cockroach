@@ -18,13 +18,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 type planMaker interface {
@@ -341,7 +344,7 @@ func (p *planner) makePlan(ctx context.Context) error {
 	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.New(pgerror.CodeFeatureNotSupportedError,
+			return pgerror.New(pgcode.FeatureNotSupported,
 				"cached plan must not change result type")
 		}
 	}
@@ -587,14 +590,14 @@ func (p *planner) newPlan(
 	canModifySchema := tree.CanModifySchema(stmt)
 	if canModifySchema {
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
-			return nil, pgerror.UnimplementedWithIssuef(26508,
+			return nil, unimplemented.NewWithIssuef(26508,
 				"schema change statement cannot follow a statement that has written in the same transaction: %v", err)
 		}
 	}
 
 	if p.EvalContext().TxnReadOnly {
 		if canModifySchema || tree.CanWriteData(stmt) {
-			return nil, pgerror.Newf(pgerror.CodeReadOnlySQLTransactionError,
+			return nil, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 				"cannot execute %s in a read-only transaction", stmt.StatementTag())
 		}
 	}
@@ -722,7 +725,7 @@ func (p *planner) newPlan(
 	case *tree.ValuesClauseWithNames:
 		return p.Values(ctx, n, desiredTypes)
 	case tree.CCLOnlyStatement:
-		return nil, pgerror.Newf(pgerror.CodeCCLRequired,
+		return nil, pgerror.Newf(pgcode.CCLRequired,
 			"a CCL binary is required to use this statement type: %T", stmt)
 	default:
 		var catalog optCatalog
@@ -735,7 +738,7 @@ func (p *planner) newPlan(
 		if newStmt != nil {
 			return p.newPlan(ctx, newStmt, nil /* desiredTypes */)
 		}
-		return nil, pgerror.AssertionFailedf("unknown statement type: %T", stmt)
+		return nil, errors.AssertionFailedf("unknown statement type: %T", stmt)
 	}
 }
 

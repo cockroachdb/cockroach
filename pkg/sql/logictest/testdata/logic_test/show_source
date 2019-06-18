@@ -326,10 +326,10 @@ SELECT field, replace(message, e'\n', ' ') AS message FROM [SHOW SYNTAX 'foo']
  WHERE field != 'line'
 ----
 field     message
-error     syntax error at or near "foo"
+error     at or near "foo": syntax error
 code      42601
-file      sql/parser/show_syntax.go
-function  RunShowSyntax
+file      lexer.go
+function  Error
 detail    source SQL: foo ^
 
 

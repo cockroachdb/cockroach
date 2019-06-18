@@ -18,13 +18,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 //
@@ -208,16 +210,17 @@ type virtualDefEntry struct {
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
 
-var errInvalidDbPrefix = pgerror.New(pgerror.CodeUndefinedObjectError,
-	"cannot access virtual schema in anonymous database",
-).SetHintf("verify that the current database is set")
+var errInvalidDbPrefix = errors.WithHint(
+	pgerror.New(pgcode.UndefinedObject,
+		"cannot access virtual schema in anonymous database"),
+	"verify that the current database is set")
 
 func newInvalidVirtualSchemaError() error {
-	return pgerror.AssertionFailedf("virtualSchema cannot have both the populate and generator functions defined")
+	return errors.AssertionFailedf("virtualSchema cannot have both the populate and generator functions defined")
 }
 
 func newInvalidVirtualDefEntryError() error {
-	return pgerror.AssertionFailedf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
+	return errors.AssertionFailedf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
 }
 
 // getPlanInfo returns the column metadata and a constructor for a new
@@ -320,13 +323,13 @@ func NewVirtualSchemaHolder(
 			tableDesc, err := def.initVirtualTableDesc(ctx, st, id)
 
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to initialize %s", log.Safe(def.getSchema()))
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to initialize %s", errors.Safe(def.getSchema()))
 			}
 
 			if schema.tableValidator != nil {
 				if err := schema.tableValidator(&tableDesc); err != nil {
-					return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "programmer error")
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programmer error")
 				}
 			}
 
@@ -397,7 +400,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 			return t, nil
 		}
 		if _, ok := db.allTableNames[tableName]; ok {
-			return virtualDefEntry{}, pgerror.Unimplementedf(tn.Schema()+"."+tableName,
+			return virtualDefEntry{}, unimplemented.Newf(tn.Schema()+"."+tableName,
 				"virtual schema table not implemented: %s.%s", tn.Schema(), tableName)
 		}
 		return virtualDefEntry{}, sqlbase.NewUndefinedRelationError(tn)

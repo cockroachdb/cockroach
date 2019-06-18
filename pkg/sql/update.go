@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -25,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 var updateNodePool = sync.Pool{
@@ -196,7 +199,7 @@ func (p *planner) Update(
 				if !requestedColSet.Contains(int(colID)) {
 					col, err := desc.FindColumnByID(colID)
 					if err != nil {
-						return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+						return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 							"error finding column %d in table %s",
 							colID, desc.Name)
 					}
@@ -345,7 +348,7 @@ func (p *planner) Update(
 				currentUpdateIdx += len(setExpr.Names)
 
 			default:
-				return nil, pgerror.AssertionFailedf("assigning to tuple with expression that is neither a tuple nor a subquery: %s", setExpr.Expr)
+				return nil, errors.AssertionFailedf("assigning to tuple with expression that is neither a tuple nor a subquery: %s", setExpr.Expr)
 			}
 
 		} else {
@@ -645,8 +648,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 			d, err := u.run.computeExprs[i].Eval(params.EvalContext())
 			if err != nil {
 				params.EvalContext().IVarContainer = nil
-				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-					"computed column %s", tree.ErrString((*tree.Name)(&u.run.computedCols[i].Name)))
+				return errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&u.run.computedCols[i].Name)))
 			}
 			u.run.updateValues[u.run.updateColsIdx[u.run.computedCols[i].ID]] = d
 		}
@@ -874,12 +876,12 @@ func (p *planner) namesForExprs(
 				n = len(t.D)
 			}
 			if n < 0 {
-				return nil, nil, pgerror.UnimplementedWithIssueDetailf(35713,
+				return nil, nil, unimplemented.NewWithIssueDetailf(35713,
 					fmt.Sprintf("%T", expr.Expr),
 					"source for a multiple-column UPDATE item must be a sub-SELECT or ROW() expression; not supported: %T", expr.Expr)
 			}
 			if len(expr.Names) != n {
-				return nil, nil, pgerror.Newf(pgerror.CodeSyntaxError,
+				return nil, nil, pgerror.Newf(pgcode.Syntax,
 					"number of columns (%d) does not match number of values (%d)", len(expr.Names), n)
 			}
 		}

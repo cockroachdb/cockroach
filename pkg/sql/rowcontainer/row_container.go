@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -468,7 +469,7 @@ func (f *DiskBackedRowContainer) UsingDisk() bool {
 // memory error. Returns whether the DiskBackedRowContainer spilled to disk and
 // an error if one occurred while doing so.
 func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
-	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+	if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
 		return false, nil
 	}
 	if spillErr := f.SpillToDisk(ctx); spillErr != nil {

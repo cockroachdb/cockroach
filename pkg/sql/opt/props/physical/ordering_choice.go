@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // OrderingChoice defines the set of possible row orderings that are provided or
@@ -123,7 +123,7 @@ func ParseOrderingChoice(s string) OrderingChoice {
 	//     matches[2]: opt(5,6)
 	matches := optRegex.FindStringSubmatch(s)
 	if matches == nil {
-		panic(pgerror.AssertionFailedf("could not parse ordering choice: %s", s))
+		panic(errors.AssertionFailedf("could not parse ordering choice: %s", s))
 	}
 
 	// Handle Any case.
@@ -189,11 +189,11 @@ func ParseOrderingChoice(s string) OrderingChoice {
 func ParseOrdering(str string) opt.Ordering {
 	prov := ParseOrderingChoice(str)
 	if !prov.Optional.Empty() {
-		panic(pgerror.AssertionFailedf("invalid ordering %s", str))
+		panic(errors.AssertionFailedf("invalid ordering %s", str))
 	}
 	for i := range prov.Columns {
 		if prov.Columns[i].Group.Len() != 1 {
-			panic(pgerror.AssertionFailedf("invalid ordering %s", str))
+			panic(errors.AssertionFailedf("invalid ordering %s", str))
 		}
 	}
 	return prov.ToOrdering()
@@ -398,7 +398,7 @@ func (oc *OrderingChoice) Intersection(other *OrderingChoice) OrderingChoice {
 			right++
 
 		default:
-			panic(pgerror.AssertionFailedf("non-intersecting sets"))
+			panic(errors.AssertionFailedf("non-intersecting sets"))
 		}
 	}
 	// An ordering matched a prefix of the other. Append the tail of the other
@@ -624,7 +624,7 @@ func (oc *OrderingChoice) ProjectCols(cols opt.ColSet) {
 		if !oc.Columns[i].Group.SubsetOf(cols) {
 			oc.Columns[i].Group = oc.Columns[i].Group.Intersection(cols)
 			if oc.Columns[i].Group.Empty() {
-				panic(pgerror.AssertionFailedf("no columns left from group"))
+				panic(errors.AssertionFailedf("no columns left from group"))
 			}
 		}
 	}
@@ -716,7 +716,7 @@ func (oc OrderingChoice) Format(buf *bytes.Buffer) {
 func (oc *OrderingColumnChoice) AnyID() opt.ColumnID {
 	id, ok := oc.Group.Next(0)
 	if !ok {
-		panic(pgerror.AssertionFailedf("column choice group should have at least one column id"))
+		panic(errors.AssertionFailedf("column choice group should have at least one column id"))
 	}
 	return opt.ColumnID(id)
 }

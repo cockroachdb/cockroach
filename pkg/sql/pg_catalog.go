@@ -24,13 +24,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 	"golang.org/x/text/collate"
 )
 
@@ -771,7 +770,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					}
 					columnIDs := con.Index.ColumnIDs
 					if int(con.FK.SharedPrefixLen) > len(columnIDs) {
-						return pgerror.AssertionFailedf(
+						return errors.AssertionFailedf(
 							"foreign key %q's SharedPrefixLen (%d) is greater than the columns in the index (%d)",
 							con.FK.Name,
 							con.FK.SharedPrefixLen,

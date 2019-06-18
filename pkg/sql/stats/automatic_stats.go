@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // AutoStatsClusterSettingName is the name of the automatic stats collection
@@ -54,7 +55,7 @@ var AutomaticStatisticsMaxIdleTime = settings.RegisterValidatedFloatSetting(
 	0.9,
 	func(val float64) error {
 		if val < 0 || val >= 1 {
-			return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+			return pgerror.Newf(pgcode.InvalidParameterValue,
 				"sql.stats.automatic_collection.max_fraction_idle must be >= 0 and < 1 but found: %v", val)
 		}
 		return nil
@@ -424,8 +425,7 @@ func (r *Refresher) maybeRefreshStats(
 	}
 
 	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
-		pgerr, ok := errors.Cause(err).(*pgerror.Error)
-		if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
+		if errors.Is(err, ConcurrentCreateStatsError) {
 			// Another stats job was already running. Attempt to reschedule this
 			// refresh.
 			if mustRefresh {
@@ -550,3 +550,15 @@ func (r autoStatsRand) randInt(n int64) int64 {
 	defer r.Unlock()
 	return r.Int63n(n)
 }
+
+type concurrentCreateStatisticsError struct{}
+
+var _ error = concurrentCreateStatisticsError{}
+
+func (concurrentCreateStatisticsError) Error() string {
+	return "another CREATE STATISTICS job is already running"
+}
+
+// ConcurrentCreateStatsError is reported when two CREATE STATISTICS jobs
+// are issued concurrently. This is a sentinel error.
+var ConcurrentCreateStatsError error = concurrentCreateStatisticsError{}

@@ -17,12 +17,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ConvertToColumnOrdering converts an Ordering type (as defined in data.proto)
@@ -128,7 +129,7 @@ func (e Expression) String() string {
 
 // String implements fmt.Stringer.
 func (e *Error) String() string {
-	if err := e.ErrorDetail(); err != nil {
+	if err := e.ErrorDetail(context.TODO()); err != nil {
 		return err.Error()
 	}
 	return "<nil>"
@@ -137,43 +138,44 @@ func (e *Error) String() string {
 // NewError creates an Error from an error, to be sent on the wire. It will
 // recognize certain errors and marshall them accordingly, and everything
 // unrecognized is turned into a PGError with code "internal".
-func NewError(err error) *Error {
-	// Unwrap the error, to attain the cause.
-	// Otherwise, Wrap() may hide the roachpb error
-	// from the cast attempt below.
-	origErr := err
-	err = errors.Cause(err)
+func NewError(ctx context.Context, err error) *Error {
+	resErr := &Error{}
 
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	}
+	// Encode the full error to the best of our ability.
+	// This field is ignored by 19.1 nodes and prior.
+	fullError := errors.EncodeError(ctx, err)
+	resErr.FullError = &fullError
 
-	switch e := err.(type) {
+	// Now populate compatibility fields for 19.1 nodes.
+	// TODO(knz): Remove this code in the 19.3 release.
+	cause := errors.UnwrapAll(err)
+	switch e := cause.(type) {
 	case *roachpb.UnhandledRetryableError:
-		return &Error{Detail: &Error_RetryableTxnError{RetryableTxnError: e}}
+		resErr.Detail = &Error_RetryableTxnError{RetryableTxnError: e}
 	case *roachpb.NodeUnavailableError:
-		// Node failures are common enough that we shouldn't fail with
-		// assertion errors upon them. Simply signal them in a way that
-		// may make sense to a client.
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.Newf(pgerror.CodeRangeUnavailable, "%v", e),
-			},
-		}
+		err = pgerror.WithCandidateCode(err, pgcode.RangeUnavailable)
+		resErr.Detail = &Error_PGError{PGError: pgerror.Flatten(err)}
 	default:
-		// Anything unrecognized is an "internal error".
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.AssertionFailedf(
-					"uncaught error: %+v", origErr)}}
+		err = errors.NewAssertionErrorWithWrappedErrf(err, "uncaught error")
+		resErr.Detail = &Error_PGError{PGError: pgerror.Flatten(err)}
 	}
+	return resErr
 }
 
 // ErrorDetail returns the payload as a Go error.
-func (e *Error) ErrorDetail() error {
+func (e *Error) ErrorDetail(ctx context.Context) error {
 	if e == nil {
 		return nil
 	}
+
+	if e.FullError != nil {
+		// If there's a 19.2-forward full error, decode and use that.
+		// This will reveal a fully causable detailed error structure.
+		return errors.DecodeError(ctx, *e.FullError)
+	}
+
+	// Fallback to pre-19.2 logic.
+	// TODO(knz): Remove in 19.3.
 	switch t := e.Detail.(type) {
 	case *Error_PGError:
 		return t.PGError
@@ -183,7 +185,7 @@ func (e *Error) ErrorDetail() error {
 		// We're receiving an error we don't know about. It's all right,
 		// it's still an error, just one we didn't expect. Let it go
 		// through. We'll pick it up in reporting.
-		return pgerror.AssertionFailedf("unknown error detail type: %+v", t)
+		return errors.AssertionFailedf("unknown error detail type: %+v", t)
 	}
 }
 
@@ -212,7 +214,9 @@ type ProducerMetadata struct {
 
 // RemoteProducerMetaToLocalMeta converts a RemoteProducerMetadata struct to
 // ProducerMetadata and returns whether the conversion was successful or not.
-func RemoteProducerMetaToLocalMeta(rpm RemoteProducerMetadata) (ProducerMetadata, bool) {
+func RemoteProducerMetaToLocalMeta(
+	ctx context.Context, rpm RemoteProducerMetadata,
+) (ProducerMetadata, bool) {
 	var meta ProducerMetadata
 	switch v := rpm.Value.(type) {
 	case *RemoteProducerMetadata_RangeInfo:
@@ -226,7 +230,7 @@ func RemoteProducerMetaToLocalMeta(rpm RemoteProducerMetadata) (ProducerMetadata
 	case *RemoteProducerMetadata_SamplerProgress_:
 		meta.SamplerProgress = v.SamplerProgress
 	case *RemoteProducerMetadata_Error:
-		meta.Err = v.Error.ErrorDetail()
+		meta.Err = v.Error.ErrorDetail(ctx)
 	default:
 		return meta, false
 	}
@@ -235,7 +239,9 @@ func RemoteProducerMetaToLocalMeta(rpm RemoteProducerMetadata) (ProducerMetadata
 
 // LocalMetaToRemoteProducerMeta converts a ProducerMetadata struct to
 // RemoteProducerMetadata.
-func LocalMetaToRemoteProducerMeta(meta ProducerMetadata) RemoteProducerMetadata {
+func LocalMetaToRemoteProducerMeta(
+	ctx context.Context, meta ProducerMetadata,
+) RemoteProducerMetadata {
 	var rpm RemoteProducerMetadata
 	if meta.Ranges != nil {
 		rpm.Value = &RemoteProducerMetadata_RangeInfo{
@@ -263,7 +269,7 @@ func LocalMetaToRemoteProducerMeta(meta ProducerMetadata) RemoteProducerMetadata
 		}
 	} else {
 		rpm.Value = &RemoteProducerMetadata_Error{
-			Error: NewError(meta.Err),
+			Error: NewError(ctx, meta.Err),
 		}
 	}
 	return rpm

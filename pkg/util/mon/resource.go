@@ -12,7 +12,11 @@
 
 package mon
 
-import "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
+)
 
 // Resource is an interface used to abstract the specifics of tracking bytes
 // usage by different types of resources.
@@ -31,13 +35,13 @@ var MemoryResource Resource = memoryResource{}
 func (m memoryResource) NewBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
-	return pgerror.Newf(
-		pgerror.CodeOutOfMemoryError,
-		"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
-		requestedBytes,
-		reservedBytes,
-		budgetBytes,
-	)
+	return pgerror.WithCandidateCode(
+		errors.Newf(
+			"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
+			errors.Safe(requestedBytes),
+			errors.Safe(reservedBytes),
+			errors.Safe(budgetBytes),
+		), pgcode.OutOfMemory)
 }
 
 // diskResource is a Resource that represents disk.
@@ -51,11 +55,11 @@ var DiskResource Resource = diskResource{}
 func (d diskResource) NewBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
-	return pgerror.Newf(
-		pgerror.CodeDiskFullError,
-		"disk budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
-		requestedBytes,
-		reservedBytes,
-		budgetBytes,
-	)
+	return pgerror.WithCandidateCode(
+		errors.Newf(
+			"disk budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
+			errors.Safe(requestedBytes),
+			errors.Safe(reservedBytes),
+			errors.Safe(budgetBytes),
+		), pgcode.DiskFull)
 }

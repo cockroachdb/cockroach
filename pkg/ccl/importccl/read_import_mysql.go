@@ -22,14 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	mysqltypes "vitess.io/vitess/go/sqltypes"
 	mysql "vitess.io/vitess/go/vt/sqlparser"
 )
@@ -625,18 +625,18 @@ func mysqlColToCockroach(
 		def.Type = types.Jsonb
 
 	case mysqltypes.Set:
-		return nil, pgerror.UnimplementedWithIssueHint(32560,
+		return nil, unimplemented.NewWithIssueHint(32560,
 			"cannot import SET columns at this time",
 			"try converting the column to a 64-bit integer before import")
 	case mysqltypes.Geometry:
-		return nil, pgerror.UnimplementedWithIssuef(32559,
+		return nil, unimplemented.NewWithIssuef(32559,
 			"cannot import GEOMETRY columns at this time")
 	case mysqltypes.Bit:
-		return nil, pgerror.UnimplementedWithIssueHint(32561,
+		return nil, unimplemented.NewWithIssueHint(32561,
 			"cannot improt BIT columns at this time",
 			"try converting the column to a 64-bit integer before import")
 	default:
-		return nil, pgerror.Unimplementedf(fmt.Sprintf("import.mysqlcoltype.%s", typ), "unsupported mysql type %q", col.Type)
+		return nil, unimplemented.Newf(fmt.Sprintf("import.mysqlcoltype.%s", typ), "unsupported mysql type %q", col.Type)
 	}
 
 	if col.NotNull {
@@ -652,7 +652,7 @@ func mysqlColToCockroach(
 		} else {
 			expr, err := parser.ParseExpr(exprString)
 			if err != nil {
-				return nil, pgerror.Unimplementedf("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
+				return nil, unimplemented.Newf("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
 			}
 			def.DefaultExpr.Expr = expr
 		}

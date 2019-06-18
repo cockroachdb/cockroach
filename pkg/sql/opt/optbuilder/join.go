@@ -16,12 +16,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // buildJoin builds a set of memo groups that represent the given join table
@@ -50,7 +52,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		flags.DisallowHashJoin = true
 		flags.DisallowMergeJoin = true
 		if joinType != sqlbase.InnerJoin && joinType != sqlbase.LeftOuterJoin {
-			panic(pgerror.Newf(pgerror.CodeSyntaxError,
+			panic(pgerror.Newf(pgcode.Syntax,
 				"%s can only be used with INNER or LEFT joins", tree.AstLookup,
 			))
 		}
@@ -62,7 +64,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 
 	default:
 		panic(pgerror.Newf(
-			pgerror.CodeFeatureNotSupportedError, "join hint %s not supported", join.Hint,
+			pgcode.FeatureNotSupported, "join hint %s not supported", join.Hint,
 		))
 	}
 
@@ -108,7 +110,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		return outScope
 
 	default:
-		panic(pgerror.AssertionFailedf("unsupported join condition %#v", cond))
+		panic(errors.AssertionFailedf("unsupported join condition %#v", cond))
 	}
 }
 
@@ -137,7 +139,7 @@ func (b *Builder) validateJoinTableNames(leftScope, rightScope *scope) {
 			}
 
 			panic(pgerror.Newf(
-				pgerror.CodeDuplicateAliasError,
+				pgcode.DuplicateAlias,
 				"source name %q specified more than once (missing AS clause)",
 				tree.ErrString(&leftName.TableName),
 			))
@@ -183,7 +185,7 @@ func (b *Builder) constructJoin(
 	case sqlbase.FullOuterJoin:
 		return b.factory.ConstructFullJoin(left, right, on, private)
 	default:
-		panic(pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
 			"unsupported JOIN type %d", joinType))
 	}
 }
@@ -297,7 +299,7 @@ func (jb *usingJoinBuilder) buildUsingJoin(using *tree.UsingJoinCond) {
 		}
 		if seenCols.Contains(leftCol.id) {
 			// Same name exists more than once in USING column name list.
-			panic(pgerror.Newf(pgerror.CodeDuplicateColumnError,
+			panic(pgerror.Newf(pgcode.DuplicateColumn,
 				"column %q appears more than once in USING clause", tree.ErrString(&name)))
 		}
 		seenCols.Add(leftCol.id)
@@ -416,7 +418,7 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 	// First, check if the comparison would even be valid.
 	if !leftCol.typ.Equivalent(rightCol.typ) {
 		if _, found := tree.FindEqualComparisonFunction(leftCol.typ, rightCol.typ); !found {
-			panic(pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+			panic(pgerror.Newf(pgcode.DatatypeMismatch,
 				"JOIN/USING types %s for left and %s for right cannot be matched for column %q",
 				leftCol.typ, rightCol.typ, tree.ErrString(&leftCol.name)))
 		}
@@ -460,11 +462,11 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 }
 
 func (jb *usingJoinBuilder) raiseDuplicateColError(name tree.Name) {
-	panic(pgerror.Newf(pgerror.CodeDuplicateColumnError,
+	panic(pgerror.Newf(pgcode.DuplicateColumn,
 		"duplicate column name: %q", tree.ErrString(&name)))
 }
 
 func (jb *usingJoinBuilder) raiseUndefinedColError(name tree.Name, context string) {
-	panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
+	panic(pgerror.Newf(pgcode.UndefinedColumn,
 		"column \"%s\" specified in USING clause does not exist in %s table", name, context))
 }

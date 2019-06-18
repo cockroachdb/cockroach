@@ -19,12 +19,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // mutationBuilder is a helper struct that supports building Insert, Update,
@@ -248,7 +251,7 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 	// Ensure that the name list does not contain duplicates.
 	colID := mb.tabID.ColumnID(ord)
 	if mb.targetColSet.Contains(colID) {
-		panic(pgerror.Newf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgcode.Syntax,
 			"multiple assignments to the same column %q", tabCol.ColName()))
 	}
 	mb.targetColSet.Add(colID)
@@ -595,7 +598,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			scopeOrd := mb.mapToReturnScopeOrd(i)
 			if scopeOrd == -1 {
-				panic(pgerror.AssertionFailedf("column %d is not available in the mutation input", i))
+				panic(errors.AssertionFailedf("column %d is not available in the mutation input", i))
 			}
 			private.ReturnCols[i] = mb.outScope.cols[scopeOrd].id
 		}
@@ -696,7 +699,7 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 		} else {
 			kw = "UPSERT"
 		}
-		panic(pgerror.Newf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgcode.Syntax,
 			"%s has more %s than %s, %d expressions for %d targets",
 			kw, more, less, actual, expected))
 	}
@@ -746,7 +749,7 @@ func findNotNullIndexCol(index cat.Index) int {
 			return indexCol.Ordinal
 		}
 	}
-	panic(pgerror.AssertionFailedf("should have found not null column in index"))
+	panic(errors.AssertionFailedf("should have found not null column in index"))
 }
 
 // resultsNeeded determines whether a statement that might have a RETURNING
@@ -758,7 +761,7 @@ func resultsNeeded(r tree.ReturningClause) bool {
 	case *tree.ReturningNothing, *tree.NoReturningClause:
 		return false
 	default:
-		panic(pgerror.AssertionFailedf("unexpected ReturningClause type: %T", t))
+		panic(errors.AssertionFailedf("unexpected ReturningClause type: %T", t))
 	}
 }
 
@@ -781,7 +784,7 @@ func getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName) {
 	}
 	tn, ok := n.(*tree.TableName)
 	if !ok {
-		panic(pgerror.Unimplemented(
+		panic(unimplemented.New(
 			"complex table expression in UPDATE/DELETE",
 			"cannot use a complex table name with DELETE/UPDATE"))
 	}
@@ -801,7 +804,7 @@ func checkDatumTypeFitsColumnType(col cat.Column, typ *types.T) {
 	}
 
 	colName := string(col.ColName())
-	panic(pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+	panic(pgerror.Newf(pgcode.DatatypeMismatch,
 		"value type %s doesn't match type %s of column %q",
 		typ, col.DatumType(), tree.ErrNameString(colName)))
 }

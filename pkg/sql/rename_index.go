@@ -16,13 +16,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-var errEmptyIndexName = pgerror.New(pgerror.CodeSyntaxError, "empty index name")
+var errEmptyIndexName = pgerror.New(pgcode.Syntax, "empty index name")
 
 type renameIndexNode struct {
 	n         *tree.RenameIndex

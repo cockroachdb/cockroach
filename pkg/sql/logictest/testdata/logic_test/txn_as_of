@@ -242,7 +242,7 @@ SET TRANSACTION AS OF SYSTEM TIME '2019-01-01'
 statement ok
 SAVEPOINT cockroach_restart;
 
-statement error pq: syntax error at or near "selct"
+statement error at or near "selct": syntax error
 SELCT;
 
 statement ok

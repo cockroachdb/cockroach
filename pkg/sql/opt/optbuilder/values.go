@@ -16,6 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -69,7 +70,7 @@ func (b *Builder) buildValuesClause(
 			if colTypes[i].Family() == types.UnknownFamily {
 				colTypes[i] = *typ
 			} else if typ.Family() != types.UnknownFamily && !typ.Equivalent(&colTypes[i]) {
-				panic(pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+				panic(pgerror.Newf(pgcode.DatatypeMismatch,
 					"VALUES types %s and %s cannot be matched", typ, &colTypes[i]))
 			}
 		}
@@ -95,7 +96,7 @@ func (b *Builder) buildValuesClause(
 
 func reportValuesLenError(expected, actual int) {
 	panic(pgerror.Newf(
-		pgerror.CodeSyntaxError,
+		pgcode.Syntax,
 		"VALUES lists must all be the same length, expected %d columns, found %d",
 		expected, actual))
 }

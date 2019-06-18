@@ -4,8 +4,9 @@ statement error unimplemented
 SELECT * FROM system.users FOR UPDATE
 
 query TI colnames
-SELECT * FROM crdb_internal.feature_usage
- WHERE feature_name LIKE '%#6583%'
+SELECT *
+  FROM crdb_internal.feature_usage
+ WHERE feature_name LIKE '%syntax.#6583%'
 ----
 feature_name                usage_count
 unimplemented.syntax.#6583  1

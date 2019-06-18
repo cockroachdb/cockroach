@@ -121,14 +121,14 @@ func (m *outbox) addRow(
 	mustFlush := false
 	var encodingErr error
 	if meta != nil {
-		m.encoder.AddMetadata(*meta)
+		m.encoder.AddMetadata(ctx, *meta)
 		// If we hit an error, let's forward it ASAP. The consumer will probably
 		// close.
 		mustFlush = meta.Err != nil
 	} else {
 		encodingErr = m.encoder.AddRow(row)
 		if encodingErr != nil {
-			m.encoder.AddMetadata(distsqlpb.ProducerMetadata{Err: encodingErr})
+			m.encoder.AddMetadata(ctx, distsqlpb.ProducerMetadata{Err: encodingErr})
 			mustFlush = true
 		}
 	}

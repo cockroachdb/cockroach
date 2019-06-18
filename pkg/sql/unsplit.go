@@ -17,12 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type unsplitNode struct {
@@ -134,7 +135,7 @@ func (n *unsplitNode) startExec(params runParams) error {
 	stickyBitEnabled := params.EvalContext().Settings.Version.IsActive(cluster.VersionStickyBit)
 	// TODO(jeffreyxiao): Remove this error in v20.1.
 	if !stickyBitEnabled {
-		return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
+		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			`UNSPLIT AT requires all nodes to be upgraded to %s`,
 			cluster.VersionByKey(cluster.VersionCreateStats),
 		)
@@ -164,7 +165,7 @@ func (n *unsplitNode) Next(params runParams) (bool, error) {
 	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
 		ctx := tree.NewFmtCtx(tree.FmtSimple)
 		row.Format(ctx)
-		return false, pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "could not UNSPLIT AT %s", ctx)
+		return false, errors.Wrapf(err, "could not UNSPLIT AT %s", ctx)
 	}
 
 	n.run.lastUnsplitKey = rowKey

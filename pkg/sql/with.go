@@ -16,10 +16,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // This file contains the implementation of common table expressions. See
@@ -75,7 +77,7 @@ func popCteNameEnvironment(p *planner) error {
 				return err
 			}
 			if seenMutation {
-				return pgerror.UnimplementedWithIssuef(24307,
+				return unimplemented.NewWithIssuef(24307,
 					"common table expression %q with side effects was not used in query", alias)
 			}
 		}
@@ -110,7 +112,7 @@ func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planne
 		for _, cte := range with.CTEList {
 			if _, ok := frame[cte.Name.Alias]; ok {
 				return nil, pgerror.Newf(
-					pgerror.CodeDuplicateAliasError,
+					pgcode.DuplicateAlias,
 					"WITH query name %s specified more than once",
 					cte.Name.Alias)
 			}
@@ -148,7 +150,7 @@ func (p *planner) getCTEDataSource(tn *tree.TableName) (planDataSource, bool, er
 				// TODO(jordan): figure out how to lift this restriction.
 				// CTE expressions that are used more than once will need to be
 				// pre-evaluated like subqueries, I think.
-				return planDataSource{}, false, pgerror.UnimplementedWithIssuef(21084,
+				return planDataSource{}, false, unimplemented.NewWithIssuef(21084,
 					"unsupported multiple use of CTE clause %q", tree.ErrString(tn))
 			}
 			cteSource.used = true
@@ -156,7 +158,7 @@ func (p *planner) getCTEDataSource(tn *tree.TableName) (planDataSource, bool, er
 			plan := cteSource.plan
 			cols := planColumns(plan)
 			if len(cols) == 0 {
-				return planDataSource{}, false, pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
+				return planDataSource{}, false, pgerror.Newf(pgcode.FeatureNotSupported,
 					"WITH clause %q does not have a RETURNING clause", tree.ErrString(tn))
 			}
 			dataSource := planDataSource{

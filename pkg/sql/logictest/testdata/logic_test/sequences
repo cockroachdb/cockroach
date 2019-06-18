@@ -84,10 +84,10 @@ statement ok
 CREATE SEQUENCE high_minvalue_test MINVALUE 5
 
 # Test unimplemented syntax.
-statement error unimplemented at or near "EOF"
+statement error at or near "EOF": syntax error: unimplemented
 CREATE SEQUENCE err_test AS INT2
 
-statement error unimplemented at or near "EOF"
+statement error at or near "EOF": syntax error: unimplemented
 CREATE SEQUENCE err_test OWNED BY someuser
 
 # Verify validation of START vs MINVALUE/MAXVALUE.
@@ -302,7 +302,7 @@ statement error pgcode 42809 "kv" is not a sequence
 SELECT nextval('kv')
 
 # Parse errors in the argument to nextval are handled.
-statement error pq: nextval\(\): syntax error at or near "@"
+statement error pq: nextval\(\): at or near "@": syntax error
 SELECT nextval('@#%@!324234')
 
 # You can create and find sequences from other databases.

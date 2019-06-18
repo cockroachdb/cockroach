@@ -15,7 +15,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // FindInlinableConstants returns the set of input columns that are synthesized
@@ -109,7 +109,7 @@ func (c *CustomFuncs) extractColumn(input memo.RelExpr, col opt.ColumnID) opt.Sc
 			}
 		}
 	}
-	panic(pgerror.AssertionFailedf("could not find column to extract"))
+	panic(errors.AssertionFailedf("could not find column to extract"))
 }
 
 // HasDuplicateRefs returns true if the target projection expressions or
@@ -276,7 +276,7 @@ func (c *CustomFuncs) inlineProjections(e opt.Expr, projections memo.Projections
 		case memo.RelExpr:
 			if !c.OuterCols(t).Empty() {
 				// Should have prevented this in HasDuplicateRefs/HasCorrelatedSubquery.
-				panic(pgerror.AssertionFailedf("cannot inline references within correlated subqueries"))
+				panic(errors.AssertionFailedf("cannot inline references within correlated subqueries"))
 			}
 
 			// No projections references possible, since there are no outer cols.

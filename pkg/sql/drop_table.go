@@ -19,13 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type dropTableNode struct {
@@ -204,7 +203,7 @@ func (p *planner) canRemoveInterleave(
 	// non-public state for referential integrity of the `InterleaveDescriptor`
 	// pointers.
 	if behavior != tree.DropCascade {
-		return pgerror.UnimplementedWithIssuef(
+		return unimplemented.NewWithIssuef(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
 	return p.CheckPrivilege(ctx, table, privilege.CREATE)
@@ -385,8 +384,8 @@ func (p *planner) initiateDropTable(
 		}
 
 		if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-			return pgerror.NewAssertionErrorWithWrappedErrf(err,
-				"failed to mark job %d as as successful", log.Safe(jobID))
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to mark job %d as as successful", errors.Safe(jobID))
 		}
 	}
 

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -162,7 +163,7 @@ func getSink(
 		var fileSize int64 = 16 << 20 // 16MB
 		if fileSizeParam != `` {
 			if fileSize, err = humanizeutil.ParseBytes(fileSizeParam); err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, `parsing %s`, fileSizeParam)
+				return nil, pgerror.Wrapf(err, pgcode.Syntax, `parsing %s`, fileSizeParam)
 			}
 		}
 		u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
@@ -373,13 +374,13 @@ func makeKafkaSink(
 	var err error
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
 	if err != nil {
-		err = pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
+		err = pgerror.Wrapf(err, pgcode.CannotConnectNow,
 			`connecting to kafka: %s`, bootstrapServers)
 		return nil, err
 	}
 	sink.producer, err = sarama.NewAsyncProducerFromClient(sink.client)
 	if err != nil {
-		err = pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
+		err = pgerror.Wrapf(err, pgcode.CannotConnectNow,
 			`connecting to kafka: %s`, bootstrapServers)
 		return nil, err
 	}

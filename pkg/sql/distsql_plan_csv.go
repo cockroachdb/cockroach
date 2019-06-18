@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -37,8 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/pkg/errors"
 )
 
 // ExportPlanResultTypes is the result types for EXPORT plans.
@@ -68,8 +67,7 @@ func PlanAndRunExport(
 
 	p, err := dsp.createPlanForNode(planCtx, in)
 	if err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"constructing distSQL plan")
+		return errors.Wrapf(err, "constructing distSQL plan")
 	}
 
 	p.AddNoGroupingStage(

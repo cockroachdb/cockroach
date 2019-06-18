@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -433,7 +434,7 @@ func (n *UnresolvedName) ResolveFunction(
 		// The Star part of the condition is really an assertion. The
 		// parser should not have let this star propagate to a point where
 		// this method is called.
-		return nil, pgerror.Newf(pgerror.CodeInvalidNameError,
+		return nil, pgerror.Newf(pgcode.InvalidName,
 			"invalid function name: %s", n)
 	}
 
@@ -480,7 +481,7 @@ func (n *UnresolvedName) ResolveFunction(
 				extraMsg = fmt.Sprintf(", but %s() exists", rdef.Name)
 			}
 			return nil, pgerror.Newf(
-				pgerror.CodeUndefinedFunctionError, "unknown function: %s()%s", ErrString(n), extraMsg)
+				pgcode.UndefinedFunction, "unknown function: %s()%s", ErrString(n), extraMsg)
 		}
 	}
 
@@ -488,14 +489,14 @@ func (n *UnresolvedName) ResolveFunction(
 }
 
 func newInvColRef(fmt string, n *UnresolvedName) error {
-	return pgerror.NewWithDepthf(1, pgerror.CodeInvalidColumnReferenceError, fmt, n)
+	return pgerror.NewWithDepthf(1, pgcode.InvalidColumnReference, fmt, n)
 }
 
 func newInvTableNameError(n fmt.Stringer) error {
-	return pgerror.NewWithDepthf(1, pgerror.CodeInvalidNameError,
+	return pgerror.NewWithDepthf(1, pgcode.InvalidName,
 		"invalid table name: %s", n)
 }
 
 func newSourceNotFoundError(fmt string, args ...interface{}) error {
-	return pgerror.NewWithDepthf(1, pgerror.CodeUndefinedTableError, fmt, args...)
+	return pgerror.NewWithDepthf(1, pgcode.UndefinedTable, fmt, args...)
 }

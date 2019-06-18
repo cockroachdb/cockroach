@@ -16,9 +16,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // This file provides reference implementations of the schema accessor
@@ -81,7 +81,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 			return sqlbase.NewImmutableTableDescriptor(*t.desc), nil
 		}
 		if _, ok := scEntry.allTableNames[tableName]; ok {
-			return nil, pgerror.Unimplementedf(name.Schema()+"."+tableName,
+			return nil, unimplemented.Newf(name.Schema()+"."+tableName,
 				"virtual schema table not implemented: %s.%s", name.Schema(), tableName)
 		}
 

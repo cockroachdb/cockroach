@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -49,7 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/net/trace"
 )
 
@@ -737,7 +738,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
 		ev := eventNonRetriableErr{IsCommit: fsm.FromBool(true)}
-		payload := eventNonRetriableErrPayload{err: pgerror.Newf(pgerror.CodeAdminShutdownError,
+		payload := eventNonRetriableErrPayload{err: pgerror.Newf(pgcode.AdminShutdown,
 			"connExecutor closing")}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
@@ -1213,7 +1214,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[tcmd.Name]
 		if !ok {
 			err := pgerror.Newf(
-				pgerror.CodeInvalidCursorNameError, "unknown portal %q", tcmd.Name)
+				pgcode.InvalidCursorName, "unknown portal %q", tcmd.Name)
 			ev = eventNonRetriableErr{IsCommit: fsm.False}
 			payload = eventNonRetriableErrPayload{err: err}
 			res = ex.clientComm.CreateErrorResult(pos)
@@ -1426,17 +1427,17 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			nextPos = pos + 1
 		case rewind:
 			if advInfo.rewCap.rewindPos != ex.extraTxnState.txnRewindPos {
-				return pgerror.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"unexpected rewind position: %d when txn start is: %d",
-					log.Safe(advInfo.rewCap.rewindPos),
-					log.Safe(ex.extraTxnState.txnRewindPos))
+					errors.Safe(advInfo.rewCap.rewindPos),
+					errors.Safe(ex.extraTxnState.txnRewindPos))
 			}
 			// txnRewindPos stays unchanged.
 			return nil
 		default:
-			return pgerror.AssertionFailedf(
+			return errors.AssertionFailedf(
 				"unexpected advance code when starting a txn: %s",
-				log.Safe(advInfo.code))
+				errors.Safe(advInfo.code))
 		}
 		ex.setTxnRewindPos(ctx, nextPos)
 	} else {
@@ -1672,7 +1673,7 @@ func isCommit(stmt tree.Statement) bool {
 }
 
 func errIsRetriable(err error) bool {
-	err = errors.Cause(err)
+	err = errors.UnwrapAll(err)
 	_, retriable := err.(*roachpb.TransactionRetryWithProtoRefreshError)
 	return retriable
 }
@@ -1724,12 +1725,12 @@ func (ex *connExecutor) setTransactionModes(
 		}
 	}
 	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
-		return pgerror.AssertionFailedf(
-			"unknown isolation level: %s", log.Safe(modes.Isolation))
+		return errors.AssertionFailedf(
+			"unknown isolation level: %s", errors.Safe(modes.Isolation))
 	}
 	rwMode := modes.ReadWriteMode
 	if modes.AsOf.Expr != nil && (asOfTs == hlc.Timestamp{}) {
-		return pgerror.AssertionFailedf("expected an evaluated AS OF timestamp")
+		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
 	if (asOfTs != hlc.Timestamp{}) {
 		ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs)
@@ -1753,7 +1754,7 @@ func priorityToProto(mode tree.UserPriority) (roachpb.UserPriority, error) {
 	case tree.High:
 		pri = roachpb.MaxUserPriority
 	default:
-		return roachpb.UserPriority(0), pgerror.AssertionFailedf("unknown user priority: %s", log.Safe(mode))
+		return roachpb.UserPriority(0), errors.AssertionFailedf("unknown user priority: %s", errors.Safe(mode))
 	}
 	return pri, nil
 }
@@ -1938,7 +1939,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 					" generated even though res.Err() has been set to: %s",
 				res.Err())
 			log.Error(ex.Ctx(), err)
-			err.(errorutil.UnexpectedWithIssueErr).SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV)
+			errorutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
 			return advanceInfo{}, err
 		}
 		scc := &ex.extraTxnState.schemaChangers
@@ -1970,11 +1971,18 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 					// This situation is sufficiently serious that we cannot let
 					// the error that caused the schema change to fail flow back
 					// to the client as-is. We replace it by a custom code
-					// dedicated to this situation.
-					newErr := pgerror.Newf(
-						pgerror.CodeTransactionCommittedWithSchemaChangeFailure,
-						"%v", schemaChangeErr).SetHintf(
-						"Some of the non-DDL statements may have committed successfully, but some of the DDL statement(s) failed.\n" +
+					// dedicated to this situation. Replacement occurs
+					// because this error code is a "serious error" and the code
+					// computation logic will give it a higher priority.
+					//
+					// We also print out the original error code as prefix of
+					// the error message, in case it was a serious error.
+					newErr := pgerror.Wrapf(schemaChangeErr,
+						pgcode.TransactionCommittedWithSchemaChangeFailure,
+						"transaction committed but schema change aborted with error: (%s)",
+						pgerror.GetPGCode(schemaChangeErr))
+					newErr = errors.WithHint(newErr,
+						"Some of the non-DDL statements may have committed successfully, but some of the DDL statement(s) failed.\n"+
 							"Manual inspection may be required to determine the actual state of the database.")
 					res.SetError(newErr)
 				}
@@ -1990,8 +1998,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			return advanceInfo{}, err
 		}
 	default:
-		return advanceInfo{}, pgerror.AssertionFailedf(
-			"unexpected event: %v", log.Safe(advInfo.txnEvent))
+		return advanceInfo{}, errors.AssertionFailedf(
+			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
 	}
 
 	return advInfo, nil

@@ -18,8 +18,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/errors"
+	"github.com/kr/pretty"
 )
 
 // f formats an error.
@@ -29,6 +30,7 @@ func f(format string, e *Error) string {
 
 // m checks a match against a single regexp.
 func m(t *testing.T, s, re string) {
+	t.Helper()
 	matched, err := regexp.MatchString(re, s)
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +42,7 @@ func m(t *testing.T, s, re string) {
 
 // ml checks a match against an array of regexps.
 func ml(t *testing.T, s string, re []string) {
+	t.Helper()
 	lines := strings.Split(s, "\n")
 	for i := 0; i < len(lines) && i < len(re); i++ {
 		matched, err := regexp.MatchString(re[i], lines[i])
@@ -57,6 +60,7 @@ func ml(t *testing.T, s string, re []string) {
 
 // eq checks a string equality.
 func eq(t *testing.T, s, exp string) {
+	t.Helper()
 	if s != exp {
 		t.Errorf("got %q, expected %q", s, exp)
 	}
@@ -68,19 +72,19 @@ func TestInternalError(t *testing.T) {
 		fn   func(*testing.T, *Error)
 	}
 
-	const ie = internalErrorPrefix
+	const ie = "internal error: "
 
 	testData := []struct {
 		err   error
 		preds []pred
 	}{
 		{
-			AssertionFailedf("woo %s", "waa"),
+			errors.AssertionFailedf("woo %s", "waa"),
 			[]pred{
 				// Verify that the information is captured.
 				{"basefields", func(t *testing.T, e *Error) {
 					eq(t, e.Message, ie+"woo waa")
-					eq(t, e.Code, CodeInternalError)
+					eq(t, e.Code, pgcode.Internal)
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
 					ml(t, e.Detail, []string{"stack trace:",
@@ -90,12 +94,9 @@ func TestInternalError(t *testing.T) {
 
 				// Verify that internal errors carry safe details.
 				{"safedetail", func(t *testing.T, e *Error) {
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go:\d+: woo %s \| string$`)
-					st, _ := log.DecodeStackTrace(e.SafeDetail[0].EncodedStackTrace)
-					sst := log.PrintStackTrace(st)
-					ml(t, sst, []string{
-						`.*internal_errors_test.go.*TestInternalError\(\)`,
-						".*testing.go.*tRunner"})
+					m(t, e.SafeDetail[0].SafeMessage, `.*TestInternalError.*`)
+					m(t, e.SafeDetail[1].SafeMessage, `woo %s`)
+					m(t, e.SafeDetail[2].SafeMessage, `arg 0: string`)
 				}},
 
 				// Verify that formatting works.
@@ -103,81 +104,60 @@ func TestInternalError(t *testing.T) {
 					eq(t, f("%v", e), ie+"woo waa")
 					eq(t, f("%s", e), ie+"woo waa")
 					eq(t, f("%#v", e), "(XX000) "+ie+"woo waa")
-					ml(t,
-						f("%+v", e),
-						[]string{
-							// Heading line: source, code, error message.
-							`.*internal_errors_test.go:\d+ in TestInternalError\(\): \(XX000\) ` +
-								ie + "woo waa",
-							// Safe details follow.
-							"-- detail --",
-							// Safe message.
-							`internal_errors_test.go:\d+: woo %s \| string`,
-							// Stack trace.
-							".*internal_errors_test.go.*TestInternalError.*",
-							".*testing.go.*tRunner.*"})
+					vErr := f("%+v", e)
+					m(t, vErr,
+						// Heading line: source, code, error message.
+						`.*internal_errors_test.go:\d+ in TestInternalError\(\): \(XX000\) `+
+							ie+"woo waa")
+					// Safe message.
+					m(t, vErr, "woo %s")
+					m(t, vErr, "arg 0: string")
 				}},
 			},
 		},
 		{
-			AssertionFailedf("safe %s", log.Safe("waa")),
+			errors.AssertionFailedf("safe %s", errors.Safe("waa")),
 			[]pred{
 				// Verify that safe details are preserved.
 				{"safedetail", func(t *testing.T, e *Error) {
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go:\d+: safe %s \| waa$`)
+					m(t, e.SafeDetail[1].SafeMessage, `safe %s`)
+					m(t, e.SafeDetail[2].SafeMessage, `arg 0: waa`)
 				}},
 			},
 		},
 		{
 			// Check that the non-formatting constructor preserves the
 			// format spec without making a mess.
-			New(CodeSyntaxError, "syn %s"),
+			New(pgcode.Syntax, "syn %s"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					eq(t, e.Message, "syn %s")
-					eq(t, e.Code, CodeSyntaxError)
+					eq(t, e.Code, pgcode.Syntax)
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
-				}},
-				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
-					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
 				}},
 			},
 		},
 		{
 			// Check that a wrapped pgerr with errors.Wrap is wrapped properly.
-			Wrap(errors.Wrap(makeNormal(), "wrapA"), CodeSyntaxError, "wrapB"),
+			Wrap(errors.Wrap(makeNormal(), "wrapA"), pgcode.Syntax, "wrapB"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
-					eq(t, e.Code, CodeSyntaxError)
+					eq(t, e.Code, pgcode.Syntax)
 					eq(t, e.Message, "wrapB: wrapA: syn")
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "makeNormal")
 				}},
-				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
-					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
-				}},
 			},
 		},
 		{
 			// Check that a wrapped internal error with errors.Wrap is wrapped properly.
-			Wrap(errors.Wrap(makeBoo(), "wrapA"), CodeSyntaxError, "wrapB"),
+			Wrap(errors.Wrap(makeBoo(), "wrapA"), pgcode.Syntax, "wrapB"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
-					eq(t, e.Code, CodeInternalError)
-					// errors.Wrap does not strip the "internal error" prefix
-					// inside the wrapped error. But we're still adding on the
-					// outside.  This is expected.
-					eq(t, e.Message, ie+"wrapB: wrapA: "+ie+"boo")
+					eq(t, e.Code, pgcode.Internal)
+					eq(t, e.Message, ie+"wrapB: wrapA: boo")
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "makeBoo")
@@ -188,86 +168,67 @@ func TestInternalError(t *testing.T) {
 						`stack trace:`,
 						`.*makeBoo.*`,
 					})
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go:\d+: boo \| string`)
-					m(t, e.SafeDetail[1].SafeMessage, `.*errors.withMessage`)
+					m(t, e.SafeDetail[0].SafeMessage, pgcode.Syntax)
 				}},
 			},
 		},
 		{
 			// Check that Wrapf respects the original code for regular errors.
-			Wrapf(New(CodeSyntaxError, "syn foo"), CodeAdminShutdownError, "wrap %s", "waa"),
+			Wrapf(New(pgcode.Syntax, "syn foo"), pgcode.AdminShutdown, "wrap %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrap waa: syn foo")
 					// Original code is preserved.
-					eq(t, e.Code, CodeSyntaxError)
+					eq(t, e.Code, pgcode.Syntax)
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
-				}},
-				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
-					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
 				}},
 			},
 		},
 		{
 			// Check that Wrapf around a regular fmt.Error makes sense.
-			Wrapf(fmt.Errorf("fmt err"), CodeAdminShutdownError, "wrap %s", "waa"),
+			Wrapf(fmt.Errorf("fmt err"), pgcode.AdminShutdown, "wrap %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrap waa: fmt err")
 					// New code was added.
-					eq(t, e.Code, CodeAdminShutdownError)
+					eq(t, e.Code, pgcode.AdminShutdown)
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
-				}},
-				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
-					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
 				}},
 			},
 		},
 		{
 			// Check that Wrap does the same thing
-			Wrap(fmt.Errorf("fmt err"), CodeAdminShutdownError, "wrapx waa"),
+			Wrap(fmt.Errorf("fmt err"), pgcode.AdminShutdown, "wrapx waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrapx waa: fmt err")
 					// New code was added.
-					eq(t, e.Code, CodeAdminShutdownError)
+					eq(t, e.Code, pgcode.AdminShutdown)
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
 				}},
 				{"no-details", func(t *testing.T, e *Error) {
-					// Simple errors do not store stack trace details.
 					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
 				}},
 			},
 		},
 		{
 			// Check that Wrapf around an error.Wrap extracts something useful.
-			Wrapf(errors.Wrap(fmt.Errorf("fmt"), "wrap1"), CodeAdminShutdownError, "wrap2 %s", "waa"),
+			Wrapf(errors.Wrap(fmt.Errorf("fmt"), "wrap1"), pgcode.AdminShutdown, "wrap2 %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrap2 waa: wrap1: fmt")
 					// New code was added.
-					eq(t, e.Code, CodeAdminShutdownError)
+					eq(t, e.Code, pgcode.AdminShutdown)
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -275,9 +236,6 @@ func TestInternalError(t *testing.T) {
 				{"no-details", func(t *testing.T, e *Error) {
 					// Simple errors do not store stack trace details.
 					eq(t, e.Detail, "")
-					if len(e.SafeDetail) > 0 {
-						t.Errorf("expected no details, got %+v", e.SafeDetail)
-					}
 				}},
 			},
 		},
@@ -289,7 +247,7 @@ func TestInternalError(t *testing.T) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, ie+"wrap woo: boo")
 					// Internal error was preserved.
-					eq(t, e.Code, CodeInternalError)
+					eq(t, e.Code, pgcode.Internal)
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "makeBoo")
@@ -302,30 +260,25 @@ func TestInternalError(t *testing.T) {
 							".*makeBoo.*",
 							".*TestInternalError.*",
 							".*tRunner.*",
-							"",
-							// Followed by the wrap stack trace underneath.
-							"stack trace:",
-							".*doWrap",
-							".*TestInternalError",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go.*boo \| string`)
-					m(t, e.SafeDetail[0].EncodedStackTrace, "makeBoo")
-					m(t, e.SafeDetail[1].SafeMessage, `internal_errors_test.go.*wrap %s \| string`)
-					m(t, e.SafeDetail[1].EncodedStackTrace, "doWrap")
+					m(t, e.SafeDetail[0].SafeMessage, pgcode.AdminShutdown)
+					m(t, e.SafeDetail[2].SafeMessage, `wrap %s`)
+					m(t, e.SafeDetail[3].SafeMessage, `arg 0: string`)
+					m(t, e.SafeDetail[5].SafeMessage, `boo`)
 				}},
 			},
 		},
 		{
 			// Check that an internal error Wrap around a regular error
 			// creates internal error details.
-			NewAssertionErrorWithWrappedErrf(New(CodeSyntaxError, "syn err"), "iewrap %s", "waa"),
+			errors.NewAssertionErrorWithWrappedErrf(New(pgcode.Syntax, "syn err"), "iewrap %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, ie+"iewrap waa: syn err")
 					// Internal error was preserved.
-					eq(t, e.Code, CodeInternalError)
+					eq(t, e.Code, pgcode.Internal)
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -339,8 +292,9 @@ func TestInternalError(t *testing.T) {
 							".*tRunner.*",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go.*iewrap %s \| string`)
-					m(t, e.SafeDetail[0].EncodedStackTrace, "TestInternalError")
+					m(t, e.SafeDetail[0].SafeMessage, "TestInternalError")
+					m(t, e.SafeDetail[1].SafeMessage, `iewrap %s`)
+					m(t, e.SafeDetail[2].SafeMessage, `arg 0: string`)
 				}},
 			},
 		},
@@ -348,36 +302,31 @@ func TestInternalError(t *testing.T) {
 			// Check that an internal error Wrap around another internal
 			// error creates internal error details and a sane error
 			// message.
-			NewAssertionErrorWithWrappedErrf(
+			errors.NewAssertionErrorWithWrappedErrf(
 				makeBoo(), "iewrap2 %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Ensure the "internal error" prefix only occurs once.
 					eq(t, e.Message, ie+"iewrap2 waa: boo")
 					// Internal error was preserved.
-					eq(t, e.Code, CodeInternalError)
+					eq(t, e.Code, pgcode.Internal)
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
-					eq(t, e.Source.Function, "makeBoo")
+					// The original cause is masked by the barrier.
+					eq(t, e.Source.Function, "TestInternalError")
 				}},
 				{"retained-details", func(t *testing.T, e *Error) {
 					ml(t, e.Detail,
 						[]string{
 							// Ensure that the assertion catcher is captured in details.
+							// Also makeBoo() is masked here.
 							"stack trace:",
-							".*makeBoo.*",
 							".*TestInternalError.*",
 							".*tRunner.*",
-							"",
-							// Followed by the wrap stack trace underneath.
-							"stack trace:",
-							".*TestInternalError",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, `internal_errors_test.go.*boo \| string`)
-					m(t, e.SafeDetail[0].EncodedStackTrace, "makeBoo")
-					m(t, e.SafeDetail[1].SafeMessage, `internal_errors_test.go.*iewrap2 %s \| string`)
-					m(t, e.SafeDetail[1].EncodedStackTrace, "TestInternalError")
+					m(t, e.SafeDetail[0].SafeMessage, "TestInternalError")
+					m(t, e.SafeDetail[1].SafeMessage, `iewrap2`)
 				}},
 			},
 		},
@@ -387,7 +336,12 @@ func TestInternalError(t *testing.T) {
 		t.Run(fmt.Sprintf("%d %s", i, test.err), func(t *testing.T) {
 			for _, pred := range test.preds {
 				t.Run(pred.name, func(t *testing.T) {
-					pred.fn(t, test.err.(*Error))
+					pgErr := Flatten(test.err)
+					pred.fn(t, pgErr)
+					if t.Failed() {
+						t.Logf("input error: %# v", pretty.Formatter(test.err))
+						t.Logf("pg error: %# v", pretty.Formatter(pgErr))
+					}
 				})
 			}
 		})
@@ -395,13 +349,13 @@ func TestInternalError(t *testing.T) {
 }
 
 func makeNormal() error {
-	return New(CodeSyntaxError, "syn")
+	return New(pgcode.Syntax, "syn")
 }
 
 func doWrap(err error) error {
-	return Wrapf(err, CodeAdminShutdownError, "wrap %s", "woo")
+	return Wrapf(err, pgcode.AdminShutdown, "wrap %s", "woo")
 }
 
 func makeBoo() error {
-	return AssertionFailedf("boo")
+	return errors.AssertionFailedf("boo")
 }

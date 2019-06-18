@@ -13,13 +13,15 @@
 package row
 
 import (
-	"errors"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // fkExistenceCheckBaseHelper is an auxiliary struct that facilitates FK existence
@@ -126,7 +128,7 @@ func makeFkExistenceCheckBaseHelper(
 	// Look up the searched table.
 	searchTable := otherTables[ref.Table].Desc
 	if searchTable == nil {
-		return ret, pgerror.AssertionFailedf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
+		return ret, errors.AssertionFailedf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	// Look up the searched index.
 	searchIdx, err := searchTable.FindIndexByID(ref.Index)
@@ -219,7 +221,7 @@ func computeFkCheckColumnIDs(
 			return ids, nil
 
 		case 1:
-			return nil, pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			return nil, pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing value for column %q in multi-part foreign key", missingColumns[0])
 
 		case prefixLen:
@@ -228,15 +230,15 @@ func computeFkCheckColumnIDs(
 
 		default:
 			sort.Strings(missingColumns)
-			return nil, pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			return nil, pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing values for columns %q in multi-part foreign key", missingColumns)
 		}
 
 	case sqlbase.ForeignKeyReference_PARTIAL:
-		return nil, pgerror.UnimplementedWithIssue(20305, "MATCH PARTIAL not supported")
+		return nil, unimplemented.NewWithIssue(20305, "MATCH PARTIAL not supported")
 
 	default:
-		return nil, pgerror.AssertionFailedf("unknown composite key match type: %v", match)
+		return nil, errors.AssertionFailedf("unknown composite key match type: %v", match)
 	}
 }
 

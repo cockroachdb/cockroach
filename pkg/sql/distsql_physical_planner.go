@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -42,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // DistSQLPlanner is used to generate distributed plans from logical
@@ -663,12 +664,12 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 	{
 		live, err := h.isLive(nodeID)
 		if err == nil && !live {
-			err = pgerror.Newf(pgerror.CodeCannotConnectNowError,
-				"node n%d is not live", log.Safe(nodeID))
+			err = pgerror.Newf(pgcode.CannotConnectNow,
+				"node n%d is not live", errors.Safe(nodeID))
 		}
 		if err != nil {
-			return pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
-				"not using n%d due to liveness", log.Safe(nodeID))
+			return pgerror.Wrapf(err, pgcode.CannotConnectNow,
+				"not using n%d due to liveness", errors.Safe(nodeID))
 		}
 	}
 
@@ -1648,7 +1649,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 				}
 			}
 			if !found {
-				return pgerror.AssertionFailedf("group column ordering contains non-grouping column %d", o.ColIdx)
+				return errors.AssertionFailedf("group column ordering contains non-grouping column %d", o.ColIdx)
 			}
 			if o.Direction == encoding.Descending {
 				ordCols[i].Direction = distsqlpb.Ordering_Column_DESC

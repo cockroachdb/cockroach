@@ -66,7 +66,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	meta := inbox.DrainMeta(ctx)
 
 	require.True(t, len(meta) == 1)
-	require.True(t, testutils.IsError(meta[0].Err, "panic"), meta[0])
+	require.True(t, testutils.IsError(meta[0].Err, "runtime error: index out of range"), meta[0])
 
 	require.NoError(t, <-streamHandlerErrCh)
 	wg.Wait()

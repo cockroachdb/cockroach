@@ -19,11 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 var statsAnnID = opt.NewTableAnnID()
@@ -242,7 +242,7 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 		if intersectsLeft {
 			if intersectsRight {
 				// TODO(radu): what if both sides have columns in colSet?
-				panic(pgerror.AssertionFailedf(
+				panic(errors.AssertionFailedf(
 					"colSet %v contains both left and right columns", log.Safe(colSet),
 				))
 			}
@@ -265,7 +265,7 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 		return &props.ColumnStatistic{Cols: colSet, DistinctCount: 1}
 	}
 
-	panic(pgerror.AssertionFailedf("unsupported operator type %s", log.Safe(e.Op())))
+	panic(errors.AssertionFailedf("unsupported operator type %s", log.Safe(e.Op())))
 }
 
 // colStat gets a column statistic for the given set of columns if it exists.
@@ -278,7 +278,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		e = e.Child(0).(RelExpr)
 	}
 	if colSet.Empty() {
-		panic(pgerror.AssertionFailedf("column statistics cannot be determined for empty column set"))
+		panic(errors.AssertionFailedf("column statistics cannot be determined for empty column set"))
 	}
 
 	// Check if the requested column statistic is already cached.
@@ -351,10 +351,10 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return sb.colStatShowTrace(colSet, e.(*ShowTraceForSessionExpr))
 
 	case opt.FakeRelOp:
-		panic(pgerror.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
+		panic(errors.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
 	}
 
-	panic(pgerror.AssertionFailedf("unrecognized relational expression type: %v", log.Safe(e.Op())))
+	panic(errors.AssertionFailedf("unrecognized relational expression type: %v", log.Safe(e.Op())))
 }
 
 // colStatLeaf creates a column statistic for a given column set (if it doesn't
@@ -2128,7 +2128,7 @@ func (sb *statisticsBuilder) copyColStat(
 	colSet opt.ColSet, s *props.Statistics, inputColStat *props.ColumnStatistic,
 ) *props.ColumnStatistic {
 	if !inputColStat.Cols.SubsetOf(colSet) {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"copyColStat colSet: %v inputColSet: %v\n", log.Safe(colSet), log.Safe(inputColStat.Cols),
 		))
 	}
@@ -2185,7 +2185,7 @@ func (sb *statisticsBuilder) finalizeFromCardinality(relProps *props.Relational)
 	// This is because the stats may be stale, and we can end up with weird and
 	// inefficient plans if we estimate 0 rows.
 	if s.RowCount <= 0 && relProps.Cardinality.Max > 0 {
-		panic(pgerror.AssertionFailedf("estimated row count must be non-zero"))
+		panic(errors.AssertionFailedf("estimated row count must be non-zero"))
 	}
 
 	// The row count should be between the min and max cardinality.
@@ -2206,7 +2206,7 @@ func (sb *statisticsBuilder) finalizeFromRowCount(
 ) {
 	// We should always have at least one distinct value if row count > 0.
 	if rowCount > 0 && colStat.DistinctCount == 0 {
-		panic(pgerror.AssertionFailedf("estimated distinct count must be non-zero"))
+		panic(errors.AssertionFailedf("estimated distinct count must be non-zero"))
 	}
 
 	// The distinct and null counts should be no larger than the row count.
@@ -2674,7 +2674,7 @@ func (sb *statisticsBuilder) selectivityFromNullCounts(
 
 		inputStat := sb.colStatFromInput(colStat.Cols, e)
 		if inputStat.NullCount > rowCount {
-			panic(pgerror.AssertionFailedf("rowCount passed in was too small"))
+			panic(errors.AssertionFailedf("rowCount passed in was too small"))
 		}
 		if colStat.NullCount < inputStat.NullCount {
 			nullsRemoved := inputStat.NullCount - colStat.NullCount
@@ -2734,7 +2734,7 @@ func (sb *statisticsBuilder) joinSelectivityFromNullCounts(
 		crossJoinNullCount := leftNullCount*rightRowCount + rightNullCount*leftRowCount
 
 		if crossJoinNullCount > inputRowCount {
-			panic(pgerror.AssertionFailedf("row count passed in was too small"))
+			panic(errors.AssertionFailedf("row count passed in was too small"))
 		}
 		// We make the assumption that colStat.NullCount is either 0 or equal
 		// to / greater than crossJoinNullCount. In the zero case, account

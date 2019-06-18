@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // scopeOrdinal identifies an ordinal position with a list of scope columns.
@@ -562,7 +564,7 @@ func (s *scope) startAggFunc() *scope {
 // are only used in a groupings scope.
 func (s *scope) endAggFunc(cols opt.ColSet) (aggInScope, aggOutScope *scope) {
 	if !s.groupby.inAgg {
-		panic(pgerror.AssertionFailedf("mismatched calls to start/end aggFunc"))
+		panic(errors.AssertionFailedf("mismatched calls to start/end aggFunc"))
 	}
 	s.groupby.inAgg = false
 
@@ -578,7 +580,7 @@ func (s *scope) endAggFunc(cols opt.ColSet) (aggInScope, aggOutScope *scope) {
 		}
 	}
 
-	panic(pgerror.AssertionFailedf("aggregate function is not allowed in this context"))
+	panic(errors.AssertionFailedf("aggregate function is not allowed in this context"))
 }
 
 // startBuildingGroupingCols is called when the builder starts building the
@@ -599,7 +601,7 @@ func (s *scope) startBuildingGroupingCols() {
 // to ensure that a grouping error is not called prematurely.
 func (s *scope) endBuildingGroupingCols() {
 	if !s.groupby.buildingGroupingCols {
-		panic(pgerror.AssertionFailedf("mismatched calls to start/end groupings"))
+		panic(errors.AssertionFailedf("mismatched calls to start/end groupings"))
 	}
 	s.groupby.buildingGroupingCols = false
 }
@@ -1034,7 +1036,7 @@ func (s *scope) lookupWindowDef(name tree.Name) *tree.WindowDef {
 			return s.windowDefs[i]
 		}
 	}
-	panic(builderError{pgerror.Newf(pgerror.CodeUndefinedObjectError, "window %q does not exist", name)})
+	panic(builderError{pgerror.Newf(pgcode.UndefinedObject, "window %q does not exist", name)})
 }
 
 func (s *scope) constructWindowDef(def tree.WindowDef) *tree.WindowDef {
@@ -1224,17 +1226,17 @@ var _ tree.IndexedVarContainer = &scope{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.AssertionFailedf("unimplemented: scope.IndexedVarEval"))
+	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarEval"))
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarResolvedType(idx int) *types.T {
 	if idx >= len(s.cols) {
 		if len(s.cols) == 0 {
-			panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
+			panic(pgerror.Newf(pgcode.UndefinedColumn,
 				"column reference @%d not allowed in this context", idx+1))
 		}
-		panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
+		panic(pgerror.Newf(pgcode.UndefinedColumn,
 			"invalid column ordinal: @%d", idx+1))
 	}
 	return s.cols[idx].typ
@@ -1242,7 +1244,7 @@ func (s *scope) IndexedVarResolvedType(idx int) *types.T {
 
 // IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	panic(pgerror.AssertionFailedf("unimplemented: scope.IndexedVarNodeFormatter"))
+	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarNodeFormatter"))
 }
 
 // newAmbiguousColumnError returns an error with a helpful error message to be
@@ -1283,7 +1285,7 @@ func (s *scope) newAmbiguousColumnError(
 		}
 	}
 
-	return pgerror.Newf(pgerror.CodeAmbiguousColumnError,
+	return pgerror.Newf(pgcode.AmbiguousColumn,
 		"column reference %q is ambiguous (candidates: %s)", colString, msgBuf.String(),
 	)
 }
@@ -1292,11 +1294,11 @@ func (s *scope) newAmbiguousColumnError(
 // used in case of an ambiguous table name.
 func newAmbiguousSourceError(tn *tree.TableName) error {
 	if tn.Catalog() == "" {
-		return pgerror.Newf(pgerror.CodeAmbiguousAliasError,
+		return pgerror.Newf(pgcode.AmbiguousAlias,
 			"ambiguous source name: %q", tree.ErrString(tn))
 
 	}
-	return pgerror.Newf(pgerror.CodeAmbiguousAliasError,
+	return pgerror.Newf(pgcode.AmbiguousAlias,
 		"ambiguous source name: %q (within database %q)",
 		tree.ErrString(&tn.TableName), tree.ErrString(&tn.CatalogName))
 }

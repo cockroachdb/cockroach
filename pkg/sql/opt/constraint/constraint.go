@@ -16,9 +16,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // Constraint specifies the possible set of values that one or more columns
@@ -51,7 +51,7 @@ type Constraint struct {
 func (c *Constraint) Init(keyCtx *KeyContext, spans *Spans) {
 	for i := 1; i < spans.Count(); i++ {
 		if !spans.Get(i).StartsStrictlyAfter(keyCtx, spans.Get(i-1)) {
-			panic(pgerror.AssertionFailedf("spans must be ordered and non-overlapping"))
+			panic(errors.AssertionFailedf("spans must be ordered and non-overlapping"))
 		}
 	}
 	c.Columns = keyCtx.Columns
@@ -83,7 +83,7 @@ func (c *Constraint) IsUnconstrained() bool {
 // constraints.
 func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 	if !c.Columns.Equals(&other.Columns) {
-		panic(pgerror.AssertionFailedf("column mismatch"))
+		panic(errors.AssertionFailedf("column mismatch"))
 	}
 	if c.IsUnconstrained() || other.IsContradiction() {
 		return
@@ -171,7 +171,7 @@ func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 // should be marked as empty and all constraints removed.
 func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint) {
 	if !c.Columns.Equals(&other.Columns) {
-		panic(pgerror.AssertionFailedf("column mismatch"))
+		panic(errors.AssertionFailedf("column mismatch"))
 	}
 	if c.IsContradiction() || other.IsUnconstrained() {
 		return
@@ -260,7 +260,7 @@ func (c *Constraint) Combine(evalCtx *tree.EvalContext, other *Constraint) {
 	if !other.Columns.IsStrictSuffixOf(&c.Columns) {
 		// Note: we don't want to let the c and other pointers escape by passing
 		// them directly to Sprintf.
-		panic(pgerror.AssertionFailedf("%s not a suffix of %s", other.String(), c.String()))
+		panic(errors.AssertionFailedf("%s not a suffix of %s", other.String(), c.String()))
 	}
 	if c.IsUnconstrained() || c.IsContradiction() || other.IsUnconstrained() {
 		return

@@ -41,9 +41,9 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")
-	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
+	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/errors\"\n")
 	fmt.Fprintf(g.w, ")\n\n")
 
 	for _, define := range g.compiled.Defines {
@@ -260,7 +260,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		}
 		fmt.Fprintf(g.w, "  }\n")
 	}
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"child index out of range\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"child index out of range\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Private method.
@@ -309,7 +309,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		}
 		fmt.Fprintf(g.w, "  }\n")
 	}
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"child index out of range\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"child index out of range\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	if define.Tags.Contains("Scalar") {
@@ -381,7 +381,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		// Generate the setNext method.
 		fmt.Fprintf(g.w, "func (e *%s) setNext(member RelExpr) {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  if e.next != nil {\n")
-		fmt.Fprintf(g.w, "    panic(pgerror.AssertionFailedf(\"expression already has its next defined: %%s\", e))\n")
+		fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"expression already has its next defined: %%s\", e))\n")
 		fmt.Fprintf(g.w, "  }\n")
 		fmt.Fprintf(g.w, "  e.next = member\n")
 		fmt.Fprintf(g.w, "}\n\n")
@@ -389,7 +389,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		// Generate the setGroup method.
 		fmt.Fprintf(g.w, "func (e *%s) setGroup(member RelExpr) {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  if e.grp != nil {\n")
-		fmt.Fprintf(g.w, "    panic(pgerror.AssertionFailedf(\"expression is already in a group: %%s\", e))\n")
+		fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"expression is already in a group: %%s\", e))\n")
 		fmt.Fprintf(g.w, "  }\n")
 		fmt.Fprintf(g.w, "  e.grp = member.group()\n")
 		fmt.Fprintf(g.w, "  LastGroupMember(member).setNext(e)\n")
@@ -417,7 +417,7 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "  if nth == 0 {\n")
 	fmt.Fprintf(g.w, "    return e.Input\n")
 	fmt.Fprintf(g.w, "  }\n")
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"child index out of range\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"child index out of range\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Private method.
@@ -438,7 +438,7 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "    e.Input = child.(RelExpr)\n")
 	fmt.Fprintf(g.w, "    return\n")
 	fmt.Fprintf(g.w, "  }\n")
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"child index out of range\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"child index out of range\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Memo method.
@@ -488,12 +488,12 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 
 	// Generate the setNext method.
 	fmt.Fprintf(g.w, "func (e *%s) setNext(member RelExpr) {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"setNext cannot be called on enforcers\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"setNext cannot be called on enforcers\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the setGroup method.
 	fmt.Fprintf(g.w, "func (e *%s) setGroup(member exprGroup) {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"setGroup cannot be called on enforcers\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"setGroup cannot be called on enforcers\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 }
 
@@ -509,7 +509,7 @@ func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
 
 	// Generate the ID method.
 	fmt.Fprintf(g.w, "func (e *%s) ID() opt.ScalarID {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"lists have no id\"))")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"lists have no id\"))")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Op method.
@@ -704,7 +704,7 @@ func (g *exprsGen) genInternFuncs() {
 		fmt.Fprintf(g.w, "    return in.Intern%s(t)\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "  default:\n")
-	fmt.Fprintf(g.w, "    panic(pgerror.AssertionFailedf(\"unhandled op: %%s\", e.Op()))\n")
+	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled op: %%s\", e.Op()))\n")
 	fmt.Fprintf(g.w, "  }\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
@@ -802,7 +802,7 @@ func (g *exprsGen) genBuildPropsFunc() {
 		fmt.Fprintf(g.w, "    b.build%sProps(t, rel)\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "  default:\n")
-	fmt.Fprintf(g.w, "    panic(pgerror.AssertionFailedf(\"unhandled type: %%s\", t.Op()))\n")
+	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled type: %%s\", t.Op()))\n")
 
 	fmt.Fprintf(g.w, "  }\n")
 	fmt.Fprintf(g.w, "}\n\n")

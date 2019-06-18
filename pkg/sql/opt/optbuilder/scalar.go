@@ -20,12 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // buildScalar builds a set of memo groups that represent the given scalar
@@ -271,7 +273,7 @@ func (b *Builder) buildScalar(
 
 	case *tree.IndexedVar:
 		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
-			panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
+			panic(pgerror.Newf(pgcode.UndefinedColumn,
 				"invalid column ordinal: @%d", t.Idx+1))
 		}
 		out = b.factory.ConstructVariable(inScope.cols[t.Idx].id)
@@ -432,11 +434,11 @@ func (b *Builder) buildFunction(
 	}
 
 	if isAggregate(def) {
-		panic(pgerror.AssertionFailedf("aggregate function should have been replaced"))
+		panic(errors.AssertionFailedf("aggregate function should have been replaced"))
 	}
 
 	if isWindow(def) {
-		panic(pgerror.AssertionFailedf("window function should have been replaced"))
+		panic(errors.AssertionFailedf("window function should have been replaced"))
 	}
 
 	args := make(memo.ScalarListExpr, len(f.Exprs))
@@ -556,7 +558,7 @@ func (b *Builder) checkSubqueryOuterCols(
 			colID, _ := subqueryOuterCols.Next(0)
 			col := inScope.getColumn(opt.ColumnID(colID))
 			panic(pgerror.Newf(
-				pgerror.CodeGroupingError,
+				pgcode.Grouping,
 				"subquery uses ungrouped column \"%s\" from outer query",
 				tree.ErrString(&col.name)))
 		}
@@ -619,7 +621,7 @@ func (b *Builder) constructComparison(
 	case tree.JSONSomeExists:
 		return b.factory.ConstructJsonSomeExists(left, right)
 	}
-	panic(pgerror.AssertionFailedf("unhandled comparison operator: %s", log.Safe(cmp)))
+	panic(errors.AssertionFailedf("unhandled comparison operator: %s", log.Safe(cmp)))
 }
 
 func (b *Builder) constructBinary(
@@ -661,7 +663,7 @@ func (b *Builder) constructBinary(
 	case tree.JSONFetchTextPath:
 		return b.factory.ConstructFetchTextPath(left, right)
 	}
-	panic(pgerror.AssertionFailedf("unhandled binary operator: %s", log.Safe(bin)))
+	panic(errors.AssertionFailedf("unhandled binary operator: %s", log.Safe(bin)))
 }
 
 func (b *Builder) constructUnary(
@@ -673,7 +675,7 @@ func (b *Builder) constructUnary(
 	case tree.UnaryComplement:
 		return b.factory.ConstructUnaryComplement(input)
 	}
-	panic(pgerror.AssertionFailedf("unhandled unary operator: %s", log.Safe(un)))
+	panic(errors.AssertionFailedf("unhandled unary operator: %s", log.Safe(un)))
 }
 
 // ScalarBuilder is a specialized variant of Builder that can be used to create

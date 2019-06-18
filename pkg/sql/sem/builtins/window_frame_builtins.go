@@ -18,10 +18,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
+	"github.com/cockroachdb/errors"
 )
 
 // indexedValue combines a value from the row with the index of that row.
@@ -212,7 +212,7 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 		case *tree.DInterval:
 			err = w.agg.Add(ctx, &tree.DInterval{Duration: duration.Duration{}.Sub(v.Duration)})
 		default:
-			err = pgerror.AssertionFailedf("unexpected value %v", v)
+			err = errors.AssertionFailedf("unexpected value %v", v)
 		}
 		if err != nil {
 			return err
@@ -352,7 +352,7 @@ func (w *avgWindowFunc) Compute(
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &dd.Decimal, count)
 		return &avg, err
 	default:
-		return nil, pgerror.AssertionFailedf("unexpected SUM result type: %s", t)
+		return nil, errors.AssertionFailedf("unexpected SUM result type: %s", t)
 	}
 }
 

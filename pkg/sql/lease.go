@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -43,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var errRenewLease = errors.New("renew lease on id")
@@ -503,7 +502,7 @@ func (s LeaseStore) getForExpiration(
 			return sqlbase.ErrDescriptorNotFound
 		}
 		if !tableDesc.ModificationTime.Less(prevTimestamp) {
-			return pgerror.AssertionFailedf("unable to read table= (%d, %s)", id, expiration)
+			return errors.AssertionFailedf("unable to read table= (%d, %s)", id, expiration)
 		}
 		// Create a tableVersionState with the table and without a lease.
 		table = &tableVersionState{

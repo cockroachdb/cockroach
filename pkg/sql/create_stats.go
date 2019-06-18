@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -31,9 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -125,8 +127,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	}
 
 	if err = <-errCh; err != nil {
-		pgerr, ok := errors.Cause(err).(*pgerror.Error)
-		if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
+		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
 			if _ /* cols */, delErr := n.p.ExecCfg().InternalExecutor.Exec(
@@ -143,7 +144,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 // execute statistics creation.
 func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, error) {
 	if !n.p.ExecCfg().Settings.Version.IsActive(cluster.VersionCreateStats) {
-		return nil, pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
+		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			`CREATE STATISTICS requires all nodes to be upgraded to %s`,
 			cluster.VersionByKey(cluster.VersionCreateStats),
 		)
@@ -176,13 +177,13 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 
 	if tableDesc.IsVirtualTable() {
 		return nil, pgerror.New(
-			pgerror.CodeWrongObjectTypeError, "cannot create statistics on virtual tables",
+			pgcode.WrongObjectType, "cannot create statistics on virtual tables",
 		)
 	}
 
 	if tableDesc.IsView() {
 		return nil, pgerror.New(
-			pgerror.CodeWrongObjectTypeError, "cannot create statistics on views",
+			pgcode.WrongObjectType, "cannot create statistics on views",
 		)
 	}
 
@@ -205,7 +206,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		columnIDs := make([]sqlbase.ColumnID, len(columns))
 		for i := range columns {
 			if columns[i].Type.Family() == types.JsonFamily {
-				return nil, pgerror.UnimplementedWithIssuef(35844,
+				return nil, unimplemented.NewWithIssuef(35844,
 					"CREATE STATISTICS is not supported for JSON columns")
 			}
 			columnIDs[i] = columns[i].ID
@@ -379,7 +380,7 @@ func (r *createStatsResumer) Resume(
 			ctx, r.evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
-			if s, ok := status.FromError(errors.Cause(err)); ok {
+			if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
 				if s.Code() == codes.Canceled && s.Message() == context.Canceled.Error() {
 					return jobs.NewRetryJobError("node failure")
 				}
@@ -446,9 +447,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 
 			// This is not the first CreateStats job running. This job should fail
 			// so that the earlier job can succeed.
-			return pgerror.New(
-				pgerror.CodeLockNotAvailableError, "another CREATE STATISTICS job is already running",
-			)
+			return stats.ConcurrentCreateStatsError
 		}
 	}
 	return nil

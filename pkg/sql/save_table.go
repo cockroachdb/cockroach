@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // saveTableNode is used for internal testing. It is a node that passes through
@@ -57,7 +58,7 @@ func (n *saveTableNode) startExec(params runParams) error {
 
 	cols := planColumns(n.source)
 	if len(n.colNames) != len(cols) {
-		return pgerror.AssertionFailedf(
+		return errors.AssertionFailedf(
 			"number of column names (%d) does not match number of columns (%d)",
 			len(n.colNames), len(cols),
 		)

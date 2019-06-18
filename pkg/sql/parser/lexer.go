@@ -17,9 +17,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 type lexer struct {
@@ -39,7 +42,7 @@ type lexer struct {
 	numPlaceholders int
 	numAnnotations  tree.AnnotationIdx
 
-	lastError *pgerror.Error
+	lastError error
 }
 
 func (l *lexer) init(sql string, tokens []sqlSymType, nakedIntType *types.T) {
@@ -142,43 +145,36 @@ func (l *lexer) UpdateNumPlaceholders(p *tree.Placeholder) {
 	}
 }
 
-func (l *lexer) initLastErr() {
-	if l.lastError == nil {
-		l.lastError = pgerror.New(pgerror.CodeSyntaxError, "syntax error")
-	}
-}
-
 // Unimplemented wraps Error, setting lastUnimplementedError.
 func (l *lexer) Unimplemented(feature string) {
-	l.lastError = pgerror.Unimplemented(feature, "unimplemented")
+	l.lastError = unimp.New(feature, "this syntax")
 	l.populateErrorDetails()
 }
 
 // UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
 func (l *lexer) UnimplementedWithIssue(issue int) {
-	l.lastError = pgerror.UnimplementedWithIssue(issue, "unimplemented")
+	l.lastError = unimp.NewWithIssue(issue, "this syntax")
 	l.populateErrorDetails()
 }
 
 // UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
 func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
-	l.lastError = pgerror.UnimplementedWithIssueDetail(issue, detail, "unimplemented")
+	l.lastError = unimp.NewWithIssueDetail(issue, detail, "this syntax")
 	l.populateErrorDetails()
 }
 
+// setErr is called from parsing action rules to register an error observed
+// while running the action. That error becomes the actual "cause" of the
+// syntax error.
 func (l *lexer) setErr(err error) {
-	newErr := pgerror.Wrapf(err, pgerror.CodeSyntaxError, "syntax error")
-	if pgErr, ok := pgerror.GetPGCause(newErr); ok {
-		l.lastError = pgErr
-	} else {
-		// This can happen if wrap refused to create a pgerror.
-		l.lastError = pgerror.NewAssertionErrorWithWrappedErrf(newErr, "unexpected parse error").(*pgerror.Error)
-	}
+	err = pgerror.WithCandidateCode(err, pgcode.Syntax)
+	l.lastError = err
 	l.populateErrorDetails()
 }
 
 func (l *lexer) Error(e string) {
-	l.lastError = pgerror.New(pgerror.CodeSyntaxError, e)
+	e = strings.TrimPrefix(e, "syntax error: ") // we'll add it again below.
+	l.lastError = pgerror.WithCandidateCode(errors.New(e), pgcode.Syntax)
 	l.populateErrorDetails()
 }
 
@@ -186,18 +182,19 @@ func (l *lexer) populateErrorDetails() {
 	lastTok := l.lastToken()
 
 	if lastTok.id == ERROR {
-		// This is a tokenizer (lexical) error: just emit the invalid
-		// input as error.
-		l.lastError.Message = fmt.Sprintf("lexical error: %s", lastTok.str)
+		// This is a tokenizer (lexical) error: the scanner
+		// will have stored the error message in the string field.
+		err := pgerror.WithCandidateCode(errors.Newf("lexical error: %s", lastTok.str), pgcode.Syntax)
+		l.lastError = errors.WithSecondaryError(err, l.lastError)
 	} else {
 		// This is a contextual error. Print the provided error message
 		// and the error context.
-		if !strings.HasPrefix(l.lastError.Message, "syntax error") {
+		if !strings.Contains(l.lastError.Error(), "syntax error") {
 			// "syntax error" is already prepended when the yacc-generated
 			// parser encounters a parsing error.
-			l.lastError.Message = fmt.Sprintf("syntax error: %s", l.lastError.Message)
+			l.lastError = errors.Wrap(l.lastError, "syntax error")
 		}
-		l.lastError.Message = fmt.Sprintf("%s at or near \"%s\"", l.lastError.Message, lastTok.str)
+		l.lastError = errors.Wrapf(l.lastError, "at or near \"%s\"", lastTok.str)
 	}
 
 	// Find the end of the line containing the last token.
@@ -215,7 +212,7 @@ func (l *lexer) populateErrorDetails() {
 	fmt.Fprintf(&buf, "source SQL:\n%s\n", l.in[:i])
 	// Output a caret indicating where the last token starts.
 	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", int(lastTok.pos)-j))
-	l.lastError.Detail = buf.String()
+	l.lastError = errors.WithDetail(l.lastError, buf.String())
 }
 
 // SetHelp marks the "last error" field in the lexer to become a
@@ -226,19 +223,21 @@ func (l *lexer) populateErrorDetails() {
 // lastError field, which was set earlier to contain details about the
 // syntax error.
 func (l *lexer) SetHelp(msg HelpMessage) {
-	l.initLastErr()
+	if l.lastError == nil {
+		l.lastError = pgerror.WithCandidateCode(errors.New("help request"), pgcode.Syntax)
+	}
+
 	if lastTok := l.lastToken(); lastTok.id == HELPTOKEN {
 		l.populateHelpMsg(msg.String())
 	} else {
 		if msg.Command != "" {
-			l.lastError.Hint = `try \h ` + msg.Command
+			l.lastError = errors.WithHintf(l.lastError, `try \h %s`, msg.Command)
 		} else {
-			l.lastError.Hint = `try \hf ` + msg.Function
+			l.lastError = errors.WithHintf(l.lastError, `try \hf %s`, msg.Function)
 		}
 	}
 }
 
 func (l *lexer) populateHelpMsg(msg string) {
-	l.lastError.Message = "help token in input"
-	l.lastError.Hint = msg
+	l.lastError = errors.WithHint(errors.Wrap(l.lastError, "help token in input"), msg)
 }
