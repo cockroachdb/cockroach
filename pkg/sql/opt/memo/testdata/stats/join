@@ -1136,3 +1136,27 @@ project
  │    └── filters (true)
  └── projections
       └── variable: ?column? [type=int, outer=(15)]
+
+norm colstat=1 colstat=2
+SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
+----
+left-join
+ ├── columns: x:1(int!null) x:2(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,) [type=tuple{int}]
+ ├── values
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0, distinct(2)=0, null(2)=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(2)
+ └── filters (true)
