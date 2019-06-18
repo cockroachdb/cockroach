@@ -867,6 +867,7 @@ func (r *Replica) changeReplicas(
 
 	rangeID := desc.RangeID
 	updatedDesc := *desc
+	updatedDesc.IncrementGeneration()
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
 	switch changeType {
