@@ -54,9 +54,9 @@ func (f *addressFaker) firstOrLastName(rng *rand.Rand) string {
 func secondaryAddress(rng *rand.Rand) string {
 	switch rng.Intn(2) {
 	case 0:
-		return fmt.Sprintf(`Apt. %d`, rand.Intn(100))
+		return fmt.Sprintf(`Apt. %d`, rng.Intn(100))
 	case 1:
-		return fmt.Sprintf(`Suite %d`, rand.Intn(100))
+		return fmt.Sprintf(`Suite %d`, rng.Intn(100))
 	}
 	panic(`unreachable`)
 }

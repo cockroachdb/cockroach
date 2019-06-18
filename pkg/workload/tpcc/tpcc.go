@@ -44,6 +44,11 @@ type tpcc struct {
 	nowString        []byte
 	numConns         int
 
+	// Used in non-uniform random data generation. cLoad is the value of C at load
+	// time. cCustomerID is the value of C for the customer id generator. cItemID
+	// is the value of C for the item id generator. See 2.1.6.
+	cLoad, cCustomerID, cItemID int
+
 	mix        string
 	doWaits    bool
 	workers    int
@@ -184,6 +189,8 @@ func (w *tpcc) Hooks() workload.Hooks {
 			if len(w.zoneCfg.zones) > 0 && (len(w.zoneCfg.zones) != w.partitions) {
 				return errors.Errorf(`--zones should have the sames length as --partitions.`)
 			}
+
+			w.initNonUniformRandomConstants()
 
 			if w.workers == 0 {
 				w.workers = w.activeWarehouses * numWorkersPerWarehouse
