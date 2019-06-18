@@ -131,7 +131,7 @@ func newIndexSkipTableReader(
 
 	// we aren't supporting reverse scans right now using this method
 	if err := t.fetcher.Init(false /* reverseScan */, true, /* returnRangeInfo */
-		spec.IsCheck, &t.alloc, tableArgs); err != nil {
+		false /* isCheck */, &t.alloc, tableArgs); err != nil {
 		return nil, err
 	}
 
@@ -190,7 +190,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 
 		// 0xff is the largest prefix marker for any encoded key. To ensure that
 		// our new key is larger than any value with the same prefix, we place
-		// 0xff at all other index column values, and one more to gaurd against
+		// 0xff at all other index column values, and one more to guard against
 		// 0xff present as a value in the table (0xff encodes a type of null)
 		for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
 			key = append(key, 0xff)

@@ -135,13 +135,13 @@ message IndexSkipTableReaderSpec {
   // optional bool reverse = 3 [(gogoproto.nullable) = false];
   repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
 
-  // TODO(rohany): include support for these fields
-
   // Indicates the visibility level of the columns that should be returned.
   // Normally, will be set to public. Will be set to publicAndNotPublic if the
   // consumer of this TableReader expects to be able to see in-progress schema
   // changes.
-  // optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
+  optional ScanVisibility visibility = 4 [(gogoproto.nullable) = false];
+
+  // TODO(rohany): include support for these fields
 
   // // If non-zero, this is a guarantee for the upper bound of rows a TableReader
   // // will read. If 0, the number of results is unbounded.

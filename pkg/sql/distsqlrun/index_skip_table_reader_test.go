@@ -37,28 +37,98 @@ func TestIndexSkipTableReader(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	// create a table where each row is:
+	// create a table t1 where each row is:
 	//
 	// |     x     |     y     |
 	// |-----------------------|
 	// | rowId/10  | rowId%10  |
 
-	xfn := func(row int) tree.Datum {
+	xFnt1 := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row / 10))
 	}
-	yfn := func(row int) tree.Datum {
+	yFnt1 := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row % 10))
 	}
 
-	sqlutils.CreateTable(t, sqlDB, "t",
+	sqlutils.CreateTable(t, sqlDB, "t1",
 		"x INT, y INT, PRIMARY KEY (x, y)",
 		99,
-		sqlutils.ToRowFn(xfn, yfn),
+		sqlutils.ToRowFn(xFnt1, yFnt1),
 	)
 
-	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	// create a table t2 where each row is:
+	//
+	// |     x     |     y         |     z     |
+	// |---------------------------------------|
+	// | rowId / 3 | rowId / 3 + 1 |  rowId    |
 
-	makeIndexSpan := func(start, end int) distsqlpb.TableReaderSpan {
+	xFnt2 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row / 3))
+	}
+	yFnt2 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row/3 + 1))
+	}
+	zFnt2 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row))
+	}
+	sqlutils.CreateTable(t, sqlDB, "t2",
+		"x INT, y INT, z INT, PRIMARY KEY (x, y, z)",
+		9,
+		sqlutils.ToRowFn(xFnt2, yFnt2, zFnt2),
+	)
+
+	// create a table t3 where each row is:
+	//
+	// |     x     |     y      |                      z                   |
+	// |-------------------------------------------------------------------|
+	// | rowId / 3 | rowId % 3  |  if rowId % 2 == 0 then NULL else rowID  |
+
+	xFnt3 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row / 3))
+	}
+	yFnt3 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row % 3))
+	}
+	zFnt3 := func(row int) tree.Datum {
+		if row%2 == 0 {
+			return tree.DNull
+		}
+		return tree.NewDInt(tree.DInt(row))
+	}
+	sqlutils.CreateTable(t, sqlDB, "t3",
+		"x INT, y INT, z INT, PRIMARY KEY (x, y)",
+		9,
+		sqlutils.ToRowFn(xFnt3, yFnt3, zFnt3),
+	)
+
+	// create a table t4 where each row is:
+	//
+	// |     x     |        y      |
+	// |---------------------------|
+	// | rowId/10  | rowId%10 + 1  |
+
+	xFnt4 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row / 10))
+	}
+	yFnt4 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row%10 + 1))
+	}
+
+	sqlutils.CreateTable(t, sqlDB, "t4",
+		"x INT, y INT, PRIMARY KEY (x, y)",
+		99,
+		sqlutils.ToRowFn(xFnt4, yFnt4),
+	)
+	// create a secondary index on (y, x) on t4
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE INDEX t4_test_index ON test.t4 (y, x)")
+
+	td1 := sqlbase.GetTableDescriptor(kvDB, "test", "t1")
+	td2 := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
+	td3 := sqlbase.GetTableDescriptor(kvDB, "test", "t3")
+	td4 := sqlbase.GetTableDescriptor(kvDB, "test", "t4")
+
+	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) distsqlpb.TableReaderSpan {
 		var span roachpb.Span
 		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td, td.PrimaryIndex.ID))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
@@ -68,13 +138,17 @@ func TestIndexSkipTableReader(t *testing.T) {
 	}
 
 	testCases := []struct {
-		spec     distsqlpb.IndexSkipTableReaderSpec
-		post     distsqlpb.PostProcessSpec
-		expected string
+		desc      string
+		tableDesc *sqlbase.TableDescriptor
+		spec      distsqlpb.IndexSkipTableReaderSpec
+		post      distsqlpb.PostProcessSpec
+		expected  string
 	}{
 		{
+			desc:      "Distinct scan simple",
+			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -83,8 +157,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
 		},
 		{
+			desc:      "Distinct scan with multiple spans",
+			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(0, 3), makeIndexSpan(5, 8)},
+				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
 			},
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -93,8 +169,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[0] [1] [2] [5] [6] [7]]",
 		},
 		{
+			desc:      "Distinct scan with multiple spans and filter",
+			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(0, 3), makeIndexSpan(5, 8)},
+				Spans: []distsqlpb.TableReaderSpan{makeIndexSpan(td1, 0, 3), makeIndexSpan(td1, 5, 8)},
 			},
 			post: distsqlpb.PostProcessSpec{
 				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
@@ -104,8 +182,10 @@ func TestIndexSkipTableReader(t *testing.T) {
 			expected: "[[5] [6]]",
 		},
 		{
+			desc:      "Distinct scan with filter",
+			tableDesc: td1,
 			spec: distsqlpb.IndexSkipTableReaderSpec{
-				Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+				Spans: []distsqlpb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
 			},
 			post: distsqlpb.PostProcessSpec{
 				Filter:        distsqlpb.Expression{Expr: "@1 > 3 AND @1 < 7"},
@@ -114,12 +194,49 @@ func TestIndexSkipTableReader(t *testing.T) {
 			},
 			expected: "[[4] [5] [6]]",
 		},
+		{
+			desc:      "Distinct scan with multiple requested columns",
+			tableDesc: td2,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td2.PrimaryIndexSpan()}},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			expected: "[[0 1] [1 2] [2 3] [3 4]]",
+		},
+		{
+			desc:      "Distinct scan on table with NULLs",
+			tableDesc: td3,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td3.PrimaryIndexSpan()}},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[0] [1] [2] [3]]",
+		},
+		{
+			desc:      "Distinct scan on secondary index",
+			tableDesc: td4,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans:    []distsqlpb.TableReaderSpan{{Span: td4.IndexSpan(2)}},
+				IndexIdx: 1,
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{1},
+			},
+			expected: "[[1] [2] [3] [4] [5] [6] [7] [8] [9] [10]]",
+		},
 	}
 
 	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
+		t.Run(c.desc, func(t *testing.T) {
 			ts := c.spec
-			ts.Table = *td
+			ts.Table = *c.tableDesc
 
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
