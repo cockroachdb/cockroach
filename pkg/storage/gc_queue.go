@@ -226,8 +226,8 @@ func makeGCQueueScore(
 // To visualize this, picture a rectangular frame of width `ttl` and height
 // `GCBytes` (i.e. the horizontal dimension is time, the vertical one bytes),
 // where the right boundary of the frame corresponds to age zero. Each non-live
-// key is a domino aligned with the right side of the frame, its width equal to
-// its size, and its height given by the duration (in seconds) it's been
+// key is a domino aligned with the right side of the frame, its height equal to
+// its size, and its width given by the duration (in seconds) it's been
 // non-live.
 //
 // The combined surface of the dominos is then `GCBytesAge`, and the claim is
