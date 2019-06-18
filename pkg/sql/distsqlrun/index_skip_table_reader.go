@@ -237,7 +237,7 @@ func (t *indexSkipTableReader) generateTrailingMeta(
 func (t *indexSkipTableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !t.ignoreMisplannedRanges {
-		if t.misplannedRanges != nil {
+		if len(t.misplannedRanges) != 0 {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: t.misplannedRanges})
 		}
 	}
