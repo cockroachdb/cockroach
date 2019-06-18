@@ -15,6 +15,7 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -275,6 +276,103 @@ func TestIndexSkipTableReader(t *testing.T) {
 		})
 	}
 
+}
+
+func TestIndexSkipTableReaderMisplannedRangesMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tc := serverutils.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
+	sqlutils.CreateTable(t, db, "t",
+		"num INT PRIMARY KEY",
+		3,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn),
+	)
+
+	_, err := db.Exec(`
+ALTER TABLE t SPLIT AT VALUES (1), (2), (3);
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3);
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	kvDB := tc.Server(0).DB()
+	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	st := tc.Server(0).ClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	nodeID := tc.Server(0).NodeID()
+	flowCtx := FlowCtx{
+		EvalCtx:  &evalCtx,
+		Settings: st,
+		txn:      client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
+		nodeID:   nodeID,
+	}
+	spec := distsqlpb.IndexSkipTableReaderSpec{
+		Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+		Table: *td,
+	}
+	post := distsqlpb.PostProcessSpec{
+		Projection:    true,
+		OutputColumns: []uint32{0},
+	}
+
+	t.Run("", func(t *testing.T) {
+		tr, err := newIndexSkipTableReader(&flowCtx, 0, &spec, &post, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tr.Start(ctx)
+		var res sqlbase.EncDatumRows
+		var metas []*distsqlpb.ProducerMetadata
+		for {
+			row, meta := tr.Next()
+			if meta != nil {
+				metas = append(metas, meta)
+				continue
+			}
+			if row == nil {
+				break
+			}
+			res = append(res, row)
+		}
+		if len(res) != 3 {
+			t.Fatalf("expected 3 rows, got: %d", len(res))
+		}
+		var misplannedRanges []roachpb.RangeInfo
+		for _, m := range metas {
+			if len(m.Ranges) > 0 {
+				misplannedRanges = m.Ranges
+			} else if m.TxnCoordMeta == nil {
+				t.Fatalf("expected only txn coord meta or misplanned ranges, got: %+v", metas)
+			}
+		}
+
+		if len(misplannedRanges) != 2 {
+			t.Fatalf("expected 2 misplanned ranges, got: %+v", misplannedRanges)
+		}
+
+		// The metadata about misplanned ranges can come in any order (it depends on
+		// the order in which parallel sub-batches complete after having been split by
+		// DistSender).
+		sort.Slice(misplannedRanges, func(i, j int) bool {
+			return misplannedRanges[i].Lease.Replica.NodeID < misplannedRanges[j].Lease.Replica.NodeID
+		})
+		if misplannedRanges[0].Lease.Replica.NodeID != 2 ||
+			misplannedRanges[1].Lease.Replica.NodeID != 3 {
+			t.Fatalf("expected misplanned ranges from nodes 2 and 3, got: %+v", metas[0])
+		}
+	})
 }
 
 func BenchmarkIndexScanTableReader(b *testing.B) {

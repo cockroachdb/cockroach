@@ -46,8 +46,8 @@ type indexSkipTableReader struct {
 
 	maxTimestampAge time.Duration
 
-	// TODO(rohany): add support for this field
-	// ignoreMisplannedRanges bool
+	ignoreMisplannedRanges bool
+	misplannedRanges       []roachpb.RangeInfo
 
 	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
@@ -86,6 +86,7 @@ func newIndexSkipTableReader(
 
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	t.ignoreMisplannedRanges = flowCtx.local
 
 	if err := t.Init(
 		t,
@@ -181,6 +182,17 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 
+		// range info resets once a scan begins, so we need to maintain
+		// the range info we get after each scan
+		if !t.ignoreMisplannedRanges {
+			ranges := misplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.flowCtx.nodeID)
+			if ranges != nil {
+				for _, r := range ranges {
+					t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
+				}
+			}
+		}
+
 		key, err := t.fetcher.PartialKey(t.keyPrefixLen)
 		if err != nil {
 			t.MoveToDraining(err)
@@ -223,10 +235,11 @@ func (t *indexSkipTableReader) Release() {
 	t.ProcessorBase.Reset()
 	t.fetcher.Reset()
 	*t = indexSkipTableReader{
-		ProcessorBase: t.ProcessorBase,
-		fetcher:       t.fetcher,
-		spans:         t.spans[:0],
-		currentSpan:   0,
+		ProcessorBase:    t.ProcessorBase,
+		fetcher:          t.fetcher,
+		spans:            t.spans[:0],
+		misplannedRanges: t.misplannedRanges[:0],
+		currentSpan:      0,
 	}
 	istrPool.Put(t)
 }
@@ -245,6 +258,15 @@ func (t *indexSkipTableReader) generateTrailingMeta(
 
 func (t *indexSkipTableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
+	if !t.ignoreMisplannedRanges {
+		ranges := misplannedRanges(ctx, t.fetcher.GetRangesInfo(), t.flowCtx.nodeID)
+		if ranges != nil {
+			for _, r := range ranges {
+				t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
+			}
+			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: t.misplannedRanges})
+		}
+	}
 	if meta := getTxnCoordMeta(ctx, t.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
