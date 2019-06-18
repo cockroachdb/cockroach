@@ -121,5 +121,5 @@ type Catalog interface {
 
 	// RequireSuperUser checks that the current user has admin privileges. If not,
 	// returns an error.
-	RequireSuperUser(ctx context.Context, action string) error
+	RequireSuperUser(ctx context.Context, action string) (bool, error)
 }

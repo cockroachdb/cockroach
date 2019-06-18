@@ -1852,7 +1852,7 @@ func userFromContext(ctx context.Context) (string, error) {
 }
 
 type superUserChecker interface {
-	RequireSuperUser(ctx context.Context, action string) error
+	RequireSuperUser(ctx context.Context, action string) (bool, error)
 }
 
 func (s *statusServer) isSuperUser(ctx context.Context, username string) bool {
@@ -1866,7 +1866,7 @@ func (s *statusServer) isSuperUser(ctx context.Context, username string) bool {
 		&sql.MemoryMetrics{},
 		s.admin.server.execCfg)
 	defer cleanup()
-	if err := planner.(superUserChecker).RequireSuperUser(ctx, "access status server endpoint"); err != nil {
+	if _, err := planner.(superUserChecker).RequireSuperUser(ctx, "access status server endpoint"); err != nil {
 		return false
 	}
 	return true
