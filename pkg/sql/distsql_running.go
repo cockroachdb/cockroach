@@ -850,3 +850,116 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	dsp.FinalizePlan(planCtx, &physPlan)
 	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
+
+// PlanAndRunPostqueries returns false if an error was encountered and sets
+// that error in the provided receiver.
+func (dsp *DistSQLPlanner) PlanAndRunPostqueries(
+	ctx context.Context,
+	planner *planner,
+	evalCtxFactory func() *extendedEvalContext,
+	postqueryPlans []postquery,
+	recv *DistSQLReceiver,
+	maybeDistribute bool,
+) bool {
+	for _, postqueryPlan := range postqueryPlans {
+		if err := dsp.planAndRunPostquery(
+			ctx,
+			postqueryPlan,
+			planner,
+			evalCtxFactory(),
+			recv,
+			maybeDistribute,
+		); err != nil {
+			recv.SetError(err)
+			return false
+		}
+	}
+
+	return true
+}
+
+func (dsp *DistSQLPlanner) planAndRunPostquery(
+	ctx context.Context,
+	postqueryPlan postquery,
+	planner *planner,
+	evalCtx *extendedEvalContext,
+	recv *DistSQLReceiver,
+	maybeDistribute bool,
+) error {
+	postqueryMonitor := mon.MakeMonitor(
+		"postquery",
+		mon.MemoryResource,
+		dsp.distSQLSrv.Metrics.CurBytesCount,
+		dsp.distSQLSrv.Metrics.MaxBytesHist,
+		-1, /* use default block size */
+		noteworthyMemoryUsageBytes,
+		dsp.distSQLSrv.Settings,
+	)
+	postqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+	defer postqueryMonitor.Stop(ctx)
+
+	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()
+	defer postqueryMemAccount.Close(ctx)
+
+	var postqueryPlanCtx *PlanningCtx
+	var distributePostquery bool
+	if maybeDistribute {
+		distributePostquery = shouldDistributePlan(
+			ctx, planner.SessionData().DistSQLMode, dsp, postqueryPlan.plan)
+	}
+	if distributePostquery {
+		postqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
+	} else {
+		postqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
+	}
+
+	postqueryPlanCtx.isLocal = !distributePostquery
+	postqueryPlanCtx.planner = planner
+	postqueryPlanCtx.stmtType = tree.Rows
+	// We cannot close the postqueries' plans through the plan top since
+	// postqueries haven't been executed yet, so we manually close each postquery
+	// plan right after the execution.
+	postqueryPlanCtx.ignoreClose = true
+	defer postqueryPlan.plan.Close(ctx)
+
+	postqueryPhysPlan, err := dsp.createPlanForNode(postqueryPlanCtx, postqueryPlan.plan)
+	if err != nil {
+		return err
+	}
+	dsp.FinalizePlan(postqueryPlanCtx, &postqueryPhysPlan)
+
+	postqueryRecv := recv.clone()
+	var postqueryRowReceiver postqueryRowResultWriter
+	postqueryRecv.resultWriter = &postqueryRowReceiver
+	dsp.Run(postqueryPlanCtx, planner.txn, &postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)
+	if postqueryRecv.commErr != nil {
+		return postqueryRecv.commErr
+	}
+	return postqueryRowReceiver.Err()
+}
+
+// postqueryRowResultWriter is a lightweight version of RowResultWriter that
+// can only write errors. It is used only for executing postqueries and is
+// sufficient for that case since those can only return errors.
+type postqueryRowResultWriter struct {
+	err error
+}
+
+var _ rowResultWriter = &postqueryRowResultWriter{}
+
+func (r *postqueryRowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	return errors.Errorf("unexpectedly AddRow is called on postqueryRowResultWriter")
+}
+
+func (r *postqueryRowResultWriter) IncrementRowsAffected(n int) {
+	// TODO(yuzefovich): this probably will need to change when we support
+	// cascades.
+}
+
+func (r *postqueryRowResultWriter) SetError(err error) {
+	r.err = err
+}
+
+func (r *postqueryRowResultWriter) Err() error {
+	return r.err
+}
