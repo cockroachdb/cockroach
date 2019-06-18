@@ -44,7 +44,6 @@ type indexSkipTableReader struct {
 	// TODO(rohany): add support for this field
 	// maxResults uint64
 
-	// TODO(rohany): add support for this field
 	maxTimestampAge time.Duration
 
 	// TODO(rohany): add support for this field
