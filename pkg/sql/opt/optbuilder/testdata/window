@@ -1548,3 +1548,8 @@ build
 SELECT rank() OVER (w) FROM kv WINDOW w as (ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ----
 error (42P20): cannot copy window "w" because it has a frame clause
+
+build
+SELECT rank() OVER (ORDER BY k GROUPS k PRECEDING) FROM kv
+----
+error (42601): GROUPS offset cannot contain variables
