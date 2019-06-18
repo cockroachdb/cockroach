@@ -274,9 +274,6 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 // populating s.ColStats with the statistic as it gets passed up the expression
 // tree.
 func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.ColumnStatistic {
-	for opt.IsEnforcerOp(e) {
-		e = e.Child(0).(RelExpr)
-	}
 	if colSet.Empty() {
 		panic(errors.AssertionFailedf("column statistics cannot be determined for empty column set"))
 	}
@@ -285,6 +282,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	if stat, ok := e.Relational().Stats.ColStats.Lookup(colSet); ok {
 		return stat
 	}
+
+	// We only calculate statistics on the normalized expression in a memo group.
+	e = e.FirstExpr()
 
 	// The statistic was not found in the cache, so calculate it based on the
 	// type of expression.
@@ -959,7 +959,7 @@ func (sb *statisticsBuilder) buildJoin(
 			}
 
 			// Ensure distinct count is non-zero.
-			colStat.DistinctCount = min(s.RowCount, max(colStat.DistinctCount, 1))
+			colStat.DistinctCount = max(colStat.DistinctCount, 1)
 		}
 	}
 
@@ -1082,6 +1082,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 				s.RowCount,
 				s.Selectivity*inputRowCount,
 			)
+
+			// Ensure distinct count is non-zero.
+			colStat.DistinctCount = max(colStat.DistinctCount, 1)
 		}
 
 		if colSet.SubsetOf(relProps.NotNullCols) {
@@ -1402,7 +1405,7 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 		s.RowCount = colStat.DistinctCount
 
 		// Non-scalar GroupBy should never increase the number of rows.
-		inputStats := &groupNode.Child(0).(RelExpr).Relational().Stats
+		inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
 		s.RowCount = min(s.RowCount, inputStats.RowCount)
 	}
 
@@ -1468,8 +1471,8 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 		return
 	}
 
-	leftStats := &setNode.Child(0).(RelExpr).Relational().Stats
-	rightStats := &setNode.Child(1).(RelExpr).Relational().Stats
+	leftStats := sb.statsFromChild(setNode, 0 /* childIdx */)
+	rightStats := sb.statsFromChild(setNode, 1 /* childIdx */)
 
 	// These calculations are an upper bound on the row count. It's likely that
 	// there is some overlap between the two sets, but not full overlap.
@@ -1999,7 +2002,7 @@ func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Rel
 		return
 	}
 
-	inputStats := &mutation.Child(0).(RelExpr).Relational().Stats
+	inputStats := sb.statsFromChild(mutation, 0 /* childIdx */)
 
 	s.RowCount = inputStats.RowCount
 	sb.finalizeFromCardinality(relProps)
