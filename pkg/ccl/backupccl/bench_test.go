@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
 
 func bankBuf(numAccounts int) *bytes.Buffer {
@@ -30,7 +30,7 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)
 	for rowIdx := 0; rowIdx < bankData.InitialRows.NumBatches; rowIdx++ {
 		for _, row := range bankData.InitialRows.BatchRows(rowIdx) {
-			rowBatch := strings.Join(workload.StringTuple(row), `,`)
+			rowBatch := strings.Join(workloadsql.StringTuple(row), `,`)
 			fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, rowBatch)
 		}
 	}

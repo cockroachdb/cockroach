@@ -21,6 +21,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+func short(in string) string {
+	return strings.Replace(in, "github.com/cockroachdb/cockroach/pkg/", "./pkg/", -1)
+}
+
 // VerifyNoImports verifies that a package doesn't depend (directly or
 // indirectly) on forbidden packages. The forbidden packages are specified as
 // either exact matches or prefix matches.
@@ -45,10 +49,6 @@ func VerifyNoImports(
 	buildContext.CgoEnabled = cgo
 
 	checked := make(map[string]struct{})
-
-	short := func(in string) string {
-		return strings.Replace(in, "github.com/cockroachdb/cockroach/pkg/", "./pkg/", -1)
-	}
 
 	var check func(string) error
 	check = func(path string) error {
@@ -115,4 +115,59 @@ func VerifyNoImports(
 	if err := check(pkgPath); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// VerifyTransitiveWhitelist checks that the entire set of transitive
+// dependencies of the given package is in a whitelist. Vendored and stdlib
+// packages are always allowed.
+func VerifyTransitiveWhitelist(t testing.TB, pkg string, allowedPkgs []string) {
+	// Skip test if source is not available.
+	if build.Default.GOPATH == "" {
+		t.Skip("GOPATH isn't set")
+	}
+
+	checked := make(map[string]struct{})
+	allowed := make(map[string]struct{}, len(allowedPkgs))
+	for _, allowedPkg := range allowedPkgs {
+		allowed[allowedPkg] = struct{}{}
+	}
+
+	var check func(string)
+	check = func(path string) {
+		if _, ok := checked[path]; ok {
+			return
+		}
+		checked[path] = struct{}{}
+		if strings.HasPrefix(path, "github.com/cockroachdb/cockroach/vendor") {
+			return
+		}
+
+		pkg, err := build.Default.Import(path, "", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, imp := range pkg.Imports {
+			if !strings.HasPrefix(imp, "github.com/cockroachdb/cockroach/") {
+				continue
+			}
+			if _, ok := allowed[imp]; !ok {
+				t.Errorf("%s imports %s, which is forbidden", short(path), short(imp))
+				// If we can't have this package, don't bother recursively checking the
+				// deps, they'll just be noise.
+				continue
+			}
+
+			// https://github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L159
+			if imp == "C" {
+				continue // "C" is fake
+			}
+
+			importPkg, err := build.Default.Import(imp, pkg.Dir, build.FindOnly)
+			if err != nil {
+				t.Fatal(err)
+			}
+			check(importPkg.ImportPath)
+		}
+	}
+	check(pkg)
 }

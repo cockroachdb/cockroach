@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
 
 func bankBuf(numAccounts int) *bytes.Buffer {
@@ -31,12 +31,13 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)
 	for rowIdx := 0; rowIdx < bankData.InitialRows.NumBatches; rowIdx++ {
 		for _, row := range bankData.InitialRows.BatchRows(rowIdx) {
-			rowTuple := strings.Join(workload.StringTuple(row), `,`)
+			rowTuple := strings.Join(workloadsql.StringTuple(row), `,`)
 			fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, rowTuple)
 		}
 	}
 	return &buf
 }
+
 func TestImportChunking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -79,8 +80,8 @@ func TestImportOutOfOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	bankData := bank.FromRows(2).Tables()[0]
-	row1 := workload.StringTuple(bankData.InitialRows.BatchRows(0)[0])
-	row2 := workload.StringTuple(bankData.InitialRows.BatchRows(1)[0])
+	row1 := workloadsql.StringTuple(bankData.InitialRows.BatchRows(0)[0])
+	row2 := workloadsql.StringTuple(bankData.InitialRows.BatchRows(1)[0])
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)

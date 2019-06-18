@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,7 +43,7 @@ func TestValidations(t *testing.T) {
 			ctx := context.Background()
 			const numRows, numRanges, payloadBytes, maxTransfer = 10, 10, 10, 999
 			gen := bank.FromConfig(numRows, payloadBytes, numRanges)
-			if _, err := workload.Setup(ctx, db, gen, 0, 0); err != nil {
+			if _, err := workloadsql.Setup(ctx, db, gen, 0, 0); err != nil {
 				t.Fatal(err)
 			}
 
@@ -123,7 +123,7 @@ func TestCatchupScanOrdering(t *testing.T) {
 			ctx := context.Background()
 			const numRows, numRanges, payloadBytes, maxTransfer = 10, 10, 10, 999
 			gen := bank.FromConfig(numRows, payloadBytes, numRanges)
-			if _, err := workload.Setup(ctx, db, gen, 0, 0); err != nil {
+			if _, err := workloadsql.Setup(ctx, db, gen, 0, 0); err != nil {
 				t.Fatal(err)
 			}
 
