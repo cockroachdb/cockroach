@@ -2832,6 +2832,9 @@ iPad             {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Th
 Kindle Fire      {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad,"Kindle Fire"}
 Samsung          {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad,"Kindle Fire",Samsung}
 
+statement error GROUPS offset cannot contain variables
+SELECT avg(price) OVER (GROUPS group_id PRECEDING) FROM products
+
 statement error frame starting offset must not be null
 SELECT avg(price) OVER (GROUPS NULL PRECEDING) FROM products
 
