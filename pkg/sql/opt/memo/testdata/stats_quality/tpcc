@@ -1323,7 +1323,7 @@ project
  ├── save-table-name: delivery_01_project_1
  ├── columns: no_o_id:1(int!null)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── stats: [rows=1, distinct(1)=0.99967919, null(1)=0]
  ├── cost: 1.09
  ├── key: ()
  ├── fd: ()-->(1)
@@ -1333,7 +1333,7 @@ project
       ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
       ├── constraint: /3/2/-1: [/7/6 - /7/6]
       ├── limit: 1(rev)
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=1, distinct(1)=0.99967919, null(1)=0, distinct(2)=0.632325031, null(2)=0, distinct(3)=0.632325031, null(3)=0]
       ├── cost: 1.07
       ├── key: ()
       ├── fd: ()-->(1-3)

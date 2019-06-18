@@ -135,7 +135,7 @@ CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
 ----
 
 exec-ddl
-CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY (f, e), INDEX e_idx (e) STORING (d))
+CREATE TABLE def (d INT, e INT, f INT, g FLOAT, PRIMARY KEY (f, e), INDEX e_idx (e) STORING (d))
 ----
 
 # Set up the statistics as if the first table is much smaller than the second.
@@ -169,7 +169,7 @@ ALTER TABLE def INJECT STATISTICS '[
 
 # The filter a=f is selective, so we expect a lookup join.
 opt
-SELECT * FROM abc JOIN def ON a = f
+SELECT a, b, c, d, e, f FROM abc JOIN def ON a = f
 ----
 inner-join (lookup def)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) f:6(int!null)
@@ -186,7 +186,7 @@ inner-join (lookup def)
 
 # The filter a=e is not very selective, so we do not expect a lookup join.
 opt
-SELECT * FROM abc JOIN def ON a = e
+SELECT a, b, c, d, e, f FROM abc JOIN def ON a = e
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) f:6(int!null)
@@ -211,7 +211,7 @@ inner-join (merge)
 
 # Check column statistics for lookup join.
 opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=5 colstat=6 colstat=(2,5,6)
-SELECT * FROM abc JOIN DEF ON a = f
+SELECT a, b, c, d, e, f FROM abc JOIN DEF ON a = f
 ----
 inner-join (lookup def)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) f:6(int!null)
@@ -224,4 +224,29 @@ inner-join (lookup def)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
  │    ├── key: (1,3)
  │    └── fd: (1,3)-->(2)
+ └── filters (true)
+
+# Check column statistics for double lookup join.
+opt colstat=7
+SELECT * FROM abc LEFT JOIN DEF ON a = e AND b = 3
+----
+left-join (lookup def)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) f:6(int) g:7(float)
+ ├── key columns: [6 5] = [6 5]
+ ├── stats: [rows=1000, distinct(5)=100, null(5)=0, distinct(7)=632.304575, null(7)=10]
+ ├── key: (1,3,5,6)
+ ├── fd: (1,3)-->(2), (5,6)-->(4,7)
+ ├── left-join (lookup def@e_idx)
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) f:6(int)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=1000, distinct(5)=100, null(5)=0]
+ │    ├── key: (1,3,5,6)
+ │    ├── fd: (1,3)-->(2), (5,6)-->(4)
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ │    │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
+ │    │    ├── key: (1,3)
+ │    │    └── fd: (1,3)-->(2)
+ │    └── filters
+ │         └── b = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
  └── filters (true)
