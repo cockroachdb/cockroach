@@ -693,6 +693,7 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typed
 
 var (
 	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
+	errVarOffsetGroups      = pgerror.New(pgcode.Syntax, fmt.Sprintf("GROUPS offset cannot contain variables"))
 	errStarNotAllowed       = pgerror.New(pgcode.Syntax, "cannot use \"*\" in this context")
 	errInvalidDefaultUsage  = pgerror.New(pgcode.Syntax, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
 	errInvalidMaxUsage      = pgerror.New(pgcode.Syntax, "MAXVALUE can only appear within a range partition expression")
@@ -998,6 +999,16 @@ func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
 			}
 		}
 	case GROUPS:
+		if startBound != nil && startBound.HasOffset() {
+			if ContainsVars(startBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
+		if endBound != nil && endBound.HasOffset() {
+			if ContainsVars(endBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
 		// In GROUPS mode, offsets must be non-null, non-negative integers.
 		// Non-nullity and non-negativity will be checked later.
 		requiredType = types.Int
