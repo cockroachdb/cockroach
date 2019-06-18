@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -41,13 +40,6 @@ type indexSkipTableReader struct {
 
 	// how much of the primary key prefix we are doing the distinct over
 	keyPrefixLen int
-
-	limitHint int64
-
-	// TODO(rohany): add support for this field
-	// maxResults uint64
-
-	maxTimestampAge time.Duration
 
 	ignoreMisplannedRanges bool
 	misplannedRanges       []roachpb.RangeInfo
@@ -82,9 +74,6 @@ func newIndexSkipTableReader(
 	}
 
 	t := istrPool.Get().(*indexSkipTableReader)
-
-	t.limitHint = limitHint(1, post)
-	t.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
@@ -168,20 +157,10 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		fmt.Println(t.spans[t.currentSpan])
 
 		// Start a scan to get the smallest value within this span
-		var err error
-		if t.maxTimestampAge == 0 {
-			err = t.fetcher.StartScan(
-				t.Ctx, t.flowCtx.txn, t.spans[t.currentSpan:t.currentSpan+1],
-				true, t.limitHint, t.flowCtx.traceKV,
-			)
-		} else {
-			initialTS := t.flowCtx.txn.GetTxnCoordMeta(t.Ctx).Txn.OrigTimestamp
-			err = t.fetcher.StartInconsistentScan(
-				t.Ctx, t.flowCtx.ClientDB, initialTS,
-				t.maxTimestampAge, t.spans[t.currentSpan:t.currentSpan+1],
-				true, t.limitHint, t.flowCtx.traceKV,
-			)
-		}
+		err := t.fetcher.StartScan(
+			t.Ctx, t.flowCtx.txn, t.spans[t.currentSpan:t.currentSpan+1],
+			true, 1 /* batch size limit */, t.flowCtx.traceKV,
+		)
 		if err != nil {
 			t.MoveToDraining(err)
 			return nil, &distsqlpb.ProducerMetadata{Err: err}
@@ -265,11 +244,7 @@ func (t *indexSkipTableReader) generateTrailingMeta(
 func (t *indexSkipTableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !t.ignoreMisplannedRanges {
-		ranges := misplannedRanges(ctx, t.fetcher.GetRangesInfo(), t.flowCtx.nodeID)
-		if ranges != nil {
-			for _, r := range ranges {
-				t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
-			}
+		if t.misplannedRanges != nil {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: t.misplannedRanges})
 		}
 	}
