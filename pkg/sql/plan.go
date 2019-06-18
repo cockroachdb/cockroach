@@ -298,6 +298,10 @@ type planTop struct {
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 
+	// postqueryPlans contains all the plans for subqueries that are to be
+	// executed after the main query (for example, foreign key checks).
+	postqueryPlans []postquery
+
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
@@ -319,6 +323,12 @@ type planTop struct {
 	// avoidBuffering, when set, causes the execution to avoid buffering
 	// results.
 	avoidBuffering bool
+}
+
+// postquery is a query tree that is executed after the main one. It can only
+// return an error (for example, foreign key violation).
+type postquery struct {
+	plan planNode
 }
 
 // makePlan implements the planMaker interface. It populates the
