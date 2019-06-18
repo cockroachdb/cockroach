@@ -10,7 +10,7 @@
 // included in the file licenses/APL.txt and at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-package workload
+package workloadsql
 
 import (
 	"math/rand"

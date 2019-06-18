@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -41,7 +41,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	db.Exec(t, "CREATE DATABASE test")
 
 	wk := bank.FromRows(rows)
-	if _, err := workload.Setup(ctx, conn, wk, 100, 3); err != nil {
+	if _, err := workloadsql.Setup(ctx, conn, wk, 100, 3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -54,7 +54,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	zoneConfig := config.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(5000)
 	config.TestingSetZoneConfig(last+1, zoneConfig)
-	if err := workload.Split(ctx, conn, wk.Tables()[0], 1 /* concurrency */); err != nil {
+	if err := workloadsql.Split(ctx, conn, wk.Tables()[0], 1 /* concurrency */); err != nil {
 		t.Fatal(err)
 	}
 	db.Exec(t, "ALTER TABLE bank SCATTER")

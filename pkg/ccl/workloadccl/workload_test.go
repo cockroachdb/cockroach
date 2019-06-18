@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
 
 func TestSetup(t *testing.T) {
@@ -65,7 +66,7 @@ func TestSetup(t *testing.T) {
 				}
 			}
 
-			if _, err := workload.Setup(ctx, db, gen, test.batchSize, test.concurrency); err != nil {
+			if _, err := workloadsql.Setup(ctx, db, gen, test.batchSize, test.concurrency); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

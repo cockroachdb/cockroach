@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	// Register the relevant examples
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/spf13/cobra"
 )
 
@@ -61,7 +62,7 @@ func runGenExamplesCmd(gen workload.Generator) {
 		fmt.Fprintf(w, "CREATE TABLE \"%s\" %s;\n", table.Name, table.Schema)
 		for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; rowIdx++ {
 			for _, row := range table.InitialRows.BatchRows(rowIdx) {
-				rowTuple := strings.Join(workload.StringTuple(row), `,`)
+				rowTuple := strings.Join(workloadsql.StringTuple(row), `,`)
 				fmt.Fprintf(w, "INSERT INTO \"%s\" VALUES (%s);\n", table.Name, rowTuple)
 			}
 		}
