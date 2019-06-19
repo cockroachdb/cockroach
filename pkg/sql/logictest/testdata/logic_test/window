@@ -2832,8 +2832,14 @@ iPad             {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Th
 Kindle Fire      {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad,"Kindle Fire"}
 Samsung          {"Microsoft Lumia","HTC One",Nexus,iPhone,"HP Elite","Lenovo Thinkpad","Sony VAIO",Dell,iPad,"Kindle Fire",Samsung}
 
+statement error ROWS offset cannot contain variables
+SELECT avg(price) OVER (ROWS group_id PRECEDING) FROM products
+
+statement error RANGE offset cannot contain variables
+SELECT avg(price) OVER (ORDER BY group_id RANGE group_id PRECEDING) FROM products
+
 statement error GROUPS offset cannot contain variables
-SELECT avg(price) OVER (GROUPS group_id PRECEDING) FROM products
+SELECT avg(price) OVER (ORDER BY group_id GROUPS group_id PRECEDING) FROM products
 
 statement error GROUPS mode requires an ORDER BY clause
 SELECT avg(price) OVER (GROUPS 1 PRECEDING) FROM products

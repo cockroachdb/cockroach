@@ -174,6 +174,8 @@ func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 
 var (
 	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
+	errVarOffsetRows        = pgerror.New(pgcode.Syntax, "ROWS offset cannot contain variables")
+	errVarOffsetRange       = pgerror.New(pgcode.Syntax, "RANGE offset cannot contain variables")
 	errVarOffsetGroups      = pgerror.New(pgcode.Syntax, "GROUPS offset cannot contain variables")
 )
 
@@ -301,6 +303,7 @@ func (p *planner) constructWindowDefinitions(
 
 // analyzeWindowFrame performs semantic analysis of offset expressions of
 // the window frame.
+// NOTE: this method must be kept in sync with the one in optbuilder/scope.go.
 func analyzeWindowFrame(
 	ctx context.Context, p *planner, r *renderNode, windowDef *tree.WindowDef,
 ) error {
@@ -308,12 +311,15 @@ func analyzeWindowFrame(
 	bounds := frame.Bounds
 	startBound, endBound := bounds.StartBound, bounds.EndBound
 	var requiredType *types.T
+	var errVarOffset error
 	switch frame.Mode {
 	case tree.ROWS:
+		errVarOffset = errVarOffsetRows
 		// In ROWS mode, offsets must be non-null, non-negative integers. Non-nullity
 		// and non-negativity will be checked later.
 		requiredType = types.Int
 	case tree.RANGE:
+		errVarOffset = errVarOffsetRange
 		// In RANGE mode, offsets must be non-null and non-negative datums of a type
 		// dependent on the type of the ordering column. Non-nullity and
 		// non-negativity will be checked later.
@@ -333,16 +339,7 @@ func analyzeWindowFrame(
 			}
 		}
 	case tree.GROUPS:
-		if startBound != nil && startBound.HasOffset() {
-			if tree.ContainsVars(startBound.OffsetExpr) {
-				return errVarOffsetGroups
-			}
-		}
-		if endBound != nil && endBound.HasOffset() {
-			if tree.ContainsVars(endBound.OffsetExpr) {
-				return errVarOffsetGroups
-			}
-		}
+		errVarOffset = errVarOffsetGroups
 		if len(windowDef.OrderBy) == 0 {
 			return pgerror.Newf(pgcode.Windowing, "GROUPS mode requires an ORDER BY clause")
 		}
@@ -352,12 +349,15 @@ func analyzeWindowFrame(
 	default:
 		return errors.AssertionFailedf("unexpected WindowFrameMode: %d", errors.Safe(frame.Mode))
 	}
-	if startBound.HasOffset() {
+	if startBound != nil && startBound.HasOffset() {
 		typedStartOffsetExpr, err := p.analyzeExpr(ctx, startBound.OffsetExpr, r.sourceInfo, r.ivarHelper, requiredType, true, "WINDOW FRAME START")
 		if err != nil {
 			return err
 		}
 		startBound.OffsetExpr = typedStartOffsetExpr
+		if tree.ContainsVars(startBound.OffsetExpr) {
+			return errVarOffset
+		}
 	}
 	if endBound != nil && endBound.HasOffset() {
 		typedEndOffsetExpr, err := p.analyzeExpr(ctx, endBound.OffsetExpr, r.sourceInfo, r.ivarHelper, requiredType, true, "WINDOW FRAME END")
@@ -365,6 +365,9 @@ func analyzeWindowFrame(
 			return err
 		}
 		endBound.OffsetExpr = typedEndOffsetExpr
+		if tree.ContainsVars(endBound.OffsetExpr) {
+			return errVarOffset
+		}
 	}
 	return nil
 }
