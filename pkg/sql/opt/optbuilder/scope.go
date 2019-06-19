@@ -315,7 +315,7 @@ func (s *scope) resolveType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 	if err != nil {
 		panic(builderError{err})
 	}
-	return s.ensureNullType(texpr, desired)
+	return ensureNullType(texpr, desired)
 }
 
 // resolveAndRequireType converts the given expr to a tree.TypedExpr. As part
@@ -334,20 +334,22 @@ func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.Typ
 	if err != nil {
 		panic(builderError{err})
 	}
-	return s.ensureNullType(texpr, desired)
+	return ensureNullType(texpr, desired)
 }
 
 // ensureNullType tests the type of the given expression. If types.Unknown, then
 // ensureNullType wraps the expression in a CAST to the desired type (assuming
-// it is not types.Any). types.Unknown is a special type used for null values,
-// and can be cast to any other type.
-func (s *scope) ensureNullType(texpr tree.TypedExpr, desired *types.T) tree.TypedExpr {
-	if desired.Family() != types.AnyFamily && texpr.ResolvedType().Family() == types.UnknownFamily {
-		var err error
-		texpr, err = tree.NewTypedCastExpr(texpr, desired)
+// it is not types.Any or types.Unknown).
+// types.Unknown is a special type used for null values, and can be cast to any
+// other type.
+func ensureNullType(texpr tree.TypedExpr, desired *types.T) tree.TypedExpr {
+	if desired.Family() != types.AnyFamily && desired.Family() != types.UnknownFamily &&
+		texpr.ResolvedType().Family() == types.UnknownFamily {
+		cast, err := tree.NewTypedCastExpr(texpr, desired)
 		if err != nil {
 			panic(err)
 		}
+		return cast
 	}
 	return texpr
 }
