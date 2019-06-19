@@ -246,8 +246,9 @@ func emitHelper(
 			panic("both row data and metadata in the same emitHelper call")
 		}
 		// Bypass EmitRow() and send directly to output.output.
+		foundErr := meta.Err != nil
 		consumerStatus = output.output.Push(nil /* row */, meta)
-		if meta.Err != nil {
+		if foundErr {
 			consumerStatus = ConsumerClosed
 		}
 	} else {
@@ -858,12 +859,10 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta distsqlpb.ProducerMetadata) {
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the
-// annotated context that's also stored in pb.ctx.
+// annotated context that's also stored in pb.Ctx.
 func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {
-	pb.Ctx = ctx
-
-	pb.origCtx = pb.Ctx
-	pb.Ctx, pb.span = processorSpan(pb.Ctx, name)
+	pb.origCtx = ctx
+	pb.Ctx, pb.span = processorSpan(ctx, name)
 	if pb.span != nil {
 		pb.span.SetTag(tracing.TagPrefix+"processorid", pb.processorID)
 	}

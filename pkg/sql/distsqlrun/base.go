@@ -65,7 +65,7 @@ type RowReceiver interface {
 	//
 	// Unless specifically permitted by the underlying implementation, (see
 	// copyingRowReceiver, for example), the sender must not modify the row
-	// after calling this function.
+	// and the metadata after calling this function.
 	//
 	// After DrainRequested is returned, it is expected that all future calls only
 	// carry metadata (however that is not enforced and implementations should be

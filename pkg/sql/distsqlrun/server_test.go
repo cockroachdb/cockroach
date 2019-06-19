@@ -103,6 +103,7 @@ func TestServer(t *testing.T) {
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreTxnCoordMeta(metas)
+	metas = ignoreMetricsMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata: %v", metas)
 	}

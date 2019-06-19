@@ -160,6 +160,11 @@ func (m *outbox) flush(ctx context.Context) error {
 		log.Infof(ctx, "flushing outbox")
 	}
 	sendErr := m.stream.Send(msg)
+	for _, rpm := range msg.Data.Metadata {
+		if metricsMeta, ok := rpm.Value.(*distsqlpb.RemoteProducerMetadata_Metrics_); ok {
+			metricsMeta.Metrics.Release()
+		}
+	}
 	if sendErr != nil {
 		// Make sure the stream is not used any more.
 		m.stream = nil
@@ -292,6 +297,11 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				err := m.addRow(ctx, msg.Row, msg.Meta)
 				if err != nil {
 					return err
+				}
+				if msg.Meta != nil {
+					// Now that we have added metadata, it is safe to release it to the
+					// pool.
+					msg.Meta.Release()
 				}
 				// If the message to add was metadata, a flush was already forced. If
 				// this is our first row, restart the flushTimer.

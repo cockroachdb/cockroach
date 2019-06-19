@@ -236,11 +236,13 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 	if errToSend != nil {
 		msg.Data.Metadata = append(
 			msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, distsqlpb.ProducerMetadata{Err: errToSend}),
+			// TODO(yuzefovich): obtain and release producer metadata from the pool.
 		)
 	}
 	for _, src := range o.metadataSources {
 		for _, meta := range src.DrainMeta(ctx) {
 			msg.Data.Metadata = append(msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta))
+			// TODO(yuzefovich): release meta object to the pool.
 		}
 	}
 	if len(msg.Data.Metadata) == 0 {
