@@ -1249,18 +1249,47 @@ func (sc *SchemaChanger) refreshStats() {
 func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError error) error {
 	// Reverse the flow of the state machine.
 	var scJob *jobs.Job
+
+	// Get the other tables whose foreign key backreferences need to be removed.
+	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
+		var err error
+		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+		for _, mutation := range desc.Mutations {
+			if mutation.MutationID != sc.mutationID {
+				break
+			}
+			if constraint := mutation.GetConstraint(); constraint != nil &&
+				constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
+				mutation.Direction == sqlbase.DescriptorMutation_ADD {
+				fk := &constraint.ForeignKey
+				if fk.Table != desc.ID {
+					fksByBackrefTable[constraint.ForeignKey.Table] = append(fksByBackrefTable[constraint.ForeignKey.Table], constraint)
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Create map of update closures for the table and all other tables with backreferences
+	updates := make(map[sqlbase.ID]func(descriptor *sqlbase.MutableTableDescriptor) error)
 	// All the mutations dropped by the reversal of the schema change.
 	// This is created by traversing the mutations list like a graph
 	// where the indexes refer columns. Whenever a column schema change
 	// is reversed, any index mutation referencing it is also reversed.
 	var droppedMutations map[sqlbase.MutationID]struct{}
-	var backrefs map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
-	_, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
+	updates[sc.tableID] = func(desc *sqlbase.MutableTableDescriptor) error {
 		// Keep track of the column mutations being reversed so that indexes
 		// referencing them can be dropped.
 		columns := make(map[string]struct{})
 		droppedMutations = nil
-		backrefs = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 
 		for i, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
@@ -1296,8 +1325,6 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 						if err := removeFKBackReferenceFromTable(desc, fk.Index, desc.ID, constraint.ForeignKeyIndex); err != nil {
 							return err
 						}
-					} else {
-						backrefs[constraint.ForeignKey.Table] = append(backrefs[constraint.ForeignKey.Table], constraint)
 					}
 				}
 			}
@@ -1315,9 +1342,21 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			}
 		}
 
-		// Publish() will increment the version.
+		// PublishMultiple() will increment the version.
 		return nil
-	}, func(txn *client.Txn) error {
+	}
+	for id := range fksByBackrefTable {
+		updates[id] = func(desc *sqlbase.MutableTableDescriptor) error {
+			for _, c := range fksByBackrefTable[id] {
+				if err := removeFKBackReferenceFromTable(desc, c.ForeignKey.Index, sc.tableID, c.ForeignKeyIndex); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+
+	_, err = sc.leaseMgr.PublishMultiple(ctx, updates, func(txn *client.Txn) error {
 		// Read the table descriptor from the store. The Version of the
 		// descriptor has already been incremented in the transaction and
 		// this descriptor can be modified without incrementing the version.
@@ -1359,18 +1398,11 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 		return err
 	}
 
-	// Drop foreign key backreferences on other tables
-	for tbl, refs := range backrefs {
-		_, err = sc.leaseMgr.Publish(ctx, tbl, func(desc *sqlbase.MutableTableDescriptor) error {
-			for _, ref := range refs {
-				if err := removeFKBackReferenceFromTable(desc, ref.ForeignKey.Index, sc.tableID, ref.ForeignKeyIndex); err != nil {
-					return err
-				}
-			}
-			return nil
-		}, nil,
-		)
-		if err != nil {
+	if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+		return err
+	}
+	for id := range fksByBackrefTable {
+		if err := sc.waitToUpdateLeases(ctx, id); err != nil {
 			return err
 		}
 	}

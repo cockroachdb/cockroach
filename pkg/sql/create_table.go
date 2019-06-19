@@ -618,10 +618,13 @@ func ResolveFK(
 		backref.Index = added
 	}
 
-	if targetIdxIndex > -1 {
-		target.Indexes[targetIdxIndex].ReferencedBy = append(target.Indexes[targetIdxIndex].ReferencedBy, backref)
-	} else {
-		target.PrimaryIndex.ReferencedBy = append(target.PrimaryIndex.ReferencedBy, backref)
+	// TODO (lucy): Should the IsNewTable() case be handled in runSchemaChangesInTxn instead?
+	if ts == NewTable || tbl.IsNewTable() {
+		if targetIdxIndex > -1 {
+			target.Indexes[targetIdxIndex].ReferencedBy = append(target.Indexes[targetIdxIndex].ReferencedBy, backref)
+		} else {
+			target.PrimaryIndex.ReferencedBy = append(target.PrimaryIndex.ReferencedBy, backref)
+		}
 	}
 
 	// Multiple FKs from the same column would potentially result in ambiguous or
