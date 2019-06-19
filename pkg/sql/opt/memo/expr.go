@@ -221,6 +221,25 @@ func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
 	*n = common
 }
 
+// RetainUncommonFilters retains only the filters found in n and not in other.
+func (n *FiltersExpr) RetainUncommonFilters(other FiltersExpr) {
+	// TODO(ridwanmsharif): Faster intersection using a map
+	common := (*n)[:0]
+	for _, filter := range *n {
+		found := false
+		for _, otherFilter := range other {
+			if filter.Condition == otherFilter.Condition {
+				found = true
+				break
+			}
+		}
+		if !found {
+			common = append(common, filter)
+		}
+	}
+	*n = common
+}
+
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {

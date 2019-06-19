@@ -13,6 +13,8 @@
 package xform
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -803,33 +805,81 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	var iter scanIndexIter
 	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
+		idxCols := iter.indexCols()
+
+		// Find the longest prefix of index key columns that are constrained by
+		// an equality with another column or a constant.
+		numIndexKeyCols := iter.index.LaxKeyColumnCount()
+		constValMap := memo.ExtractValuesFromFilter(on, idxCols)
+		constFilterMap := memo.ExtractConstantFilter(on, idxCols)
+
+		var projections memo.ProjectionsExpr
+		var constFilters memo.FiltersExpr
+		if len(constValMap) > 0 {
+			projections = make(memo.ProjectionsExpr, 0, numIndexKeyCols)
+			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols)
+		}
+
 		// Check if the first column in the index has an equality constraint.
 		firstIdxCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			continue
+			if _, ok := constValMap[firstIdxCol]; !ok {
+				continue
+			}
 		}
 
-		lookupJoin := memo.LookupJoinExpr{Input: input, On: on}
+		lookupJoin := memo.LookupJoinExpr{Input: input}
 		lookupJoin.JoinPrivate = *joinPrivate
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = iter.indexOrdinal
 
-		// Find the longest prefix of index key columns that are equality columns.
-		numIndexKeyCols := iter.index.LaxKeyColumnCount()
 		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
 		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
+		needProjection := false
+
+		// All the lookup conditions must apply to the prefix of the index and so
+		// the projected columns created must be created in order.
 		for j := 0; j < numIndexKeyCols; j++ {
 			idxCol := scanPrivate.Table.ColumnID(iter.index.Column(j).Ordinal)
-			eqIdx, ok := rightEq.Find(idxCol)
-			if !ok {
+			if eqIdx, ok := rightEq.Find(idxCol); ok {
+				lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
+				rightSideCols = append(rightSideCols, idxCol)
+				continue
+			}
+
+			// Project a new column with a constant value if that allows the
+			// index column to be constrained and used by the lookup joiner.
+			if filter, ok := constFilterMap[idxCol]; ok {
+				if condition, ok := filter.Condition.(*memo.EqExpr); ok {
+					constColID := c.e.f.Metadata().AddColumn(
+						fmt.Sprintf("project_const_col_@%d", idxCol),
+						condition.Right.(*memo.ConstExpr).Typ)
+					projections = append(projections, memo.ProjectionsItem{
+						Element:    c.e.f.ConstructConst(constValMap[idxCol]),
+						ColPrivate: memo.ColPrivate{Col: constColID},
+					})
+
+					needProjection = true
+					lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
+					rightSideCols = append(rightSideCols, idxCol)
+					constFilters = append(constFilters, filter)
+				} else {
+					break
+				}
+			} else {
 				break
 			}
-			lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
-			rightSideCols = append(rightSideCols, idxCol)
 		}
 
+		// Construct the projections for the constant columns.
+		if needProjection {
+			lookupJoin.Input = c.e.f.ConstructProject(input, projections, input.Relational().OutputCols)
+		}
+
+		// Remove the redundant filters and update the lookup condition.
 		lookupJoin.On = memo.ExtractRemainingJoinFilters(on, lookupJoin.KeyCols, rightSideCols)
+		lookupJoin.On.RetainUncommonFilters(constFilters)
 
 		if iter.isCovering() {
 			// Case 1 (see function comment).
