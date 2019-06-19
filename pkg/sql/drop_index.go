@@ -15,6 +15,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -242,7 +243,7 @@ func (p *planner) dropIndexByName(
 				// lies within the span of the index since ScanMetaKVs returns all
 				// intersecting spans.
 				if (desc.StickyBit != hlc.Timestamp{}) && span.Key.Compare(desc.StartKey.AsRawKey()) <= 0 {
-					if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil {
+					if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil && strings.Contains(err.Error(), "is not the start of a range") {
 						return err
 					}
 				}

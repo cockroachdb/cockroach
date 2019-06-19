@@ -15,6 +15,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -366,7 +367,7 @@ func (p *planner) initiateDropTable(
 			return err
 		}
 		if (desc.StickyBit != hlc.Timestamp{}) {
-			if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil {
+			if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil && strings.Contains(err.Error(), "is not the start of a range") {
 				return err
 			}
 		}
