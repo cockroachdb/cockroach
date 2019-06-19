@@ -228,8 +228,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				ck.Validity = sqlbase.ConstraintValidity_Validating
-				n.tableDesc.AddCheckValidationMutation(ck)
+				if t.ValidationBehavior == tree.ValidationDefault {
+					ck.Validity = sqlbase.ConstraintValidity_Validating
+				} else {
+					ck.Validity = sqlbase.ConstraintValidity_Unvalidated
+				}
+				n.tableDesc.AddCheckMutation(ck)
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
