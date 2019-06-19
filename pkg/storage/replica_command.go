@@ -227,9 +227,14 @@ func (r *Replica) adminSplitWithDescriptor(
 			newDesc := *desc
 			newDesc.StickyBit = args.ExpirationTime
 			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				_, dbDescValue, err := fetchDBRangeDescriptor(ctx, txn, desc)
+				if err != nil {
+					return err
+				}
+
 				b := txn.NewBatch()
 				descKey := keys.RangeDescriptorKey(desc.StartKey)
-				if err := updateRangeDescriptor(b, descKey, desc, &newDesc); err != nil {
+				if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
 					return err
 				}
 				if err := updateRangeAddressing(b, &newDesc); err != nil {
@@ -298,9 +303,14 @@ func (r *Replica) adminSplitWithDescriptor(
 		// split. Note that we mutate the descriptor for the left hand
 		// side of the split first to locate the txn record there.
 		{
+			_, dbLeftDescValue, err := fetchDBRangeDescriptor(ctx, txn, desc)
+			if err != nil {
+				return err
+			}
+
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, dbLeftDescValue, &leftDesc); err != nil {
 				return err
 			}
 			// Commit this batch first to ensure that the transaction record
@@ -397,12 +407,16 @@ func (r *Replica) AdminUnsplit(
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		_, dbDescValue, err := fetchDBRangeDescriptor(ctx, txn, &desc)
+		if err != nil {
+			return err
+		}
+
 		b := txn.NewBatch()
 		newDesc := desc
 		newDesc.StickyBit = hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
-
-		if err := updateRangeDescriptor(b, descKey, &desc, &newDesc); err != nil {
+		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
 			return err
 		}
 		if err := updateRangeAddressing(b, &newDesc); err != nil {
@@ -483,7 +497,11 @@ func (r *Replica) AdminMerge(
 		// NB: this read does NOT impact transaction record placement.
 		var rightDesc roachpb.RangeDescriptor
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
-		if err := txn.GetProto(ctx, rightDescKey, &rightDesc); err != nil {
+		dbRightDescKV, err := txn.Get(ctx, rightDescKey)
+		if err != nil {
+			return err
+		}
+		if err := dbRightDescKV.Value.GetProto(&rightDesc); err != nil {
 			return err
 		}
 
@@ -511,9 +529,14 @@ func (r *Replica) AdminMerge(
 		// transaction is this conditional put to change the left hand side's
 		// descriptor end key.
 		{
+			_, dbLeftDescValue, err := fetchDBRangeDescriptor(ctx, txn, origLeftDesc)
+			if err != nil {
+				return err
+			}
+
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, dbLeftDescValue, &updatedLeftDesc); err != nil {
 				return err
 			}
 			// Commit this batch on its own to ensure that the transaction record
@@ -541,7 +564,7 @@ func (r *Replica) AdminMerge(
 		}
 
 		// Remove the range descriptor for the deleted range.
-		if err := updateRangeDescriptor(b, rightDescKey, &rightDesc, nil); err != nil {
+		if err := updateRangeDescriptor(b, rightDescKey, dbRightDescKV.Value, nil); err != nil {
 			return err
 		}
 
@@ -568,7 +591,7 @@ func (r *Replica) AdminMerge(
 		}
 		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
-		err := waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
+		err = waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
 		if err != nil {
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
@@ -792,6 +815,7 @@ func (r *Replica) changeReplicas(
 	if desc == nil {
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
+
 	repDesc := roachpb.ReplicaDescriptor{
 		NodeID:  target.NodeID,
 		StoreID: target.StoreID,
@@ -870,24 +894,19 @@ func (r *Replica) changeReplicas(
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
-		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
-		// Remove when that has been solved. The failure mode is likely based on
-		// prior divergence of the Replica (in which case the check below does not
-		// fire because everything reads from the local, diverged, set of data),
-		// so we don't expect to see this fail in practice ever.
-		oldDesc := new(roachpb.RangeDescriptor)
-		if err := txn.GetProto(ctx, descKey, oldDesc); err != nil {
+		dbDesc, dbDescValue, err := fetchDBRangeDescriptor(ctx, txn, desc)
+		if err != nil {
 			return err
 		}
 		log.Infof(ctx, "change replicas (%v %s): read existing descriptor %s",
-			changeType, repDesc, oldDesc)
+			changeType, repDesc, dbDesc)
 
 		{
 			b := txn.NewBatch()
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
+			if err := updateRangeDescriptor(b, descKey, dbDescValue, &updatedDesc); err != nil {
 				return err
 			}
 
@@ -932,12 +951,6 @@ func (r *Replica) changeReplicas(
 			return err
 		}
 
-		if oldDesc.RangeID != 0 && !oldDesc.Equal(desc) {
-			// We read the previous value, it wasn't what we supposedly used in
-			// the CPut, but we still overwrote in the CPut above.
-			panic(fmt.Sprintf("committed replica change, but oldDesc != assumedOldDesc:\n%+v\n%+v\nnew desc:\n%+v",
-				oldDesc, desc, updatedDesc))
-		}
 		return nil
 	}); err != nil {
 		log.Event(ctx, err.Error())
@@ -1080,6 +1093,27 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 	return true
 }
 
+func fetchDBRangeDescriptor(
+	ctx context.Context, txn *client.Txn, desc *roachpb.RangeDescriptor,
+) (*roachpb.RangeDescriptor, *roachpb.Value, error) {
+	descKey := keys.RangeDescriptorKey(desc.StartKey)
+	existingDescKV, err := txn.Get(ctx, descKey)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "fetching current range descriptor value")
+	}
+	var existingDesc *roachpb.RangeDescriptor
+	if existingDescKV.Value != nil {
+		existingDesc = &roachpb.RangeDescriptor{}
+		if err := existingDescKV.Value.GetProto(existingDesc); err != nil {
+			return nil, nil, errors.Wrap(err, "decoding current range descriptor value")
+		}
+	}
+	if !existingDesc.Equal(desc) {
+		return nil, nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
+	}
+	return existingDesc, existingDescKV.Value, nil
+}
+
 // updateRangeDescriptor adds a ConditionalPut on the range descriptor. The
 // conditional put verifies that changes to the range descriptor are made in a
 // well-defined order, preventing a scenario where a wayward replica which is
@@ -1088,16 +1122,13 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // range descriptor. This is a last line of defense; other mechanisms should
 // prevent rogue replicas from getting this far (see #768).
 //
-// oldDesc can be nil, meaning that the key is expected to not exist.
+// oldValue can be nil, meaning that the key is expected to not exist.
 //
 // Note that in addition to using this method to update the on-disk range
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
 func updateRangeDescriptor(
-	b *client.Batch,
-	descKey roachpb.Key,
-	oldDesc *roachpb.RangeDescriptor,
-	newDesc *roachpb.RangeDescriptor,
+	b *client.Batch, descKey roachpb.Key, oldValue *roachpb.Value, newDesc *roachpb.RangeDescriptor,
 ) error {
 	// This is subtle: []byte(nil) != interface{}(nil). A []byte(nil) refers to
 	// an empty value. An interface{}(nil) refers to a non-existent value. So
@@ -1105,7 +1136,8 @@ func updateRangeDescriptor(
 	var newValue interface{}
 	if newDesc != nil {
 		if err := newDesc.Validate(); err != nil {
-			return errors.Wrapf(err, "validating new descriptor %+v (old descriptor is %+v)", newDesc, oldDesc)
+			return errors.Wrapf(err, "validating new descriptor %+v (old descriptor is %+v)",
+				newDesc, oldValue)
 		}
 		newBytes, err := protoutil.Marshal(newDesc)
 		if err != nil {
@@ -1113,15 +1145,12 @@ func updateRangeDescriptor(
 		}
 		newValue = newBytes
 	}
-	var oldValue interface{}
-	if oldDesc != nil {
-		oldBytes, err := protoutil.Marshal(oldDesc)
-		if err != nil {
-			return err
-		}
-		oldValue = oldBytes
+	var ov interface{}
+	if oldValue != nil {
+		oldValue.ClearChecksum()
+		ov = oldValue
 	}
-	b.CPut(descKey, newValue, oldValue)
+	b.CPut(descKey, newValue, ov)
 	return nil
 }
 
