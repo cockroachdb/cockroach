@@ -944,9 +944,19 @@ func TestReplicaLease(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
+
+	var filterErr atomic.Value
+	applyFilter := func(args storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+		if pErr := filterErr.Load(); pErr != nil {
+			return 0, pErr.(*roachpb.Error)
+		}
+		return 0, nil
+	}
+
 	tc.manualClock = hlc.NewManualClock(123)
 	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	tsc.TestingKnobs.TestingApplyFilter = applyFilter
 	tc.StartWithStoreConfig(t, stopper, tsc)
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
 	if err != nil {
@@ -1001,13 +1011,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	// Verify that command returns NotLeaseHolderError when lease is rejected.
-	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(*ProposalData) error {
-		return &roachpb.LeaseRejectedError{
-			Message: "replica not found",
-		}
-	}
-	tc.repl.mu.Unlock()
+	filterErr.Store(roachpb.NewError(&roachpb.LeaseRejectedError{Message: "replica not found"}))
 
 	{
 		_, err := tc.repl.redirectOnOrAcquireLease(context.Background())
@@ -2081,6 +2085,11 @@ func TestLeaseConcurrent(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(context.TODO())
 
+		var seen int32
+		var active int32
+		var wg sync.WaitGroup
+		wg.Add(num)
+
 		tc := testContext{manualClock: hlc.NewManualClock(123)}
 		cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 		// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
@@ -2088,20 +2097,10 @@ func TestLeaseConcurrent(t *testing.T) {
 		// with an AmbiguousResultError.
 		cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
 		cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
-		tc.StartWithStoreConfig(t, stopper, cfg)
-
-		var wg sync.WaitGroup
-		wg.Add(num)
-		var active atomic.Value
-		active.Store(false)
-
-		var seen int32
-		tc.repl.mu.Lock()
-		tc.repl.mu.submitProposalFn = func(proposal *ProposalData) error {
-			ll, ok := proposal.Request.Requests[0].
-				GetInner().(*roachpb.RequestLeaseRequest)
-			if !ok || !active.Load().(bool) {
-				return defaultSubmitProposalLocked(tc.repl, proposal)
+		cfg.TestingKnobs.TestingProposalFilter = func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+			ll, ok := args.Req.Requests[0].GetInner().(*roachpb.RequestLeaseRequest)
+			if !ok || atomic.LoadInt32(&active) == 0 {
+				return nil
 			}
 			if c := atomic.AddInt32(&seen, 1); c > 1 {
 				// Morally speaking, this is an error, but reproposals can
@@ -2109,27 +2108,16 @@ func TestLeaseConcurrent(t *testing.T) {
 				// in more unexpected ways).
 				log.Infof(context.Background(), "reproposal of %+v", ll)
 			}
-			go func() {
-				wg.Wait()
-				tc.repl.mu.Lock()
-				defer tc.repl.mu.Unlock()
-				if withError {
-					// When we complete the command, we have to remove it from the map;
-					// otherwise its context (and tracing span) may be used after the
-					// client cleaned up.
-					tc.repl.cleanupFailedProposalLocked(proposal)
-					proposal.finishApplication(proposalResult{Err: roachpb.NewErrorf(origMsg)})
-					return
-				}
-				if err := defaultSubmitProposalLocked(tc.repl, proposal); err != nil {
-					panic(err) // unlikely, so punt on proper handling
-				}
-			}()
+			// Wait for all lease requests to join the same LeaseRequest command.
+			wg.Wait()
+			if withError {
+				return roachpb.NewErrorf(origMsg)
+			}
 			return nil
 		}
-		tc.repl.mu.Unlock()
+		tc.StartWithStoreConfig(t, stopper, cfg)
 
-		active.Store(true)
+		atomic.StoreInt32(&active, 1)
 		tc.manualClock.Increment(leaseExpiry(tc.repl))
 		ts := tc.Clock().Now()
 		pErrCh := make(chan *roachpb.Error, num)
@@ -6224,25 +6212,28 @@ func TestRangeLookup(t *testing.T) {
 // RaftGroupDeletedError is converted to a RangeNotFoundError in the Store.
 func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
 
-	// Mock propose to return an roachpb.RaftGroupDeletedError.
-	submitProposalFn := func(*ProposalData) error {
-		return &roachpb.RaftGroupDeletedError{}
+	// Mock propose to return a roachpb.RaftGroupDeletedError.
+	var active int32
+	proposeFn := func(fArgs storagebase.ProposalFilterArgs) *roachpb.Error {
+		if atomic.LoadInt32(&active) == 1 {
+			return roachpb.NewError(&roachpb.RaftGroupDeletedError{})
+		}
+		return nil
 	}
 
-	repl := tc.repl
+	manual := hlc.NewManualClock(123)
+	tc := testContext{manualClock: manual}
+	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.TestingProposalFilter = proposeFn
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
-	repl.mu.Lock()
-	repl.mu.submitProposalFn = submitProposalFn
-	repl.mu.Unlock()
-
+	atomic.StoreInt32(&active, 1)
 	gArgs := getArgs(roachpb.Key("a"))
 	// Force the read command request a new lease.
-	tc.manualClock.Set(leaseExpiry(repl))
+	manual.Set(leaseExpiry(tc.repl))
 	_, pErr := client.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
 		Timestamp: tc.Clock().Now(),
 		RangeID:   1,
@@ -6399,8 +6390,8 @@ func TestProposalOverhead(t *testing.T) {
 	// present in Raft commands. This test will fail if that overhead
 	// changes. Try to make this number go down and not up. It slightly
 	// undercounts because our proposal filter is called before
-	// maxLeaseIndex and a few other fields are filled in.
-	const expectedOverhead = 50
+	// maxLeaseIndex is filled in.
+	const expectedOverhead = 52
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
@@ -6936,71 +6927,45 @@ func TestReplicaTryAbandon(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t, stopper)
 
+	type magicKey struct{}
 	ctx, cancel := context.WithCancel(context.Background())
-	proposalCh := make(chan struct{})
-	proposalErrCh := make(chan error)
+	ctx = context.WithValue(ctx, magicKey{}, "foo")
 
 	// Cancel the request before it is proposed to Raft.
-	var proposed int32
+	dropProp := int32(1)
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(result *ProposalData) error {
-		if atomic.AddInt32(&proposed, 1) != 1 {
-			// We only need to propose the command once for this test. Worse, a
-			// second proposal will cause the test to deadlock. How do we get a
-			// second proposal? reasonNewLeaderOrConfigChange ->
-			// refreshProposalsLocked(). Note that this form of refresh cannot
-			// currently be disabled via a testing knob.
-			return nil
+	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
+		if v := p.ctx.Value(magicKey{}); v != nil {
+			cancel()
+			return atomic.LoadInt32(&dropProp) == 1
 		}
-
-		cancel()
-		go func() {
-			<-proposalCh
-			tc.repl.mu.Lock()
-			proposalErrCh <- defaultSubmitProposalLocked(tc.repl, result)
-			tc.repl.mu.Unlock()
-		}()
-		return nil
+		return false
 	}
 	tc.repl.mu.Unlock()
 
 	var ba roachpb.BatchRequest
 	ba.RangeID = 1
+	ba.Timestamp = tc.Clock().Now()
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{Key: []byte("acdfg")},
 	})
-	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
-		t.Fatal(err)
-	}
 	_, pErr := tc.repl.executeWriteBatch(ctx, ba)
 	if pErr == nil {
-		t.Fatalf("expected failure, but found success")
+		t.Fatal("expected failure, but found success")
 	}
 	detail := pErr.GetDetail()
 	if _, ok := detail.(*roachpb.AmbiguousResultError); !ok {
 		t.Fatalf("expected AmbiguousResultError error; got %s (%T)", detail, detail)
 	}
 
-	// Despite the cancellation the request should still be occupying the
-	// proposals map and should still hold its latches.
-	func() {
-		tc.repl.mu.Lock()
-		defer tc.repl.mu.Unlock()
-		if len(tc.repl.mu.proposals) == 0 {
-			t.Fatal("expected non-empty proposals map")
-		}
-	}()
-
+	// The request should still be holding its latches.
 	latchInfoGlobal, _ := tc.repl.latchMgr.Info()
 	if w := latchInfoGlobal.WriteCount; w == 0 {
 		t.Fatal("expected non-empty latch manager")
 	}
 
-	// Allow the proposal to go through.
-	close(proposalCh)
-	if err := <-proposalErrCh; err != nil {
-		t.Fatal(err)
-	}
+	// Let the proposal be reproposed and go through.
+	atomic.StoreInt32(&dropProp, 0)
 
 	// Even though we canceled the command it will still get executed and its
 	// latches cleaned up.
@@ -7191,12 +7156,19 @@ func TestReplicaIDChangePending(t *testing.T) {
 	repl := tc.repl
 
 	// Stop the command from being proposed to the raft group and being removed.
+	proposedOnOld := make(chan struct{}, 1)
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(p *ProposalData) error { return nil }
+	repl.mu.proposalBuf.testing.submitProposalFilter = func(*ProposalData) (drop bool) {
+		select {
+		case proposedOnOld <- struct{}{}:
+		default:
+		}
+		return true
+	}
 	lease := *repl.mu.state.Lease
 	repl.mu.Unlock()
 
-	// Add a command to the pending list.
+	// Add a command to the pending list and wait for it to be proposed.
 	magicTS := tc.Clock().Now()
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = magicTS
@@ -7210,19 +7182,20 @@ func TestReplicaIDChangePending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	<-proposedOnOld
 
 	// Set the raft command handler so we can tell if the command has been
 	// re-proposed.
-	commandProposed := make(chan struct{}, 1)
+	proposedOnNew := make(chan struct{}, 1)
 	repl.mu.Lock()
-	repl.mu.submitProposalFn = func(p *ProposalData) error {
+	repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
 		if p.Request.Timestamp == magicTS {
 			select {
-			case commandProposed <- struct{}{}:
+			case proposedOnNew <- struct{}{}:
 			default:
 			}
 		}
-		return nil
+		return false
 	}
 	repl.mu.Unlock()
 
@@ -7231,7 +7204,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	<-commandProposed
+	<-proposedOnNew
 }
 
 func TestSetReplicaID(t *testing.T) {
@@ -7293,13 +7266,13 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	var wrongLeaseIndex uint64 // populated below
 
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(proposal *ProposalData) error {
-		if v := proposal.ctx.Value(magicKey{}); v != nil {
+	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+		if v := p.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
-				proposal.command.MaxLeaseIndex = wrongLeaseIndex
+				return wrongLeaseIndex
 			}
 		}
-		return defaultSubmitProposalLocked(tc.repl, proposal)
+		return 0
 	}
 	tc.repl.mu.Unlock()
 
@@ -7313,15 +7286,14 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 		}
 	}
 
-	tc.repl.mu.Lock()
-	ai := tc.repl.mu.state.LeaseAppliedIndex
-	tc.repl.mu.Unlock()
-
-	if ai < 1 {
-		t.Fatal("committed a batch, but still at lease index zero")
+	// Set the max lease index to that of the recently applied write.
+	// Two requests can't have the same lease applied index.
+	tc.repl.mu.RLock()
+	wrongLeaseIndex = tc.repl.mu.state.LeaseAppliedIndex
+	if wrongLeaseIndex < 1 {
+		t.Fatal("committed a few batches, but still at lease index zero")
 	}
-
-	wrongLeaseIndex = ai - 1 // used by submitProposalFn above
+	tc.repl.mu.RUnlock()
 
 	log.Infof(ctx, "test begins")
 
@@ -7383,53 +7355,50 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 // not be the case if gaps in the applied index posed an issue).
 func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var tc testContext
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
+	var tc testContext
 	tc.Start(t, stopper)
 	repl := tc.repl
 
-	repDesc, err := repl.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const num = 10
-
-	var chs []chan proposalResult // protected by repl.mu
-
-	{
-		for i := 0; i < num; i++ {
-			var ba roachpb.BatchRequest
-			ba.Timestamp = tc.Clock().Now()
-			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{
-				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			lease, _ := repl.GetLease()
-			proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, &allSpans)
-			if pErr != nil {
-				t.Fatal(pErr)
-			}
-			repl.mu.Lock()
-
-			proposal.command.ProposerReplica = repDesc
-			proposal.command.ProposerLeaseSequence = lease.Sequence
-			repl.insertProposalLocked(proposal)
-			// We actually propose the command only if we don't
-			// cancel it to simulate the case in which Raft loses
-			// the command and it isn't reproposed due to the
-			// client abandoning it.
-			if rand.Intn(2) == 0 {
-				log.Infof(context.Background(), "abandoning command %d", i)
-				repl.cleanupFailedProposalLocked(proposal)
-			} else if err := repl.submitProposalLocked(proposal); err != nil {
-				t.Error(err)
-			} else {
-				chs = append(chs, proposal.doneCh)
-			}
-			repl.mu.Unlock()
+	tc.repl.mu.Lock()
+	lease := *repl.mu.state.Lease
+	abandoned := make(map[int64]struct{}) // protected by repl.mu
+	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
+		if _, ok := abandoned[int64(p.command.MaxLeaseIndex)]; ok {
+			log.Infof(p.ctx, "abandoning command")
+			return true
 		}
+		return false
+	}
+	tc.repl.mu.Unlock()
+
+	var chs []chan proposalResult
+	const num = 10
+	for i := 0; i < num; i++ {
+		var ba roachpb.BatchRequest
+		ba.Timestamp = tc.Clock().Now()
+		ba.Add(&roachpb.PutRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
+			},
+		})
+		ch, _, idx, err := repl.evalAndPropose(ctx, lease, ba, nil, &allSpans)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		repl.mu.Lock()
+		if rand.Intn(2) == 0 {
+			abandoned[idx] = struct{}{}
+		} else {
+			chs = append(chs, ch)
+		}
+		repl.mu.Unlock()
 	}
 
+	log.Infof(ctx, "waiting on %d chans", len(chs))
 	for _, ch := range chs {
 		if rwe := <-ch; rwe.Err != nil {
 			t.Fatal(rwe.Err)
@@ -7449,65 +7418,59 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	const num = 10
-	repDesc, err := tc.repl.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	type magicKey struct{}
+	ctx := context.WithValue(context.Background(), magicKey{}, "foo")
 
 	var seenCmds []int
+	dropAll := int32(1)
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(proposal *ProposalData) error {
-		if v := proposal.ctx.Value(magicKey{}); v != nil {
-			seenCmds = append(seenCmds, int(proposal.command.MaxLeaseIndex))
+	lease := *tc.repl.mu.state.Lease
+	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
+		if atomic.LoadInt32(&dropAll) == 1 {
+			return true
 		}
-		return defaultSubmitProposalLocked(tc.repl, proposal)
+		if v := p.ctx.Value(magicKey{}); v != nil {
+			seenCmds = append(seenCmds, int(p.command.MaxLeaseIndex))
+		}
+		return false
 	}
 	tc.repl.mu.Unlock()
 
-	status, pErr := tc.repl.redirectOnOrAcquireLease(context.Background())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-
+	const num = 10
 	expIndexes := make([]int, 0, num)
 	chs := func() []chan proposalResult {
 		chs := make([]chan proposalResult, 0, num)
 
-		origIndexes := make([]int, 0, num)
 		for i := 0; i < num; i++ {
 			expIndexes = append(expIndexes, i+1)
-			ctx := context.WithValue(context.Background(), magicKey{}, "foo")
 			var ba roachpb.BatchRequest
 			ba.Timestamp = tc.Clock().Now()
-			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{
-				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), ba, nil, &allSpans)
-			if pErr != nil {
-				t.Fatal(pErr)
+			ba.Add(&roachpb.PutRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key: roachpb.Key(fmt.Sprintf("k%d", i)),
+				},
+			})
+			ch, _, _, err := tc.repl.evalAndPropose(ctx, lease, ba, nil, &allSpans)
+			if err != nil {
+				t.Fatal(err)
 			}
-
-			tc.repl.raftMu.Lock()
+			chs = append(chs, ch)
 			tc.repl.mu.Lock()
-			cmd.command.ProposerReplica = repDesc
-			cmd.command.ProposerLeaseSequence = status.Lease.Sequence
-			tc.repl.insertProposalLocked(cmd)
-			chs = append(chs, cmd.doneCh)
+			if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+				t.Fatal(err)
+			}
 			tc.repl.mu.Unlock()
-			tc.repl.raftMu.Unlock()
 		}
 
 		tc.repl.mu.Lock()
+		origIndexes := make([]int, 0, num)
 		for _, p := range tc.repl.mu.proposals {
 			if v := p.ctx.Value(magicKey{}); v != nil {
 				origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
 			}
 		}
-		tc.repl.mu.Unlock()
-
 		sort.Ints(origIndexes)
+		tc.repl.mu.Unlock()
 
 		if !reflect.DeepEqual(expIndexes, origIndexes) {
 			t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
@@ -7515,7 +7478,11 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 		tc.repl.raftMu.Lock()
 		tc.repl.mu.Lock()
+		atomic.StoreInt32(&dropAll, 0)
 		tc.repl.refreshProposalsLocked(0, reasonTicks)
+		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+			t.Fatal(err)
+		}
 		tc.repl.mu.Unlock()
 		tc.repl.raftMu.Unlock()
 		return chs
@@ -7530,15 +7497,15 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		t.Fatalf("expected indexes %v, got %v", expIndexes, seenCmds)
 	}
 
-	tc.repl.mu.Lock()
-	defer tc.repl.mu.Unlock()
-	nonePending := len(tc.repl.mu.proposals) == 0
-	c := int(tc.repl.mu.lastAssignedLeaseIndex) - int(tc.repl.mu.state.LeaseAppliedIndex)
-	if nonePending && c > 0 {
-		t.Errorf("no pending cmds, but have required index offset %d", c)
+	tc.repl.mu.RLock()
+	defer tc.repl.mu.RUnlock()
+	if tc.repl.hasPendingProposalsRLocked() {
+		t.Fatal("still pending commands")
 	}
-	if !nonePending {
-		t.Fatalf("still pending commands: %+v", tc.repl.mu.proposals)
+	lastAssignedIdx := tc.repl.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
+	curIdx := tc.repl.mu.state.LeaseAppliedIndex
+	if c := lastAssignedIdx - curIdx; c > 0 {
+		t.Errorf("no pending cmds, but have required index offset %d", c)
 	}
 }
 
@@ -7592,13 +7559,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	dropProposals.m = make(map[*ProposalData]struct{})
 
 	r.mu.Lock()
-	r.mu.submitProposalFn = func(pd *ProposalData) error {
+	r.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
 		dropProposals.Lock()
 		defer dropProposals.Unlock()
-		if _, ok := dropProposals.m[pd]; !ok {
-			return defaultSubmitProposalLocked(r, pd)
-		}
-		return nil // pretend we proposed though we didn't
+		_, ok := dropProposals.m[p]
+		return ok
 	}
 	r.mu.Unlock()
 
@@ -7611,7 +7576,8 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		lease, _ := r.GetLease()
-		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil, &allSpans)
+		ctx := context.Background()
+		cmd, pErr := r.requestToProposal(ctx, storagebase.CmdIDKey(id), ba, nil, &allSpans)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -7620,17 +7586,14 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		dropProposals.m[cmd] = struct{}{} // silently drop proposals
 		dropProposals.Unlock()
 
-		r.mu.Lock()
 		cmd.command.ProposerReplica = repDesc
 		cmd.command.ProposerLeaseSequence = lease.Sequence
-		r.insertProposalLocked(cmd)
-		if err := r.submitProposalLocked(cmd); err != nil {
-			t.Error(err)
+		if _, pErr := r.propose(ctx, cmd); pErr != nil {
+			t.Error(pErr)
 		}
-		// Build the map of expected reproposals at this stage.
-		m := map[storagebase.CmdIDKey]int{}
-		for id, p := range r.mu.proposals {
-			m[id] = p.proposedAtTicks
+		r.mu.Lock()
+		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+			t.Fatal(err)
 		}
 		r.mu.Unlock()
 
@@ -7645,6 +7608,9 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 		var reproposed []*ProposalData
 		r.mu.Lock() // avoid data race - proposals belong to the Replica
+		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+			t.Fatal(err)
+		}
 		dropProposals.Lock()
 		for p := range dropProposals.m {
 			if p.proposedAtTicks >= ticks {
@@ -7744,34 +7710,40 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	// Save this channel; it may get reset to nil before we read from it.
 	proposalDoneCh := proposal.doneCh
 
-	// Propose the command manually with errors induced.
-	func() {
-		repl.mu.Lock()
-		defer repl.mu.Unlock()
-		ai := repl.mu.state.LeaseAppliedIndex
-		if ai <= 1 {
-			// Lease index zero is special in this test because we subtract
-			// from it below, so we need enough previous proposals in the
-			// log to ensure it doesn't go negative.
-			t.Fatalf("test requires LeaseAppliedIndex >= 2 at this point, have %d", ai)
+	repl.mu.Lock()
+	ai := repl.mu.state.LeaseAppliedIndex
+	if ai <= 1 {
+		// Lease index zero is special in this test because we subtract
+		// from it below, so we need enough previous proposals in the
+		// log to ensure it doesn't go negative.
+		t.Fatalf("test requires LeaseAppliedIndex >= 2 at this point, have %d", ai)
+	}
+	assigned := false
+	repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+		if p == proposal && !assigned {
+			assigned = true
+			return ai - 1
 		}
-		// Manually run parts of the proposal process. Insert it, then
-		// tweak the lease index to ensure it will generate a retry when
-		// it fails. Don't call submitProposal (to simulate a dropped
-		// message). Then call refreshProposals twice to repropose it and
-		// put it in the logs twice. (submit + refresh should be
-		// equivalent to the double refresh used here)
-		//
-		// Note that all of this is under the same lock so there's no
-		// chance of it applying and exiting the pending state before we
-		// refresh.
-		proposal.command.ProposerReplica = repDesc
-		proposal.command.ProposerLeaseSequence = repl.mu.state.Lease.Sequence
-		repl.insertProposalLocked(proposal)
-		proposal.command.MaxLeaseIndex = ai - 1
-		repl.refreshProposalsLocked(0, reasonNewLeader)
-		repl.refreshProposalsLocked(0, reasonNewLeader)
-	}()
+		return 0
+	}
+	repl.mu.Unlock()
+
+	// Propose the command manually with errors induced. The first time it is
+	// proposed it will be given the incorrect max lease index which ensures
+	// that it will generate a retry when it fails. Then call refreshProposals
+	// twice to repropose it and put it in the logs twice more.
+	proposal.command.ProposerReplica = repDesc
+	proposal.command.ProposerLeaseSequence = repl.mu.state.Lease.Sequence
+	if _, pErr := repl.propose(ctx, proposal); pErr != nil {
+		t.Fatal(pErr)
+	}
+	repl.mu.Lock()
+	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		t.Fatal(err)
+	}
+	repl.refreshProposalsLocked(0, reasonNewLeader)
+	repl.refreshProposalsLocked(0, reasonNewLeader)
+	repl.mu.Unlock()
 
 	// Wait for our proposal to apply. The two refreshed proposals above
 	// will fail due to their illegal lease index. Then they'll generate
@@ -7893,17 +7865,16 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 
 	r := tc.repl
 	r.mu.Lock()
-	r.mu.submitProposalFn = func(pd *ProposalData) error {
+	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
 		// We're going to recognize the first time the commnand for the
 		// EndTransaction is proposed and we're going to hackily decrease its
 		// MaxLeaseIndex, so that the processing gets rejected further on.
-		ut := pd.Local.UpdatedTxns
-		if atomic.LoadInt64(&proposalRecognized) == 0 &&
-			ut != nil && len(*ut) == 1 && (*ut)[0].ID.Equal(txn.ID) {
-			pd.command.MaxLeaseIndex--
+		ut := p.Local.UpdatedTxns
+		if atomic.LoadInt64(&proposalRecognized) == 0 && ut != nil && len(*ut) == 1 && (*ut)[0].ID == txn.ID {
 			atomic.StoreInt64(&proposalRecognized, 1)
+			return p.command.MaxLeaseIndex - 1
 		}
-		return defaultSubmitProposalLocked(r, pd)
+		return 0
 	}
 	r.mu.Unlock()
 
@@ -8383,16 +8354,16 @@ func TestCancelPendingCommands(t *testing.T) {
 	proposalDroppedCh := make(chan struct{})
 	proposalDropped := false
 	tc.repl.mu.Lock()
-	tc.repl.mu.submitProposalFn = func(p *ProposalData) error {
+	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
 		if _, ok := p.Request.GetArg(roachpb.Increment); ok {
 			if !proposalDropped {
 				// Notify the main thread the first time we drop a proposal.
 				close(proposalDroppedCh)
 				proposalDropped = true
 			}
-			return nil
+			return true
 		}
-		return defaultSubmitProposalLocked(tc.repl, p)
+		return false
 	}
 	tc.repl.mu.Unlock()
 
@@ -9004,6 +8975,10 @@ func (q *testQuiescer) hasRaftReadyRLocked() bool {
 	return q.raftReady
 }
 
+func (q *testQuiescer) hasPendingProposalsRLocked() bool {
+	return q.numProposals > 0
+}
+
 func (q *testQuiescer) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
 	return q.ownsValidLease
 }
@@ -9063,7 +9038,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				},
 			}
 			q = transform(q)
-			_, ok := shouldReplicaQuiesce(context.Background(), q, hlc.Timestamp{}, q.numProposals, q.livenessMap)
+			_, ok := shouldReplicaQuiesce(context.Background(), q, hlc.Timestamp{}, q.livenessMap)
 			if expected != ok {
 				t.Fatalf("expected %v, but found %v", expected, ok)
 			}

@@ -224,8 +224,6 @@ type Replica struct {
 		mergeComplete chan struct{}
 		// The state of the Raft state machine.
 		state storagepb.ReplicaState
-		// Counter used for assigning lease indexes for proposals.
-		lastAssignedLeaseIndex uint64
 		// Last index/term persisted to the raft log (not necessarily
 		// committed). Note that lastTerm may be 0 (and thus invalid) even when
 		// lastIndex is known, in which case the term will have to be retrieved
@@ -284,6 +282,12 @@ type Replica struct {
 		minLeaseProposedTS hlc.Timestamp
 		// A pointer to the zone config for this replica.
 		zone *config.ZoneConfig
+		// proposalBuf buffers Raft commands as they are passed to the Raft
+		// replication subsystem. The buffer is populated by requests after
+		// evaluation and is consumed by the Raft processing thread. Once
+		// consumed, commands are proposed through Raft and moved to the
+		// proposals map.
+		proposalBuf propBuf
 		// proposals stores the Raft in-flight commands which originated at
 		// this Replica, i.e. all commands for which propose has been called,
 		// but which have not yet applied.
@@ -383,8 +387,6 @@ type Replica struct {
 		// newly recreated replica will have a complete range descriptor.
 		lastToReplica, lastFromReplica roachpb.ReplicaDescriptor
 
-		// submitProposalFn can be set to mock out the propose operation.
-		submitProposalFn func(*ProposalData) error
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]ReplicaChecksum
 

@@ -3588,12 +3588,14 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				return nil
 			}
 
+			repl.raftMu.Lock()
+			defer repl.raftMu.Unlock()
 			repl.mu.Lock()
+			defer repl.mu.Unlock()
 			// If the replica ID in the error does not match then we know
 			// that the replica has been removed and re-added quickly. In
 			// that case, we don't want to add it to the replicaGCQueue.
 			if tErr.ReplicaID != repl.mu.replicaID {
-				repl.mu.Unlock()
 				log.Infof(ctx, "replica too old response with old replica ID: %s", tErr.ReplicaID)
 				return nil
 			}
@@ -3611,7 +3613,6 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				storeID := repl.store.StoreID()
 				repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID, storeID), destroyReasonRemovalPending)
 			}
-			repl.mu.Unlock()
 
 			s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityRemoved)
 		case *roachpb.RaftGroupDeletedError:
