@@ -914,3 +914,61 @@ ALTER TABLE t32917_2 ADD CONSTRAINT fk_c_a FOREIGN KEY (c) references t32917 (a)
 
 statement ok
 ROLLBACK
+
+# Test SET NOT NULL
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (1), (NULL)
+
+statement error validation of NOT NULL constraint failed: validation of CHECK "a IS NOT NULL" failed
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement ok
+DELETE FROM t WHERE a IS NULL
+
+statement ok
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement error null value in column "a" violates not-null constraint
+INSERT INTO t VALUES (NULL)
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+
+statement ok
+ALTER TABLE t ALTER COLUMN a DROP NOT NULL
+
+statement ok
+INSERT INTO t VALUES (NULL)
+
+statement ok
+DROP TABLE t
+
+# Test interaction of SET NOT NULL with other constraints
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+# Check for name collisions with the auto-generated NOT NULL check constraint name
+statement ok
+ALTER TABLE t ADD CONSTRAINT a_auto_not_null CHECK (a IS NOT NULL)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT a_auto_not_null1 CHECK (a IS NOT NULL), ALTER COLUMN a SET NOT NULL
+
+statement error null value in column "a" violates not-null constraint
+INSERT INTO t VALUES (NULL)
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+t  a_auto_not_null   CHECK  CHECK (a IS NOT NULL)  true
+t  a_auto_not_null1  CHECK  CHECK (a IS NOT NULL)  true
+
+statement ok
+DROP TABLE t
