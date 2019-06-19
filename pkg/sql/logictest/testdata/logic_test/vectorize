@@ -249,6 +249,17 @@ SELECT c.d FROM c@sec JOIN d ON d.b = c.b
 0
 0
 
+# Ordinality operator with a filter and limit.
+query III
+SELECT * FROM a WITH ORDINALITY WHERE a > 1 LIMIT 6
+----
+2  4  5
+2  5  6
+3  6  7
+3  7  8
+4  8  9
+4  9  10
+
 # Ensure that lookup joins properly get their postprocessing to select needed
 # columns.
 
