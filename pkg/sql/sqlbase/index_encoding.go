@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -236,6 +237,35 @@ func MakeSpanFromEncDatums(
 		endKey = startKey.PrefixEnd()
 	}
 	return roachpb.Span{Key: startKey, EndKey: endKey}, nil
+}
+
+// NeededColumnFamilyIDs TODO: I'm not sure the appropriate place for this, but it
+// seems like its going to be used a few places, so somewhere
+// in sqlbase seems like a decent spot.
+// NeededColumnFamilyIDs
+func NeededColumnFamilyIDs(
+	colIdxMap map[ColumnID]int,
+	families []ColumnFamilyDescriptor,
+	neededCols util.FastIntSet,
+) []FamilyID {
+	var needed []FamilyID
+	for i := range families {
+		family := &families[i]
+		for _, columnID := range family.ColumnIDs {
+			columnOrdinal := colIdxMap[columnID]
+			if neededCols.Contains(columnOrdinal) {
+				needed = append(needed, family.ID)
+				break
+			}
+		}
+	}
+
+	// TODO(solon): There is a further optimization possible here: if there is at
+	// least one non-nullable column in the needed column families, we can
+	// potentially omit the primary family, since the primary keys are encoded
+	// in all families. (Note that composite datums are an exception.)
+
+	return needed
 }
 
 // makeKeyFromEncDatums creates an index key by concatenating keyPrefix with the

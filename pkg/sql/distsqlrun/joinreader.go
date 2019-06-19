@@ -15,6 +15,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -99,6 +100,10 @@ type joinReader struct {
 	inputRowIdxToOutputRows []sqlbase.EncDatumRows
 	finalLookupBatch        bool
 	toEmit                  sqlbase.EncDatumRows
+
+	// Hold onto what families we need to query from if our
+	// needed columns span multiple queries
+	neededFamilies []sqlbase.FamilyID
 
 	// A few scratch buffers, to avoid re-allocating.
 	lookupRows  []lookupRow
@@ -209,6 +214,12 @@ func newJoinReader(
 
 	jr.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
+	jr.neededFamilies = sqlbase.NeededColumnFamilyIDs(
+		spec.Table.ColumnIdxMap(),
+		spec.Table.Families,
+		jr.neededRightCols(),
+	)
+
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
 }
@@ -277,6 +288,42 @@ func (jr *joinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error
 	return sqlbase.MakeSpanFromEncDatums(
 		jr.indexKeyPrefix, jr.indexKeyRow, jr.indexTypes[:numLookupCols], jr.indexDirs, &jr.desc,
 		jr.index, &jr.alloc)
+}
+
+// TODO: maybe want to move this into the joinerbase?
+func (jr *joinReader) canSplitSpanIntoSeparateFamilies(span roachpb.Span) (bool, roachpb.Spans) {
+	// check the following:
+	// - we have more than one needed family
+	// - we are looking at the primary index
+	// - our table has more than the default family
+	// - we have all the columns of the tables index
+	// TODO VERIFY: I think this logic holds. If the number of columns we are looking
+	// up on is equal to the number of columns in the primary index, then
+	// we are guaranteed to be looking at a single row, so we don't need to
+	// be checking if span.Key.Equals(span.EndKey)
+	if len(jr.neededFamilies) > 0 &&
+		jr.index.ID == jr.desc.PrimaryIndex.ID &&
+		len(jr.desc.Families) > 1 &&
+		len(jr.lookupCols) == len(jr.desc.PrimaryIndex.ColumnIDs) {
+		var resultSpans roachpb.Spans
+		if len(jr.neededFamilies) < len(jr.desc.Families) {
+			for i, familyID := range jr.neededFamilies {
+				var tempSpan roachpb.Span
+				tempSpan.Key = make(roachpb.Key, len(span.Key))
+				copy(tempSpan.Key, span.Key)
+				tempSpan.Key = keys.MakeFamilyKey(tempSpan.Key, uint32(familyID))
+				tempSpan.EndKey = span.Key.PrefixEnd()
+				if i > 0 && familyID == jr.neededFamilies[i-1]+1 {
+					// the family ID is the same, so collapse these spans
+					resultSpans[len(resultSpans)-1].EndKey = tempSpan.EndKey
+				} else {
+					resultSpans = append(resultSpans, tempSpan)
+				}
+			}
+			return true, resultSpans
+		}
+	}
+	return false, nil
 }
 
 // Next is part of the RowSource interface.
@@ -369,7 +416,11 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 		}
 		inputRowIndices := jr.keyToInputRowIndices[string(span.Key)]
 		if inputRowIndices == nil {
-			spans = append(spans, span)
+			if canSplit, splitSpans := jr.canSplitSpanIntoSeparateFamilies(span); canSplit {
+				spans = append(spans, splitSpans...)
+			} else {
+				spans = append(spans, span)
+			}
 		}
 		jr.keyToInputRowIndices[string(span.Key)] = append(inputRowIndices, i)
 	}

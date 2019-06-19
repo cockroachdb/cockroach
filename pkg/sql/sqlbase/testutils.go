@@ -799,6 +799,8 @@ var (
 	TwoIntCols = []types.T{*types.Int, *types.Int}
 	// ThreeIntCols is a slice of three IntTypes.
 	ThreeIntCols = []types.T{*types.Int, *types.Int, *types.Int}
+	// FourIntCols is a slice of four IntTypes.
+	FourIntCols = []types.T{*types.Int, *types.Int, *types.Int, *types.Int}
 )
 
 // MakeIntCols makes a slice of numCols IntTypes.

@@ -135,6 +135,23 @@ func TestJoinReader(t *testing.T) {
 			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
 		},
 		{
+			description: "Test lookup join queries with separate families",
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 3, 4},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			lookupCols:  []uint32{0, 1},
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.FourIntCols,
+			expected:    "[[0 2 2 2] [0 5 5 5] [1 0 0 1] [1 5 5 6]]",
+		},
+		{
 			description: "Test lookup joins preserve order of left input",
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -406,7 +423,6 @@ func TestJoinReader(t *testing.T) {
 					Settings: st,
 					txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 				}
-
 				encRows := make(sqlbase.EncDatumRows, len(c.input))
 				for rowIdx, row := range c.input {
 					encRow := make(sqlbase.EncDatumRow, len(row))

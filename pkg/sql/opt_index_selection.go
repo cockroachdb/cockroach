@@ -683,7 +683,7 @@ func appendSpansFromConstraintSpan(
 		len(tableDesc.Families) > 1 &&
 		cs.StartKey().Length() == len(tableDesc.PrimaryIndex.ColumnIDs) &&
 		s.Key.Equal(s.EndKey) {
-		neededFamilyIDs := neededColumnFamilyIDs(tableDesc, needed)
+		neededFamilyIDs := sqlbase.NeededColumnFamilyIDs(tableDesc.ColumnIdxMap(), tableDesc.Families, needed)
 		if len(neededFamilyIDs) < len(tableDesc.Families) {
 			for i, familyID := range neededFamilyIDs {
 				var span roachpb.Span
@@ -712,29 +712,4 @@ func appendSpansFromConstraintSpan(
 		return nil, err
 	}
 	return append(spans, s), nil
-}
-
-func neededColumnFamilyIDs(
-	tableDesc *sqlbase.ImmutableTableDescriptor, neededCols exec.ColumnOrdinalSet,
-) []sqlbase.FamilyID {
-	colIdxMap := tableDesc.ColumnIdxMap()
-
-	var needed []sqlbase.FamilyID
-	for i := range tableDesc.Families {
-		family := &tableDesc.Families[i]
-		for _, columnID := range family.ColumnIDs {
-			columnOrdinal := colIdxMap[columnID]
-			if neededCols.Contains(columnOrdinal) {
-				needed = append(needed, family.ID)
-				break
-			}
-		}
-	}
-
-	// TODO(solon): There is a further optimization possible here: if there is at
-	// least one non-nullable column in the needed column families, we can
-	// potentially omit the primary family, since the primary keys are encoded
-	// in all families. (Note that composite datums are an exception.)
-
-	return needed
 }
