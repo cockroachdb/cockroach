@@ -269,7 +269,7 @@ render          ·         ·               (title, edition, shelf, title, editi
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFLwzAQx9_9FOGeb6zpNpCAkNeJdDL3Jn3I2mPWbbmQpKCMfndpI7iJq_p4_7vf5UfuBJZrKsyRAqhnkICwgBLBea4oBPZ9nIaW9RuoDKGxro19XCJU7AnUCWITDwQKCp6wm-aAUFM0zWEY6xC4jV9QiGZHoGYdni2W44s3ZnugNZma_DS7WA_ON0fj37Vp40vvi_DkjA1KTABh1UYltESdwzUP-R-Pe27sp4b8WWPLvA_9Dzww71snXrmxgq0Sug9XhdBzcSekUmpZbG4vFFHPUM9RL6665heuvxxjTcGxDfSna2RdiUD1jtLBA7e-okfP1fBMKlcDNwQ1hZi6s1QsbWr1guewHIXzcTgfhbNvcNndfAQAAP__24voVg==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU9LMzEQh-_vpwhzntLN9q1ITrlWpJXam-wh3Qx1bZsJSRaUst9dsivYil31OH-eyUN-J3BsaWmOFEE9gQSEOVQIPnBNMXLI7WFpYV9BFQiN823K7Qqh5kCgTpCadCBQsOQJ-2kJCJaSaQ79WofAbfqEYjI7AjXr8OywHD-8MdsDrclYCtPi4jz40BxNeNOmTc_ZF-HRGxeVmADCmpyloIRUSi2Wm1sUWqLQJVyzkn-xuuPGfUjJ76W2zPuY_-Oeed968cKNE-yU0DPUmVm1SQldYq7_o56jvrnqVl64_RDFmqJnF-lXWRRdhUB2R0PckdtQ00Pgun9mKFc91zcsxTRMZ0OxcMMoC57DchQux-FyFC6-wFX37z0AAP__kSzobw==
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #
