@@ -1441,6 +1441,9 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 ) error {
 	switch constraint.ConstraintType {
 	case sqlbase.ConstraintToUpdate_CHECK:
+		if constraint.Check.Validity == sqlbase.ConstraintValidity_Unvalidated{
+			return nil
+		}
 		for j, c := range desc.Checks {
 			if c.Name == constraint.Name {
 				desc.Checks = append(desc.Checks[:j], desc.Checks[j+1:]...)
@@ -1455,6 +1458,9 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			)
 		}
 	case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+		if constraint.ForeignKey.Validity == sqlbase.ConstraintValidity_Unvalidated{
+			return nil
+		}
 		idx, err := desc.FindIndexByID(constraint.ForeignKeyIndex)
 		if err != nil {
 			return err
