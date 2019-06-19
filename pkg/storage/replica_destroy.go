@@ -153,6 +153,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 
 func (r *Replica) cancelPendingCommandsLocked() {
 	r.mu.AssertHeld()
+	r.mu.proposalBuf.FlushLockedWithoutProposing()
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)
 		// NB: each proposal needs its own version of the error (i.e. don't try to

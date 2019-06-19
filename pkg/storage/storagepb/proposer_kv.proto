@@ -278,3 +278,13 @@ message RaftCommand {
 
   reserved 1, 10001 to 10014;
 }
+
+// RaftCommandFooter contains a subset of the fields in RaftCommand. It is used
+// to optimize a pattern where most of the fields in RaftCommand are marshaled
+// outside of a heavily contended critical section, except for the fields in the
+// footer, which are assigned and marhsaled inside of the critical section and
+// appended to the marshaled byte buffer. This minimizes the memory allocation
+// and marshaling work performed under lock.
+message RaftCommandFooter {
+  uint64 max_lease_index = 4;
+}

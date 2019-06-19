@@ -256,7 +256,7 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 func (r *Replica) LastAssignedLeaseIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastAssignedLeaseIndex
+	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
 }
 
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
