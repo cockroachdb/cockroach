@@ -334,68 +334,77 @@ func (s LeaseStore) WaitForOneVersion(
 
 var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 
-// Publish updates a table descriptor. It also maintains the invariant that
-// there are at most two versions of the descriptor out in the wild at any time
-// by first waiting for all nodes to be on the current (pre-update) version of
-// the table desc.
-// The update closure is called after the wait, and it provides the new version
-// of the descriptor to be written. In a multi-step schema operation, this
-// update should perform a single step.
-// The closure may be called multiple times if retries occur; make sure it does
+// PublishMultiple updates multiple table descriptors, maintaining the invariant
+// that there are at most two versions of each descriptor out in the wild at any
+// time by first waiting for all nodes to be on the current (pre-update) version
+// of the table desc.
+//
+// The update closure for each table ID is called after the wait, and it
+// provides the new version of the descriptor to be written.
+//
+// The closures may be called multiple times if retries occur; make sure they do
 // not have side effects.
-// Returns the updated version of the descriptor.
-func (s LeaseStore) Publish(
+//
+// Returns the updated versions of the descriptors.
+func (s LeaseStore) PublishMultiple(
 	ctx context.Context,
-	tableID sqlbase.ID,
-	update func(*sqlbase.MutableTableDescriptor) error,
+	updates map[sqlbase.ID]func(descriptor *sqlbase.MutableTableDescriptor) error,
 	logEvent func(*client.Txn) error,
-) (*sqlbase.ImmutableTableDescriptor, error) {
+) (map[sqlbase.ID]*sqlbase.ImmutableTableDescriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-		// Wait until there are no unexpired leases on the previous version
-		// of the table.
-		expectedVersion, err := s.WaitForOneVersion(ctx, tableID, base.DefaultRetryOptions())
-		if err != nil {
-			return nil, err
+		// Wait until there are no unexpired leases on the previous versions
+		// of the tables.
+		expectedVersions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
+		for id := range updates {
+			expected, err := s.WaitForOneVersion(ctx, id, base.DefaultRetryOptions())
+			if err != nil {
+				return nil, err
+			}
+			expectedVersions[id] = expected
 		}
 
-		var tableDesc *sqlbase.MutableTableDescriptor
+		tableDescs := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		err = s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			// Re-read the current version of the table descriptor, this time
-			// transactionally.
-			var err error
-			tableDesc, err = sqlbase.GetMutableTableDescFromID(ctx, txn, tableID)
-			if err != nil {
-				return err
-			}
-
-			if expectedVersion != tableDesc.Version {
-				// The version changed out from under us. Someone else must be
-				// performing a schema change operation.
-				if log.V(3) {
-					log.Infof(ctx, "publish (version changed): %d != %d", expectedVersion, tableDesc.Version)
+		err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			for id, update := range updates {
+				// Re-read the current versions of the table descriptor, this time
+				// transactionally.
+				var err error
+				tableDesc, err := sqlbase.GetMutableTableDescFromID(ctx, txn, id)
+				if err != nil {
+					return err
 				}
-				return errLeaseVersionChanged
-			}
 
-			// Run the update closure.
-			version := tableDesc.Version
-			if err := update(tableDesc); err != nil {
-				return err
-			}
-			if version != tableDesc.Version {
-				return errors.Errorf("updated version to: %d, expected: %d",
-					tableDesc.Version, version)
-			}
+				if expectedVersions[id] != tableDesc.Version {
+					// The version changed out from under us. Someone else must be
+					// performing a schema change operation.
+					if log.V(3) {
+						log.Infof(ctx, "publish (version changed): %d != %d", expectedVersions[id], tableDesc.Version)
+					}
+					return errLeaseVersionChanged
+				}
 
-			if err := tableDesc.MaybeIncrementVersion(ctx, txn); err != nil {
-				return err
-			}
-			if err := tableDesc.ValidateTable(s.settings); err != nil {
-				return err
+				// Run the update closure.
+				version := tableDesc.Version
+				if err := update(tableDesc); err != nil {
+					return err
+				}
+				if version != tableDesc.Version {
+					return errors.Errorf("updated version to: %d, expected: %d",
+						tableDesc.Version, version)
+				}
+
+				if err := tableDesc.MaybeIncrementVersion(ctx, txn); err != nil {
+					return err
+				}
+				if err := tableDesc.ValidateTable(s.settings); err != nil {
+					return err
+				}
+
+				tableDescs[id] = tableDesc
 			}
 
 			// Write the updated descriptor.
@@ -403,7 +412,9 @@ func (s LeaseStore) Publish(
 				return err
 			}
 			b := txn.NewBatch()
-			b.Put(sqlbase.MakeDescMetadataKey(tableID), sqlbase.WrapDescriptor(tableDesc))
+			for tableID, tableDesc := range tableDescs {
+				b.Put(sqlbase.MakeDescMetadataKey(tableID), sqlbase.WrapDescriptor(tableDesc))
+			}
 			if logEvent != nil {
 				// If an event log is required for this update, ensure that the
 				// descriptor change occurs first in the transaction. This is
@@ -425,7 +436,11 @@ func (s LeaseStore) Publish(
 
 		switch err {
 		case nil, errDidntUpdateDescriptor:
-			return sqlbase.NewImmutableTableDescriptor(tableDesc.TableDescriptor), nil
+			immutTableDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
+			for id, tableDesc := range tableDescs {
+				immutTableDescs[id] = sqlbase.NewImmutableTableDescriptor(tableDesc.TableDescriptor)
+			}
+			return immutTableDescs, nil
 		case errLeaseVersionChanged:
 			// will loop around to retry
 		default:
@@ -434,6 +449,35 @@ func (s LeaseStore) Publish(
 	}
 
 	panic("not reached")
+}
+
+// Publish updates a table descriptor. It also maintains the invariant that
+// there are at most two versions of the descriptor out in the wild at any time
+// by first waiting for all nodes to be on the current (pre-update) version of
+// the table desc.
+//
+// The update closure is called after the wait, and it provides the new version
+// of the descriptor to be written. In a multi-step schema operation, this
+// update should perform a single step.
+//
+// The closure may be called multiple times if retries occur; make sure it does
+// not have side effects.
+//
+// Returns the updated version of the descriptor.
+func (s LeaseStore) Publish(
+	ctx context.Context,
+	tableID sqlbase.ID,
+	update func(*sqlbase.MutableTableDescriptor) error,
+	logEvent func(*client.Txn) error,
+) (*sqlbase.ImmutableTableDescriptor, error) {
+	updates := make(map[sqlbase.ID]func(descriptor *sqlbase.MutableTableDescriptor) error)
+	updates[tableID] = update
+
+	results, err := s.PublishMultiple(ctx, updates, logEvent)
+	if err != nil {
+		return nil, err
+	}
+	return results[tableID], nil
 }
 
 // IDVersion represents a descriptor ID, version pair that are
