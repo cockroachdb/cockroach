@@ -225,6 +225,13 @@ func newColOperator(
 		typs := conv.FromColumnTypes(columnTypes)
 		op, err = exec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
 
+	case core.Ordinality != nil:
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
+		op = exec.NewOrdinalityOp(inputs[0])
+
 	case core.HashJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
 			return nil, err
