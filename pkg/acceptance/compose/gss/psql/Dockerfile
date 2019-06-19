@@ -8,7 +8,7 @@ RUN apt-get update && \
   git \
   krb5-user
 
-RUN curl https://dl.google.com/go/go1.11.5.linux-amd64.tar.gz | tar xz -C /usr/local
+RUN curl --retry 5 https://dl.google.com/go/go1.11.5.linux-amd64.tar.gz | tar xz -C /usr/local
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
