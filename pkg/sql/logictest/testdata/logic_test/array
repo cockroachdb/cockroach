@@ -1297,3 +1297,14 @@ GROUP BY
     tab_1.col_1
 ----
 {}
+
+# Regression test for #38293.
+statement ok
+CREATE TABLE defvals (
+    id SERIAL NOT NULL PRIMARY KEY,
+    arr1 STRING(100) ARRAY NOT NULL DEFAULT ARRAY[],
+    arr2 INT ARRAY NOT NULL DEFAULT ARRAY[]
+)
+
+statement ok
+INSERT INTO defvals(id) VALUES (1)

@@ -898,6 +898,10 @@ func (node *Array) Format(ctx *FmtCtx) {
 	ctx.WriteString("ARRAY[")
 	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(']')
+	if len(node.Exprs) == 0 && ctx.HasFlags(FmtParsable) && node.typ != nil {
+		ctx.WriteString(":::")
+		ctx.Buffer.WriteString(node.typ.SQLString())
+	}
 }
 
 // ArrayFlatten represents a subquery array constructor.
