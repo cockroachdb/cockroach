@@ -899,6 +899,14 @@ func (node *Array) Format(ctx *FmtCtx) {
 	ctx.WriteString("ARRAY[")
 	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(']')
+	// If the array has a type, add an annotation. Don't add it if the type is
+	// UNKNOWN[], since that's not a valid annotation.
+	if ctx.HasFlags(FmtParsable) {
+		if colTyp, err := coltypes.DatumTypeToColumnType(node.typ); err == nil {
+			ctx.WriteString(":::")
+			colTyp.Format(&ctx.Buffer, ctx.flags.EncodeFlags())
+		}
+	}
 }
 
 // ArrayFlatten represents a subquery array constructor.

@@ -1395,3 +1395,37 @@ insert decimals
                 │    ├── variable: a [type=decimal]
                 │    └── variable: c [type=decimal]
                 └── const: 1 [type=int]
+
+# Regression test for #38293; the default values should be separate projections.
+exec-ddl
+CREATE TABLE defvals (
+    id INT PRIMARY KEY,
+    arr1 STRING(100) ARRAY NOT NULL DEFAULT ARRAY[],
+    arr2 INT ARRAY NOT NULL DEFAULT ARRAY[]
+)
+----
+TABLE defvals
+ ├── id int not null
+ ├── arr1 string[] not null
+ ├── arr2 int[] not null
+ └── INDEX primary
+      └── id int not null
+
+build
+INSERT INTO defvals(id) VALUES (1)
+----
+insert defvals
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:4 => id:1
+ │    ├──  column5:5 => arr1:2
+ │    └──  column6:6 => arr2:3
+ └── project
+      ├── columns: column5:5(string[]) column6:6(int[]) column1:4(int)
+      ├── values
+      │    ├── columns: column1:4(int)
+      │    └── tuple [type=tuple{int}]
+      │         └── const: 1 [type=int]
+      └── projections
+           ├── array: [type=string[]]
+           └── array: [type=int[]]
