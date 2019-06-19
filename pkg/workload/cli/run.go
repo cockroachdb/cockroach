@@ -59,6 +59,9 @@ var pprofport = initFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
 var histograms = runFlags.String(
 	"histograms", "",
 	"File to write per-op incremental and cumulative histogram data.")
+var histogramMaxLatency = runFlags.Duration(
+	"histograms-max-latency", 0*time.Second,
+	"Expected maximum latency of running a query")
 
 func init() {
 	AddSubCmd(func(userFacing bool) *cobra.Command {
@@ -322,7 +325,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	if !ok {
 		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
 	}
-	reg := histogram.NewRegistry()
+	reg := histogram.NewRegistry(*histogramMaxLatency)
 	var ops workload.QueryLoad
 	for {
 		ops, err = o.Ops(urls, reg)

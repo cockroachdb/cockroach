@@ -32,20 +32,19 @@ const (
 	maxLatency = 100 * time.Second
 )
 
-var (
-	histogramPool = sync.Pool{
+// NOTE: this pool is initialized within NewRegistry.
+var histogramPool *sync.Pool
+
+func initializeHistogramPool(maxLat time.Duration) {
+	if maxLat == 0*time.Second {
+		maxLat = maxLatency
+	}
+	histogramPool = &sync.Pool{
 		New: func() interface{} {
-			return hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+			return hdrhistogram.New(minLatency.Nanoseconds(), maxLat.Nanoseconds(), sigFigs)
 		},
 	}
-	/*
-		namedHistogramPool = sync.Pool{
-			New: func() interface{} {
-				return &NamedHistogram{}
-			},
-		}
-	*/
-)
+}
 
 func newHistogram() *hdrhistogram.Histogram {
 	h := histogramPool.Get().(*hdrhistogram.Histogram)
@@ -110,14 +109,20 @@ type Registry struct {
 	start      time.Time
 	cumulative map[string]*hdrhistogram.Histogram
 	prevTick   map[string]time.Time
+	maxLatency time.Duration
 }
 
-// NewRegistry returns an initialized Registry.
-func NewRegistry() *Registry {
+// NewRegistry returns an initialized Registry. maxLat is the maximum time that
+// queries are expected to take to execute which is needed to initialize the
+// pool of histograms.
+func NewRegistry(maxLat time.Duration) *Registry {
+	initializeHistogramPool(maxLat)
+
 	r := &Registry{
 		start:      timeutil.Now(),
 		cumulative: make(map[string]*hdrhistogram.Histogram),
 		prevTick:   make(map[string]time.Time),
+		maxLatency: maxLat,
 	}
 	r.mu.registered = make(map[string][]*NamedHistogram)
 	return r
