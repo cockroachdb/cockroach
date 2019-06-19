@@ -104,6 +104,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	// reloading the raft state below, it isn't safe to use the existing raft
 	// group.
 	r.mu.internalRaftGroup = nil
+	r.mu.proposalBuf.Init((*replicaProposer)(r))
 
 	var err error
 	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.store.Engine(), desc); err != nil {

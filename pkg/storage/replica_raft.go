@@ -43,44 +43,6 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
-// insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
-// it to the pending map. Returns the assigned MaxLeaseIndex, if any.
-func (r *Replica) insertProposalLocked(proposal *ProposalData) int64 {
-	// Assign a lease index. Note that we do this as late as possible
-	// to make sure (to the extent that we can) that we don't assign
-	// (=predict) the index differently from the order in which commands are
-	// proposed (and thus likely applied).
-	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
-		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
-	}
-	isLease := proposal.Request.IsLeaseRequest()
-	if !isLease {
-		r.mu.lastAssignedLeaseIndex++
-	}
-	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
-	if proposal.command.ProposerReplica == (roachpb.ReplicaDescriptor{}) {
-		// 0 is a valid LeaseSequence value so we can't actually enforce it.
-		log.Fatalf(context.TODO(), "ProposerReplica and ProposerLeaseSequence must be filled in")
-	}
-
-	if log.V(4) {
-		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
-			proposal.idKey, proposal.command.MaxLeaseIndex)
-	}
-
-	if _, ok := r.mu.proposals[proposal.idKey]; ok {
-		ctx := r.AnnotateCtx(context.TODO())
-		log.Fatalf(ctx, "pending command already exists for %s", proposal.idKey)
-	}
-	r.mu.proposals[proposal.idKey] = proposal
-	if isLease {
-		// For lease requests, we return zero because no real MaxLeaseIndex is assigned.
-		// We could also return the lastAssignedIndex but this invites confusion.
-		return 0
-	}
-	return int64(proposal.command.MaxLeaseIndex)
-}
-
 func makeIDKey() storagebase.CmdIDKey {
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
@@ -115,6 +77,12 @@ func (r *Replica) evalAndPropose(
 	r.mu.RLock()
 	if !r.mu.destroyStatus.IsAlive() {
 		err := r.mu.destroyStatus.err
+		r.mu.RUnlock()
+		return nil, nil, 0, roachpb.NewError(err)
+	}
+
+	repDesc, err := r.getReplicaDescriptorRLocked()
+	if err != nil {
 		r.mu.RUnlock()
 		return nil, nil, 0, roachpb.NewError(err)
 	}
@@ -197,6 +165,10 @@ func (r *Replica) evalAndPropose(
 		// Continue with proposal...
 	}
 
+	// Attach information about the proposer to the command.
+	proposal.command.ProposerReplica = repDesc
+	proposal.command.ProposerLeaseSequence = lease.Sequence
+
 	// TODO(irfansharif): This int cast indicates that if someone configures a
 	// very large max proposal size, there is weird overflow behavior and it
 	// will not work the way it should.
@@ -210,6 +182,7 @@ func (r *Replica) evalAndPropose(
 			proposalSize, MaxCommandSize.Get(&r.store.cfg.Settings.SV),
 		))
 	}
+	proposal.quotaSize = proposalSize
 
 	// TODO(tschottdorf): blocking a proposal here will leave it dangling in the
 	// closed timestamp tracker for an extended period of time, which will in turn
@@ -218,7 +191,7 @@ func (r *Replica) evalAndPropose(
 	// closed timestamp tracker is acquired. This is better anyway; right now many
 	// commands can evaluate but then be blocked on quota, which has worse memory
 	// behavior.
-	if err := r.maybeAcquireProposalQuota(ctx, int64(proposalSize)); err != nil {
+	if err := r.maybeAcquireProposalQuota(ctx, int64(proposal.quotaSize)); err != nil {
 		return nil, nil, 0, roachpb.NewError(err)
 	}
 
@@ -234,42 +207,7 @@ func (r *Replica) evalAndPropose(
 		}
 	}
 
-	// submitProposalLocked calls withRaftGroupLocked which requires that raftMu
-	// is held, but only if Replica.mu.internalRaftGroup == nil. To avoid
-	// locking Replica.raftMu in the common case where the raft group is
-	// non-nil, we lock only Replica.mu at first before checking the status of
-	// the internal raft group. If it equals nil then we fall back to the slow
-	// path of locking Replica.raftMu. However, in order to maintain our lock
-	// ordering we need to lock Replica.raftMu here before locking Replica.mu,
-	// so we unlock Replica.mu before locking them both again.
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.internalRaftGroup == nil {
-		// Unlock first before locking in {raft,replica}mu order.
-		r.mu.Unlock()
-
-		r.raftMu.Lock()
-		defer r.raftMu.Unlock()
-		r.mu.Lock()
-		log.Event(proposal.ctx, "acquired {raft,replica}mu")
-	} else {
-		log.Event(proposal.ctx, "acquired replica mu")
-	}
-
-	// Add size of proposal to commandSizes map.
-	if r.mu.commandSizes != nil {
-		r.mu.commandSizes[proposal.idKey] = proposalSize
-	}
-
-	// Record the proposer and lease sequence.
-	repDesc, err := r.getReplicaDescriptorRLocked()
-	if err != nil {
-		return nil, nil, 0, roachpb.NewError(err)
-	}
-	proposal.command.ProposerReplica = repDesc
-	proposal.command.ProposerLeaseSequence = lease.Sequence
-
-	maxLeaseIndex, pErr := r.proposeLocked(ctx, proposal)
+	maxLeaseIndex, pErr := r.propose(ctx, proposal)
 	if pErr != nil {
 		return nil, nil, 0, pErr
 	}
@@ -283,68 +221,64 @@ func (r *Replica) evalAndPropose(
 	return proposalCh, abandon, maxLeaseIndex, nil
 }
 
-// proposeLocked starts tracking a command and proposes it to raft. If
+// propose starts tracking a command and proposes it to raft. If
 // this method succeeds, the caller is responsible for eventually
 // removing the proposal from the pending map (on success, in
 // processRaftCommand, or on failure via cleanupFailedProposalLocked).
-//
-// This method requires that r.mu is held in all cases, and if
-// r.mu.internalRaftGroup is nil, r.raftMu must also be held (note
-// that lock ordering requires that raftMu be acquired first).
-func (r *Replica) proposeLocked(
-	ctx context.Context, proposal *ProposalData,
-) (_ int64, pErr *roachpb.Error) {
-	// Make sure we clean up the proposal if we fail to submit it successfully.
-	// This is important both to ensure that that the proposals map doesn't
-	// grow without bound and to ensure that we always release any quota that
-	// we acquire.
-	defer func() {
-		if pErr != nil {
-			r.cleanupFailedProposalLocked(proposal)
-		}
-	}()
+func (r *Replica) propose(ctx context.Context, p *ProposalData) (_ int64, pErr *roachpb.Error) {
+	// Make sure the maximum lease index is unset. This field will be set in
+	// propBuf.Insert and its encoded bytes will be appended to the encoding
+	// buffer as a RaftCommandFooter.
+	p.command.MaxLeaseIndex = 0
 
-	// NB: We need to check Replica.mu.destroyStatus again in case the Replica has
-	// been destroyed between the initial check at the beginning of this method
-	// and the acquisition of Replica.mu. Failure to do so will leave pending
-	// proposals that never get cleared.
-	if !r.mu.destroyStatus.IsAlive() {
-		return 0, roachpb.NewError(r.mu.destroyStatus.err)
+	// Determine the encoding style for the Raft command.
+	prefix := true
+	version := raftVersionStandard
+	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
+		// EndTransactionRequest with a ChangeReplicasTrigger is special because
+		// Raft needs to understand it; it cannot simply be an opaque command.
+		// To permit this, the command is proposed by the proposal buffer using
+		// ProposeConfChange. For that reason, we also don't need a Raft command
+		// prefix because the command ID is stored in a field in raft.ConfChange.
+		log.Infof(p.ctx, "proposing %s", crt)
+		prefix = false
+
+		// Ensure that we aren't trying to remove ourselves from the range without
+		// having previously given up our lease, since the range won't be able
+		// to make progress while the lease is owned by a removed replica (and
+		// leases can stay in such a state for a very long time when using epoch-
+		// based range leases). This shouldn't happen often, but has been seen
+		// before (#12591).
+		if crt.ChangeType == roachpb.REMOVE_REPLICA && crt.Replica.ReplicaID == r.mu.replicaID {
+			msg := fmt.Sprintf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
+			log.Error(p.ctx, msg)
+			return 0, roachpb.NewErrorf("%s: %s", r, msg)
+		}
+	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
+		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
+		version = raftVersionSideloaded
+		r.store.metrics.AddSSTableProposals.Inc(1)
+	} else if log.V(4) {
+		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
-	maxLeaseIndex := r.insertProposalLocked(proposal)
-
-	if err := r.submitProposalLocked(proposal); err == raft.ErrProposalDropped {
-		// Silently ignore dropped proposals (they were always silently ignored
-		// prior to the introduction of ErrProposalDropped).
-		// TODO(bdarnell): Handle ErrProposalDropped better.
-		// https://github.com/cockroachdb/cockroach/issues/21849
-	} else if err != nil {
+	// Create encoding buffer.
+	preLen := 0
+	if prefix {
+		preLen = raftCommandPrefixLen
+	}
+	cmdLen := p.command.Size()
+	cap := preLen + cmdLen + storagepb.MaxRaftCommandFooterSize()
+	data := make([]byte, preLen, cap)
+	// Encode prefix with command ID, if necessary.
+	if prefix {
+		encodeRaftCommandPrefix(data, version, p.idKey)
+	}
+	// Encode body of command.
+	data = data[:preLen+cmdLen]
+	if _, err := protoutil.MarshalToWithoutFuzzing(p.command, data[preLen:]); err != nil {
 		return 0, roachpb.NewError(err)
 	}
-
-	return maxLeaseIndex, nil
-}
-
-// submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
-// The replica lock must be held.
-func (r *Replica) submitProposalLocked(p *ProposalData) error {
-	p.proposedAtTicks = r.mu.ticks
-
-	if r.mu.submitProposalFn != nil {
-		return r.mu.submitProposalFn(p)
-	}
-	return defaultSubmitProposalLocked(r, p)
-}
-
-func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
-	cmdSize := p.command.Size()
-	data := make([]byte, raftCommandPrefixLen+cmdSize)
-	_, err := protoutil.MarshalToWithoutFuzzing(p.command, data[raftCommandPrefixLen:])
-	if err != nil {
-		return err
-	}
-	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 
 	// Too verbose even for verbose logging, so manually enable if you want to
 	// debug proposal sizes.
@@ -354,7 +288,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
   RaftCommand.ReplicatedEvalResult:          %d
   RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
-`, p.Request.Summary(), cmdSize,
+`, p.Request.Summary(), cmdLen,
 			p.command.ProposerReplica.Size(),
 			p.command.ReplicatedEvalResult.Size(),
 			p.command.ReplicatedEvalResult.Delta.Size(),
@@ -362,77 +296,27 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		)
 	}
 
-	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
-
 	// Log an event if this is a large proposal. These are more likely to cause
 	// blips or worse, and it's good to be able to pick them from traces.
 	//
 	// TODO(tschottdorf): can we mark them so lightstep can group them?
-	if size := cmdSize; size > largeProposalEventThresholdBytes {
-		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(size)))
+	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
+	if cmdLen > largeProposalEventThresholdBytes {
+		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(cmdLen)))
 	}
 
-	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
-		// EndTransactionRequest with a ChangeReplicasTrigger is special
-		// because raft needs to understand it; it cannot simply be an
-		// opaque command.
-		log.Infof(p.ctx, "proposing %s", crt)
-
-		// Ensure that we aren't trying to remove ourselves from the range without
-		// having previously given up our lease, since the range won't be able
-		// to make progress while the lease is owned by a removed replica (and
-		// leases can stay in such a state for a very long time when using epoch-
-		// based range leases). This shouldn't happen often, but has been seen
-		// before (#12591).
-		if crt.ChangeType == roachpb.REMOVE_REPLICA && crt.Replica.ReplicaID == r.mu.replicaID {
-			log.Errorf(p.ctx, "received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
-			return errors.Errorf("%s: received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", r, crt)
-		}
-
-		confChangeCtx := ConfChangeContext{
-			CommandID: string(p.idKey),
-			Payload:   data[raftCommandPrefixLen:], // chop off prefix
-			Replica:   crt.Replica,
-		}
-		encodedCtx, err := protoutil.Marshal(&confChangeCtx)
-		if err != nil {
-			return err
-		}
-
-		return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
-			// We're proposing a command here so there is no need to wake the
-			// leader if we were quiesced.
-			r.unquiesceLocked()
-			return false, /* unquiesceAndWakeLeader */
-				raftGroup.ProposeConfChange(raftpb.ConfChange{
-					Type:    changeTypeInternalToRaft[crt.ChangeType],
-					NodeID:  uint64(crt.Replica.ReplicaID),
-					Context: encodedCtx,
-				})
-		})
+	// Insert into the proposal buffer, which passes the command to Raft to be
+	// proposed. The proposal buffer assigns the command a maximum lease index
+	// when it sequences it.
+	maxLeaseIndex, err := r.mu.proposalBuf.Insert(p, data)
+	if err != nil {
+		return 0, roachpb.NewError(err)
 	}
+	return int64(maxLeaseIndex), nil
+}
 
-	if log.V(4) {
-		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
-	}
-
-	encodingVersion := raftVersionStandard
-	if p.command.ReplicatedEvalResult.AddSSTable != nil {
-		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
-			return errors.New("cannot sideload empty SSTable")
-		}
-		encodingVersion = raftVersionSideloaded
-		r.store.metrics.AddSSTableProposals.Inc(1)
-		log.Event(p.ctx, "sideloadable proposal detected")
-	}
-	encodeRaftCommandPrefix(data[:raftCommandPrefixLen], encodingVersion, p.idKey)
-
-	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
-		// We're proposing a command so there is no need to wake the leader if
-		// we're quiesced.
-		r.unquiesceLocked()
-		return false /* unquiesceAndWakeLeader */, raftGroup.Propose(data)
-	})
+func (r *Replica) hasPendingProposalsRLocked() bool {
+	return len(r.mu.proposals) > 0 || r.mu.proposalBuf.Len() > 0
 }
 
 // abandonProposal attempts to abandon the provided proposal. When called, it
@@ -547,6 +431,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	defer r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+		if err := r.mu.proposalBuf.FlushLockedWithRaftGroup(raftGroup); err != nil {
+			return false, err
+		}
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
@@ -1074,16 +961,10 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	// the "correct" index). For reproposals, it's generally pretty unlikely
 	// that they can make it in the right place. Reproposing in order is
 	// definitely required, however.
-	//
-	// TODO(tschottdorf): evaluate whether `r.mu.proposals` should
-	// be a list/slice.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
-		if err := r.submitProposalLocked(p); err == raft.ErrProposalDropped {
-			// TODO(bdarnell): Handle ErrProposalDropped better.
-			// https://github.com/cockroachdb/cockroach/issues/21849
-		} else if err != nil {
+		if err := r.mu.proposalBuf.ReinsertLocked(p); err != nil {
 			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(proposalResult{
 				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err.Error())),
@@ -1529,9 +1410,7 @@ func (s pendingCmdSlice) Less(i, j int) bool {
 // leader awoken). See handleRaftReady for an instance of where this value
 // varies.
 //
-// Requires that Replica.mu is held. Also requires that Replica.raftMu is held
-// if either the caller can't guarantee that r.mu.internalRaftGroup != nil or
-// the provided function requires Replica.raftMu.
+// Requires that Replica.mu is held.
 func (r *Replica) withRaftGroupLocked(
 	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
@@ -1548,8 +1427,6 @@ func (r *Replica) withRaftGroupLocked(
 	}
 
 	if r.mu.internalRaftGroup == nil {
-		r.raftMu.Mutex.AssertHeld()
-
 		ctx := r.AnnotateCtx(context.TODO())
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
 			raft.Storage((*replicaRaftStorage)(r)),
@@ -1590,8 +1467,6 @@ func (r *Replica) withRaftGroupLocked(
 // should not initiate an election while handling incoming raft
 // messages (which may include MsgVotes from an election in progress,
 // and this election would be disrupted if we started our own).
-//
-// Has the same requirement for Replica.raftMu as withRaftGroupLocked.
 func (r *Replica) withRaftGroup(
 	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
@@ -2081,11 +1956,10 @@ func (r *Replica) processRaftCommand(
 // necessarily by this method! But if this method returns true, the
 // command will be in the local proposals map).
 func (r *Replica) tryReproposeWithNewLeaseIndex(proposal *ProposalData) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	// Note that we don't need to validate anything about the proposal's
 	// lease here - if we got this far, we know that everything but the
 	// index is valid at this point in the log.
+	r.mu.Lock()
 	if proposal.command.MaxLeaseIndex > r.mu.state.LeaseAppliedIndex {
 		// If the command's MaxLeaseIndex is greater than the
 		// LeaseAppliedIndex, it must have already been reproposed (this
@@ -2102,11 +1976,17 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(proposal *ProposalData) bool {
 		log.VEventf(proposal.ctx, 2, "skipping reproposal, already reproposed at index %d",
 			proposal.command.MaxLeaseIndex)
 		r.mu.proposals[proposal.idKey] = proposal
+		r.mu.Unlock()
 		return true
 	}
+	r.mu.Unlock()
+
 	// Some tests check for this log message in the trace.
 	log.VEventf(proposal.ctx, 2, "retry: proposalIllegalLeaseIndex")
-	if _, pErr := r.proposeLocked(proposal.ctx, proposal); pErr != nil {
+	if _, pErr := r.propose(proposal.ctx, proposal); pErr != nil {
+		// TODO(nvanbenschoten): Returning false here isn't ok. It will result
+		// in a proposal returning without a response or an error, which
+		// triggers a panic higher up in the stack. We need to fix this.
 		log.Warningf(proposal.ctx, "failed to repropose with new lease index: %s", pErr)
 		return false
 	}
