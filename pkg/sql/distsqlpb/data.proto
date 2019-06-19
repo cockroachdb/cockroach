@@ -281,6 +281,13 @@ message RemoteProducerMetadata {
     // update.
     optional uint64 rows_processed = 1 [(gogoproto.nullable) = false];
   }
+  // Metrics are unconditionally emitted by table readers.
+  message Metrics {
+    // Total number of bytes read while executing a statement.
+    optional int64 bytes_read = 1 [(gogoproto.nullable) = false];
+    // Total number of rows read while executing a statement.
+    optional int64 rows_read = 2 [(gogoproto.nullable) = false];
+  }
   oneof value {
     RangeInfos range_info = 1;
     Error error = 2;
@@ -288,6 +295,7 @@ message RemoteProducerMetadata {
     roachpb.TxnCoordMeta txn_coord_meta = 4;
     RowNum row_num = 5;
     SamplerProgress sampler_progress = 7;
+    Metrics metrics = 8;
   }
   reserved 6;
 }

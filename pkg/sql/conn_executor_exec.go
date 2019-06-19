@@ -729,7 +729,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagDistSQLLocal)
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
-	err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
+	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
@@ -737,7 +737,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// plan has not been closed earlier.
 	ex.recordStatementSummary(
 		ctx, planner,
-		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
+		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(), bytesRead, rowsRead,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -852,7 +852,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	stmtType tree.StatementType,
 	res RestrictedCommandResult,
 	distribute bool,
-) error {
+) (bytesRead, rowsRead int64, _ error) {
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache, ex.server.cfg.LeaseHolderCache,
@@ -887,7 +887,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute,
 		) {
-			return recv.commErr
+			return recv.bytesRead, recv.rowsRead, recv.commErr
 		}
 	}
 	recv.discardRows = planner.discardRows
@@ -895,7 +895,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// the planner whether or not to plan remote table readers.
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
 		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv)
-	return recv.commErr
+	return recv.bytesRead, recv.rowsRead, recv.commErr
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and

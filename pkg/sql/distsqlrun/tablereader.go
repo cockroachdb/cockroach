@@ -62,6 +62,9 @@ type tableReader struct {
 	// initialization, call input.Next() to retrieve rows once initialized.
 	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
+
+	// rowsRead is the number of rows read and is tracked unconditionally.
+	rowsRead int64
 }
 
 var _ Processor = &tableReader{}
@@ -277,6 +280,7 @@ func (tr *tableReader) Release() {
 		ProcessorBase: tr.ProcessorBase,
 		fetcher:       tr.fetcher,
 		spans:         tr.spans[:0],
+		rowsRead:      0,
 	}
 	trPool.Put(tr)
 }
@@ -297,6 +301,11 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 			break
 		}
 
+		// When tracing is enabled, number of rows read is tracked twice (once
+		// here, and once through InputStats). This is done so that non-tracing
+		// case can avoid tracking of the stall time which gives a noticeable
+		// performance hit.
+		tr.rowsRead++
 		if outRow := tr.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
@@ -355,6 +364,11 @@ func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMet
 	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
+
+	meta := distsqlpb.GetProducerMeta()
+	meta.Metrics = distsqlpb.GetMetricsMeta()
+	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.fetcher.GetBytesRead(), tr.rowsRead
+	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
 }
 
