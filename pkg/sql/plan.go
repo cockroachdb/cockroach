@@ -321,7 +321,7 @@ type planTop struct {
 	avoidBuffering bool
 }
 
-// makePlan implements the Planner interface. It populates the
+// makePlan implements the planMaker interface. It populates the
 // planner's curPlan field.
 //
 // The caller is responsible for populating the placeholders
