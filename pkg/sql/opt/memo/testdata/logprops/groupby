@@ -250,7 +250,8 @@ group-by
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
       └── tuple [type=tuple{int}]
-           └── null [type=unknown]
+           └── cast: INT8 [type=int]
+                └── null [type=unknown]
 
 # GroupBy with empty grouping columns.
 opt
