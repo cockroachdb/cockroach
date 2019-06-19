@@ -1381,8 +1381,10 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 
 // NewStdLogger creates a *stdLog.Logger that forwards messages to the
 // CockroachDB logs with the specified severity.
-func NewStdLogger(severity Severity) *stdLog.Logger {
-	return stdLog.New(logBridge(severity), "", stdLog.Lshortfile)
+//
+// The prefix appears at the beginning of each generated log line.
+func NewStdLogger(severity Severity, prefix string) *stdLog.Logger {
+	return stdLog.New(logBridge(severity), prefix, stdLog.Lshortfile)
 }
 
 // setV computes and remembers the V level for a given PC
