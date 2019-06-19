@@ -180,10 +180,10 @@ type ScalarProperties struct {
 	// properly.
 	inFuncExpr bool
 
-	// inWindowFunc is temporarily set to true while type checking the
+	// InWindowFunc is temporarily set to true while type checking the
 	// parameters of a window function in order to reject nested window
 	// functions.
-	inWindowFunc bool
+	InWindowFunc bool
 }
 
 // Clear resets the scalar properties to defaults.
@@ -729,9 +729,9 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 	return pgerror.Newf(code, "%s functions are not allowed in %s", cat, context)
 }
 
-// checkFunctionUsage checks whether a given built-in function is
+// CheckFunctionUsage checks whether a given built-in function is
 // allowed in the current context.
-func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
+func (sc *SemaContext) CheckFunctionUsage(expr *FuncExpr, def *FunctionDefinition) error {
 	if def.UnsupportedWithIssue != 0 {
 		// Note: no need to embed the function name in the message; the
 		// caller will add the function name as prefix.
@@ -755,7 +755,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 			return NewInvalidFunctionUsageError(WindowClass, sc.Properties.required.context)
 		}
 
-		if sc.Properties.Derived.inWindowFunc &&
+		if sc.Properties.Derived.InWindowFunc &&
 			sc.Properties.required.rejectFlags&RejectNestedWindowFunctions != 0 {
 			return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 		}
@@ -822,28 +822,28 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		return nil, err
 	}
 
-	if err := ctx.checkFunctionUsage(expr, def); err != nil {
+	if err := ctx.CheckFunctionUsage(expr, def); err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 			"%s()", def.Name)
 	}
 	if ctx != nil {
 		// We'll need to remember we are in a function application to
-		// generate suitable errors in checkFunctionUsage().  We cannot
+		// generate suitable errors in CheckFunctionUsage().  We cannot
 		// set ctx.inFuncExpr earlier (in particular not before the call
-		// to checkFunctionUsage() above) because the top-level FuncExpr
+		// to CheckFunctionUsage() above) because the top-level FuncExpr
 		// must be acceptable even if it is a SRF and
 		// RejectNestedGenerators is set.
 		defer func(ctx *SemaContext, prevFunc bool, prevWindow bool) {
 			ctx.Properties.Derived.inFuncExpr = prevFunc
-			ctx.Properties.Derived.inWindowFunc = prevWindow
+			ctx.Properties.Derived.InWindowFunc = prevWindow
 		}(
 			ctx,
 			ctx.Properties.Derived.inFuncExpr,
-			ctx.Properties.Derived.inWindowFunc,
+			ctx.Properties.Derived.InWindowFunc,
 		)
 		ctx.Properties.Derived.inFuncExpr = true
 		if expr.WindowDef != nil {
-			ctx.Properties.Derived.inWindowFunc = true
+			ctx.Properties.Derived.InWindowFunc = true
 		}
 	}
 
