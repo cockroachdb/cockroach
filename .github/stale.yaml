@@ -1,0 +1,12 @@
+# Number of days of inactivity before a PR becomes stale
+daysUntilStale: 60
+# Number of days of inactivity before a stale PR is closed
+daysUntilClose: 7
+staleLabel: []
+# Comment to post when marking a PR as stale.
+markComment: >
+  This PR has been automatically marked as stale because it has not had
+  recent activity. It will be closed if no further activity occurs. Thank you
+  for your contributions.
+# Don't touch issues, limit to pull requests.
+only: pulls
