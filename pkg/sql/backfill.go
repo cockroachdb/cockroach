@@ -124,7 +124,7 @@ func (sc *SchemaChanger) runBackfill(
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexSpans []roachpb.Span
 
-	var constraintsToAdd []sqlbase.ConstraintToUpdate
+	var constraintsToAddBeforeValidation []sqlbase.ConstraintToUpdate
 	var constraintsToValidate []sqlbase.ConstraintToUpdate
 
 	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
@@ -156,8 +156,24 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Index:
 				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(t.Index.ID))
 			case *sqlbase.DescriptorMutation_Constraint:
-				constraintsToAdd = append(constraintsToAdd, *t.Constraint)
-				constraintsToValidate = append(constraintsToValidate, *t.Constraint)
+				switch t.Constraint.ConstraintType {
+				case sqlbase.ConstraintToUpdate_CHECK:
+					if t.Constraint.Check.Validity == sqlbase.ConstraintValidity_Validating {
+						constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
+						constraintsToValidate = append(constraintsToValidate, *t.Constraint)
+					}
+					// TODO (tyler): we do not yet support teh NOT VALID foreign keys,
+					//  because we don't add the Foreign Key mutations
+				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+					if t.Constraint.ForeignKey.Validity == sqlbase.ConstraintValidity_Validating {
+						constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
+						constraintsToValidate = append(constraintsToValidate, *t.Constraint)
+					}
+				case sqlbase.ConstraintToUpdate_NOT_NULL:
+					// NOT NULL constraints are always validated before they can be added
+					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
+					constraintsToValidate = append(constraintsToValidate, *t.Constraint)
+				}
 			default:
 				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)
@@ -218,8 +234,8 @@ func (sc *SchemaChanger) runBackfill(
 	// a constraint references both public and non-public columns), and 2) the
 	// validation occurs only when the entire cluster is already enforcing the
 	// constraint on insert/update.
-	if len(constraintsToAdd) > 0 {
-		if err := sc.AddConstraints(ctx, constraintsToAdd); err != nil {
+	if len(constraintsToAddBeforeValidation) > 0 {
+		if err := sc.AddConstraints(ctx, constraintsToAddBeforeValidation); err != nil {
 			return err
 		}
 	}
