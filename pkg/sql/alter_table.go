@@ -809,7 +809,41 @@ func applyColumnMutation(
 			}
 		}
 
+	case *tree.AlterTableSetNotNull:
+		if !col.Nullable {
+			return nil
+		}
+		// See if there's already a mutation to add a not null constraint
+		for i := range tableDesc.Mutations {
+			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
+				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL {
+				return nil
+			}
+		}
+
+		info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+		if err != nil {
+			return err
+		}
+		inuseNames := make(map[string]struct{}, len(info))
+		for k := range info {
+			inuseNames[k] = struct{}{}
+		}
+		tableDesc.AddNotNullValidationMutation(string(t.Column), col.ID, inuseNames)
+
 	case *tree.AlterTableDropNotNull:
+		if col.Nullable {
+			return nil
+		}
+		// See if there's already a mutation to add a not null constraint
+		for i := range tableDesc.Mutations {
+			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
+				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"constraint in the middle of being added, try again later")
+			}
+		}
+		// TODO (lucy): As with FKs and check constraints, move this to the schema changer
 		col.Nullable = true
 
 	case *tree.AlterTableDropStored:

@@ -277,7 +277,7 @@ func ConvertBackfillError(
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
 	// are "live" in the tableDesc.
-	desc, err := tableDesc.MakeFirstMutationPublic()
+	desc, err := tableDesc.MakeFirstMutationPublic(sqlbase.IncludeConstraints)
 	if err != nil {
 		return err
 	}

@@ -340,12 +340,18 @@ message ConstraintToUpdate {
   enum ConstraintType {
     CHECK = 0;
     FOREIGN_KEY = 1;
+    // NOT NULL constraints being added are represented by a dummy check
+    // constraint so that a multi-state schema change, including a bulk
+    // validation step, can occur. The check field contains the dummy
+    // constraint.
+    NOT_NULL = 2;
   }
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
   optional TableDescriptor.CheckConstraint check = 3 [(gogoproto.nullable) = false];
   optional ForeignKeyReference foreign_key = 4 [(gogoproto.nullable) = false];
   optional uint32 foreign_key_index = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
 }
 
 // A DescriptorMutation represents a column or an index that
@@ -521,6 +527,7 @@ message TableDescriptor {
     // An ordered list of column IDs used by the check constraint.
     repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
+    optional bool is_non_null_constraint = 6 [(gogoproto.nullable) = false];
   }
 
   repeated CheckConstraint checks = 20;
