@@ -274,6 +274,20 @@ func ExtractValuesFromFilter(on FiltersExpr, cols opt.ColSet) map[opt.ColumnID]t
 	return vals
 }
 
+// ExtractConstantFilter returns a map of columns to the filters that constrain
+// value to a constant.
+func ExtractConstantFilter(on FiltersExpr, cols opt.ColSet) map[opt.ColumnID]FiltersItem {
+	vals := make(map[opt.ColumnID]FiltersItem)
+	for i := range on {
+		ok, col, _ := extractConstEquality(on[i].Condition)
+		if !ok || !cols.Contains(col) {
+			continue
+		}
+		vals[opt.ColumnID(col)] = on[i]
+	}
+	return vals
+}
+
 // extractConstEquality extracts a column that's being equated to a constant
 // value if possible.
 func extractConstEquality(condition opt.ScalarExpr) (bool, opt.ColumnID, tree.Datum) {
