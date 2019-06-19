@@ -312,7 +312,7 @@ func (jr *joinReader) canSplitSpanIntoSeparateFamilies(span roachpb.Span) (bool,
 				tempSpan.Key = make(roachpb.Key, len(span.Key))
 				copy(tempSpan.Key, span.Key)
 				tempSpan.Key = keys.MakeFamilyKey(tempSpan.Key, uint32(familyID))
-				tempSpan.EndKey = span.Key.PrefixEnd()
+				tempSpan.EndKey = tempSpan.Key.PrefixEnd()
 				if i > 0 && familyID == jr.neededFamilies[i-1]+1 {
 					// the family ID is the same, so collapse these spans
 					resultSpans[len(resultSpans)-1].EndKey = tempSpan.EndKey

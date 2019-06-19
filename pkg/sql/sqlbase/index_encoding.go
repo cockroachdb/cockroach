@@ -244,9 +244,7 @@ func MakeSpanFromEncDatums(
 // in sqlbase seems like a decent spot.
 // NeededColumnFamilyIDs
 func NeededColumnFamilyIDs(
-	colIdxMap map[ColumnID]int,
-	families []ColumnFamilyDescriptor,
-	neededCols util.FastIntSet,
+	colIdxMap map[ColumnID]int, families []ColumnFamilyDescriptor, neededCols util.FastIntSet,
 ) []FamilyID {
 	var needed []FamilyID
 	for i := range families {
