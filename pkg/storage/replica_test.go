@@ -2807,7 +2807,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	// CPut args which expect value "1" to write "0".
 	key := []byte("a")
 	cpArgs1 := cPutArgs(key, []byte("1"), []byte("0"))
-	_, pErr := tc.SendWrapped(&cpArgs1)
+	_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: t2}, &cpArgs1)
 	if cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 		t.Errorf("expected ConditionFailedError; got %v", pErr)
 	} else if cfErr.ActualValue != nil {
@@ -2895,7 +2895,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 
 	// InitPut args to write "1" to same key. Should fail.
 	ipArgs2 := iPutArgs(key, []byte("1"))
-	_, pErr = tc.SendWrapped(&ipArgs2)
+	_, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: t2}, &ipArgs2)
 	if cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 		t.Errorf("expected ConditionFailedError; got %v", pErr)
 	} else if valueBytes, err := cfErr.ActualValue.GetBytes(); err != nil {
