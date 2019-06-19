@@ -416,11 +416,11 @@ render       ·              ·                           ("coalesce")        ·
 ·            row 0, expr 0  1                           ·                   ·
 ·            row 0, expr 1  2                           ·                   ·
 ·            row 1, expr 0  3                           ·                   ·
-·            row 1, expr 1  NULL                        ·                   ·
-·            row 2, expr 0  NULL                        ·                   ·
+·            row 1, expr 1  CAST(NULL AS INT8)          ·                   ·
+·            row 2, expr 0  CAST(NULL AS INT8)          ·                   ·
 ·            row 2, expr 1  4                           ·                   ·
-·            row 3, expr 0  NULL                        ·                   ·
-·            row 3, expr 1  NULL                        ·                   ·
+·            row 3, expr 0  CAST(NULL AS INT8)          ·                   ·
+·            row 3, expr 1  CAST(NULL AS INT8)          ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
@@ -432,15 +432,15 @@ render       ·              ·                                    ("coalesce") 
 ·            row 0, expr 0  1                                    ·                            ·
 ·            row 0, expr 1  2                                    ·                            ·
 ·            row 0, expr 2  3                                    ·                            ·
-·            row 1, expr 0  NULL                                 ·                            ·
+·            row 1, expr 0  CAST(NULL AS INT8)                   ·                            ·
 ·            row 1, expr 1  4                                    ·                            ·
 ·            row 1, expr 2  5                                    ·                            ·
-·            row 2, expr 0  NULL                                 ·                            ·
-·            row 2, expr 1  NULL                                 ·                            ·
+·            row 2, expr 0  CAST(NULL AS INT8)                   ·                            ·
+·            row 2, expr 1  CAST(NULL AS INT8)                   ·                            ·
 ·            row 2, expr 2  6                                    ·                            ·
-·            row 3, expr 0  NULL                                 ·                            ·
-·            row 3, expr 1  NULL                                 ·                            ·
-·            row 3, expr 2  NULL                                 ·                            ·
+·            row 3, expr 0  CAST(NULL AS INT8)                   ·                            ·
+·            row 3, expr 1  CAST(NULL AS INT8)                   ·                            ·
+·            row 3, expr 2  CAST(NULL AS INT8)                   ·                            ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a BETWEEN b AND d
