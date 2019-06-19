@@ -375,3 +375,44 @@ query T
 SELECT crdb_internal.pretty_key(e'\\xa82a00918ed9':::BYTES, (-5096189069466142898):::INT8);
 ----
 /Table/32/???/9/6/81
+
+subtest max_retry_counter
+# Verify that the max_retry counter in statement stats actually increases with retries.
+
+statement ok
+SET application_name = 'test_max_retry'
+
+# Make the statement retry, to ensure max_retries increases to
+# become different from 0.
+# The delay is chosen identically to the value in the `txn`
+# logic tests introduced in #16719. It is long enough
+# to ensure max_retries increases, even under stress,
+# but short enough to be negligible compared to the
+# overall test suite.
+statement OK
+SELECT crdb_internal.force_retry('50ms'::INTERVAL)
+
+statement OK
+RESET application_name
+
+# Note: in the following test, three rows of output are expected:
+# - one for the SELECT statements that failed with a retry error,
+# - one for the final SELECT retry attempt that succeeded without an error,
+# - one for the RESET statement.
+#
+# We expect the first two entries to have max_retries > 0 because
+# auto-retries are expected by the server.
+# We also expect the RESET statement to have max_retries = 0, because
+# RESET never retries. This tests that the retry counter is properly
+# reset to 0 between statements - a naive implementation could make
+# the counter increase forever, even between statements.
+#
+query TBB
+SELECT key, (max_retries > 0), flags LIKE '!%' AS f
+  FROM crdb_internal.node_statement_statistics
+ WHERE application_name = 'test_max_retry'
+ORDER BY key, f
+----
+SELECT crdb_internal.force_retry(_)  true  false
+SELECT crdb_internal.force_retry(_)  true  true
+SET application_name = DEFAULT       false false
