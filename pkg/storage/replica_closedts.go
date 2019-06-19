@@ -20,13 +20,13 @@ import (
 // closed timestamp tracker. This is called to emit an update about this
 // replica in the absence of write activity.
 func (r *Replica) EmitMLAI() {
-	r.mu.Lock()
-	lai := r.mu.lastAssignedLeaseIndex
+	r.mu.RLock()
+	lai := r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
 	if r.mu.state.LeaseAppliedIndex > lai {
 		lai = r.mu.state.LeaseAppliedIndex
 	}
 	epoch := r.mu.state.Lease.Epoch
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	ctx := r.AnnotateCtx(context.Background())
 	_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
