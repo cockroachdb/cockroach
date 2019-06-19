@@ -316,54 +316,55 @@ EXPLAIN (VERBOSE)
         avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
         avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
         avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW),
-        avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
-        avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
-        avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
-        avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)
+        avg(k) OVER (ORDER BY k GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (ORDER BY k GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+        avg(k) OVER (ORDER BY k GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+        avg(k) OVER (ORDER BY k GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)
     FROM
         kv
 ----
-render          ·          ·                                                                          (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)     ·
- │              render 0   avg                                                                        ·                                                                ·
- │              render 1   avg                                                                        ·                                                                ·
- │              render 2   avg                                                                        ·                                                                ·
- │              render 3   avg                                                                        ·                                                                ·
- │              render 4   avg                                                                        ·                                                                ·
- │              render 5   avg                                                                        ·                                                                ·
- │              render 6   avg                                                                        ·                                                                ·
- │              render 7   avg                                                                        ·                                                                ·
- │              render 8   avg                                                                        ·                                                                ·
- │              render 9   avg                                                                        ·                                                                ·
- │              render 10  avg                                                                        ·                                                                ·
- │              render 11  avg                                                                        ·                                                                ·
- └── window     ·          ·                                                                          (k, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)  ·
-      │         window 0   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)   ·                                                                ·
-      │         window 1   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)           ·                                                                ·
-      │         window 2   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)           ·                                                                ·
-      │         window 3   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                   ·                                                                ·
-      │         window 4   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)    ·                                                                ·
-      │         window 5   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            ·                                                                ·
-      │         window 6   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)            ·                                                                ·
-      │         window 7   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                    ·                                                                ·
-      │         window 8   avg(@1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                                                                ·
-      │         window 9   avg(@1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                                ·
-      │         window 10  avg(@1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                                                                ·
-      │         window 11  avg(@1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                                                                ·
-      │         render 1   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)   ·                                                                ·
-      │         render 2   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)           ·                                                                ·
-      │         render 3   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)           ·                                                                ·
-      │         render 4   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                   ·                                                                ·
-      │         render 5   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)    ·                                                                ·
-      │         render 6   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)            ·                                                                ·
-      │         render 7   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)            ·                                                                ·
-      │         render 8   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                    ·                                                                ·
-      │         render 9   avg(@1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                                                                ·
-      │         render 10  avg(@1) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                                ·
-      │         render 11  avg(@1) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                                                                ·
-      │         render 12  avg(@1) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                                                                ·
-      └── scan  ·          ·                                                                          (k)                                                              ·
-·               table      kv@primary                                                                 ·                                                                ·
-·               spans      ALL                                                                        ·                                                                ·
+render               ·          ·                                                                                          (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)     ·
+ │                   render 0   avg                                                                                        ·                                                                ·
+ │                   render 1   avg                                                                                        ·                                                                ·
+ │                   render 2   avg                                                                                        ·                                                                ·
+ │                   render 3   avg                                                                                        ·                                                                ·
+ │                   render 4   avg                                                                                        ·                                                                ·
+ │                   render 5   avg                                                                                        ·                                                                ·
+ │                   render 6   avg                                                                                        ·                                                                ·
+ │                   render 7   avg                                                                                        ·                                                                ·
+ │                   render 8   avg                                                                                        ·                                                                ·
+ │                   render 9   avg                                                                                        ·                                                                ·
+ │                   render 10  avg                                                                                        ·                                                                ·
+ │                   render 11  avg                                                                                        ·                                                                ·
+ └── window          ·          ·                                                                                          (k, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)  ·
+      │              window 0   avg(@1) OVER (ORDER BY @1 ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                                                                ·
+      │              window 1   avg(@1) OVER (ORDER BY @1 ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                                ·
+      │              window 2   avg(@1) OVER (ORDER BY @1 ASC GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                                                                ·
+      │              window 3   avg(@1) OVER (ORDER BY @1 ASC GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                                                                ·
+      │              render 9   avg(@1) OVER (ORDER BY @1 ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                                                                ·
+      │              render 10  avg(@1) OVER (ORDER BY @1 ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                                ·
+      │              render 11  avg(@1) OVER (ORDER BY @1 ASC GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                                                                ·
+      │              render 12  avg(@1) OVER (ORDER BY @1 ASC GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                                                                ·
+      └── window     ·          ·                                                                                          (k, avg, avg, avg, avg, avg, avg, avg, avg)                      ·
+           │         window 0   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)                   ·                                                                ·
+           │         window 1   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                           ·                                                                ·
+           │         window 2   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)                           ·                                                                ·
+           │         window 3   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                                   ·                                                                ·
+           │         window 4   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)                    ·                                                                ·
+           │         window 5   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                            ·                                                                ·
+           │         window 6   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)                            ·                                                                ·
+           │         window 7   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                                    ·                                                                ·
+           │         render 1   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)                   ·                                                                ·
+           │         render 2   avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                           ·                                                                ·
+           │         render 3   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)                           ·                                                                ·
+           │         render 4   avg(@1) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                                   ·                                                                ·
+           │         render 5   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)                    ·                                                                ·
+           │         render 6   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                            ·                                                                ·
+           │         render 7   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)                            ·                                                                ·
+           │         render 8   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                                    ·                                                                ·
+           └── scan  ·          ·                                                                                          (k)                                                              ·
+·                    table      kv@primary                                                                                 ·                                                                ·
+·                    spans      ALL                                                                                        ·                                                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE)

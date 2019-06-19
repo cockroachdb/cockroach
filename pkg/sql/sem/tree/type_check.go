@@ -180,10 +180,10 @@ type ScalarProperties struct {
 	// properly.
 	inFuncExpr bool
 
-	// inWindowFunc is temporarily set to true while type checking the
+	// InWindowFunc is temporarily set to true while type checking the
 	// parameters of a window function in order to reject nested window
 	// functions.
-	inWindowFunc bool
+	InWindowFunc bool
 }
 
 // Clear resets the scalar properties to defaults.
@@ -755,7 +755,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 			return NewInvalidFunctionUsageError(WindowClass, sc.Properties.required.context)
 		}
 
-		if sc.Properties.Derived.inWindowFunc &&
+		if sc.Properties.Derived.InWindowFunc &&
 			sc.Properties.required.rejectFlags&RejectNestedWindowFunctions != 0 {
 			return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 		}
@@ -835,15 +835,15 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		// RejectNestedGenerators is set.
 		defer func(ctx *SemaContext, prevFunc bool, prevWindow bool) {
 			ctx.Properties.Derived.inFuncExpr = prevFunc
-			ctx.Properties.Derived.inWindowFunc = prevWindow
+			ctx.Properties.Derived.InWindowFunc = prevWindow
 		}(
 			ctx,
 			ctx.Properties.Derived.inFuncExpr,
-			ctx.Properties.Derived.inWindowFunc,
+			ctx.Properties.Derived.InWindowFunc,
 		)
 		ctx.Properties.Derived.inFuncExpr = true
 		if expr.WindowDef != nil {
-			ctx.Properties.Derived.inWindowFunc = true
+			ctx.Properties.Derived.InWindowFunc = true
 		}
 	}
 
