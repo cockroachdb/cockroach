@@ -2993,6 +2993,9 @@ type DArray struct {
 	// HasNonNulls is set to true if any of the datums within the are non-null.
 	// This is used in expression serialization (FmtParsable).
 	HasNonNulls bool
+
+	// customOid, if non-0, is the oid of this array datum.
+	customOid oid.Oid
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
@@ -3026,6 +3029,12 @@ func MustBeDArray(e Expr) *DArray {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() *types.T {
+	switch d.customOid {
+	case oid.T_int2vector:
+		return types.Int2Vector
+	case oid.T_oidvector:
+		return types.OidVector
+	}
 	return types.MakeArray(d.ParamTyp)
 }
 
@@ -3514,13 +3523,19 @@ func NewDName(d string) Datum {
 // NewDIntVectorFromDArray is a helper routine to create a *DIntVector
 // (implemented as a *DOidWrapper) initialized from an existing *DArray.
 func NewDIntVectorFromDArray(d *DArray) Datum {
-	return wrapWithOid(d, oid.T_int2vector)
+	ret := new(DArray)
+	*ret = *d
+	ret.customOid = oid.T_int2vector
+	return ret
 }
 
 // NewDOidVectorFromDArray is a helper routine to create a *DOidVector
 // (implemented as a *DOidWrapper) initialized from an existing *DArray.
 func NewDOidVectorFromDArray(d *DArray) Datum {
-	return wrapWithOid(d, oid.T_oidvector)
+	ret := new(DArray)
+	*ret = *d
+	ret.customOid = oid.T_oidvector
+	return ret
 }
 
 // DatumTypeSize returns a lower bound on the total size of a Datum
