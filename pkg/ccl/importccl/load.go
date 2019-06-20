@@ -288,7 +288,7 @@ func insertStmtToKVs(
 		return errors.Errorf("load insert: expected VALUES clause: %q", stmt)
 	}
 
-	b := inserter(f)
+	b := sql.Inserter(f)
 	computedIVarContainer := sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
 		Cols:    tableDesc.Columns,
@@ -328,30 +328,6 @@ func insertStmtToKVs(
 		}
 	}
 	return nil
-}
-
-type inserter func(roachpb.KeyValue)
-
-func (i inserter) CPut(key, value, expValue interface{}) {
-	panic("unimplemented")
-}
-
-func (i inserter) Del(key ...interface{}) {
-	panic("unimplemented")
-}
-
-func (i inserter) Put(key, value interface{}) {
-	i(roachpb.KeyValue{
-		Key:   *key.(*roachpb.Key),
-		Value: *value.(*roachpb.Value),
-	})
-}
-
-func (i inserter) InitPut(key, value interface{}, failOnTombstones bool) {
-	i(roachpb.KeyValue{
-		Key:   *key.(*roachpb.Key),
-		Value: *value.(*roachpb.Value),
-	})
 }
 
 func writeSST(

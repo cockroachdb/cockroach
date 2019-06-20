@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,7 +32,7 @@ import (
 const defaultScanBuffer = 1024 * 1024 * 4
 
 type pgCopyReader struct {
-	conv rowConverter
+	conv sql.RowConverter
 	opts roachpb.PgCopyOptions
 }
 
@@ -43,7 +44,7 @@ func newPgCopyReader(
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*pgCopyReader, error) {
-	conv, err := newRowConverter(tableDesc, evalCtx, kvCh)
+	conv, err := sql.NewRowConverter(tableDesc, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +58,7 @@ func (d *pgCopyReader) start(ctx ctxgroup.Group) {
 }
 
 func (d *pgCopyReader) inputFinished(ctx context.Context) {
-	close(d.conv.kvCh)
+	close(d.conv.KvCh)
 }
 
 func (d *pgCopyReader) readFiles(
@@ -276,27 +277,27 @@ func (d *pgCopyReader) readFile(
 		if err != nil {
 			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 		}
-		if len(row) != len(d.conv.visibleColTypes) {
+		if len(row) != len(d.conv.VisibleColTypes) {
 			return makeRowErr(inputName, count, pgcode.Syntax,
-				"expected %d values, got %d", len(d.conv.visibleColTypes), len(row))
+				"expected %d values, got %d", len(d.conv.VisibleColTypes), len(row))
 		}
 		for i, s := range row {
 			if s == nil {
-				d.conv.datums[i] = tree.DNull
+				d.conv.Datums[i] = tree.DNull
 			} else {
-				d.conv.datums[i], err = tree.ParseDatumStringAs(d.conv.visibleColTypes[i], *s, d.conv.evalCtx)
+				d.conv.Datums[i], err = tree.ParseDatumStringAs(d.conv.VisibleColTypes[i], *s, d.conv.EvalCtx)
 				if err != nil {
-					col := d.conv.visibleCols[i]
+					col := d.conv.VisibleCols[i]
 					return wrapRowErr(err, inputName, count, pgcode.Syntax,
 						"parse %q as %s", col.Name, col.Type.SQLString())
 				}
 			}
 		}
 
-		if err := d.conv.row(ctx, inputIdx, count); err != nil {
+		if err := d.conv.Row(ctx, inputIdx, count); err != nil {
 			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 		}
 	}
 
-	return d.conv.sendBatch(ctx)
+	return d.conv.SendBatch(ctx)
 }

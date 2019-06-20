@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -225,7 +226,7 @@ func NewWorkloadKVConverter(
 func (w *WorkloadKVConverter) Worker(
 	ctx context.Context, evalCtx *tree.EvalContext, finishedBatchFn func(),
 ) error {
-	conv, err := newRowConverter(w.tableDesc, evalCtx, w.kvCh)
+	conv, err := sql.NewRowConverter(w.tableDesc, evalCtx, w.kvCh)
 	if err != nil {
 		return err
 	}
@@ -246,13 +247,13 @@ func (w *WorkloadKVConverter) Worker(
 				// TODO(dan): This does a type switch once per-datum. Reduce this to
 				// a one-time switch per column.
 				converted, err := makeDatumFromColOffset(
-					&alloc, conv.visibleColTypes[colIdx], evalCtx, col, rowIdx)
+					&alloc, conv.VisibleColTypes[colIdx], evalCtx, col, rowIdx)
 				if err != nil {
 					return err
 				}
-				conv.datums[colIdx] = converted
+				conv.Datums[colIdx] = converted
 			}
-			// `conv.row` uses these as arguments to GenerateUniqueID to generate
+			// `conv.Row` uses these as arguments to GenerateUniqueID to generate
 			// hidden primary keys, when necessary. We want them to be ascending per
 			// batch (to reduce overlap in the resulting kvs) and non-conflicting
 			// (because of primary key uniqueness). The ids that come out of
@@ -261,11 +262,11 @@ func (w *WorkloadKVConverter) Worker(
 			// within the table and the index of the row within the batch should do
 			// what we want.
 			fileIdx, timestamp := int32(batchIdx), int64(rowIdx)
-			if err := conv.row(ctx, fileIdx, timestamp); err != nil {
+			if err := conv.Row(ctx, fileIdx, timestamp); err != nil {
 				return err
 			}
 		}
 		finishedBatchFn()
 	}
-	return conv.sendBatch(ctx)
+	return conv.SendBatch(ctx)
 }

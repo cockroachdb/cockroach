@@ -24,14 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -191,154 +187,6 @@ func (b *byteCounter) Read(p []byte) (int, error) {
 	n, err := b.r.Read(p)
 	b.n += int64(n)
 	return n, err
-}
-
-type rowConverter struct {
-	// current row buf
-	datums []tree.Datum
-
-	// kv destination and current batch
-	kvCh     chan<- []roachpb.KeyValue
-	kvBatch  []roachpb.KeyValue
-	batchCap int
-
-	tableDesc *sqlbase.ImmutableTableDescriptor
-
-	// The rest of these are derived from tableDesc, just cached here.
-	hidden                int
-	ri                    row.Inserter
-	evalCtx               *tree.EvalContext
-	cols                  []sqlbase.ColumnDescriptor
-	visibleCols           []sqlbase.ColumnDescriptor
-	visibleColTypes       []*types.T
-	defaultExprs          []tree.TypedExpr
-	computedIVarContainer sqlbase.RowIndexedVarContainer
-}
-
-const kvBatchSize = 5000
-
-func newRowConverter(
-	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- []roachpb.KeyValue,
-) (*rowConverter, error) {
-	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
-	c := &rowConverter{
-		tableDesc: immutDesc,
-		kvCh:      kvCh,
-		evalCtx:   evalCtx,
-	}
-
-	ri, err := row.MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
-		immutDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
-	if err != nil {
-		return nil, errors.Wrap(err, "make row inserter")
-	}
-	c.ri = ri
-
-	var txCtx transform.ExprTransformContext
-	// Although we don't yet support DEFAULT expressions on visible columns,
-	// we do on hidden columns (which is only the default _rowid one). This
-	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(immutDesc.Columns, immutDesc, &txCtx, c.evalCtx)
-	if err != nil {
-		return nil, errors.Wrap(err, "process default columns")
-	}
-	c.cols = cols
-	c.defaultExprs = defaultExprs
-
-	c.visibleCols = immutDesc.VisibleColumns()
-	c.visibleColTypes = make([]*types.T, len(c.visibleCols))
-	for i := range c.visibleCols {
-		c.visibleColTypes[i] = c.visibleCols[i].DatumType()
-	}
-	c.datums = make([]tree.Datum, len(c.visibleCols), len(cols))
-
-	// Check for a hidden column. This should be the unique_rowid PK if present.
-	c.hidden = -1
-	for i := range cols {
-		col := &cols[i]
-		if col.Hidden {
-			if col.DefaultExpr == nil || *col.DefaultExpr != "unique_rowid()" || c.hidden != -1 {
-				return nil, errors.New("unexpected hidden column")
-			}
-			c.hidden = i
-			c.datums = append(c.datums, nil)
-		}
-	}
-	if len(c.datums) != len(cols) {
-		return nil, errors.New("unexpected hidden column")
-	}
-
-	padding := 2 * (len(immutDesc.Indexes) + len(immutDesc.Families))
-	c.batchCap = kvBatchSize + padding
-	c.kvBatch = make([]roachpb.KeyValue, 0, c.batchCap)
-
-	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
-		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    immutDesc.Columns,
-	}
-	return c, nil
-}
-
-func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64) error {
-	if c.hidden >= 0 {
-		// We don't want to call unique_rowid() for the hidden PK column because
-		// it is not idempotent. The sampling from the first stage will be useless
-		// during the read phase, producing a single range split with all of the
-		// data. Instead, we will call our own function that mimics that function,
-		// but more-or-less guarantees that it will not interfere with the numbers
-		// that will be produced by it. The lower 15 bits mimic the node id, but as
-		// the CSV file number. The upper 48 bits are the line number and mimic the
-		// timestamp. It would take a file with many more than 2**32 lines to even
-		// begin approaching what unique_rowid would return today, so we assume it
-		// to be safe. Since the timestamp is won't overlap, it is safe to use any
-		// number in the node id portion. The 15 bits in that portion should account
-		// for up to 32k CSV files in a single IMPORT. In the case of > 32k files,
-		// the data is xor'd so the final bits are flipped instead of set.
-		c.datums[c.hidden] = tree.NewDInt(builtins.GenerateUniqueID(fileIndex, uint64(rowIndex)))
-	}
-
-	// TODO(justin): we currently disallow computed columns in import statements.
-	var computeExprs []tree.TypedExpr
-	var computedCols []sqlbase.ColumnDescriptor
-
-	insertRow, err := sql.GenerateInsertRow(
-		c.defaultExprs, computeExprs, c.cols, computedCols, c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
-	if err != nil {
-		return errors.Wrap(err, "generate insert row")
-	}
-	if err := c.ri.InsertRow(
-		ctx,
-		inserter(func(kv roachpb.KeyValue) {
-			kv.Value.InitChecksum(kv.Key)
-			c.kvBatch = append(c.kvBatch, kv)
-		}),
-		insertRow,
-		true, /* ignoreConflicts */
-		row.SkipFKs,
-		false, /* traceKV */
-	); err != nil {
-		return errors.Wrap(err, "insert row")
-	}
-	// If our batch is full, flush it and start a new one.
-	if len(c.kvBatch) >= kvBatchSize {
-		if err := c.sendBatch(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (c *rowConverter) sendBatch(ctx context.Context) error {
-	if len(c.kvBatch) == 0 {
-		return nil
-	}
-	select {
-	case c.kvCh <- c.kvBatch:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	c.kvBatch = make([]roachpb.KeyValue, 0, c.batchCap)
-	return nil
 }
 
 var csvOutputTypes = []types.T{
