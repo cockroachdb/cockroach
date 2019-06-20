@@ -99,13 +99,20 @@ func (p *PGTest) Receive(typs ...pgproto3.BackendMessage) ([]pgproto3.BackendMes
 func (p *PGTest) Until(typs ...pgproto3.BackendMessage) ([]pgproto3.BackendMessage, error) {
 	var msgs []pgproto3.BackendMessage
 	for len(typs) > 0 {
+		typ := reflect.TypeOf(typs[0])
+
 		// Receive messages and make copies of them.
 		recv, err := p.fe.Receive()
 		if err != nil {
 			return nil, errors.Wrap(err, "receive")
 		}
-		if errmsg, ok := recv.(*pgproto3.ErrorResponse); ok {
+		if errmsg, ok := recv.(*pgproto3.ErrorResponse); ok && typ != typErrorResponse {
 			return nil, errors.Errorf("waiting for %T, got %#v", typs[0], errmsg)
+		}
+		// If we saw a ready message but weren't waiting for one, we
+		// might wait forever so bail.
+		if msg, ok := recv.(*pgproto3.ReadyForQuery); ok && typ != typReadyForQuery {
+			return nil, errors.Errorf("waiting for %T, got %#v", typs[0], msg)
 		}
 		data := recv.Encode(nil)
 		// Trim off message type and length.
@@ -117,9 +124,14 @@ func (p *PGTest) Until(typs ...pgproto3.BackendMessage) ([]pgproto3.BackendMessa
 			return nil, errors.Wrap(err, "decode")
 		}
 		msgs = append(msgs, msg)
-		if reflect.TypeOf(typs[0]) == reflect.TypeOf(msg) {
+		if typ == reflect.TypeOf(msg) {
 			typs = typs[1:]
 		}
 	}
 	return msgs, nil
 }
+
+var (
+	typErrorResponse = reflect.TypeOf(&pgproto3.ErrorResponse{})
+	typReadyForQuery = reflect.TypeOf(&pgproto3.ReadyForQuery{})
+)
