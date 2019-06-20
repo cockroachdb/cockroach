@@ -93,7 +93,6 @@ type indexHTMLArgs struct {
 	LoginEnabled         bool
 	LoggedInUser         *string
 	Tag                  string
-	Version              string
 	NodeID               string
 }
 
@@ -140,7 +139,6 @@ func Handler(cfg Config) http.Handler {
 			LoginEnabled:         cfg.LoginEnabled,
 			LoggedInUser:         cfg.GetUser(r.Context()),
 			Tag:                  buildInfo.Tag,
-			Version:              build.VersionPrefix(),
 			NodeID:               cfg.NodeID.String(),
 		}); err != nil {
 			err = errors.Wrap(err, "templating index.html")

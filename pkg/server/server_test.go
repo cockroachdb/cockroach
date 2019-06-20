@@ -921,9 +921,7 @@ Binary built without web UI.
 			expected := fmt.Sprintf(
 				htmlTemplate,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
-					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"NodeID":"%d"}`,
 					1,
 				),
 			)
@@ -956,18 +954,14 @@ Binary built without web UI.
 			{
 				loggedInClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d"}`,
-					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","NodeID":"%d"}`,
 					1,
 				),
 			},
 			{
 				loggedOutClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
-					build.GetInfo().Tag,
-					build.VersionPrefix(),
+					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"NodeID":"%d"}`,
 					1,
 				),
 			},
