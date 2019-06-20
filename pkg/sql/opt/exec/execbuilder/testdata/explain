@@ -362,7 +362,7 @@ scan  ·      ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
-scan  ·      ·          (k, v)  ·
+scan  ·      ·          (k, v)  +k
 ·     table  t@primary  ·       ·
 ·     spans  ALL        ·       ·
 
@@ -436,7 +436,7 @@ sort             ·      ·           (a, b)              +b
  │               order  +b          ·                   ·
  └── index-join  ·      ·           (a, b)              ·
       │          table  tc@primary  ·                   ·
-      └── scan   ·      ·           (a, rowid[hidden])  ·
+      └── scan   ·      ·           (a, rowid[hidden])  +a,+rowid
 ·                table  tc@c        ·                   ·
 ·                spans  /10-/11     ·                   ·
 
@@ -463,21 +463,21 @@ values  ·              ·                (a int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM t
 ----
-scan  ·      ·          (k int, v int)  ·
+scan  ·      ·          (k int, v int)  +k
 ·     table  t@primary  ·               ·
 ·     spans  ALL        ·               ·
 
 query TTTTT
 EXPLAIN (TYPES,SYMVARS) SELECT k FROM t
 ----
-scan  ·      ·          (k int)  ·
+scan  ·      ·          (k int)  +k
 ·     table  t@primary  ·        ·
 ·     spans  ALL        ·        ·
 
 query TTTTT
 EXPLAIN (TYPES,VERBOSE) SELECT k FROM t
 ----
-scan  ·      ·          (k int)  ·
+scan  ·      ·          (k int)  +k
 ·     table  t@primary  ·        ·
 ·     spans  ALL        ·        ·
 
@@ -554,7 +554,7 @@ union        ·              ·                (column1 int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ----
-scan  ·      ·          (k int)  ·
+scan  ·      ·          (k int)  +k
 ·     table  t@primary  ·        ·
 ·     spans  ALL        ·        ·
 

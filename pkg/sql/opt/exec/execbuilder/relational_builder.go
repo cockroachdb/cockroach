@@ -397,8 +397,12 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
+	revScan := ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering)
 	needed, output := b.getColumns(scan.Cols, scan.Table)
 	res := execPlan{outputCols: output}
+
+	// The orderings of the scanNode are restricted by the output columns of the scan.
+	scanOrdering := ordering.ScanOrdering(scan, tab.Index(scan.Index), revScan)
 
 	root, err := b.factory.ConstructScan(
 		tab,
@@ -407,9 +411,9 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		scan.Constraint,
 		scan.HardLimit.RowCount(),
 		// HardLimit.Reverse() is taken into account by ScanIsReverse.
-		ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
+		revScan,
 		b.indexConstraintMaxResults(scan),
-		res.reqOrdering(scan),
+		exec.OutputOrdering(res.sqlOrdering(scanOrdering)),
 	)
 	if err != nil {
 		return execPlan{}, err

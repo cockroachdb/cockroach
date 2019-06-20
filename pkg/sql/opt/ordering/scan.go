@@ -14,6 +14,7 @@ package ordering
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -146,6 +147,25 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	}
 
 	return trimProvided(provided, required, fds)
+}
+
+// ScanOrdering provides the ordering that the scan is able to provide given
+// the index the scan uses.
+func ScanOrdering(scan *memo.ScanExpr, index cat.Index, revScan bool) opt.Ordering {
+	indexKeyCols := index.KeyColumnCount()
+	ordering := make(opt.Ordering, 0, indexKeyCols)
+	for i := 0; i < indexKeyCols; i++ {
+		col := index.Column(i)
+		colID := scan.Table.ColumnID(col.Ordinal)
+		if scan.Cols.Contains(colID) {
+
+			// This is an equivalent to an XOR. We want to reverse the direction if
+			// its a reverse scan.
+			descending := (col.Descending || revScan) && !(col.Descending && revScan)
+			ordering = append(ordering, opt.MakeOrderingColumn(colID, descending))
+		}
+	}
+	return ordering
 }
 
 func init() {

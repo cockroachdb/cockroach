@@ -119,14 +119,14 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyslU1vm0AQhu_9FdFcswjPsv
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
-scan  ·      ·            (a, b, c)  ·
+scan  ·      ·            (a, b, c)  +a,+b,+c
 ·     table  abc@primary  ·          ·
 ·     spans  ALL          ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJykk01r4zAQhu_7K8x7lvH3HnzaayBkS9qeah8Ua0gNiWQkGVqC_3uxDI3jpkVpLgMj6fH7MIxPkErQhh_JoHxBAoYUDBkYcjAUqBk6rRoyRunxyQSsxBvKmKGVXW_H45qhUZpQnmBbeyCUeOK7A22JC9LR-F1BlrcHF9Pp9sj1-z--a8Dw2HFpyiDaPK_X5xJGFZIKnzWtgHpgUL09ZxrL94QyGdg3XmedXiotSJO4UKmHK-YbFaouKhYPr0enF9GJ_0hSn5F8GUE4b26aSuqvlt2ils7VpiZzNfdWy_zVcj-1hUc4b6IKhbda7q8We6iFiyUPuBRBEij7SvoX233FaEumU9KQ1_LG4_aT2NP0qxjV64YetGpczNT-d5w7EGTsdJtMzUq6Kyc4h5Mf4b8XcLyE03uSs3vg_B64uAmuhz8fAQAA__9FDr-I
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykk8Gqm0AUhvd9Cvm3GdEZtQtXbgMhLWm7qi4mziEVEkdmJtASfPeiwo3mJpfJzebAP-Pn-TwcL2i1oq08kUX-GxwMAgwJGFIwZKgYOqNrslab4ZEJWKu_yGOGpu3ObjiuGGptCPkFrnFHQo6fcn-kHUlFJhreq8jJ5ji26UxzkuZfIfc1GH50srV5EG1_bTbXEkYleIm3Kkqg6hn02V17WicPhJz37IHXVUcbRYbUUqTgK1aIFSuSFar-zkdsdai7KFtQjyzEwoL7T0f4TOfdNMJ5eGpAwl8teUZNzNWmkIw19VZL_NVSP7Ubj3AeohKZt1rqrxZ7qIU3-x7IVgU80O4PmU8s-h2jHdlOt5a8ljcetp_Ugaa_xuqzqem70fXYZorfRm48UGTddMunsG7Hq1FwDvMP4a8LOL6FxSudk1fg9BU4ewqu-i__AwAA__-yiMEY
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c

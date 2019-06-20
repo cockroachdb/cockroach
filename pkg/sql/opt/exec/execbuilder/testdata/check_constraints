@@ -37,7 +37,7 @@ count                     ·         ·                          ()             
                 │         render 1  a                          ·                                 ·
                 │         render 2  b                          ·                                 ·
                 │         render 3  d                          ·                                 ·
-                └── scan  ·         ·                          (a, b, d)                         ·
+                └── scan  ·         ·                          (a, b, d)                         +a
 ·                         table     t9@primary                 ·                                 ·
 ·                         spans     /5/0-/5/1/2 /5/3/1-/5/3/2  ·                                 ·
 ·                         parallel  ·                          ·                                 ·
@@ -59,6 +59,6 @@ count                ·         ·           ()                                 
            │         render 5  2           ·                                          ·
            │         render 6  b < 2       ·                                          ·
            │         render 7  d IS NULL   ·                                          ·
-           └── scan  ·         ·           (a, b, c, d, e)                            ·
+           └── scan  ·         ·           (a, b, c, d, e)                            +a
 ·                    table     t9@primary  ·                                          ·
 ·                    spans     /5-/5/#     ·                                          ·

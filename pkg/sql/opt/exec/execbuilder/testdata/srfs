@@ -80,7 +80,7 @@ sort              ·         ·                            (a, generate_series) 
  │                order     +a,+generate_series          ·                     ·
  └── project set  ·         ·                            (a, generate_series)  ·
       │           render 0  generate_series(@1, @1 + 1)  ·                     ·
-      └── scan    ·         ·                            (a)                   ·
+      └── scan    ·         ·                            (a)                   +a
 ·                 table     data@primary                 ·                     ·
 ·                 spans     ALL                          ·                     ·
 
@@ -130,12 +130,12 @@ render                      ·         ·                        (generate_serie
       └── hash-join         ·         ·                        (x, z)                   ·
            │                type      semi                     ·                        ·
            │                pred      z < generate_series      ·                        ·
-           ├── scan         ·         ·                        (x, z)                   ·
+           ├── scan         ·         ·                        (x, z)                   +x
            │                table     xz@primary               ·                        ·
            │                spans     ALL                      ·                        ·
            └── project set  ·         ·                        (x, y, generate_series)  ·
                 │           render 0  generate_series(@1, @2)  ·                        ·
-                └── scan    ·         ·                        (x, y)                   ·
+                └── scan    ·         ·                        (x, y)                   +x
 ·                           table     xy@primary               ·                        ·
 ·                           spans     ALL                      ·                        ·
 
@@ -184,7 +184,7 @@ root                             ·             ·                              
                 │                render 0      unnest                                ·                     ·
                 └── project set  ·             ·                                     (x, y, unnest)        ·
                      │           render 0      unnest(ARRAY[@1, @2])                 ·                     ·
-                     └── scan    ·             ·                                     (x, y)                ·
+                     └── scan    ·             ·                                     (x, y)                +x
 ·                                table         xy@primary                            ·                     ·
 ·                                spans         ALL                                   ·                     ·
 
@@ -273,7 +273,7 @@ limit                                 ·            ·                          
                      │                filter       unnest = 'dragons'         ·                                                                                        ·
                      └── project set  ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)  ·
                           │           render 0     unnest(@6)                 ·                                                                                        ·
-                          └── scan    ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
+                          └── scan    ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +id
 ·                                     table        articles@primary           ·                                                                                        ·
 ·                                     spans        ALL                        ·                                                                                        ·
 

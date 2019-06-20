@@ -121,7 +121,7 @@ count                ·         ·            ()                           ·
            │         render 2  z            ·                            ·
            │         render 3  1            ·                            ·
            │         render 4  2            ·                            ·
-           └── scan  ·         ·            (x, y, z)                    ·
+           └── scan  ·         ·            (x, y, z)                    +x
 ·                    table     xyz@primary  ·                            ·
 ·                    spans     ALL          ·                            ·
 
@@ -139,7 +139,7 @@ count                ·         ·            ()               ·
            │         render 2  z            ·                ·
            │         render 3  y            ·                ·
            │         render 4  x            ·                ·
-           └── scan  ·         ·            (x, y, z)        ·
+           └── scan  ·         ·            (x, y, z)        +x
 ·                    table     xyz@primary  ·                ·
 ·                    spans     ALL          ·                ·
 
@@ -162,7 +162,7 @@ count                     ·         ·            ()                           
                 │         render 1  x            ·                            ·
                 │         render 2  y            ·                            ·
                 │         render 3  z            ·                            ·
-                └── scan  ·         ·            (x, y, z)                    ·
+                └── scan  ·         ·            (x, y, z)                    +x
 ·                         table     xyz@primary  ·                            ·
 ·                         spans     ALL          ·                            ·
 
@@ -319,7 +319,7 @@ render                    ·         ·              (a)                       +
                 │         render 2  c              ·                         ·
                 │         render 3  rowid          ·                         ·
                 │         render 4  c              ·                         ·
-                └── scan  ·         ·              (a, b, c, rowid[hidden])  +c
+                └── scan  ·         ·              (a, b, c, rowid[hidden])  +c,+rowid
 ·                         table     abc@abc_c_idx  ·                         ·
 ·                         spans     ALL            ·                         ·
 

@@ -51,13 +51,13 @@ render               ·                   ·                (a, b, c, d, b, x, c
       │              right cols are key  ·                ·                         ·
       ├── hash-join  ·                   ·                (b, x, c, y)              ·
       │    │         type                cross            ·                         ·
-      │    ├── scan  ·                   ·                (b, x)                    ·
+      │    ├── scan  ·                   ·                (b, x)                    +b
       │    │         table               bx@primary       ·                         ·
       │    │         spans               ALL              ·                         ·
-      │    └── scan  ·                   ·                (c, y)                    ·
+      │    └── scan  ·                   ·                (c, y)                    +c
       │              table               cy@primary       ·                         ·
       │              spans               ALL              ·                         ·
-      └── scan       ·                   ·                (a, b, c, d)              ·
+      └── scan       ·                   ·                (a, b, c, d)              +a
 ·                    table               abc@primary      ·                         ·
 ·                    spans               /1-/1/#          ·                         ·
 
@@ -82,6 +82,6 @@ render                 ·         ·            (a, b, c, d, b, x, c, y)  ·
       └── lookup-join  ·         ·            (a, b, c, d, c, y)        ·
            │           table     cy@primary   ·                         ·
            │           type      inner        ·                         ·
-           └── scan    ·         ·            (a, b, c, d)              ·
+           └── scan    ·         ·            (a, b, c, d)              +a
 ·                      table     abc@primary  ·                         ·
 ·                      spans     /1-/1/#      ·                         ·

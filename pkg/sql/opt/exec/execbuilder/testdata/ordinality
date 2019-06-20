@@ -20,7 +20,7 @@ EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER B
 filter           ·       ·                 (x, "ordinality")  +"ordinality"
  │               filter  "ordinality" > 1  ·                  ·
  └── ordinality  ·       ·                 (x, "ordinality")  ·
-      └── scan   ·       ·                 (x)                ·
+      └── scan   ·       ·                 (x)                +x
 ·                table   foo@primary       ·                  ·
 ·                spans   ALL               ·                  ·
 
@@ -32,7 +32,7 @@ sort                  ·       ·                 (x, "ordinality")  -"ordinalit
  └── filter           ·       ·                 (x, "ordinality")  ·
       │               filter  "ordinality" > 1  ·                  ·
       └── ordinality  ·       ·                 (x, "ordinality")  ·
-           └── scan   ·       ·                 (x)                ·
+           └── scan   ·       ·                 (x)                +x
 ·                     table   foo@primary       ·                  ·
 ·                     spans   ALL               ·                  ·
 
@@ -41,7 +41,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
 ----
 ordinality  ·      ·            (x, "ordinality")  ·
- └── scan   ·      ·            (x)                ·
+ └── scan   ·      ·            (x)                +x
 ·           table  foo@primary  ·                  ·
 ·           spans  /"a\x00"-    ·                  ·
 
@@ -53,6 +53,6 @@ EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 filter           ·       ·            (x, "ordinality")  ·
  │               filter  x > 'a'      ·                  ·
  └── ordinality  ·       ·            (x, "ordinality")  ·
-      └── scan   ·       ·            (x)                ·
+      └── scan   ·       ·            (x)                +x
 ·                table   foo@primary  ·                  ·
 ·                spans   ALL          ·                  ·

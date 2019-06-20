@@ -115,7 +115,7 @@ render                    ·         ·                                         
                 │         window 1  (variance((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
                 │         render 3  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
                 │         render 4  (variance((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
-                └── scan  ·         ·                                                                                                                   (k int, v int, d decimal)                                    ·
+                └── scan  ·         ·                                                                                                                   (k int, v int, d decimal)                                    +k
 ·                         table     kv@primary                                                                                                          ·                                                            ·
 ·                         spans     ALL                                                                                                                 ·                                                            ·
 
@@ -137,7 +137,7 @@ render                         ·         ·                                    
                 └── window     ·         ·                                                                                                                   (k int, v int, d decimal, stddev decimal)                    ·
                      │         window 0  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
                      │         render 3  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
-                     └── scan  ·         ·                                                                                                                   (k int, v int, d decimal)                                    ·
+                     └── scan  ·         ·                                                                                                                   (k int, v int, d decimal)                                    +k
 ·                              table     kv@primary                                                                                                          ·                                                            ·
 ·                              spans     ALL                                                                                                                 ·                                                            ·
 
@@ -152,7 +152,7 @@ sort                 ·         ·                                              
       └── window     ·         ·                                                                                                                 (k int, v int, d decimal, stddev decimal)  ·
            │         window 0  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                          ·
            │         render 3  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                          ·
-           └── scan  ·         ·                                                                                                                 (k int, v int, d decimal)                  ·
+           └── scan  ·         ·                                                                                                                 (k int, v int, d decimal)                  +k
 ·                    table     kv@primary                                                                                                        ·                                          ·
 ·                    spans     ALL                                                                                                               ·                                          ·
 
@@ -174,7 +174,7 @@ render                         ·         ·                                    
                 └── window     ·         ·                                                                                                                   (k int, v int, d decimal, stddev decimal)                    ·
                      │         window 0  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
                      │         render 3  (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
-                     └── scan  ·         ·                                                                                                                   (k int, v int, d decimal)                                    ·
+                     └── scan  ·         ·                                                                                                                   (k int, v int, d decimal)                                    +k
 ·                              table     kv@primary                                                                                                          ·                                                            ·
 ·                              spans     ALL                                                                                                                 ·                                                            ·
 
@@ -201,7 +201,7 @@ render                              ·            ·                            
                           │         aggregate 1  d                                                                                                                   ·                                                              ·
                           │         aggregate 2  max(k)                                                                                                              ·                                                              ·
                           │         group by     v, d                                                                                                                ·                                                              ·
-                          └── scan  ·            ·                                                                                                                   (k int, v int, d decimal)                                      ·
+                          └── scan  ·            ·                                                                                                                   (k int, v int, d decimal)                                      +k
 ·                                   table        kv@primary                                                                                                          ·                                                              ·
 ·                                   spans        ALL                                                                                                                 ·                                                              ·
 
@@ -221,7 +221,7 @@ sort                      ·            ·                                      
                 │         aggregate 1  d                                                                                                                 ·                                            ·
                 │         aggregate 2  max(k)                                                                                                            ·                                            ·
                 │         group by     v, d                                                                                                              ·                                            ·
-                └── scan  ·            ·                                                                                                                 (k int, v int, d decimal)                    ·
+                └── scan  ·            ·                                                                                                                 (k int, v int, d decimal)                    +k
 ·                         table        kv@primary                                                                                                        ·                                            ·
 ·                         spans        ALL                                                                                                               ·                                            ·
 
@@ -262,7 +262,7 @@ sort            ·         ·                                                   
  └── window     ·         ·                                                                                (k, v, rank)  ·
       │         window 0  rank() OVER (ORDER BY @1 ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·             ·
       │         render 2  rank() OVER (ORDER BY @1 ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·             ·
-      └── scan  ·         ·                                                                                (k, v)        ·
+      └── scan  ·         ·                                                                                (k, v)        +k
 ·               table     kv@primary                                                                       ·             ·
 ·               spans     ALL                                                                              ·             ·
 
@@ -277,7 +277,7 @@ render          ·         ·                                                   
  └── window     ·         ·                                                                 (k, avg)  ·
       │         window 0  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
       │         render 1  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
-      └── scan  ·         ·                                                                 (k)       ·
+      └── scan  ·         ·                                                                 (k)       +k
 ·               table     kv@primary                                                        ·         ·
 ·               spans     ALL                                                               ·         ·
 
@@ -289,7 +289,7 @@ render          ·         ·                                                   
  └── window     ·         ·                                                                         (k, avg)  ·
       │         window 0  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·         ·
       │         render 1  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·         ·
-      └── scan  ·         ·                                                                         (k)       ·
+      └── scan  ·         ·                                                                         (k)       +k
 ·               table     kv@primary                                                                ·         ·
 ·               spans     ALL                                                                       ·         ·
 
@@ -301,7 +301,7 @@ render          ·         ·                                                   
  └── window     ·         ·                                                                 (k, avg)  ·
       │         window 0  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
       │         render 1  avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
-      └── scan  ·         ·                                                                 (k)       ·
+      └── scan  ·         ·                                                                 (k)       +k
 ·               table     kv@primary                                                        ·         ·
 ·               spans     ALL                                                               ·         ·
 
@@ -362,7 +362,7 @@ render               ·          ·                                             
            │         render 6   avg(@1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                            ·                                                                ·
            │         render 7   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)                            ·                                                                ·
            │         render 8   avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                                    ·                                                                ·
-           └── scan  ·          ·                                                                                          (k)                                                              ·
+           └── scan  ·          ·                                                                                          (k)                                                              +k
 ·                    table      kv@primary                                                                                 ·                                                                ·
 ·                    spans      ALL                                                                                        ·                                                                ·
 

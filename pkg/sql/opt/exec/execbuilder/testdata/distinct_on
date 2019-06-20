@@ -51,7 +51,7 @@ render     ·         ·            (a, c, b)  ·
  │         render 0  a            ·          ·
  │         render 1  c            ·          ·
  │         render 2  b            ·          ·
- └── scan  ·         ·            (a, b, c)  ·
+ └── scan  ·         ·            (a, b, c)  +a,+b,+c
 ·          table     abc@primary  ·          ·
 ·          spans     ALL          ·          ·
 
@@ -59,7 +59,7 @@ render     ·         ·            (a, c, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a FROM abc
 ----
-scan  ·      ·            (a)  ·
+scan  ·      ·            (a)  +a
 ·     table  abc@primary  ·    ·
 ·     spans  ALL          ·    ·
 
@@ -69,7 +69,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
 sort       ·      ·            (b)  +b
  │         order  +b           ·    ·
- └── scan  ·      ·            (b)  ·
+ └── scan  ·      ·            (b)  +b
 ·          table  abc@primary  ·    ·
 ·          spans  ALL          ·    ·
 
@@ -127,10 +127,10 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, c) a, b FROM abc
 render          ·            ·            (a, b)     ·
  │              render 0     a            ·          ·
  │              render 1     b            ·          ·
- └── distinct   ·            ·            (a, b, c)  weak-key(a,c); +a
+ └── distinct   ·            ·            (a, b, c)  weak-key(a,c); +a,+b,+c
       │         distinct on  a, c         ·          ·
       │         order key    a            ·          ·
-      └── scan  ·            ·            (a, b, c)  +a
+      └── scan  ·            ·            (a, b, c)  +a,+b,+c
 ·               table        abc@primary  ·          ·
 ·               spans        ALL          ·          ·
 
@@ -141,10 +141,10 @@ render          ·            ·            (b, c, a)  ·
  │              render 0     b            ·          ·
  │              render 1     c            ·          ·
  │              render 2     a            ·          ·
- └── distinct   ·            ·            (a, b, c)  weak-key(a,c); +a
+ └── distinct   ·            ·            (a, b, c)  weak-key(a,c); +a,+b,+c
       │         distinct on  a, c         ·          ·
       │         order key    a            ·          ·
-      └── scan  ·            ·            (a, b, c)  +a
+      └── scan  ·            ·            (a, b, c)  +a,+b,+c
 ·               table        abc@primary  ·          ·
 ·               spans        ALL          ·          ·
 
@@ -156,10 +156,10 @@ render          ·            ·            (b, c, a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (pk1) pk1, pk2 FROM xyz
 ----
-distinct   ·            ·            (pk1, pk2)  weak-key(pk1); +pk1
+distinct   ·            ·            (pk1, pk2)  weak-key(pk1); +pk1,+pk2
  │         distinct on  pk1          ·           ·
  │         order key    pk1          ·           ·
- └── scan  ·            ·            (pk1, pk2)  +pk1
+ └── scan  ·            ·            (pk1, pk2)  +pk1,+pk2
 ·          table        xyz@primary  ·           ·
 ·          spans        ALL          ·           ·
 
@@ -176,7 +176,7 @@ render               ·            ·            (a, c)     +a
       │              order key    a            ·          ·
       └── sort       ·            ·            (a, b, c)  +a,-c,+b
            │         order        +a,-c,+b     ·          ·
-           └── scan  ·            ·            (a, b, c)  ·
+           └── scan  ·            ·            (a, b, c)  +a,+b,+c
 ·                    table        abc@primary  ·          ·
 ·                    spans        ALL          ·          ·
 
@@ -251,7 +251,7 @@ group              ·            ·                (max)      ·
  │                 scalar       ·                ·          ·
  └── render        ·            ·                (a)        ·
       │            render 0     a                ·          ·
-      └── revscan  ·            ·                (a, b, c)  ·
+      └── revscan  ·            ·                (a, b, c)  -a,-b,-c
 ·                  table        abc@primary      ·          ·
 ·                  spans        ALL              ·          ·
 ·                  limit        1                ·          ·
@@ -326,7 +326,7 @@ distinct   ·            ·            (x, y, z)  weak-key(x)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (1,2,3) a, b, c FROM abc
 ----
-scan  ·      ·            (a, b, c)  ·
+scan  ·      ·            (a, b, c)  +a,+b,+c
 ·     table  abc@primary  ·          ·
 ·     spans  ALL          ·          ·
 
@@ -391,7 +391,7 @@ render               ·            ·            (pk1)           ·
       │              order key    x            ·               ·
       └── sort       ·            ·            (x, y, z, pk1)  +x
            │         order        +x           ·               ·
-           └── scan  ·            ·            (x, y, z, pk1)  ·
+           └── scan  ·            ·            (x, y, z, pk1)  +pk1
 ·                    table        xyz@primary  ·               ·
 ·                    spans        ALL          ·               ·
 

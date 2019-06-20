@@ -415,7 +415,7 @@ render                                   ·         ·                      ("?c
                                │         render 0  length(k)              ·                              ·
                                │         render 1  2                      ·                              ·
                                │         render 2  k || v                 ·                              ·
-                               └── scan  ·         ·                      (k, v)                         ·
+                               └── scan  ·         ·                      (k, v)                         +k
 ·                                        table     kv@primary             ·                              ·
 ·                                        spans     ALL                    ·                              ·
 

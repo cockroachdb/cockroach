@@ -132,7 +132,7 @@ render               ·            ·                           (count int, r in
       │              group by     column6                     ·                              ·
       └── render     ·            ·                           (column6 int)                  ·
            │         render 0     ((k)[int] + (v)[int])[int]  ·                              ·
-           └── scan  ·            ·                           (k int, v int)                 ·
+           └── scan  ·            ·                           (k int, v int)                 +k
 ·                    table        kv@primary                  ·                              ·
 ·                    spans        ALL                         ·                              ·
 
@@ -159,7 +159,7 @@ EXPLAIN (TYPES) SELECT count(k) FROM kv
 group      ·            ·           (count int)  ·
  │         aggregate 0  count(k)    ·            ·
  │         scalar       ·           ·            ·
- └── scan  ·            ·           (k int)      ·
+ └── scan  ·            ·           (k int)      +k
 ·          table        kv@primary  ·            ·
 ·          spans        ALL         ·            ·
 
@@ -171,7 +171,7 @@ group      ·            ·           (count int, sum decimal, max int)  ·
  │         aggregate 1  sum(k)      ·                                  ·
  │         aggregate 2  max(k)      ·                                  ·
  │         scalar       ·           ·                                  ·
- └── scan  ·            ·           (k int)                            ·
+ └── scan  ·            ·           (k int)                            +k
 ·          table        kv@primary  ·                                  ·
 ·          spans        ALL         ·                                  ·
 
@@ -200,7 +200,7 @@ group                ·            ·                             (count)       
       │              render 0     ((k, v, w, s) AS k, v, w, s)  ·             ·
       └── hash-join  ·            ·                             (k, v, w, s)  ·
            │         type         cross                         ·             ·
-           ├── scan  ·            ·                             (k, v, w, s)  ·
+           ├── scan  ·            ·                             (k, v, w, s)  +k
            │         table        kv@primary                    ·             ·
            │         spans        ALL                           ·             ·
            └── scan  ·            ·                             ()            ·
@@ -301,7 +301,7 @@ EXPLAIN (TYPES) SELECT min(a) FROM abc
 group      ·            ·                (min char)  ·
  │         aggregate 0  any_not_null(a)  ·           ·
  │         scalar       ·                ·           ·
- └── scan  ·            ·                (a char)    ·
+ └── scan  ·            ·                (a char)    +a
 ·          table        abc@primary      ·           ·
 ·          spans        ALL              ·           ·
 ·          limit        1                ·           ·
@@ -327,7 +327,7 @@ EXPLAIN (TYPES) SELECT min(x) FROM xyz
 group      ·            ·                (min int)  ·
  │         aggregate 0  any_not_null(x)  ·          ·
  │         scalar       ·                ·          ·
- └── scan  ·            ·                (x int)    ·
+ └── scan  ·            ·                (x int)    +x
 ·          table        xyz@xy           ·          ·
 ·          spans        ALL              ·          ·
 ·          limit        1                ·          ·
@@ -338,7 +338,7 @@ EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 group      ·            ·                  (min int)  ·
  │         aggregate 0  any_not_null(x)    ·          ·
  │         scalar       ·                  ·          ·
- └── scan  ·            ·                  (x int)    ·
+ └── scan  ·            ·                  (x int)    +x
 ·          table        xyz@xy             ·          ·
 ·          spans        /0-/1 /4-/5 /7-/8  ·          ·
 ·          limit        1                  ·          ·
@@ -349,7 +349,7 @@ EXPLAIN (TYPES) SELECT max(x) FROM xyz
 group         ·            ·                (max int)  ·
  │            aggregate 0  any_not_null(x)  ·          ·
  │            scalar       ·                ·          ·
- └── revscan  ·            ·                (x int)    ·
+ └── revscan  ·            ·                (x int)    -x
 ·             table        xyz@xy           ·          ·
 ·             spans        ALL              ·          ·
 ·             limit        1                ·          ·
@@ -362,7 +362,7 @@ group           ·            ·                (min int)       ·
  │              scalar       ·                ·               ·
  └── render     ·            ·                (y int)         ·
       │         render 0     (y)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
+      └── scan  ·            ·                (x int, y int)  +x,+y
 ·               table        xyz@xy           ·               ·
 ·               spans        /1/!NULL-/2      ·               ·
 
@@ -374,7 +374,7 @@ group           ·            ·                (max int)       ·
  │              scalar       ·                ·               ·
  └── render     ·            ·                (y int)         ·
       │         render 0     (y)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
+      └── scan  ·            ·                (x int, y int)  +x,+y
 ·               table        xyz@xy           ·               ·
 ·               spans        /1/!NULL-/2      ·               ·
 
@@ -386,7 +386,7 @@ group           ·            ·                            (min int)         ·
  │              scalar       ·                            ·                 ·
  └── render     ·            ·                            (y int)           ·
       │         render 0     (y)[int]                     ·                 ·
-      └── scan  ·            ·                            (y int, z float)  ·
+      └── scan  ·            ·                            (y int, z float)  +z,+y
 ·               table        xyz@zyx                      ·                 ·
 ·               spans        /7/!NULL-/7.000000000000001  ·                 ·
 ·               limit        1                            ·                 ·
@@ -399,7 +399,7 @@ group              ·            ·                            (max int)        
  │                 scalar       ·                            ·                 ·
  └── render        ·            ·                            (y int)           ·
       │            render 0     (y)[int]                     ·                 ·
-      └── revscan  ·            ·                            (y int, z float)  ·
+      └── revscan  ·            ·                            (y int, z float)  -z,-y
 ·                  table        xyz@zyx                      ·                 ·
 ·                  spans        /7/!NULL-/7.000000000000001  ·                 ·
 ·                  limit        1                            ·                 ·
@@ -412,7 +412,7 @@ group           ·            ·          (min int)                ·
  │              scalar       ·          ·                        ·
  └── render     ·            ·          (x int)                  ·
       │         render 0     (x)[int]   ·                        ·
-      └── scan  ·            ·          (x int, y int, z float)  ·
+      └── scan  ·            ·          (x int, y int, z float)  +z,+y,+x
 ·               table        xyz@zyx    ·                        ·
 ·               spans        /3/2-/3/3  ·                        ·
 
@@ -434,7 +434,7 @@ group           ·            ·          (max int)                ·
  │              scalar       ·          ·                        ·
  └── render     ·            ·          (x int)                  ·
       │         render 0     (x)[int]   ·                        ·
-      └── scan  ·            ·          (x int, y int, z float)  ·
+      └── scan  ·            ·          (x int, y int, z float)  +z,+y,+x
 ·               table        xyz@zyx    ·                        ·
 ·               spans        /3/2-/3/3  ·                        ·
 
@@ -463,7 +463,7 @@ EXPLAIN (TYPES) SELECT variance(x) FROM xyz WHERE x = 1
 group      ·            ·            (variance decimal)  ·
  │         aggregate 0  variance(x)  ·                   ·
  │         scalar       ·            ·                   ·
- └── scan  ·            ·            (x int)             ·
+ └── scan  ·            ·            (x int)             +x
 ·          table        xyz@xy       ·                   ·
 ·          spans        /1-/2        ·                   ·
 
@@ -535,7 +535,7 @@ sort            ·            ·           (v int, count int)  +count
       │         aggregate 0  v           ·                   ·
       │         aggregate 1  count(k)    ·                   ·
       │         group by     v           ·                   ·
-      └── scan  ·            ·           (k int, v int)      ·
+      └── scan  ·            ·           (k int, v int)      +k
 ·               table        kv@primary  ·                   ·
 ·               spans        ALL         ·                   ·
 
@@ -652,7 +652,7 @@ render               ·            ·                                 (sum decim
       └── hash-join  ·            ·                                 (k int, d decimal)    ·
            │         type         inner                             ·                     ·
            │         pred         ((k)[int] >= (d)[decimal])[bool]  ·                     ·
-           ├── scan  ·            ·                                 (k int)               ·
+           ├── scan  ·            ·                                 (k int)               +k
            │         table        kv@primary                        ·                     ·
            │         spans        ALL                               ·                     ·
            └── scan  ·            ·                                 (d decimal)           ·
@@ -670,7 +670,7 @@ EXPLAIN (TYPES) SELECT min(v) FROM opt_test
 group      ·            ·                (min int)  ·
  │         aggregate 0  any_not_null(v)  ·          ·
  │         scalar       ·                ·          ·
- └── scan  ·            ·                (v int)    ·
+ └── scan  ·            ·                (v int)    +v
 ·          table        opt_test@v       ·          ·
 ·          spans        /!NULL-          ·          ·
 ·          limit        1                ·          ·
@@ -686,7 +686,7 @@ group           ·            ·                 (min int)       ·
  │              scalar       ·                 ·               ·
  └── render     ·            ·                 (v int)         ·
       │         render 0     (v)[int]          ·               ·
-      └── scan  ·            ·                 (k int, v int)  ·
+      └── scan  ·            ·                 (k int, v int)  +k
 ·               table        opt_test@primary  ·               ·
 ·               spans        -/3/# /5-         ·               ·
 
@@ -727,7 +727,7 @@ EXPLAIN (TYPES) SELECT (b, a) r FROM ab GROUP BY (b, a)
 ----
 render     ·         ·                                        (r tuple{int, int})  ·
  │         render 0  (((b)[int], (a)[int]))[tuple{int, int}]  ·                    ·
- └── scan  ·         ·                                        (a int, b int)       ·
+ └── scan  ·         ·                                        (a int, b int)       +a
 ·          table     ab@primary                               ·                    ·
 ·          spans     ALL                                      ·                    ·
 
@@ -745,7 +745,7 @@ render               ·            ·                                           
       │              group by     a, x                                                ·                                                ·
       └── hash-join  ·            ·                                                   (a int, b int, x string, y string)               ·
            │         type         cross                                               ·                                                ·
-           ├── scan  ·            ·                                                   (a int, b int)                                   ·
+           ├── scan  ·            ·                                                   (a int, b int)                                   +a
            │         table        ab@primary                                          ·                                                ·
            │         spans        ALL                                                 ·                                                ·
            └── scan  ·            ·                                                   (x string, y string)                             ·
@@ -938,7 +938,7 @@ render          ·         ·           (k)     ·
  │              render 0  k           ·       ·
  └── sort       ·         ·           (k, s)  +s
       │         order     +s          ·       ·
-      └── scan  ·         ·           (k, s)  ·
+      └── scan  ·         ·           (k, s)  +k
 ·               table     kv@primary  ·       ·
 ·               spans     ALL         ·       ·
 
@@ -960,7 +960,7 @@ group           ·            ·             (array_agg)  ·
  │              scalar       ·             ·            ·
  └── sort       ·            ·             (k, s)       +s
       │         order        +s            ·            ·
-      └── scan  ·            ·             (k, s)       ·
+      └── scan  ·            ·             (k, s)       +k
 ·               table        kv@primary    ·            ·
 ·               spans        ALL           ·            ·
 
@@ -988,7 +988,7 @@ group                ·            ·             (count)  ·
       └── hash-join  ·            ·             (y, v)   ·
            │         type         inner         ·        ·
            │         equality     (y) = (v)     ·        ·
-           ├── scan  ·            ·             (y)      ·
+           ├── scan  ·            ·             (y)      +y
            │         table        xyz@xy        ·        ·
            │         spans        ALL           ·        ·
            └── scan  ·            ·             (v)      ·
