@@ -78,9 +78,7 @@ type ProposalData struct {
 	// quotaSize is the encoded size of command that was used to acquire
 	// proposal quota. command.Size can change slightly as the object is
 	// mutated, so it's safer to record the exact value used here.
-	// TODO(nvanbenschoten): we're already tracking this here, so why do
-	// we need the separate commandSizes map? Let's get rid of it.
-	quotaSize int
+	quotaSize int64
 
 	// tmpFooter is used to avoid an allocation.
 	tmpFooter storagepb.RaftCommandFooter

@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft"
@@ -99,7 +98,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		r.mu.proposalQuota = nil
 		r.mu.lastUpdateTimes = nil
 		r.mu.quotaReleaseQueue = nil
-		r.mu.commandSizes = nil
 		return
 	}
 
@@ -114,9 +112,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			if releaseQueueLen := len(r.mu.quotaReleaseQueue); releaseQueueLen != 0 {
 				log.Fatalf(ctx, "len(r.mu.quotaReleaseQueue) = %d, expected 0", releaseQueueLen)
 			}
-			if commandSizesLen := len(r.mu.commandSizes); commandSizesLen != 0 {
-				log.Fatalf(ctx, "len(r.mu.commandSizes) = %d, expected 0", commandSizesLen)
-			}
 
 			// Raft may propose commands itself (specifically the empty
 			// commands when leadership changes), and these commands don't go
@@ -126,7 +121,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.proposalQuota = newQuotaPool(r.store.cfg.RaftProposalQuota)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Unwrap(), timeutil.Now())
-			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
 
@@ -136,7 +130,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			r.mu.proposalQuota = nil
 			r.mu.lastUpdateTimes = nil
 			r.mu.quotaReleaseQueue = nil
-			r.mu.commandSizes = nil
 		}
 		return
 	} else if r.mu.proposalQuota == nil {
@@ -237,13 +230,13 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		if qLen := uint64(len(r.mu.quotaReleaseQueue)); qLen < numReleases {
 			numReleases = qLen
 		}
-		sum := 0
+		sum := int64(0)
 		for _, rel := range r.mu.quotaReleaseQueue[:numReleases] {
 			sum += rel
 		}
 		r.mu.proposalQuotaBaseIndex += numReleases
 		r.mu.quotaReleaseQueue = r.mu.quotaReleaseQueue[numReleases:]
 
-		r.mu.proposalQuota.add(int64(sum))
+		r.mu.proposalQuota.add(sum)
 	}
 }
