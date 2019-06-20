@@ -611,47 +611,61 @@ func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
 func (rdc *RangeDescriptorCache) clearOverlappingCachedRangeDescriptors(
 	ctx context.Context, desc *roachpb.RangeDescriptor,
 ) (bool, error) {
-	key := desc.EndKey
-	metaKey := keys.RangeMetaKey(key)
+	startMeta := keys.RangeMetaKey(desc.StartKey)
+	endMeta := keys.RangeMetaKey(desc.EndKey)
+	var entriesToEvict []*cache.Entry
+	continueWithInsert := true
 
 	// Clear out any descriptors which subsume the key which we're going
 	// to cache. For example, if an existing KeyMin->KeyMax descriptor
 	// should be cleared out in favor of a KeyMin->"m" descriptor.
-	entry, ok := rdc.rangeCache.cache.CeilEntry(rangeCacheKey(metaKey))
+	entry, ok := rdc.rangeCache.cache.CeilEntry(rangeCacheKey(endMeta))
 	if ok {
 		descriptor := entry.Value.(*roachpb.RangeDescriptor)
-		if descriptor.StartKey.Less(key) && !descriptor.EndKey.Less(key) {
-			if descriptor.Equal(*desc) {
-				// The descriptor is already in the cache. Nothing to do.
-				return false, nil
+		if descriptor.StartKey.Less(desc.EndKey) && !descriptor.EndKey.Less(desc.EndKey) {
+			if desc.GenerationComparable && descriptor.GenerationComparable {
+				if desc.GetGeneration() <= descriptor.GetGeneration() {
+					// Generations are comparable and a newer descriptor already exists in
+					// cache.
+					continueWithInsert = false
+				}
+			} else if desc.Equal(*descriptor) {
+				continueWithInsert = false
 			}
-			if log.V(2) {
-				log.Infof(ctx, "clearing overlapping descriptor: key=%s desc=%s",
-					entry.Key, descriptor)
+			if continueWithInsert {
+				entriesToEvict = append(entriesToEvict, entry)
 			}
-			rdc.rangeCache.cache.DelEntry(entry)
 		}
 	}
 
-	startMeta := keys.RangeMetaKey(desc.StartKey)
-	endMeta := keys.RangeMetaKey(desc.EndKey)
-
-	// Also clear any descriptors which are subsumed by the one we're
-	// going to cache. This could happen on a merge (and also happens
-	// when there's a lot of concurrency). Iterate from the range meta key
-	// after RangeMetaKey(desc.StartKey) to the range meta key for desc.EndKey.
-	var entries []*cache.Entry
+	// Clear any descriptors which are overlapping by the one we're going to
+	// cache with a smaller generation if both generations are comparable. This
+	// could happen on a merge (and also happens when there's a lot of
+	// concurrency). Iterate from the range meta key after
+	// RangeMetaKey(desc.StartKey) to the range meta key for desc.EndKey.
 	rdc.rangeCache.cache.DoRangeEntry(func(e *cache.Entry) bool {
-		if log.V(2) {
-			log.Infof(ctx, "clearing subsumed descriptor: key=%s desc=%s",
-				e.Key, e.Value.(*roachpb.RangeDescriptor))
+		descriptor := e.Value.(*roachpb.RangeDescriptor)
+		if desc.GenerationComparable && descriptor.GenerationComparable {
+			// If generations are comparable, then check generations to see if we
+			// evict.
+			if desc.GetGeneration() <= descriptor.GetGeneration() {
+				continueWithInsert = false
+			} else {
+				entriesToEvict = append(entriesToEvict, e)
+			}
+		} else {
+			// If generations are not comparable, evict.
+			entriesToEvict = append(entriesToEvict, e)
 		}
-		entries = append(entries, e)
 		return false
 	}, rangeCacheKey(startMeta.Next()), rangeCacheKey(endMeta))
 
-	for _, e := range entries {
+	for _, e := range entriesToEvict {
+		if log.V(2) {
+			log.Infof(ctx, "clearing overlapping descriptor: key=%s desc=%s",
+				e.Key, e.Value.(*roachpb.RangeDescriptor))
+		}
 		rdc.rangeCache.cache.DelEntry(e)
 	}
-	return true, nil
+	return continueWithInsert, nil
 }
