@@ -2843,7 +2843,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 		},
 	}
 	const expected = "preemptive snapshot from term 0 received"
-	if err := s.processRaftSnapshotRequest(ctx, snapHeader,
+	if err := s.processPreemptiveSnapshotRequest(ctx, snapHeader,
 		IncomingSnapshot{
 			SnapUUID: uuid.MakeV4(),
 			State:    &storagepb.ReplicaState{Desc: repl1.Desc()},
