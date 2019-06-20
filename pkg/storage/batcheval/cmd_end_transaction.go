@@ -1123,6 +1123,7 @@ func changeReplicasTrigger(
 	cpy.SetReplicas(roachpb.MakeReplicaDescriptors(change.UpdatedReplicas))
 	cpy.NextReplicaID = change.NextReplicaID
 	cpy.IncrementGeneration()
+	cpy.GenerationComparable = true
 	// TODO(tschottdorf): duplication of Desc with the trigger below, should
 	// likely remove it from the trigger.
 	pd.Replicated.State = &storagepb.ReplicaState{

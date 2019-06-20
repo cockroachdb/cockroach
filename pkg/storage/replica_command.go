@@ -245,12 +245,14 @@ func (r *Replica) adminSplitWithDescriptor(
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
 	leftDesc.IncrementGeneration()
+	leftDesc.GenerationComparable = true
 	leftDesc.EndKey = splitKey
 
 	// Set the generation of the right hand side descriptor to match that of the
 	// (updated) left hand side. See the comment on the field for an explanation
 	// of why generations are useful.
 	rightDesc.Generation = leftDesc.Generation
+	rightDesc.GenerationComparable = true
 
 	var extra string
 	if delayable {
@@ -553,6 +555,7 @@ func (r *Replica) AdminMerge(
 			updatedLeftDesc.Generation = rightDesc.Generation
 		}
 		updatedLeftDesc.IncrementGeneration()
+		updatedLeftDesc.GenerationComparable = true
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", rightDesc, reason)
 
@@ -923,6 +926,7 @@ func (r *Replica) changeReplicas(
 		}
 	}
 	updatedDesc.IncrementGeneration()
+	updatedDesc.GenerationComparable = true
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
