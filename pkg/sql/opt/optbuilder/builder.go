@@ -51,6 +51,12 @@ import (
 // See factory.go and memo.go inside the opt/xform package for more details
 // about the memo structure.
 type Builder struct {
+
+	// -- Control knobs --
+	//
+	// These fields can be set before calling Build to control various aspects of
+	// the building process.
+
 	// AllowUnsupportedExpr is a control knob: if set, when building a scalar, the
 	// builder takes any TypedExpr node that it doesn't recognize and wraps that
 	// expression in an UnsupportedExpr node. This is temporary; it is used for
@@ -61,6 +67,15 @@ type Builder struct {
 	// a placeholder operator with its assigned value, even when it is available.
 	// This is used when re-preparing invalidated queries.
 	KeepPlaceholders bool
+
+	// BuildFKChecks is a control knob: if set, we build foreign key checks (see
+	// the ForeignKeys operator).
+	BuildFKChecks bool
+
+	// -- Results --
+	//
+	// These fields are set during the building process and can be used after
+	// Build is called.
 
 	// IsCorrelated is set to true during semantic analysis if a scalar variable was
 	// pulled from an outer scope, that is, if the query was found to be correlated.

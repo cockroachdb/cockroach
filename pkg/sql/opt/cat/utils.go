@@ -245,15 +245,20 @@ func formatCatalogFKRef(
 	if inbound {
 		title = "REFERENCED BY " + title
 	}
+	match := ""
+	if fkRef.MatchMethod() != tree.MatchSimple {
+		match = fmt.Sprintf(" %s", fkRef.MatchMethod())
+	}
 
 	tp.Childf(
-		"%s %s FOREIGN KEY %v %s REFERENCES %v %s",
+		"%s %s FOREIGN KEY %v %s REFERENCES %v %s%s",
 		title,
 		fkRef.Name(),
 		originDS.Name(),
 		formatCols(originDS.(Table), fkRef.ColumnCount(), fkRef.OriginColumnOrdinal),
 		refDS.Name(),
 		formatCols(refDS.(Table), fkRef.ColumnCount(), fkRef.ReferencedColumnOrdinal),
+		match,
 	)
 }
 
