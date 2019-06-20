@@ -1979,7 +1979,7 @@ SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
-FOREIGN KEY (a) REFERENCES pg_indexdef_test (a) ON DELETE CASCADE
+FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
 CHECK ((c > a))
 UNIQUE (b ASC)
 
