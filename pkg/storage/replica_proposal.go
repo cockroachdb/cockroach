@@ -1011,6 +1011,14 @@ func (r *Replica) requestToProposal(
 		Local:   &res.Local,
 		Request: &ba,
 	}
+	clusterVersionActive := true
+	if !clusterVersionActive {
+		if res.Replicated.Delta.ContainsEstimates > 0 {
+			res.Replicated.Delta.ContainsEstimates = 1
+		} else if res.Replicated.Delta.ContainsEstimates < 0 {
+
+		}
+	}
 
 	if needConsensus {
 		proposal.command = &storagepb.RaftCommand{
