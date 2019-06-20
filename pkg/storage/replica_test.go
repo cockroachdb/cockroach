@@ -347,6 +347,18 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	newDesc.InternalReplicas = append(newDesc.InternalReplicas, secondReplica)
 	newDesc.NextReplicaID = 3
 
+	dbDescKV, err := tc.store.DB().Get(ctx, keys.RangeDescriptorKey(oldDesc.StartKey))
+	if err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+	var dbDesc roachpb.RangeDescriptor
+	if err := dbDescKV.Value.GetProto(&dbDesc); err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+	if !oldDesc.Equal(&dbDesc) {
+		return roachpb.ReplicaDescriptor{}, errors.Errorf(`descs didn't match: %v vs %v`, oldDesc, dbDesc)
+	}
+
 	// Update the "on-disk" replica state, so that it doesn't diverge from what we
 	// have in memory. At the time of this writing, this is not actually required
 	// by the tests using this functionality, but it seems sane to do.
@@ -354,7 +366,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		Header: roachpb.Header{Timestamp: tc.Clock().Now()},
 	}
 	descKey := keys.RangeDescriptorKey(oldDesc.StartKey)
-	if err := updateRangeDescriptor(&ba, descKey, &oldDesc, &newDesc); err != nil {
+	if err := updateRangeDescriptor(&ba, descKey, dbDescKV.Value, &newDesc); err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
 	if err := tc.store.DB().Run(ctx, &ba); err != nil {
