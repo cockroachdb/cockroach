@@ -879,6 +879,30 @@ SELECT description
 		},
 	),
 
+	// pg_type_is_visible returns true if the input oid corresponds to a type
+	// that is part of the databases on the search path, or NULL if no such type
+	// exists. CockroachDB doesn't support the notion of type visibility, so we
+	// always return true for any type oid that we support, and NULL for those
+	// that we don't.
+	// https://www.postgresql.org/docs/9.6/static/functions-info.html
+	"pg_type_is_visible": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oidArg := args[0]
+				if oidArg == tree.DNull {
+					return tree.DNull, nil
+				}
+				if _, ok := types.OidToType[oid.Oid(int(oidArg.(*tree.DOid).DInt))]; ok {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DNull, nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
 	"pg_sleep": makeBuiltin(
 		tree.FunctionProperties{
 			// pg_sleep is marked as impure so it doesn't get executed during
