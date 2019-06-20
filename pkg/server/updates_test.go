@@ -487,11 +487,6 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(`CREATE TABLE somestring.foo (a INT8 PRIMARY KEY, b INT8, INDEX (b) INTERLEAVE IN PARENT foo (b))`); !testutils.IsError(
-			err, "unimplemented: use CREATE INDEX to make interleaved indexes",
-		) {
-			t.Fatal(err)
-		}
 		// Even queries that don't use placeholders and contain literal strings
 		// should still not cause those strings to appear in reports.
 		for _, q := range []string{
@@ -707,7 +702,6 @@ func TestReportUsage(t *testing.T) {
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
 		"unimplemented.syntax.#32564":                   10,
-		"unimplemented.#9148":                           10,
 		"othererror." +
 			pgcode.Uncategorized +
 			".crdb_internal.set_vmodule()": 10,
@@ -853,7 +847,6 @@ func TestReportUsage(t *testing.T) {
 		"[true,false,false] SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]",
 		`[true,false,false] UPDATE _ SET _ = _ + _`,
 		"[true,false,false] WITH _ AS (SELECT _) SELECT * FROM _",
-		`[true,false,true] CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 		`[true,false,true] SELECT _ / $1`,
 		`[true,false,true] SELECT _ / _`,
 		`[true,false,true] SELECT crdb_internal.force_assertion_error(_)`,
@@ -896,7 +889,6 @@ func TestReportUsage(t *testing.T) {
 			`CREATE DATABASE _`,
 			`CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
 			`CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
-			`CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 			`INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
 			`INSERT INTO _ VALUES (_), (__more2__)`,
 			`INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
