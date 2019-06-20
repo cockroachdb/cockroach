@@ -137,7 +137,7 @@ func TestSnapshotPreemptiveOnUninitializedReplica(t *testing.T) {
 		t.Fatal("mock snapshot isn't preemptive")
 	}
 
-	if _, err := store.canApplySnapshot(
+	if _, err := store.canApplyPreemptiveSnapshot(
 		ctx, header, true, /* authoritative */
 	); !testutils.IsError(err, "intersects existing range") {
 		t.Fatal(err)
