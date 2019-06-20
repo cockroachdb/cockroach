@@ -2171,9 +2171,6 @@ func TestQuotaPool(t *testing.T) {
 			if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 1 {
 				return errors.Errorf("expected 1 queued quota release, found: %d", qLen)
 			}
-			if cLen := leaderRepl.CommandSizesLen(); cLen != 0 {
-				return errors.Errorf("expected zero-length command sizes map, found %d", cLen)
-			}
 			return nil
 		})
 
@@ -2195,9 +2192,6 @@ func TestQuotaPool(t *testing.T) {
 		}
 		if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 0 {
 			return errors.Errorf("expected no queued quota releases, found: %d", qLen)
-		}
-		if cLen := leaderRepl.CommandSizesLen(); cLen != 0 {
-			return errors.Errorf("expected zero-length command sizes map, found %d", cLen)
 		}
 		return nil
 	})
