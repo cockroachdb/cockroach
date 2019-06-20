@@ -391,7 +391,7 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 }
 
 type pgDumpReader struct {
-	tables map[string]*rowConverter
+	tables map[string]*sql.RowConverter
 	descs  map[string]*sqlbase.TableDescriptor
 	kvCh   chan []roachpb.KeyValue
 	opts   roachpb.PgDumpOptions
@@ -406,10 +406,10 @@ func newPgDumpReader(
 	descs map[string]*sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
-	converters := make(map[string]*rowConverter, len(descs))
+	converters := make(map[string]*sql.RowConverter, len(descs))
 	for name, desc := range descs {
 		if desc.IsTable() {
-			conv, err := newRowConverter(desc, evalCtx, kvCh)
+			conv, err := sql.NewRowConverter(desc, evalCtx, kvCh)
 			if err != nil {
 				return nil, err
 			}
@@ -481,23 +481,23 @@ func (m *pgDumpReader) readFile(
 			startingCount := count
 			for _, tuple := range values.Rows {
 				count++
-				if expected, got := len(conv.visibleCols), len(tuple); expected != got {
+				if expected, got := len(conv.VisibleCols), len(tuple); expected != got {
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, tuple)
 				}
 				for i, expr := range tuple {
-					typed, err := expr.TypeCheck(semaCtx, conv.visibleColTypes[i])
+					typed, err := expr.TypeCheck(semaCtx, conv.VisibleColTypes[i])
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
 					}
-					converted, err := typed.Eval(conv.evalCtx)
+					converted, err := typed.Eval(conv.EvalCtx)
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
 					}
-					conv.datums[i] = converted
+					conv.Datums[i] = converted
 				}
-				if err := conv.row(ctx, inputIdx, count); err != nil {
+				if err := conv.Row(ctx, inputIdx, count); err != nil {
 					return err
 				}
 			}
@@ -514,11 +514,11 @@ func (m *pgDumpReader) readFile(
 				return errors.Errorf("missing schema info for requested table %q", name)
 			}
 			if conv != nil {
-				if expected, got := len(conv.visibleCols), len(i.Columns); expected != got {
+				if expected, got := len(conv.VisibleCols), len(i.Columns); expected != got {
 					return errors.Errorf("expected %d columns, got %d", expected, got)
 				}
 				for colI, col := range i.Columns {
-					if string(col) != conv.visibleCols[colI].Name {
+					if string(col) != conv.VisibleCols[colI].Name {
 						return errors.Errorf("COPY columns do not match table columns for table %s", name)
 					}
 				}
@@ -542,23 +542,23 @@ func (m *pgDumpReader) readFile(
 				}
 				switch row := row.(type) {
 				case copyData:
-					if expected, got := len(conv.visibleCols), len(row); expected != got {
+					if expected, got := len(conv.VisibleCols), len(row); expected != got {
 						return makeRowErr(inputName, count, pgcode.Syntax,
 							"expected %d values, got %d", expected, got)
 					}
 					for i, s := range row {
 						if s == nil {
-							conv.datums[i] = tree.DNull
+							conv.Datums[i] = tree.DNull
 						} else {
-							conv.datums[i], err = tree.ParseDatumStringAs(conv.visibleColTypes[i], *s, conv.evalCtx)
+							conv.Datums[i], err = tree.ParseDatumStringAs(conv.VisibleColTypes[i], *s, conv.EvalCtx)
 							if err != nil {
-								col := conv.visibleCols[i]
+								col := conv.VisibleCols[i]
 								return wrapRowErr(err, inputName, count, pgcode.Syntax,
 									"parse %q as %s", col.Name, col.Type.SQLString())
 							}
 						}
 					}
-					if err := conv.row(ctx, inputIdx, count); err != nil {
+					if err := conv.Row(ctx, inputIdx, count); err != nil {
 						return err
 					}
 				default:
@@ -628,7 +628,7 @@ func (m *pgDumpReader) readFile(
 		}
 	}
 	for _, conv := range m.tables {
-		if err := conv.sendBatch(ctx); err != nil {
+		if err := conv.SendBatch(ctx); err != nil {
 			return err
 		}
 	}

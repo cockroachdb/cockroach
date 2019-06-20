@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -23,7 +24,7 @@ import (
 )
 
 type mysqloutfileReader struct {
-	conv rowConverter
+	conv sql.RowConverter
 	opts roachpb.MySQLOutfileOptions
 }
 
@@ -35,7 +36,7 @@ func newMysqloutfileReader(
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*mysqloutfileReader, error) {
-	conv, err := newRowConverter(tableDesc, evalCtx, kvCh)
+	conv, err := sql.NewRowConverter(tableDesc, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +50,7 @@ func (d *mysqloutfileReader) start(ctx ctxgroup.Group) {
 }
 
 func (d *mysqloutfileReader) inputFinished(ctx context.Context) {
-	close(d.conv.kvCh)
+	close(d.conv.KvCh)
 }
 
 func (d *mysqloutfileReader) readFiles(
@@ -85,9 +86,9 @@ func (d *mysqloutfileReader) readFile(
 
 	reader := bufio.NewReaderSize(input, 1024*64)
 	addField := func() error {
-		if len(row) >= len(d.conv.visibleCols) {
+		if len(row) >= len(d.conv.VisibleCols) {
 			return makeRowErr(inputName, count, pgcode.Syntax,
-				"too many columns, expected %d: %#v", len(d.conv.visibleCols), row)
+				"too many columns, expected %d: %#v", len(d.conv.VisibleCols), row)
 		}
 		if gotNull {
 			if len(field) != 0 {
@@ -99,9 +100,9 @@ func (d *mysqloutfileReader) readFile(
 		} else if !d.opts.HasEscape && string(field) == "NULL" {
 			row = append(row, tree.DNull)
 		} else {
-			datum, err := tree.ParseStringAs(d.conv.visibleColTypes[len(row)], string(field), d.conv.evalCtx)
+			datum, err := tree.ParseStringAs(d.conv.VisibleColTypes[len(row)], string(field), d.conv.EvalCtx)
 			if err != nil {
-				col := d.conv.visibleCols[len(row)]
+				col := d.conv.VisibleCols[len(row)]
 				return wrapRowErr(err, inputName, count, pgcode.Syntax,
 					"parse %q as %s", col.Name, col.Type.SQLString())
 			}
@@ -112,8 +113,8 @@ func (d *mysqloutfileReader) readFile(
 		return nil
 	}
 	addRow := func() error {
-		copy(d.conv.datums, row)
-		if err := d.conv.row(ctx, inputIdx, count); err != nil {
+		copy(d.conv.Datums, row)
+		if err := d.conv.Row(ctx, inputIdx, count); err != nil {
 			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 		}
 		count++
@@ -226,5 +227,5 @@ func (d *mysqloutfileReader) readFile(
 		field = append(field, string(c)...)
 	}
 
-	return d.conv.sendBatch(ctx)
+	return d.conv.SendBatch(ctx)
 }
