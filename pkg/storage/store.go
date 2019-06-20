@@ -3367,8 +3367,8 @@ func (s *Store) processRaftRequestWithReplica(
 }
 
 // processRaftSnapshotRequest processes the incoming snapshot Raft request on
-// the request's specified replica. This snapshot can be preemptive or not. If
-// not, the function makes sure to handle any updated Raft Ready state.
+// the request's specified replica. The function makes sure to handle any
+// updated Raft Ready state.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
@@ -3388,7 +3388,7 @@ func (s *Store) processRaftSnapshotRequest(
 		if err := func() error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			placeholder, err := s.canApplySnapshotLocked(ctx, snapHeader, true /* authoritative */)
+			placeholder, err := s.canApplySnapshotLocked(ctx, snapHeader)
 			if err != nil {
 				// If the storage cannot accept the snapshot, return an
 				// error before passing it to RawNode.Step, since our
@@ -3424,123 +3424,6 @@ func (s *Store) processRaftSnapshotRequest(
 					}
 				}
 			}()
-		}
-
-		if snapHeader.IsPreemptive() {
-			// Requiring that the Term is set in a message makes sure that we
-			// get all of Raft's internal safety checks (it confuses messages
-			// at term zero for internal messages). The sending side uses the
-			// term from the snapshot itself, but we'll just check nonzero.
-			if snapHeader.RaftMessageRequest.Message.Term == 0 {
-				return roachpb.NewErrorf(
-					"preemptive snapshot from term %d received with zero term",
-					snapHeader.RaftMessageRequest.Message.Snapshot.Metadata.Term,
-				)
-			}
-			// TODO(tschottdorf): A lot of locking of the individual Replica
-			// going on below as well. I think that's more easily refactored
-			// away; what really matters is that the Store doesn't do anything
-			// else with that same Replica (or one that might conflict with us
-			// while we still run). In effect, we'd want something like:
-			//
-			// 1. look up the snapshot's key range
-			// 2. get an exclusive lock for operations on that key range from
-			//    the store (or discard the snapshot)
-			//    (at the time of writing, we have checked the key range in
-			//    canApplySnapshotLocked above, but there are concerns about two
-			//    conflicting operations passing that check simultaneously,
-			//    see #7830)
-			// 3. do everything below (apply the snapshot through temp Raft group)
-			// 4. release the exclusive lock on the snapshot's key range
-			//
-			// There are two future outcomes: Either we begin receiving
-			// legitimate Raft traffic for this Range (hence learning the
-			// ReplicaID and becoming a real Replica), or the Replica GC queue
-			// decides that the ChangeReplicas as a part of which the
-			// preemptive snapshot was sent has likely failed and removes both
-			// in-memory and on-disk state.
-			r.mu.Lock()
-			// We are paranoid about applying preemptive snapshots (which
-			// were constructed via our code rather than raft) to the "real"
-			// raft group. Instead, we destroy the "real" raft group if one
-			// exists (this is rare in production, although it occurs in
-			// tests), apply the preemptive snapshot to a temporary raft
-			// group, then discard that one as well to be replaced by a real
-			// raft group when we get a new replica ID.
-			//
-			// It might be OK instead to apply preemptive snapshots just
-			// like normal ones (essentially switching between regular and
-			// preemptive mode based on whether or not we have a raft group,
-			// instead of based on the replica ID of the snapshot message).
-			// However, this is a risk that we're not yet willing to take.
-			// Additionally, without some additional plumbing work, doing so
-			// would limit the effectiveness of RaftTransport.SendSync for
-			// preemptive snapshots.
-			r.mu.internalRaftGroup = nil
-			needTombstone := r.mu.state.Desc.NextReplicaID != 0
-			r.mu.Unlock()
-
-			appliedIndex, _, err := r.raftMu.stateLoader.LoadAppliedIndex(ctx, r.store.Engine())
-			if err != nil {
-				return roachpb.NewError(err)
-			}
-			raftGroup, err := raft.NewRawNode(
-				newRaftConfig(
-					raft.Storage((*replicaRaftStorage)(r)),
-					preemptiveSnapshotRaftGroupID,
-					// We pass the "real" applied index here due to subtleties
-					// arising in the case in which Raft discards the snapshot:
-					// It would instruct us to apply entries, which would have
-					// crashing potential for any choice of dummy value below.
-					appliedIndex,
-					r.store.cfg,
-					&raftLogger{ctx: ctx},
-				), nil)
-			if err != nil {
-				return roachpb.NewError(err)
-			}
-			// We have a Raft group; feed it the message.
-			if err := raftGroup.Step(snapHeader.RaftMessageRequest.Message); err != nil {
-				return roachpb.NewError(errors.Wrap(err, "unable to process preemptive snapshot"))
-			}
-			// In the normal case, the group should ask us to apply a snapshot.
-			// If it doesn't, our snapshot was probably stale. In that case we
-			// still go ahead and apply a noop because we want that case to be
-			// counted by stats as a successful application.
-			var ready raft.Ready
-			if raftGroup.HasReady() {
-				ready = raftGroup.Ready()
-			}
-
-			if needTombstone {
-				// Bump the min replica ID, but don't write the tombstone key. The
-				// tombstone key is not expected to be present when normal replica data
-				// is present and applySnapshot would delete the key in most cases. If
-				// Raft has decided the snapshot shouldn't be applied we would be
-				// writing the tombstone key incorrectly.
-				r.mu.Lock()
-				if r.mu.state.Desc.NextReplicaID > r.mu.minReplicaID {
-					r.mu.minReplicaID = r.mu.state.Desc.NextReplicaID
-				}
-				r.mu.Unlock()
-			}
-
-			// Apply the snapshot, as Raft told us to. Preemptive snapshots never
-			// subsume replicas (this is guaranteed by Store.canApplySnapshot), so
-			// we can simply pass nil for the subsumedRepls parameter.
-			if err := r.applySnapshot(
-				ctx, inSnap, ready.Snapshot, ready.HardState, nil, /* subsumedRepls */
-			); err != nil {
-				return roachpb.NewError(err)
-			}
-			// applySnapshot has already removed the placeholder.
-			removePlaceholder = false
-
-			// At this point, the Replica has data but no ReplicaID. We hope
-			// that it turns into a "real" Replica by means of receiving Raft
-			// messages addressed to it with a ReplicaID, but if that doesn't
-			// happen, at some point the Replica GC queue will have to grab it.
-			return nil
 		}
 
 		if err := r.stepRaftGroup(&snapHeader.RaftMessageRequest); err != nil {
