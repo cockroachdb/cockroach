@@ -169,6 +169,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData.ZigzagJoinEnabled = false
 	notStale()
 
+	// Stale optimizer FK planning enable.
+	evalCtx.SessionData.OptimizerFKs = true
+	stale()
+	evalCtx.SessionData.OptimizerFKs = false
+	notStale()
+
 	// Stale safe updates.
 	evalCtx.SessionData.SafeUpdates = true
 	stale()
