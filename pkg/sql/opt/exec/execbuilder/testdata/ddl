@@ -251,6 +251,6 @@ render                    ·         ·            (k)                 ·
                 │         render 1  v            ·                   ·
                 │         render 2  z            ·                   ·
                 │         render 3  444          ·                   ·
-                └── scan  ·         ·            (k, v, z)           ·
+                └── scan  ·         ·            (k, v, z)           +k
 ·                         table     kv@primary   ·                   ·
 ·                         spans     /1-          ·                   ·

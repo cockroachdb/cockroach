@@ -146,7 +146,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkDFrwzAQhff-CnFdFWwHMl
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
-scan  ·      ·                    (x)  ·
+scan  ·      ·                    (x)  +x
 ·     table  numtosquare@primary  ·    ·
 ·     spans  ALL                  ·    ·
 
@@ -170,7 +170,7 @@ render               ·         ·                  (y, str, res)  ·
            │         render 0  repeat('test', y)  ·              ·
            │         render 1  y                  ·              ·
            │         render 2  str                ·              ·
-           └── scan  ·         ·                  (y, str)       ·
+           └── scan  ·         ·                  (y, str)       +y
 ·                    table     numtostr@primary   ·              ·
 ·                    spans     ALL                ·              ·
 
@@ -189,7 +189,7 @@ render                    ·         ·                  (y, str, res)  ·
                 │         render 0  repeat('test', y)  ·              ·
                 │         render 1  y                  ·              ·
                 │         render 2  str                ·              ·
-                └── scan  ·         ·                  (y, str)       ·
+                └── scan  ·         ·                  (y, str)       +y
 ·                         table     numtostr@primary   ·              ·
 ·                         spans     ALL                ·              ·
 

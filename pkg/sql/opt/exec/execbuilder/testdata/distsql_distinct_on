@@ -119,7 +119,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyslU1vm0AQhu_9FdFcswjPsv
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
-scan  ·      ·            (a, b, c)  ·
+scan  ·      ·            (a, b, c)  +a,+b,+c
 ·     table  abc@primary  ·          ·
 ·     spans  ALL          ·          ·
 

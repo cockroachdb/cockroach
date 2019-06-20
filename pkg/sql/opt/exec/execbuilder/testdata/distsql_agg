@@ -360,7 +360,7 @@ group           ·            ·              (b, count)  ·
  │              ordered      +b             ·           ·
  └── render     ·            ·              (b)         +b
       │         render 0     b              ·           ·
-      └── scan  ·            ·              (a, b)      +b
+      └── scan  ·            ·              (a, b)      +a,+b
 ·               table        data2@primary  ·           ·
 ·               spans        /1-/2          ·           ·
 

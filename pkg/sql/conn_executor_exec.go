@@ -762,6 +762,7 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 		result, isCorrelated, err = planner.makeOptimizerPlan(ctx)
 		if err == nil {
 			planner.curPlan = *result
+			//planner.curPlan.plan = planner.simplifyOrderings(planner.curPlan.plan, nil)
 			return nil
 		}
 		if isCorrelated {

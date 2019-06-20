@@ -65,6 +65,7 @@ type Factory interface {
 		reverse bool,
 		maxResults uint64,
 		reqOrdering OutputOrdering,
+		optOrdering OutputOrdering,
 	) (Node, error)
 
 	// ConstructVirtualScan returns a node that represents the scan of a virtual

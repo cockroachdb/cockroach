@@ -64,7 +64,7 @@ ALTER TABLE num_ref DROP COLUMN xx
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53 AS num_ref_alias]
 ----
-scan  ·      ·                (p, d, c)  ·
+scan  ·      ·                (p, d, c)  +p
 ·     table  num_ref@primary  ·          ·
 ·     spans  ALL              ·          ·
 
@@ -78,14 +78,14 @@ scan  ·      ·                (c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(1,4) AS num_ref_alias]
 ----
-scan  ·      ·                (p, c)  ·
+scan  ·      ·                (p, c)  +p
 ·     table  num_ref@primary  ·       ·
 ·     spans  ALL              ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(1,3,4) AS num_ref_alias]
 ----
-scan  ·      ·                (p, d, c)  ·
+scan  ·      ·                (p, d, c)  +p
 ·     table  num_ref@primary  ·          ·
 ·     spans  ALL              ·          ·
 
@@ -96,7 +96,7 @@ render     ·         ·                (c, d, p)  ·
  │         render 0  c                ·          ·
  │         render 1  d                ·          ·
  │         render 2  p                ·          ·
- └── scan  ·         ·                (p, d, c)  ·
+ └── scan  ·         ·                (p, d, c)  +p
 ·          table     num_ref@primary  ·          ·
 ·          spans     ALL              ·          ·
 
@@ -107,7 +107,7 @@ render     ·         ·                (col1, col2, col3)  ·
  │         render 0  c                ·                   ·
  │         render 1  d                ·                   ·
  │         render 2  p                ·                   ·
- └── scan  ·         ·                (p, d, c)           ·
+ └── scan  ·         ·                (p, d, c)           +p
 ·          table     num_ref@primary  ·                   ·
 ·          spans     ALL              ·                   ·
 
@@ -118,42 +118,42 @@ render     ·         ·           (c, d, p)  ·
  │         render 0  c           ·          ·
  │         render 1  d           ·          ·
  │         render 2  p           ·          ·
- └── scan  ·         ·           (p, d, c)  ·
+ └── scan  ·         ·           (p, d, c)  +d,+c,+p
 ·          table     num_ref@bc  ·          ·
 ·          spans     ALL         ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@bc
 ----
-scan  ·      ·           (c)  ·
+scan  ·      ·           (c)  +c
 ·     table  num_ref@bc  ·    ·
 ·     spans  ALL         ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(3) AS num_ref_alias]@bc
 ----
-scan  ·      ·           (d)  ·
+scan  ·      ·           (d)  +d
 ·     table  num_ref@bc  ·    ·
 ·     spans  ALL         ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@bc
 ----
-scan  ·      ·           (p)  ·
+scan  ·      ·           (p)  +p
 ·     table  num_ref@bc  ·    ·
 ·     spans  ALL         ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@[1]
 ----
-scan  ·      ·                (p)  ·
+scan  ·      ·                (p)  +p
 ·     table  num_ref@primary  ·    ·
 ·     spans  ALL              ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@[2]
 ----
-scan  ·      ·           (p)  ·
+scan  ·      ·           (p)  +p
 ·     table  num_ref@bc  ·    ·
 ·     spans  ALL         ·    ·
 
@@ -167,7 +167,7 @@ scan  ·      ·                (d)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(3) AS num_ref_alias]@[2]
 ----
-scan  ·      ·           (d)  ·
+scan  ·      ·           (d)  +d
 ·     table  num_ref@bc  ·    ·
 ·     spans  ALL         ·    ·
 
@@ -181,7 +181,7 @@ scan  ·      ·                (c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@[2]
 ----
-scan  ·      ·           (c)  ·
+scan  ·      ·           (c)  +c
 ·     table  num_ref@bc  ·    ·
 ·     spans  ALL         ·    ·
 
@@ -203,7 +203,7 @@ scan  ·      ·                       ()  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT rowid FROM [54(3) AS num_ref_alias]
 ----
-scan  ·      ·                       (rowid[hidden])  ·
+scan  ·      ·                       (rowid[hidden])  +rowid
 ·     table  num_ref_hidden@primary  ·                ·
 ·     spans  ALL                     ·                ·
 
@@ -237,14 +237,14 @@ CREATE TABLE a (x INT PRIMARY KEY, y INT);
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
 ----
-scan  ·      ·          (x, y)  ·
+scan  ·      ·          (x, y)  +x
 ·     table  a@primary  ·       ·
 ·     spans  /2-        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 10
 ----
-scan  ·       ·          (x, y)  ·
+scan  ·       ·          (x, y)  +x
 ·     table   a@primary  ·       ·
 ·     spans   ALL        ·       ·
 ·     filter  y > 10     ·       ·
@@ -252,14 +252,14 @@ scan  ·       ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
 ----
-scan  ·      ·          (x, y)  ·
+scan  ·      ·          (x, y)  +x
 ·     table  a@primary  ·       ·
 ·     spans  /2-/2/#    ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
 ----
-scan  ·       ·          (x, y)  ·
+scan  ·       ·          (x, y)  +x
 ·     table   a@primary  ·       ·
 ·     spans   /2-        ·       ·
 ·     filter  y < 30     ·       ·
@@ -269,7 +269,7 @@ EXPLAIN (VERBOSE) SELECT x + 1 AS r FROM a
 ----
 render     ·         ·          (r)  ·
  │         render 0  x + 1      ·    ·
- └── scan  ·         ·          (x)  ·
+ └── scan  ·         ·          (x)  +x
 ·          table     a@primary  ·    ·
 ·          spans     ALL        ·    ·
 
@@ -282,7 +282,7 @@ render     ·         ·          (a, b, y, c, d)  ·
  │         render 2  y          ·                ·
  │         render 3  y + 1      ·                ·
  │         render 4  x + y      ·                ·
- └── scan  ·         ·          (x, y)           ·
+ └── scan  ·         ·          (x, y)           +x
 ·          table     a@primary  ·                ·
 ·          spans     ALL        ·                ·
 
@@ -294,7 +294,7 @@ render          ·         ·                                       (r)         
  └── render     ·         ·                                       ("?column?", "?column?")  ·
       │         render 0  x + 3                                   ·                         ·
       │         render 1  y + 10                                  ·                         ·
-      └── scan  ·         ·                                       (x, y)                    ·
+      └── scan  ·         ·                                       (x, y)                    +x
 ·               table     a@primary                               ·                         ·
 ·               spans     ALL                                     ·                         ·
 
@@ -306,7 +306,7 @@ render     ·         ·          (x, x, y, x)  ·
  │         render 1  x          ·             ·
  │         render 2  y          ·             ·
  │         render 3  x          ·             ·
- └── scan  ·         ·          (x, y)        ·
+ └── scan  ·         ·          (x, y)        +x
 ·          table     a@primary  ·             ·
 ·          spans     ALL        ·             ·
 
@@ -316,7 +316,7 @@ EXPLAIN (VERBOSE) SELECT x + 1 AS a, x + y AS b FROM a WHERE x + y > 20
 render     ·         ·             (a, b)  ·
  │         render 0  x + 1         ·       ·
  │         render 1  x + y         ·       ·
- └── scan  ·         ·             (x, y)  ·
+ └── scan  ·         ·             (x, y)  +x
 ·          table     a@primary     ·       ·
 ·          spans     ALL           ·       ·
 ·          filter    (x + y) > 20  ·       ·
@@ -340,7 +340,7 @@ scan  ·      ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, rowid FROM b WHERE rowid > 0
 ----
-scan  ·      ·          (x, y, rowid[hidden])  ·
+scan  ·      ·          (x, y, rowid[hidden])  +rowid
 ·     table  b@primary  ·                      ·
 ·     spans  /1-        ·                      ·
 
@@ -508,7 +508,7 @@ CREATE TABLE c (n INT PRIMARY KEY, str STRING, INDEX str(str DESC));
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM c WHERE str >= 'moo'
 ----
-scan  ·      ·                  (n, str)  ·
+scan  ·      ·                  (n, str)  -str,+n
 ·     table  c@str              ·         ·
 ·     spans  -/"moo"/PrefixEnd  ·         ·
 
@@ -542,8 +542,40 @@ CREATE TABLE coll (
   b INT,
   c BOOL,
   PRIMARY KEY (a, b),
-  INDEX (b, a) STORING (c)
+  INDEX second (b, a) STORING (c),
+  INDEX third (c DESC, b DESC)
 )
+
+# Test scan ordering.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM coll
+----
+scan  ·      ·             (a, b, c)  +a,+b
+·     table  coll@primary  ·          ·
+·     spans  ALL           ·          ·
+
+# Test scan ordering on secondary indexes.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM coll@second
+----
+scan  ·      ·            (a, b, c)  +b,+a
+·     table  coll@second  ·          ·
+·     spans  ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM coll@third
+----
+scan  ·      ·           (a, b, c)  -c,-b,+a
+·     table  coll@third  ·          ·
+·     spans  ALL         ·          ·
+
+# Test scan ordering for reverse scans.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM coll ORDER BY c, b, a DESC
+----
+revscan  ·      ·           (a, b, c)  +c,+b,-a
+·        table  coll@third  ·          ·
+·        spans  ALL         ·          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT a, b FROM coll ORDER BY a, b
@@ -559,7 +591,7 @@ render     ·         ·                        (b int, a collatedstring{da})  �
  │         render 0  (b)[int]                 ·                              ·
  │         render 1  (a)[collatedstring{da}]  ·                              ·
  └── scan  ·         ·                        (a collatedstring{da}, b int)  +b,+a
-·          table     coll@coll_b_a_idx        ·                              ·
+·          table     coll@second              ·                              ·
 ·          spans     ALL                      ·                              ·
 
 statement ok
@@ -654,7 +686,7 @@ CREATE TABLE dec (d decimal, v decimal(3, 1), primary key (d, v))
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec WHERE d IS NaN and v IS NaN
 ----
-scan  ·      ·                    (d decimal, v decimal)  ·
+scan  ·      ·                    (d decimal, v decimal)  +d,+v
 ·     table  dec@primary          ·                       ·
 ·     spans  /NaN/NaN-/NaN/NaN/#  ·                       ·
 
@@ -662,14 +694,14 @@ scan  ·      ·                    (d decimal, v decimal)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec WHERE d = 'Infinity' and v = 'Infinity'
 ----
-scan  ·      ·                                        (d decimal, v decimal)  ·
+scan  ·      ·                                        (d decimal, v decimal)  +d,+v
 ·     table  dec@primary                              ·                       ·
 ·     spans  /Infinity/Infinity-/Infinity/Infinity/#  ·                       ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec WHERE d = '-Infinity' and v = '-Infinity'
 ----
-scan  ·      ·                                            (d decimal, v decimal)  ·
+scan  ·      ·                                            (d decimal, v decimal)  +d,+v
 ·     table  dec@primary                                  ·                       ·
 ·     spans  /-Infinity/-Infinity-/-Infinity/-Infinity/#  ·                       ·
 
@@ -720,14 +752,14 @@ CREATE TABLE dec2 (d decimal null, index (d))
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE d IS NaN
 ----
-scan  ·      ·                (d decimal)  ·
+scan  ·      ·                (d decimal)  +d
 ·     table  dec2@dec2_d_idx  ·            ·
 ·     spans  /NaN-/-Infinity  ·            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE d = 'NaN'
 ----
-scan  ·      ·                (d decimal)  ·
+scan  ·      ·                (d decimal)  +d
 ·     table  dec2@dec2_d_idx  ·            ·
 ·     spans  /NaN-/-Infinity  ·            ·
 
@@ -754,14 +786,14 @@ CREATE TABLE flt (f float null, unique index (f))
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM flt WHERE f IS NaN
 ----
-scan  ·      ·                    (f float)  ·
+scan  ·      ·                    (f float)  +f
 ·     table  flt@flt_f_key        ·          ·
 ·     spans  /NaN-/NaN/PrefixEnd  ·          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM flt WHERE f = 'NaN'
 ----
-scan  ·      ·                    (f float)  ·
+scan  ·      ·                    (f float)  +f
 ·     table  flt@flt_f_key        ·          ·
 ·     spans  /NaN-/NaN/PrefixEnd  ·          ·
 
@@ -796,28 +828,28 @@ CREATE TABLE num (
 query TTTTT
 EXPLAIN (TYPES) SELECT i FROM num WHERE i = -1:::INT
 ----
-scan  ·      ·              (i int)  ·
+scan  ·      ·              (i int)  +i
 ·     table  num@num_i_key  ·        ·
 ·     spans  /-1-/0         ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT f FROM num WHERE f = -1:::FLOAT
 ----
-scan  ·      ·                  (f float)  ·
+scan  ·      ·                  (f float)  +f
 ·     table  num@num_f_key      ·          ·
 ·     spans  /-1-/-1/PrefixEnd  ·          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT d FROM num WHERE d = -1:::DECIMAL
 ----
-scan  ·      ·                  (d decimal)  ·
+scan  ·      ·                  (d decimal)  +d
 ·     table  num@num_d_key      ·            ·
 ·     spans  /-1-/-1/PrefixEnd  ·            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT n FROM num WHERE n = -'1h':::INTERVAL
 ----
-scan  ·      ·                            (n interval)  ·
+scan  ·      ·                            (n interval)  +n
 ·     table  num@num_n_key                ·             ·
 ·     spans  /-01:00:00-/1 day -25:00:00  ·             ·
 
@@ -1022,7 +1054,7 @@ EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b + c AS x FROM abcd) ORDER BY a
 ----
 render     ·         ·             ("?column?")  ·
  │         render 0  a + (b + c)   ·             ·
- └── scan  ·         ·             (a, b, c)     +a
+ └── scan  ·         ·             (a, b, c)     +a,+b
 ·          table     abcd@primary  ·             ·
 ·          spans     ALL           ·             ·
 
@@ -1036,7 +1068,7 @@ render               ·         ·                  ("?column?")     ·
       └── render     ·         ·                  ("?column?", b)  ·
            │         render 0  a + (c + (a + b))  ·                ·
            │         render 1  b                  ·                ·
-           └── scan  ·         ·                  (a, b, c)        ·
+           └── scan  ·         ·                  (a, b, c)        +a,+b
 ·                    table     abcd@primary       ·                ·
 ·                    spans     ALL                ·                ·
 
@@ -1054,7 +1086,7 @@ render        ·         ·                  ("?column?")  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a
 ----
-scan  ·       ·             (a, b, c, d)  +a
+scan  ·       ·             (a, b, c, d)  +a,+b
 ·     table   abcd@primary  ·             ·
 ·     spans   ALL           ·             ·
 ·     filter  a > b         ·             ·
@@ -1064,7 +1096,7 @@ EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a DESC, b DESC
 ----
 sort       ·       ·             (a, b, c, d)  -a,-b
  │         order   -a,-b         ·             ·
- └── scan  ·       ·             (a, b, c, d)  ·
+ └── scan  ·       ·             (a, b, c, d)  +a,+b
 ·          table   abcd@primary  ·             ·
 ·          spans   ALL           ·             ·
 ·          filter  a > b         ·             ·
@@ -1074,7 +1106,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, b FROM abcd LIMIT 10) WHERE a > b ORD
 ----
 filter     ·       ·             (a, b)  +a
  │         filter  a > b         ·       ·
- └── scan  ·       ·             (a, b)  +a
+ └── scan  ·       ·             (a, b)  +a,+b
 ·          table   abcd@primary  ·       ·
 ·          spans   ALL           ·       ·
 ·          limit   10            ·       ·
@@ -1087,7 +1119,7 @@ render          ·         ·                    (a, x)     ·
  │              render 1  c + (a + b)          ·          ·
  └── filter     ·         ·                    (a, b, c)  +a
       │         filter    (c + (a + b)) > 100  ·          ·
-      └── scan  ·         ·                    (a, b, c)  +a
+      └── scan  ·         ·                    (a, b, c)  +a,+b
 ·               table     abcd@primary         ·          ·
 ·               spans     ALL                  ·          ·
 ·               limit     10                   ·          ·

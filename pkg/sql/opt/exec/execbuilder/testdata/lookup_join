@@ -35,7 +35,7 @@ tree         field  description  columns             ordering
 lookup-join  ·      ·            (a, b, c, d, e, f)  ·
  │           table  def@primary  ·                   ·
  │           type   inner        ·                   ·
- └── scan    ·      ·            (a, b, c)           ·
+ └── scan    ·      ·            (a, b, c)           +a,+c
 ·            table  abc@primary  ·                   ·
 ·            spans  ALL          ·                   ·
 
@@ -47,7 +47,7 @@ lookup-join  ·      ·            (a, b, c, d, e, f)  ·
  │           table  def@primary  ·                   ·
  │           type   inner        ·                   ·
  │           pred   @5 > 1       ·                   ·
- └── scan    ·      ·            (a, b, c)           ·
+ └── scan    ·      ·            (a, b, c)           +a,+c
 ·            table  abc@primary  ·                   ·
 ·            spans  /2-          ·                   ·
 
@@ -59,7 +59,7 @@ lookup-join  ·      ·            (a, b, c, d, e, f)  ·
  │           table  def@primary  ·                   ·
  │           type   inner        ·                   ·
  │           pred   @6 > 1       ·                   ·
- └── scan    ·      ·            (a, b, c)           ·
+ └── scan    ·      ·            (a, b, c)           +a,+c
 ·            table  abc@primary  ·                   ·
 ·            spans  /2-          ·                   ·
 
@@ -71,7 +71,7 @@ lookup-join  ·      ·            (a, b, c, d, e, f)  ·
  │           table  def@primary  ·                   ·
  │           type   inner        ·                   ·
  │           pred   @1 >= @5     ·                   ·
- └── scan    ·      ·            (a, b, c)           ·
+ └── scan    ·      ·            (a, b, c)           +a,+c
 ·            table  abc@primary  ·                   ·
 ·            spans  ALL          ·                   ·
 
@@ -83,7 +83,7 @@ lookup-join  ·      ·            (a, b, c, d, e, f)  ·
  │           table  def@primary  ·                   ·
  │           type   inner        ·                   ·
  │           pred   @1 >= @5     ·                   ·
- └── scan    ·      ·            (a, b, c)           ·
+ └── scan    ·      ·            (a, b, c)           +a,+c
 ·            table  abc@primary  ·                   ·
 ·            spans  ALL          ·                   ·
 
@@ -127,7 +127,7 @@ render            ·         ·             (a, b, c, d)              ·
  └── lookup-join  ·         ·             (a, b, c, d, a, b, c, d)  ·
       │           table     data@primary  ·                         ·
       │           type      inner         ·                         ·
-      └── scan    ·         ·             (a, b, c, d)              ·
+      └── scan    ·         ·             (a, b, c, d)              +a,+b,+c,+d
 ·                 table     data@primary  ·                         ·
 ·                 spans     ALL           ·                         ·
 ·                 filter    c = 1         ·                         ·
@@ -208,7 +208,7 @@ distinct                    ·            ·                 (name)             
            │    │           table        books2@primary    ·                                         ·
            │    │           type         inner             ·                                         ·
            │    │           pred         @2 != @4          ·                                         ·
-           │    └── scan    ·            ·                 (title, shelf)                            ·
+           │    └── scan    ·            ·                 (title, shelf)                            +title
            │                table        books@primary     ·                                         ·
            │                spans        ALL               ·                                         ·
            └── scan         ·            ·                 (name, book)                              ·
@@ -258,10 +258,10 @@ render          ·         ·               (title, edition, shelf, title, editi
  │              render 5  shelf           ·                                               ·
  └── hash-join  ·         ·               (title, edition, shelf, title, edition, shelf)  ·
       │         type      cross           ·                                               ·
-      ├── scan  ·         ·               (title, edition, shelf)                         ·
+      ├── scan  ·         ·               (title, edition, shelf)                         +title,+edition
       │         table     books2@primary  ·                                               ·
       │         spans     ALL             ·                                               ·
-      └── scan  ·         ·               (title, edition, shelf)                         ·
+      └── scan  ·         ·               (title, edition, shelf)                         +title,+edition
 ·               table     books@primary   ·                                               ·
 ·               spans     ALL             ·                                               ·
 
@@ -322,7 +322,7 @@ render            ·         ·              (a, c)     ·
  └── lookup-join  ·         ·              (a, b, c)  ·
       │           table     large@bc       ·          ·
       │           type      inner          ·          ·
-      └── scan    ·         ·              (a)        ·
+      └── scan    ·         ·              (a)        +a
 ·                 table     small@primary  ·          ·
 ·                 spans     ALL            ·          ·
 
@@ -339,7 +339,7 @@ render                 ·         ·              (a, d)        ·
       └── lookup-join  ·         ·              (a, a, b)     ·
            │           table     large@bc       ·             ·
            │           type      inner          ·             ·
-           └── scan    ·         ·              (a)           ·
+           └── scan    ·         ·              (a)           +a
 ·                      table     small@primary  ·             ·
 ·                      spans     ALL            ·             ·
 
@@ -436,7 +436,7 @@ render          ·         ·              (c, d)     ·
  └── hash-join  ·         ·              (b, d, c)  ·
       │         type      right outer    ·          ·
       │         equality  (b) = (c)      ·          ·
-      ├── scan  ·         ·              (b, d)     ·
+      ├── scan  ·         ·              (b, d)     +b
       │         table     large@primary  ·          ·
       │         spans     ALL            ·          ·
       │         filter    d < 30         ·          ·
@@ -566,7 +566,7 @@ render            ·         ·            (d, e, f, a, b, c)  ·
  └── lookup-join  ·         ·            (a, b, c, d, e, f)  +a
       │           table     def@primary  ·                   ·
       │           type      inner        ·                   ·
-      └── scan    ·         ·            (a, b, c)           +a
+      └── scan    ·         ·            (a, b, c)           +a,+c
 ·                 table     abc@primary  ·                   ·
 ·                 spans     ALL          ·                   ·
 
@@ -578,10 +578,10 @@ merge-join  ·               ·            (d, e, f, a, b, c)  +f
  │          type            inner        ·                   ·
  │          equality        (f) = (a)    ·                   ·
  │          mergeJoinOrder  +"(f=a)"     ·                   ·
- ├── scan   ·               ·            (d, e, f)           +f
+ ├── scan   ·               ·            (d, e, f)           +f,+e
  │          table           def@primary  ·                   ·
  │          spans           ALL          ·                   ·
- └── scan   ·               ·            (a, b, c)           +a
+ └── scan   ·               ·            (a, b, c)           +a,+c
 ·           table           abc@primary  ·                   ·
 ·           spans           ALL          ·                   ·
 
@@ -594,9 +594,9 @@ sort            ·         ·            (d, e, f, a, b, c)  +f
  └── hash-join  ·         ·            (d, e, f, a, b, c)  ·
       │         type      inner        ·                   ·
       │         equality  (f) = (a)    ·                   ·
-      ├── scan  ·         ·            (d, e, f)           ·
+      ├── scan  ·         ·            (d, e, f)           +f,+e
       │         table     def@primary  ·                   ·
       │         spans     ALL          ·                   ·
-      └── scan  ·         ·            (a, b, c)           ·
+      └── scan  ·         ·            (a, b, c)           +a,+c
 ·               table     abc@primary  ·                   ·
 ·               spans     ALL          ·                   ·

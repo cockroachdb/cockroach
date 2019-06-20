@@ -74,7 +74,7 @@ filter           ·       ·                                                    
  │               filter  ((a, b, c) > (1, 2, 3)) AND ((a, b, c) < (8, 9, 10))  ·                      ·
  └── index-join  ·       ·                                                     (a, b, c)              ·
       │          table   abc@primary                                           ·                      ·
-      └── scan   ·       ·                                                     (a, b, rowid[hidden])  ·
+      └── scan   ·       ·                                                     (a, b, rowid[hidden])  +a,+b,+rowid
 ·                table   abc@abc_a_b_idx                                       ·                      ·
 ·                spans   /1/2-/8/10                                            ·                      ·
 
@@ -87,7 +87,7 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b DESC, c))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3)
 ----
-scan  ·       ·                      (a, b, c)  ·
+scan  ·       ·                      (a, b, c)  +a,-b,+c
 ·     table   abc@abc_a_b_c_idx      ·          ·
 ·     spans   /1-                    ·          ·
 ·     filter  (a, b, c) > (1, 2, 3)  ·          ·

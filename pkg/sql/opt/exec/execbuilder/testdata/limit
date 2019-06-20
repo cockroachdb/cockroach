@@ -14,7 +14,7 @@ limit                 ·       ·            (k, v, w)  +v
       │               filter  w > 30       ·          ·
       └── index-join  ·       ·            (k, v, w)  +v
            │          table   t@primary    ·          ·
-           └── scan   ·       ·            (k, v)     +v
+           └── scan   ·       ·            (k, v)     +v,+k
 ·                     table   t@t_v_idx    ·          ·
 ·                     spans   /5-/8        ·          ·
 
@@ -58,20 +58,20 @@ limit      ·       ·          (k, v)  +k
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
-limit      ·       ·          (k, v)  +v
+limit      ·       ·          (k, v)  +v,+k
  │         count   5          ·       ·
  │         offset  1          ·       ·
- └── scan  ·       ·          (k, v)  +v
+ └── scan  ·       ·          (k, v)  +v,+k
 ·          table   t@t_v_idx  ·       ·
 ·          spans   ALL        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
-limit         ·       ·          (k, v)  -v
+limit         ·       ·          (k, v)  -v,-k
  │            count   5          ·       ·
  │            offset  1          ·       ·
- └── revscan  ·       ·          (k, v)  -v
+ └── revscan  ·       ·          (k, v)  -v,-k
 ·             table   t@t_v_idx  ·       ·
 ·             spans   ALL        ·       ·
 
@@ -99,7 +99,7 @@ EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
 render     ·         ·          (k)     ·
  │         render 0  k          ·       ·
- └── scan  ·         ·          (k, v)  ·
+ └── scan  ·         ·          (k, v)  +v,+k
 ·          table     t@t_v_idx  ·       ·
 ·          spans     ALL        ·       ·
 ·          limit     4          ·       ·
@@ -109,7 +109,7 @@ EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
 render     ·         ·          (k)     ·
  │         render 0  k          ·       ·
- └── scan  ·         ·          (k, v)  ·
+ └── scan  ·         ·          (k, v)  +v,+k
 ·          table     t@t_v_idx  ·       ·
 ·          spans     ALL        ·       ·
 ·          limit     4          ·       ·
@@ -119,7 +119,7 @@ EXPLAIN (VERBOSE) SELECT k FROM (SELECT k FROM t LIMIT 5) WHERE k != 2
 ----
 filter     ·       ·          (k)  ·
  │         filter  k != 2     ·    ·
- └── scan  ·       ·          (k)  ·
+ └── scan  ·       ·          (k)  +k
 ·          table   t@t_v_idx  ·    ·
 ·          spans   ALL        ·    ·
 ·          limit   5          ·    ·
@@ -132,7 +132,7 @@ render           ·         ·          (k, w)     ·
  │               render 1  w          ·          ·
  └── index-join  ·         ·          (k, v, w)  ·
       │          table     t@primary  ·          ·
-      └── scan   ·         ·          (k, v)     ·
+      └── scan   ·         ·          (k, v)     +v,+k
 ·                table     t@t_v_idx  ·          ·
 ·                spans     /1-/101    ·          ·
 ·                limit     10         ·          ·
@@ -145,7 +145,7 @@ render           ·         ·          (k, w)     ·
  │               render 1  w          ·          ·
  └── index-join  ·         ·          (k, v, w)  +v
       │          table     t@primary  ·          ·
-      └── scan   ·         ·          (k, v)     +v
+      └── scan   ·         ·          (k, v)     +v,+k
 ·                table     t@t_v_idx  ·          ·
 ·                spans     /1-/101    ·          ·
 ·                limit     10         ·          ·

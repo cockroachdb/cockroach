@@ -137,6 +137,8 @@ type physicalProps struct {
 	// the columns in constantCols do not appear in this ordering and for groups of
 	// equivalent columns, only the group representative can appear.
 	ordering sqlbase.ColumnOrdering
+
+	optionalOrdering sqlbase.ColumnOrdering
 }
 
 // check verifies the invariants of the structure.
@@ -331,7 +333,11 @@ func (pp *physicalProps) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 	}
 
 	// Print the ordering columns and for each their sort order.
-	for i, o := range pp.ordering {
+	ordering := pp.ordering
+	if len(pp.optionalOrdering) > 0 {
+		ordering = pp.optionalOrdering
+	}
+	for i, o := range ordering {
 		if i == 0 {
 			semiColon()
 		} else {
@@ -619,6 +625,10 @@ func (pp physicalProps) computeMatchInternal(
 	pos := 0
 	// Set of column groups seen so far.
 	var groupsSeen util.FastIntSet
+	ordering := pp.ordering
+	if len(pp.optionalOrdering) > 0 {
+		ordering = pp.optionalOrdering
+	}
 
 	for i, col := range desired {
 		if pp.isKey(groupsSeen) {
@@ -636,8 +646,8 @@ func (pp physicalProps) computeMatchInternal(
 			continue
 		}
 		groupsSeen.Add(group)
-		if pos < len(pp.ordering) && pp.ordering[pos].ColIdx == group &&
-			pp.ordering[pos].Direction == col.Direction {
+		if pos < len(ordering) && ordering[pos].ColIdx == group &&
+			ordering[pos].Direction == col.Direction {
 			// The next column matches.
 			pos++
 			continue

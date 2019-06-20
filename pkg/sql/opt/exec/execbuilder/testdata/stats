@@ -18,7 +18,7 @@ set experimental_enable_zigzag_join = false
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-scan  ·       ·            (u, v)  ·
+scan  ·       ·            (u, v)  +v
 ·     table   uv@uv_v_idx  ·       ·
 ·     spans   /1-/2        ·       ·
 ·     filter  u = 1        ·       ·
@@ -43,7 +43,7 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-scan  ·       ·            (u, v)  ·
+scan  ·       ·            (u, v)  +u
 ·     table   uv@uv_u_idx  ·       ·
 ·     spans   /1-/2        ·       ·
 ·     filter  v = 1        ·       ·
@@ -71,7 +71,7 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-scan  ·       ·            (u, v)  ·
+scan  ·       ·            (u, v)  +u
 ·     table   uv@uv_u_idx  ·       ·
 ·     spans   /1-/2        ·       ·
 ·     filter  v = 1        ·       ·
@@ -97,7 +97,7 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-scan  ·       ·            (u, v)  ·
+scan  ·       ·            (u, v)  +v
 ·     table   uv@uv_v_idx  ·       ·
 ·     spans   /1-/2        ·       ·
 ·     filter  u = 1        ·       ·

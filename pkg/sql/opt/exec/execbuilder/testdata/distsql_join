@@ -115,10 +115,10 @@ sort            ·         ·                (a, b, c, d)  +b,+a
  └── hash-join  ·         ·                (a, b, c, d)  ·
       │         type      inner            ·             ·
       │         equality  (a, b) = (c, d)  ·             ·
-      ├── scan  ·         ·                (a, b)        ·
+      ├── scan  ·         ·                (a, b)        +a,+b
       │         table     data@primary     ·             ·
       │         spans     ALL              ·             ·
-      └── scan  ·         ·                (c, d)        ·
+      └── scan  ·         ·                (c, d)        +c,+d
 ·               table     data@primary     ·             ·
 ·               spans     ALL              ·             ·
 

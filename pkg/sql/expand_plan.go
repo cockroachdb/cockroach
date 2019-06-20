@@ -910,6 +910,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *showTraceNode:
 	case *scanBufferNode:
 	case *scatterNode:
+	case *lookupJoinNode: // TODO(ridwanmsharif): Implement this.
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))

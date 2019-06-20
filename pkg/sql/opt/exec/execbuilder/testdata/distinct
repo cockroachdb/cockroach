@@ -89,14 +89,14 @@ sort            ·            ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT x FROM xyz
 ----
-scan  ·      ·            (x)  ·
+scan  ·      ·            (x)  +x
 ·     table  xyz@primary  ·    ·
 ·     spans  ALL          ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT x, y, z FROM xyz
 ----
-scan  ·      ·            (x, y, z)  ·
+scan  ·      ·            (x, y, z)  +x
 ·     table  xyz@primary  ·          ·
 ·     spans  ALL          ·          ·
 
@@ -109,7 +109,7 @@ distinct        ·            ·        (z)     weak-key(z); +z
  │              order key    z        ·       ·
  └── render     ·            ·        (z)     +z
       │         render 0     z        ·       ·
-      └── scan  ·            ·        (y, z)  +z
+      └── scan  ·            ·        (y, z)  +z,+y
 ·               table        xyz@foo  ·       ·
 ·               spans        ALL      ·       ·
 ·               filter       y > 1    ·       ·
@@ -148,14 +148,14 @@ distinct   ·            ·             (a, b)  weak-key(a,b); +a,+b
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c FROM abcd
 ----
-scan  ·      ·             (a, b, c)  ·
+scan  ·      ·             (a, b, c)  +a,+b,+c
 ·     table  abcd@primary  ·          ·
 ·     spans  ALL           ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c, d FROM abcd
 ----
-scan  ·      ·             (a, b, c, d)  ·
+scan  ·      ·             (a, b, c, d)  +a,+b,+c
 ·     table  abcd@primary  ·             ·
 ·     spans  ALL           ·             ·
 
@@ -187,7 +187,7 @@ distinct   ·            ·       (v)  weak-key(v); +v
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
 ----
-scan  ·      ·       (v)  ·
+scan  ·      ·       (v)  +v
 ·     table  kv@idx  ·    ·
 ·     spans  /1-     ·    ·
 
@@ -198,6 +198,6 @@ CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv2@idx
 ----
-scan  ·      ·        (v)  ·
+scan  ·      ·        (v)  +v
 ·     table  kv2@idx  ·    ·
 ·     spans  ALL      ·    ·

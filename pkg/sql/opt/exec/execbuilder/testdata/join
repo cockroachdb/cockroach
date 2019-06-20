@@ -441,7 +441,7 @@ render               ·         ·                 (a, b, n, sq)           ·
       │    └── scan  ·         ·                 (a, b)                  ·
       │              table     pairs@primary     ·                       ·
       │              spans     ALL               ·                       ·
-      └── scan       ·         ·                 (n, sq)                 ·
+      └── scan       ·         ·                 (n, sq)                 +n
 ·                    table     square@primary    ·                       ·
 ·                    spans     ALL               ·                       ·
 
@@ -468,7 +468,7 @@ render                    ·         ·               (a, b, n, sq)       ·
                 ├── scan  ·         ·               (a, b)              ·
                 │         table     pairs@primary   ·                   ·
                 │         spans     ALL             ·                   ·
-                └── scan  ·         ·               (n, sq)             ·
+                └── scan  ·         ·               (n, sq)             +n
 ·                         table     square@primary  ·                   ·
 ·                         spans     ALL             ·                   ·
 
@@ -491,7 +491,7 @@ render               ·         ·                 (a, b, n, sq)           ·
       │    └── scan  ·         ·                 (a, b)                  ·
       │              table     pairs@primary     ·                       ·
       │              spans     ALL               ·                       ·
-      └── scan       ·         ·                 (n, sq)                 ·
+      └── scan       ·         ·                 (n, sq)                 +n
 ·                    table     square@primary    ·                       ·
 ·                    spans     ALL               ·                       ·
 
@@ -515,7 +515,7 @@ render                    ·         ·                    (a, b, n, sq)        
            │    └── scan  ·         ·                    (a, b)                  ·
            │              table     pairs@primary        ·                       ·
            │              spans     ALL                  ·                       ·
-           └── scan       ·         ·                    (n, sq)                 ·
+           └── scan       ·         ·                    (n, sq)                 +n
 ·                         table     square@primary       ·                       ·
 ·                         spans     ALL                  ·                       ·
 
@@ -635,10 +635,10 @@ hash-join  ·                   ·                      (a, b, c, d, a, b, c, d)
  │         equality            (a, b, c) = (a, b, c)  ·                         ·
  │         left cols are key   ·                      ·                         ·
  │         right cols are key  ·                      ·                         ·
- ├── scan  ·                   ·                      (a, b, c, d)              ·
+ ├── scan  ·                   ·                      (a, b, c, d)              +b,+a
  │         table               pkba@primary           ·                         ·
  │         spans               ALL                    ·                         ·
- └── scan  ·                   ·                      (a, b, c, d)              ·
+ └── scan  ·                   ·                      (a, b, c, d)              +b,+c
 ·          table               pkbc@primary           ·                         ·
 ·          spans               ALL                    ·                         ·
 
@@ -655,10 +655,10 @@ render          ·                   ·                            (a, b, c, d) 
       │         equality            (a, b, c, d) = (a, b, c, d)  ·                         ·
       │         left cols are key   ·                            ·                         ·
       │         right cols are key  ·                            ·                         ·
-      ├── scan  ·                   ·                            (a, b, c, d)              ·
+      ├── scan  ·                   ·                            (a, b, c, d)              +b,+a
       │         table               pkba@primary                 ·                         ·
       │         spans               ALL                          ·                         ·
-      └── scan  ·                   ·                            (a, b, c, d)              ·
+      └── scan  ·                   ·                            (a, b, c, d)              +b,+a,+d
 ·               table               pkbad@primary                ·                         ·
 ·               spans               ALL                          ·                         ·
 
@@ -784,10 +784,10 @@ render          ·                   ·                (a, s)        ·
       │         equality            (a, s) = (a, s)  ·             ·
       │         left cols are key   ·                ·             ·
       │         right cols are key  ·                ·             ·
-      ├── scan  ·                   ·                (a, s)        ·
+      ├── scan  ·                   ·                (a, s)        +a
       │         table               str1@primary     ·             ·
       │         spans               ALL              ·             ·
-      └── scan  ·                   ·                (a, s)        ·
+      └── scan  ·                   ·                (a, s)        +a
 ·               table               str2@primary     ·             ·
 ·               spans               ALL              ·             ·
 
@@ -810,10 +810,10 @@ render           ·               ·                  (x, y, u, v)        ·
       │          type            inner              ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-      ├── scan   ·               ·                  (x, y, u)           +x,+y
+      ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
       │          table           xyu@primary        ·                   ·
       │          spans           /3-                ·                   ·
-      └── scan   ·               ·                  (x, y, v)           +x,+y
+      └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·                table           xyv@primary        ·                   ·
 ·                spans           /3-                ·                   ·
 
@@ -829,10 +829,10 @@ render           ·               ·                  (x, y, u, v)        ·
       │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-      ├── scan   ·               ·                  (x, y, u)           +x,+y
+      ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
       │          table           xyu@primary        ·                   ·
       │          spans           /3-                ·                   ·
-      └── scan   ·               ·                  (x, y, v)           +x,+y
+      └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·                table           xyv@primary        ·                   ·
 ·                spans           /3-                ·                   ·
 
@@ -848,10 +848,10 @@ render           ·               ·                  (x, y, u, v)        ·
       │          type            right outer        ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-      ├── scan   ·               ·                  (x, y, u)           +x,+y
+      ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
       │          table           xyu@primary        ·                   ·
       │          spans           /3-                ·                   ·
-      └── scan   ·               ·                  (x, y, v)           +x,+y
+      └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·                table           xyv@primary        ·                   ·
 ·                spans           /3-                ·                   ·
 
@@ -869,10 +869,10 @@ filter                ·               ·                  (x, y, u, v)        �
            │          type            full outer         ·                   ·
            │          equality        (x, y) = (x, y)    ·                   ·
            │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-           ├── scan   ·               ·                  (x, y, u)           +x,+y
+           ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
            │          table           xyu@primary        ·                   ·
            │          spans           ALL                ·                   ·
-           └── scan   ·               ·                  (x, y, v)           +x,+y
+           └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·                     table           xyv@primary        ·                   ·
 ·                     spans           ALL                ·                   ·
 
@@ -884,10 +884,10 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            inner              ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·               ·                  (x, y, u)           +y
+ ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
  │          table           xyu@primary        ·                   ·
  │          spans           /1-/1/10           ·                   ·
- └── scan   ·               ·                  (x, y, v)           +y
+ └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·           table           xyv@primary        ·                   ·
 ·           spans           /1-/1/10           ·                   ·
 
@@ -898,10 +898,10 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            inner              ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·               ·                  (x, y, u)           +y
+ ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
  │          table           xyu@primary        ·                   ·
  │          spans           /1-/1/10           ·                   ·
- └── scan   ·               ·                  (x, y, v)           +y
+ └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·           table           xyv@primary        ·                   ·
 ·           spans           /1-/1/10           ·                   ·
 
@@ -912,10 +912,10 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            left outer         ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·               ·                  (x, y, u)           +x,+y
+ ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
  │          table           xyu@primary        ·                   ·
  │          spans           ALL                ·                   ·
- └── scan   ·               ·                  (x, y, v)           +y
+ └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·           table           xyv@primary        ·                   ·
 ·           spans           /1-/1/10           ·                   ·
 
@@ -926,10 +926,10 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            right outer        ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·               ·                  (x, y, u)           +y
+ ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
  │          table           xyu@primary        ·                   ·
  │          spans           /1-/1/10           ·                   ·
- └── scan   ·               ·                  (x, y, v)           +x,+y
+ └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·           table           xyv@primary        ·                   ·
 ·           spans           ALL                ·                   ·
 
@@ -948,10 +948,10 @@ render           ·               ·                  (x, y, u, v)        ·
       │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-      ├── scan   ·               ·                  (x, y, u)           +x,+y
+      ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
       │          table           xyu@primary        ·                   ·
       │          spans           /3-                ·                   ·
-      └── scan   ·               ·                  (x, y, v)           +x,+y
+      └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·                table           xyv@primary        ·                   ·
 ·                spans           /3-                ·                   ·
 
@@ -967,10 +967,10 @@ render           ·               ·                  (x, y, u, v)        ·
       │          type            right outer        ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-      ├── scan   ·               ·                  (x, y, u)           +x,+y
+      ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
       │          table           xyu@primary        ·                   ·
       │          spans           /3-                ·                   ·
-      └── scan   ·               ·                  (x, y, v)           +x,+y
+      └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·                table           xyv@primary        ·                   ·
 ·                spans           /3-                ·                   ·
 
@@ -988,10 +988,10 @@ filter                ·               ·                  (x, y, u, v)        �
            │          type            full outer         ·                   ·
            │          equality        (x, y) = (x, y)    ·                   ·
            │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-           ├── scan   ·               ·                  (x, y, u)           +x,+y
+           ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
            │          table           xyu@primary        ·                   ·
            │          spans           ALL                ·                   ·
-           └── scan   ·               ·                  (x, y, v)           +x,+y
+           └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·                     table           xyv@primary        ·                   ·
 ·                     spans           ALL                ·                   ·
 
@@ -1002,10 +1002,10 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            left outer         ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·               ·                  (x, y, u)           +x,+y
+ ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
  │          table           xyu@primary        ·                   ·
  │          spans           ALL                ·                   ·
- └── scan   ·               ·                  (x, y, v)           +y
+ └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·           table           xyv@primary        ·                   ·
 ·           spans           /1-/1/10           ·                   ·
 
@@ -1016,10 +1016,10 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
  │          type            right outer        ·                   ·
  │          equality        (x, y) = (x, y)    ·                   ·
  │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·               ·                  (x, y, u)           +y
+ ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
  │          table           xyu@primary        ·                   ·
  │          spans           /1-/1/10           ·                   ·
- └── scan   ·               ·                  (x, y, v)           +x,+y
+ └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·           table           xyv@primary        ·                   ·
 ·           spans           ALL                ·                   ·
 
@@ -1036,10 +1036,10 @@ render           ·               ·                  (x, y, u, v)        ·
       │          type            inner              ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-      ├── scan   ·               ·                  (x, y, u)           +x,+y
+      ├── scan   ·               ·                  (x, y, u)           +x,+y,+u
       │          table           xyu@primary        ·                   ·
       │          spans           /1/2/4-            ·                   ·
-      └── scan   ·               ·                  (x, y, v)           +x,+y
+      └── scan   ·               ·                  (x, y, v)           +x,+y,+v
 ·                table           xyv@primary        ·                   ·
 ·                spans           ALL                ·                   ·
 
@@ -1063,10 +1063,10 @@ render           ·               ·           (a)     ·
       │          type            left outer  ·       ·
       │          equality        (a) = (a)   ·       ·
       │          mergeJoinOrder  +"(a=a)"    ·       ·
-      ├── scan   ·               ·           (a)     ·
+      ├── scan   ·               ·           (a)     +a
       │          table           l@primary   ·       ·
       │          spans           /3-/3/#     ·       ·
-      └── scan   ·               ·           (a)     ·
+      └── scan   ·               ·           (a)     +a
 ·                table           r@primary   ·       ·
 ·                spans           /3-/3/#     ·       ·
 
@@ -1077,10 +1077,10 @@ merge-join  ·               ·           (a, a)  ·
  │          type            left outer  ·       ·
  │          equality        (a) = (a)   ·       ·
  │          mergeJoinOrder  +"(a=a)"    ·       ·
- ├── scan   ·               ·           (a)     ·
+ ├── scan   ·               ·           (a)     +a
  │          table           l@primary   ·       ·
  │          spans           /3-/3/#     ·       ·
- └── scan   ·               ·           (a)     ·
+ └── scan   ·               ·           (a)     +a
 ·           table           r@primary   ·       ·
 ·           spans           /3-/3/#     ·       ·
 
@@ -1093,10 +1093,10 @@ render           ·               ·            (a)     ·
       │          type            right outer  ·       ·
       │          equality        (a) = (a)    ·       ·
       │          mergeJoinOrder  +"(a=a)"     ·       ·
-      ├── scan   ·               ·            (a)     ·
+      ├── scan   ·               ·            (a)     +a
       │          table           l@primary    ·       ·
       │          spans           /3-/3/#      ·       ·
-      └── scan   ·               ·            (a)     ·
+      └── scan   ·               ·            (a)     +a
 ·                table           r@primary    ·       ·
 ·                spans           /3-/3/#      ·       ·
 
@@ -1107,10 +1107,10 @@ merge-join  ·               ·            (a, a)  ·
  │          type            right outer  ·       ·
  │          equality        (a) = (a)    ·       ·
  │          mergeJoinOrder  +"(a=a)"     ·       ·
- ├── scan   ·               ·            (a)     ·
+ ├── scan   ·               ·            (a)     +a
  │          table           l@primary    ·       ·
  │          spans           /3-/3/#      ·       ·
- └── scan   ·               ·            (a)     ·
+ └── scan   ·               ·            (a)     +a
 ·           table           r@primary    ·       ·
 ·           spans           /3-/3/#      ·       ·
 
