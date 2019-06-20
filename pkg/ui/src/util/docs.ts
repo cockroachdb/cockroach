@@ -10,22 +10,13 @@
 // included in the file licenses/APL.txt and at
 // https://www.apache.org/licenses/LICENSE-2.0
 
-import { getDataFromServer } from "src/util/dataFromServer";
-
-const stable = "stable";
-const version = getDataFromServer().Version || stable;
-const docsURLBase = "https://www.cockroachlabs.com/docs/" + version;
-const docsURLBaseNoVersion = "https://www.cockroachlabs.com/docs/" + stable;
+const docsURLBaseNoVersion = "https://www.cockroachlabs.com/docs/stable";
 
 function docsURL(pageName: string): string {
-  return `${docsURLBase}/${pageName}`;
-}
-
-function docsURLNoVersion(pageName: string): string {
   return `${docsURLBaseNoVersion}/${pageName}`;
 }
 
-export const adminUILoginNoVersion = docsURLNoVersion("admin-ui-access-and-navigate.html#secure-the-admin-ui");
+export const adminUILoginNoVersion = docsURL("admin-ui-access-and-navigate.html#secure-the-admin-ui");
 export const startFlags = docsURL("start-a-node.html#flags");
 export const pauseJob = docsURL("pause-job.html");
 export const cancelJob = docsURL("cancel-job.html");

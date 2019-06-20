@@ -15,7 +15,6 @@ export interface DataFromServer {
   LoginEnabled: boolean;
   LoggedInUser: string;
   Tag: string;
-  Version: string;
   NodeID: string;
 }
 
