@@ -3610,11 +3610,9 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 	arr := MustBeDArray(d)
 
 	// VECTOR types use 0-indexing.
-	if w, ok := d.(*DOidWrapper); ok {
-		switch w.Oid {
-		case oid.T_oidvector, oid.T_int2vector:
-			subscriptIdx++
-		}
+	switch arr.customOid {
+	case oid.T_oidvector, oid.T_int2vector:
+		subscriptIdx++
 	}
 	if subscriptIdx < 1 || subscriptIdx > arr.Len() {
 		return DNull, nil
