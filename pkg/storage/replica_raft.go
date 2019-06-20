@@ -822,6 +822,14 @@ func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 
 	r.maybeTransferRaftLeadershipLocked(ctx)
 
+	// For followers, we update lastUpdateTimes when we step a message from them
+	// into the local Raft group. The leader won't hit that path, so we update
+	// it whenever it ticks. In effect, this makes sure it always sees itself as
+	// alive.
+	if r.mu.replicaID == r.mu.leaderID {
+		r.mu.lastUpdateTimes.update(r.mu.replicaID, timeutil.Now())
+	}
+
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
 
@@ -1038,7 +1046,7 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 
 // sendRaftMessage sends a Raft message.
 func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
-	r.mu.Lock()
+	r.mu.RLock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
 	var startKey roachpb.RKey
@@ -1046,11 +1054,6 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		if r.mu.replicaID == 0 {
 			log.Fatalf(ctx, "preemptive snapshot attempted to send a heartbeat: %+v", msg)
 		}
-		// For followers, we update lastUpdateTimes when we step a message from
-		// them into the local Raft group. The leader won't hit that path, so we
-		// update it whenever it sends a heartbeat. In effect, this makes sure
-		// it always sees itself as alive.
-		r.mu.lastUpdateTimes.update(r.mu.replicaID, timeutil.Now())
 	} else if msg.Type == raftpb.MsgApp && r.mu.internalRaftGroup != nil {
 		// When the follower is potentially an uninitialized replica waiting for
 		// a split trigger, send the replica's StartKey along. See the method
@@ -1068,7 +1071,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 			}
 		})
 	}
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	if fromErr != nil {
 		log.Warningf(ctx, "failed to look up sender replica %d in r%d while sending %s: %s",
