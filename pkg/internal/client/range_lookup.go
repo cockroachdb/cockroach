@@ -12,6 +12,7 @@ package client
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -209,20 +210,31 @@ func RangeLookup(
 		desiredDesc := containsForDir(prefetchReverse, rkey)
 		var matchingRanges []roachpb.RangeDescriptor
 		var prefetchedRanges []roachpb.RangeDescriptor
-		for _, desc := range descs {
+		for index, desc := range descs {
 			if desiredDesc(desc) {
 				if len(matchingRanges) == 0 {
 					matchingRanges = append(matchingRanges, desc)
 				} else {
-					// Since we support scanning non-transactionally, it's possible
-					// that we pick up both the pre- and post-split descriptor for a
-					// range. In this case, we can detect the newer version of the
-					// descriptor by selecting the smaller range. This is possible
-					// by simply looking at the descriptors' EndKeys, which can never
-					// be the same or the two options would have been stored at the
-					// same key.
-					if desc.EndKey.Less(matchingRanges[0].EndKey) {
-						matchingRanges[0] = desc
+					// Since we support scanning non-transactionally, it's possible that
+					// we pick up both the pre- and post-split descriptor for a range.
+					if desc.GenerationComparable && matchingRanges[0].GenerationComparable {
+						if desc.GetGeneration() > matchingRanges[0].GetGeneration() {
+							// If both generations are comparable, we take the range
+							// descriptor with the newer generation.
+							matchingRanges[0] = desc
+						}
+					} else {
+						if rand.Intn(index+1) == 0 {
+							// Generations are not comparable, so we randomly choose using
+							// reservoir sampling. Note that we cannot determine the newer
+							// version of the descriptor by looking at the size of the range
+							// because both splits and merges can happen. Using randomness to
+							// determine which range to return is okay, because if we guess
+							// wrong we will try the lookup again. Randomness is used to
+							// ensure we probabilistically converge to the correct
+							// descriptor.
+							matchingRanges[0] = desc
+						}
 					}
 				}
 			} else {

@@ -29,20 +29,28 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	desc1BeforeSplit := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKey("j"),
-		EndKey:   roachpb.RKey("p"),
+		RangeID:              1,
+		StartKey:             roachpb.RKey("j"),
+		EndKey:               roachpb.RKey("p"),
+		Generation:           new(int64),
+		GenerationComparable: true,
 	}
 	desc1AfterSplit := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKey("j"),
-		EndKey:   roachpb.RKey("m"),
+		RangeID:              1,
+		StartKey:             roachpb.RKey("j"),
+		EndKey:               roachpb.RKey("m"),
+		Generation:           new(int64),
+		GenerationComparable: true,
 	}
+	desc1AfterSplit.IncrementGeneration()
 	desc2AfterSplit := roachpb.RangeDescriptor{
-		RangeID:  2,
-		StartKey: roachpb.RKey("m"),
-		EndKey:   roachpb.RKey("p"),
+		RangeID:              2,
+		StartKey:             roachpb.RKey("m"),
+		EndKey:               roachpb.RKey("p"),
+		Generation:           new(int64),
+		GenerationComparable: true,
 	}
+	desc2AfterSplit.IncrementGeneration()
 
 	lookupKey := roachpb.Key("k")
 	assertRangeLookupScan := func(ba roachpb.BatchRequest) {

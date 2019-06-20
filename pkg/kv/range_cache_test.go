@@ -1083,3 +1083,108 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 		}
 	}
 }
+
+func TestRangeCacheGeneration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.TODO()
+
+	makeGeneration := func(generation int64) *int64 {
+		return &generation
+	}
+
+	descAM1 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKey("a"),
+		EndKey:               roachpb.RKey("m"),
+		Generation:           makeGeneration(1),
+		GenerationComparable: true,
+	}
+	descMZ3 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKey("m"),
+		EndKey:               roachpb.RKey("z"),
+		Generation:           makeGeneration(3),
+		GenerationComparable: true,
+	}
+
+	descBY0 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKey("b"),
+		EndKey:               roachpb.RKey("y"),
+		Generation:           makeGeneration(0),
+		GenerationComparable: true,
+	}
+	descBY2 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKey("b"),
+		EndKey:               roachpb.RKey("y"),
+		Generation:           makeGeneration(2),
+		GenerationComparable: true,
+	}
+	descBY4 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKey("b"),
+		EndKey:               roachpb.RKey("y"),
+		Generation:           makeGeneration(4),
+		GenerationComparable: true,
+	}
+	descBYIncomparable := &roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("y"),
+	}
+
+	testCases := []struct {
+		name         string
+		insertDesc   *roachpb.RangeDescriptor
+		queryKeys    []roachpb.RKey
+		expectedDesc []*roachpb.RangeDescriptor
+	}{
+		{
+			// descBY0 is ignored since the existing keyspace is covered by
+			// descriptors of generations 1 and 3, respectively.
+			name:         "generation comparable evict 0",
+			insertDesc:   descBY0,
+			queryKeys:    []roachpb.RKey{roachpb.RKey("b"), roachpb.RKey("y")},
+			expectedDesc: []*roachpb.RangeDescriptor{descAM1, descMZ3},
+		},
+		{
+			// descBY2 evicts descAM1, but not descMZ3 based on Generation. Since
+			// there is an overlapping descriptor with higher Generation (descMZ3),
+			// it is not inserted.;
+			name:         "generation comparable evict 1",
+			insertDesc:   descBY2,
+			queryKeys:    []roachpb.RKey{roachpb.RKey("b"), roachpb.RKey("y")},
+			expectedDesc: []*roachpb.RangeDescriptor{nil, descMZ3},
+		},
+		{
+			// descBY4 replaces both existing descriptors and it is inserted.
+			name:         "generation comparable evict 2",
+			insertDesc:   descBY4,
+			queryKeys:    []roachpb.RKey{roachpb.RKey("b"), roachpb.RKey("y")},
+			expectedDesc: []*roachpb.RangeDescriptor{descBY4, nil},
+		},
+		{
+			// descBYIncomparable has an incomparable Generation, so it evicts all
+			// overlapping descriptors. This behavior is clearly less desirable in
+			// general, but there's no better option in this case.
+			name:         "generation incomparable evict 2",
+			insertDesc:   descBYIncomparable,
+			queryKeys:    []roachpb.RKey{roachpb.RKey("b"), roachpb.RKey("y")},
+			expectedDesc: []*roachpb.RangeDescriptor{descBYIncomparable, nil},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
+			err := cache.InsertRangeDescriptors(ctx, *descAM1, *descMZ3, *tc.insertDesc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for index, queryKey := range tc.queryKeys {
+				if actualDesc, err := cache.GetCachedRangeDescriptor(queryKey, false); err != nil {
+					t.Fatal(err)
+				} else if !tc.expectedDesc[index].Equal(actualDesc) {
+					t.Errorf("expected descriptor %s; got %s", tc.expectedDesc[index], actualDesc)
+				}
+			}
+		})
+	}
+}
