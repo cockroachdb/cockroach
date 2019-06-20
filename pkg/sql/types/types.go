@@ -925,6 +925,24 @@ func (t *T) PGName() string {
 //   SELECT format_type(pg_typeof(1::int)::regtype, NULL)
 //
 func (t *T) SQLStandardName() string {
+	return t.SQLStandardNameWithTypmod(false, 0)
+}
+
+// SQLStandardNameWithTypmod is like SQLStandardName but it also accepts a
+// typmod argument, and a boolean which indicates whether or not a typmod was
+// even specified. The expected results of this function should be, in Postgres:
+//
+//   SELECT format_type('thetype'::regype, typmod)
+//
+// Generally, what this does with a non-0 typmod is append the scale, precision
+// or length of a datatype to the name of the datatype. For example, a
+// varchar(20) would appear as character varying(20) when provided the typmod
+// value for varchar(20), which happens to be 24.
+//
+// This function is full of special cases. See backend/utils/adt/format_type.c
+// in Postgres.
+func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
+	var buf strings.Builder
 	switch t.Family() {
 	case AnyFamily:
 		return "anyelement"
@@ -938,9 +956,15 @@ func (t *T) SQLStandardName() string {
 		return t.ArrayContents().SQLStandardName() + "[]"
 	case BitFamily:
 		if t.Oid() == oid.T_varbit {
-			return "bit varying"
+			buf.WriteString("bit varying")
+		} else {
+			buf.WriteString("bit")
 		}
-		return "bit"
+		if !haveTypmod || typmod <= 0 {
+			return buf.String()
+		}
+		buf.WriteString(fmt.Sprintf("(%d)", typmod))
+		return buf.String()
 	case BoolFamily:
 		return "boolean"
 	case BytesFamily:
@@ -948,7 +972,19 @@ func (t *T) SQLStandardName() string {
 	case DateFamily:
 		return "date"
 	case DecimalFamily:
-		return "numeric"
+		if !haveTypmod || typmod <= 0 {
+			return "numeric"
+		}
+		// The typmod of a numeric has the precision in the upper bits and the
+		// scale in the lower bits of a 32-bit int, after subtracting 4 (the var
+		// header size). See numeric.c.
+		typmod -= 4
+		return fmt.Sprintf(
+			"numeric(%d,%d)",
+			(typmod>>16)&0xffff,
+			typmod&0xffff,
+		)
+
 	case FloatFamily:
 		switch t.Width() {
 		case 32:
@@ -973,6 +1009,7 @@ func (t *T) SQLStandardName() string {
 			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
 		}
 	case IntervalFamily:
+		// TODO(jordan): intervals can have typmods, but we don't support them yet.
 		return "interval"
 	case JsonFamily:
 		// Only binary JSON is currently supported.
@@ -997,24 +1034,55 @@ func (t *T) SQLStandardName() string {
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
 		case oid.T_text:
-			return "text"
+			buf.WriteString("text")
 		case oid.T_varchar:
-			return "character varying"
+			buf.WriteString("character varying")
 		case oid.T_bpchar:
-			return "character"
+			if haveTypmod && typmod < 0 {
+				// Special case. Run `select format_type('bpchar'::regtype, -1);` in pg.
+				return "bpchar"
+			}
+			buf.WriteString("character")
 		case oid.T_char:
-			// Not the same as "character". Beware.
+			// Type modifiers not allowed for "char".
 			return `"char"`
 		case oid.T_name:
+			// Type modifiers not allowed for name.
 			return "name"
+		default:
+			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
-		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
+		if !haveTypmod {
+			return buf.String()
+		}
+
+		// Typmod gets subtracted by 4 for all non-text string-like types to produce
+		// the length.
+		if t.Oid() != oid.T_text {
+			typmod -= 4
+		}
+		if typmod <= 0 {
+			// In this case, we don't print any modifier.
+			return buf.String()
+		}
+		buf.WriteString(fmt.Sprintf("(%d)", typmod))
+		return buf.String()
+
 	case TimeFamily:
-		return "time without time zone"
+		if !haveTypmod || typmod <= 0 {
+			return "time without time zone"
+		}
+		return fmt.Sprintf("time(%d) without time zone", typmod)
 	case TimestampFamily:
-		return "timestamp without time zone"
+		if !haveTypmod || typmod <= 0 {
+			return "timestamp without time zone"
+		}
+		return fmt.Sprintf("timestamp(%d) without time zone", typmod)
 	case TimestampTZFamily:
-		return "timestamp with time zone"
+		if !haveTypmod || typmod <= 0 {
+			return "timestamp with time zone"
+		}
+		return fmt.Sprintf("timestamp(%d) with time zone", typmod)
 	case TupleFamily:
 		return "record"
 	case UnknownFamily:

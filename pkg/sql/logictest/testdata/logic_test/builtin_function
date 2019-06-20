@@ -1782,7 +1782,7 @@ anyelement
 bit
 boolean
 bytea
-character
+bpchar
 date
 numeric
 double precision
