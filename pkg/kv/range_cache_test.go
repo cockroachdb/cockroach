@@ -1085,3 +1085,99 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 		}
 	}
 }
+
+func TestRangeCacheGeneration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.TODO()
+
+	makeGeneration := func(generation int64) *int64 {
+		return &generation
+	}
+
+	initialDesc1 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKeyMin,
+		EndKey:               roachpb.RKey("m"),
+		Generation:           makeGeneration(1),
+		GenerationComparable: true,
+	}
+	initialDesc2 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKey("m"),
+		EndKey:               roachpb.RKeyMax,
+		Generation:           makeGeneration(3),
+		GenerationComparable: true,
+	}
+
+	desc1 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKey("a"),
+		EndKey:               roachpb.RKey("z"),
+		Generation:           makeGeneration(0),
+		GenerationComparable: true,
+	}
+	desc2 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKey("a"),
+		EndKey:               roachpb.RKey("z"),
+		Generation:           makeGeneration(2),
+		GenerationComparable: true,
+	}
+	desc3 := &roachpb.RangeDescriptor{
+		StartKey:             roachpb.RKey("a"),
+		EndKey:               roachpb.RKey("z"),
+		Generation:           makeGeneration(4),
+		GenerationComparable: true,
+	}
+	desc4 := &roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
+	}
+
+	testCases := []struct {
+		name         string
+		insertDesc   *roachpb.RangeDescriptor
+		queryKeys    []roachpb.RKey
+		expectedDesc []*roachpb.RangeDescriptor
+	}{
+		{
+			name:         "generation comparable evict 0",
+			insertDesc:   desc1,
+			queryKeys:    []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("z")},
+			expectedDesc: []*roachpb.RangeDescriptor{initialDesc1, initialDesc2},
+		},
+		{
+			name:         "generation comparable evict 1",
+			insertDesc:   desc2,
+			queryKeys:    []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("z")},
+			expectedDesc: []*roachpb.RangeDescriptor{nil, initialDesc2},
+		},
+		{
+			name:         "generation comparable evict 2",
+			insertDesc:   desc3,
+			queryKeys:    []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("z")},
+			expectedDesc: []*roachpb.RangeDescriptor{desc3, nil},
+		},
+		{
+			name:         "generation incomparable evict 2",
+			insertDesc:   desc4,
+			queryKeys:    []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("z")},
+			expectedDesc: []*roachpb.RangeDescriptor{desc4, nil},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
+			err := cache.InsertRangeDescriptors(ctx, *initialDesc1, *initialDesc2, *tc.insertDesc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for index, queryKey := range tc.queryKeys {
+				if actualDesc, err := cache.GetCachedRangeDescriptor(queryKey, false); err != nil {
+					t.Fatal(err)
+				} else if !tc.expectedDesc[index].Equal(actualDesc) {
+					t.Errorf("expected descriptor %s; got %s", tc.expectedDesc[index], actualDesc)
+				}
+			}
+		})
+	}
+}
