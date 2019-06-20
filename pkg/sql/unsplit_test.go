@@ -44,13 +44,15 @@ func TestUnsplitAt(t *testing.T) {
 		INDEX s_idx (s)
 	)`)
 	r.Exec(t, `CREATE TABLE d.i (k INT PRIMARY KEY)`)
+	r.Exec(t, `CREATE TABLE i (k INT PRIMARY KEY)`)
 
 	// Create initial splits
 	splitStmts := []string{
-		"ALTER TABLE d.t SPLIT AT VALUES (2, 'b'), (3, 'c'), (4, 'd'), (5, 'd'), (6, 'e'), (7, 'f')",
+		"ALTER TABLE d.t SPLIT AT VALUES (2, 'b'), (3, 'c'), (4, 'd'), (5, 'd'), (6, 'e'), (7, 'f'), (8, 'g'), (9, 'h'), (10, 'i')",
 		"ALTER TABLE d.t SPLIT AT VALUES (10)",
-		"ALTER TABLE d.i SPLIT AT VALUES (1), (8)",
-		"ALTER INDEX d.t@s_idx SPLIT AT VALUES ('f')",
+		"ALTER TABLE d.i SPLIT AT VALUES (1), (8), (10), (11), (12)",
+		"ALTER TABLE i SPLIT AT VALUES (10), (11), (12)",
+		"ALTER INDEX d.t@s_idx SPLIT AT VALUES ('f'), ('g'), ('h'), ('i')",
 	}
 
 	for _, splitStmt := range splitStmts {
@@ -63,34 +65,60 @@ func TestUnsplitAt(t *testing.T) {
 	}
 
 	tests := []struct {
-		in    string
+		in string
+		// Number of unsplits expected.
+		count int
 		error string
 		args  []interface{}
 	}{
 		{
-			in: "ALTER TABLE d.t UNSPLIT AT VALUES (2, 'b')",
+			in:    "ALTER TABLE d.t UNSPLIT AT VALUES (2, 'b')",
+			count: 1,
 		},
 		{
-			in: "ALTER TABLE d.t UNSPLIT AT VALUES (3, 'c'), (4, 'd')",
+			in:    "ALTER TABLE d.t UNSPLIT AT VALUES (3, 'c'), (4, 'd')",
+			count: 2,
 		},
 		{
-			in: "ALTER TABLE d.t UNSPLIT AT SELECT 5, 'd'",
+			in:    "ALTER TABLE d.t UNSPLIT AT SELECT 5, 'd'",
+			count: 1,
 		},
 		{
-			in: "ALTER TABLE d.t UNSPLIT AT SELECT * FROM (VALUES (6, 'e'), (7, 'f')) AS a",
+			in:    "ALTER TABLE d.t UNSPLIT AT SELECT * FROM (VALUES (6, 'e'), (7, 'f')) AS a",
+			count: 2,
 		},
 		{
-			in: "ALTER TABLE d.t UNSPLIT AT VALUES (10)",
+			in:    "ALTER TABLE d.t UNSPLIT AT VALUES (10)",
+			count: 1,
 		},
 		{
-			in:   "ALTER TABLE d.i UNSPLIT AT VALUES ($1)",
-			args: []interface{}{8},
+			in:    "ALTER TABLE d.i UNSPLIT AT VALUES ($1)",
+			args:  []interface{}{8},
+			count: 1,
 		},
 		{
-			in: "ALTER TABLE d.i UNSPLIT AT VALUES ((SELECT 1))",
+			in:    "ALTER TABLE d.i UNSPLIT AT VALUES ((SELECT 1))",
+			count: 1,
 		},
 		{
-			in: "ALTER INDEX d.t@s_idx UNSPLIT AT VALUES ('f')",
+			in:    "ALTER INDEX d.t@s_idx UNSPLIT AT VALUES ('f')",
+			count: 1,
+		},
+		{
+			in:    "ALTER TABLE d.t UNSPLIT ALL",
+			count: 3,
+		},
+		{
+			in:    "ALTER INDEX d.t@s_idx UNSPLIT ALL",
+			count: 3,
+		},
+		{
+			in:    "ALTER TABLE d.i UNSPLIT ALL",
+			count: 3,
+		},
+		{
+			in:    "ALTER TABLE i UNSPLIT ALL",
+			count: 3,
 		},
 		{
 			in:    "ALTER TABLE d.t UNSPLIT AT VALUES (1, 'non-existent')",
@@ -131,7 +159,7 @@ func TestUnsplitAt(t *testing.T) {
 	for _, tt := range tests {
 		var key roachpb.Key
 		var pretty string
-		err := db.QueryRow(tt.in, tt.args...).Scan(&key, &pretty)
+		rows, err := db.Query(tt.in, tt.args...)
 		if err != nil && tt.error == "" {
 			t.Fatalf("%s: unexpected error: %s", tt.in, err)
 		} else if tt.error != "" && err == nil {
@@ -141,13 +169,25 @@ func TestUnsplitAt(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", tt.in, err)
 			}
 		} else {
-			// Successful unsplit, verify it happened.
-			rng, err := s.(*server.TestServer).LookupRange(key)
-			if err != nil {
-				t.Fatal(err)
+			actualCount := 0
+			for rows.Next() {
+				actualCount++
+				err := rows.Scan(&key, &pretty)
+				if err != nil {
+					t.Fatalf("%s: expected error: %s", tt.in, tt.error)
+				}
+				// Successful unsplit, verify it happened.
+				rng, err := s.(*server.TestServer).LookupRange(key)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if (rng.StickyBit != hlc.Timestamp{}) {
+					t.Fatalf("%s: expected range sticky bit to be hlc.MinTimestamp, got %s", tt.in, pretty)
+				}
 			}
-			if (rng.StickyBit != hlc.Timestamp{}) {
-				t.Fatalf("%s: expected range sticky bit to be hlc.MinTimestamp, got %s", tt.in, pretty)
+
+			if tt.count != actualCount {
+				t.Fatalf("%s: expected %d unsplits, got %d", tt.in, tt.count, actualCount)
 			}
 		}
 	}

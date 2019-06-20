@@ -74,14 +74,20 @@ func (p *planner) Unsplit(ctx context.Context, n *tree.Unsplit) (planNode, error
 			FROM
 				crdb_internal.ranges_no_leases
 			WHERE
-				table_name=$1::string AND index_name=$2::string AND split_enforced_until IS NOT NULL
+				database_name=$1::string AND table_name=$2::string AND index_name=$3::string AND split_enforced_until IS NOT NULL
 		`
-		ranges, err := p.ExtendedEvalContext().InternalExecutor.Query(
-			ctx, "split points query", p.txn, statement, n.TableOrIndex.Table.String(), n.TableOrIndex.Index)
+		dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, tableDesc.ParentID)
 		if err != nil {
 			return nil, err
 		}
-		v := p.newContainerValuesNode(columns, 0)
+		ranges, err := p.ExtendedEvalContext().InternalExecutor.Query(
+			ctx, "split points query", p.txn, statement, dbDesc.Name, tableDesc.Name, n.TableOrIndex.Index)
+		if err != nil {
+			return nil, err
+		}
+		rawColumns := make(sqlbase.ResultColumns, 1)
+		rawColumns[0].Typ = types.Bytes
+		v := p.newContainerValuesNode(rawColumns, 0)
 		for _, d := range ranges {
 			if _, err := v.rows.AddRow(ctx, d); err != nil {
 				return nil, err
