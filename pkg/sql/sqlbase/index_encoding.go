@@ -271,9 +271,7 @@ func NeededColumnFamilyIDs(
 // instead of requesting all the families. It is up to the client to verify
 // whether the requested span represents a single row lookup, and when
 // the span splitting is appropriate
-func SplitSpanIntoSeparateFamilies(
-	span roachpb.Span,
-	neededFamilies []FamilyID) roachpb.Spans {
+func SplitSpanIntoSeparateFamilies(span roachpb.Span, neededFamilies []FamilyID) roachpb.Spans {
 	var resultSpans roachpb.Spans
 	for i, familyID := range neededFamilies {
 		var tempSpan roachpb.Span
