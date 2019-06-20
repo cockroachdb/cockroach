@@ -117,7 +117,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	indexName := index.Name
 
 	if n.n.Interleave != nil {
-		if err := params.p.addInterleave(params.ctx, n.tableDesc, index, n.n.Interleave); err != nil {
+		if err := addInterleave(params.ctx, params.p, n.tableDesc, index, n.n.Interleave); err != nil {
 			return err
 		}
 		if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, index); err != nil {

@@ -738,20 +738,10 @@ func colNames(cols []sqlbase.ColumnDescriptor) string {
 	return s.String()
 }
 
-func (p *planner) addInterleave(
-	ctx context.Context,
-	desc *sqlbase.MutableTableDescriptor,
-	index *sqlbase.IndexDescriptor,
-	interleave *tree.InterleaveDef,
-) error {
-	return addInterleave(ctx, p.txn, p, desc, index, interleave)
-}
-
 // addInterleave marks an index as one that is interleaved in some parent data
 // according to the given definition.
 func addInterleave(
 	ctx context.Context,
-	txn *client.Txn,
 	vt SchemaResolver,
 	desc *sqlbase.MutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
@@ -1038,6 +1028,14 @@ func dequalifyColumnRefs(
 	)
 }
 
+// interleaveToAdd is a helper struct that associates an interleave definition
+// with an index into an indexes array, to facilitate creating interleaved
+// indexes during CREATE TABLE.
+type interleaveToAdd struct {
+	def          *tree.InterleaveDef
+	indexOrdinal int
+}
+
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
 //
 // txn and vt can be nil if the table to be created does not contain references
@@ -1142,6 +1140,11 @@ func MakeTableDesc(
 		}
 	}
 
+	// interleavesToAdd will accumulate all interleave definitions we're going to
+	// add. We delay creating the interleaves until after the indexes get their
+	// IDs allocated, since that information is necessary to create an interleave
+	// at all.
+	var interleavesToAdd []interleaveToAdd
 	var primaryIndexColumnSet map[string]struct{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
@@ -1170,7 +1173,10 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.Interleave != nil {
-				return desc, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
+				interleavesToAdd = append(interleavesToAdd, interleaveToAdd{
+					def:          d.Interleave,
+					indexOrdinal: len(desc.Indexes) - 1,
+				})
 			}
 		case *tree.UniqueConstraintTableDef:
 			idx := sqlbase.IndexDescriptor{
@@ -1196,9 +1202,17 @@ func MakeTableDesc(
 				for _, c := range d.Columns {
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
 				}
+				if d.Interleave != nil {
+					return desc, errors.Errorf("can't interleave primary index directly: put the INTERLEAVE IN PARENT statement" +
+						" on the" +
+						" CREATE TABLE statement instead")
+				}
 			}
 			if d.Interleave != nil {
-				return desc, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
+				interleavesToAdd = append(interleavesToAdd, interleaveToAdd{
+					def:          d.Interleave,
+					indexOrdinal: len(desc.Indexes) - 1,
+				})
 			}
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
@@ -1235,7 +1249,15 @@ func MakeTableDesc(
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
+		if err := addInterleave(ctx, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
+			return desc, err
+		}
+	}
+	// Add any interleaves to secondary indexes that we found. The backreferences
+	// will be created in the actual createTableNode, by finalizeInterleave.
+	for _, interleaveToAdd := range interleavesToAdd {
+		indexDesc := &desc.Indexes[interleaveToAdd.indexOrdinal]
+		if err := addInterleave(ctx, vt, &desc, indexDesc, interleaveToAdd.def); err != nil {
 			return desc, err
 		}
 	}

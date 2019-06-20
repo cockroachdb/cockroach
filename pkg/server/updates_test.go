@@ -487,11 +487,6 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(`CREATE TABLE somestring.foo (a INT8 PRIMARY KEY, b INT8, INDEX (b) INTERLEAVE IN PARENT foo (b))`); !testutils.IsError(
-			err, "unimplemented: use CREATE INDEX to make interleaved indexes",
-		) {
-			t.Fatal(err)
-		}
 		// Even queries that don't use placeholders and contain literal strings
 		// should still not cause those strings to appear in reports.
 		for _, q := range []string{
@@ -707,7 +702,6 @@ func TestReportUsage(t *testing.T) {
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
 		"unimplemented.syntax.#32564":                   10,
-		"unimplemented.#9148":                           10,
 		"othererror." +
 			pgcode.Uncategorized +
 			".crdb_internal.set_vmodule()": 10,

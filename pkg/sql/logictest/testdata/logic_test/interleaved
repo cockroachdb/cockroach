@@ -201,21 +201,14 @@ SELECT * FROM p0
 
 # Validation and descriptor bookkeeping
 
-# TODO(dan): Interleave these two indexes once we support the syntax.
 statement ok
 CREATE TABLE all_interleaves (
   b INT PRIMARY KEY,
   c INT,
   d INT,
-  INDEX (c),
-  UNIQUE INDEX (d)
+  INDEX (c, d) INTERLEAVE IN PARENT p1_1(c),
+  UNIQUE INDEX (d, c) INTERLEAVE IN PARENT p1_1 (d)
 ) INTERLEAVE IN PARENT p1_1 (b)
-
-statement ok
-CREATE INDEX ON all_interleaves (c, d) INTERLEAVE IN PARENT p1_1 (c)
-
-statement ok
-CREATE UNIQUE INDEX ON all_interleaves (d, c) INTERLEAVE IN PARENT p1_1 (d)
 
 query TT
 SHOW CREATE TABLE all_interleaves
@@ -225,8 +218,6 @@ all_interleaves                  CREATE TABLE all_interleaves (
                                  c INT8 NULL,
                                  d INT8 NULL,
                                  CONSTRAINT "primary" PRIMARY KEY (b ASC),
-                                 INDEX all_interleaves_c_idx (c ASC),
-                                 UNIQUE INDEX all_interleaves_d_key (d ASC),
                                  INDEX all_interleaves_c_d_idx (c ASC, d ASC) INTERLEAVE IN PARENT p1_1 (c),
                                  UNIQUE INDEX all_interleaves_d_c_key (d ASC, c ASC) INTERLEAVE IN PARENT p1_1 (d),
                                  FAMILY "primary" (b, c, d)
@@ -268,13 +259,6 @@ CREATE INDEX ON p1_0 (d) INTERLEAVE IN PARENT p1_1 (d)
 
 statement error pq: declared interleaved columns \(i\) must match type and sort direction of the parent's primary index \(i\)
 CREATE INDEX ON p1_0 (i DESC) INTERLEAVE IN PARENT p1_1 (i)
-
-
-statement error unimplemented
-CREATE TABLE err (i INT PRIMARY KEY, INDEX (i) INTERLEAVE IN PARENT p1_1 (i))
-
-statement error unimplemented
-CREATE TABLE err (i INT PRIMARY KEY, UNIQUE INDEX (i) INTERLEAVE IN PARENT p1_1 (i))
 
 statement error unimplemented: unsupported shorthand CASCADE
 CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (i) CASCADE
