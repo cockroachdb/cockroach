@@ -54,7 +54,13 @@ func TestIndexJoiner(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
+	sqlutils.CreateTable(t, sqlDB, "t2",
+		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), FAMILY f1 (a, b), FAMILY f2 (s), FAMILY f3 (sum), INDEX bs (b,s)",
+		99,
+		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
+
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	tdf := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
@@ -63,6 +69,7 @@ func TestIndexJoiner(t *testing.T) {
 
 	testCases := []struct {
 		description string
+		desc        *sqlbase.TableDescriptor
 		post        distsqlpb.PostProcessSpec
 		input       sqlbase.EncDatumRows
 		outputTypes []types.T
@@ -70,6 +77,7 @@ func TestIndexJoiner(t *testing.T) {
 	}{
 		{
 			description: "Test selecting rows using the primary index",
+			desc:        td,
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
@@ -90,6 +98,7 @@ func TestIndexJoiner(t *testing.T) {
 		},
 		{
 			description: "Test a filter in the post process spec and using a secondary index",
+			desc:        td,
 			post: distsqlpb.PostProcessSpec{
 				Filter:        distsqlpb.Expression{Expr: "@3 <= 5"}, // sum <= 5
 				Projection:    true,
@@ -114,12 +123,33 @@ func TestIndexJoiner(t *testing.T) {
 				{sqlbase.StrEncDatum("five-zero")},
 			},
 		},
+		{
+			description: "Test selecting rows using the primary index with multiple family spans",
+			desc:        tdf,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[0], v[2]},
+				{v[0], v[5]},
+				{v[1], v[0]},
+				{v[1], v[5]},
+			},
+			outputTypes: sqlbase.ThreeIntCols,
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[2], v[2]},
+				{v[0], v[5], v[5]},
+				{v[1], v[0], v[1]},
+				{v[1], v[5], v[6]},
+			},
+		},
 	}
 
 	for _, c := range testCases {
 		t.Run(c.description, func(t *testing.T) {
 			spec := distsqlpb.JoinReaderSpec{
-				Table:    *td,
+				Table:    *c.desc,
 				IndexIdx: 0,
 			}
 			txn := client.NewTxn(context.Background(), s.DB(), s.NodeID(), client.RootTxn)

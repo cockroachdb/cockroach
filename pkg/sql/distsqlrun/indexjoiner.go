@@ -52,6 +52,10 @@ type indexJoiner struct {
 	// spans is the batch of spans we will next retrieve from the index.
 	spans roachpb.Spans
 
+	// Hold onto what families we need to query from if our
+	// needed columns span multiple queries
+	neededFamilies []sqlbase.FamilyID
+
 	alloc sqlbase.DatumAlloc
 }
 
@@ -119,6 +123,12 @@ func newIndexJoiner(
 		ij.finishTrace = ij.outputStatsToTrace
 	}
 
+	ij.neededFamilies = sqlbase.NeededColumnFamilyIDs(
+		spec.Table.ColumnIdxMap(),
+		spec.Table.Families,
+		ij.out.neededColumns(),
+	)
+
 	return ij, nil
 }
 
@@ -150,7 +160,11 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 					ij.MoveToDraining(err)
 					return nil, ij.DrainHelper()
 				}
-				ij.spans = append(ij.spans, span)
+				if canSplit, splitSpans := ij.canSplitSpanIntoSeparateFamilies(span); canSplit {
+					ij.spans = append(ij.spans, splitSpans...)
+				} else {
+					ij.spans = append(ij.spans, span)
+				}
 			}
 			if len(ij.spans) == 0 {
 				// All done.
@@ -203,6 +217,17 @@ func (ij *indexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, erro
 	return sqlbase.MakeSpanFromEncDatums(
 		ij.keyPrefix, keyRow, types, ij.desc.PrimaryIndex.ColumnDirections, &ij.desc,
 		&ij.desc.PrimaryIndex, &ij.alloc)
+}
+
+func (ij *indexJoiner) canSplitSpanIntoSeparateFamilies(span roachpb.Span) (bool, roachpb.Spans) {
+	// we are always looking up a single row, because we are always
+	// looking up a full primary key
+	if len(ij.neededFamilies) > 0 &&
+		len(ij.desc.Families) > 1 &&
+		len(ij.neededFamilies) < len(ij.desc.Families) {
+		return true, sqlbase.SplitSpanIntoSeparateFamilies(span, ij.neededFamilies)
+	}
+	return false, nil
 }
 
 // outputStatsToTrace outputs the collected indexJoiner stats to the trace. Will

@@ -15,7 +15,6 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -304,24 +303,9 @@ func (jr *joinReader) canSplitSpanIntoSeparateFamilies(span roachpb.Span) (bool,
 	if len(jr.neededFamilies) > 0 &&
 		jr.index.ID == jr.desc.PrimaryIndex.ID &&
 		len(jr.desc.Families) > 1 &&
-		len(jr.lookupCols) == len(jr.desc.PrimaryIndex.ColumnIDs) {
-		var resultSpans roachpb.Spans
-		if len(jr.neededFamilies) < len(jr.desc.Families) {
-			for i, familyID := range jr.neededFamilies {
-				var tempSpan roachpb.Span
-				tempSpan.Key = make(roachpb.Key, len(span.Key))
-				copy(tempSpan.Key, span.Key)
-				tempSpan.Key = keys.MakeFamilyKey(tempSpan.Key, uint32(familyID))
-				tempSpan.EndKey = tempSpan.Key.PrefixEnd()
-				if i > 0 && familyID == jr.neededFamilies[i-1]+1 {
-					// the family ID is the same, so collapse these spans
-					resultSpans[len(resultSpans)-1].EndKey = tempSpan.EndKey
-				} else {
-					resultSpans = append(resultSpans, tempSpan)
-				}
-			}
-			return true, resultSpans
-		}
+		len(jr.lookupCols) == len(jr.desc.PrimaryIndex.ColumnIDs) &&
+		len(jr.neededFamilies) < len(jr.desc.Families) {
+		return true, sqlbase.SplitSpanIntoSeparateFamilies(span, jr.neededFamilies)
 	}
 	return false, nil
 }

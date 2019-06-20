@@ -266,6 +266,31 @@ func NeededColumnFamilyIDs(
 	return needed
 }
 
+// SplitSpanIntoSeparateFamilies splits a span representing a single row lookup
+// into separate spans that request particular families from neededFamilies
+// instead of requesting all the families. It is up to the client to verify
+// whether the requested span represents a single row lookup, and when
+// the span splitting is appropriate
+func SplitSpanIntoSeparateFamilies(
+	span roachpb.Span,
+	neededFamilies []FamilyID) roachpb.Spans {
+	var resultSpans roachpb.Spans
+	for i, familyID := range neededFamilies {
+		var tempSpan roachpb.Span
+		tempSpan.Key = make(roachpb.Key, len(span.Key))
+		copy(tempSpan.Key, span.Key)
+		tempSpan.Key = keys.MakeFamilyKey(tempSpan.Key, uint32(familyID))
+		tempSpan.EndKey = tempSpan.Key.PrefixEnd()
+		if i > 0 && familyID == neededFamilies[i-1]+1 {
+			// the family ID is the same, so collapse these spans
+			resultSpans[len(resultSpans)-1].EndKey = tempSpan.EndKey
+		} else {
+			resultSpans = append(resultSpans, tempSpan)
+		}
+	}
+	return resultSpans
+}
+
 // makeKeyFromEncDatums creates an index key by concatenating keyPrefix with the
 // encodings of the given EncDatum values. The values, types, and dirs
 // parameters should be specified in the same order as the index key columns and

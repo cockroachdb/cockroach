@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -685,21 +684,7 @@ func appendSpansFromConstraintSpan(
 		s.Key.Equal(s.EndKey) {
 		neededFamilyIDs := sqlbase.NeededColumnFamilyIDs(tableDesc.ColumnIdxMap(), tableDesc.Families, needed)
 		if len(neededFamilyIDs) < len(tableDesc.Families) {
-			for i, familyID := range neededFamilyIDs {
-				var span roachpb.Span
-				span.Key = make(roachpb.Key, len(s.Key))
-				copy(span.Key, s.Key)
-				span.Key = keys.MakeFamilyKey(span.Key, uint32(familyID))
-				span.EndKey = span.Key.PrefixEnd()
-				if i > 0 && familyID == neededFamilyIDs[i-1]+1 {
-					// This column family is adjacent to the previous one. We can merge
-					// the two spans into one.
-					spans[len(spans)-1].EndKey = span.EndKey
-				} else {
-					spans = append(spans, span)
-				}
-			}
-			return spans, nil
+			return sqlbase.SplitSpanIntoSeparateFamilies(s, neededFamilyIDs), nil
 		}
 	}
 
