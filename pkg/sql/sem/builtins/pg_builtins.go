@@ -700,15 +700,23 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// See format_type.c in Postgres.
 				oidArg := args[0]
 				if oidArg == tree.DNull {
 					return tree.DNull, nil
 				}
+				maybeTypmod := args[1]
 				typ, ok := types.OidToType[oid.Oid(int(oidArg.(*tree.DOid).DInt))]
 				if !ok {
 					return tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
 				}
-				return tree.NewDString(typ.SQLStandardName()), nil
+				var hasTypmod bool
+				var typmod int
+				if maybeTypmod != tree.DNull {
+					hasTypmod = true
+					typmod = int(tree.MustBeDInt(maybeTypmod))
+				}
+				return tree.NewDString(typ.SQLStandardNameWithTypmod(hasTypmod, typmod)), nil
 			},
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
