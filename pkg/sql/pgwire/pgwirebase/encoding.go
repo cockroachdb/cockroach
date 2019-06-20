@@ -549,7 +549,13 @@ func DecodeOidDatum(
 			}
 			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
 		case oid.T_jsonb:
-			// Skip over the version number `1`.
+			if len(b) < 1 {
+				return nil, NewProtocolViolationErrorf("no data to decode")
+			}
+			if b[0] != 1 {
+				return nil, pgerror.Newf(pgcode.Syntax, "expected JSONB version 1")
+			}
+			// Skip over the version number.
 			b = b[1:]
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
