@@ -12,14 +12,20 @@
 
 import { getDataFromServer } from "src/util/dataFromServer";
 
-const version = getDataFromServer().Version || "stable";
+const stable = "stable";
+const version = getDataFromServer().Version || stable;
 const docsURLBase = "https://www.cockroachlabs.com/docs/" + version;
+const docsURLBaseNoVersion = "https://www.cockroachlabs.com/docs/" + stable;
 
 function docsURL(pageName: string): string {
   return `${docsURLBase}/${pageName}`;
 }
 
-export const adminUILogin = docsURL("admin-ui-access-and-navigate.html#secure-the-admin-ui");
+function docsURLNoVersion(pageName: string): string {
+  return `${docsURLBaseNoVersion}/${pageName}`;
+}
+
+export const adminUILoginNoVersion = docsURLNoVersion("admin-ui-access-and-navigate.html#secure-the-admin-ui");
 export const startFlags = docsURL("start-a-node.html#flags");
 export const pauseJob = docsURL("pause-job.html");
 export const cancelJob = docsURL("cancel-job.html");
