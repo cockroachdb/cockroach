@@ -550,11 +550,28 @@ func (s *Store) canApplySnapshotLocked(
 	// We have a key range [desc.StartKey,desc.EndKey) which we want to apply a
 	// snapshot for. Is there a conflicting existing placeholder or an
 	// overlapping range?
+	if err := s.checkSnapshotOverlapLocked(ctx, snapHeader); err != nil {
+		return nil, err
+	}
+
+	placeholder := &ReplicaPlaceholder{
+		rangeDesc: desc,
+	}
+	return placeholder, nil
+}
+
+// checkSnapshotOverlapLocked returns an error if the snapshot overlaps an
+// existing replica or placeholder. Any replicas that do overlap have a good
+// chance of being abandoned, so they're proactively handed to the GC queue .
+func (s *Store) checkSnapshotOverlapLocked(
+	ctx context.Context, snapHeader *SnapshotRequest_Header,
+) error {
+	desc := *snapHeader.State.Desc
 
 	// NB: this check seems redundant since placeholders are also represented in
 	// replicasByKey (and thus returned in getOverlappingKeyRangeLocked).
 	if exRng, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
-		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
+		return errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
 
 	// TODO(benesch): consider discovering and GC'ing *all* overlapping ranges,
@@ -602,7 +619,155 @@ func (s *Store) canApplySnapshotLocked(
 			msg += "; initiated GC:"
 			s.replicaGCQueue.AddAsync(ctx, exReplica, gcPriority)
 		}
-		return nil, errors.Errorf("%s %v (incoming %v)", msg, exReplica, snapHeader.State.Desc.RSpan()) // exReplica can be nil
+		return errors.Errorf("%s %v (incoming %v)", msg, exReplica, snapHeader.State.Desc.RSpan()) // exReplica can be nil
+	}
+	return nil
+}
+
+// shouldAcceptSnapshotData returns (_, nil) if the snapshot can be applied to
+// this store's replica (i.e. the snapshot is not from an older incarnation of
+// the replica) and a placeholder can be added to the replicasByKey map (if
+// necessary). If a placeholder is required, it is returned as the first value.
+// The authoritative bool determines whether the check is carried out with the
+// intention of actually applying the snapshot (in which case an existing replica
+// must exist and have its raftMu locked) or as a preliminary check.
+func (s *Store) shouldAcceptSnapshotData(
+	ctx context.Context, snapHeader *SnapshotRequest_Header, authoritative bool,
+) (*ReplicaPlaceholder, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.shouldAcceptSnapshotDataLocked(ctx, snapHeader, authoritative)
+}
+
+func (s *Store) shouldAcceptSnapshotDataLocked(
+	ctx context.Context, snapHeader *SnapshotRequest_Header, authoritative bool,
+) (*ReplicaPlaceholder, error) {
+	// TODO(tbg): see the comment on desc.Generation for what seems to be a much
+	// saner way to handle overlap via generational semantics.
+	desc := *snapHeader.State.Desc
+
+	// First, check for an existing Replica.
+	//
+	// We call canApplySnapshotLocked twice for each snapshot application. In
+	// the first case, it's an optimization early before having received any
+	// data (and we don't use the placeholder if one is returned), and the
+	// replica may or may not be present.
+	//
+	// The second call happens right before we actually plan to apply the
+	// snapshot (and a Replica is always in place at that point). This means
+	// that without a Replica, we can have false positives, but if we have a
+	// replica it needs to take everything into account.
+	//
+	// TODO(tbg): untangle these two use cases.
+	if v, ok := s.mu.replicas.Load(
+		int64(desc.RangeID),
+	); !ok {
+		if authoritative {
+			return nil, errors.Errorf("authoritative call requires a replica present")
+		}
+	} else {
+		existingRepl := (*Replica)(v)
+		// The raftMu is held which allows us to use the existing replica as a
+		// placeholder when we decide that the snapshot can be applied. As long
+		// as the caller releases the raftMu only after feeding the snapshot
+		// into the replica, this is safe.
+		if authoritative {
+			existingRepl.raftMu.AssertHeld()
+		}
+
+		existingRepl.mu.RLock()
+		existingDesc := existingRepl.descRLocked()
+		existingIsInitialized := existingRepl.isInitializedRLocked()
+		existingIsPreemptive := existingRepl.mu.replicaID == 0
+		existingRepl.mu.RUnlock()
+
+		if existingIsInitialized {
+			if !snapHeader.IsPreemptive() {
+				// Regular Raft snapshots can't be refused at this point,
+				// even if they widen the existing replica. See the comments
+				// in Replica.maybeAcquireSnapshotMergeLock for how this is
+				// made safe.
+				//
+				// NB: we expect the replica to know its replicaID at this point
+				// (i.e. !existingIsPreemptive), though perhaps it's possible
+				// that this isn't true if the leader initiates a Raft snapshot
+				// (that would provide a range descriptor with this replica in
+				// it) but this node reboots (temporarily forgetting its
+				// replicaID) before the snapshot arrives.
+				return nil, nil
+			}
+
+			if existingIsPreemptive {
+				// Allow applying a preemptive snapshot on top of another
+				// preemptive snapshot. We only need to acquire a placeholder
+				// for the part (if any) of the new snapshot that extends past
+				// the old one. If there's no such overlap, return early; if
+				// there is, "forward" the descriptor's StartKey so that the
+				// later code will only check the overlap.
+				//
+				// NB: morally it would be cleaner to ask for the existing
+				// replica to be GC'ed first, but consider that the preemptive
+				// snapshot was likely left behind by a failed attempt to
+				// up-replicate. This is a relatively common scenario and not
+				// worth discarding and resending another snapshot for. Let the
+				// snapshot through, which means "pretending that it doesn't
+				// intersect the existing replica".
+				if !existingDesc.EndKey.Less(desc.EndKey) {
+					return nil, nil
+				}
+				desc.StartKey = existingDesc.EndKey
+			}
+			// NB: If the existing snapshot is *not* preemptive (i.e. the above
+			// branch wasn't taken), the overlap check below will hit an error.
+			// This path is hit after a rapid up-down-upreplication to the same
+			// store and will resolve as the replicaGCQueue removes the existing
+			// replica. We are pretty sure that the existing replica is gc'able,
+			// because a preemptive snapshot implies that someone is trying to
+			// add this replica to the group at the moment. (We are not however,
+			// sure enough that this couldn't happen by accident to GC the
+			// replica ourselves - the replica GC queue will perform the proper
+			// check).
+		} else if snapHeader.IsPreemptive() {
+			// Morally, the existing replica now has a nonzero replica ID
+			// because we already know that it is not initialized (i.e. has no
+			// data). Interestingly, the case in which it has a zero replica ID
+			// is also possible and should see the snapshot accepted as it
+			// occurs when a preemptive snapshot is handled: we first create a
+			// Replica in this state, run this check, and then apply the
+			// preemptive snapshot.
+			if !existingIsPreemptive {
+				// This is similar to the case of a preemptive snapshot hitting
+				// a fully initialized replica (i.e. not a preemptive snapshot)
+				// at the end of the last branch (which we don't allow), so we
+				// want to reject the snapshot. There is a tricky problem to
+				// to solve here, though: existingRepl doesn't know anything
+				// about its key bounds, and so to check whether it is actually
+				// gc'able would require a full scan of the meta2 entries (and
+				// we would also need to teach the queues how to deal with un-
+				// initialized replicas).
+				//
+				// So we let the snapshot through (by falling through to the
+				// overlap check, where it either picks up placeholders or
+				// fails). This is safe (or at least we assume so) because we
+				// carry out all snapshot decisions through Raft (though it
+				// still is an odd path that we would be wise to avoid if it
+				// weren't so difficult).
+				//
+				// A consequence of letting this snapshot through is opening this
+				// replica up to the possibility of erroneous replicaGC. This is
+				// because it will retain the replicaID of the current replica,
+				// which is going to be initialized after the snapshot (and thus
+				// gc'able).
+				_ = 0 // avoid staticcheck failure
+			}
+		}
+	}
+
+	// We have a key range [desc.StartKey,desc.EndKey) which we want to apply a
+	// snapshot for. Is there a conflicting existing placeholder or an
+	// overlapping range?
+	if err := s.checkSnapshotOverlapLocked(ctx, snapHeader); err != nil {
+		return nil, err
 	}
 
 	placeholder := &ReplicaPlaceholder{
@@ -632,10 +797,18 @@ func (s *Store) receiveSnapshot(
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	if _, err := s.canApplySnapshot(ctx, header, false /* authoritative */); err != nil {
-		return sendSnapshotError(stream,
-			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
-		)
+	if header.IsPreemptive() {
+		if _, err := s.canApplyPreemptiveSnapshot(ctx, header, false /* authoritative */); err != nil {
+			return sendSnapshotError(stream,
+				errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
+			)
+		}
+	} else {
+		if _, err := s.shouldAcceptSnapshotData(ctx, header, false /* authoritative */); err != nil {
+			return sendSnapshotError(stream,
+				errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
+			)
+		}
 	}
 
 	// Determine which snapshot strategy the sender is using to send this
@@ -665,8 +838,14 @@ func (s *Store) receiveSnapshot(
 	if err != nil {
 		return err
 	}
-	if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
-		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
+	if header.IsPreemptive() {
+		if err := s.processPreemptiveSnapshotRequest(ctx, header, inSnap); err != nil {
+			return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
+		}
+	} else {
+		if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
+			return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
+		}
 	}
 
 	return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
