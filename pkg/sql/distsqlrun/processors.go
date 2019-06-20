@@ -931,6 +931,22 @@ func getInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
 	return isc.InputStats, true
 }
 
+func getFetcherInputStats(flowCtx *FlowCtx, f rowFetcher) (InputStats, bool) {
+	rfsc, ok := f.(*rowFetcherStatCollector)
+	if !ok {
+		return InputStats{}, false
+	}
+	is, ok := getInputStats(flowCtx, rfsc.inputStatCollector)
+	if !ok {
+		return InputStats{}, false
+	}
+	// Add row fetcher start scan stall time to Next() stall time.
+	if !flowCtx.testingKnobs.DeterministicStats {
+		is.StallTime += rfsc.startScanStallTime
+	}
+	return is, true
+}
+
 // rowSourceBase provides common functionality for RowSource implementations
 // that need to track consumer status. It is intended to be used by RowSource
 // implementations into which data is pushed by a producer async, as opposed to
