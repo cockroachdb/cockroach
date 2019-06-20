@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -884,7 +885,7 @@ func (r *Replica) changeReplicas(
 	updatedDesc := *desc
 	if generationComparableEnabled {
 		updatedDesc.IncrementGeneration()
-		updatedDesc.GenerationComparable = true
+		updatedDesc.GenerationComparable = proto.Bool(true)
 	}
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
@@ -1630,7 +1631,7 @@ func (r *Replica) adminScatter(
 // maybeMarkGenerationComparable sets GenerationComparable if the cluster is at
 // a high enough version such that GenerationComparable won't be lost.
 func (r *Replica) maybeMarkGenerationComparable(desc *roachpb.RangeDescriptor) {
-	if !desc.GenerationComparable && r.store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable) {
-		desc.GenerationComparable = true
+	if !desc.GetGenerationComparable() && r.store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable) {
+		desc.GenerationComparable = proto.Bool(true)
 	}
 }

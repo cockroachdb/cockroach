@@ -28,21 +28,38 @@ import (
 func TestRangeLookupRaceSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	makeGeneration := func(generation int64) *int64 {
+		return &generation
+	}
+	makeGenerationComparable := func(generationComparable bool) *bool {
+		return &generationComparable
+	}
+
 	desc1BeforeSplit := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKey("j"),
-		EndKey:   roachpb.RKey("p"),
+		RangeID:              1,
+		StartKey:             roachpb.RKey("j"),
+		EndKey:               roachpb.RKey("p"),
+		Generation:           new(int64),
+		GenerationComparable: makeGenerationComparable(true),
 	}
 	desc1AfterSplit := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKey("j"),
-		EndKey:   roachpb.RKey("m"),
+		RangeID:              1,
+		StartKey:             roachpb.RKey("j"),
+		EndKey:               roachpb.RKey("m"),
+		Generation:           makeGeneration(1),
+		GenerationComparable: makeGenerationComparable(true),
 	}
+	*desc1AfterSplit.Generation = 1
+	*desc1AfterSplit.GenerationComparable = true
 	desc2AfterSplit := roachpb.RangeDescriptor{
-		RangeID:  2,
-		StartKey: roachpb.RKey("m"),
-		EndKey:   roachpb.RKey("p"),
+		RangeID:              2,
+		StartKey:             roachpb.RKey("m"),
+		EndKey:               roachpb.RKey("p"),
+		Generation:           makeGeneration(1),
+		GenerationComparable: makeGenerationComparable(true),
 	}
+	*desc2AfterSplit.Generation = 1
+	*desc2AfterSplit.GenerationComparable = true
 
 	lookupKey := roachpb.Key("k")
 	assertRangeLookupScan := func(ba roachpb.BatchRequest) {
