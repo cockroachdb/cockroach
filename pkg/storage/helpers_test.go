@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -275,7 +274,6 @@ func (r *Replica) InitQuotaPool(quota int64) {
 	}
 	r.mu.proposalQuota = newQuotaPool(quota)
 	r.mu.quotaReleaseQueue = nil
-	r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 }
 
 // QuotaAvailable returns the quota available in the replica's quota pool. Only
@@ -296,12 +294,6 @@ func (r *Replica) IsFollowerActive(ctx context.Context, followerID roachpb.Repli
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.lastUpdateTimes.isFollowerActive(ctx, followerID, timeutil.Now())
-}
-
-func (r *Replica) CommandSizesLen() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.mu.commandSizes)
 }
 
 // GetTSCacheHighWater returns the high water mark of the replica's timestamp

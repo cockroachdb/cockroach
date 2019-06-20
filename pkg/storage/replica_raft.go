@@ -172,21 +172,11 @@ func (r *Replica) evalAndPropose(
 	proposal.command.ProposerReplica = repDesc
 	proposal.command.ProposerLeaseSequence = lease.Sequence
 
-	// TODO(irfansharif): This int cast indicates that if someone configures a
-	// very large max proposal size, there is weird overflow behavior and it
-	// will not work the way it should.
-	proposalSize := proposal.command.Size()
-	if proposalSize > int(MaxCommandSize.Get(&r.store.cfg.Settings.SV)) {
-		// Once a command is written to the raft log, it must be loaded
-		// into memory and replayed on all replicas. If a command is
-		// too big, stop it here.
-		return nil, nil, 0, roachpb.NewError(errors.Errorf(
-			"command is too large: %d bytes (max: %d)",
-			proposalSize, MaxCommandSize.Get(&r.store.cfg.Settings.SV),
-		))
-	}
-	proposal.quotaSize = proposalSize
-
+	// Once a command is written to the raft log, it must be loaded into memory
+	// and replayed on all replicas. If a command is too big, stop it here. If
+	// the command is not too big, acquire an appropriate amount of quota from
+	// the replica's proposal quota pool.
+	//
 	// TODO(tschottdorf): blocking a proposal here will leave it dangling in the
 	// closed timestamp tracker for an extended period of time, which will in turn
 	// prevent the node-wide closed timestamp from making progress. This is quite
@@ -194,7 +184,13 @@ func (r *Replica) evalAndPropose(
 	// closed timestamp tracker is acquired. This is better anyway; right now many
 	// commands can evaluate but then be blocked on quota, which has worse memory
 	// behavior.
-	if err := r.maybeAcquireProposalQuota(ctx, int64(proposal.quotaSize)); err != nil {
+	proposal.quotaSize = int64(proposal.command.Size())
+	if maxSize := MaxCommandSize.Get(&r.store.cfg.Settings.SV); proposal.quotaSize > maxSize {
+		return nil, nil, 0, roachpb.NewError(errors.Errorf(
+			"command is too large: %d bytes (max: %d)", proposal.quotaSize, maxSize,
+		))
+	}
+	if err := r.maybeAcquireProposalQuota(ctx, proposal.quotaSize); err != nil {
 		return nil, nil, 0, roachpb.NewError(err)
 	}
 
@@ -711,20 +707,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			r.store.metrics.RaftCommandsApplied.Inc(1)
 			stats.processed++
 
-			r.mu.Lock()
-			if r.mu.replicaID == r.mu.leaderID {
-				// At this point we're not guaranteed to have proposalQuota
-				// initialized, the same is true for quotaReleaseQueue and
-				// commandSizes. By checking if the specified commandID is
-				// present in commandSizes, we'll only queue the cmdSize if
-				// they're all initialized.
-				if cmdSize, ok := r.mu.commandSizes[commandID]; ok {
-					r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, cmdSize)
-					delete(r.mu.commandSizes, commandID)
-				}
-			}
-			r.mu.Unlock()
-
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
 			if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
@@ -750,15 +732,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				cc = raftpb.ConfChange{}
 			}
 			stats.processed++
-
-			r.mu.Lock()
-			if r.mu.replicaID == r.mu.leaderID {
-				if cmdSize, ok := r.mu.commandSizes[commandID]; ok {
-					r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, cmdSize)
-					delete(r.mu.commandSizes, commandID)
-				}
-			}
-			r.mu.Unlock()
 
 			if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 				raftGroup.ApplyConfChange(cc)
@@ -1637,6 +1610,13 @@ func (r *Replica) processRaftCommand(
 		// We initiated this command, so use the caller-supplied context.
 		ctx = proposal.ctx
 		delete(r.mu.proposals, idKey)
+
+		// At this point we're not guaranteed to have proposalQuota initialized,
+		// the same is true for quotaReleaseQueues. Only queue the proposal's
+		// quota for release if the proposalQuota is initialized.
+		if r.mu.proposalQuota != nil {
+			r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, proposal.quotaSize)
+		}
 	}
 
 	leaseIndex, proposalRetry, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)

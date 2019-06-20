@@ -400,16 +400,11 @@ type Replica struct {
 
 		proposalQuotaBaseIndex uint64
 
-		// For command size based allocations we keep track of the sizes of all
-		// in-flight commands.
-		commandSizes map[storagebase.CmdIDKey]int
-
-		// Once the leader observes a proposal come 'out of Raft', we consult
-		// the 'commandSizes' map to determine the size of the associated
-		// command and add it to a queue of quotas we have yet to release back
-		// to the quota pool. We only do so when all replicas have persisted
-		// the corresponding entry into their logs.
-		quotaReleaseQueue []int
+		// Once the leader observes a proposal come 'out of Raft', we add the
+		// size of the associated command to a queue of quotas we have yet to
+		// release back to the quota pool. We only do so when all replicas have
+		// persisted the corresponding entry into their logs.
+		quotaReleaseQueue []int64
 
 		// Counts calls to Replica.tick()
 		ticks int
@@ -590,9 +585,8 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 	// NB: We may be double free-ing here in cases where proposals are
 	// duplicated. To counter this our quota pool is capped at the initial
 	// quota size.
-	if cmdSize, ok := r.mu.commandSizes[p.idKey]; ok {
-		r.mu.proposalQuota.add(int64(cmdSize))
-		delete(r.mu.commandSizes, p.idKey)
+	if r.mu.proposalQuota != nil {
+		r.mu.proposalQuota.add(p.quotaSize)
 	}
 }
 

@@ -577,7 +577,4 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	// decide if/when to re-propose it.
 	p.proposedAtTicks = rp.r.mu.ticks
 	rp.r.mu.proposals[p.idKey] = p
-	if rp.r.mu.commandSizes != nil {
-		rp.r.mu.commandSizes[p.idKey] = p.quotaSize
-	}
 }
