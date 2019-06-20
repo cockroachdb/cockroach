@@ -813,9 +813,9 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
 						return err
 					}
-					consrc = tree.NewDString(con.Details)
+					consrc = tree.NewDString(fmt.Sprintf("(%s)", con.Details))
 					conbin = consrc
-					condef = tree.NewDString(fmt.Sprintf("CHECK (%s)", con.Details))
+					condef = tree.NewDString(fmt.Sprintf("CHECK ((%s))", con.Details))
 				}
 
 				if err := addRow(
