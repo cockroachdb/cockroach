@@ -66,11 +66,9 @@ type joinReader struct {
 	index     *sqlbase.IndexDescriptor
 	colIdxMap map[sqlbase.ColumnID]int
 
-	// fetcherInput wraps fetcher in a RowSource implementation and should be used
-	// to get rows from the fetcher. This enables the joinReader to wrap the
-	// fetcherInput with a stat collector when necessary.
-	fetcherInput   RowSource
-	fetcher        row.Fetcher
+	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
+	// joinReader to wrap the fetcher with a stat collector when necessary.
+	fetcher        rowFetcher
 	indexKeyPrefix []byte
 	alloc          sqlbase.DatumAlloc
 	rowAlloc       sqlbase.EncDatumRowAlloc
@@ -192,19 +190,21 @@ func newJoinReader(
 		return nil, errors.Errorf("joinreader index does not cover all columns")
 	}
 
+	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
-		&jr.fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+		&fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		jr.neededRightCols(), false /* isCheck */, &jr.alloc,
 		distsqlpb.ScanVisibility_PUBLIC,
 	)
 	if err != nil {
 		return nil, err
 	}
-	jr.fetcherInput = &rowFetcherWrapper{Fetcher: &jr.fetcher}
 	if collectingStats {
 		jr.input = NewInputStatCollector(jr.input)
-		jr.fetcherInput = NewInputStatCollector(jr.fetcherInput)
+		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.finishTrace = jr.outputStatsToTrace
+	} else {
+		jr.fetcher = &rowFetcherWrapper{Fetcher: &fetcher}
 	}
 
 	jr.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
@@ -406,7 +406,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 			return jrStateUnknown, jr.DrainHelper()
 		}
 
-		indexRow, meta := jr.fetcherInput.Next()
+		indexRow, meta := jr.fetcher.Next()
 		if meta != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
 			return jrStateUnknown, jr.DrainHelper()
@@ -510,7 +510,7 @@ func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
 // Start is part of the RowSource interface.
 func (jr *joinReader) Start(ctx context.Context) context.Context {
 	jr.input.Start(ctx)
-	jr.fetcherInput.Start(ctx)
+	jr.fetcher.Start(ctx)
 	jr.runningState = jrReadingInput
 	return jr.StartInternal(ctx, joinReaderProcName)
 }
@@ -551,7 +551,7 @@ func (jr *joinReader) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	ils, ok := getInputStats(jr.flowCtx, jr.fetcherInput)
+	ils, ok := getFetcherInputStats(jr.flowCtx, jr.fetcher)
 	if !ok {
 		return
 	}

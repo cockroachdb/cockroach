@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -123,13 +124,15 @@ func newScrubTableReader(
 		}
 	}
 
+	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
+		&fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
 		neededColumns, true /* isCheck */, &tr.alloc,
 		distsqlpb.ScanVisibility_PUBLIC,
 	); err != nil {
 		return nil, err
 	}
+	tr.fetcher = &rowFetcherWrapper{Fetcher: &fetcher}
 
 	tr.spans = make(roachpb.Spans, len(spec.Spans))
 	for i, s := range spec.Spans {
