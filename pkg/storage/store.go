@@ -559,7 +559,8 @@ type Store struct {
 		replicasByKey  *btree.BTree
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 		// replicaPlaceholders is a map to access all placeholders, so they can
-		// be directly accessed and cleared after stepping all raft groups.
+		// be directly accessed and cleared after stepping all raft groups. This
+		// is always in sync with the placeholders in replicasByKey.
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
@@ -3368,7 +3369,10 @@ func (s *Store) processRaftRequestWithReplica(
 
 // processRaftSnapshotRequest processes the incoming snapshot Raft request on
 // the request's specified replica. This snapshot can be preemptive or not. If
-// not, the function makes sure to handle any updated Raft Ready state.
+// not, the function makes sure to handle any updated Raft Ready state. It also
+// adds and later removes the (potentially) necessary placeholder to protect
+// against concurrent access to the keyspace encompassed by the snapshot but not
+// yet guarded by the replica.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
