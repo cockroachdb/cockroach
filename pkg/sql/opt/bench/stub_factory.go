@@ -195,7 +195,9 @@ func (f *stubFactory) RenameColumns(input exec.Node, colNames []string) (exec.No
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructPlan(root exec.Node, subqueries []exec.Subquery) (exec.Plan, error) {
+func (f *stubFactory) ConstructPlan(
+	root exec.Node, subqueries []exec.Subquery, postqueries []exec.Node,
+) (exec.Plan, error) {
 	return struct{}{}, nil
 }
 
@@ -221,6 +223,7 @@ func (f *stubFactory) ConstructInsert(
 	insertCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	rowsNeeded bool,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -274,5 +277,9 @@ func (f *stubFactory) ConstructSequenceSelect(seq cat.Sequence) (exec.Node, erro
 func (f *stubFactory) ConstructSaveTable(
 	input exec.Node, table *cat.DataSourceName, colNames []string,
 ) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructErrorIfRows(input exec.Node) (exec.Node, error) {
 	return struct{}{}, nil
 }

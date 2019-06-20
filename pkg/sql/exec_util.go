@@ -1807,6 +1807,10 @@ func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
 	m.data.OptimizerMode = val
 }
 
+func (m *sessionDataMutator) SetOptimizerFKs(val bool) {
+	m.data.OptimizerFKs = val
+}
+
 func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondata.SerialNormalizationMode) {
 	m.data.SerialNormalizationMode = val
 }
