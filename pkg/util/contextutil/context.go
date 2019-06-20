@@ -119,9 +119,6 @@ var _ net.Error = TimeoutError{}
 func RunWithTimeout(
 	ctx context.Context, op string, timeout time.Duration, fn func(ctx context.Context) error,
 ) error {
-	if timeout <= 0 {
-		return fn(ctx)
-	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	err := fn(ctx)
