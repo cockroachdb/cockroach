@@ -18,17 +18,13 @@ import { withRouter, WithRouterProps } from "react-router";
 
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
-import { getDataFromServer } from "src/util/dataFromServer";
 import * as docsURL from "src/util/docs";
 import { trustIcon } from "src/util/trust";
 import InfoBox from "src/views/shared/components/infoBox";
 
 import logo from "assets/crdb.png";
 import docsIcon from "!!raw-loader!assets/docs.svg";
-import newFeatureIcon from "!!raw-loader!assets/paperPlane.svg";
 import "./loginPage.styl";
-
-const version = getDataFromServer().Tag || "UNKNOWN";
 
 interface LoginPageProps {
   loginState: LoginAPIState;
@@ -105,16 +101,6 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
         <div className="content">
           <section className="section login-page__info">
             <img className="logo" alt="CockroachDB" src={logo} />
-            <div className="login-new-feature">
-              <div className="login-new-feature-heading">
-                <span dangerouslySetInnerHTML={trustIcon(newFeatureIcon)} />
-                <span className="login-new-feature-heading__text">New in v2.1</span>
-              </div>
-              <p className="login-new-feature__blurb">
-                A user with a password is required to log in to the UI
-                on secure clusters.
-              </p>
-            </div>
             <InfoBox>
               <h4 className="login-note-box__heading">Note:</h4>
               <p className="login-note-box__blurb">
@@ -129,7 +115,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
                 <span className="sql-keyword">;</span>
               </pre>
               <p className="aside">
-                <a href={docsURL.adminUILogin} className="login-docs-link" target="_blank">
+                <a href={docsURL.adminUILoginNoVersion} className="login-docs-link" target="_blank">
                   <span className="login-docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
                   <span className="login-docs-link__text">Read more about configuring login</span>
                 </a>
@@ -137,9 +123,6 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
             </InfoBox>
           </section>
           <section className="section login-page__form">
-            <p className="version">
-              Version: <span className="version-tag">{ version }</span>
-            </p>
             <div className="form-container">
               <h1 className="heading">Log in to the Web UI</h1>
               {this.renderError()}
