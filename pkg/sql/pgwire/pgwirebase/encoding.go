@@ -443,7 +443,7 @@ func DecodeOidDatum(
 			}
 
 			if alloc.pgNum.Ndigits > 0 {
-				decDigits := make([]byte, 0, alloc.pgNum.Ndigits*PGDecDigits)
+				decDigits := make([]byte, 0, int(alloc.pgNum.Ndigits)*PGDecDigits)
 				nextDigit := func() error {
 					if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
 						return err
