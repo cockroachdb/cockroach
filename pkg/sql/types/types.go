@@ -675,9 +675,13 @@ func MakeArray(typ *T) *T {
 
 // MakeTuple constructs a new instance of a TupleFamily type with the given
 // field types (some/all of which may be other TupleFamily types).
+//
+// Warning: the contents slice is used directly; the caller should not modify it
+// after calling this function.
 func MakeTuple(contents []T) *T {
 	return &T{InternalType: InternalType{
-		Family: TupleFamily, Oid: oid.T_record, TupleContents: contents, Locale: &emptyLocale}}
+		Family: TupleFamily, Oid: oid.T_record, TupleContents: contents, Locale: &emptyLocale,
+	}}
 }
 
 // MakeLabeledTuple constructs a new instance of a TupleFamily type with the
