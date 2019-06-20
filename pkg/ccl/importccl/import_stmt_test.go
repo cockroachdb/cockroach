@@ -1335,6 +1335,15 @@ func TestImportCSVStmt(t *testing.T) {
 			)
 		})
 	})
+
+	//TODO(adityamaru): Remove once issue #38044 is resolved.
+	t.Run("import-into-table-with-secondary-index", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE s; USE s; CREATE TABLE t (a int8 primary key, b string, index (b))")
+		sqlDB.ExpectErr(
+			t, `cannot IMPORT INTO a table with secondary indexes.`,
+			fmt.Sprintf(`IMPORT INTO t(a, b) CSV DATA (%s)`, files[0]),
+		)
+	})
 }
 
 func BenchmarkImport(b *testing.B) {
