@@ -762,11 +762,11 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
-conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
-check_b    NULL     NULL       NULL       NULL       NULL       b > 11  b > 11
-primary    NULL     NULL       NULL       NULL       NULL       NULL    NULL
-t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL    NULL
-index_key  NULL     NULL       NULL       NULL       NULL       NULL    NULL
+conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin    consrc
+check_b    NULL     NULL       NULL       NULL       NULL       (b > 11)  (b > 11)
+primary    NULL     NULL       NULL       NULL       NULL       NULL      NULL
+t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL      NULL
+index_key  NULL     NULL       NULL       NULL       NULL       NULL      NULL
 
 query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc

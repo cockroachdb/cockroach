@@ -176,21 +176,8 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DArray:
-		switch d.ResolvedType().Oid() {
-		case oid.T_int2vector, oid.T_oidvector:
-			// vectors are serialized as a string of space-separated values.
-			sep := ""
-			// TODO(justin): add a test for nested arrays when #32552 is
-			// addressed.
-			for _, d := range v.Array {
-				b.textFormatter.WriteString(sep)
-				b.textFormatter.FormatNode(d)
-				sep = " "
-			}
-		default:
-			// Uses the default pgwire text format for arrays.
-			b.textFormatter.FormatNode(v)
-		}
+		// Arrays have custom formatting depending on their OID.
+		b.textFormatter.FormatNode(d)
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DOid:

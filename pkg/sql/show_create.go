@@ -84,7 +84,7 @@ func printForeignKeyConstraint(
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	fmtCtx.FormatNode(&fkTableName)
 	buf.WriteString(fmtCtx.CloseAndGetString())
-	buf.WriteString(" (")
+	buf.WriteString("(")
 	formatQuoteNames(buf, refNames...)
 	buf.WriteByte(')')
 	idx.ColNamesString()
