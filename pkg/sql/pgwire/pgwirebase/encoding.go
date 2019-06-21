@@ -673,10 +673,15 @@ func pgBinaryToDate(i int32) (*tree.DDate, error) {
 // format. See https://github.com/postgres/postgres/blob/81c5e46c490e2426db243eada186995da5bb0ba7/src/backend/utils/adt/network.c#L144
 // for the binary spec.
 func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
+	if len(b) < 4 {
+		return ipaddr.IPAddr{}, NewProtocolViolationErrorf("insufficient data: %d", len(b))
+	}
+
 	mask := b[1]
 	familyByte := b[0]
 	var addr ipaddr.Addr
 	var family ipaddr.IPFamily
+	b = b[4:]
 
 	if familyByte == PGBinaryIPv4family {
 		family = ipaddr.IPv4family
@@ -688,14 +693,20 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 
 	// Get the IP address bytes. The IP address length is byte 3 but is ignored.
 	if family == ipaddr.IPv4family {
+		if len(b) != 4 {
+			return ipaddr.IPAddr{}, NewProtocolViolationErrorf("unexpected data: %d", len(b))
+		}
 		// Add the IPv4-mapped IPv6 prefix of 0xFF.
 		var tmp [16]byte
 		tmp[10] = 0xff
 		tmp[11] = 0xff
-		copy(tmp[12:], b[4:])
+		copy(tmp[12:], b)
 		addr = ipaddr.Addr(uint128.FromBytes(tmp[:]))
 	} else {
-		addr = ipaddr.Addr(uint128.FromBytes(b[4:]))
+		if len(b) != 16 {
+			return ipaddr.IPAddr{}, NewProtocolViolationErrorf("unexpected data: %d", len(b))
+		}
+		addr = ipaddr.Addr(uint128.FromBytes(b))
 	}
 
 	return ipaddr.IPAddr{
