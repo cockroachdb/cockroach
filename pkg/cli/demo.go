@@ -99,12 +99,16 @@ func setupTransientServer(
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
 
+	sysCfg := config.DefaultSystemZoneConfig()
+	sysCfg.NumReplicas = proto.Int32(1)
+
 	// Create the transient server.
 	args := base.TestServerArgs{
 		Insecure: true,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				DefaultZoneConfigOverride: &cfg,
+				DefaultZoneConfigOverride:       &cfg,
+				DefaultSystemZoneConfigOverride: &sysCfg,
 			},
 		},
 	}
