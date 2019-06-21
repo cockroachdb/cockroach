@@ -459,6 +459,11 @@ func (s *CSVWriterSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (s *BulkRowWriterSpec) summary() (string, []string) {
+	return "BulkRowWriterSpec", []string{}
+}
+
+// summary implements the diagramCellType interface.
 func (w *WindowerSpec) summary() (string, []string) {
 	details := make([]string, 0, len(w.WindowFns))
 	if len(w.PartitionBy) > 0 {
