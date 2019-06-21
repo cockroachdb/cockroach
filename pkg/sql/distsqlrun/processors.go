@@ -1125,6 +1125,15 @@ func newProcessor(
 		}
 		return NewCSVWriterProcessor(flowCtx, processorID, *core.CSVWriter, inputs[0], outputs[0])
 	}
+	if core.BulkRowWriter != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		if NewBulkRowWriterProcessor == nil {
+			return nil, errors.New("BulkRowWriterProcessor processor unimplemented")
+		}
+		return NewBulkRowWriterProcessor(flowCtx, processorID, *core.BulkRowWriter, inputs[0], outputs[0])
+	}
 	if core.MetadataTestSender != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
@@ -1231,6 +1240,9 @@ var NewSSTWriterProcessor func(*FlowCtx, int32, distsqlpb.SSTWriterSpec, RowSour
 
 // NewCSVWriterProcessor is externally implemented.
 var NewCSVWriterProcessor func(*FlowCtx, int32, distsqlpb.CSVWriterSpec, RowSource, RowReceiver) (Processor, error)
+
+// NewBulkRowWriterProcessor is externally implemented.
+var NewBulkRowWriterProcessor func(*FlowCtx, int32, distsqlpb.BulkRowWriterSpec, RowSource, RowReceiver) (Processor, error)
 
 // NewChangeAggregatorProcessor is externally implemented.
 var NewChangeAggregatorProcessor func(*FlowCtx, int32, distsqlpb.ChangeAggregatorSpec, RowReceiver) (Processor, error)
