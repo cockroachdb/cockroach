@@ -48,7 +48,7 @@ type StreamDecoder struct {
 	typing       []distsqlpb.DatumInfo
 	data         []byte
 	numEmptyRows int
-	metadata     []distsqlpb.ProducerMetadata
+	metadata     []*distsqlpb.ProducerMetadata
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
 	headerReceived bool
@@ -124,7 +124,7 @@ func (sd *StreamDecoder) GetRow(
 	rowBuf sqlbase.EncDatumRow,
 ) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata, error) {
 	if len(sd.metadata) != 0 {
-		r := &sd.metadata[0]
+		r := sd.metadata[0]
 		sd.metadata = sd.metadata[1:]
 		return nil, r, nil
 	}

@@ -267,7 +267,7 @@ func newSortAllProcessor(
 		spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []*distsqlpb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -304,7 +304,7 @@ func (s *sortAllProcessor) fill() (ok bool, _ error) {
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
-			s.trailingMeta = append(s.trailingMeta, *meta)
+			s.trailingMeta = append(s.trailingMeta, meta)
 			if meta.Err != nil {
 				return false, nil
 			}
@@ -385,7 +385,7 @@ func newSortTopKProcessor(
 		ordering, spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []*distsqlpb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -408,7 +408,7 @@ func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
-			s.trailingMeta = append(s.trailingMeta, *meta)
+			s.trailingMeta = append(s.trailingMeta, meta)
 			if meta.Err != nil {
 				s.MoveToDraining(nil /* err */)
 				break
@@ -488,7 +488,7 @@ func newSortChunksProcessor(
 		proc, flowCtx, processorID, input, post, out, ordering, spec.OrderingMatchLen,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []*distsqlpb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -532,7 +532,7 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 	for nextChunkRow == nil {
 		nextChunkRow, meta = s.input.Next()
 		if meta != nil {
-			s.trailingMeta = append(s.trailingMeta, *meta)
+			s.trailingMeta = append(s.trailingMeta, meta)
 			if meta.Err != nil {
 				return false, nil
 			}
@@ -555,7 +555,7 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 		nextChunkRow, meta = s.input.Next()
 
 		if meta != nil {
-			s.trailingMeta = append(s.trailingMeta, *meta)
+			s.trailingMeta = append(s.trailingMeta, meta)
 			if meta.Err != nil {
 				return false, nil
 			}

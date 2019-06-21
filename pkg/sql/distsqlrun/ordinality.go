@@ -61,7 +61,7 @@ func newOrdinalityProcessor(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{o.input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []*distsqlpb.ProducerMetadata {
 				o.ConsumerClosed()
 				return nil
 			}},

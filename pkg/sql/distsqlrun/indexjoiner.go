@@ -87,7 +87,7 @@ func newIndexJoiner(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{ij.input},
-			TrailingMetaCallback: func(ctx context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(ctx context.Context) []*distsqlpb.ProducerMetadata {
 				ij.InternalClose()
 				return ij.generateMeta(ctx)
 			},
@@ -225,14 +225,16 @@ func (ij *indexJoiner) outputStatsToTrace() {
 	}
 }
 
-func (ij *indexJoiner) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (ij *indexJoiner) generateMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
 	if meta := getTxnCoordMeta(ctx, ij.flowCtx.txn); meta != nil {
-		return []distsqlpb.ProducerMetadata{{TxnCoordMeta: meta}}
+		producerMeta := distsqlpb.GetProducerMeta()
+		producerMeta.TxnCoordMeta = meta
+		return []*distsqlpb.ProducerMetadata{producerMeta}
 	}
 	return nil
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (ij *indexJoiner) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (ij *indexJoiner) DrainMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
 	return ij.generateMeta(ctx)
 }

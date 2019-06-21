@@ -36,6 +36,7 @@ type colBatchScan struct {
 }
 
 var _ exec.Operator = &colBatchScan{}
+var _ distsqlpb.MetadataSource = &colBatchScan{}
 
 func (s *colBatchScan) Init() {
 	s.ctx = context.Background()
@@ -57,16 +58,20 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (s *colBatchScan) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	var trailingMeta []distsqlpb.ProducerMetadata
+func (s *colBatchScan) DrainMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
+	var trailingMeta []*distsqlpb.ProducerMetadata
 	if !s.flowCtx.local {
 		ranges := misplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.nodeID)
 		if ranges != nil {
-			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
+			meta := distsqlpb.GetProducerMeta()
+			meta.Ranges = ranges
+			trailingMeta = append(trailingMeta, meta)
 		}
 	}
-	if meta := getTxnCoordMeta(ctx, s.flowCtx.txn); meta != nil {
-		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
+	if txnCoordMeta := getTxnCoordMeta(ctx, s.flowCtx.txn); txnCoordMeta != nil {
+		meta := distsqlpb.GetProducerMeta()
+		meta.TxnCoordMeta = txnCoordMeta
+		trailingMeta = append(trailingMeta, meta)
 	}
 	return trailingMeta
 }

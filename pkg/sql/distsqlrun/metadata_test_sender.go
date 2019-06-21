@@ -55,17 +55,16 @@ func newMetadataTestSender(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{mts.input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []*distsqlpb.ProducerMetadata {
 				mts.InternalClose()
 				// Send a final record with LastMsg set.
-				meta := distsqlpb.ProducerMetadata{
-					RowNum: &distsqlpb.RemoteProducerMetadata_RowNum{
-						RowNum:   mts.rowNumCnt,
-						SenderID: mts.id,
-						LastMsg:  true,
-					},
+				meta := distsqlpb.GetProducerMeta()
+				meta.RowNum = &distsqlpb.RemoteProducerMetadata_RowNum{
+					RowNum:   mts.rowNumCnt,
+					SenderID: mts.id,
+					LastMsg:  true,
 				}
-				return []distsqlpb.ProducerMetadata{meta}
+				return []*distsqlpb.ProducerMetadata{meta}
 			},
 		},
 	); err != nil {
@@ -86,13 +85,13 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 	if mts.sendRowNumMeta {
 		mts.sendRowNumMeta = false
 		mts.rowNumCnt++
-		return nil, &distsqlpb.ProducerMetadata{
-			RowNum: &distsqlpb.RemoteProducerMetadata_RowNum{
-				RowNum:   mts.rowNumCnt,
-				SenderID: mts.id,
-				LastMsg:  false,
-			},
+		meta := distsqlpb.GetProducerMeta()
+		meta.RowNum = &distsqlpb.RemoteProducerMetadata_RowNum{
+			RowNum:   mts.rowNumCnt,
+			SenderID: mts.id,
+			LastMsg:  false,
 		}
+		return nil, meta
 	}
 
 	for mts.State == StateRunning {

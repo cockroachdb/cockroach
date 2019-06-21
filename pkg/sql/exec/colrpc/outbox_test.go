@@ -90,7 +90,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 			typs,
 			[]distsqlpb.MetadataSource{
 				distsqlpb.CallbackMetadataSource{
-					DrainMetaCb: func(context.Context) []distsqlpb.ProducerMetadata {
+					DrainMetaCb: func(context.Context) []*distsqlpb.ProducerMetadata {
 						atomic.StoreUint32(&sourceDrained, 1)
 						return nil
 					},

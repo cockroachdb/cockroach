@@ -121,14 +121,16 @@ func (m *outbox) addRow(
 	mustFlush := false
 	var encodingErr error
 	if meta != nil {
-		m.encoder.AddMetadata(ctx, *meta)
+		m.encoder.AddMetadata(ctx, meta)
 		// If we hit an error, let's forward it ASAP. The consumer will probably
 		// close.
 		mustFlush = meta.Err != nil
 	} else {
 		encodingErr = m.encoder.AddRow(row)
 		if encodingErr != nil {
-			m.encoder.AddMetadata(ctx, distsqlpb.ProducerMetadata{Err: encodingErr})
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = encodingErr
+			m.encoder.AddMetadata(ctx, meta)
 			mustFlush = true
 		}
 	}
@@ -284,7 +286,9 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 					tracing.FinishSpan(span)
 					spanFinished = true
 					if trace := getTraceData(ctx); trace != nil {
-						err := m.addRow(ctx, nil, &distsqlpb.ProducerMetadata{TraceData: trace})
+						meta := distsqlpb.GetProducerMeta()
+						meta.TraceData = trace
+						err := m.addRow(ctx, nil, meta)
 						if err != nil {
 							return err
 						}

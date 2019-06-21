@@ -282,7 +282,9 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMe
 	if s.state == notInitialized {
 		if err := s.initHeap(); err != nil {
 			s.ConsumerDone()
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = err
+			return nil, meta
 		}
 		s.state = returningRows
 	} else if s.state == returningRows && s.needsAdvance {
@@ -290,7 +292,9 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMe
 		// the next row for that source.
 		if err := s.advanceRoot(); err != nil {
 			s.ConsumerDone()
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = err
+			return nil, meta
 		}
 	}
 

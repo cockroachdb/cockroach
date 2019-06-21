@@ -69,7 +69,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 				}
 				numRows++
 			} else {
-				se.AddMetadata(context.TODO(), records[rowIdx].meta)
+				se.AddMetadata(context.TODO(), &records[rowIdx].meta)
 				numMeta++
 			}
 		}

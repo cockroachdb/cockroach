@@ -247,7 +247,7 @@ type zigzagJoiner struct {
 	started bool
 
 	// returnedMeta contains all the metadata that zigzag joiner has emitted.
-	returnedMeta []distsqlpb.ProducerMetadata
+	returnedMeta []*distsqlpb.ProducerMetadata
 }
 
 // Batch size is a parameter which determines how many rows should be fetched
@@ -299,7 +299,7 @@ func newZigzagJoiner(
 
 	z.numTables = len(spec.Tables)
 	z.infos = make([]*zigzagJoinerInfo, z.numTables)
-	z.returnedMeta = make([]distsqlpb.ProducerMetadata, 0, 1)
+	z.returnedMeta = make([]*distsqlpb.ProducerMetadata, 0, 1)
 
 	for i := range z.infos {
 		z.infos[i] = &zigzagJoinerInfo{}
@@ -473,16 +473,17 @@ func (z *zigzagJoiner) producerMeta(err error) *distsqlpb.ProducerMetadata {
 	var meta *distsqlpb.ProducerMetadata
 	if !z.closed {
 		if err != nil {
-			meta = &distsqlpb.ProducerMetadata{Err: err}
+			meta = distsqlpb.GetProducerMeta()
+			meta.Err = err
 		} else if trace := getTraceData(z.Ctx); trace != nil {
-			meta = &distsqlpb.ProducerMetadata{TraceData: trace}
+			meta.TraceData = trace
 		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
 		z.close()
 	}
 	if meta != nil {
-		z.returnedMeta = append(z.returnedMeta, *meta)
+		z.returnedMeta = append(z.returnedMeta, meta)
 	}
 	return meta
 }
@@ -729,7 +730,9 @@ func (z *zigzagJoiner) nextRow(
 ) (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for {
 		if err := z.cancelChecker.Check(); err != nil {
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = err
+			return nil, meta
 		}
 
 		// Check if there are any rows built up in the containers that need to be
@@ -933,7 +936,7 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		row, meta := z.nextRow(z.Ctx, txn)
 		if z.closed || meta != nil {
 			if meta != nil {
-				z.returnedMeta = append(z.returnedMeta, *meta)
+				z.returnedMeta = append(z.returnedMeta, meta)
 			}
 			return nil, meta
 		}
@@ -950,7 +953,7 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 	}
 	meta := z.DrainHelper()
 	if meta != nil {
-		z.returnedMeta = append(z.returnedMeta, *meta)
+		z.returnedMeta = append(z.returnedMeta, meta)
 	}
 	return nil, meta
 }
@@ -962,6 +965,6 @@ func (z *zigzagJoiner) ConsumerClosed() {
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (z *zigzagJoiner) DrainMeta(_ context.Context) []distsqlpb.ProducerMetadata {
+func (z *zigzagJoiner) DrainMeta(_ context.Context) []*distsqlpb.ProducerMetadata {
 	return z.returnedMeta
 }

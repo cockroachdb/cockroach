@@ -424,26 +424,32 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 
 func (irj *interleavedReaderJoiner) generateTrailingMeta(
 	ctx context.Context,
-) []distsqlpb.ProducerMetadata {
+) []*distsqlpb.ProducerMetadata {
 	trailingMeta := irj.generateMeta(ctx)
 	irj.InternalClose()
 	return trailingMeta
 }
 
-func (irj *interleavedReaderJoiner) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	var trailingMeta []distsqlpb.ProducerMetadata
+func (irj *interleavedReaderJoiner) generateMeta(
+	ctx context.Context,
+) []*distsqlpb.ProducerMetadata {
+	var trailingMeta []*distsqlpb.ProducerMetadata
 	ranges := misplannedRanges(ctx, irj.fetcher.GetRangesInfo(), irj.flowCtx.nodeID)
 	if ranges != nil {
-		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
+		meta := distsqlpb.GetProducerMeta()
+		meta.Ranges = ranges
+		trailingMeta = append(trailingMeta, meta)
 	}
-	if meta := getTxnCoordMeta(ctx, irj.flowCtx.txn); meta != nil {
-		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
+	if txnCoordMeta := getTxnCoordMeta(ctx, irj.flowCtx.txn); txnCoordMeta != nil {
+		meta := distsqlpb.GetProducerMeta()
+		meta.TxnCoordMeta = txnCoordMeta
+		trailingMeta = append(trailingMeta, meta)
 	}
 	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (irj *interleavedReaderJoiner) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (irj *interleavedReaderJoiner) DrainMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
 	return irj.generateMeta(ctx)
 }
 

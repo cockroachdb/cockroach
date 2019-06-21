@@ -372,7 +372,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 		numBatches int
 		// test is the body of the test to be run. Metadata should be returned to
 		// be verified.
-		test func(context.Context, *Inbox) []distsqlpb.ProducerMetadata
+		test func(context.Context, *Inbox) []*distsqlpb.ProducerMetadata
 	}{
 		{
 			// ExplicitDrainRequest verifies that an Outbox responds to an explicit drain
@@ -381,7 +381,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			// Set a high number of batches to ensure that the Outbox is very far
 			// from being finished when it receives a DrainRequest.
 			numBatches: math.MaxInt64,
-			test: func(ctx context.Context, inbox *Inbox) []distsqlpb.ProducerMetadata {
+			test: func(ctx context.Context, inbox *Inbox) []*distsqlpb.ProducerMetadata {
 				// Simulate the inbox flow calling Next an arbitrary amount of times
 				// (including none).
 				for i := 0; i < numNextsBeforeDrain; i++ {
@@ -395,7 +395,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			// Next has returned a zero batch.
 			name:       "AfterSuccessfulCompletion",
 			numBatches: 4,
-			test: func(ctx context.Context, inbox *Inbox) []distsqlpb.ProducerMetadata {
+			test: func(ctx context.Context, inbox *Inbox) []*distsqlpb.ProducerMetadata {
 				for {
 					b := inbox.Next(ctx)
 					if b.Length() == 0 {
@@ -434,8 +434,8 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				typs,
 				[]distsqlpb.MetadataSource{
 					distsqlpb.CallbackMetadataSource{
-						DrainMetaCb: func(context.Context) []distsqlpb.ProducerMetadata {
-							return []distsqlpb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
+						DrainMetaCb: func(context.Context) []*distsqlpb.ProducerMetadata {
+							return []*distsqlpb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
 						},
 					},
 				},

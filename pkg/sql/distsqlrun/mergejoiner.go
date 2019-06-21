@@ -84,7 +84,7 @@ func newMergeJoiner(
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{leftSource, rightSource},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []*distsqlpb.ProducerMetadata {
 				m.close()
 				return nil
 			},
@@ -156,7 +156,9 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 				m.rightIdx++
 				renderedRow, err := m.render(lrow, m.rightRows[ridx])
 				if err != nil {
-					return nil, &distsqlpb.ProducerMetadata{Err: err}
+					meta := distsqlpb.GetProducerMeta()
+					meta.Err = err
+					return nil, meta
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
@@ -178,7 +180,9 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadat
 			// Perform the cancellation check. We don't perform this on every row,
 			// but once for every iteration through the right-side batch.
 			if err := m.cancelChecker.Check(); err != nil {
-				return nil, &distsqlpb.ProducerMetadata{Err: err}
+				meta := distsqlpb.GetProducerMeta()
+				meta.Err = err
+				return nil, meta
 			}
 
 			// We've exhausted the right-side batch. Adjust the indexes for the next

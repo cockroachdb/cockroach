@@ -89,7 +89,9 @@ func (s *streamGroupAccumulator) nextGroup(
 		}
 
 		if err := s.memAcc.Grow(ctx, int64(row.Size())); err != nil {
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = err
+			return nil, meta
 		}
 		row = s.rowAlloc.CopyRow(row)
 
@@ -103,16 +105,18 @@ func (s *streamGroupAccumulator) nextGroup(
 
 		cmp, err := s.curGroup[0].Compare(s.types, &s.datumAlloc, s.ordering, evalCtx, row)
 		if err != nil {
-			return nil, &distsqlpb.ProducerMetadata{Err: err}
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = err
+			return nil, meta
 		}
 		if cmp == 0 {
 			s.curGroup = append(s.curGroup, row)
 		} else if cmp == 1 {
-			return nil, &distsqlpb.ProducerMetadata{
-				Err: errors.Errorf(
-					"detected badly ordered input: %s > %s, but expected '<'",
-					s.curGroup[0].String(s.types), row.String(s.types)),
-			}
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = errors.Errorf(
+				"detected badly ordered input: %s > %s, but expected '<'",
+				s.curGroup[0].String(s.types), row.String(s.types))
+			return nil, meta
 		} else {
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]

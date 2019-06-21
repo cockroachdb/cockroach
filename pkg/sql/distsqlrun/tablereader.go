@@ -186,7 +186,7 @@ func initRowFetcher(
 	return index, isSecondaryIndex, nil
 }
 
-func (tr *tableReader) generateTrailingMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (tr *tableReader) generateTrailingMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
 	trailingMeta := tr.generateMeta(ctx)
 	tr.InternalClose()
 	return trailingMeta
@@ -324,26 +324,30 @@ func (tr *tableReader) outputStatsToTrace() {
 	}
 }
 
-func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	var trailingMeta []distsqlpb.ProducerMetadata
+func (tr *tableReader) generateMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
+	trailingMeta := make([]*distsqlpb.ProducerMetadata, 0, 1)
 	if !tr.ignoreMisplannedRanges {
 		ranges := misplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.flowCtx.nodeID)
 		if ranges != nil {
-			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
+			meta := distsqlpb.GetProducerMeta()
+			meta.Ranges = ranges
+			trailingMeta = append(trailingMeta, meta)
 		}
 	}
-	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
-		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
+	if txnCoordMeta := getTxnCoordMeta(ctx, tr.flowCtx.txn); txnCoordMeta != nil {
+		meta := distsqlpb.GetProducerMeta()
+		meta.TxnCoordMeta = txnCoordMeta
+		trailingMeta = append(trailingMeta, meta)
 	}
 
 	meta := distsqlpb.GetProducerMeta()
 	meta.Metrics = distsqlpb.GetMetricsMeta()
 	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.fetcher.GetBytesRead(), tr.rowsRead
-	trailingMeta = append(trailingMeta, *meta)
+	trailingMeta = append(trailingMeta, meta)
 	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (tr *tableReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (tr *tableReader) DrainMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
 	return tr.generateMeta(ctx)
 }

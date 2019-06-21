@@ -314,7 +314,9 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					// Send any rows that have been buffered. We grab multiple rows at a
 					// time to reduce contention.
 					if rows, err := ro.popRowsLocked(ctx, rowBuf); err != nil {
-						rb.fwdMetadata(&distsqlpb.ProducerMetadata{Err: err})
+						meta := distsqlpb.GetProducerMeta()
+						meta.Err = err
+						rb.fwdMetadata(meta)
 						atomic.StoreUint32(&rb.aggregatedStatus, uint32(DrainRequested))
 						drain = true
 						continue
@@ -344,7 +346,9 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 						tracing.FinishSpan(span)
 						if trace := getTraceData(ctx); trace != nil {
 							rb.semaphore <- struct{}{}
-							status := ro.stream.Push(nil, &distsqlpb.ProducerMetadata{TraceData: trace})
+							meta := distsqlpb.GetProducerMeta()
+							meta.TraceData = trace
+							status := ro.stream.Push(nil, meta)
 							rb.updateStreamState(&streamStatus, status)
 							<-rb.semaphore
 						}
@@ -512,7 +516,9 @@ func (mr *mirrorRouter) Push(
 			if useSema {
 				<-mr.semaphore
 			}
-			mr.fwdMetadata(&distsqlpb.ProducerMetadata{Err: err})
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = err
+			mr.fwdMetadata(meta)
 			atomic.StoreUint32(&mr.aggregatedStatus, uint32(ConsumerClosed))
 			return ConsumerClosed
 		}
@@ -570,7 +576,9 @@ func (hr *hashRouter) Push(
 		<-hr.semaphore
 	}
 	if err != nil {
-		hr.fwdMetadata(&distsqlpb.ProducerMetadata{Err: err})
+		meta := distsqlpb.GetProducerMeta()
+		meta.Err = err
+		hr.fwdMetadata(meta)
 		atomic.StoreUint32(&hr.aggregatedStatus, uint32(ConsumerClosed))
 		return ConsumerClosed
 	}
@@ -657,7 +665,9 @@ func (rr *rangeRouter) Push(
 		<-rr.semaphore
 	}
 	if err != nil {
-		rr.fwdMetadata(&distsqlpb.ProducerMetadata{Err: err})
+		meta := distsqlpb.GetProducerMeta()
+		meta.Err = err
+		rr.fwdMetadata(meta)
 		atomic.StoreUint32(&rr.aggregatedStatus, uint32(ConsumerClosed))
 		return ConsumerClosed
 	}

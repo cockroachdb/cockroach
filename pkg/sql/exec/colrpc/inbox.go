@@ -73,7 +73,7 @@ type Inbox struct {
 
 	// bufferedMeta buffers any metadata found in Next when reading from the
 	// stream and is returned by DrainMeta.
-	bufferedMeta []distsqlpb.ProducerMetadata
+	bufferedMeta []*distsqlpb.ProducerMetadata
 
 	scratch struct {
 		data []*array.Data
@@ -81,6 +81,7 @@ type Inbox struct {
 }
 
 var _ exec.Operator = &Inbox{}
+var _ distsqlpb.MetadataSource = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(typs []types.T) (*Inbox, error) {
@@ -96,7 +97,7 @@ func NewInbox(typs []types.T) (*Inbox, error) {
 		streamCh:     make(chan flowStreamServer, 1),
 		contextCh:    make(chan context.Context, 1),
 		errCh:        make(chan error, 1),
-		bufferedMeta: make([]distsqlpb.ProducerMetadata, 0),
+		bufferedMeta: make([]*distsqlpb.ProducerMetadata, 0),
 	}
 	i.zeroBatch.SetLength(0)
 	i.scratch.data = make([]*array.Data, len(typs))
@@ -245,9 +246,9 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-// DrainMeta is part of the MetadataGenerator interface. DrainMeta may not be
+// DrainMeta is part of the MetadataSource interface. DrainMeta may not be
 // called concurrently with Next.
-func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (i *Inbox) DrainMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
 	allMeta := i.bufferedMeta
 	i.bufferedMeta = i.bufferedMeta[:0]
 

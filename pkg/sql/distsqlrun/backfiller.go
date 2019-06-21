@@ -86,7 +86,9 @@ func (b *backfiller) Run(ctx context.Context) {
 	defer tracing.FinishSpan(span)
 
 	if err := b.mainLoop(ctx); err != nil {
-		b.output.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
+		meta := distsqlpb.GetProducerMeta()
+		meta.Err = err
+		b.output.Push(nil /* row */, meta)
 	}
 	sendTraceData(ctx, b.output)
 	b.output.ProducerDone()

@@ -140,7 +140,9 @@ func (w *rowFetcherWrapper) Start(ctx context.Context) context.Context {
 func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	row, _, _, err := w.NextRow(w.ctx)
 	if err != nil {
-		return row, &distsqlpb.ProducerMetadata{Err: err}
+		meta := distsqlpb.GetProducerMeta()
+		meta.Err = err
+		return row, meta
 	}
 	return row, nil
 }

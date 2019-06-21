@@ -169,7 +169,7 @@ func newJoinReader(
 		output,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{jr.input},
-			TrailingMetaCallback: func(ctx context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(ctx context.Context) []*distsqlpb.ProducerMetadata {
 				jr.InternalClose()
 				return jr.generateMeta(ctx)
 			},
@@ -565,14 +565,16 @@ func (jr *joinReader) outputStatsToTrace() {
 	}
 }
 
-func (jr *joinReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	if meta := getTxnCoordMeta(ctx, jr.flowCtx.txn); meta != nil {
-		return []distsqlpb.ProducerMetadata{{TxnCoordMeta: meta}}
+func (jr *joinReader) generateMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
+	if txnCoordMeta := getTxnCoordMeta(ctx, jr.flowCtx.txn); txnCoordMeta != nil {
+		meta := distsqlpb.GetProducerMeta()
+		meta.TxnCoordMeta = txnCoordMeta
+		return []*distsqlpb.ProducerMetadata{meta}
 	}
 	return nil
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (jr *joinReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+func (jr *joinReader) DrainMeta(ctx context.Context) []*distsqlpb.ProducerMetadata {
 	return jr.generateMeta(ctx)
 }

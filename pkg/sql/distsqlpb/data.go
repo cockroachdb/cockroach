@@ -216,8 +216,6 @@ type ProducerMetadata struct {
 }
 
 var (
-	// TODO(yuzefovich): use this pool in other places apart from metrics
-	// collection.
 	// producerMetadataPool is a pool of producer metadata objects.
 	producerMetadataPool = sync.Pool{
 		New: func() interface{} {
@@ -262,7 +260,7 @@ func GetMetricsMeta() *RemoteProducerMetadata_Metrics {
 // ProducerMetadata and returns whether the conversion was successful or not.
 func RemoteProducerMetaToLocalMeta(
 	ctx context.Context, rpm RemoteProducerMetadata,
-) (ProducerMetadata, bool) {
+) (*ProducerMetadata, bool) {
 	meta := GetProducerMeta()
 	switch v := rpm.Value.(type) {
 	case *RemoteProducerMetadata_RangeInfo:
@@ -280,15 +278,15 @@ func RemoteProducerMetaToLocalMeta(
 	case *RemoteProducerMetadata_Metrics_:
 		meta.Metrics = v.Metrics
 	default:
-		return *meta, false
+		return meta, false
 	}
-	return *meta, true
+	return meta, true
 }
 
 // LocalMetaToRemoteProducerMeta converts a ProducerMetadata struct to
 // RemoteProducerMetadata.
 func LocalMetaToRemoteProducerMeta(
-	ctx context.Context, meta ProducerMetadata,
+	ctx context.Context, meta *ProducerMetadata,
 ) RemoteProducerMetadata {
 	var rpm RemoteProducerMetadata
 	if meta.Ranges != nil {
@@ -336,5 +334,5 @@ type MetadataSource interface {
 	// Implementers can choose what to do on subsequent calls (if such occur).
 	// TODO(yuzefovich): modify the contract to require returning nil on all
 	// calls after the first one.
-	DrainMeta(context.Context) []ProducerMetadata
+	DrainMeta(context.Context) []*ProducerMetadata
 }

@@ -210,5 +210,5 @@ func (p *planNodeToRowSource) IsException() bool {
 // metadata through local processors, so they instead add the metadata to our
 // trailing metadata and expect us to forward it further.
 func (p *planNodeToRowSource) forwardMetadata(metadata *distsqlpb.ProducerMetadata) {
-	p.ProcessorBase.AppendTrailingMeta(*metadata)
+	p.ProcessorBase.AppendTrailingMeta(metadata)
 }

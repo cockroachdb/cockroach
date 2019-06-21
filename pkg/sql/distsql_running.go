@@ -527,8 +527,8 @@ func (r *DistSQLReceiver) Push(
 			r.bytesRead += meta.Metrics.BytesRead
 			r.rowsRead += meta.Metrics.RowsRead
 			meta.Metrics.Release()
-			meta.Release()
 		}
+		meta.Release()
 		return r.status
 	}
 	if r.resultWriter.Err() == nil && r.txnAbortedErr.Load() != nil {

@@ -585,7 +585,9 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = err
+			f.syncFlowConsumer.Push(nil /* row */, meta)
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}
@@ -614,7 +616,9 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = err
+			f.syncFlowConsumer.Push(nil /* row */, meta)
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}
@@ -701,9 +705,9 @@ func (f *Flow) cancel() {
 		go func(receiver RowReceiver) {
 			// Stream has yet to be started; send an error to its
 			// receiver and prevent it from being connected.
-			receiver.Push(
-				nil, /* row */
-				&distsqlpb.ProducerMetadata{Err: sqlbase.QueryCanceledError})
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = sqlbase.QueryCanceledError
+			receiver.Push(nil /* row */, meta)
 			receiver.ProducerDone()
 		}(receiver)
 	}

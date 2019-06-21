@@ -245,7 +245,9 @@ func getTraceData(ctx context.Context) []tracing.RecordedSpan {
 // each one gets its own trace "recording group".
 func sendTraceData(ctx context.Context, dst RowReceiver) {
 	if rec := getTraceData(ctx); rec != nil {
-		dst.Push(nil /* row */, &distsqlpb.ProducerMetadata{TraceData: rec})
+		meta := distsqlpb.GetProducerMeta()
+		meta.TraceData = rec
+		dst.Push(nil /* row */, meta)
 	}
 }
 
@@ -293,7 +295,9 @@ func DrainAndClose(
 	if cause != nil {
 		// We ignore the returned ConsumerStatus and rely on the
 		// DrainAndForwardMetadata() calls below to close srcs in all cases.
-		_ = dst.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: cause})
+		meta := distsqlpb.GetProducerMeta()
+		meta.Err = cause
+		_ = dst.Push(nil /* row */, meta)
 	}
 	if len(srcs) > 0 {
 		var wg sync.WaitGroup

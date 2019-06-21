@@ -234,15 +234,16 @@ func (o *Outbox) sendBatches(
 func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errToSend error) error {
 	msg := &distsqlpb.ProducerMessage{}
 	if errToSend != nil {
+		meta := distsqlpb.GetProducerMeta()
+		meta.Err = errToSend
 		msg.Data.Metadata = append(
-			msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, distsqlpb.ProducerMetadata{Err: errToSend}),
-			// TODO(yuzefovich): obtain and release producer metadata from the pool.
+			msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta),
 		)
 	}
 	for _, src := range o.metadataSources {
 		for _, meta := range src.DrainMeta(ctx) {
 			msg.Data.Metadata = append(msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta))
-			// TODO(yuzefovich): release meta object to the pool.
+			meta.Release()
 		}
 	}
 	if len(msg.Data.Metadata) == 0 {

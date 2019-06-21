@@ -117,7 +117,7 @@ func NewDistinct(
 		d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{d.input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []*distsqlpb.ProducerMetadata {
 				d.close()
 				return nil
 			},

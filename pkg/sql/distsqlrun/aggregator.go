@@ -146,7 +146,7 @@ func (ag *aggregatorBase) init(
 	input RowSource,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
-	trailingMetaCallback func(context.Context) []distsqlpb.ProducerMetadata,
+	trailingMetaCallback func(context.Context) []*distsqlpb.ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
@@ -348,7 +348,7 @@ func newAggregator(
 		input,
 		post,
 		output,
-		func(context.Context) []distsqlpb.ProducerMetadata {
+		func(context.Context) []*distsqlpb.ProducerMetadata {
 			ag.close()
 			return nil
 		},
@@ -377,7 +377,7 @@ func newOrderedAggregator(
 		input,
 		post,
 		output,
-		func(context.Context) []distsqlpb.ProducerMetadata {
+		func(context.Context) []*distsqlpb.ProducerMetadata {
 			ag.close()
 			return nil
 		},

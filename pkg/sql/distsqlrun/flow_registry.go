@@ -229,9 +229,9 @@ func (fr *flowRegistry) RegisterFlow(
 			}
 			for _, r := range timedOutReceivers {
 				go func(r RowReceiver) {
-					r.Push(
-						nil, /* row */
-						&distsqlpb.ProducerMetadata{Err: errNoInboundStreamConnection})
+					meta := distsqlpb.GetProducerMeta()
+					meta.Err = errNoInboundStreamConnection
+					r.Push(nil /* row */, meta)
 					r.ProducerDone()
 				}(r)
 			}

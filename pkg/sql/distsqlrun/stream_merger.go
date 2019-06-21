@@ -82,7 +82,9 @@ func (sm *streamMerger) NextBatch(
 		sm.nullEquality, &sm.datumAlloc, evalCtx,
 	)
 	if err != nil {
-		return nil, nil, &distsqlpb.ProducerMetadata{Err: err}
+		meta := distsqlpb.GetProducerMeta()
+		meta.Err = err
+		return nil, nil, meta
 	}
 	var leftGroup, rightGroup []sqlbase.EncDatumRow
 	if cmp <= 0 {

@@ -80,8 +80,8 @@ func newMaterializer(
 		output,
 		nil, /* memMonitor */
 		ProcStateOpts{
-			TrailingMetaCallback: func(ctx context.Context) []distsqlpb.ProducerMetadata {
-				var trailingMeta []distsqlpb.ProducerMetadata
+			TrailingMetaCallback: func(ctx context.Context) []*distsqlpb.ProducerMetadata {
+				var trailingMeta []*distsqlpb.ProducerMetadata
 				for _, src := range metadataSourcesQueue {
 					trailingMeta = append(trailingMeta, src.DrainMeta(ctx)...)
 				}

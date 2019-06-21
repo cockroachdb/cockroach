@@ -69,11 +69,11 @@ func newMetadataTestReceiver(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []distsqlpb.ProducerMetadata {
-				var trailingMeta []distsqlpb.ProducerMetadata
+			TrailingMetaCallback: func(context.Context) []*distsqlpb.ProducerMetadata {
+				var trailingMeta []*distsqlpb.ProducerMetadata
 				if mtr.rowCounts != nil {
 					if meta := mtr.checkRowNumMetadata(); meta != nil {
-						trailingMeta = append(trailingMeta, *meta)
+						trailingMeta = append(trailingMeta, meta)
 					}
 				}
 				mtr.InternalClose()
@@ -104,31 +104,33 @@ func (mtr *metadataTestReceiver) checkRowNumMetadata() *distsqlpb.ProducerMetada
 				}
 			}
 		}
-		return &distsqlpb.ProducerMetadata{
-			Err: fmt.Errorf(
-				"expected %d metadata senders but found %d; missing %s",
-				len(mtr.senders), len(mtr.rowCounts), missingSenders,
-			),
-		}
+		meta := distsqlpb.GetProducerMeta()
+		meta.Err = fmt.Errorf(
+			"expected %d metadata senders but found %d; missing %s",
+			len(mtr.senders), len(mtr.rowCounts), missingSenders,
+		)
+		return meta
 	}
 	for id, cnt := range mtr.rowCounts {
 		if cnt.err != nil {
-			return &distsqlpb.ProducerMetadata{Err: cnt.err}
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = cnt.err
+			return meta
 		}
 		if cnt.expected != cnt.actual {
-			return &distsqlpb.ProducerMetadata{
-				Err: fmt.Errorf(
-					"dropped metadata from sender %s: expected %d RowNum messages but got %d",
-					id, cnt.expected, cnt.actual),
-			}
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = fmt.Errorf(
+				"dropped metadata from sender %s: expected %d RowNum messages but got %d",
+				id, cnt.expected, cnt.actual)
+			return meta
 		}
 		for i := 0; i < int(cnt.expected); i++ {
 			if !cnt.seen.Contains(i) {
-				return &distsqlpb.ProducerMetadata{
-					Err: fmt.Errorf(
-						"dropped and repeated metadata from sender %s: have %d messages but missing RowNum #%d",
-						id, cnt.expected, i+1),
-				}
+				meta := distsqlpb.GetProducerMeta()
+				meta.Err = fmt.Errorf(
+					"dropped and repeated metadata from sender %s: have %d messages but missing RowNum #%d",
+					id, cnt.expected, i+1)
+				return meta
 			}
 		}
 	}
@@ -212,7 +214,9 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *distsqlpb.Produce
 		// it to be as unintrusive as possible.
 		outRow, ok, err := mtr.out.ProcessRow(mtr.Ctx, row)
 		if err != nil {
-			mtr.trailingMeta = append(mtr.trailingMeta, distsqlpb.ProducerMetadata{Err: err})
+			meta := distsqlpb.GetProducerMeta()
+			meta.Err = err
+			mtr.trailingMeta = append(mtr.trailingMeta, meta)
 			continue
 		}
 		if outRow == nil {
