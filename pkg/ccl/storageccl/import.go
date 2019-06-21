@@ -176,7 +176,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 
-		key.Key, ok, err = kr.RewriteKey(key.Key)
+		key.Key, ok, err = kr.RewriteKey(key.Key, false /* isFromSpan */)
 		if err != nil {
 			return nil, err
 		}

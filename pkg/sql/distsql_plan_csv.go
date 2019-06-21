@@ -161,11 +161,6 @@ func (c *callbackResultWriter) Err() error {
 	return c.err
 }
 
-// KeyRewriter describes helpers that can rewrite keys (possibly in-place).
-type KeyRewriter interface {
-	RewriteKey(key []byte) (res []byte, ok bool, err error)
-}
-
 // LoadCSV performs a distributed transformation of the CSV files at from
 // and stores them in enterprise backup format at to.
 func LoadCSV(

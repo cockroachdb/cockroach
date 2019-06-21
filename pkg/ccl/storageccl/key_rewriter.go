@@ -130,7 +130,14 @@ func makeKeyRewriterPrefixIgnoringInterleaved(tableID sqlbase.ID, indexID sqlbas
 // it encounters a table ID for which it does not have a configured rewrite, it
 // returns the prefix of the key that was rewritten key. The returned boolean
 // is true if and only if all of the table IDs found in the key were rewritten.
-func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
+// If isFromSpan is true, failures in value decoding are assumed to be due to
+// valid span manipulations, like PrefixEnd or Next having altered the trailing
+// byte(s) to corrupt the value encoding -- in such a case we will not be able
+// to decode the value (to determine how much further to scan for table IDs) but
+// we can assume that since these manipulations are only done to the trailing
+// byte that we're likely at the end anyway and do not need to search for any
+// further table IDs to replace.
+func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
@@ -173,6 +180,33 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	for i := 0; i < len(colIDs)-skipCols; i++ {
 		n, err := encoding.PeekLength(k)
 		if err != nil {
+			// PeekLength, and key decoding in general, can fail when reading the last
+			// value from a key that is coming from a span. Keys in spans are often
+			// altered e.g. by calling Next() or PrefixEnd() to ensure a given span is
+			// inclusive or for other reasons, but the manipulations sometimes change
+			// the encoded bytes, meaning they can no longer successfully decode as
+			// back to the original values. This is OK when span boundaries mostly are
+			// only required to be even divisions of keyspace, but when we try to go
+			// back to interpreting them as keys, it can fall apart. Partitioning a
+			// table (and applying zone configs) eagerly creates splits at the defined
+			// partition boundaries, using PrefixEnd for their ends, resulting in such
+			// spans.
+			//
+			// Fortunately, the only common span manipulations are to the trailing
+			// byte of a key (e.g. incrementing or appending a null) so for our needs
+			// here, if we fail to decode because of one of those manipulations, we
+			// can assume that we are at the end of the key as far as fields where a
+			// table ID which needs to be replaced can appear and consider the rewrite
+			// of this key as being compelted successfully.
+			//
+			// Finally unlike key rewrites of actual row-data, span rewrites do not
+			// need to be perfect: spans are only rewritten for use in pre-splitting
+			// and work distribution, so even if it turned out that this assumption
+			// was incorrect, it could cause a performance degradation but does not
+			// pose a correctness risk.
+			if isFromSpan {
+				return key, true, nil
+			}
 			return nil, false, err
 		}
 		k = k[n:]
@@ -187,7 +221,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 		return key, true, nil
 	}
 	prefix := key[:len(key)-len(k)]
-	k, ok, err = kr.RewriteKey(k)
+	k, ok, err = kr.RewriteKey(k, isFromSpan)
 	if err != nil {
 		return nil, false, err
 	}
