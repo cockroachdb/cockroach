@@ -136,11 +136,22 @@ func (m *memColumn) CopyAt(src Vec, destStartIdx, srcStartIdx, srcEndIdx uint64,
 		// allocate a new bitmap.
 		srcBitmap := src.Nulls().NullBitmap()
 		m.nulls.nulls = make([]byte, len(srcBitmap))
-		if src.HasNulls() {
+		m.nulls.UnsetNulls()
+		if !src.HasNulls() {
+			return
+		}
+		if destStartIdx == 0 {
 			m.nulls.hasNulls = true
 			copy(m.nulls.nulls, srcBitmap)
 		} else {
-			m.nulls.UnsetNulls()
+			// The above strategy to just copy will not work. Fall back to a loop.
+			// TODO(asubiotto): This can be improved as well.
+			srcNulls := src.Nulls()
+			for curDestIdx, curSrcIdx := destStartIdx, srcStartIdx; curSrcIdx < srcEndIdx; curDestIdx, curSrcIdx = curDestIdx+1, curSrcIdx+1 {
+				if srcNulls.NullAt64(curSrcIdx) {
+					m.nulls.SetNull64(curDestIdx)
+				}
+			}
 		}
 	// {{end}}
 	default:
