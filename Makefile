@@ -762,10 +762,10 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/vecbuiltins/row_number.eg.go \
   pkg/sql/exec/zerocolumns.eg.go
 
-EXECGEN_EXCLUSION_STRING = $(shell echo ${EXECGEN_TARGETS} | sed 's/ / -e /g')
+execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
 $(info Cleaning old generated files.)
-$(shell find ./pkg/sql/exec -type f -name '*.eg.go' | grep -v -e ${EXECGEN_EXCLUSION_STRING} | xargs --no-run-if-empty rm)
+$(shell find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) -delete)
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
