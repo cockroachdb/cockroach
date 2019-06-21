@@ -13,6 +13,7 @@
 package qos
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -286,4 +287,16 @@ func TestMarshalText(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestContext(t *testing.T) {
+	ctx := context.Background()
+	got, ok := LevelFromContext(ctx)
+	assert.Zero(t, got)
+	assert.False(t, ok)
+	l := Level{ClassHigh, 12}
+	ctx = ContextWithLevel(ctx, l)
+	got, ok = LevelFromContext(ctx)
+	assert.Equal(t, l, got)
+	assert.True(t, ok)
 }
