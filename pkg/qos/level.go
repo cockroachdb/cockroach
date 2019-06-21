@@ -15,7 +15,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
+	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // Class indicates traffic of a certain quality.
@@ -106,6 +110,17 @@ func Decode(p uint32) Level {
 	}
 }
 
+// DecodeString decodes a priority from a string.
+// The string should be a 4 character hex encoded value as returned from
+// EncodeString.
+func DecodeString(s string) (Level, error) {
+	var l Level
+	if err := l.UnmarshalText(encoding.UnsafeConvertStringToBytes(s)); err != nil {
+		return Level{}, err
+	}
+	return l, nil
+}
+
 // IsValid return true if p has a valid value.
 func (l Level) IsValid() bool {
 	return l.Class.IsValid() && l.Shard.IsValid()
@@ -145,8 +160,20 @@ func (l Level) Less(other Level) bool {
 
 // Encode encodes a priority to a uint32.
 // Encoded priorities can be compared using normal comparison operators.
+// Encode will panic if l is not valid.
 func (l Level) Encode() uint32 {
 	return uint32(encodeClass(l.Class))<<8 | uint32(encodeShard(l.Shard))
+}
+
+// EncodeString encodes a priority to a string.
+// The returned string will be a 4 character lower-case hex encoded value.
+// String encoded priorities can be compared using normal comparison operators.
+// EncodeString will panic if l is not valid.
+func (l Level) EncodeString() string {
+	if !l.IsValid() {
+		panic(fmt.Errorf("cannot encode invalid Level %v", l))
+	}
+	return marshaledString[l.Class][l.Shard]
 }
 
 // String returns a string formatted as Class:Shard where Shard is always an
@@ -218,6 +245,7 @@ var classStrings = [NumClasses]string{
 }
 
 var marshaledText [NumClasses][NumShards][textLen]byte
+var marshaledString [NumClasses][NumShards]string
 
 // textLen is the length of a hex-encoded Level.
 const textLen = 4 // 2 * 2 bytes = 4
@@ -225,7 +253,13 @@ const textLen = 4 // 2 * 2 bytes = 4
 func init() {
 	for c := Class(0); c < NumClasses; c++ {
 		for s := Shard(0); s < NumShards; s++ {
-			marshaledText[c][s] = levelToText(Level{c, s})
+			text := levelToText(Level{c, s})
+			marshaledText[c][s] = text
+			var str string
+			strHdr := (*reflect.StringHeader)(unsafe.Pointer(&str))
+			strHdr.Data = uintptr(unsafe.Pointer(&text[0]))
+			strHdr.Len = len(text)
+			marshaledString[c][s] = str
 		}
 	}
 }
