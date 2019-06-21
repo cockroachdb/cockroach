@@ -120,11 +120,11 @@ message TableReaderSpec {
   optional uint64 max_timestamp_age_nanos = 9 [(gogoproto.nullable) = false];
 }
 
-// IndexSkipTableReaderSpec is the specification for table reader that
+// IndexSkipTableReaderSpec is the specification for a table reader that
 // is performing a loose index scan over rows in the table. This means that
 // this reader will return distinct rows from the table while using the index
 // to skip unnecessary rows. This reader is used for different optimizations
-// when operating on a prefix of a compound key
+// when operating on a prefix of a compound key.
 message IndexSkipTableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
