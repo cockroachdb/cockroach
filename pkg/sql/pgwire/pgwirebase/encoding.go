@@ -563,7 +563,7 @@ func DecodeOidDatum(
 			return tree.ParseDJSON(string(b))
 		case oid.T_varbit, oid.T_bit:
 			if len(b) < 4 {
-				return nil, pgerror.Newf(pgcode.Syntax, "missing varbit bitlen prefix")
+				return nil, NewProtocolViolationErrorf("insufficient data: %d", len(b))
 			}
 			bitlen := binary.BigEndian.Uint32(b)
 			b = b[4:]
@@ -586,6 +586,9 @@ func DecodeOidDatum(
 				var w uint64
 				i := uint(0)
 				for ; i < uint(lastBitsUsed); i += 8 {
+					if len(b) == 0 {
+						return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "incorrect binary data")
+					}
 					w = (w << 8) | uint64(b[0])
 					b = b[1:]
 				}
