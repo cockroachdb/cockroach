@@ -752,48 +752,6 @@ define Max1Row {
     Input RelExpr
 }
 
-# Explain returns information about the execution plan of the "input"
-# expression.
-[Relational]
-define Explain {
-    Input RelExpr
-
-    _ ExplainPrivate
-}
-
-[Private]
-define ExplainPrivate {
-    # Options contains settings that control the output of the explain statement.
-    Options ExplainOptions
-
-    # ColList stores the column IDs for the explain columns.
-    ColList ColList
-
-    # Props stores the required physical properties for the enclosed expression.
-    Props PhysProps
-
-    # StmtType stores the type of the statement we are explaining.
-    StmtType StatementType
-}
-
-# ShowTraceForSession returns the current session traces.
-[Relational]
-define ShowTraceForSession {
-    _ ShowTracePrivate
-}
-
-[Private]
-define ShowTracePrivate {
-    TraceType ShowTraceType
-
-    # Compact indicates that we output a smaller set of columns; set
-    # when SHOW COMPACT [KV] TRACE is used.
-    Compact bool
-
-    # ColList stores the column IDs for the SHOW TRACE columns.
-    ColList ColList
-}
-
 # Ordinality adds a column to each row in its input containing a unique,
 # increasing number.
 [Relational]

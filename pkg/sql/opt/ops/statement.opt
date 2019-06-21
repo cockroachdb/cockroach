@@ -1,197 +1,8 @@
-# statement.opt contains Optgen language definitions for all of Cockroach's
-# SQL statement operators, such as Insert and CreateTable. Although though many
-# of them have no return result, they are still treated as if they were
-# expressions with a zero row, zero column result.
-
-
-# Insert evaluates a relational input expression, and inserts values from it
-# into a target table. The input may be an arbitrarily complex expression:
+# statement.opt contains Optgen language definitions for non-DML statements with
+# specific optimizer support, such as CreateTable.
 #
-#   INSERT INTO ab SELECT x, y+1 FROM xy ORDER BY y
-#
-# It can also be a simple VALUES clause:
-#
-#   INSERT INTO ab VALUES (1, 2)
-#
-# It may also return rows, which can be further composed:
-#
-#   SELECT a + b FROM [INSERT INTO ab VALUES (1, 2) RETURNING a, b]
-#
-# The Insert operator is capable of inserting values into computed columns and
-# mutation columns, which are not writable (or even visible in the case of
-# mutation columns) by SQL users.
-[Relational, Mutation]
-define Insert {
-    Input RelExpr
-    Checks FKChecksExpr
-
-    _ MutationPrivate
-}
-
-[Private]
-define MutationPrivate {
-    # Table identifies the table which is being mutated. It is an id that can be
-    # passed to the Metadata.Table method in order to fetch cat.Table metadata.
-    Table TableID
-
-    # InsertCols are columns from the Input expression that will be inserted into
-    # the target table. They must be a subset of the Input expression's output
-    # columns. The count and order of columns corresponds to the count and order
-    # of the target table's columns, including in-progress schema mutation
-    # columns. If any column ID is zero, then that column will not be part of
-    # the insert operation (e.g. delete-only mutation column). Column values are
-    # read from the input columns and are then inserted into the corresponding
-    # table columns. For example:
-    #
-    #   INSERT INTO ab VALUES (1, 2)
-    #
-    # If there is a delete-only mutation column "c", then InsertCols would contain
-    # [a_colid, b_colid, 0].
-    InsertCols ColList
-
-    # FetchCols are columns from the Input expression that will be fetched from
-    # the target table. They must be a subset of the Input expression's output
-    # columns. The count and order of columns corresponds to the count and order
-    # of the target table's columns, including in-progress schema mutation
-    # columns. If any column ID is zero, then that column will not take part in
-    # the update operation (e.g. columns in unreferenced column family).
-    #
-    # Fetch columns are referenced by update, computed, and constraint
-    # expressions. They're also needed to formulate the final key/value pairs;
-    # updating even one column in a family requires the entire value to be
-    # reformulated. For example:
-    #
-    #   CREATE TABLE abcd (
-    #     a INT PRIMARY KEY, b INT, c INT, d INT, e INT,
-    #     FAMILY (a, b), FAMILY (c, d), FAMILY (e))
-    #   UPDATE ab SET c=c+1
-    #
-    # The (a, c, d) columns need to be fetched from the store in order to satisfy
-    # the UPDATE query. The "a" column is needed because it's in the primary key.
-    # The "c" column is needed because its value is used as part of computing an
-    # updated value, and the "d" column is needed because it's in the same family
-    # as "c". Taking all this into account, FetchCols would contain this list:
-    # [a_colid, 0, c_colid, d_colid, 0].
-    FetchCols ColList
-
-    # UpdateCols are columns from the Input expression that contain updated values
-    # for columns of the target table. They must be a subset of the Input
-    # expression's output columns. The count and order of columns corresponds to
-    # the count and order of the target table's columns, including in-progress
-    # schema mutation columns. If any column ID is zero, then that column will not
-    # take part in the update operation (e.g. columns that are not updated).
-    # Updated column values are read from the input columns and are then inserted
-    # into the corresponding table columns. For example:
-    #
-    #   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT AS (b+1) AS STORED)
-    #   UPDATE abc SET b=1
-    #
-    # Since column "b" is updated, and "c" is a computed column dependent on "b",
-    # then UpdateCols would contain [0, b_colid, c_colid].
-    UpdateCols ColList
-
-    # CheckCols are columns from the Input expression containing the results of
-    # evaluating the check constraints from the target table. Evaluating a check
-    # check constraint expression produces a boolean value which is projected as
-    # a column and then checked by the mutation operator. Check columns must be
-    # a subset of the Input expression's output columns. The count and order of
-    # columns corresponds to the count and order of the target table's Check
-    # collection (see the opt.Table.CheckCount and opt.Table.Check methods). If
-    # any column ID is zero, then that check will not be performed (i.e. because
-    # it's been statically proved to be true). For example:
-    #
-    #   CREATE TABLE abc (a INT CHECK (a > 0), b INT, c INT CHECK (c <> 0))
-    #   UPDATE abc SET a=1, b=b+1
-    #
-    # Since the check constraint for column "a" can be statically proven to be
-    # true, CheckCols would contain [0, b_colid].
-    CheckCols ColList
-
-    # CanaryCol is used only with the Upsert operator. It identifies the column
-    # that the execution engine uses to decide whether to insert or to update.
-    # If the canary column value is null for a particular input row, then a new
-    # row is inserted into the table. Otherwise, the existing row is updated.
-    # While CanaryCol is 0 for all non-Upsert operators, it is also 0 for the
-    # "blind" Upsert case in which a "Put" KV operator inserts a new row or
-    # overwrites an existing row.
-    CanaryCol ColumnID
-
-    # ReturnCols are the set of columns returned by the mutation operator when
-    # the RETURNING clause has been specified. By default, the return columns
-    # include all columns in the table, including hidden columns, but not
-    # including any columns that are undergoing mutation (being added or dropped
-    # as part of online schema change). If no RETURNING clause was specified,
-    # then ReturnCols is nil.
-    ReturnCols ColList
-}
-
-# Update evaluates a relational input expression that fetches existing rows from
-# a target table and computes new values for one or more columns. Arbitrary
-# subsets of rows can be selected from the target table and processed in order,
-# as with this example:
-#
-#   UPDATE abc SET b=10 WHERE a>0 ORDER BY b+c LIMIT 10
-#
-# The Update operator will also update any computed columns, including mutation
-# columns that are computed.
-[Relational, Mutation]
-define Update {
-    Input RelExpr
-    Checks FKChecksExpr
-
-    _ MutationPrivate
-}
-
-# Upsert evaluates a relational input expression that tries to insert a new row
-# into a target table. If a conflicting row already exists, then Upsert will
-# instead update the existing row. The Upsert operator is used for all of these
-# syntactic variants:
-#
-#   INSERT..ON CONFLICT DO UPDATE
-#     INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT (a) DO UPDATE SET b=10
-#
-#   INSERT..ON CONFLICT DO NOTHING
-#     INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT DO NOTHING
-#
-#   UPSERT
-#     UPSERT INTO abc VALUES (1, 2, 3)
-#
-# The Update operator will also insert/update any computed columns, including
-# mutation columns that are computed.
-[Relational, Mutation]
-define Upsert {
-    Input RelExpr
-    Checks FKChecksExpr
-
-    _ MutationPrivate
-}
-
-# Delete is an operator used to delete all rows that are selected by a
-# relational input expression:
-#
-#   DELETE FROM abc WHERE a>0 ORDER BY b LIMIT 10
-#
-[Relational, Mutation]
-define Delete {
-    Input RelExpr
-    Checks FKChecksExpr
-
-    _ MutationPrivate
-}
-
-# FKChecks is a list of foreign key check queries, to be run after the main
-# query.
-[Scalar, List]
-define FKChecks {
-}
-
-# FKChecksItem is a foreign key check query, to be run after the main query.
-# An execution error will be generated if the query returns any results.
-[Scalar, ListItem]
-define FKChecksItem {
-    Check RelExpr
-    # TODO(radu): information for making a good error message.
-}
+# Although though many of them have no return result, they are still treated as
+# if they were expressions with a zero row, zero column result.
 
 # CreateTable represents a CREATE TABLE statement.
 [Relational, DDL, Mutation]
@@ -215,4 +26,46 @@ define CreateTablePrivate {
 
     # Syntax is the CREATE TABLE AST node.
     Syntax CreateTable
+}
+
+# Explain returns information about the execution plan of the "input"
+# expression.
+[Relational]
+define Explain {
+    Input RelExpr
+
+    _ ExplainPrivate
+}
+
+[Private]
+define ExplainPrivate {
+    # Options contains settings that control the output of the explain statement.
+    Options ExplainOptions
+
+    # ColList stores the column IDs for the explain columns.
+    ColList ColList
+
+    # Props stores the required physical properties for the enclosed expression.
+    Props PhysProps
+
+    # StmtType stores the type of the statement we are explaining.
+    StmtType StatementType
+}
+
+# ShowTraceForSession returns the current session traces.
+[Relational]
+define ShowTraceForSession {
+    _ ShowTracePrivate
+}
+
+[Private]
+define ShowTracePrivate {
+    TraceType ShowTraceType
+
+    # Compact indicates that we output a smaller set of columns; set
+    # when SHOW COMPACT [KV] TRACE is used.
+    Compact bool
+
+    # ColList stores the column IDs for the SHOW TRACE columns.
+    ColList ColList
 }
