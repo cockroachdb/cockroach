@@ -17,7 +17,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
+	"unsafe"
 )
 
 // Level represents a quality of service level.
@@ -75,8 +77,34 @@ func (s Shard) IsValid() bool {
 
 // Encode encodes a priority to a uint32.
 // Encoded priorities can be compared using normal comparison operators.
+// Encode will panic if l is not valid.
 func (l Level) Encode() uint32 {
 	return uint32(encodeClass(l.Class))<<8 | uint32(encodeShard(l.Shard))
+}
+
+// EncodeString encodes a priority to a string.
+// The returned string will be a 4 character lower-case hex encoded value.
+// String encoded priorities can be compared using normal comparison operators.
+// EncodeString will panic if l is not valid.
+func (l Level) EncodeString() string {
+	if !l.IsValid() {
+		panic(fmt.Errorf("cannot encode invalid Level %v", l))
+	}
+	return marshaledString[l.Class][l.Shard]
+}
+
+// DecodeString decodes a priority from a string.
+// The string should be a 4 character hex encoded value as returned from
+// EncodeString.
+func DecodeString(s string) (Level, error) {
+	var data []byte
+	strHdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	dataHdr := (*reflect.SliceHeader)(unsafe.Pointer(&data))
+	dataHdr.Data = strHdr.Data
+	dataHdr.Len = strHdr.Len
+	dataHdr.Cap = strHdr.Len
+	var l Level
+	return l, l.UnmarshalText(data)
 }
 
 const (
@@ -164,6 +192,7 @@ var levelStrings = [NumClasses]string{
 }
 
 var marshaledText [NumClasses][NumShards][textLen]byte
+var marshaledString [NumClasses][NumShards]string
 
 // textLen is the length of a hex-encoded Level.
 const textLen = 4 // 2 * 2 bytes = 4
@@ -171,7 +200,11 @@ const textLen = 4 // 2 * 2 bytes = 4
 func init() {
 	for c := Class(0); c < NumClasses; c++ {
 		for s := Shard(0); s < NumShards; s++ {
-			marshaledText[c][s] = levelToText(Level{c, s})
+			text := levelToText(Level{c, s})
+			marshaledText[c][s] = text
+			// TODO(ajwerner): could avoid duplicating all of these strings using
+			// unsafe.
+			marshaledString[c][s] = string(text[:])
 		}
 	}
 }

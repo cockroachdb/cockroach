@@ -14,15 +14,20 @@ package rpc
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
+	"github.com/cockroachdb/cockroach/pkg/admission"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -66,6 +71,7 @@ const (
 	defaultWindowSize     = 65535
 	initialWindowSize     = defaultWindowSize * 32 // for an RPC
 	initialConnWindowSize = initialWindowSize * 16 // for a connection
+	clientPriorityKey     = "c_prio"
 )
 
 // sourceAddr is the environment-provided local address for outgoing
@@ -140,6 +146,35 @@ func requireSuperUser(ctx context.Context) error {
 // service.
 func NewServer(ctx *Context) *grpc.Server {
 	return NewServerWithInterceptor(ctx, nil)
+}
+
+func priorityFromClientMetadata(ctx context.Context, md metadata.MD) (admission.Priority, error) {
+	v := md.Get(clientPriorityKey)
+	if len(v) == 0 {
+		// 19.1 clients don't send timestamps this way.
+		return admission.Priority{
+			Level: admission.DefaultLevel,
+			Shard: uint8(rand.Intn(math.MaxInt8)),
+		}, nil
+	}
+	if len(v) != 1 {
+		// We don't expect more than one item; gRPC does not copy metadata from
+		// one incoming RPC to an outgoing RPC, so there should be a single
+		// timestamp in the context put there by the interceptor on the clienbt
+		// before calling this RPC.
+		log.Fatalf(ctx, "unexpected multiple priorities in client metadata: %s", v)
+	}
+	var buf [2]byte
+	if _, err := hex.NewDecoder(strings.NewReader(v[0])).Read(buf[:]); err != nil {
+		return admission.Priority{}, err
+	}
+	return admission.Decode(binary.BigEndian.Uint16(buf[:])), nil
+}
+
+func encodePriority(p admission.Priority) string {
+	var buf [2]byte
+	binary.BigEndian.PutUint16(buf[:], p.Encode())
+	return hex.EncodeToString(buf[:])
 }
 
 // NewServerWithInterceptor is like NewServer, but accepts an additional
@@ -264,7 +299,30 @@ func NewServerWithInterceptor(
 			return handler(srv, stream)
 		}
 	}
-
+	prevUnaryInterceptor := unaryInterceptor
+	unaryInterceptor = func(
+		goCtx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		prio, err := func() (admission.Priority, error) {
+			md, ok := metadata.FromIncomingContext(goCtx)
+			if !ok {
+				// 19.1 clients don't send timestamps this way.
+				return admission.Priority{
+					Level: admission.DefaultLevel,
+					Shard: uint8(rand.Intn(math.MaxInt8)),
+				}, nil
+			}
+			return priorityFromClientMetadata(goCtx, md)
+		}()
+		if err != nil {
+			return nil, err
+		}
+		goCtx = admission.ContextWithPriority(goCtx, prio)
+		if prevUnaryInterceptor != nil {
+			return prevUnaryInterceptor(goCtx, req, info, handler)
+		}
+		return handler(goCtx, req)
+	}
 	if unaryInterceptor != nil {
 		opts = append(opts, grpc.UnaryInterceptor(unaryInterceptor))
 	}
@@ -639,17 +697,35 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	}
 
+	var unaryInterceptor grpc.UnaryClientInterceptor
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
 		// We use a SpanInclusionFunc to circumvent the interceptor's work when
 		// tracing is disabled. Otherwise, the interceptor causes an increase in
 		// the number of packets (even with an empty context!). See #17177.
-		interceptor := otgrpc.OpenTracingClientInterceptor(
+		unaryInterceptor = otgrpc.OpenTracingClientInterceptor(
 			tracer,
 			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFuncForClient)),
 		)
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(interceptor))
 	}
-
+	prevUnaryInterceptor := unaryInterceptor
+	unaryInterceptor = func(
+		goCtx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		// The server is going to put its timestamp in the response header.
+		if md, ok := metadata.FromOutgoingContext(goCtx); !ok || len(md.Get(clientPriorityKey)) == 0 {
+			prio := admission.PriorityFromContext(goCtx)
+			goCtx = metadata.AppendToOutgoingContext(goCtx, clientPriorityKey, encodePriority(prio))
+		}
+		var err error
+		if prevUnaryInterceptor != nil {
+			// Chain the previous interceptor.
+			err = prevUnaryInterceptor(goCtx, method, req, reply, cc, invoker, opts...)
+		} else {
+			err = invoker(goCtx, method, req, reply, cc, opts...)
+		}
+		return err
+	}
+	dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(unaryInterceptor))
 	return dialOpts, nil
 }
 
