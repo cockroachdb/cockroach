@@ -25,7 +25,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse"}
+{"Type":"ErrorResponse","Code":"34000"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Verify that closing a bound portal prevents execution.
@@ -46,7 +46,7 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"CloseComplete"}
-{"Type":"ErrorResponse"}
+{"Type":"ErrorResponse","Code":"34000"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # The spec says that closing a prepared statement also closes its portals,
