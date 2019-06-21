@@ -1020,18 +1020,17 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:9c0eed728d7c6c3232a7b90505855517daa4a81697529bc509c3c10bea5d3ef1"
+  digest = "1:71425d83ffb201ca42fd0046860b2cae872c85e4c087c40271c04dea8c755434"
   name = "github.com/knz/go-libedit"
   packages = [
     ".",
     "common",
     "other",
     "unix",
-    "unix/sigtramp",
   ]
   pruneopts = "T"
-  revision = "0af72fd06d6f44cdb9666279d9b9a4d29cfa2da0"
-  version = "v1.9.1"
+  revision = "802af8e4ca87d39065a7df261d9f359ed7cf7b34"
+  version = "v1.10.1"
 
 [[projects]]
   branch = "master"
@@ -1899,6 +1898,7 @@
     "github.com/cockroachdb/errors",
     "github.com/cockroachdb/errors/assert",
     "github.com/cockroachdb/errors/errbase",
+    "github.com/cockroachdb/errors/errorspb",
     "github.com/cockroachdb/errors/issuelink",
     "github.com/cockroachdb/errors/markers",
     "github.com/cockroachdb/errors/testutils",

@@ -20,6 +20,12 @@ required = [
  "honnef.co/go/tools/cmd/staticcheck",
 ]
 
+noverify = [
+  # We generate Go code with cgo configuration flags into go-libedit in order
+   # to link against our own version of libedit.
+  "github.com/knz/go-libedit"
+]
+
 ignored = [
   # Non-existent package used by a toy program in c-deps/protobuf.
   "github.com/google/protobuf/examples/tutorial",
