@@ -14,6 +14,7 @@ package sql
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"runtime/pprof"
 	"strings"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/qos"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -628,6 +630,15 @@ func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
 	return err
 }
 
+// setQosLevel returns a context which contains the qos.Level at which this
+// query should execute.
+func (ex *connExecutor) setQosLevel(ctx context.Context) context.Context {
+	return qos.ContextWithLevel(ctx, qos.Level{
+		Class: qos.ClassDefault,
+		Shard: qos.Shard(md5.Sum(ex.sessionID.GetBytes())[0] % qos.NumShards),
+	})
+}
+
 // dispatchToExecutionEngine executes the statement, writes the result to res
 // and returns an event for the connection's state machine.
 //
@@ -638,6 +649,7 @@ func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
 func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, planner *planner, res RestrictedCommandResult,
 ) error {
+	ctx = ex.setQosLevel(ctx)
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
