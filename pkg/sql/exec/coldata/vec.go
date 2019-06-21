@@ -162,7 +162,7 @@ func NewMemColumn(t types.T, n int) Vec {
 	case types.Bool:
 		return &memColumn{t: t, col: make([]bool, n), nulls: nulls}
 	case types.Bytes:
-		return &memColumn{t: t, col: make([][]byte, n), nulls: nulls}
+		return &memColumn{t: t, col: MakeBytes(n), nulls: nulls}
 	case types.Int8:
 		return &memColumn{t: t, col: make([]int8, n), nulls: nulls}
 	case types.Int16:
