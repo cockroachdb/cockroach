@@ -598,7 +598,8 @@ func DecodeOidDatum(
 			return &tree.DBitArray{BitArray: ba}, err
 		default:
 			if _, ok := types.ArrayOids[id]; ok {
-				return decodeBinaryArray(ctx, b, code)
+				innerOid := types.OidToType[id].ArrayContents().Oid()
+				return decodeBinaryArray(ctx, innerOid, b, code)
 			}
 		}
 	default:
@@ -719,7 +720,9 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 	}, nil
 }
 
-func decodeBinaryArray(ctx tree.ParseTimeContext, b []byte, code FormatCode) (tree.Datum, error) {
+func decodeBinaryArray(
+	ctx tree.ParseTimeContext, elemOid oid.Oid, b []byte, code FormatCode,
+) (tree.Datum, error) {
 	hdr := struct {
 		Ndims int32
 		// Nullflag
@@ -740,7 +743,9 @@ func decodeBinaryArray(ctx tree.ParseTimeContext, b []byte, code FormatCode) (tr
 		return nil, err
 	}
 
-	elemOid := oid.Oid(hdr.ElemOid)
+	if elemOid != oid.Oid(hdr.ElemOid) {
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "wrong element type")
+	}
 	arr := tree.NewDArray(types.OidToType[elemOid])
 	var vlen int32
 	for i := int32(0); i < hdr.DimSize; i++ {
