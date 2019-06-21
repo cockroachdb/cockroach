@@ -130,7 +130,7 @@ statement ok
 SET tracing = on,kv,results; UPDATE t.kv2 SET v = v + 2; SET tracing = off
 
 query TT
-SELECT operation, regexp_replace(message, '(\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d\.)?\d\d\d\d\d+', '...PK...') as message
+SELECT operation, message
   FROM [SHOW KV TRACE FOR SESSION]
 WHERE message NOT LIKE '%Z/%'
   AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
@@ -142,7 +142,7 @@ WHERE message NOT LIKE '%Z/%'
 [async] kv.DistSender: sending pre-commit query intents  r7: sending batch 1 QueryIntent to (n1,s1):1
 table reader                                             Scan /Table/55/{1-2}
 table reader                                             fetched: /kv2/primary/...PK.../k/v -> /1/2
-flow                                                     Put /Table/55/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/4
+flow                                                     Put /Table/55/1/1/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
 flow                                                     fast path completed
 exec cmd: exec stmt                                      rows affected: 1
 

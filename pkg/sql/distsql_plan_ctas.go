@@ -1,3 +1,13 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package sql
 
 import (
@@ -5,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
@@ -18,16 +29,17 @@ var CTASPlanResultTypes = []types.T{
 func PlanAndRunCTAS(
 	ctx context.Context,
 	dsp *DistSQLPlanner,
-	evalCtx *extendedEvalContext,
+	planner *planner,
 	txn *client.Txn,
-	canDistribute bool,
 	isLocal bool,
 	in planNode,
 	out distsqlpb.ProcessorCoreUnion,
 	recv *DistSQLReceiver,
 ) {
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
+	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), txn)
 	planCtx.isLocal = isLocal
+	planCtx.planner = planner
+	planCtx.stmtType = tree.Rows
 
 	p, err := dsp.createPlanForNode(planCtx, in)
 	if err != nil {
@@ -43,6 +55,8 @@ func PlanAndRunCTAS(
 	p.PlanToStreamColMap = []int{0}
 	p.ResultTypes = CTASPlanResultTypes
 
+	// Make copy of evalCtx as Run might modify it.
+	evalCtxCopy := planner.ExtendedEvalContextCopy()
 	dsp.FinalizePlan(planCtx, &p)
-	dsp.Run(planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, txn, &p, recv, evalCtxCopy, nil /* finishedSetupFn */)
 }
