@@ -155,3 +155,9 @@ message CSVWriterSpec {
   // chunk_rows is num rows to write per file. 0 = no limit.
   optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
 }
+
+// BulkRowWriterSpec is the specification for a processor that consumes rows and
+// writes them to a target table using AddSSTable. It outputs a BulkOpSummary.
+message BulkRowWriterSpec {
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+}
