@@ -125,20 +125,15 @@ func (p *allSpooler) spool(ctx context.Context) {
 	var nTuples uint64
 	for ; batch.Length() != 0; batch = p.input.Next(ctx) {
 		for i := 0; i < len(p.values); i++ {
-			if batch.Selection() == nil {
-				p.values[i].Append(batch.ColVec(i),
-					p.inputTypes[i],
-					nTuples,
-					batch.Length(),
-				)
-			} else {
-				p.values[i].AppendWithSel(batch.ColVec(i),
-					batch.Selection(),
-					batch.Length(),
-					p.inputTypes[i],
-					nTuples,
-				)
-			}
+			p.values[i].Append(
+				coldata.AppendArgs{
+					ColType:   p.inputTypes[i],
+					Src:       batch.ColVec(i),
+					Sel:       batch.Selection(),
+					DestIdx:   nTuples,
+					SrcEndIdx: batch.Length(),
+				},
+			)
 		}
 		nTuples += uint64(batch.Length())
 	}

@@ -270,7 +270,13 @@ func TestOutboxInbox(t *testing.T) {
 				// Copy batch since it's not safe to reuse after calling Next.
 				batchCopy := coldata.NewMemBatchWithSize(typs, int(outputBatch.Length()))
 				for i := range typs {
-					batchCopy.ColVec(i).Append(outputBatch.ColVec(i), typs[i], 0, outputBatch.Length())
+					batchCopy.ColVec(i).Append(
+						coldata.AppendArgs{
+							ColType:   typs[i],
+							Src:       outputBatch.ColVec(i),
+							SrcEndIdx: outputBatch.Length(),
+						},
+					)
 				}
 				batchCopy.SetLength(outputBatch.Length())
 				outputBatches.Add(batchCopy)
