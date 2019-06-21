@@ -700,15 +700,23 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// See format_type.c in Postgres.
 				oidArg := args[0]
 				if oidArg == tree.DNull {
 					return tree.DNull, nil
 				}
+				maybeTypmod := args[1]
 				typ, ok := types.OidToType[oid.Oid(int(oidArg.(*tree.DOid).DInt))]
 				if !ok {
 					return tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
 				}
-				return tree.NewDString(typ.SQLStandardName()), nil
+				var hasTypmod bool
+				var typmod int
+				if maybeTypmod != tree.DNull {
+					hasTypmod = true
+					typmod = int(tree.MustBeDInt(maybeTypmod))
+				}
+				return tree.NewDString(typ.SQLStandardNameWithTypmod(hasTypmod, typmod)), nil
 			},
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
@@ -866,6 +874,30 @@ SELECT description
 					return nil, err
 				}
 				return tree.MakeDBool(tree.DBool(t != nil)), nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
+	// pg_type_is_visible returns true if the input oid corresponds to a type
+	// that is part of the databases on the search path, or NULL if no such type
+	// exists. CockroachDB doesn't support the notion of type visibility, so we
+	// always return true for any type oid that we support, and NULL for those
+	// that we don't.
+	// https://www.postgresql.org/docs/9.6/static/functions-info.html
+	"pg_type_is_visible": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oidArg := args[0]
+				if oidArg == tree.DNull {
+					return tree.DNull, nil
+				}
+				if _, ok := types.OidToType[oid.Oid(int(oidArg.(*tree.DOid).DInt))]; ok {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DNull, nil
 			},
 			Info: notUsableInfo,
 		},

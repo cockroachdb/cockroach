@@ -119,11 +119,11 @@ INSERT INTO s_tbl (id, v) VALUES
 	(1, 10),
 	(2, 11);
 
-ALTER TABLE a ADD CONSTRAINT fk_i_ref_b FOREIGN KEY (i) REFERENCES b (i);
-ALTER TABLE f ADD CONSTRAINT fk_g_ref_g FOREIGN KEY (g) REFERENCES g (i);
-ALTER TABLE d ADD CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES e (i);
-ALTER TABLE d ADD CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES f (i);
-ALTER TABLE c ADD CONSTRAINT fk_i_ref_d FOREIGN KEY (i) REFERENCES d (i);
+ALTER TABLE a ADD CONSTRAINT fk_i_ref_b FOREIGN KEY (i) REFERENCES b(i);
+ALTER TABLE f ADD CONSTRAINT fk_g_ref_g FOREIGN KEY (g) REFERENCES g(i);
+ALTER TABLE d ADD CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES e(i);
+ALTER TABLE d ADD CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES f(i);
+ALTER TABLE c ADD CONSTRAINT fk_i_ref_d FOREIGN KEY (i) REFERENCES d(i);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
 ALTER TABLE a VALIDATE CONSTRAINT fk_i_ref_b;
@@ -163,8 +163,8 @@ INSERT INTO e (i) VALUES
 INSERT INTO d (i, e, f) VALUES
 	(1, 1, 1);
 
-ALTER TABLE d ADD CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES e (i);
-ALTER TABLE d ADD CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES f (i);
+ALTER TABLE d ADD CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES e(i);
+ALTER TABLE d ADD CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES f(i);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
 ALTER TABLE d VALIDATE CONSTRAINT fk_e_ref_e;
