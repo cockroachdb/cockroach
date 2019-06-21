@@ -39,88 +39,43 @@ const _TYPES_T = types.Unhandled
 
 // */}}
 
-func (m *memColumn) Append(vec Vec, colType types.T, toLength uint64, fromLength uint16) {
-	switch colType {
+func (m *memColumn) Append(args AppendArgs) {
+	switch args.ColType {
 	// {{range .}}
 	case _TYPES_T:
-		m.col = append(m._TemplateType()[:toLength], vec._TemplateType()[:fromLength]...)
-		// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-
-	if fromLength > 0 {
-		m.nulls.Extend(vec.Nulls(), toLength, 0 /* srcStartIdx */, fromLength)
-	}
-}
-
-func (m *memColumn) AppendSlice(
-	vec Vec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16,
-) {
-	batchSize := srcEndIdx - srcStartIdx
-	outputLen := destStartIdx + uint64(batchSize)
-
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		if outputLen > uint64(len(m._TemplateType())) {
-			m.col = append(m._TemplateType()[:destStartIdx], vec._TemplateType()[srcStartIdx:srcEndIdx]...)
+		fromCol := args.Src._TemplateType()
+		toCol := m._TemplateType()
+		numToAppend := args.SrcEndIdx - args.SrcStartIdx
+		if args.DestIdx == 0 {
+			args.DestIdx = uint64(len(toCol))
+		}
+		if args.Sel == nil {
+			if args.SrcEndIdx == 0 {
+				args.SrcEndIdx = uint16(len(fromCol))
+			}
+			toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
+			m.nulls.Extend(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend)
 		} else {
-			copy(m._TemplateType()[destStartIdx:], vec._TemplateType()[srcStartIdx:srcEndIdx])
+			if args.SrcEndIdx == 0 {
+				args.SrcEndIdx = uint16(len(args.Sel))
+			}
+			sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
+			// If Sel is not nil, the indices specified in Sel override whatever is
+			// provided in Src{Start,End}Idx.
+			appendVals := make([]_GOTYPE, len(sel))
+			for i, selIdx := range sel {
+				appendVals[i] = fromCol[selIdx]
+			}
+			toCol = append(toCol[:args.DestIdx], appendVals...)
+			// TODO(asubiotto): Change Extend* signatures to allow callers to pass in
+			// SrcEndIdx instead of numToAppend.
+			m.nulls.ExtendWithSel(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend, args.Sel)
 		}
-	// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-
-	m.nulls.Extend(vec.Nulls(), destStartIdx, srcStartIdx, batchSize)
-}
-
-func (m *memColumn) AppendWithSel(
-	vec Vec, sel []uint16, batchSize uint16, colType types.T, toLength uint64,
-) {
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		toCol := append(m._TemplateType()[:toLength], make([]_GOTYPE, batchSize)...)
-		fromCol := vec._TemplateType()
-
-		for i := uint16(0); i < batchSize; i++ {
-			toCol[uint64(i)+toLength] = fromCol[sel[i]]
-		}
-
-		m.col = toCol
-		// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-
-	if batchSize > 0 {
-		m.nulls.ExtendWithSel(vec.Nulls(), toLength, 0 /* srcStartIdx */, batchSize, sel)
-	}
-}
-
-func (m *memColumn) AppendSliceWithSel(
-	vec Vec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16, sel []uint16,
-) {
-	batchSize := srcEndIdx - srcStartIdx
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		toCol := append(m._TemplateType()[:destStartIdx], make([]_GOTYPE, batchSize)...)
-		fromCol := vec._TemplateType()
-
-		for i := 0; i < int(batchSize); i++ {
-			toCol[uint64(i)+destStartIdx] = fromCol[sel[i+int(srcStartIdx)]]
-		}
-
 		m.col = toCol
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		panic(fmt.Sprintf("unhandled type %s", args.ColType))
 	}
-
-	m.nulls.ExtendWithSel(vec.Nulls(), destStartIdx, srcStartIdx, batchSize, sel)
 }
 
 func (m *memColumn) Copy(src Vec, srcStartIdx, srcEndIdx uint64, typ types.T) {

@@ -124,11 +124,15 @@ func (t *topKSorter) spool(ctx context.Context) {
 			destVec := t.topK.ColVec(i)
 			vec := inputBatch.ColVec(i)
 			colType := t.inputTypes[i]
-			if inputBatch.Selection() == nil {
-				destVec.Append(vec, colType, toLength, fromLength)
-			} else {
-				destVec.AppendWithSel(vec, inputBatch.Selection(), fromLength, colType, toLength)
-			}
+			destVec.Append(
+				coldata.AppendArgs{
+					ColType:   colType,
+					Src:       vec,
+					Sel:       inputBatch.Selection(),
+					DestIdx:   toLength,
+					SrcEndIdx: fromLength,
+				},
+			)
 		}
 		spooledRows += fromLength
 		remainingRows -= fromLength
