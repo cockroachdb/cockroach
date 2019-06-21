@@ -79,6 +79,9 @@ type Vec interface {
 	// Copy copies src[srcStartIdx:srcEndIdx] into this Vec.
 	Copy(src Vec, srcStartIdx, srcEndIdx uint64, typ types.T)
 
+	// CopyAt copies src[srcStartIdx:srcEndIdx] into this Vec starting at destStartIdx.
+	CopyAt(src Vec, destStartIdx, srcStartIdx, srcEndIdx uint64, typ types.T)
+
 	// CopyWithSelInt64 copies vec, filtered by sel, into this Vec. It replaces
 	// the contents of this Vec.
 	CopyWithSelInt64(vec Vec, sel []uint64, nSel uint16, colType types.T)
