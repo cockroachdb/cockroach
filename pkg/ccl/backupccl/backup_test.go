@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -1042,6 +1043,12 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	// `db.table` syntax. Fix that and use it here instead of `SET DATABASE`.
 	_ = sqlDB.Exec(t, `SET DATABASE = data`)
 
+	_ = sqlDB.Exec(t, `CREATE TABLE strpk (id string, v int, primary key (id, v)) PARTITION BY LIST (id) ( PARTITION ab VALUES IN (('a'), ('b')), PARTITION xy VALUES IN (('x'), ('y')) );`)
+	_ = sqlDB.Exec(t, `ALTER PARTITION ab OF TABLE strpk CONFIGURE ZONE USING gc.ttlseconds = 60`)
+	_ = sqlDB.Exec(t, `INSERT INTO strpk VALUES ('a', 1), ('a', 2), ('x', 100), ('y', 101)`)
+	const numStrPK = 4
+	_ = sqlDB.Exec(t, `CREATE TABLE strpkchild (a string, b int, c int, primary key (a, b, c)) INTERLEAVE IN PARENT strpk (a, b)`)
+
 	// i0 interleaves in parent with a, and has a multi-col PK of its own b, c
 	_ = sqlDB.Exec(t, `CREATE TABLE i0 (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) INTERLEAVE IN PARENT bank (a)`)
 	// Split at at a _strict prefix_ of the cols in i_0's PK
@@ -1054,7 +1061,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 
 	// The bank table has numAccounts accounts, put 2x that in i0, 3x in i0_0,
 	// and 4x in i1.
-	totalRows := numAccounts
+	totalRows := numAccounts + numStrPK
 	for i := 0; i < numAccounts; i++ {
 		_ = sqlDB.Exec(t, `INSERT INTO i0 VALUES ($1, 1, 1), ($1, 2, 2)`, i)
 		totalRows += 2
