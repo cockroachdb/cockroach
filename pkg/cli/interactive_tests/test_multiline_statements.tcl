@@ -20,8 +20,7 @@ eexpect "root@"
 
 # Send up-arrow.
 send "\033\[A"
-eexpect "select 'foo"
-eexpect "\rbar';"
+eexpect "select 'foo\r\nbar';"
 send "\r"
 eexpect "root@"
 
