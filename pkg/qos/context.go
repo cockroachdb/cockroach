@@ -10,6 +10,9 @@
 
 package qos
 
+// TODO(ajwerner): change this store the encoded value so that intermediate
+// servers of different versions do not mutate qos.Level values.
+
 import "context"
 
 type levelContextKey struct{}

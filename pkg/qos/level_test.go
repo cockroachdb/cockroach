@@ -221,10 +221,13 @@ func TestInvalidEncodePanics(t *testing.T) {
 		assert.Panics(t, func() {
 			tc.Encode()
 		}, "(%d, %d)", tc.Class, tc.Shard)
+		assert.Panics(t, func() {
+			tc.EncodeString()
+		}, "(%d, %d)", tc.Class, tc.Shard)
 	}
 }
 
-func TestUnmarshalText(t *testing.T) {
+func TestDecodeStringAndUnmarshalText(t *testing.T) {
 	for _, tc := range []struct {
 		in  []byte
 		out Level
@@ -239,6 +242,10 @@ func TestUnmarshalText(t *testing.T) {
 			err: "invalid data length 0, expected 4",
 		},
 		{
+			in:  nil,
+			err: "invalid data length 0, expected 4",
+		},
+		{
 			in:  []byte("000z"),
 			err: "encoding/hex: invalid byte:",
 		},
@@ -247,7 +254,17 @@ func TestUnmarshalText(t *testing.T) {
 			out: Level{ClassLow, 0},
 		},
 	} {
-		t.Run(fmt.Sprintf("%v", tc), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%v/DecodeString", tc), func(t *testing.T) {
+			l, err := DecodeString(string(tc.in))
+			if tc.err != "" {
+				if assert.Error(t, err) {
+					assert.Regexp(t, tc.err, err.Error())
+				}
+			} else {
+				assert.Equal(t, tc.out, l)
+			}
+		})
+		t.Run(fmt.Sprintf("%v/UnmarshalText", tc), func(t *testing.T) {
 			var l Level
 			err := l.UnmarshalText(tc.in)
 			if tc.err != "" {
@@ -288,6 +305,7 @@ func TestMarshalText(t *testing.T) {
 				}
 			} else {
 				assert.Equal(t, tc.out, out)
+				assert.Equal(t, string(tc.out), tc.l.EncodeString())
 			}
 		})
 	}
