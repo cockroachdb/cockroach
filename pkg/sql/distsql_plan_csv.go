@@ -183,7 +183,6 @@ func LoadCSV(
 	walltime int64,
 	splitSize int64,
 	oversample int64,
-	makeRewriter func(map[sqlbase.ID]*sqlbase.TableDescriptor) (KeyRewriter, error),
 ) error {
 	ctx = logtags.AddTag(ctx, "import-distsql", nil)
 	dsp := phs.DistSQLPlanner()
