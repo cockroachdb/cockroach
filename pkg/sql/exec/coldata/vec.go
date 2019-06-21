@@ -22,6 +22,26 @@ import (
 // column is an interface that represents a raw array of a Go native type.
 type column interface{}
 
+// AppendArgs represents the arguments passed in to Vec.Append.
+type AppendArgs struct {
+	// ColType is the type of both the destination and source slices.
+	ColType types.T
+	// Src is the data being appended.
+	Src Vec
+	// Sel is an optional slice specifying indices to append to the destination
+	// slice. Note that Src{Start,End}Idx apply to Sel.
+	Sel []uint16
+	// DestIdx is the first index that Append will append to.
+	DestIdx uint64
+	// SrcStartIdx is the index of the first element in Src that Append will
+	// append.
+	SrcStartIdx uint16
+	// SrcEndIdx is the exclusive end index of Src. i.e. the element in the index
+	// before SrcEndIdx is the last element appended to the destination slice,
+	// similar to Src[SrcStartIdx:SrcEndIdx].
+	SrcEndIdx uint16
+}
+
 // Vec is an interface that represents a column vector that's accessible by
 // Go native types.
 type Vec interface {
@@ -59,22 +79,13 @@ type Vec interface {
 	// Do not call this from normal code - it'll always panic.
 	_TemplateType() []interface{}
 
-	// Append appends fromLength elements of the given Vec to toLength
-	// elements of this Vec, assuming that both Vecs are of type colType.
-	Append(vec Vec, colType types.T, toLength uint64, fromLength uint16)
-
-	// AppendSlice appends vec[srcStartIdx:srcEndIdx] elements to
-	// this Vec starting at destStartIdx.
-	AppendSlice(vec Vec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16)
-
-	// AppendWithSel appends into itself another column vector from a Batch with
-	// maximum size of BatchSize, filtered by the given selection vector.
-	AppendWithSel(vec Vec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
-
-	// AppendSliceWithSel appends srcEndIdx - srcStartIdx elements to this Vec starting
-	// at destStartIdx. These elements come from vec, filtered by the selection
-	// vector sel.
-	AppendSliceWithSel(vec Vec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16, sel []uint16)
+	// Append uses AppendArgs to append elements of a source Vec into this Vec.
+	// It is logically equivalent to:
+	// destVec = append(destVec[:args.DestIdx], args.Src[args.SrcStartIdx:args.SrcEndIdx])
+	// An optional Sel slice can also be provided to apply a filter on the source
+	// Vec.
+	// Refer to the AppendArgs comment for specifics and TestAppend for examples.
+	Append(AppendArgs)
 
 	// Copy copies src[srcStartIdx:srcEndIdx] into this Vec.
 	Copy(src Vec, srcStartIdx, srcEndIdx uint64, typ types.T)
