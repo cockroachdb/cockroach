@@ -431,13 +431,19 @@ func (o *mergeJoinOp) saveGroupToState(
 ) {
 	endIdx := idx + groupLength
 	if sel != nil {
-		for cIdx, cType := range src.sourceTypes {
-			destBatch.ColVec(cIdx).AppendSliceWithSel(bat.ColVec(cIdx), cType, uint64(*destStartIdx), uint16(idx), uint16(endIdx), sel)
-		}
-	} else {
-		for cIdx, cType := range src.sourceTypes {
-			destBatch.ColVec(cIdx).AppendSlice(bat.ColVec(cIdx), cType, uint64(*destStartIdx), uint16(idx), uint16(endIdx))
-		}
+		sel = sel[idx:endIdx]
+	}
+	for cIdx, cType := range src.sourceTypes {
+		destBatch.ColVec(cIdx).Append(
+			coldata.AppendArgs{
+				ColType:     cType,
+				Src:         bat.ColVec(cIdx),
+				Sel:         sel,
+				DestIdx:     uint64(*destStartIdx),
+				SrcStartIdx: uint16(idx),
+				SrcEndIdx:   uint16(endIdx),
+			},
+		)
 	}
 
 	*destStartIdx += groupLength

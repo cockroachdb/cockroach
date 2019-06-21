@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMemColumnSlice(t *testing.T) {
@@ -129,5 +130,114 @@ func TestNullRanges(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestAppend(t *testing.T) {
+	const typ = types.Int64
+
+	src := NewMemColumn(typ, BatchSize)
+	sel := make([]uint16, len(src.Int64()))
+	for i := range sel {
+		sel[i] = uint16(i)
+	}
+
+	testCases := []struct {
+		name           string
+		args           AppendArgs
+		expectedLength int
+	}{
+		{
+			name:           "AppendSimple",
+			args:           AppendArgs{},
+			expectedLength: BatchSize * 2,
+		},
+		{
+			name: "AppendOverwriteSource",
+			args: AppendArgs{
+				// Start appending at index 10.
+				DestIdx: 10,
+			},
+			expectedLength: BatchSize + 10,
+		},
+		{
+			name: "AppendSlice",
+			args: AppendArgs{
+				DestIdx:     20,
+				SrcStartIdx: 10,
+				SrcEndIdx:   20,
+			},
+			expectedLength: 30,
+		},
+		{
+			name: "AppendWithSel",
+			args: AppendArgs{
+				DestIdx: 5,
+				// These next two fields should be ignored.
+				SrcStartIdx: 10,
+				SrcEndIdx:   20,
+				// Select every element.
+				Sel: sel,
+			},
+			expectedLength: 5 + BatchSize,
+		},
+		{
+			name: "AppendWithHalfSel",
+			args: AppendArgs{
+				DestIdx: 5,
+				// These next two fields should be ignored.
+				SrcStartIdx: 6,
+				SrcEndIdx:   7,
+				Sel:         sel[:len(sel)/2],
+			},
+			expectedLength: 5 + (BatchSize / 2),
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.args.Src = src
+		tc.args.ColType = typ
+		t.Run(tc.name, func(t *testing.T) {
+			dest := NewMemColumn(typ, BatchSize)
+			dest.Append(tc.args)
+			require.Equal(t, tc.expectedLength, len(dest.Int64()))
+		})
+	}
+}
+
+func BenchmarkAppend(b *testing.B) {
+	const typ = types.Int64
+
+	src := NewMemColumn(typ, BatchSize)
+	sel := make([]uint16, len(src.Int64()))
+
+	benchCases := []struct {
+		name string
+		args AppendArgs
+	}{
+		{
+			name: "SimpleAppend",
+			args: AppendArgs{},
+		},
+		{
+			name: "AppendWithSel",
+			args: AppendArgs{
+				Sel: sel,
+			},
+		},
+	}
+
+	for _, bc := range benchCases {
+		bc.args.Src = src
+		bc.args.ColType = typ
+		dest := NewMemColumn(typ, BatchSize)
+		b.Run(bc.name, func(b *testing.B) {
+			b.SetBytes(8 * BatchSize)
+			for i := 0; i < b.N; i++ {
+				dest.Append(bc.args)
+				// "Reset" dest for another round.
+				dest.SetCol(dest.Int64()[:BatchSize])
+			}
+		})
 	}
 }
