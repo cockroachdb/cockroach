@@ -67,6 +67,7 @@ const (
 	defaultWindowSize     = 65535
 	initialWindowSize     = defaultWindowSize * 32 // for an RPC
 	initialConnWindowSize = initialWindowSize * 16 // for a connection
+	clientQosLevelKey     = "c_qos"
 )
 
 // sourceAddr is the environment-provided local address for outgoing
@@ -265,7 +266,7 @@ func NewServerWithInterceptor(
 			return handler(srv, stream)
 		}
 	}
-
+	unaryInterceptor = qosServerInterceptor(unaryInterceptor)
 	if unaryInterceptor != nil {
 		opts = append(opts, grpc.UnaryInterceptor(unaryInterceptor))
 	}
@@ -640,17 +641,20 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	}
 
+	var unaryInterceptor grpc.UnaryClientInterceptor
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
 		// We use a SpanInclusionFunc to circumvent the interceptor's work when
 		// tracing is disabled. Otherwise, the interceptor causes an increase in
 		// the number of packets (even with an empty context!). See #17177.
-		interceptor := otgrpc.OpenTracingClientInterceptor(
+		unaryInterceptor = otgrpc.OpenTracingClientInterceptor(
 			tracer,
 			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFuncForClient)),
 		)
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(interceptor))
 	}
-
+	unaryInterceptor = qosClientInterceptor(unaryInterceptor)
+	if unaryInterceptor != nil {
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(unaryInterceptor))
+	}
 	return dialOpts, nil
 }
 
