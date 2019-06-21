@@ -14,7 +14,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -102,11 +101,17 @@ func parseMessages(s string) []pgproto3.BackendMessage {
 
 func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestData) string {
 	ignore := map[string]bool{}
+	errs := map[string]string{}
 	for _, arg := range args.CmdArgs {
-		if arg.Key == "ignore" {
+		switch arg.Key {
+		case "ignore":
 			for _, typ := range arg.Vals {
 				ignore[fmt.Sprintf("*pgproto3.%s", typ)] = true
 			}
+		case "mapError":
+			errs[arg.Vals[0]] = arg.Vals[1]
+		default:
+			panic(fmt.Errorf("unknown argument: %v", arg))
 		}
 	}
 	var sb strings.Builder
@@ -115,11 +120,17 @@ func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 		if ignore[fmt.Sprintf("%T", msg)] {
 			continue
 		}
-		if reflect.TypeOf(msg) == typErrorResponse {
+		if errmsg, ok := msg.(*pgproto3.ErrorResponse); ok {
+			code := errmsg.Code
+			if v, ok := errs[code]; ok {
+				code = v
+			}
 			if err := enc.Encode(struct {
 				Type string
+				Code string
 			}{
 				Type: "ErrorResponse",
+				Code: code,
 			}); err != nil {
 				panic(err)
 			}

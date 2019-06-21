@@ -112,8 +112,18 @@ func (p *PGTest) Until(typs ...pgproto3.BackendMessage) ([]pgproto3.BackendMessa
 		if testing.Verbose() {
 			fmt.Printf("RECV %T: %+[1]v\n", recv)
 		}
-		if errmsg, ok := recv.(*pgproto3.ErrorResponse); ok && typ != typErrorResponse {
-			return nil, errors.Errorf("waiting for %T, got %#v", typs[0], errmsg)
+		if errmsg, ok := recv.(*pgproto3.ErrorResponse); ok {
+			if typ != typErrorResponse {
+				return nil, errors.Errorf("waiting for %T, got %#v", typs[0], errmsg)
+			}
+			// ErrorResponse doesn't encode/decode correctly, so
+			// manually append it here. We only record the Code so
+			// other fields aren't kept.
+			msgs = append(msgs, &pgproto3.ErrorResponse{
+				Code: errmsg.Code,
+			})
+			typs = typs[1:]
+			continue
 		}
 		// If we saw a ready message but weren't waiting for one, we
 		// might wait forever so bail.

@@ -187,6 +187,11 @@ func NewProtocolViolationErrorf(format string, args ...interface{}) error {
 	return pgerror.Newf(pgcode.ProtocolViolation, format, args...)
 }
 
+// NewInvalidBinaryRepresentationErrorf creates a pgwire InvalidBinaryRepresentation.
+func NewInvalidBinaryRepresentationErrorf(format string, args ...interface{}) error {
+	return pgerror.Newf(pgcode.InvalidBinaryRepresentation, format, args...)
+}
+
 // validateArrayDimensions takes the number of dimensions and elements and
 // returns an error if we don't support that combination.
 func validateArrayDimensions(nDimensions int, nElements int) error {
@@ -551,7 +556,7 @@ func DecodeOidDatum(
 				return nil, NewProtocolViolationErrorf("no data to decode")
 			}
 			if b[0] != 1 {
-				return nil, pgerror.Newf(pgcode.Syntax, "expected JSONB version 1")
+				return nil, NewProtocolViolationErrorf("expected JSONB version 1")
 			}
 			// Skip over the version number.
 			b = b[1:]
@@ -585,7 +590,7 @@ func DecodeOidDatum(
 				i := uint(0)
 				for ; i < uint(lastBitsUsed); i += 8 {
 					if len(b) == 0 {
-						return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "incorrect binary data")
+						return nil, NewInvalidBinaryRepresentationErrorf("incorrect binary data")
 					}
 					w = (w << 8) | uint64(b[0])
 					b = b[1:]
@@ -690,13 +695,13 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 	} else if familyByte == PGBinaryIPv6family {
 		family = ipaddr.IPv6family
 	} else {
-		return ipaddr.IPAddr{}, errors.Errorf("unknown family received: %d", familyByte)
+		return ipaddr.IPAddr{}, NewInvalidBinaryRepresentationErrorf("unknown family received: %d", familyByte)
 	}
 
 	// Get the IP address bytes. The IP address length is byte 3 but is ignored.
 	if family == ipaddr.IPv4family {
 		if len(b) != 4 {
-			return ipaddr.IPAddr{}, NewProtocolViolationErrorf("unexpected data: %d", len(b))
+			return ipaddr.IPAddr{}, NewInvalidBinaryRepresentationErrorf("unexpected data: %d", len(b))
 		}
 		// Add the IPv4-mapped IPv6 prefix of 0xFF.
 		var tmp [16]byte
@@ -706,7 +711,7 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 		addr = ipaddr.Addr(uint128.FromBytes(tmp[:]))
 	} else {
 		if len(b) != 16 {
-			return ipaddr.IPAddr{}, NewProtocolViolationErrorf("unexpected data: %d", len(b))
+			return ipaddr.IPAddr{}, NewInvalidBinaryRepresentationErrorf("unexpected data: %d", len(b))
 		}
 		addr = ipaddr.Addr(uint128.FromBytes(b))
 	}
