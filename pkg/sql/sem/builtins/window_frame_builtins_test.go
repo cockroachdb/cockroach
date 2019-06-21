@@ -163,7 +163,7 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 		wfr.StartBoundOffset = tree.NewDInt(tree.DInt(offset))
 		wfr.EndBoundOffset = tree.NewDInt(tree.DInt(offset))
 		sum := &slidingWindowSumFunc{agg: &intSumAggregate{}}
-		avg := &avgWindowFunc{sum: slidingWindowSumFunc{agg: &intSumAggregate{}}}
+		avg := &avgWindowFunc{sum: newSlidingWindowSumFunc(&intSumAggregate{})}
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
 			res, err := sum.Compute(evalCtx.Ctx(), evalCtx, wfr)
 			if err != nil {
