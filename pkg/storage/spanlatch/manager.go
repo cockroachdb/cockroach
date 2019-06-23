@@ -414,7 +414,7 @@ func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, he
 				defer m.slowReqs.Dec(1)
 			}
 		case <-ctx.Done():
-			log.VEventf(ctx, 2, "%s while acquiring latches", ctx.Err())
+			log.VEventf(ctx, 2, "%s while acquiring latch %s, held by %s", ctx.Err(), wait, held)
 			return ctx.Err()
 		case <-m.stopper.ShouldQuiesce():
 			// While shutting down, requests may acquire
