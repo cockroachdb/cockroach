@@ -39,7 +39,7 @@ func (m *InputStats) Reset()         { *m = InputStats{} }
 func (m *InputStats) String() string { return proto.CompactTextString(m) }
 func (*InputStats) ProtoMessage()    {}
 func (*InputStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{0}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{0}
 }
 func (m *InputStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -76,7 +76,7 @@ func (m *TableReaderStats) Reset()         { *m = TableReaderStats{} }
 func (m *TableReaderStats) String() string { return proto.CompactTextString(m) }
 func (*TableReaderStats) ProtoMessage()    {}
 func (*TableReaderStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{1}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{1}
 }
 func (m *TableReaderStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -116,7 +116,7 @@ func (m *HashJoinerStats) Reset()         { *m = HashJoinerStats{} }
 func (m *HashJoinerStats) String() string { return proto.CompactTextString(m) }
 func (*HashJoinerStats) ProtoMessage()    {}
 func (*HashJoinerStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{2}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{2}
 }
 func (m *HashJoinerStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -153,7 +153,7 @@ func (m *AggregatorStats) Reset()         { *m = AggregatorStats{} }
 func (m *AggregatorStats) String() string { return proto.CompactTextString(m) }
 func (*AggregatorStats) ProtoMessage()    {}
 func (*AggregatorStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{3}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{3}
 }
 func (m *AggregatorStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -190,7 +190,7 @@ func (m *DistinctStats) Reset()         { *m = DistinctStats{} }
 func (m *DistinctStats) String() string { return proto.CompactTextString(m) }
 func (*DistinctStats) ProtoMessage()    {}
 func (*DistinctStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{4}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{4}
 }
 func (m *DistinctStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -226,7 +226,7 @@ func (m *OrdinalityStats) Reset()         { *m = OrdinalityStats{} }
 func (m *OrdinalityStats) String() string { return proto.CompactTextString(m) }
 func (*OrdinalityStats) ProtoMessage()    {}
 func (*OrdinalityStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{5}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{5}
 }
 func (m *OrdinalityStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -264,7 +264,7 @@ func (m *MergeJoinerStats) Reset()         { *m = MergeJoinerStats{} }
 func (m *MergeJoinerStats) String() string { return proto.CompactTextString(m) }
 func (*MergeJoinerStats) ProtoMessage()    {}
 func (*MergeJoinerStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{6}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{6}
 }
 func (m *MergeJoinerStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -302,7 +302,7 @@ func (m *SorterStats) Reset()         { *m = SorterStats{} }
 func (m *SorterStats) String() string { return proto.CompactTextString(m) }
 func (*SorterStats) ProtoMessage()    {}
 func (*SorterStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{7}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{7}
 }
 func (m *SorterStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -339,7 +339,7 @@ func (m *JoinReaderStats) Reset()         { *m = JoinReaderStats{} }
 func (m *JoinReaderStats) String() string { return proto.CompactTextString(m) }
 func (*JoinReaderStats) ProtoMessage()    {}
 func (*JoinReaderStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{8}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{8}
 }
 func (m *JoinReaderStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -375,7 +375,7 @@ func (m *OutboxStats) Reset()         { *m = OutboxStats{} }
 func (m *OutboxStats) String() string { return proto.CompactTextString(m) }
 func (*OutboxStats) ProtoMessage()    {}
 func (*OutboxStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{9}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{9}
 }
 func (m *OutboxStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -413,7 +413,7 @@ func (m *RouterOutputStats) Reset()         { *m = RouterOutputStats{} }
 func (m *RouterOutputStats) String() string { return proto.CompactTextString(m) }
 func (*RouterOutputStats) ProtoMessage()    {}
 func (*RouterOutputStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{10}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{10}
 }
 func (m *RouterOutputStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -451,7 +451,7 @@ func (m *WindowerStats) Reset()         { *m = WindowerStats{} }
 func (m *WindowerStats) String() string { return proto.CompactTextString(m) }
 func (*WindowerStats) ProtoMessage()    {}
 func (*WindowerStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_1e58475be25c5df0, []int{11}
+	return fileDescriptor_stats_21b76d5c6a211ca4, []int{11}
 }
 func (m *WindowerStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2505,9 +2505,9 @@ var (
 	ErrIntOverflowStats   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/distsqlrun/stats.proto", fileDescriptor_stats_1e58475be25c5df0) }
+func init() { proto.RegisterFile("sql/distsqlrun/stats.proto", fileDescriptor_stats_21b76d5c6a211ca4) }
 
-var fileDescriptor_stats_1e58475be25c5df0 = []byte{
+var fileDescriptor_stats_21b76d5c6a211ca4 = []byte{
 	// 593 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x55, 0x3f, 0x6f, 0xd3, 0x4e,
 	0x18, 0xee, 0x25, 0xf9, 0xfd, 0x48, 0x5f, 0xab, 0xd8, 0xb5, 0x18, 0xdc, 0x4a, 0xb8, 0x95, 0xd5,
