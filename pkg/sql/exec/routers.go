@@ -35,6 +35,8 @@ type routerOutput interface {
 const defaultRouterOutputBlockedThreshold = coldata.BatchSize * 2
 
 type routerOutputOp struct {
+	allocator coldata.BatchAllocator
+
 	types []types.T
 	// zeroBatch is used to return a 0 length batch in some cases.
 	zeroBatch coldata.Batch
@@ -66,16 +68,23 @@ var _ Operator = &routerOutputOp{}
 // newRouterOutputOp creates a new router output. The caller must ensure that
 // unblockedEventsChan is a buffered channel, as the router output will write to
 // it.
-func newRouterOutputOp(types []types.T, unblockedEventsChan chan<- struct{}) *routerOutputOp {
+func newRouterOutputOp(
+	allocator coldata.BatchAllocator, types []types.T, unblockedEventsChan chan<- struct{},
+) *routerOutputOp {
 	return newRouterOutputOpWithBlockedThresholdAndBatchSize(
-		types, unblockedEventsChan, defaultRouterOutputBlockedThreshold, coldata.BatchSize,
+		allocator, types, unblockedEventsChan, defaultRouterOutputBlockedThreshold, coldata.BatchSize,
 	)
 }
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
-	types []types.T, unblockedEventsChan chan<- struct{}, blockedThreshold int, outputBatchSize int,
+	allocator coldata.BatchAllocator,
+	types []types.T,
+	unblockedEventsChan chan<- struct{},
+	blockedThreshold int,
+	outputBatchSize int,
 ) *routerOutputOp {
 	o := &routerOutputOp{
+		allocator:           allocator,
 		types:               types,
 		zeroBatch:           coldata.NewMemBatchWithSize(types, 0 /* size */),
 		unblockedEventsChan: unblockedEventsChan,
@@ -164,11 +173,19 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 	writeIdx := 0
 	if len(o.mu.data) == 0 {
 		// New output batch.
-		o.mu.data = append(o.mu.data, coldata.NewMemBatchWithSize(o.types, o.outputBatchSize))
+		b, ok := o.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize)
+		if !ok {
+			panic("routerOutputOp exceeded allocator budget")
+		}
+		o.mu.data = append(o.mu.data, b)
 	} else {
 		if int(o.mu.data[len(o.mu.data)-1].Length()) == o.outputBatchSize {
 			// No space in last batch, append new output batch.
-			o.mu.data = append(o.mu.data, coldata.NewMemBatchWithSize(o.types, o.outputBatchSize))
+			b, ok := o.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize)
+			if !ok {
+				panic("routerOutputOp exceeded allocator budget")
+			}
+			o.mu.data = append(o.mu.data, b)
 		}
 		writeIdx = len(o.mu.data) - 1
 	}
@@ -189,11 +206,18 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 			numAppended = available
 			// Need to create a new batch to append to in the next o.mu.data slot.
 			// This will be used in the next iteration.
-			o.mu.data = append(o.mu.data, coldata.NewMemBatchWithSize(o.types, o.outputBatchSize))
+			b, ok := o.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize)
+			if !ok {
+				panic("routerOutputOp exceeded allocator budget")
+			}
+			o.mu.data = append(o.mu.data, b)
 		}
 
 		for i, t := range o.types {
-			dst.ColVec(i).Append(
+			// TODO(solon): Is this double-counting the memory allocated by
+			//  NewMemBatchWithSize?
+			if ok := o.allocator.Append(
+				dst.ColVec(i),
 				coldata.AppendArgs{
 					ColType:   t,
 					Src:       batch.ColVec(i),
@@ -201,7 +225,9 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 					DestIdx:   uint64(dst.Length()),
 					SrcEndIdx: uint16(len(selection)),
 				},
-			)
+			); !ok {
+				panic("routerOutputOp exceeded allocator budget")
+			}
 		}
 
 		selection = selection[numAppended:]
@@ -271,7 +297,7 @@ type hashRouter struct {
 // input and hashes each row according to hashCols to one of numOutputs outputs.
 // These outputs are exposed as Operators.
 func newHashRouter(
-	input Operator, types []types.T, hashCols []int, numOutputs int,
+	input Operator, allocator coldata.BatchAllocator, types []types.T, hashCols []int, numOutputs int,
 ) (*hashRouter, []Operator) {
 	outputs := make([]routerOutput, numOutputs)
 	outputsAsOps := make([]Operator, numOutputs)
@@ -284,7 +310,7 @@ func newHashRouter(
 	// all unblock events preceding it since these *must* be on the channel.
 	unblockEventsChan := make(chan struct{}, 2*numOutputs)
 	for i := 0; i < numOutputs; i++ {
-		op := newRouterOutputOp(types, unblockEventsChan)
+		op := newRouterOutputOp(allocator, types, unblockEventsChan)
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}

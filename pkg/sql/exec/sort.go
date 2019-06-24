@@ -23,9 +23,12 @@ import (
 // given in orderingCols. The inputTypes must correspond 1-1 with the columns
 // in the input operator.
 func NewSorter(
-	input Operator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column,
+	input Operator,
+	allocator coldata.BatchAllocator,
+	inputTypes []types.T,
+	orderingCols []distsqlpb.Ordering_Column,
 ) (Operator, error) {
-	return newSorter(newAllSpooler(input, inputTypes), inputTypes, orderingCols)
+	return newSorter(newAllSpooler(input, allocator, inputTypes), inputTypes, orderingCols)
 }
 
 func newSorter(
@@ -84,7 +87,8 @@ type spooler interface {
 // allSpooler is the spooler that spools all tuples from the input. It is used
 // by the general sorter over the whole input.
 type allSpooler struct {
-	input Operator
+	input     Operator
+	allocator coldata.BatchAllocator
 
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []types.T
@@ -99,9 +103,10 @@ type allSpooler struct {
 
 var _ spooler = &allSpooler{}
 
-func newAllSpooler(input Operator, inputTypes []types.T) spooler {
+func newAllSpooler(input Operator, allocator coldata.BatchAllocator, inputTypes []types.T) spooler {
 	return &allSpooler{
 		input:      input,
+		allocator:  allocator,
 		inputTypes: inputTypes,
 	}
 }
@@ -123,7 +128,7 @@ func (p *allSpooler) spool(ctx context.Context) {
 	var nTuples uint64
 	for ; batch.Length() != 0; batch = p.input.Next(ctx) {
 		for i := 0; i < len(p.values); i++ {
-			p.values[i].Append(
+			if ok := p.allocator.Append(p.values[i],
 				coldata.AppendArgs{
 					ColType:   p.inputTypes[i],
 					Src:       batch.ColVec(i),
@@ -131,7 +136,9 @@ func (p *allSpooler) spool(ctx context.Context) {
 					DestIdx:   nTuples,
 					SrcEndIdx: batch.Length(),
 				},
-			)
+			); !ok {
+				panic("allSpooler exceeded allocator budget")
+			}
 		}
 		nTuples += uint64(batch.Length())
 	}

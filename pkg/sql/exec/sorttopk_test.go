@@ -68,7 +68,7 @@ func TestTopKSorter(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-				sort := NewTopKSorter(input[0], tc.typ, tc.ordCols, tc.k)
+				sort := NewTopKSorter(input[0], testAllocator, tc.typ, tc.ordCols, tc.k)
 				cols := make([]int, len(tc.typ))
 				for i := range cols {
 					cols[i] = i

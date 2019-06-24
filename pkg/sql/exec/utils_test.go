@@ -24,6 +24,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// testAllocator is a BatchAllocator with an unlimited budget for use in unit
+// tests.
+var testAllocator = coldata.NewBatchAllocator()
+
 // tuple represents a row with any-type columns.
 type tuple []interface{}
 

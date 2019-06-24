@@ -166,6 +166,8 @@ type hashJoinerSourceSpec struct {
 // all build table rows that have never been matched and stitching it together
 // with NULL values on the probe side.
 type hashJoinEqOp struct {
+	allocator coldata.BatchAllocator
+
 	// spec, if not nil, holds the specification for the current hash joiner
 	// process.
 	spec hashJoinerSpec
@@ -208,6 +210,7 @@ func (hj *hashJoinEqOp) Init() {
 	}
 
 	hj.ht = makeHashTable(
+		hj.allocator,
 		hashTableBucketSize,
 		build.sourceTypes,
 		build.eqCols,
@@ -311,6 +314,8 @@ func (hj *hashJoinEqOp) emitUnmatched() {
 // The table can then be probed in column batches to find at most one matching
 // row per column batch row.
 type hashTable struct {
+	allocator coldata.BatchAllocator
+
 	// first stores the keyID of the first key that resides in each bucket. This
 	// keyID is used to determine the corresponding equality column key as well
 	// as output column values.
@@ -387,7 +392,11 @@ type hashTable struct {
 }
 
 func makeHashTable(
-	bucketSize uint64, sourceTypes []types.T, eqCols []uint32, outCols []uint32,
+	allocator coldata.BatchAllocator,
+	bucketSize uint64,
+	sourceTypes []types.T,
+	eqCols []uint32,
+	outCols []uint32,
 ) *hashTable {
 	// Compute the union of eqCols and outCols and compress vals to only keep the
 	// important columns.
@@ -439,6 +448,8 @@ func makeHashTable(
 	}
 
 	return &hashTable{
+		allocator: allocator,
+
 		first: make([]uint64, bucketSize),
 
 		vals:     cols,
@@ -466,7 +477,8 @@ func makeHashTable(
 func (ht *hashTable) loadBatch(batch coldata.Batch) {
 	batchSize := batch.Length()
 	for i, colIdx := range ht.valCols {
-		ht.vals[i].Append(
+		if ok := ht.allocator.Append(
+			ht.vals[i],
 			coldata.AppendArgs{
 				ColType:   ht.valTypes[i],
 				Src:       batch.ColVec(int(colIdx)),
@@ -474,7 +486,9 @@ func (ht *hashTable) loadBatch(batch coldata.Batch) {
 				DestIdx:   ht.size,
 				SrcEndIdx: batchSize,
 			},
-		)
+		); !ok {
+			panic("hashTable exceeded allocator budget")
+		}
 	}
 
 	ht.size += uint64(batchSize)
@@ -964,6 +978,7 @@ func (ht *hashTable) distinctCheck(nToCheck uint16, sel []uint16) uint16 {
 // while leftOutCols and rightOutCols specifies the output columns. leftTypes
 // and rightTypes specify the input column types of the two sources.
 func NewEqHashJoinerOp(
+	allocator coldata.BatchAllocator,
 	leftSource Operator,
 	rightSource Operator,
 	leftEqCols []uint32,
@@ -1025,6 +1040,7 @@ func NewEqHashJoinerOp(
 	}
 
 	return &hashJoinEqOp{
-		spec: spec,
+		allocator: allocator,
+		spec:      spec,
 	}, nil
 }

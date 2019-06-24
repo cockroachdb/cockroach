@@ -64,7 +64,14 @@ type aggType struct {
 
 var aggTypes = []aggType{
 	{
-		new:  NewHashAggregator,
+		new: func(input Operator,
+			colTypes []types.T,
+			aggFns []distsqlpb.AggregatorSpec_Func,
+			groupCols []uint32,
+			aggCols [][]uint32,
+		) (Operator, error) {
+			return NewHashAggregator(input, testAllocator, colTypes, aggFns, groupCols, aggCols)
+		},
 		name: "hash",
 	},
 	{
@@ -704,7 +711,8 @@ func TestHashAggregator(t *testing.T) {
 			t.Fatal(err)
 		}
 		runTests(t, []tuples{tc.input}, func(t *testing.T, sources []Operator) {
-			ag, err := NewHashAggregator(sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
+			ag, err := NewHashAggregator(
+				sources[0], testAllocator, tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
 
 			if err != nil {
 				t.Fatal(err)

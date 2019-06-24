@@ -65,6 +65,7 @@ type hashAggregator struct {
 // the NewOrderedAggregator function.
 func NewHashAggregator(
 	input Operator,
+	allocator coldata.BatchAllocator,
 	colTypes []types.T,
 	aggFns []distsqlpb.AggregatorSpec_Func,
 	groupCols []uint32,
@@ -106,6 +107,7 @@ func NewHashAggregator(
 	}
 
 	ht := makeHashTable(
+		allocator,
 		hashTableBucketSize,
 		colTypes,
 		groupCols,

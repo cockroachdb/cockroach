@@ -92,7 +92,8 @@ func TestRouterOutputAddBatch(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				[]types.T{types.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
+				testAllocator, []types.T{types.Int64}, unblockEventsChan, tc.blockedThreshold,
+				tc.outputBatchSize,
 			)
 			in := newOpTestInput(tc.inputBatchSize, data)
 			out := newOpTestOutput(o, []int{0}, data[:len(tc.selection)])
@@ -173,7 +174,7 @@ func TestRouterOutputNext(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var wg sync.WaitGroup
 			batchChan := make(chan coldata.Batch)
-			o := newRouterOutputOp([]types.T{types.Int64}, unblockedEventsChan)
+			o := newRouterOutputOp(testAllocator, []types.T{types.Int64}, unblockedEventsChan)
 			in := newOpTestInput(coldata.BatchSize, data)
 			in.Init()
 			wg.Add(1)
@@ -223,7 +224,7 @@ func TestRouterOutputNext(t *testing.T) {
 	}
 
 	t.Run("NextAfterZeroBatchDoesntBlock", func(t *testing.T) {
-		o := newRouterOutputOp([]types.T{types.Int64}, unblockedEventsChan)
+		o := newRouterOutputOp(testAllocator, []types.T{types.Int64}, unblockedEventsChan)
 		o.addBatch(o.zeroBatch, fullSelection)
 		o.Next(ctx)
 		o.Next(ctx)
@@ -252,7 +253,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 		ch := make(chan struct{}, 2)
 		o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-			[]types.T{types.Int64}, ch, blockThreshold, coldata.BatchSize,
+			testAllocator, []types.T{types.Int64}, ch, blockThreshold, coldata.BatchSize,
 		)
 		in := newOpTestInput(smallBatchSize, data)
 		out := newOpTestOutput(o, []int{0}, expected)
@@ -323,7 +324,7 @@ func TestRouterOutputRandom(t *testing.T) {
 			var wg sync.WaitGroup
 			unblockedEventsChans := make(chan struct{}, 2)
 			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				typs, unblockedEventsChans, blockedThreshold, outputSize,
+				testAllocator, typs, unblockedEventsChans, blockedThreshold, outputSize,
 			)
 			inputs[0].Init()
 
@@ -602,7 +603,8 @@ func TestHashRouterOneOutput(t *testing.T) {
 	typs := []types.T{types.Int64}
 
 	r, routerOutputs := newHashRouter(
-		newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
+		newOpFixedSelTestInput(sel, uint16(len(sel)), data), testAllocator, typs, []int{0},
+		1, /* numOutputs */
 	)
 
 	if len(routerOutputs) != 1 {
@@ -691,7 +693,7 @@ func TestHashRouterRandom(t *testing.T) {
 			outputsAsOps := make([]Operator, numOutputs)
 			for i := range outputs {
 				op := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-					typs, unblockEventsChan, blockedThreshold, outputSize,
+					testAllocator, typs, unblockEventsChan, blockedThreshold, outputSize,
 				)
 				outputs[i] = op
 				outputsAsOps[i] = op
@@ -780,7 +782,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	for _, numOutputs := range []int{2, 4, 8, 16} {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
-				r, outputs := newHashRouter(input, types, []int{0}, numOutputs)
+				r, outputs := newHashRouter(input, testAllocator, types, []int{0}, numOutputs)
 				b.SetBytes(8 * coldata.BatchSize * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.

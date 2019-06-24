@@ -155,3 +155,30 @@ func (m *MemBatch) Reset(types []types.T, length int) {
 		col.Nulls().UnsetNulls()
 	}
 }
+
+// BatchAllocator is a memory management tool for vectorized operators. It
+// provides new batches (and appends to existing ones) within a fixed memory
+// budget. If the budget is exceeded, its methods return ok == false and the
+// caller must spill to disk or throw an error.
+//
+// In the future this can also be used to pool Vec allocations.
+//
+// TODO(solon): Add memory budget logic.
+type BatchAllocator struct{}
+
+// NewBatchAllocator constructs a new BatchAllocator instance.
+func NewBatchAllocator() BatchAllocator {
+	return BatchAllocator{}
+}
+
+// NewMemBatchWithSize allocates a new in-memory Batch with the given column
+// size.
+func (*BatchAllocator) NewMemBatchWithSize(types []types.T, size int) (batch Batch, ok bool) {
+	return NewMemBatchWithSize(types, size), true
+}
+
+// Append appends elements of a source Vec into dest according to AppendArgs.
+func (*BatchAllocator) Append(dest Vec, args AppendArgs) (ok bool) {
+	dest.Append(args)
+	return true
+}
