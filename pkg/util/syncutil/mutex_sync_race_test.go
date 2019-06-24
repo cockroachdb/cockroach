@@ -38,11 +38,43 @@ func TestAssertHeld(t *testing.T) {
 			defer func() {
 				if r := recover(); r == nil {
 					t.Fatal("did not get expected panic")
-				} else if a, e := r.(string), "mutex is not locked"; a != e {
+				} else if a, e := r.(string), "mutex is not write locked"; a != e {
 					t.Fatalf("got %q, expected %q", a, e)
 				}
 			}()
 			c.m.AssertHeld()
 		}()
 	}
+}
+
+func TestAssertRHeld(t *testing.T) {
+	var m RWMutex
+
+	// The normal, successful case.
+	m.RLock()
+	m.AssertRHeld()
+	m.RUnlock()
+
+	// The normal case with two readers.
+	m.RLock()
+	m.RLock()
+	m.AssertRHeld()
+	m.RUnlock()
+	m.RUnlock()
+
+	// The case where a write lock is held.
+	m.Lock()
+	m.AssertRHeld()
+	m.Unlock()
+
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("did not get expected panic")
+			} else if a, e := r.(string), "mutex is not read locked"; a != e {
+				t.Fatalf("got %q, expected %q", a, e)
+			}
+		}()
+		m.AssertRHeld()
+	}()
 }
