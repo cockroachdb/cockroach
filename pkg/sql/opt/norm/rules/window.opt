@@ -142,13 +142,13 @@ $input
         $private:*
     )
     $limit:*
-    $ordering:* & (ImpliesOrdering
-        $newOrdering:(PrependColsToOrdering
+    $ordering:* &
+        (OrderingSucceeded $newOrdering:(MakeSegmentedOrdering
+            $input
             (WindowPartition $private)
             (WindowOrdering $private)
             $ordering
         )
-        $ordering
     )
 )
 =>
@@ -156,7 +156,7 @@ $input
     (Limit
         $input
         $limit
-        $newOrdering
+        (DerefOrderingChoice $newOrdering)
     )
     $fns
     $private

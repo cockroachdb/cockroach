@@ -47,6 +47,16 @@ func (c *CustomFuncs) Succeeded(result opt.Expr) bool {
 	return result != nil
 }
 
+// OrderingSucceeded returns true if an OrderingChoice is not nil.
+func (c *CustomFuncs) OrderingSucceeded(result *physical.OrderingChoice) bool {
+	return result != nil
+}
+
+// DerefOrderingChoice returns an OrderingChoice from a pointer.
+func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physical.OrderingChoice {
+	return *result
+}
+
 // ----------------------------------------------------------------------
 //
 // ScalarList functions
@@ -378,56 +388,30 @@ func (c *CustomFuncs) EmptyOrdering() physical.OrderingChoice {
 	return physical.OrderingChoice{}
 }
 
-// ImpliesOrdering returns true if every ordering valid for the left ordering
-// is also valid for the right ordering.
-func (c *CustomFuncs) ImpliesOrdering(left, right physical.OrderingChoice) bool {
-	return left.Implies(&right)
-}
+// MakeSegmentedOrdering returns an ordering choice which satisfies both
+// limitOrdering and the ordering required by a window function. Returns nil if
+// no such ordering exists. See OrderingChoice.PrefixIntersection for more
+// details.
+func (c *CustomFuncs) MakeSegmentedOrdering(
+	input memo.RelExpr,
+	prefix opt.ColSet,
+	ordering physical.OrderingChoice,
+	limitOrdering physical.OrderingChoice,
+) *physical.OrderingChoice {
 
-// PrependColsToOrdering returns an ordering choice with the given ColSet as a
-// prefix to the given ordering choice, in an arbitrary ordering, with arbitrary
-// directions. referenceOrdering is used to pick an order to prepend the
-// columns from the ColSet in which is likely to work well.
-// TODO(justin): this is overly restrictive, since the columns in the colset
-// should be allowed to occur in any order, and it doesn't matter if they're
-// ascending or descending. We could use an interesting ordering to attempt to
-// find a good choice here.
-func (c *CustomFuncs) PrependColsToOrdering(
-	cols opt.ColSet, ordering physical.OrderingChoice, referenceOrdering physical.OrderingChoice,
-) physical.OrderingChoice {
-	if cols.Empty() {
-		return ordering
+	// The columns in the closure of the prefix may be included in it. It's
+	// beneficial to do so for a given column iff that column appears in the
+	// limit's ordering.
+	cl := input.Relational().FuncDeps.ComputeClosure(prefix)
+	cl.IntersectionWith(limitOrdering.ColSet())
+	cl.UnionWith(prefix)
+	prefix = cl
+
+	oc, ok := limitOrdering.PrefixIntersection(prefix, ordering.Columns)
+	if !ok {
+		return nil
 	}
-	var oc physical.OrderingChoice
-	oc.Optional = ordering.Optional.Copy()
-
-	cpy := cols.Copy()
-	// We're allowed to prepend the columns from the set in any order, but we're
-	// more likely to be successful in making the ordering "work" if we try to
-	// prepend them in the order and direction they occur in the reference
-	// ordering.
-	//
-	// We do this by first adding in any columns that occur in both the set and
-	// the reference ordering in the order they occur in the reference ordering,
-	// and then after we add any from the set that didn't get added in that way.
-	for _, col := range referenceOrdering.Columns {
-		id := col.AnyID()
-		// If this column is one of the ones we're going to be prepending, do it
-		// now, so that the ordering is more likely to agree with the reference
-		// ordering.
-		if cpy.Contains(id) {
-			cpy.Remove(id)
-			oc.AppendCol(id, col.Descending)
-		}
-	}
-
-	// Add any remaining columns.
-	for col, ok := cpy.Next(0); ok; col, ok = cpy.Next(col + 1) {
-		oc.AppendCol(opt.ColumnID(col), false /* descending */)
-	}
-	oc.Columns = append(oc.Columns, ordering.Columns...)
-
-	return oc
+	return &oc
 }
 
 // AllArePrefixSafe returns whether every window function in the list satisfies
