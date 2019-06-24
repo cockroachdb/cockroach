@@ -17,22 +17,8 @@ namespace cockroach {
 
 const DBTimestamp kZeroTimestamp = {0, 0};
 
-DBTimestamp ToDBTimestamp(const cockroach::util::hlc::LegacyTimestamp& timestamp) {
-  return DBTimestamp{timestamp.wall_time(), timestamp.logical()};
-}
-
-DBTimestamp PrevTimestamp(DBTimestamp ts) {
-  if (ts.logical > 0) {
-    --ts.logical;
-  } else if (ts.wall_time == 0) {
-    fprintf(stderr, "no previous time for zero timestamp\n");
-    abort();
-  } else {
-    --ts.wall_time;
-    ts.logical = std::numeric_limits<int32_t>::max();
-  }
-  return ts;
-}
+DBTimestamp ToDBTimestamp(const cockroach::util::hlc::LegacyTimestamp& timestamp);
+DBTimestamp PrevTimestamp(DBTimestamp ts);
 
 inline bool operator==(const DBTimestamp& a, const DBTimestamp& b) {
   return a.wall_time == b.wall_time && a.logical == b.logical;
