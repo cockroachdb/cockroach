@@ -382,6 +382,8 @@ ifneq ($(HOST_TRIPLE),$(TARGET_TRIPLE))
 is-cross-compile := 1
 endif
 
+target-is-windows := $(findstring w64,$(TARGET_TRIPLE))
+
 # CMAKE_TARGET_MESSAGES=OFF prevents CMake from printing progress messages
 # whenever a target is fully built to prevent spammy output from make when
 # c-deps are all already built. Progress messages are still printed when actual
@@ -454,7 +456,10 @@ LIBROACHCCL := $(LIBROACH_DIR)/libroachccl.a
 LIBKRB5     := $(KRB5_DIR)/lib/libgssapi_krb5.a
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
-C_LIBS_COMMON = $(if $(use-stdmalloc),,$(LIBJEMALLOC)) $(LIBPROTOBUF) $(LIBSNAPPY) $(LIBEDIT) $(LIBROCKSDB)
+C_LIBS_COMMON = \
+	$(if $(use-stdmalloc),,$(LIBJEMALLOC)) \
+	$(if $(target-is-windows),,$(LIBEDIT)) \
+	$(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB)
 C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBROACH)
 C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL)
 
@@ -519,7 +524,7 @@ vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submo
 	@echo 'package $($(@D)-package)' >> $@
 	@echo >> $@
 	@echo '// #cgo CPPFLAGS: -DGO_LIBEDIT_NO_BUILD' >> $@
-	@echo '// #cgo LDFLAGS: -ledit -lncurses' >> $@
+	@echo '// #cgo !windows LDFLAGS: -ledit -lncurses' >> $@
 	@echo 'import "C"' >> $@
 
 # BUILD ARTIFACT CACHING
