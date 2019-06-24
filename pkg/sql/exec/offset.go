@@ -23,8 +23,7 @@ import (
 type offsetOp struct {
 	input Operator
 
-	internalBatch coldata.Batch
-	offset        uint64
+	offset uint64
 
 	// seen is the number of tuples seen so far.
 	seen uint64
@@ -42,7 +41,6 @@ func NewOffsetOp(input Operator, offset uint64) Operator {
 }
 
 func (c *offsetOp) Init() {
-	c.internalBatch = coldata.NewMemBatch(nil)
 	c.input.Init()
 }
 
