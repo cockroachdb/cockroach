@@ -193,6 +193,16 @@ message RangeDescriptor {
   // replica is gc'able or not. If it is not gc'able, then by definition the
   // replica applying the merge is.
   optional int64 generation = 6;
+  // generation_comparable is additional state to mark descriptors as obeying
+  // the new generation rules. We can determine the causality of two range
+  // descriptors if they overlap and both their generation_comparable are set.
+  // If one or both of their generation_comparable is not set, we cannot
+  // determine which range descriptor is newer. This is needed because older
+  // versions of Cockroach did not set the generation in some cases where it is
+  // currently set. Code that relies on a total order of range descriptor
+  // generations can determine when this order is ensured from this state. See
+  // #36654 for more details.
+  optional bool generation_comparable = 8;
   // The presence of the sticky_bit indicates that the range should not be
   // automatically merged by the merge queue with the range to its left. It is
   // set during a split operation and unset during an unsplit operation. Note

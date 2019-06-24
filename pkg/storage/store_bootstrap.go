@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -148,6 +149,9 @@ func WriteInitialClusterData(
 			StartKey:      startKey,
 			EndKey:        endKey,
 			NextReplicaID: 2,
+		}
+		if !bootstrapVersion.Less(cluster.VersionByKey(cluster.VersionGenerationComparable)) {
+			desc.GenerationComparable = proto.Bool(true)
 		}
 		desc.SetReplicas(roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{
 			{
