@@ -37,5 +37,9 @@ type RWMutex struct {
 }
 
 // AssertHeld is a no-op for deadlock mutexes.
-func (m *RWMutex) AssertHeld() {
+func (rw *RWMutex) AssertHeld() {
+}
+
+// AssertRHeld is a no-op for deadlock mutexes.
+func (rw *RWMutex) AssertRHeld() {
 }
