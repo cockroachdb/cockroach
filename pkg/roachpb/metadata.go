@@ -198,6 +198,14 @@ func (r *RangeDescriptor) IncrementGeneration() {
 	r.Generation = proto.Int64(r.GetGeneration() + 1)
 }
 
+// GetGenerationComparable returns if the generation of this RangeDescriptor is comparable.
+func (r RangeDescriptor) GetGenerationComparable() bool {
+	if r.GenerationComparable == nil {
+		return false
+	}
+	return *r.GenerationComparable
+}
+
 // GetStickyBit returns the sticky bit of this RangeDescriptor.
 func (r RangeDescriptor) GetStickyBit() hlc.Timestamp {
 	if r.StickyBit == nil {
