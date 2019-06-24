@@ -2897,6 +2897,29 @@ func (fr *RocksDBSstFileReader) Close() {
 	fr.rocksDB.RocksDB = nil
 }
 
+// CheckForKeyCollisions indicates if the two iterators collide on any keys.
+func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) error {
+	existingIterGetter := existingIter.(dbIteratorGetter)
+	sstableIterGetter := sstIter.(dbIteratorGetter)
+	var intentErr C.DBString
+
+	state := C.DBCheckForKeyCollisions(existingIterGetter.getIter(), sstableIterGetter.getIter(), &intentErr)
+
+	err := statusToError(state.status)
+	if err != nil {
+		if err.Error() == "WriteIntentError" {
+			var e roachpb.WriteIntentError
+			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
+				return errors.Wrap(err, "failed to decode write intent error")
+			}
+
+			return &e
+		}
+	}
+
+	return err
+}
+
 // RocksDBSstFileWriter creates a file suitable for importing with
 // RocksDBSstFileReader.
 type RocksDBSstFileWriter struct {
