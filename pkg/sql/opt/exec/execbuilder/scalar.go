@@ -67,8 +67,10 @@ func init() {
 		opt.SubqueryOp: (*Builder).buildSubquery,
 	}
 
-	for _, op := range opt.BooleanOperators {
-		scalarBuildFuncMap[op] = (*Builder).buildBoolean
+	for _, op := range opt.BoolOperators {
+		if scalarBuildFuncMap[op] == nil {
+			scalarBuildFuncMap[op] = (*Builder).buildBoolean
+		}
 	}
 
 	for _, op := range opt.ComparisonOperators {
