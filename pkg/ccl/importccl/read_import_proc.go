@@ -374,7 +374,6 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
 			const bufferSize, flushSize = 64 << 20, 16 << 20
 			adder, err := cp.flowCtx.BulkAdder(ctx, cp.flowCtx.ClientDB, bufferSize, flushSize, writeTS)
-			adder.SetDisallowShadowing(true)
 			if err != nil {
 				return err
 			}

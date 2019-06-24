@@ -12610,12 +12610,19 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::cockroach::roachpb::RequestHeader* mutable_header();
   void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
 
+  // bool disallow_shadowing = 3;
+  void clear_disallow_shadowing();
+  static const int kDisallowShadowingFieldNumber = 3;
+  bool disallow_shadowing() const;
+  void set_disallow_shadowing(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.AddSSTableRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr data_;
   ::cockroach::roachpb::RequestHeader* header_;
+  bool disallow_shadowing_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -27271,6 +27278,20 @@ inline void AddSSTableRequest::set_allocated_data(::std::string* data) {
   }
   data_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), data);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AddSSTableRequest.data)
+}
+
+// bool disallow_shadowing = 3;
+inline void AddSSTableRequest::clear_disallow_shadowing() {
+  disallow_shadowing_ = false;
+}
+inline bool AddSSTableRequest::disallow_shadowing() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AddSSTableRequest.disallow_shadowing)
+  return disallow_shadowing_;
+}
+inline void AddSSTableRequest::set_disallow_shadowing(bool value) {
+  
+  disallow_shadowing_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.AddSSTableRequest.disallow_shadowing)
 }
 
 // -------------------------------------------------------------------

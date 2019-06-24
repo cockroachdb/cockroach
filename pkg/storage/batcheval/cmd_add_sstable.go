@@ -42,6 +42,14 @@ func EvalAddSSTable(
 	// defer tracing.FinishSpan(span)
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
+	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
+	// entries - #38044.
+	if args.DisallowShadowing {
+		if err := checkForKeyCollisions(ctx, batch, mvccStartKey, mvccEndKey, args.Data); err != nil {
+			return result.Result{}, errors.Wrap(err, "checking for key collisions")
+		}
+	}
+
 	// Verify that the keys in the sstable are within the range specified by the
 	// request header, verify the key-value checksums, and compute the new
 	// MVCCStats.
@@ -103,6 +111,48 @@ func EvalAddSSTable(
 			},
 		},
 	}, nil
+}
+
+func checkForKeyCollisions(
+	ctx context.Context,
+	batch engine.ReadWriter,
+	mvccStartKey engine.MVCCKey,
+	mvccEndKey engine.MVCCKey,
+	data []byte,
+) error {
+
+	// Create iterator over the existing data.
+	existingDataIter := batch.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
+	defer existingDataIter.Close()
+	existingDataIter.Seek(mvccStartKey)
+	if ok, err := existingDataIter.Valid(); err != nil {
+		return errors.Wrap(err, "checking for key collisions")
+	} else if ok && !existingDataIter.UnsafeKey().Less(mvccEndKey) {
+		// Target key range is empty, so it is safe to ingest.
+		return nil
+	}
+
+	// Create a C++ iterator over the SST being added. This iterator is used to
+	// perform a check for key collisions between the SST being ingested, and the
+	// exisiting data. As the collision check is in C++ we are unable to use a
+	// pure go iterator as in verifySSTable.
+	//
+	// TODO(adityamaru): reuse this iterator in verifySSTable.
+	sst := engine.MakeRocksDBSstFileReader()
+	defer sst.Close()
+
+	if err := sst.IngestExternalFile(data); err != nil {
+		return err
+	}
+	sstIterator := sst.NewIterator(engine.IterOptions{UpperBound: mvccEndKey.Key})
+	defer sstIterator.Close()
+	sstIterator.Seek(mvccStartKey)
+	if ok, err := sstIterator.Valid(); err != nil || !ok {
+		return errors.Wrap(err, "checking for key collisions")
+	}
+
+	checkErr := engine.CheckForKeyCollisions(existingDataIter, sstIterator)
+	return checkErr
 }
 
 func verifySSTable(
