@@ -876,7 +876,6 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.isLocal = !distribute
 	planCtx.planner = planner
 	planCtx.stmtType = recv.stmtType
-
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		var evalCtx extendedEvalContext
 		ex.initEvalCtx(ctx, &evalCtx, planner)
