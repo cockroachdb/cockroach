@@ -994,16 +994,111 @@ func (r *Replica) changeReplicas(
 	return &updatedDesc, nil
 }
 
-// sendSnapshot sends a snapshot of the replica state to the specified
-// replica. This is used for both preemptive snapshots that are performed
-// before adding a replica to a range, and for Raft-initiated snapshots that
-// are used to bring a replica up to date that has fallen too far
-// behind. Currently only invoked from replicateQueue and raftSnapshotQueue. Be
-// careful about adding additional calls as generating a snapshot is moderately
+// sendSnapshot sends a snapshot of the replica state to the specified replica.
+// Currently only invoked from replicateQueue and raftSnapshotQueue. Be careful
+// about adding additional calls as generating a snapshot is moderately
 // expensive.
+//
+// A snapshot is a bulk transfer of all data in a range. It consists of a
+// consistent view of all the state needed to run some replica of a range as of
+// some clock time (not mvcc-time). Snapshots are used by raft when a follower
+// is far enough behind the leader that the leader can no longer catch it up by
+// sending incremental diffs (because the leader has already garbage collected
+// the diffs, in this case because it truncated the raft log past where the
+// follower is).
+//
+// We also proactively send a snapshot when adding a new replica to bootstrap it
+// (this is called a "learner" snapshot and is a special case of a raft
+// snapshot, we just speed the process along). It's called a learner snapshot
+// because it's sent to what raft terms a learner replica. As of 19.2, when we
+// add a new replica, it's first added as a learner using a raft ConfChange,
+// which means it accepts raft traffic but doesn't vote or affect quorum. Then
+// we immediately send it a snapshot to catch it up. After the snapshot
+// successfully applies, we turn it into a normal voting replica using another
+// ConfChange. It then uses the normal mechanisms to catch up with whatever got
+// committed to the raft log during the snapshot transfer. In contrast to adding
+// the voting replica directly, this avoids a period of fragility when the
+// replica would be a full member, but very far behind. [1]
+//
+// Snapshots are expensive and mostly unexpected (except learner snapshots
+// during rebalancing). The quota pool is responsible for keeping a leader from
+// getting too far ahead of any of the followers, so ideally they'd never be far
+// enough behind to need a snapshot.
+//
+// The snapshot process itself is broken into 3 parts: generating the snapshot,
+// transmitting it, and applying it.
+//
+// Generating the snapshot: The data contained in a snapshot is a full copy of
+// the range's data plus everything the replica needs to be a healthy member of
+// a raft group. The former is large, so we send it via streaming rpc instead of
+// keeping it all in memory at once. (Well, at least on the sender side. On the
+// recipient side, we do still buffer it, but we'll fix that at some point). The
+// `(Replica).GetSnapshot` method does the necessary locking and gathers the
+// various raft state needed to run a replica. It also creates an iterator for
+// the range's data as it looked under those locks (this is powered by a RocksDB
+// snapshot, which is a different thing but a similar idea). Notably,
+// GetSnapshot does not do the data iteration.
+//
+// Transmitting the snapshot: The transfer itself happens over the grpc
+// `RaftSnapshot` method, which is a bi-directional stream of `SnapshotRequest`s
+// and `SnapshotResponse`s. The two sides are orchestrated by the
+// `(RaftTransport).SendSnapshot` and `(Store).receiveSnapshot` methods.
+//
+// `SendSnapshot` starts up the streaming rpc and first sends a header message
+// with everything but the range data and then blocks, waiting on the first
+// streaming response from the recipient. This lets us short-circuit sending the
+// range data if the recipient can't be contacted or if it can't use the
+// snapshot (which is usually the result of a race). The recipient's grpc hander
+// for RaftSnapshot sanity checks a few things and ends up calling down into
+// `receiveSnapshot`, which does the bulk of the work. `receiveSnapshot` starts
+// by waiting for a reservation in the snapshot rate limiter. It then reads the
+// header message and hands it to `shouldAcceptSnapshotData` to determine if it
+// can use the snapshot [2]. `shouldAcceptSnapshotData` is advisory and can
+// return false positives. If `shouldAcceptSnapshotData` returns true, this is
+// communicated back to the sender, which then proceeds to call
+// `kvBatchSnapshotStrategy.Send`. This uses the iterator captured earlier to
+// send the data in chunks, each chunk a streaming grpc message. The sender then
+// sends a final message with an indicaton that it's done and blocks again,
+// waiting for a second and final response from the recipient which indicates if
+// the snapshot was a success.
+//
+// Applying the snapshot: After the recipient has received the message
+// indicating it has all the data, it hands it all to
+// `(Store).processRaftSnapshotRequest` to be applied. First, this re-checks the
+// same things as `shouldAcceptSnapshotData` to make sure nothing has changed
+// while the snapshot was being transferred. It then guarantees that there is
+// either an initialized[3] replica or a `ReplicaPlaceholder`[4] to accept the
+// snapshot by creating a placeholder if necessary. Finally, a *raft snapshot*
+// message is manually handed to the replica's raft node (by calling
+// `stepRaftGroup` + `handleRaftReadyRaftMuLocked`), at which point the snapshot
+// has been applied.
+//
+// [1]: There is a third kind of snapshot, called "preemptive", which is how we
+// avoided the above fragility before learner replicas were introduced in the
+// 19.2 cycle. It's essentially a snapshot that we made very fast by staging it
+// on a remote node right before we added a replica on that node. However,
+// preemptive snapshots came with all sorts of complexity that we're delighted
+// to be rid of. They have to stay around for clusters with mixed 19.1 and 19.2
+// nodes, but after 19.2, we can remove them entirely.
+//
+// [2]: The largest class of rejections here is if the store contains a replica
+// that overlaps the snapshot but has a different id (we maintain an invariant
+// that replicas on a store never overlap). This usually happens when the
+// recipient has an old copy of a replica that is no longer part of a range and
+// the `replicaGCQueue` hasn't gotten around to collecting it yet. So if this
+// happens, `shouldAcceptSnapshotData` will queue it up for consideration.
+//
+// [3]: A uninitialized replica is created when a replica that's being added
+// gets traffic from its new peers before it gets a snapshot. It may be possible
+// to get rid of uninitialized replicas (by dropping all raft traffic except
+// votes on the floor), but this is a cleanup that hasn't happened yet.
+//
+// [4]: The placeholder is essentially a snapshot lock, making any future
+// callers of `shouldAcceptSnapshotData` return an error so that we no longer
+// have to worry about racing with a second snapshot.
 func (r *Replica) sendSnapshot(
 	ctx context.Context,
-	repDesc roachpb.ReplicaDescriptor,
+	recipient roachpb.ReplicaDescriptor,
 	snapType SnapshotRequest_Type,
 	priority SnapshotRequest_Priority,
 ) error {
@@ -1014,7 +1109,7 @@ func (r *Replica) sendSnapshot(
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
 
-	fromRepDesc, err := r.GetReplicaDescriptor()
+	sender, err := r.GetReplicaDescriptor()
 	if err != nil {
 		return errors.Wrapf(err, "%s: change replicas failed", r)
 	}
@@ -1065,12 +1160,12 @@ func (r *Replica) sendSnapshot(
 		UnreplicatedTruncatedState: !usesReplicatedTruncatedState,
 		RaftMessageRequest: RaftMessageRequest{
 			RangeID:     r.RangeID,
-			FromReplica: fromRepDesc,
-			ToReplica:   repDesc,
+			FromReplica: sender,
+			ToReplica:   recipient,
 			Message: raftpb.Message{
 				Type:     raftpb.MsgSnap,
-				To:       uint64(repDesc.ReplicaID),
-				From:     uint64(fromRepDesc.ReplicaID),
+				To:       uint64(recipient.ReplicaID),
+				From:     uint64(sender.ReplicaID),
 				Term:     status.Term,
 				Snapshot: snap.RaftSnap,
 			},
