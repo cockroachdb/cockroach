@@ -140,7 +140,7 @@ func EncodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) 
 		buf.WriteString(s)
 		return
 	}
-	encodeEscapedSQLIdent(buf, s)
+	EncodeEscapedSQLIdent(buf, s)
 }
 
 // EncodeRestrictedSQLIdent writes the identifier in s to buf. The
@@ -152,13 +152,13 @@ func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
 		buf.WriteString(s)
 		return
 	}
-	encodeEscapedSQLIdent(buf, s)
+	EncodeEscapedSQLIdent(buf, s)
 }
 
-// encodeEscapedSQLIdent writes the identifier in s to buf. The
+// EncodeEscapedSQLIdent writes the identifier in s to buf. The
 // identifier is always quoted. Double quotes inside the identifier
 // are escaped.
-func encodeEscapedSQLIdent(buf *bytes.Buffer, s string) {
+func EncodeEscapedSQLIdent(buf *bytes.Buffer, s string) {
 	buf.WriteByte('"')
 	start := 0
 	for i, n := 0, len(s); i < n; i++ {
