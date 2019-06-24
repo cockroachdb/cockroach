@@ -272,6 +272,10 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 // merged with existing. This method is provided for invocation from Go code.
 DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 
+// DBCheckForAddSSTableKeyCollisions runs both iterators in lock step and
+// errors out at the first key collision it finds.
+DBIterState DBCheckForAddSSTableKeyCollisions(DBIterator* existingIter, DBIterator* sstIter);
+
 // NB: The function (cStatsToGoStats) that converts these to the go
 // representation is unfortunately duplicated in engine and engineccl. If this
 // struct is changed, both places need to be updated.

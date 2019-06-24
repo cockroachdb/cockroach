@@ -527,6 +527,40 @@ DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname) {
   return db->EnvLinkFile(oldname, newname);
 }
 
+DBIterState DBCheckForAddSSTableKeyCollisions(DBIterator* existingIter, DBIterator* sstIter) {
+  DBIterState state = {};
+  while (existingIter->rep->Valid() && sstIter->rep->Valid()) {
+    rocksdb::Slice sstKey;
+    rocksdb::Slice existingKey;
+    int64_t wall_time = 0;
+    int32_t logical_time = 0;
+    if (!DecodeKey(sstIter->rep->key(), &sstKey, &wall_time, &logical_time) ||
+        !DecodeKey(existingIter->rep->key(), &existingKey, &wall_time, &logical_time)) {
+          state.valid = false;
+          state.status = FmtStatus("unable to decode key");
+          return state;
+    }
+
+    int compare = kComparator.Compare(existingKey, sstKey);
+    if (compare == 0) {
+      // If the colliding key has been deleted in rocksdb then it is not
+      // considered a collision.
+      if (existingIter->rep->value().empty()) { break; }
+
+      state.valid = false;
+      state.status = FmtStatus("key collision at %s", sstKey.data());
+      return state;
+    } else if (compare < 0) {
+      existingIter->rep->Seek(sstKey);
+    } else if (compare > 0) {
+      sstIter->rep->Seek(existingKey);
+    }
+  }
+
+  state.valid = true;
+  return state;
+}
+
 DBIterator* DBNewIter(DBEngine* db, DBIterOptions iter_options) {
   return db->NewIter(iter_options);
 }
