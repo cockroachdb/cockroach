@@ -1888,6 +1888,7 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
 	optUsed bool,
+	implicitTxn bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
@@ -1895,7 +1896,7 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 	bytesRead, rowsRead int64,
 ) {
 	s.appStats.recordStatement(
-		stmt, samplePlanDescription, distSQLUsed, optUsed, automaticRetryCount, numRows, err,
+		stmt, samplePlanDescription, distSQLUsed, optUsed, implicitTxn, automaticRetryCount, numRows, err,
 		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
 }
 
