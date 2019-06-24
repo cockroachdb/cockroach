@@ -23,7 +23,7 @@ insert child
  │         ├── const: 200 [type=int]
  │         └── const: 1 [type=int]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join
                 ├── columns: column2:4(int!null)
                 ├── project
@@ -67,7 +67,7 @@ insert child_nullable
  │         └── cast: INT8 [type=int]
  │              └── null [type=unknown]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join
                 ├── columns: column2:4(int!null)
                 ├── select
@@ -113,7 +113,7 @@ insert child_nullable
  │         ├── const: 200 [type=int]
  │         └── const: 1 [type=int]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join
                 ├── columns: column2:4(int!null)
                 ├── project
@@ -157,7 +157,7 @@ insert child_nullable_full
  │         └── cast: INT8 [type=int]
  │              └── null [type=unknown]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: child_nullable_full(p) -> parent(p)
            └── anti-join
                 ├── columns: column2:4(int!null)
                 ├── select
@@ -219,7 +219,7 @@ insert multi_col_child
  │         └── cast: INT8 [type=int]
  │              └── null [type=unknown]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join
                 ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
                 ├── select
@@ -285,7 +285,7 @@ insert multi_col_child
  │         │    └── null [type=unknown]
  │         └── const: 20 [type=int]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join
                 ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
                 ├── select
@@ -345,7 +345,7 @@ insert multi_col_child
  │         ├── const: 10 [type=int]
  │         └── const: 10 [type=int]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join
                 ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
                 ├── project
@@ -400,7 +400,7 @@ insert multi_col_child_full
  │         └── cast: INT8 [type=int]
  │              └── null [type=unknown]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join
                 ├── columns: column2:6(int) column3:7(int) column4:8(int)
                 ├── select
@@ -468,7 +468,7 @@ insert multi_col_child_full
  │         │    └── null [type=unknown]
  │         └── const: 20 [type=int]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join
                 ├── columns: column2:6(int) column3:7(int) column4:8(int!null)
                 ├── project
@@ -519,7 +519,7 @@ insert multi_col_child_full
  │         ├── const: 10 [type=int]
  │         └── const: 10 [type=int]
  └── f-k-checks
-      └── f-k-checks-item
+      └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join
                 ├── columns: column2:6(int!null) column3:7(int!null) column4:8(int!null)
                 ├── project
@@ -584,7 +584,7 @@ insert multi_ref_child
  │         └── cast: INT8 [type=int]
  │              └── null [type=unknown]
  └── f-k-checks
-      ├── f-k-checks-item
+      ├── f-k-checks-item: multi_ref_child(a) -> multi_ref_parent_a(a)
       │    └── anti-join
       │         ├── columns: column2:6(int!null)
       │         ├── select
@@ -611,7 +611,7 @@ insert multi_ref_child
       │              └── eq [type=bool]
       │                   ├── variable: column2 [type=int]
       │                   └── variable: t.public.multi_ref_parent_a.a [type=int]
-      └── f-k-checks-item
+      └── f-k-checks-item: multi_ref_child(b,c) -> multi_ref_parent_bc(b,c)
            └── anti-join
                 ├── columns: column3:7(int!null) column4:8(int!null)
                 ├── select
