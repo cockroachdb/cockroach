@@ -592,7 +592,9 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 	// expression.
 	typ := scalar.DataType()
 	if typ == nil {
-		f.Buffer.WriteString(" [type=undefined]")
+		if scalar.Op() != opt.FKChecksItemOp {
+			f.Buffer.WriteString(" [type=undefined]")
+		}
 	} else {
 		first := true
 		writeProp := func(format string, args ...interface{}) {

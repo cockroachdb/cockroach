@@ -313,8 +313,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 	if define.Tags.Contains("Scalar") {
 		// Generate the DataType method.
 		fmt.Fprintf(g.w, "func (e *%s) DataType() *types.T {\n", opTyp.name)
-		dataType := g.constDataType(define)
-		if dataType != "" {
+		if dataType, ok := g.constDataType(define); ok {
 			fmt.Fprintf(g.w, "  return %s\n", dataType)
 		} else {
 			fmt.Fprintf(g.w, "  return e.Typ\n")
@@ -816,23 +815,22 @@ func (g *exprsGen) scalarPropsFieldName(define *lang.DefineExpr) string {
 }
 
 func (g *exprsGen) needsDataTypeField(define *lang.DefineExpr) bool {
+	if _, ok := g.constDataType(define); ok {
+		return false
+	}
 	for _, field := range expandFields(g.compiled, define) {
 		if field.Name == "Typ" && field.Type == "Type" {
 			return false
 		}
 	}
-	return g.constDataType(define) == ""
+	return true
 }
 
-func (g *exprsGen) constDataType(define *lang.DefineExpr) string {
-	switch define.Name {
-	case "Exists", "Any", "AnyScalar":
-		return "types.Bool"
-	case "CountRows":
-		return "types.Int"
+func (g *exprsGen) constDataType(define *lang.DefineExpr) (_ string, ok bool) {
+	for _, typ := range []string{"Bool", "Int", "Float"} {
+		if define.Tags.Contains(typ) {
+			return "types." + typ, true
+		}
 	}
-	if define.Tags.Contains("Comparison") || define.Tags.Contains("Boolean") {
-		return "types.Bool"
-	}
-	return ""
+	return "", false
 }

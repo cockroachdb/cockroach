@@ -1619,7 +1619,7 @@ window partition=()
  ├── columns: rank:5(int)
  ├── scan a
  └── windows
-      └── rank [type=undefined]
+      └── rank [type=int]
 
 norm expect=PruneWindowInputCols
 SELECT ntile(1) OVER () FROM a
