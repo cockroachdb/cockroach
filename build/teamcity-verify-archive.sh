@@ -26,12 +26,11 @@ tc_start_block "Test archive"
 # NB: This docker container runs as root. Be sure to mount any bind volumes as
 # read-only to avoid creating root-owned directories and files on the host
 # machine.
-# NB: Using golang:1.11.5-stretch instead of golang:stretch because of #35637.
 run docker run \
   --rm \
   --volume="$(cd "$(dirname "$0")" && pwd):/work:ro" \
   --workdir="/work" \
-  golang:1.11.5-stretch ./verify-archive.sh
+  golang:1.12-stretch ./verify-archive.sh
 tc_end_block "Test archive"
 
 tc_start_block "Clean up"
