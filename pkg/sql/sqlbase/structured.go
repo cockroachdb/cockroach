@@ -2387,7 +2387,7 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 						}
 					}
 				default:
-					return pgerror.AssertionFailedf("impossible constraint validity state: %d", t.Constraint.Check.Validity)
+					return errors.AssertionFailedf("impossible constraint validity state: %d", t.Constraint.Check.Validity)
 				}
 			case ConstraintToUpdate_FOREIGN_KEY:
 				idx, err := desc.FindIndexByID(t.Constraint.ForeignKeyIndex)
