@@ -35,7 +35,7 @@ new engineers.
      - On GNU/Linux, the terminfo development libraries, which may be
        part of a ncurses development package (e.g. `libncurses-dev` on
        Debian/Ubuntu, but `ncurses-devel` on CentOS).
-     - A Go 1.11.4 environment with a recent 64-bit version of the toolchain. Note that
+     - A Go 1.12 environment with a recent 64-bit version of the toolchain. Note that
        the Makefile enforces the specific version required, as it is updated
        frequently.
      - Git 1.9+

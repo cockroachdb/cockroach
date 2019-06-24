@@ -107,7 +107,7 @@ sudo apt-get install -y gcc;
 sudo apt-get update;
 sudo apt-get install -y graphviz rlwrap;
 
-curl https://dl.google.com/go/go1.11.linux-amd64.tar.gz | sudo tar -C /usr/local -xz;
+curl https://dl.google.com/go/go1.12.linux-amd64.tar.gz | sudo tar -C /usr/local -xz;
 echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee /etc/profile.d/go.sh > /dev/null;
 sudo chmod +x /etc/profile.d/go.sh;
 `,
