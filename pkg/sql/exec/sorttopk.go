@@ -122,11 +122,15 @@ func (t *topKSorter) spool(ctx context.Context) {
 			destVec := t.topK.ColVec(i)
 			vec := inputBatch.ColVec(i)
 			colType := t.inputTypes[i]
-			if inputBatch.Selection() == nil {
-				destVec.Append(vec, colType, toLength, fromLength)
-			} else {
-				destVec.AppendWithSel(vec, inputBatch.Selection(), fromLength, colType, toLength)
-			}
+			destVec.Append(
+				coldata.AppendArgs{
+					ColType:   colType,
+					Src:       vec,
+					Sel:       inputBatch.Selection(),
+					DestIdx:   toLength,
+					SrcEndIdx: fromLength,
+				},
+			)
 		}
 		spooledRows += fromLength
 		remainingRows -= fromLength
@@ -160,9 +164,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 					// TODO(solon): Make this copy more efficient, perhaps by adding a
 					// copy method to the vecComparator interface. This would avoid
 					// needing to switch on the column type every time.
-					t.topK.ColVec(j).AppendSlice(
-						inputBatch.ColVec(j), t.inputTypes[j], uint64(maxIdx), uint16(idx), uint16(idx)+1)
-
+					t.topK.ColVec(j).CopyAt(inputBatch.ColVec(j), uint64(maxIdx), uint64(idx), uint64(idx+1), t.inputTypes[j])
 				}
 				heap.Fix(t, 0)
 			}

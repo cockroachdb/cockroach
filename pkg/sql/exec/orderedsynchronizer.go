@@ -71,8 +71,15 @@ func (o *orderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				srcStartIdx = sel[srcStartIdx]
 			}
-			o.output.ColVec(i).AppendSlice(
-				vec, o.columnTypes[i], uint64(outputIdx), srcStartIdx, srcStartIdx+1)
+			o.output.ColVec(i).Append(
+				coldata.AppendArgs{
+					ColType:     o.columnTypes[i],
+					Src:         vec,
+					DestIdx:     uint64(outputIdx),
+					SrcStartIdx: srcStartIdx,
+					SrcEndIdx:   srcStartIdx + 1,
+				},
+			)
 		}
 
 		// Advance the input batch, fetching a new batch if necessary.

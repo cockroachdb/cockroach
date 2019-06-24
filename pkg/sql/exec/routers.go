@@ -193,7 +193,15 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 		}
 
 		for i, t := range o.types {
-			dst.ColVec(i).AppendWithSel(batch.ColVec(i), selection, numAppended, t, uint64(dst.Length()))
+			dst.ColVec(i).Append(
+				coldata.AppendArgs{
+					ColType:   t,
+					Src:       batch.ColVec(i),
+					Sel:       selection,
+					DestIdx:   uint64(dst.Length()),
+					SrcEndIdx: uint16(len(selection)),
+				},
+			)
 		}
 
 		selection = selection[numAppended:]
