@@ -708,6 +708,7 @@ func (c *chunkingBatchSource) Init() {
 	c.batch = coldata.NewMemBatch(c.typs)
 	for i := range c.cols {
 		c.batch.ColVec(i).SetCol(c.cols[i].Col())
+		c.batch.ColVec(i).SetNulls(c.cols[i].Nulls())
 	}
 }
 
@@ -721,6 +722,8 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	}
 	for i, vec := range c.batch.ColVecs() {
 		vec.SetCol(c.cols[i].Slice(c.typs[i], c.curIdx, lastIdx).Col())
+		nullsSlice := c.cols[i].Nulls().Slice(c.curIdx, lastIdx)
+		vec.SetNulls(&nullsSlice)
 	}
 	c.batch.SetLength(uint16(lastIdx - c.curIdx))
 	c.curIdx = lastIdx

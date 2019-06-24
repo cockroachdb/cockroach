@@ -189,6 +189,8 @@ func makeAggregateFuncs(
 		case distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM_INT:
 			funcs[i], err = newSumAgg(aggTyps[i][0])
 		case distsqlpb.AggregatorSpec_COUNT_ROWS:
+			funcs[i] = newCountRowAgg()
+		case distsqlpb.AggregatorSpec_COUNT:
 			funcs[i] = newCountAgg()
 		case distsqlpb.AggregatorSpec_MIN:
 			funcs[i], err = newMinAgg(aggTyps[i][0])
@@ -200,7 +202,7 @@ func makeAggregateFuncs(
 
 		// Set the output type of the aggregate.
 		switch aggFns[i] {
-		case distsqlpb.AggregatorSpec_COUNT_ROWS:
+		case distsqlpb.AggregatorSpec_COUNT_ROWS, distsqlpb.AggregatorSpec_COUNT:
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
 			// should come with their own output types, somehow.
 			outTyps[i] = types.Int64
