@@ -74,7 +74,7 @@ define SubqueryPrivate {
 # Any expects the input subquery to return a single column of any data type. The
 # scalar value is compared with that column using the specified comparison
 # operator.
-[Scalar]
+[Scalar, Bool]
 define Any {
     Input  RelExpr
     Scalar ScalarExpr
@@ -84,7 +84,7 @@ define Any {
 
 # Exists takes a relational query as its input, and evaluates to true if the
 # query returns at least one row.
-[Scalar]
+[Scalar, Bool]
 define Exists {
     Input RelExpr
 
@@ -129,14 +129,14 @@ define Null {
 # True is the boolean true value that is equivalent to the tree.DBoolTrue datum
 # value. It is a separate operator to make matching and replacement simpler and
 # more efficient, as patterns can contain (True) expressions.
-[Scalar, Boolean, ConstValue]
+[Scalar, Bool, ConstValue]
 define True {
 }
 
 # False is the boolean false value that is equivalent to the tree.DBoolFalse
 # datum value. It is a separate operator to make matching and replacement
 # simpler and more efficient, as patterns can contain (False) expressions.
-[Scalar, Boolean, ConstValue]
+[Scalar, Bool, ConstValue]
 define False {
 }
 
@@ -227,7 +227,7 @@ define AggregationsItem {
 # filtered only if all conditions evaluate to true. If the set is empty, then
 # it never filters rows. See the Select and FiltersItem headers for more
 # details.
-[Scalar, Boolean, List]
+[Scalar, Bool, List]
 define Filters {
 }
 
@@ -236,7 +236,7 @@ define Filters {
 # set of scalar properties that are lazily calculated by traversing the
 # Condition scalar expression. This allows the properties for the entire
 # expression subtree to be calculated once and then repeatedly reused.
-[Scalar, Boolean, ListItem]
+[Scalar, Bool, ListItem]
 define FiltersItem {
     Condition ScalarExpr
 
@@ -294,7 +294,7 @@ define ZipItemPrivate {
 
 # And is the boolean conjunction operator that evalutes to true only if both of
 # its conditions evaluate to true.
-[Scalar, Boolean]
+[Scalar, Bool]
 define And {
     Left  ScalarExpr
     Right ScalarExpr
@@ -302,7 +302,7 @@ define And {
 
 # Or is the boolean disjunction operator that evaluates to true if either one of
 # its conditions evaluates to true.
-[Scalar, Boolean]
+[Scalar, Bool]
 define Or {
     Left  ScalarExpr
     Right ScalarExpr
@@ -316,157 +316,157 @@ define Or {
 #
 # Currently, Range expressions are only created by the ConsolidateSelectFilters
 # normalization rule.
-[Scalar, Boolean]
+[Scalar, Bool]
 define Range {
     And ScalarExpr
 }
 
 # Not is the boolean negation operator that evaluates to true if its input
 # evaluates to false.
-[Scalar, Boolean]
+[Scalar, Bool]
 define Not {
     Input ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define Eq {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define Lt {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define Gt {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define Le {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define Ge {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define Ne {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define In {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define NotIn {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define Like {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define NotLike {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define ILike {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define NotILike {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define SimilarTo {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define NotSimilarTo {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define RegMatch {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define NotRegMatch {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define RegIMatch {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define NotRegIMatch {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define Is {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define IsNot {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define Contains {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define JsonExists {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define JsonAllExists {
    Left  ScalarExpr
    Right ScalarExpr
 }
 
-[Scalar, Comparison]
+[Scalar, Bool, Comparison]
 define JsonSomeExists {
    Left  ScalarExpr
    Right ScalarExpr
@@ -474,7 +474,7 @@ define JsonSomeExists {
 
 # AnyScalar is the form of ANY which refers to an ANY operation on a
 # tuple or array, as opposed to Any which operates on a subquery.
-[Scalar]
+[Scalar, Bool]
 define AnyScalar {
    Left  ScalarExpr
    Right ScalarExpr
@@ -776,7 +776,7 @@ define Count {
     Input ScalarExpr
 }
 
-[Scalar, Aggregate]
+[Scalar, Int, Aggregate]
 define CountRows {
 }
 
@@ -956,35 +956,35 @@ define WindowsItemPrivate {
 
 # Rank computes the position of a row relative to an ordering, with same-valued
 # rows receiving the same value.
-[Scalar, Window]
+[Scalar, Int, Window]
 define Rank {
 }
 
 # RowNumber computes the position of a row relative to an ordering, with
 # same-valued rows having ties broken arbitrarily.
-[Scalar, Window]
+[Scalar, Int, Window]
 define RowNumber {
 }
 
 # DenseRank is like Rank, but without gaps. Instead of 1, 1, 3, it gives 1, 1, 2.
-[Scalar, Window]
+[Scalar, Int, Window]
 define DenseRank {
 }
 
 # PercentRank is (rank - 1) / (total rows - 1).
-[Scalar, Window]
+[Scalar, Float, Window]
 define PercentRank {
 }
 
 # CumeDist is the relative rank of the current row:
 # (number of rows preceding or peer with current row) / (total rows)
-[Scalar, Window]
+[Scalar, Float, Window]
 define CumeDist {
 }
 
 # Ntile builds a histogram with the specified number of buckets and evaluates
 # to which bucket the row falls in.
-[Scalar, Window]
+[Scalar, Int, Window]
 define Ntile {
     NumBuckets ScalarExpr
 }

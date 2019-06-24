@@ -1542,4 +1542,4 @@ sort
       ├── scan abc
       │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]

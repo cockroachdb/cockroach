@@ -324,7 +324,7 @@ distinct-on
  │         ├── scan xyz
  │         │    └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
  │         └── windows
- │              └── row-number [type=undefined]
+ │              └── row-number [type=int]
  └── aggregations
       └── first-agg [type=int]
            └── variable: y [type=int]
