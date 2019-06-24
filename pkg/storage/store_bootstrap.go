@@ -149,6 +149,9 @@ func WriteInitialClusterData(
 			EndKey:        endKey,
 			NextReplicaID: 2,
 		}
+		if !bootstrapVersion.Less(cluster.VersionByKey(cluster.VersionGenerationComparable)) {
+			desc.GenerationComparable = true
+		}
 		desc.SetReplicas(roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{
 			{
 				NodeID:    1,

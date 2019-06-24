@@ -25,11 +25,12 @@ func _() {
 	_ = x[VersionQueryTxnTimestamp-14]
 	_ = x[VersionStickyBit-15]
 	_ = x[VersionParallelCommits-16]
+	_ = x[VersionGenerationComparable-17]
 }
 
-const _VersionKey_name = "Version2_1VersionCascadingZoneConfigsVersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
+const _VersionKey_name = "Version2_1VersionCascadingZoneConfigsVersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommitsVersionGenerationComparable"
 
-var _VersionKey_index = [...]uint16{0, 10, 37, 54, 82, 102, 123, 160, 178, 197, 232, 257, 283, 294, 310, 334, 350, 372}
+var _VersionKey_index = [...]uint16{0, 10, 37, 54, 82, 102, 123, 160, 178, 197, 232, 257, 283, 294, 310, 334, 350, 372, 399}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {

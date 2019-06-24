@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -1121,6 +1122,9 @@ func changeReplicasTrigger(
 	cpy.SetReplicas(roachpb.MakeReplicaDescriptors(change.UpdatedReplicas))
 	cpy.NextReplicaID = change.NextReplicaID
 	cpy.IncrementGeneration()
+	if !cpy.GenerationComparable && rec.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable) {
+		cpy.GenerationComparable = true
+	}
 	// TODO(tschottdorf): duplication of Desc with the trigger below, should
 	// likely remove it from the trigger.
 	pd.Replicated.State = &storagepb.ReplicaState{
