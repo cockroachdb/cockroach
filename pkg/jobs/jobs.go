@@ -134,7 +134,7 @@ func (j *Job) Started(ctx context.Context) error {
 			return nil
 		}
 		ju.UpdateStatus(StatusRunning)
-		md.Payload.StartedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -323,7 +323,7 @@ func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn
 			}
 		}
 		ju.UpdateStatus(StatusCanceled)
-		md.Payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -347,7 +347,7 @@ func (j *Job) Failed(
 		}
 		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
-		md.Payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -365,7 +365,7 @@ func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *client.Tx
 			return err
 		}
 		ju.UpdateStatus(StatusSucceeded)
-		md.Payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
 			FractionCompleted: 1.0,
