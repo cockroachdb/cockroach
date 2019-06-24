@@ -19,7 +19,7 @@ import (
 
 func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#30001")
+
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb", true, []string{"c-deps"}, nil,
 	)
