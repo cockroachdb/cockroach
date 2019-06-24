@@ -248,31 +248,39 @@ func (sc *SchemaChanger) AddConstraints(
 			fksByBackrefTable[c.ForeignKey.Table] = append(fksByBackrefTable[c.ForeignKey.Table], c)
 		}
 	}
+	tableIDsToUpdate := make([]sqlbase.ID, 0, len(fksByBackrefTable)+1)
+	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
+	for id := range fksByBackrefTable {
+		tableIDsToUpdate = append(tableIDsToUpdate, id)
+	}
 
-	// Create map of update closures for the table and all other tables with backreferences
-	updates := make(map[sqlbase.ID]func(descriptor *sqlbase.MutableTableDescriptor) error)
-	updates[sc.tableID] = func(desc *sqlbase.MutableTableDescriptor) error {
+	// Create update closure for the table and all other tables with backreferences
+	update := func(descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
+		scTable, ok := descs[sc.tableID]
+		if !ok {
+			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+		}
 		for i := range constraints {
-			added := &constraints[i]
-			switch added.ConstraintType {
+			constraint := &constraints[i]
+			switch constraint.ConstraintType {
 			case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 				found := false
-				for _, c := range desc.Checks {
-					if c.Name == added.Name {
+				for _, c := range scTable.Checks {
+					if c.Name == constraint.Name {
 						log.VEventf(
 							ctx, 2,
 							"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
-							added, c,
+							constraint, c,
 						)
 						found = true
 						break
 					}
 				}
 				if !found {
-					desc.Checks = append(desc.Checks, &constraints[i].Check)
+					scTable.Checks = append(scTable.Checks, &constraints[i].Check)
 				}
 			case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
-				idx, err := desc.FindIndexByID(added.ForeignKeyIndex)
+				idx, err := scTable.FindIndexByID(constraint.ForeignKeyIndex)
 				if err != nil {
 					return err
 				}
@@ -281,39 +289,29 @@ func (sc *SchemaChanger) AddConstraints(
 						log.VEventf(
 							ctx, 2,
 							"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
-							added, idx.ForeignKey,
+							constraint, idx.ForeignKey,
 						)
 					}
 				} else {
-					idx.ForeignKey = added.ForeignKey
-					// If there are any backreferences to be added to the same table, add them here
-					if added.ForeignKey.Table == sc.tableID {
-						backref := sqlbase.ForeignKeyReference{Table: sc.tableID, Index: added.ForeignKeyIndex}
-						idx, err := desc.FindIndexByID(added.ForeignKey.Index)
-						if err != nil {
-							return err
-						}
-						idx.ReferencedBy = append(idx.ReferencedBy, backref)
+					idx.ForeignKey = constraint.ForeignKey
+					// Add backreference on the referenced table (which could be the same table)
+					backref := sqlbase.ForeignKeyReference{Table: sc.tableID, Index: constraint.ForeignKeyIndex}
+					backrefTable, ok := descs[constraint.ForeignKey.Table]
+					if !ok {
+						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 					}
+					backrefIdx, err := backrefTable.FindIndexByID(constraint.ForeignKey.Index)
+					if err != nil {
+						return err
+					}
+					backrefIdx.ReferencedBy = append(backrefIdx.ReferencedBy, backref)
 				}
 			}
 		}
 		return nil
 	}
-	for id := range fksByBackrefTable {
-		updates[id] = func(desc *sqlbase.MutableTableDescriptor) error {
-			for _, c := range fksByBackrefTable[id] {
-				backref := sqlbase.ForeignKeyReference{Table: sc.tableID, Index: c.ForeignKeyIndex}
-				idx, err := desc.FindIndexByID(c.ForeignKey.Index)
-				if err != nil {
-					return err
-				}
-				idx.ReferencedBy = append(idx.ReferencedBy, backref)
-			}
-			return nil
-		}
-	}
-	if _, err := sc.leaseMgr.PublishMultiple(ctx, updates, nil); err != nil {
+
+	if _, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, nil); err != nil {
 		return err
 	}
 	if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
@@ -342,7 +340,7 @@ func (sc *SchemaChanger) validateConstraints(
 		return err
 	}
 
-	if fn := sc.testingKnobs.RunBeforeChecksValidation; fn != nil {
+	if fn := sc.testingKnobs.RunBeforeConstraintValidation; fn != nil {
 		if err := fn(); err != nil {
 			return err
 		}
