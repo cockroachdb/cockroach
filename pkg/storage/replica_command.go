@@ -243,12 +243,14 @@ func (r *Replica) adminSplitWithDescriptor(
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
 	leftDesc.IncrementGeneration()
+	r.maybeMarkGenerationComparable(&leftDesc)
 	leftDesc.EndKey = splitKey
 
 	// Set the generation of the right hand side descriptor to match that of the
 	// (updated) left hand side. See the comment on the field for an explanation
 	// of why generations are useful.
 	rightDesc.Generation = leftDesc.Generation
+	r.maybeMarkGenerationComparable(rightDesc)
 
 	var extra string
 	if delayable {
@@ -551,6 +553,7 @@ func (r *Replica) AdminMerge(
 			updatedLeftDesc.Generation = rightDesc.Generation
 		}
 		updatedLeftDesc.IncrementGeneration()
+		r.maybeMarkGenerationComparable(&updatedLeftDesc)
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", rightDesc, reason)
 
@@ -868,6 +871,7 @@ func (r *Replica) changeReplicas(
 	rangeID := desc.RangeID
 	updatedDesc := *desc
 	updatedDesc.IncrementGeneration()
+	r.maybeMarkGenerationComparable(&updatedDesc)
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
 	switch changeType {
@@ -1604,4 +1608,12 @@ func (r *Replica) adminScatter(
 			},
 		}},
 	}, nil
+}
+
+// maybeMarkGenerationComparable sets GenerationComparable if the cluster is at
+// a high enough version such that GenerationComparable won't be lost.
+func (r *Replica) maybeMarkGenerationComparable(desc *roachpb.RangeDescriptor) {
+	if !desc.GenerationComparable && r.store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable) {
+		desc.GenerationComparable = true
+	}
 }
