@@ -113,7 +113,7 @@ func TestSort(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			sort, err := NewSorter(input[0], tc.typ, tc.ordCols)
+			sort, err := NewSorter(input[0], testAllocator, tc.typ, tc.ordCols)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -169,10 +169,10 @@ func TestSortRandomized(t *testing.T) {
 					runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
 						var sorter Operator
 						if topK {
-							sorter = NewTopKSorter(input[0], typs[:nCols], ordCols, k)
+							sorter = NewTopKSorter(input[0], testAllocator, typs[:nCols], ordCols, k)
 						} else {
 							var err error
-							sorter, err = NewSorter(input[0], typs[:nCols], ordCols)
+							sorter, err = NewSorter(input[0], testAllocator, typs[:nCols], ordCols)
 							if err != nil {
 								t.Fatal(err)
 							}
@@ -237,7 +237,7 @@ func TestAllSpooler(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			allSpooler := newAllSpooler(input[0], tc.typ)
+			allSpooler := newAllSpooler(input[0], testAllocator, tc.typ)
 			allSpooler.init()
 			allSpooler.spool(context.Background())
 			if len(tc.tuples) != int(allSpooler.getNumTuples()) {
@@ -294,11 +294,11 @@ func BenchmarkSort(b *testing.B) {
 						var sorter Operator
 						var resultBatches int
 						if topK {
-							sorter = NewTopKSorter(source, typs, ordCols, k)
+							sorter = NewTopKSorter(source, testAllocator, typs, ordCols, k)
 							resultBatches = 1
 						} else {
 							var err error
-							sorter, err = NewSorter(source, typs, ordCols)
+							sorter, err = NewSorter(source, testAllocator, typs, ordCols)
 							if err != nil {
 								b.Fatal(err)
 							}
@@ -343,7 +343,7 @@ func BenchmarkAllSpooler(b *testing.B) {
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
 					source := newFiniteBatchSource(batch, nBatches)
-					allSpooler := newAllSpooler(source, typs)
+					allSpooler := newAllSpooler(source, testAllocator, typs)
 					allSpooler.init()
 					allSpooler.spool(ctx)
 				}

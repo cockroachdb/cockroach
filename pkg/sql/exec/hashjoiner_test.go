@@ -711,6 +711,7 @@ func TestHashJoinerInt64(t *testing.T) {
 					leftSource, rightSource := sources[0], sources[1]
 
 					hj, err := NewEqHashJoinerOp(
+						testAllocator,
 						leftSource, rightSource,
 						tc.leftEqCols, tc.rightEqCols,
 						tc.leftOutCols, tc.rightOutCols,
@@ -816,7 +817,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 										}
 
 										hj := &hashJoinEqOp{
-											spec: spec,
+											allocator: testAllocator,
+											spec:      spec,
 										}
 
 										hj.Init()

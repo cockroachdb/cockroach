@@ -78,6 +78,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		rightInput.SetOutputWatch(mjInputWatch)
 
 		mergeJoiner, err := NewMergeJoinOp(
+			testAllocator,
 			leftInput,
 			rightInput,
 			[]uint32{0},

@@ -179,6 +179,8 @@ var _ Operator = &feedOperator{}
 // that we don't miss any cross product entries while expanding the groups
 // (leftGroups and rightGroups) when a group spans multiple batches.
 type mergeJoinOp struct {
+	allocator coldata.BatchAllocator
+
 	left  mergeJoinInput
 	right mergeJoinInput
 
@@ -199,6 +201,7 @@ var _ Operator = &mergeJoinOp{}
 
 // NewMergeJoinOp returns a new merge join operator with the given spec.
 func NewMergeJoinOp(
+	allocator coldata.BatchAllocator,
 	left Operator,
 	right Operator,
 	leftOutCols []uint32,
@@ -223,8 +226,9 @@ func NewMergeJoinOp(
 	}
 
 	c := &mergeJoinOp{
-		left:  mergeJoinInput{source: left, outCols: leftOutCols, sourceTypes: leftTypes, eqCols: lEqCols, directions: lDirections},
-		right: mergeJoinInput{source: right, outCols: rightOutCols, sourceTypes: rightTypes, eqCols: rEqCols, directions: rDirections},
+		allocator: allocator,
+		left:      mergeJoinInput{source: left, outCols: leftOutCols, sourceTypes: leftTypes, eqCols: lEqCols, directions: lDirections},
+		right:     mergeJoinInput{source: right, outCols: rightOutCols, sourceTypes: rightTypes, eqCols: rEqCols, directions: rDirections},
 	}
 
 	var err error
@@ -438,7 +442,8 @@ func (o *mergeJoinOp) saveGroupToState(
 ) {
 	endIdx := idx + groupLength
 	for cIdx, cType := range src.sourceTypes {
-		destBatch.ColVec(cIdx).Append(
+		if ok := o.allocator.Append(
+			destBatch.ColVec(cIdx),
 			coldata.AppendArgs{
 				ColType:     cType,
 				Src:         bat.ColVec(cIdx),
@@ -447,7 +452,9 @@ func (o *mergeJoinOp) saveGroupToState(
 				SrcStartIdx: uint16(idx),
 				SrcEndIdx:   uint16(endIdx),
 			},
-		)
+		); !ok {
+			panic("mergeJoiner exceeded allocator budget")
+		}
 		if sel != nil {
 			if *needToResetBufferedGroup {
 				// Note that we don't need to explicitly reset the values vector, so we

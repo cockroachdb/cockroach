@@ -29,10 +29,15 @@ const (
 // columns given in orderingCols and returns the first K rows. The inputTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
-	input Operator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column, k uint16,
+	input Operator,
+	allocator coldata.BatchAllocator,
+	inputTypes []types.T,
+	orderingCols []distsqlpb.Ordering_Column,
+	k uint16,
 ) Operator {
 	return &topKSorter{
 		input:        input,
+		allocator:    allocator,
 		inputTypes:   inputTypes,
 		orderingCols: orderingCols,
 		k:            k,
@@ -53,6 +58,7 @@ const (
 
 type topKSorter struct {
 	input        Operator
+	allocator    coldata.BatchAllocator
 	orderingCols []distsqlpb.Ordering_Column
 	inputTypes   []types.T
 	k            uint16 // TODO(solon): support larger k values
@@ -122,7 +128,8 @@ func (t *topKSorter) spool(ctx context.Context) {
 			destVec := t.topK.ColVec(i)
 			vec := inputBatch.ColVec(i)
 			colType := t.inputTypes[i]
-			destVec.Append(
+			if ok := t.allocator.Append(
+				destVec,
 				coldata.AppendArgs{
 					ColType:   colType,
 					Src:       vec,
@@ -130,7 +137,9 @@ func (t *topKSorter) spool(ctx context.Context) {
 					DestIdx:   toLength,
 					SrcEndIdx: fromLength,
 				},
-			)
+			); !ok {
+				panic("topKSorter exceeded allocator budget")
+			}
 		}
 		spooledRows += fromLength
 		remainingRows -= fromLength

@@ -775,7 +775,9 @@ func TestMergeJoiner(t *testing.T) {
 		}
 
 		runTests(t, []tuples{tc.leftTuples, tc.rightTuples}, func(t *testing.T, input []Operator) {
-			s, err := NewMergeJoinOp(input[0], input[1], tc.leftOutCols, tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings)
+			s, err := NewMergeJoinOp(
+				testAllocator, input[0], input[1], tc.leftOutCols, tc.rightOutCols, tc.leftTypes,
+				tc.rightTypes, lOrderings, rOrderings)
 			if err != nil {
 				t.Fatal("Error in merge join op constructor", err)
 			}
@@ -811,6 +813,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 						a, err := NewMergeJoinOp(
+							testAllocator,
 							leftSource,
 							rightSource,
 							[]uint32{0},
@@ -872,6 +875,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						leftSource,
 						rightSource,
 						[]uint32{0},
@@ -934,6 +938,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 						a, err := NewMergeJoinOp(
+							testAllocator,
 							leftSource,
 							rightSource,
 							[]uint32{},
@@ -982,6 +987,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						testAllocator,
 						leftSource,
 						rightSource,
 						[]uint32{},
@@ -1095,6 +1101,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
 
 							a, err := NewMergeJoinOp(
+								testAllocator,
 								leftSource,
 								rightSource,
 								[]uint32{0},

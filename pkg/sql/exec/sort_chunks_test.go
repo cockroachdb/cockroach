@@ -177,7 +177,7 @@ func TestSortChunks(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			sorter, err := NewSortChunks(input[0], tc.typ, tc.ordCols, tc.matchLen)
+			sorter, err := NewSortChunks(input[0], testAllocator, tc.typ, tc.ordCols, tc.matchLen)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -229,7 +229,7 @@ func TestSortChunksRandomized(t *testing.T) {
 				sort.Slice(expected, less(expected, ordCols))
 
 				runTests(t, []tuples{sortedTups}, func(t *testing.T, input []Operator) {
-					sorter, err := NewSortChunks(input[0], typs[:nCols], ordCols, matchLen)
+					sorter, err := NewSortChunks(input[0], testAllocator, typs[:nCols], ordCols, matchLen)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -252,10 +252,10 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(Operator, []types.T, []distsqlpb.Ordering_Column, int) (Operator, error){
+	sorterConstructors := []func(Operator, coldata.BatchAllocator, []types.T, []distsqlpb.Ordering_Column, int) (Operator, error){
 		NewSortChunks,
-		func(input Operator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column, _ int) (Operator, error) {
-			return NewSorter(input, inputTypes, orderingCols)
+		func(input Operator, allocator coldata.BatchAllocator, inputTypes []types.T, orderingCols []distsqlpb.Ordering_Column, _ int) (Operator, error) {
+			return NewSorter(input, allocator, inputTypes, orderingCols)
 		},
 	}
 	sorterNames := []string{"CHUNKS", "ALL"}
@@ -306,7 +306,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
 									source := newFiniteChunksSource(batch, nBatches, matchLen)
-									sorter, err := sorterConstructor(source, typs, ordCols, matchLen)
+									sorter, err := sorterConstructor(source, testAllocator, typs, ordCols, matchLen)
 									if err != nil {
 										b.Fatal(err)
 									}

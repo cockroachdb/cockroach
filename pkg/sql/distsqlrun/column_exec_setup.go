@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/vecbuiltins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -191,11 +192,13 @@ func newColOperator(
 		}
 		if needHash {
 			op, err = exec.NewHashAggregator(
-				inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols,
+				inputs[0], coldata.NewBatchAllocator(), conv.FromColumnTypes(spec.Input[0].ColumnTypes),
+				aggFns, aggSpec.GroupCols, aggCols,
 			)
 		} else {
 			op, err = exec.NewOrderedAggregator(
-				inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols,
+				inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols,
+				aggCols,
 			)
 		}
 
@@ -271,6 +274,7 @@ func newColOperator(
 		}
 
 		op, err = exec.NewEqHashJoinerOp(
+			coldata.NewBatchAllocator(),
 			inputs[0],
 			inputs[1],
 			core.HashJoiner.LeftEqColumns,
@@ -324,6 +328,7 @@ func newColOperator(
 		}
 
 		op, err = exec.NewMergeJoinOp(
+			coldata.NewBatchAllocator(),
 			inputs[0],
 			inputs[1],
 			leftOutCols,
@@ -380,16 +385,17 @@ func newColOperator(
 		if matchLen > 0 {
 			// The input is already partially ordered. Use a chunks sorter to avoid
 			// loading all the rows into memory.
-			op, err = exec.NewSortChunks(input, inputTypes, orderingCols, int(matchLen))
+			op, err = exec.NewSortChunks(
+				input, coldata.NewBatchAllocator(), inputTypes, orderingCols, int(matchLen))
 		} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
 			// There is a limit specified with no post-process filter, so we know
 			// exactly how many rows the sorter should output. Choose a top K sorter,
 			// which uses a heap to avoid storing more rows than necessary.
 			k := uint16(post.Limit + post.Offset)
-			op = exec.NewTopKSorter(input, inputTypes, orderingCols, k)
+			op = exec.NewTopKSorter(input, coldata.NewBatchAllocator(), inputTypes, orderingCols, k)
 		} else {
 			// No optimizations possible. Default to the standard sort operator.
-			op, err = exec.NewSorter(input, inputTypes, orderingCols)
+			op, err = exec.NewSorter(input, coldata.NewBatchAllocator(), inputTypes, orderingCols)
 		}
 		columnTypes = spec.Input[0].ColumnTypes
 
@@ -416,11 +422,13 @@ func newColOperator(
 			// TODO(yuzefovich): add support for hashing partitioner (probably by
 			// leveraging hash routers once we can distribute). The decision about
 			// which kind of partitioner to use should come from the optimizer.
-			input, orderingCols, err = exec.NewWindowSortingPartitioner(input, typs, core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx))
+			input, orderingCols, err = exec.NewWindowSortingPartitioner(
+				input, coldata.NewBatchAllocator(), typs, core.Windower.PartitionBy, wf.Ordering.Columns,
+				int(wf.OutputColIdx))
 			tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
 		} else {
 			if len(wf.Ordering.Columns) > 0 {
-				input, err = exec.NewSorter(input, typs, wf.Ordering.Columns)
+				input, err = exec.NewSorter(input, coldata.NewBatchAllocator(), typs, wf.Ordering.Columns)
 			}
 			orderingCols = make([]uint32, len(wf.Ordering.Columns))
 			for i, col := range wf.Ordering.Columns {

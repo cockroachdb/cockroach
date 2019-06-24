@@ -25,6 +25,7 @@ import (
 // every tuple that is the first within its partition.
 func NewWindowSortingPartitioner(
 	input Operator,
+	allocator coldata.BatchAllocator,
 	inputTyps []types.T,
 	partitionIdxs []uint32,
 	ordCols []distsqlpb.Ordering_Column,
@@ -39,7 +40,7 @@ func NewWindowSortingPartitioner(
 	for i := range ordCols {
 		orderingColsIdxs[i] = uint32(len(partitionIdxs) + i)
 	}
-	input, err = NewSorter(input, inputTyps, partitionAndOrderingCols)
+	input, err = NewSorter(input, allocator, inputTyps, partitionAndOrderingCols)
 	if err != nil {
 		return nil, nil, err
 	}
