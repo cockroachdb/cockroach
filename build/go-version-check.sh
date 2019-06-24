@@ -6,7 +6,7 @@
 # To bump the required version of Go, edit the appropriate variables:
 
 required_version_major=1
-minimum_version_minor=11
+minimum_version_minor=12
 
 go=${1-go}
 
