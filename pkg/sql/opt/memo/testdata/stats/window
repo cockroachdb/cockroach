@@ -41,4 +41,4 @@ project
       │    │    └── fd: (1)-->(2-7)
       │    └── const: 10 [type=int]
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
