@@ -1442,6 +1442,10 @@ message AddSSTableRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes data = 2;
+  // If set, indicates that AddSSTable will not allow ingestion of keys which
+  // shadow already existing key entries. This disallows any key slice overlap
+  // regardless of the timestamps.
+  bool disallow_shadowing = 3;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
