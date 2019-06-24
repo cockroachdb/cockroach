@@ -880,15 +880,18 @@ func (ctx *Context) runHeartbeat(
 
 			var response *PingResponse
 			sendTime := ctx.LocalClock.PhysicalTime()
-			err := contextutil.RunWithTimeout(goCtx, "rpc heartbeat", ctx.heartbeatTimeout,
-				func(goCtx context.Context) error {
-					// NB: We want the request to fail-fast (the default), otherwise we won't
-					// be notified of transport failures.
-					var err error
-					response, err = heartbeatClient.Ping(goCtx, request)
-					return err
-				})
-
+			ping := func(goCtx context.Context) (err error) {
+				// NB: We want the request to fail-fast (the default), otherwise we won't
+				// be notified of transport failures.
+				response, err = heartbeatClient.Ping(goCtx, request)
+				return err
+			}
+			var err error
+			if ctx.heartbeatTimeout > 0 {
+				err = contextutil.RunWithTimeout(goCtx, "rpc heartbeat", ctx.heartbeatTimeout, ping)
+			} else {
+				err = ping(goCtx)
+			}
 			if err == nil {
 				err = errors.Wrap(
 					checkVersion(ctx.version, response.ServerVersion),
