@@ -198,6 +198,7 @@ func (n *Nulls) ExtendWithSel(
 
 // Slice returns a new Nulls representing a slice of the current Nulls from
 // [start, end).
+// TODO(rafi): make this return *Nulls
 func (n *Nulls) Slice(start uint64, end uint64) Nulls {
 	if !n.hasNulls {
 		return NewNulls(int(end - start))

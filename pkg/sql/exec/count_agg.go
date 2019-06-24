@@ -12,16 +12,24 @@ package exec
 
 import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 
-func newCountAgg() *countAgg {
-	return &countAgg{}
+// The COUNT(*) aggregate, which counts every row in the result unconditionally.
+func newCountRowAgg() *countAgg {
+	return &countAgg{countRow: true}
 }
 
-// countAgg is the COUNT(*) aggregate - it takes no arguments.
+// The COUNT(col) aggregate, which counts every row in the result where the
+// value of col is not null.
+func newCountAgg() *countAgg {
+	return &countAgg{countRow: false}
+}
+
+// countAgg supports both the COUNT(*) and COUNT(col) aggregates
 type countAgg struct {
-	groups []bool
-	vec    []int64
-	curIdx int
-	done   bool
+	groups   []bool
+	vec      []int64
+	curIdx   int
+	done     bool
+	countRow bool
 }
 
 func (a *countAgg) Init(groups []bool, vec coldata.Vec) {
@@ -47,7 +55,7 @@ func (a *countAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *countAgg) Compute(b coldata.Batch, _ []uint32) {
+func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}
@@ -57,25 +65,62 @@ func (a *countAgg) Compute(b coldata.Batch, _ []uint32) {
 		a.done = true
 		return
 	}
+
 	sel := b.Selection()
-	if sel != nil {
-		sel = sel[:inputLen]
-		for _, i := range sel {
-			x := 0
-			if a.groups[i] {
-				x = 1
+	checkForNulls := false
+	nulls := coldata.NewNulls(0)
+	if !a.countRow {
+		// If there are nulls in this batch and this is not a COUNT_ROW aggregator
+		// we must check each value for nullity.
+		nulls = *b.ColVec(int(inputIdxs[0])).Nulls()
+		checkForNulls = nulls.HasNulls()
+	}
+
+	if checkForNulls {
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				x := 0
+				if a.groups[i] {
+					x = 1
+				}
+				a.curIdx += x
+				if !nulls.NullAt(i) {
+					a.vec[a.curIdx]++
+				}
 			}
-			a.curIdx += x
-			a.vec[a.curIdx]++
+		} else {
+			for i := range a.groups[:inputLen] {
+				x := 0
+				if a.groups[i] {
+					x = 1
+				}
+				a.curIdx += x
+				if !nulls.NullAt(uint16(i)) {
+					a.vec[a.curIdx]++
+				}
+			}
 		}
 	} else {
-		for i := range a.groups[:inputLen] {
-			x := 0
-			if a.groups[i] {
-				x = 1
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				x := 0
+				if a.groups[i] {
+					x = 1
+				}
+				a.curIdx += x
+				a.vec[a.curIdx]++
 			}
-			a.curIdx += x
-			a.vec[a.curIdx]++
+		} else {
+			for i := range a.groups[:inputLen] {
+				x := 0
+				if a.groups[i] {
+					x = 1
+				}
+				a.curIdx += x
+				a.vec[a.curIdx]++
+			}
 		}
 	}
 }
