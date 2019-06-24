@@ -43,6 +43,7 @@ add_library(roach
   snapshot.cc
   sst_dump.cc
   table_props.cc
+  timestamp.cc
   utils.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/errors.pb.cc
