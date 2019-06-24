@@ -675,6 +675,7 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 }
 
 func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
+	r.mu.AssertRHeld()
 	return r.mu.state.Desc
 }
 
