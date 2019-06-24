@@ -40,6 +40,38 @@ type AppendArgs struct {
 	SrcEndIdx uint16
 }
 
+// CopyArgs represents the arguments passed in to Vec.Copy.
+type CopyArgs struct {
+	// ColType is the type of both the destination and source slices.
+	ColType types.T
+	// Src is the data being copied.
+	Src Vec
+	// Sel is an optional slice specifying indices to copy to the destination
+	// slice. Note that Src{Start,End}Idx apply to Sel.
+	Sel []uint16
+	// Sel64 overrides Sel. Used when the amount of data being copied exceeds the
+	// representation capabilities of a []uint16.
+	Sel64 []uint64
+	// DestIdx is the first index that Copy will copy to.
+	DestIdx uint64
+	// SrcStartIdx is the index of the first element in Src that Copy will copy.
+	SrcStartIdx uint64
+	// SrcEndIdx is the exclusive end index of Src. i.e. the element in the index
+	// before SrcEndIdx is the last element copied into the destination slice,
+	// similar to Src[SrcStartIdx:SrcEndIdx].
+	SrcEndIdx uint64
+
+	// Nils exists to support the hashJoiner's use case of Copy before the
+	// migration to a single Copy method. It overrides the use of a selection
+	// vector only in the Sel64 case and simply sets the destination slice's value
+	// to NULL if the index is true, otherwise defaulting to using the selection
+	// vector.
+	// TODO(asubiotto): Get rid of this.
+	// DEPRECATED: DO NOT USE, it should not be Copy's responsibility to care
+	// about this.
+	Nils []bool
+}
+
 // Vec is an interface that represents a column vector that's accessible by
 // Go native types.
 type Vec interface {
@@ -85,23 +117,13 @@ type Vec interface {
 	// Refer to the AppendArgs comment for specifics and TestAppend for examples.
 	Append(AppendArgs)
 
-	// Copy copies src[srcStartIdx:srcEndIdx] into this Vec.
-	Copy(src Vec, srcStartIdx, srcEndIdx uint64, typ types.T)
-
-	// CopyAt copies src[srcStartIdx:srcEndIdx] into this Vec starting at destStartIdx.
-	CopyAt(src Vec, destStartIdx, srcStartIdx, srcEndIdx uint64, typ types.T)
-
-	// CopyWithSelInt64 copies vec, filtered by sel, into this Vec. It replaces
-	// the contents of this Vec.
-	CopyWithSelInt64(vec Vec, sel []uint64, nSel uint16, colType types.T)
-
-	// CopyWithSelInt16 copies vec, filtered by sel, into this Vec. It replaces
-	// the contents of this Vec.
-	CopyWithSelInt16(vec Vec, sel []uint16, nSel uint16, colType types.T)
-
-	// CopyWithSelAndNilsInt64 copies vec, filtered by sel, unless nils is set,
-	// into Vec. It replaces the contents of this Vec.
-	CopyWithSelAndNilsInt64(vec Vec, sel []uint64, nSel uint16, nils []bool, colType types.T)
+	// Copy uses CopyArgs to copy elements of a source Vec into this Vec. It is
+	// logically equivalent to:
+	// copy(destVec[:args.DestIdx], args.Src[args.SrcStartIdx:args.SrcEndIdx])
+	// An optional Sel slice can also be provided to apply a filter on the source
+	// Vec.
+	// Refer to the CopyArgs comment for specifics and TestCopy for examples.
+	Copy(CopyArgs)
 
 	// Slice returns a new Vec representing a slice of the current Vec from
 	// [start, end).
