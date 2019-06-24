@@ -1574,8 +1574,13 @@ func (ef *execFactory) ConstructSaveTable(
 }
 
 // ConstructErrorIfRows is part of the exec.Factory interface.
-func (ef *execFactory) ConstructErrorIfRows(input exec.Node) (exec.Node, error) {
-	return &errorIfRowsNode{plan: input.(planNode)}, nil
+func (ef *execFactory) ConstructErrorIfRows(
+	input exec.Node, mkErr func(tree.Datums) error,
+) (exec.Node, error) {
+	return &errorIfRowsNode{
+		plan:  input.(planNode),
+		mkErr: mkErr,
+	}, nil
 }
 
 // renderBuilder encapsulates the code to build a renderNode.
