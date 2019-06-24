@@ -28,7 +28,7 @@ func ExampleIntPool_AcquireFunc() {
 	qp := NewIntPool("work units", quota)
 	type job struct {
 		name string
-		cost int64
+		cost uint64
 	}
 	jobs := []*job{
 		{name: "foo", cost: 3},
@@ -53,24 +53,24 @@ func ExampleIntPool_AcquireFunc() {
 		ctx context.Context, qp *IntPool,
 	) (j *job, alloc *IntAlloc, err error) {
 		alloc, err = qp.AcquireFunc(ctx, func(
-			ctx context.Context, v int64,
-		) (fulfilled bool, took int64) {
+			ctx context.Context, pi PoolInfo,
+		) (took uint64, err error) {
 			sortJobs()
 			// There are no more jobs, take 0 and return.
 			if jobs[0] == nil {
-				return true, 0
+				return 0, nil
 			}
 			// Find the largest jobs which can be run.
 			for i := range jobs {
 				if jobs[i] == nil {
 					break
 				}
-				if jobs[i].cost <= v {
+				if jobs[i].cost <= pi.Available {
 					j, jobs[i] = jobs[i], nil
-					return true, j.cost
+					return j.cost, nil
 				}
 			}
-			return false, 0
+			return 0, ErrNotEnoughQuota
 		})
 		return j, alloc, err
 	}
