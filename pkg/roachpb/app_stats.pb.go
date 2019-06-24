@@ -82,7 +82,7 @@ func (m *StatementStatistics) Reset()         { *m = StatementStatistics{} }
 func (m *StatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*StatementStatistics) ProtoMessage()    {}
 func (*StatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_3ca33a5c4835fdcb, []int{0}
+	return fileDescriptor_app_stats_5a498d7a32ae5aeb, []int{0}
 }
 func (m *StatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -123,7 +123,7 @@ func (m *SensitiveInfo) Reset()         { *m = SensitiveInfo{} }
 func (m *SensitiveInfo) String() string { return proto.CompactTextString(m) }
 func (*SensitiveInfo) ProtoMessage()    {}
 func (*SensitiveInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_3ca33a5c4835fdcb, []int{1}
+	return fileDescriptor_app_stats_5a498d7a32ae5aeb, []int{1}
 }
 func (m *SensitiveInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -165,7 +165,7 @@ func (m *NumericStat) Reset()         { *m = NumericStat{} }
 func (m *NumericStat) String() string { return proto.CompactTextString(m) }
 func (*NumericStat) ProtoMessage()    {}
 func (*NumericStat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_3ca33a5c4835fdcb, []int{2}
+	return fileDescriptor_app_stats_5a498d7a32ae5aeb, []int{2}
 }
 func (m *NumericStat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -205,7 +205,7 @@ func (m *StatementStatisticsKey) Reset()         { *m = StatementStatisticsKey{}
 func (m *StatementStatisticsKey) String() string { return proto.CompactTextString(m) }
 func (*StatementStatisticsKey) ProtoMessage()    {}
 func (*StatementStatisticsKey) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_3ca33a5c4835fdcb, []int{3}
+	return fileDescriptor_app_stats_5a498d7a32ae5aeb, []int{3}
 }
 func (m *StatementStatisticsKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -242,7 +242,7 @@ func (m *CollectedStatementStatistics) Reset()         { *m = CollectedStatement
 func (m *CollectedStatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedStatementStatistics) ProtoMessage()    {}
 func (*CollectedStatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_3ca33a5c4835fdcb, []int{4}
+	return fileDescriptor_app_stats_5a498d7a32ae5aeb, []int{4}
 }
 func (m *CollectedStatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -284,7 +284,7 @@ func (m *ExplainTreePlanNode) Reset()         { *m = ExplainTreePlanNode{} }
 func (m *ExplainTreePlanNode) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode) ProtoMessage()    {}
 func (*ExplainTreePlanNode) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_3ca33a5c4835fdcb, []int{5}
+	return fileDescriptor_app_stats_5a498d7a32ae5aeb, []int{5}
 }
 func (m *ExplainTreePlanNode) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -320,7 +320,7 @@ func (m *ExplainTreePlanNode_Attr) Reset()         { *m = ExplainTreePlanNode_At
 func (m *ExplainTreePlanNode_Attr) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode_Attr) ProtoMessage()    {}
 func (*ExplainTreePlanNode_Attr) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_3ca33a5c4835fdcb, []int{5, 0}
+	return fileDescriptor_app_stats_5a498d7a32ae5aeb, []int{5, 0}
 }
 func (m *ExplainTreePlanNode_Attr) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2101,9 +2101,9 @@ var (
 	ErrIntOverflowAppStats   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_3ca33a5c4835fdcb) }
+func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_5a498d7a32ae5aeb) }
 
-var fileDescriptor_app_stats_3ca33a5c4835fdcb = []byte{
+var fileDescriptor_app_stats_5a498d7a32ae5aeb = []byte{
 	// 846 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0xcd, 0x6e, 0x23, 0x45,
 	0x10, 0xce, 0xe0, 0x38, 0xb6, 0x6b, 0xe2, 0x45, 0x74, 0x60, 0x77, 0xb0, 0x22, 0x27, 0x6b, 0xb4,

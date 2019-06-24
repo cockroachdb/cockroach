@@ -70,7 +70,7 @@ func (x *SnapshotRequest_Priority) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SnapshotRequest_Priority) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{5, 0}
+	return fileDescriptor_raft_f47831d7892245c6, []int{5, 0}
 }
 
 type SnapshotRequest_Strategy int32
@@ -107,7 +107,7 @@ func (x *SnapshotRequest_Strategy) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SnapshotRequest_Strategy) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{5, 1}
+	return fileDescriptor_raft_f47831d7892245c6, []int{5, 1}
 }
 
 type SnapshotRequest_Type int32
@@ -146,7 +146,7 @@ func (x *SnapshotRequest_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SnapshotRequest_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{5, 2}
+	return fileDescriptor_raft_f47831d7892245c6, []int{5, 2}
 }
 
 type SnapshotResponse_Status int32
@@ -191,7 +191,7 @@ func (x *SnapshotResponse_Status) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SnapshotResponse_Status) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{6, 0}
+	return fileDescriptor_raft_f47831d7892245c6, []int{6, 0}
 }
 
 // RaftHeartbeat is a request that contains the barebones information for a
@@ -213,7 +213,7 @@ func (m *RaftHeartbeat) Reset()         { *m = RaftHeartbeat{} }
 func (m *RaftHeartbeat) String() string { return proto.CompactTextString(m) }
 func (*RaftHeartbeat) ProtoMessage()    {}
 func (*RaftHeartbeat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{0}
+	return fileDescriptor_raft_f47831d7892245c6, []int{0}
 }
 func (m *RaftHeartbeat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -271,7 +271,7 @@ func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
 func (m *RaftMessageRequest) String() string { return proto.CompactTextString(m) }
 func (*RaftMessageRequest) ProtoMessage()    {}
 func (*RaftMessageRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{1}
+	return fileDescriptor_raft_f47831d7892245c6, []int{1}
 }
 func (m *RaftMessageRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -306,7 +306,7 @@ func (m *RaftMessageRequestBatch) Reset()         { *m = RaftMessageRequestBatch
 func (m *RaftMessageRequestBatch) String() string { return proto.CompactTextString(m) }
 func (*RaftMessageRequestBatch) ProtoMessage()    {}
 func (*RaftMessageRequestBatch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{2}
+	return fileDescriptor_raft_f47831d7892245c6, []int{2}
 }
 func (m *RaftMessageRequestBatch) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -341,7 +341,7 @@ func (m *RaftMessageResponseUnion) Reset()         { *m = RaftMessageResponseUni
 func (m *RaftMessageResponseUnion) String() string { return proto.CompactTextString(m) }
 func (*RaftMessageResponseUnion) ProtoMessage()    {}
 func (*RaftMessageResponseUnion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{3}
+	return fileDescriptor_raft_f47831d7892245c6, []int{3}
 }
 func (m *RaftMessageResponseUnion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -386,7 +386,7 @@ func (m *RaftMessageResponse) Reset()         { *m = RaftMessageResponse{} }
 func (m *RaftMessageResponse) String() string { return proto.CompactTextString(m) }
 func (*RaftMessageResponse) ProtoMessage()    {}
 func (*RaftMessageResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{4}
+	return fileDescriptor_raft_f47831d7892245c6, []int{4}
 }
 func (m *RaftMessageResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -429,7 +429,7 @@ func (m *SnapshotRequest) Reset()         { *m = SnapshotRequest{} }
 func (m *SnapshotRequest) String() string { return proto.CompactTextString(m) }
 func (*SnapshotRequest) ProtoMessage()    {}
 func (*SnapshotRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{5}
+	return fileDescriptor_raft_f47831d7892245c6, []int{5}
 }
 func (m *SnapshotRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -493,7 +493,7 @@ func (m *SnapshotRequest_Header) Reset()         { *m = SnapshotRequest_Header{}
 func (m *SnapshotRequest_Header) String() string { return proto.CompactTextString(m) }
 func (*SnapshotRequest_Header) ProtoMessage()    {}
 func (*SnapshotRequest_Header) Descriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{5, 0}
+	return fileDescriptor_raft_f47831d7892245c6, []int{5, 0}
 }
 func (m *SnapshotRequest_Header) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -529,7 +529,7 @@ func (m *SnapshotResponse) Reset()         { *m = SnapshotResponse{} }
 func (m *SnapshotResponse) String() string { return proto.CompactTextString(m) }
 func (*SnapshotResponse) ProtoMessage()    {}
 func (*SnapshotResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{6}
+	return fileDescriptor_raft_f47831d7892245c6, []int{6}
 }
 func (m *SnapshotResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -570,7 +570,7 @@ func (m *ConfChangeContext) Reset()         { *m = ConfChangeContext{} }
 func (m *ConfChangeContext) String() string { return proto.CompactTextString(m) }
 func (*ConfChangeContext) ProtoMessage()    {}
 func (*ConfChangeContext) Descriptor() ([]byte, []int) {
-	return fileDescriptor_raft_9a327e89a23d2a6f, []int{7}
+	return fileDescriptor_raft_f47831d7892245c6, []int{7}
 }
 func (m *ConfChangeContext) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2874,9 +2874,9 @@ var (
 	ErrIntOverflowRaft   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("storage/raft.proto", fileDescriptor_raft_9a327e89a23d2a6f) }
+func init() { proto.RegisterFile("storage/raft.proto", fileDescriptor_raft_f47831d7892245c6) }
 
-var fileDescriptor_raft_9a327e89a23d2a6f = []byte{
+var fileDescriptor_raft_f47831d7892245c6 = []byte{
 	// 1226 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe4, 0x56, 0xcd, 0x6e, 0x1b, 0x55,
 	0x14, 0xf6, 0xc4, 0x63, 0x7b, 0x7c, 0x6c, 0x27, 0xd3, 0x4b, 0x05, 0x23, 0x53, 0x1c, 0x33, 0xa5,
