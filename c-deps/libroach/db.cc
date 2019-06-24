@@ -32,6 +32,7 @@
 #include "iterator.h"
 #include "merge.h"
 #include "options.h"
+#include "protos/roachpb/errors.pb.h"
 #include "snapshot.h"
 #include "status.h"
 #include "table_props.h"
@@ -525,6 +526,83 @@ DBStatus DBEnvDeleteDirAndFiles(DBEngine* db, DBSlice dir) { return db->EnvDelet
 
 DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname) {
   return db->EnvLinkFile(oldname, newname);
+}
+
+DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIter,
+                                    DBString* write_intent) {
+  DBIterState state = {};
+  while (existingIter->rep->Valid() && sstIter->rep->Valid()) {
+    rocksdb::Slice sstKey;
+    rocksdb::Slice existingKey;
+    int64_t sst_wall_time = 0;
+    int32_t sst_logical_time = 0;
+    int64_t existing_wall_time = 0;
+    int32_t existing_logical_time = 0;
+    if (!DecodeKey(sstIter->rep->key(), &sstKey, &sst_wall_time, &sst_logical_time) ||
+        !DecodeKey(existingIter->rep->key(), &existingKey, &existing_wall_time, &existing_logical_time)) {
+      state.valid = false;
+      state.status = FmtStatus("unable to decode key");
+      return state;
+    }
+
+    // Encountered an inline value or a write intent.
+    if (existing_wall_time == 0 && existing_wall_time == 0) {
+      cockroach::storage::engine::enginepb::MVCCMetadata meta;
+      if (!meta.ParseFromArray(existingIter->rep->value().data(),
+                               existingIter->rep->value().size())) {
+        state.status = FmtStatus("failed to parse meta");
+        state.valid = false;
+        return state;
+      }
+
+      // Check for an inline value, as these are only used in non-user data.
+      // This method is currently used by AddSSTable when performing an IMPORT
+      // INTO. We do not expect to encounter any inline values, and thus we
+      // report an error.
+      if (meta.has_raw_bytes()) {
+        state.status = FmtStatus("inline values are unsupported when checking for key collisions");
+      } else if (meta.has_txn()) {
+        // Check for a write intent.
+        //
+        // TODO(adityamaru): Currently, we raise a WriteIntentError on
+        // encountering all intents. This is because, we do not expect to
+        // encounter many intents during IMPORT INTO as we lock the key space we
+        // are importing into. Older write intents could however be found in the
+        // target key space, which will require appropriate resolution logic.
+        cockroach::roachpb::WriteIntentError err;
+        cockroach::roachpb::Intent* intent = err.add_intents();
+        intent->mutable_span()->set_key(existingIter->rep->key().data(),
+                                        existingIter->rep->key().size());
+        intent->mutable_txn()->CopyFrom(meta.txn());
+
+        *write_intent = ToDBString(err.SerializeAsString());
+        state.status = FmtStatus("WriteIntentError");
+      }
+
+      state.valid = false;
+      return state;
+    }
+
+    int compare = kComparator.Compare(existingKey, sstKey);
+    if (compare == 0) {
+      // If the colliding key is a tombstone from an MVCC delete then this is
+      // not considered a collision.
+      if (existingIter->rep->value().empty()) {
+        break;
+      }
+
+      state.valid = false;
+      state.status = FmtStatus("key collision at %s", sstKey.data());
+      return state;
+    } else if (compare < 0) {
+      existingIter->rep->Seek(sstKey);
+    } else if (compare > 0) {
+      sstIter->rep->Seek(existingKey);
+    }
+  }
+
+  state.valid = true;
+  return state;
 }
 
 DBIterator* DBNewIter(DBEngine* db, DBIterOptions iter_options) {
