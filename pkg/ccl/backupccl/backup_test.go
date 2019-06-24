@@ -846,7 +846,7 @@ func getHighWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 // work as intended on backup and restore jobs.
 func TestBackupRestoreControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#24637")
+	t.Skip("#24136")
 
 	// force every call to update
 	defer jobs.TestingSetProgressThresholds()()
