@@ -877,15 +877,19 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.planner = planner
 	planCtx.stmtType = recv.stmtType
 
-	if len(planner.curPlan.subqueryPlans) != 0 {
+	var evalCtxFactory func() *extendedEvalContext
+	if len(planner.curPlan.subqueryPlans) != 0 || len(planner.curPlan.postqueryPlans) != 0 {
 		var evalCtx extendedEvalContext
 		ex.initEvalCtx(ctx, &evalCtx, planner)
-		evalCtxFactory := func() *extendedEvalContext {
+		evalCtxFactory = func() *extendedEvalContext {
 			ex.resetEvalCtx(&evalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			evalCtx.Placeholders = &planner.semaCtx.Placeholders
 			evalCtx.Annotations = &planner.semaCtx.Annotations
 			return &evalCtx
 		}
+	}
+
+	if len(planner.curPlan.subqueryPlans) != 0 {
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute,
 		) {
@@ -897,6 +901,16 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// the planner whether or not to plan remote table readers.
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
 		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv)
+	if recv.commErr != nil {
+		return recv.bytesRead, recv.rowsRead, recv.commErr
+	}
+
+	if len(planner.curPlan.postqueryPlans) != 0 {
+		ex.server.cfg.DistSQLPlanner.PlanAndRunPostqueries(
+			ctx, planner, evalCtxFactory, planner.curPlan.postqueryPlans, recv, distribute,
+		)
+	}
+
 	return recv.bytesRead, recv.rowsRead, recv.commErr
 }
 
