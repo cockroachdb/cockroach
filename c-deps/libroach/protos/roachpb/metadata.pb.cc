@@ -1293,6 +1293,7 @@ const int RangeDescriptor::kEndKeyFieldNumber;
 const int RangeDescriptor::kInternalReplicasFieldNumber;
 const int RangeDescriptor::kNextReplicaIdFieldNumber;
 const int RangeDescriptor::kGenerationFieldNumber;
+const int RangeDescriptor::kGenerationComparableFieldNumber;
 const int RangeDescriptor::kStickyBitFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -1323,8 +1324,8 @@ RangeDescriptor::RangeDescriptor(const RangeDescriptor& from)
     sticky_bit_ = NULL;
   }
   ::memcpy(&range_id_, &from.range_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&next_replica_id_) -
-    reinterpret_cast<char*>(&range_id_)) + sizeof(next_replica_id_));
+    static_cast<size_t>(reinterpret_cast<char*>(&generation_comparable_) -
+    reinterpret_cast<char*>(&range_id_)) + sizeof(generation_comparable_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RangeDescriptor)
 }
 
@@ -1332,8 +1333,8 @@ void RangeDescriptor::SharedCtor() {
   start_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   end_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&sticky_bit_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&next_replica_id_) -
-      reinterpret_cast<char*>(&sticky_bit_)) + sizeof(next_replica_id_));
+      reinterpret_cast<char*>(&generation_comparable_) -
+      reinterpret_cast<char*>(&sticky_bit_)) + sizeof(generation_comparable_));
 }
 
 RangeDescriptor::~RangeDescriptor() {
@@ -1376,10 +1377,10 @@ void RangeDescriptor::Clear() {
       sticky_bit_->Clear();
     }
   }
-  if (cached_has_bits & 56u) {
+  if (cached_has_bits & 120u) {
     ::memset(&range_id_, 0, static_cast<size_t>(
-        reinterpret_cast<char*>(&next_replica_id_) -
-        reinterpret_cast<char*>(&range_id_)) + sizeof(next_replica_id_));
+        reinterpret_cast<char*>(&generation_comparable_) -
+        reinterpret_cast<char*>(&range_id_)) + sizeof(generation_comparable_));
   }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
@@ -1486,6 +1487,20 @@ bool RangeDescriptor::MergePartialFromCodedStream(
         break;
       }
 
+      // optional bool generation_comparable = 8;
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(64u /* 64 & 0xFF */)) {
+          set_has_generation_comparable();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &generation_comparable_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -1550,6 +1565,11 @@ void RangeDescriptor::SerializeWithCachedSizes(
       7, this->_internal_sticky_bit(), output);
   }
 
+  // optional bool generation_comparable = 8;
+  if (cached_has_bits & 0x00000040u) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(8, this->generation_comparable(), output);
+  }
+
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
                    static_cast<int>(_internal_metadata_.unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RangeDescriptor)
@@ -1571,7 +1591,7 @@ size_t RangeDescriptor::ByteSizeLong() const {
     }
   }
 
-  if (_has_bits_[0 / 32] & 63u) {
+  if (_has_bits_[0 / 32] & 127u) {
     if (has_start_key()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::BytesSize(
@@ -1610,6 +1630,11 @@ size_t RangeDescriptor::ByteSizeLong() const {
           this->next_replica_id());
     }
 
+    // optional bool generation_comparable = 8;
+    if (has_generation_comparable()) {
+      total_size += 1 + 1;
+    }
+
   }
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
@@ -1630,7 +1655,7 @@ void RangeDescriptor::MergeFrom(const RangeDescriptor& from) {
 
   internal_replicas_.MergeFrom(from.internal_replicas_);
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 63u) {
+  if (cached_has_bits & 127u) {
     if (cached_has_bits & 0x00000001u) {
       set_has_start_key();
       start_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.start_key_);
@@ -1650,6 +1675,9 @@ void RangeDescriptor::MergeFrom(const RangeDescriptor& from) {
     }
     if (cached_has_bits & 0x00000020u) {
       next_replica_id_ = from.next_replica_id_;
+    }
+    if (cached_has_bits & 0x00000040u) {
+      generation_comparable_ = from.generation_comparable_;
     }
     _has_bits_[0] |= cached_has_bits;
   }
@@ -1681,6 +1709,7 @@ void RangeDescriptor::InternalSwap(RangeDescriptor* other) {
   swap(range_id_, other->range_id_);
   swap(generation_, other->generation_);
   swap(next_replica_id_, other->next_replica_id_);
+  swap(generation_comparable_, other->generation_comparable_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
