@@ -171,7 +171,7 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 
 		if ju.md.Progress != nil {
 			progress = ju.md.Progress
-			progress.ModifiedMicros = timeutil.ToUnixMicros(timeutil.Now())
+			progress.ModifiedMicros = timeutil.ToUnixMicros(txn.OrigTimestamp().GoTime())
 			progressBytes, err := protoutil.Marshal(progress)
 			if err != nil {
 				return err
