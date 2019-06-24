@@ -88,13 +88,13 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 
 		// Key is before the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "d", "e", data,
+			ctx, "d", "e", data, false, /* disallowShadowing */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
 		// Key is after the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "a", "b", data,
+			ctx, "a", "b", data, false, /* disallowShadowing */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
@@ -102,7 +102,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 		// Do an initial ingest.
 		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 		defer cancel()
-		if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
+		if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		formatted := tracing.FormatRecordedSpans(collect())
@@ -143,7 +143,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(ctx, "b", "c", data); err != nil {
+		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		if r, err := db.Get(ctx, "bb"); err != nil {
@@ -178,7 +178,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 			defer cancel()
 
-			if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
+			if err := db.AddSSTable(ingestCtx, "b", "c", data, false /* disallowShadowing */); err != nil {
 				t.Fatalf("%+v", err)
 			}
 			if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
@@ -223,7 +223,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(ctx, "b", "c", data); !testutils.IsError(err, "invalid checksum") {
+		if err := db.AddSSTable(ctx, "b", "c", data, false /* disallowShadowing */); !testutils.IsError(err, "invalid checksum") {
 			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
 		}
 	}
@@ -381,5 +381,148 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	evaledStats.ContainsEstimates = false
 	if !afterStats.Equal(evaledStats) {
 		t.Errorf("mvcc stats mismatch: diff(expected, actual): %s", pretty.Diff(afterStats, evaledStats))
+	}
+}
+
+func TestAddSSTableDisallowShadowing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
+
+	for _, kv := range mvccKVsFromStrs([]strKv{
+		{"a", 1, "aa"},
+		{"a", 6, ""},
+		{"g", 5, "bb"},
+		{"r", 1, "rr"},
+		{"z", 2, "zz"},
+	}) {
+		if err := e.Put(kv.Key, kv.Value); err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	getSSTBytes := func(sstKVs []engine.MVCCKeyValue) []byte {
+		sst, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		defer sst.Close()
+		for _, kv := range sstKVs {
+			if err := sst.Add(kv); err != nil {
+				t.Fatalf("%+v", err)
+			}
+		}
+		sstBytes, err := sst.Finish()
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		return sstBytes
+	}
+
+	// Test key collision when ingesting an existing key with a lower ts.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"g", 4, "aa"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("h")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "key collision at g") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test for no key collision where the key range being ingested into is
+	// non-empty.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"b", 2, "bb"},
+			{"h", 6, "hh"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("b"), EndKey: roachpb.Key("i")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test key collision when ingesting an existing key with a higher ts.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"f", 2, "ff"},
+			{"h", 4, "hh"},
+			{"s", 1, "ss"},
+			{"z", 3, "zz"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("f"), EndKey: roachpb.Key("zz")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if !testutils.IsError(err, "key collision at z") {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Test key collision when ingesting a deleted key.
+	{
+		sstKVs := mvccKVsFromStrs([]strKv{
+			{"a", 4, "aa"},
+		})
+
+		sstBytes := getSSTBytes(sstKVs)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader:     roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+				Data:              sstBytes,
+				DisallowShadowing: true,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+
+		_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
 	}
 }
