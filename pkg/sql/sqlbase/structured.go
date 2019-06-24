@@ -2424,9 +2424,7 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 }
 
 // AddCheckMutation adds a check constraint validation mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddCheckMutation(
-	ck *TableDescriptor_CheckConstraint,
-) {
+func (desc *MutableTableDescriptor) AddCheckMutation(ck *TableDescriptor_CheckConstraint) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
