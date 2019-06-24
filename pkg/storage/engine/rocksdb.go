@@ -2898,6 +2898,15 @@ func (fr *RocksDBSstFileReader) Close() {
 	fr.rocksDB.RocksDB = nil
 }
 
+// CheckForKeyCollisions indicates if the two iterators collide on any keys.
+func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) error {
+	existingIterGetter := existingIter.(dbIteratorGetter)
+	sstableIterGetter := sstIter.(dbIteratorGetter)
+	state := C.DBCheckForKeyCollisions(existingIterGetter.getIter(), sstableIterGetter.getIter())
+
+	return statusToError(state.status)
+}
+
 // RocksDBSstFileWriter creates a file suitable for importing with
 // RocksDBSstFileReader.
 type RocksDBSstFileWriter struct {
