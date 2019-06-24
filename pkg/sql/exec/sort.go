@@ -261,9 +261,24 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		for j := 0; j < len(p.inputTypes); j++ {
 			if p.isOrderingCol[j] {
 				// The vec is already sorted, so just fill it directly.
-				p.output.ColVec(j).Copy(p.input.getValues(j), p.emitted, newEmitted, p.inputTypes[j])
+				p.output.ColVec(j).Copy(
+					coldata.CopyArgs{
+						ColType:     p.inputTypes[j],
+						Src:         p.input.getValues(j),
+						SrcStartIdx: p.emitted,
+						SrcEndIdx:   newEmitted,
+					},
+				)
 			} else {
-				p.output.ColVec(j).CopyWithSelInt64(p.input.getValues(j), p.order[p.emitted:], p.output.Length(), p.inputTypes[j])
+				p.output.ColVec(j).Copy(
+					coldata.CopyArgs{
+						ColType:     p.inputTypes[j],
+						Src:         p.input.getValues(j),
+						Sel64:       p.order,
+						SrcStartIdx: p.emitted,
+						SrcEndIdx:   uint64(p.output.Length()),
+					},
+				)
 			}
 		}
 		p.emitted = newEmitted

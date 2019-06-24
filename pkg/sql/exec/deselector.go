@@ -55,7 +55,14 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 	for i, t := range p.inputTypes {
 		toCol := p.output.ColVec(i)
 		fromCol := batch.ColVec(i)
-		toCol.CopyWithSelInt16(fromCol, sel, batch.Length(), t)
+		toCol.Copy(
+			coldata.CopyArgs{
+				ColType:   t,
+				Src:       fromCol,
+				Sel:       sel,
+				SrcEndIdx: uint64(batch.Length()),
+			},
+		)
 	}
 	return p.output
 }

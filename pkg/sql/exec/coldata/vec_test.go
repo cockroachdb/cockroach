@@ -132,6 +132,7 @@ func TestNullRanges(t *testing.T) {
 }
 
 func TestAppend(t *testing.T) {
+	// TODO(asubiotto): Test nulls.
 	const typ = types.Int64
 
 	src := NewMemColumn(typ, BatchSize)
@@ -214,6 +215,90 @@ func TestAppend(t *testing.T) {
 	}
 }
 
+func TestCopy(t *testing.T) {
+	// TODO(asubiotto): Test nulls.
+	const typ = types.Int64
+
+	src := NewMemColumn(typ, BatchSize)
+	srcInts := src.Int64()
+	for i := range srcInts {
+		srcInts[i] = int64(i + 1)
+	}
+	sel := make([]uint16, len(src.Int64()))
+	for i := range sel {
+		sel[i] = uint16(i)
+	}
+	sel64 := make([]uint64, len(src.Int64()))
+	for i := range sel64 {
+		sel64[i] = uint64(i)
+	}
+
+	sum := func(ints []int64) int {
+		s := 0
+		for _, i := range ints {
+			s += int(i)
+		}
+		return s
+	}
+
+	testCases := []struct {
+		name        string
+		args        CopyArgs
+		expectedSum int
+	}{
+		{
+			name:        "CopyNothing",
+			args:        CopyArgs{},
+			expectedSum: 0,
+		},
+		{
+			name: "CopyBatchSizeMinus1WithOffset1",
+			args: CopyArgs{
+				// Use DestIdx 1 to make sure that it is respected.
+				DestIdx:   1,
+				SrcEndIdx: BatchSize - 1,
+			},
+			// expectedSum uses sum of positive integers formula.
+			expectedSum: ((BatchSize - 1) * (BatchSize)) / 2,
+		},
+		{
+			name: "CopyWithSel",
+			args: CopyArgs{
+				// Set sel, but this should be ignored in favor of Sel64.
+				Sel: sel,
+				// Since sel64 and sel refer to the same indices, slice sel64 to be able
+				// to tell which sel was used.
+				Sel64:       sel64[1:],
+				DestIdx:     25,
+				SrcStartIdx: 1,
+				SrcEndIdx:   2,
+			},
+			// We'll have just the third element in the resulting slice.
+			expectedSum: 3,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.args.Src = src
+		tc.args.ColType = typ
+		t.Run(tc.name, func(t *testing.T) {
+			dest := NewMemColumn(typ, BatchSize)
+			dest.Copy(tc.args)
+			destInts := dest.Int64()
+			firstNonZero := 0
+			for i := range destInts {
+				if destInts[i] != 0 {
+					firstNonZero = i
+					break
+				}
+			}
+			// Verify that Copy started copying where we expected it to.
+			require.Equal(t, tc.args.DestIdx, uint64(firstNonZero))
+			require.Equal(t, tc.expectedSum, sum(destInts))
+		})
+	}
+}
+
 func BenchmarkAppend(b *testing.B) {
 	const typ = types.Int64
 
@@ -247,6 +332,42 @@ func BenchmarkAppend(b *testing.B) {
 				dest.Append(bc.args)
 				// "Reset" dest for another round.
 				dest.SetCol(dest.Int64()[:BatchSize])
+			}
+		})
+	}
+}
+
+func BenchmarkCopy(b *testing.B) {
+	const typ = types.Int64
+
+	src := NewMemColumn(typ, BatchSize)
+	sel := make([]uint16, len(src.Int64()))
+
+	benchCases := []struct {
+		name string
+		args CopyArgs
+	}{
+		{
+			name: "CopySimple",
+			args: CopyArgs{},
+		},
+		{
+			name: "CopyWithSel",
+			args: CopyArgs{
+				Sel: sel,
+			},
+		},
+	}
+
+	for _, bc := range benchCases {
+		bc.args.Src = src
+		bc.args.ColType = typ
+		bc.args.SrcEndIdx = BatchSize
+		dest := NewMemColumn(typ, BatchSize)
+		b.Run(bc.name, func(b *testing.B) {
+			b.SetBytes(8 * BatchSize)
+			for i := 0; i < b.N; i++ {
+				dest.Copy(bc.args)
 			}
 		})
 	}
