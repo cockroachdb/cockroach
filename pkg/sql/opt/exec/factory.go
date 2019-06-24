@@ -398,9 +398,9 @@ type Factory interface {
 	ConstructSaveTable(input Node, table *cat.DataSourceName, colNames []string) (Node, error)
 
 	// ConstructErrorIfRows wraps the input into a node which itself returns no
-	// results, but errors out if the input returns any rows.
-	// TODO(radu): add a way to control the error message.
-	ConstructErrorIfRows(input Node) (Node, error)
+	// results, but errors out if the input returns any rows. The mkErr function
+	// is used to create the error.
+	ConstructErrorIfRows(input Node, mkErr func(tree.Datums) error) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

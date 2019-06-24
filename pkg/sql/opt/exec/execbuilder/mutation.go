@@ -14,6 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -338,7 +341,11 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 			return err
 		}
 		// Wrap the query in an error node.
-		node, err := b.factory.ConstructErrorIfRows(query.root)
+		mkErr := func(row tree.Datums) error {
+			// TODO(radu): improve the error message.
+			return pgerror.Newf(pgcode.ForeignKeyViolation, "foreign key violation: values %s", row)
+		}
+		node, err := b.factory.ConstructErrorIfRows(query.root, mkErr)
 		if err != nil {
 			return err
 		}
