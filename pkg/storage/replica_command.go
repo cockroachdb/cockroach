@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -252,12 +253,14 @@ func (r *Replica) adminSplitWithDescriptor(
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
 	leftDesc.IncrementGeneration()
+	r.maybeMarkGenerationComparable(&leftDesc)
 	leftDesc.EndKey = splitKey
 
 	// Set the generation of the right hand side descriptor to match that of the
 	// (updated) left hand side. See the comment on the field for an explanation
 	// of why generations are useful.
 	rightDesc.Generation = leftDesc.Generation
+	r.maybeMarkGenerationComparable(rightDesc)
 
 	var extra string
 	if delayable {
@@ -563,6 +566,7 @@ func (r *Replica) AdminMerge(
 			updatedLeftDesc.Generation = rightDesc.Generation
 		}
 		updatedLeftDesc.IncrementGeneration()
+		r.maybeMarkGenerationComparable(&updatedLeftDesc)
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", rightDesc, reason)
 
@@ -882,6 +886,7 @@ func (r *Replica) changeReplicas(
 	updatedDesc := *desc
 	if generationComparableEnabled {
 		updatedDesc.IncrementGeneration()
+		updatedDesc.GenerationComparable = proto.Bool(true)
 	}
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
 
@@ -1633,4 +1638,12 @@ func (r *Replica) adminScatter(
 			},
 		}},
 	}, nil
+}
+
+// maybeMarkGenerationComparable sets GenerationComparable if the cluster is at
+// a high enough version such that GenerationComparable won't be lost.
+func (r *Replica) maybeMarkGenerationComparable(desc *roachpb.RangeDescriptor) {
+	if r.store.ClusterSettings().Version.IsActive(cluster.VersionGenerationComparable) {
+		desc.GenerationComparable = proto.Bool(true)
+	}
 }
