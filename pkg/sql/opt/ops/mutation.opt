@@ -187,5 +187,26 @@ define FKChecks {
 [Scalar, ListItem]
 define FKChecksItem {
     Check RelExpr
-    # TODO(radu): information for making a good error message.
+
+    _ FKChecksItemPrivate
+}
+
+[Private]
+define FKChecksItemPrivate {
+    OriginTable     TableID
+    ReferencedTable TableID
+
+    # If FKOutbound is true: this item checks that a new value in the origin
+    # table has a valid reference. The FK constraint is
+    # OutboundForeignKey(FKOrdinal) on the origin table.
+    #
+    # If FKOutbound is false: this item checks that a removed value from the
+    # referenced table doesn't orphan references to it from the origin table.
+    # The FK constraint is InboundForeignKey(FKOrdinal) on the referenced table.
+    FKOutbound bool
+    FKOrdinal  int
+
+    # KeyCols are the columns in the Check query that form the value tuple shown
+    # in the error message.
+    KeyCols ColList
 }

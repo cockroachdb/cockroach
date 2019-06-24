@@ -659,8 +659,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 		// of the mutation table so that a different set of column IDs are used for
 		// the two tables in the self-join.
 		scanScope := mb.b.buildScan(
-			mb.tab,
-			&mb.alias,
+			mb.b.addTable(mb.tab, &mb.alias),
 			nil, /* ordinals */
 			nil, /* indexFlags */
 			excludeMutations,
@@ -742,8 +741,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	// because they can be used by computed update expressions. Use a different
 	// instance of table metadata so that col IDs do not overlap.
 	fetchScope := mb.b.buildScan(
-		mb.tab,
-		&mb.alias,
+		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
 		nil, /* indexFlags */
 		includeMutations,
