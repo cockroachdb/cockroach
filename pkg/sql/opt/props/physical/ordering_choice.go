@@ -631,6 +631,85 @@ func (oc *OrderingChoice) ProjectCols(cols opt.ColSet) {
 	}
 }
 
+// PrefixIntersection computes an OrderingChoice which implies both oc and
+// the "segmented ordering" defined by s and other.
+//
+// The "segmented ordering" consisting of s and other is satisfied by any
+// ordering having all the columns of s as a prefix followed by any ordering
+// satisfying other.
+//
+// Such an ordering can be computed via the following rules:
+//
+// 1. intersection(X, {}[])           = X
+// 2. intersection([], SY)            = LY where L is any linearization of S
+// 3. intersection(xX, {}xY)          = x intersection(X, {}Y)
+// 4. intersection(xX, ({x} \cup S)Y) = x intersection(X, SY)
+//
+// If no rule applies, then an ordering that is representable by an
+// OrderingChoice does not exist.
+//
+// Note that rule 2. implies that the resulting OrderingChoice is not unique,
+// as any linearization of S will suffice.
+func (oc *OrderingChoice) PrefixIntersection(
+	prefix opt.ColSet, other *OrderingChoice, fds props.FuncDepSet,
+) (_ OrderingChoice, ok bool) {
+	var result OrderingChoice
+	x := oc.Copy()
+
+	s := prefix.Copy()
+	y := other.Copy()
+	y.Optional.DifferenceWith(s)
+
+	// We're allowed to add to s any columns in its closure, but we only
+	// want to do this for columns that also show up in the x ordering.
+	cl := fds.ComputeClosure(s)
+	cl.DifferenceWith(s)
+	cl.IntersectionWith(x.ColSet())
+	s.UnionWith(cl)
+
+	for {
+		switch {
+		case s.Empty() && len(y.Columns) == 0:
+			// Rule 1:
+			for _, c := range x.Columns {
+				result.Columns = append(result.Columns, c)
+			}
+			return result, true
+		case len(x.Columns) == 0:
+			// Rule 2:
+			for col, ok := s.Next(0); ok; col, ok = s.Next(col + 1) {
+				result.AppendCol(col, false /* descending */)
+			}
+
+			for _, c := range y.Columns {
+				result.Columns = append(result.Columns, c)
+			}
+			return result, true
+		case s.Empty() && len(x.Columns) > 0 && len(y.Columns) > 0 &&
+			x.Columns[0].Group.Intersects(y.Columns[0].Group) &&
+			x.Columns[0].Descending == y.Columns[0].Descending:
+			// Rule 3:
+			l := x.Columns[0]
+			r := y.Columns[0]
+			col, _ := l.Group.Intersection(r.Group).Next(0)
+			result.AppendCol(col, l.Descending)
+
+			x.Columns = x.Columns[1:]
+			y.Columns = y.Columns[1:]
+			continue
+		case len(x.Columns) > 0 && s.Intersects(x.Columns[0].Group):
+			// Rule 4:
+			s.DifferenceWith(x.Columns[0].Group)
+			result.Columns = append(result.Columns, x.Columns[0])
+			x.Columns = x.Columns[1:]
+			continue
+		default:
+			// If no rule applied, fail.
+			return OrderingChoice{}, false
+		}
+	}
+}
+
 // Equals returns true if the set of orderings matched by this instance is the
 // same as the set matched by the given instance.
 func (oc *OrderingChoice) Equals(rhs *OrderingChoice) bool {
@@ -643,12 +722,12 @@ func (oc *OrderingChoice) Equals(rhs *OrderingChoice) bool {
 
 	for i := range oc.Columns {
 		left := &oc.Columns[i]
-		right := &rhs.Columns[i]
+		y := &rhs.Columns[i]
 
-		if left.Descending != right.Descending {
+		if left.Descending != y.Descending {
 			return false
 		}
-		if !left.Group.Equals(right.Group) {
+		if !left.Group.Equals(y.Group) {
 			return false
 		}
 	}
