@@ -178,3 +178,35 @@ SELECT key,
 key       svc_ok  parse_ok  plan_ok  run_ok  ovh_ok
 SELECT _  true    true      true     true    true
 SELECT _  true    true      true     true    true
+
+# Check that statements made in implicit transactions are separated from those
+# that are not.
+
+statement ok
+SET application_name = 'implicit_txn_test'
+
+statement ok
+BEGIN; SELECT x FROM test where y=1; COMMIT;
+
+statement ok
+BEGIN;
+SELECT x, z FROM test;
+SELECT x FROM test where y=1;
+COMMIT;
+
+statement ok
+SELECT z FROM test where y=2;
+
+statement ok
+SELECT x FROM test where y=1;
+
+query TB colnames rowsort
+SELECT key, implicit_txn
+  FROM crdb_internal.node_statement_statistics
+ WHERE application_name = 'implicit_txn_test' ORDER BY key, implicit_txn;
+----
+key                             implicit_txn
+SELECT x FROM test WHERE y = _  false
+SELECT x FROM test WHERE y = _  true
+SELECT x, z FROM test           false
+SELECT z FROM test WHERE y = _  true

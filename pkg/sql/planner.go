@@ -575,6 +575,7 @@ type sqlStatsCollector interface {
 		samplePlanDescription *roachpb.ExplainTreePlanNode,
 		distSQLUsed bool,
 		optUsed bool,
+		implicitTxn bool,
 		automaticRetryCount int,
 		numRows int,
 		err error,

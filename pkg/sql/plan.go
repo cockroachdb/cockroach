@@ -887,6 +887,10 @@ const (
 
 	// planFlagExecDone marks that execution has been completed.
 	planFlagExecDone
+
+	// planFlagImplicitTxn marks that the plan was run inside of an implicit
+	// transaction.
+	planFlagImplicitTxn
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {

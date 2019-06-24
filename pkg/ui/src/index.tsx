@@ -23,7 +23,7 @@ import { Provider } from "react-redux";
 import { Router, Route, IndexRoute, IndexRedirect, Redirect } from "react-router";
 
 import {
-  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr, appAttr,
+  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr, appAttr, implicitTxnAttr,
 } from "src/util/constants";
 
 import { alertDataSync } from "src/redux/alerts";
@@ -137,10 +137,12 @@ ReactDOM.render(
           <IndexRoute component={ StatementsPage } />
           <Route path={ `:${appAttr}` } component={ StatementsPage } />
           <Route path={ `:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
+          <Route path={ `:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
         </Route>
         <Route path="statement">
           <IndexRedirect to="/statements" />
           <Route path={ `:${statementAttr}` } component={ StatementDetails } />
+          <Route path={ `:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
         </Route>
 
         { /* debug pages */ }
