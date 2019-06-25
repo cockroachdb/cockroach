@@ -285,3 +285,7 @@ func (f *stubFactory) ConstructErrorIfRows(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, error) {
+	return struct{}{}, nil
+}

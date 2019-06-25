@@ -1583,6 +1583,15 @@ func (ef *execFactory) ConstructErrorIfRows(
 	}, nil
 }
 
+// ConstructOpaque is part of the exec.Factory interface.
+func (ef *execFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, error) {
+	o, ok := metadata.(*opaqueMetadata)
+	if !ok {
+		return nil, errors.AssertionFailedf("unexpected OpaqueMedata object")
+	}
+	return o.plan, nil
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode

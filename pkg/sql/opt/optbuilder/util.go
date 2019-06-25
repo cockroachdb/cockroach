@@ -166,8 +166,6 @@ func (b *Builder) expandStarAndResolveType(
 //        the AS keyword).
 // typ    The type of the column.
 // expr   The expression this column refers to (if any).
-// group  The memo group ID of this column/expression (if any). This parameter
-//        is optional and can be set later in the returned scopeColumn.
 //
 // The new column is returned as a scopeColumn object.
 func (b *Builder) synthesizeColumn(

@@ -575,6 +575,10 @@ func (h *hasher) HashPresentation(val physical.Presentation) {
 	}
 }
 
+func (h *hasher) HashOpaqueMetadata(val opt.OpaqueMetadata) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
 func (h *hasher) HashPointer(val unsafe.Pointer) {
 	h.HashUint64(uint64(uintptr(val)))
 }
@@ -894,6 +898,10 @@ func (h *hasher) IsPresentationEqual(l, r physical.Presentation) bool {
 		}
 	}
 	return true
+}
+
+func (h *hasher) IsOpaqueMetadataEqual(l, r opt.OpaqueMetadata) bool {
+	return l == r
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two
