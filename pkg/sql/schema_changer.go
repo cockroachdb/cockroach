@@ -768,6 +768,11 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	ctx context.Context, table *sqlbase.TableDescriptor,
 ) error {
 	if table.Adding() {
+		// At this point, before we make ourselves public, we need to make sure that
+		// the tables that we reference are correctly updating themselves, so that
+		// the constraints that we have on those tables are already being enforced.
+		// We do this for both foreign keys (other table must check us for orphans)
+		// and for interleaves (other table must not take fast path delete).
 		fks, err := table.AllActiveAndInactiveForeignKeys()
 		if err != nil {
 			return err
@@ -775,6 +780,13 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 		for _, fk := range fks {
 			if err := sc.waitToUpdateLeases(ctx, fk.Table); err != nil {
 				return err
+			}
+		}
+		for _, idx := range table.AllNonDropIndexes() {
+			if nAncestors := len(idx.Interleave.Ancestors); nAncestors > 0 {
+				if err := sc.waitToUpdateLeases(ctx, idx.Interleave.Ancestors[nAncestors-1].TableID); err != nil {
+					return err
+				}
 			}
 		}
 

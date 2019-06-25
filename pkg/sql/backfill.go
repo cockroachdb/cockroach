@@ -123,6 +123,15 @@ func (sc *SchemaChanger) runBackfill(
 	// mutations. Collect the elements that are part of the mutation.
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexSpans []roachpb.Span
+	// addedIndexInterleaveParents will contain the list of all table ids of
+	// tables that any new indexes are interleaved into. We collect these so that
+	// we can make sure to wait until their versions are up to date across the
+	// cluster before beginning the backfill, after which other nodes that
+	// accidentally ran a fast path delete (DeleteRange) not even knowing about
+	// the new interleaved index we're adding would cause invalid data. Basically,
+	// we're going to wait for our parents to know about us before we start the
+	// backfill.
+	var addedIndexInterleaveParents []sqlbase.ID
 
 	var constraintsToAdd []sqlbase.ConstraintToUpdate
 	var constraintsToValidate []sqlbase.ConstraintToUpdate
@@ -155,6 +164,11 @@ func (sc *SchemaChanger) runBackfill(
 				}
 			case *sqlbase.DescriptorMutation_Index:
 				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(t.Index.ID))
+				if nAncestors := len(t.Index.Interleave.Ancestors); nAncestors > 0 {
+					addedIndexInterleaveParents = append(
+						addedIndexInterleaveParents,
+						t.Index.Interleave.Ancestors[nAncestors-1].TableID)
+				}
 			case *sqlbase.DescriptorMutation_Constraint:
 				constraintsToAdd = append(constraintsToAdd, *t.Constraint)
 				constraintsToValidate = append(constraintsToValidate, *t.Constraint)
@@ -203,6 +217,11 @@ func (sc *SchemaChanger) runBackfill(
 
 	// Add new indexes.
 	if len(addedIndexSpans) > 0 {
+		for _, tableID := range addedIndexInterleaveParents {
+			if err := sc.waitToUpdateLeases(ctx, tableID); err != nil {
+				return err
+			}
+		}
 		// Check if bulk-adding is enabled and supported by indexes (ie non-unique).
 		if err := sc.backfillIndexes(ctx, evalCtx, lease, version, addedIndexSpans); err != nil {
 			return err

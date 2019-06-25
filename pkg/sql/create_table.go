@@ -184,12 +184,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	// Descriptor written to store here.
-	if err := params.p.createDescriptorWithID(
-		params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
-		return err
-	}
-
 	for _, updated := range affected {
 		if err := params.p.writeSchemaChange(params.ctx, updated, sqlbase.InvalidMutationID); err != nil {
 			return err
@@ -202,6 +196,12 @@ func (n *createTableNode) startExec(params runParams) error {
 				return err
 			}
 		}
+	}
+
+	// Descriptor written to store here.
+	if err := params.p.createDescriptorWithID(
+		params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
+		return err
 	}
 
 	if err := desc.Validate(params.ctx, params.p.txn, params.EvalContext().Settings); err != nil {
@@ -825,8 +825,6 @@ func addInterleave(
 		intl.SharedPrefixLen -= ancestor.SharedPrefixLen
 	}
 	index.Interleave = sqlbase.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
-
-	desc.State = sqlbase.TableDescriptor_ADD
 	return nil
 }
 
@@ -860,14 +858,6 @@ func (p *planner) finalizeInterleave(
 
 	if err := p.writeSchemaChange(ctx, ancestorTable, sqlbase.InvalidMutationID); err != nil {
 		return err
-	}
-
-	if desc.State == sqlbase.TableDescriptor_ADD {
-		desc.State = sqlbase.TableDescriptor_PUBLIC
-
-		if err := p.writeSchemaChange(ctx, desc, sqlbase.InvalidMutationID); err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -1249,6 +1239,7 @@ func MakeTableDesc(
 	}
 
 	if n.Interleave != nil {
+		desc.State = sqlbase.TableDescriptor_ADD
 		if err := addInterleave(ctx, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
 			return desc, err
 		}
@@ -1256,6 +1247,7 @@ func MakeTableDesc(
 	// Add any interleaves to secondary indexes that we found. The backreferences
 	// will be created in the actual createTableNode, by finalizeInterleave.
 	for _, interleaveToAdd := range interleavesToAdd {
+		desc.State = sqlbase.TableDescriptor_ADD
 		indexDesc := &desc.Indexes[interleaveToAdd.indexOrdinal]
 		if err := addInterleave(ctx, vt, &desc, indexDesc, interleaveToAdd.def); err != nil {
 			return desc, err
