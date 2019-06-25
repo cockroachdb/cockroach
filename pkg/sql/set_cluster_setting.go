@@ -46,7 +46,7 @@ type setClusterSettingNode struct {
 func (p *planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
-	if _, err := p.RequireSuperUser(ctx, "SET CLUSTER SETTING"); err != nil {
+	if err := p.RequireSuperUser(ctx, "SET CLUSTER SETTING"); err != nil {
 		return nil, err
 	}
 

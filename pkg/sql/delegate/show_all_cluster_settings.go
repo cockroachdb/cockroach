@@ -17,7 +17,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 func (d *delegator) delegateShowAllClusterSettings(
 	stmt *tree.ShowAllClusterSettings,
 ) (tree.Statement, error) {
-	if _, err := d.catalog.RequireSuperUser(d.ctx, "SHOW ALL CLUSTER SETTINGS"); err != nil {
+	if err := d.catalog.RequireSuperUser(d.ctx, "SHOW ALL CLUSTER SETTINGS"); err != nil {
 		return nil, err
 	}
 	return parse(

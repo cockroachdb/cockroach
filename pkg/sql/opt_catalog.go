@@ -235,7 +235,12 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 }
 
 // RequireSuperUser is part of the cat.Catalog interface.
-func (oc *optCatalog) RequireSuperUser(ctx context.Context, action string) (bool, error) {
+func (oc *optCatalog) IsSuperUser(ctx context.Context, action string) (bool, error) {
+	return oc.planner.IsSuperUser(ctx, action)
+}
+
+// RequireSuperUser is part of the cat.Catalog interface.
+func (oc *optCatalog) RequireSuperUser(ctx context.Context, action string) error {
 	return oc.planner.RequireSuperUser(ctx, action)
 }
 

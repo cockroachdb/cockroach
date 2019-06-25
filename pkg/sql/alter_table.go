@@ -712,7 +712,7 @@ func (p *planner) setAuditMode(
 		auditEvent{desc: desc, writing: true})
 
 	// We require root for now. Later maybe use a different permission?
-	if _, err := p.RequireSuperUser(ctx, "change auditing settings on a table"); err != nil {
+	if err := p.RequireSuperUser(ctx, "change auditing settings on a table"); err != nil {
 		return false, err
 	}
 

@@ -1298,7 +1298,7 @@ func restorePlanHook(
 			return err
 		}
 
-		if _, err := p.RequireSuperUser(ctx, "RESTORE"); err != nil {
+		if err := p.RequireSuperUser(ctx, "RESTORE"); err != nil {
 			return err
 		}
 

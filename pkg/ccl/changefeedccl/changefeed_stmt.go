@@ -136,13 +136,7 @@ func changefeedPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionCreateChangefeed) {
-			return errors.Errorf(`CREATE CHANGEFEED requires all nodes to be upgraded to %s`,
-				cluster.VersionByKey(cluster.VersionCreateChangefeed),
-			)
-		}
-
-		if _, err := p.RequireSuperUser(ctx, "CREATE CHANGEFEED"); err != nil {
+		if err := p.RequireSuperUser(ctx, "CREATE CHANGEFEED"); err != nil {
 			return err
 		}
 
