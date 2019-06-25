@@ -57,7 +57,7 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 
 	for _, snapType := range []SnapshotRequest_Type{SnapshotRequest_PREEMPTIVE, SnapshotRequest_RAFT} {
 		t.Run(snapType.String(), func(t *testing.T) {
-			lastIndex, err := (*replicaRaftStorage)(repl).LastIndex()
+			lastIndex, err := repl.GetLastIndex()
 			if err != nil {
 				t.Fatal(err)
 			}
