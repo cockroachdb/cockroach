@@ -94,11 +94,10 @@ func makeIDKey() storagebase.CmdIDKey {
 //
 // Return values:
 // - a channel which receives a response or error upon application
-// - a closure used to attempt to abandon the command. When called, it tries to
-//   remove the pending command from the internal commands map. This is
-//   possible until execution of the command at the local replica has already
-//   begun, in which case false is returned and the client needs to continue
-//   waiting for successful execution.
+// - a closure used to attempt to abandon the command. When called, it unbinds
+//   the command's context from its Raft proposal. The client is then free to
+//   terminate execution, although it is given no guarantee that the proposal
+//   won't still go on to commit and apply at some later time.
 // - a callback to undo quota acquisition if the attempt to propose the batch
 //   request to raft fails. This also cleans up the command sizes stored for
 //   the corresponding proposal.
@@ -111,7 +110,7 @@ func (r *Replica) evalAndPropose(
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
-) (_ chan proposalResult, _ func() bool, _ int64, pErr *roachpb.Error) {
+) (_ chan proposalResult, _ func(), _ int64, pErr *roachpb.Error) {
 	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
 	r.mu.RLock()
 	if !r.mu.destroyStatus.IsAlive() {
@@ -167,7 +166,7 @@ func (r *Replica) evalAndPropose(
 			EndTxns: endTxns,
 		}
 		proposal.finishApplication(pr)
-		return proposalCh, func() bool { return false }, 0, nil
+		return proposalCh, func() {}, 0, nil
 	}
 
 	// If the request requested that Raft consensus be performed asynchronously,
@@ -274,29 +273,14 @@ func (r *Replica) evalAndPropose(
 	if pErr != nil {
 		return nil, nil, 0, pErr
 	}
-	// Must not use `proposal` in the closure below as a proposal which is not
-	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
-	// a command only abandons the associated context. As soon as we propose a
-	// command to Raft, ownership passes to the "below Raft" machinery. In
-	// particular, endCmds will be invoked when the command is applied. There are
-	// a handful of cases where the command may not be applied (or even
+	// Abandoning a command only abandons the associated context - it does
+	// nothing to try to prevent the command from succeeding. In particular,
+	// endCmds will still be invoked when the command is applied. There are a
+	// handful of cases where the command may not be applied (or even
 	// processed): the process crashes or the local replica is removed from the
 	// range.
-	tryAbandon := func() bool {
-		// The raftMu must be locked to modify the context of a proposal.
-		r.raftMu.Lock()
-		defer r.raftMu.Unlock()
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		p, ok := r.mu.proposals[idKey]
-		if ok {
-			// TODO(radu): Should this context be created via tracer.ForkCtxSpan?
-			// We'd need to make sure the span is finished eventually.
-			p.ctx = r.AnnotateCtx(context.TODO())
-		}
-		return ok
-	}
-	return proposalCh, tryAbandon, maxLeaseIndex, nil
+	abandon := func() { r.abandonProposal(proposal) }
+	return proposalCh, abandon, maxLeaseIndex, nil
 }
 
 // proposeLocked starts tracking a command and proposes it to raft. If
@@ -449,6 +433,23 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		r.unquiesceLocked()
 		return false /* unquiesceAndWakeLeader */, raftGroup.Propose(data)
 	})
+}
+
+// abandonProposal attempt to abandon the provided proposal. When called, it
+// unbinds the context from the proposal. The proposal's client is then free to
+// terminate execution, although it is given no guarantee that the proposal
+// won't still go on to commit and apply at some later time.
+func (r *Replica) abandonProposal(proposal *ProposalData) {
+	// The raftMu must be locked to modify the context of a proposal because
+	// as soon as we propose a command to Raft, ownership passes to the
+	// "below Raft" machinery.
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// TODO(radu): Should this context be created via tracer.ForkCtxSpan?
+	// We'd need to make sure the span is finished eventually.
+	proposal.ctx = r.AnnotateCtx(context.TODO())
 }
 
 // stepRaftGroup calls Step on the replica's RawNode with the provided request's
