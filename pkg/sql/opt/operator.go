@@ -276,6 +276,16 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 	return false
 }
 
+// OpaqueMetadata is an object stored in OpaqueRelExpr and passed
+// through to the exec factory.
+type OpaqueMetadata interface {
+	ImplementsOpaqueMetadata()
+
+	// String is used when printing optimizer trees and should contain a short
+	// description of the statement.
+	String() string
+}
+
 func init() {
 	for optOp, treeOp := range ComparisonOpReverseMap {
 		ComparisonOpMap[treeOp] = optOp
