@@ -38,9 +38,11 @@ type SessionData struct {
 	// ForceSplitAt indicates whether checks to prevent incorrect usage of ALTER
 	// TABLE ... SPLIT AT should be skipped.
 	ForceSplitAt bool
-	// OptimizerMode indicates whether to use the experimental optimizer for
-	// query planning.
+	// OptimizerMode indicates whether to use the optimizer for query planning.
 	OptimizerMode OptimizerMode
+	// OptimizerFKs indicates whether we should use the new paths to plan foreign
+	// key checks in the optimizer.
+	OptimizerFKs bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of namespaces to search builtins in.
