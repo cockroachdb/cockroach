@@ -2,17 +2,31 @@
 
 subtest automatic_retry
 
+statement ok
+CREATE SEQUENCE s
+
 # On an implicit transaction, we retry automatically and the function
 # eventually returns a result.
 query I
-SELECT crdb_internal.force_retry('50ms':::INTERVAL)
+SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)
 ----
 0
+
+# Demonstrate that the txn was indeed retried.
+query I
+SELECT currval('s')
+----
+3
+
+statement ok
+DROP SEQUENCE s
 
 subtest automatic_retry
 
 statement ok
-BEGIN TRANSACTION; SAVEPOINT cockroach_restart
+CREATE SEQUENCE s;
+  BEGIN TRANSACTION;
+  SAVEPOINT cockroach_restart
 
 # The SELECT 1 is necessary to take the session out of the AutoRetry state,
 # otherwise the statement below would be retries automatically.
@@ -20,31 +34,45 @@ statement ok
 SELECT 1
 
 query error restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
-SELECT crdb_internal.force_retry('500ms':::INTERVAL)
+SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
 ROLLBACK TO SAVEPOINT cockroach_restart
 
-# wait until the transaction is at least 1 second
-sleep 1s
+query I
+SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)
+----
+0
+
+# Demonstrate that the txn was indeed retried.
+query I
+SELECT currval('s')
+----
+3
+
+statement ok
+COMMIT
+
+subtest savepoint_name
+
+statement ok
+BEGIN
 
 # Ensure that ident case rules are used.
 statement error pq: unimplemented: SAVEPOINT not supported except for cockroach_restart
 SAVEPOINT "COCKROACH_RESTART"
 
+statement ok
+ROLLBACK; BEGIN
+
 # Ensure that ident case rules are used.
 statement ok
 SAVEPOINT COCKROACH_RESTART
 
-query I
-SELECT crdb_internal.force_retry('500ms':::INTERVAL)
-----
-0
-
 statement ok
-COMMIT
+ROLLBACK
 
-subtest schema_chage_with_rollback
+subtest schema_change_with_rollback
 
 # Test that creating a table repeatedly across restarts doesn't leave dangling
 # rows behind (the rows are  associated with the correct descriptor).
