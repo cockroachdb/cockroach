@@ -705,7 +705,7 @@ func (b *Batch) writeBatch(s, e interface{}, data []byte) {
 }
 
 // addSSTable is only exported on DB.
-func (b *Batch) addSSTable(s, e interface{}, data []byte) {
+func (b *Batch) addSSTable(s, e interface{}, data []byte, disallowShadowing bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -721,7 +721,8 @@ func (b *Batch) addSSTable(s, e interface{}, data []byte) {
 			Key:    begin,
 			EndKey: end,
 		},
-		Data: data,
+		Data:              data,
+		DisallowShadowing: disallowShadowing,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
