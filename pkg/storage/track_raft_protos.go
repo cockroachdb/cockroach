@@ -34,7 +34,7 @@ func funcName(f interface{}) string {
 // instrumentation and returns the list of downstream-of-raft protos.
 func TrackRaftProtos() func() []reflect.Type {
 	// Grab the name of the function that roots all raft operations.
-	processRaftFunc := funcName((*Replica).processRaftCommand)
+	processRaftFunc := funcName((*Replica).stageRaftCommand)
 	// We only need to track protos that could cause replica divergence
 	// by being written to disk downstream of raft.
 	whitelist := []string{
