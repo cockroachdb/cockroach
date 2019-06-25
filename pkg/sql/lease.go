@@ -337,16 +337,18 @@ var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 // time by first waiting for all nodes to be on the current (pre-update) version
 // of the table desc.
 //
-// The update closure for each table ID is called after the wait, and it
-// provides the new version of the descriptor to be written.
+// The update closure for all tables is called after the wait. The argument to
+// the closure is a map of the table descriptors with the IDs given in tableIDs,
+// and the closure mutates those descriptors.
 //
-// The closures may be called multiple times if retries occur; make sure they do
+// The closure may be called multiple times if retries occur; make sure it does
 // not have side effects.
 //
 // Returns the updated versions of the descriptors.
 func (s LeaseStore) PublishMultiple(
 	ctx context.Context,
-	updates map[sqlbase.ID]func(descriptor *sqlbase.MutableTableDescriptor) error,
+	tableIDs []sqlbase.ID,
+	update func(map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error,
 	logEvent func(*client.Txn) error,
 ) (map[sqlbase.ID]*sqlbase.ImmutableTableDescriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
@@ -355,7 +357,7 @@ func (s LeaseStore) PublishMultiple(
 		// Wait until there are no unexpired leases on the previous versions
 		// of the tables.
 		expectedVersions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
-		for id := range updates {
+		for _, id := range tableIDs {
 			expected, err := s.WaitForOneVersion(ctx, id, base.DefaultRetryOptions())
 			if err != nil {
 				return nil, err
@@ -367,45 +369,50 @@ func (s LeaseStore) PublishMultiple(
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
 		err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			for id, update := range updates {
+			versions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
+			descsToUpdate := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
+			for _, id := range tableIDs {
 				// Re-read the current versions of the table descriptor, this time
 				// transactionally.
 				var err error
-				tableDesc, err := sqlbase.GetMutableTableDescFromID(ctx, txn, id)
+				descsToUpdate[id], err = sqlbase.GetMutableTableDescFromID(ctx, txn, id)
 				if err != nil {
 					return err
 				}
 
-				if expectedVersions[id] != tableDesc.Version {
+				if expectedVersions[id] != descsToUpdate[id].Version {
 					// The version changed out from under us. Someone else must be
 					// performing a schema change operation.
 					if log.V(3) {
-						log.Infof(ctx, "publish (version changed): %d != %d", expectedVersions[id], tableDesc.Version)
+						log.Infof(ctx, "publish (version changed): %d != %d", expectedVersions[id], descsToUpdate[id].Version)
 					}
 					return errLeaseVersionChanged
 				}
 
-				// Run the update closure.
-				version := tableDesc.Version
-				if err := update(tableDesc); err != nil {
-					return err
-				}
-				if version != tableDesc.Version {
-					return errors.Errorf("updated version to: %d, expected: %d",
-						tableDesc.Version, version)
-				}
-
-				if err := tableDesc.MaybeIncrementVersion(ctx, txn); err != nil {
-					return err
-				}
-				if err := tableDesc.ValidateTable(s.settings); err != nil {
-					return err
-				}
-
-				tableDescs[id] = tableDesc
+				versions[id] = descsToUpdate[id].Version
 			}
 
-			// Write the updated descriptor.
+			// Run the update closure.
+			if err := update(descsToUpdate); err != nil {
+				return err
+			}
+			for _, id := range tableIDs {
+				if versions[id] != descsToUpdate[id].Version {
+					return errors.Errorf("updated version to: %d, expected: %d",
+						descsToUpdate[id].Version, versions[id])
+				}
+
+				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn); err != nil {
+					return err
+				}
+				if err := descsToUpdate[id].ValidateTable(s.settings); err != nil {
+					return err
+				}
+
+				tableDescs[id] = descsToUpdate[id]
+			}
+
+			// Write the updated descriptors.
 			if err := txn.SetSystemConfigTrigger(); err != nil {
 				return err
 			}
@@ -468,10 +475,16 @@ func (s LeaseStore) Publish(
 	update func(*sqlbase.MutableTableDescriptor) error,
 	logEvent func(*client.Txn) error,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
-	updates := make(map[sqlbase.ID]func(descriptor *sqlbase.MutableTableDescriptor) error)
-	updates[tableID] = update
+	tableIDs := []sqlbase.ID{tableID}
+	updates := func(descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
+		desc, ok := descs[tableID]
+		if !ok {
+			return errors.AssertionFailedf("required table with ID %d not provided to update closure", tableID)
+		}
+		return update(desc)
+	}
 
-	results, err := s.PublishMultiple(ctx, updates, logEvent)
+	results, err := s.PublishMultiple(ctx, tableIDs, updates, logEvent)
 	if err != nil {
 		return nil, err
 	}
