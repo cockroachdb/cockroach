@@ -383,7 +383,7 @@ func kvTest(clusterName, testName, dir, cmd string) {
 				log.Fatal(err)
 			}
 			defer f.Close()
-			c.Wipe()
+			c.Wipe(wipePreserveCerts)
 			c.Start()
 			cmd := fmt.Sprintf(m.Test, concurrency)
 			stdout := io.MultiWriter(f, os.Stdout)
@@ -480,7 +480,7 @@ func nightly(clusterName, dir string) {
 				log.Fatal(err)
 			}
 			defer f.Close()
-			c.Wipe()
+			c.Wipe(wipePreserveCerts)
 			c.Start()
 			stdout := io.MultiWriter(f, os.Stdout)
 			stderr := io.MultiWriter(f, os.Stderr)
@@ -545,7 +545,7 @@ func splits(clusterName, dir string) {
 				log.Fatal(err)
 			}
 			defer f.Close()
-			c.Wipe()
+			c.Wipe(wipePreserveCerts)
 			c.Start()
 			stdout := io.MultiWriter(f, os.Stdout)
 			stderr := io.MultiWriter(f, os.Stderr)
