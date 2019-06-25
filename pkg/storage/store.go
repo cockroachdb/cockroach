@@ -3611,7 +3611,7 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	// remote replicas will likely start campaigning.
 	if elapsed >= defaultReplicaRaftMuWarnThreshold {
 		log.Warningf(ctx, "handle raft ready: %.1fs [processed=%d]",
-			elapsed.Seconds(), stats.processed)
+			elapsed.Seconds(), stats.entriesProcessed)
 	}
 	if !r.IsInitialized() {
 		// Only an uninitialized replica can have a placeholder since, by
