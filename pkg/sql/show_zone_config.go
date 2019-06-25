@@ -100,7 +100,7 @@ func getShowZoneConfigRow(
 		return nil, err
 	}
 
-	index, partition, err := resolveSubzone(ctx, p.txn, &zoneSpecifier, targetID, tblDesc)
+	index, partition, err := resolveSubzone(&zoneSpecifier, tblDesc)
 	if err != nil {
 		return nil, err
 	}
