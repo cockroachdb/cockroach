@@ -96,7 +96,7 @@ type joinReader struct {
 	finalLookupBatch        bool
 	toEmit                  sqlbase.EncDatumRows
 
-	// Hold onto what families we need to query from if our
+	// neededFamilies maintains what families we need to query from if our
 	// needed columns span multiple queries
 	neededFamilies []sqlbase.FamilyID
 
@@ -287,25 +287,19 @@ func (jr *joinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error
 		jr.index, &jr.alloc)
 }
 
-// TODO: maybe want to move this into the joinerbase?
-func (jr *joinReader) canSplitSpanIntoSeparateFamilies(span roachpb.Span) (bool, roachpb.Spans) {
+func (jr *joinReader) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {
 	// check the following:
 	// - we have more than one needed family
-	// - we are looking at the primary index
+	// - we are looking at a unique index
 	// - our table has more than the default family
-	// - we have all the columns of the tables index
-	// TODO VERIFY: I think this logic holds. If the number of columns we are looking
-	// up on is equal to the number of columns in the primary index, then
-	// we are guaranteed to be looking at a single row, so we don't need to
-	// be checking if span.Key.Equals(span.EndKey)
+	// - we have all the columns of the index
 	if len(jr.neededFamilies) > 0 &&
-		jr.index.ID == jr.desc.PrimaryIndex.ID &&
-		len(jr.desc.Families) > 1 &&
-		len(jr.lookupCols) == len(jr.desc.PrimaryIndex.ColumnIDs) &&
+		jr.index.Unique &&
+		len(jr.lookupCols) == len(jr.index.ColumnIDs) &&
 		len(jr.neededFamilies) < len(jr.desc.Families) {
-		return true, sqlbase.SplitSpanIntoSeparateFamilies(span, jr.neededFamilies)
+		return sqlbase.SplitSpanIntoSeparateFamilies(span, jr.neededFamilies)
 	}
-	return false, nil
+	return roachpb.Spans{span}
 }
 
 // Next is part of the RowSource interface.
@@ -398,11 +392,7 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 		}
 		inputRowIndices := jr.keyToInputRowIndices[string(span.Key)]
 		if inputRowIndices == nil {
-			if canSplit, splitSpans := jr.canSplitSpanIntoSeparateFamilies(span); canSplit {
-				spans = append(spans, splitSpans...)
-			} else {
-				spans = append(spans, span)
-			}
+			spans = append(spans, jr.maybeSplitSpanIntoSeparateFamilies(span)...)
 		}
 		jr.keyToInputRowIndices[string(span.Key)] = append(inputRowIndices, i)
 	}

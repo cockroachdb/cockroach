@@ -237,10 +237,8 @@ func MakeSpanFromEncDatums(
 	return roachpb.Span{Key: startKey, EndKey: endKey}, nil
 }
 
-// NeededColumnFamilyIDs TODO: I'm not sure the appropriate place for this, but it
-// seems like its going to be used a few places, so somewhere
-// in sqlbase seems like a decent spot.
-// NeededColumnFamilyIDs
+// NeededColumnFamilyIDs returns a slice of FamilyIDs which contain
+// the families needed to load a set of neededCols
 func NeededColumnFamilyIDs(
 	colIdxMap map[ColumnID]int, families []ColumnFamilyDescriptor, neededCols util.FastIntSet,
 ) []FamilyID {
@@ -264,11 +262,11 @@ func NeededColumnFamilyIDs(
 	return needed
 }
 
-// SplitSpanIntoSeparateFamilies splits a span representing a single row lookup
-// into separate spans that request particular families from neededFamilies
-// instead of requesting all the families. It is up to the client to verify
-// whether the requested span represents a single row lookup, and when
-// the span splitting is appropriate
+// SplitSpanIntoSeparateFamilies can only be used to split a span representing
+// a single row point lookup into separate spans that request particular
+// families from neededFamilies instead of requesting all the families.
+// It is up to the client to verify whether the requested span
+// represents a single row lookup, and when the span splitting is appropriate.
 func SplitSpanIntoSeparateFamilies(span roachpb.Span, neededFamilies []FamilyID) roachpb.Spans {
 	var resultSpans roachpb.Spans
 	for i, familyID := range neededFamilies {
@@ -278,7 +276,8 @@ func SplitSpanIntoSeparateFamilies(span roachpb.Span, neededFamilies []FamilyID)
 		tempSpan.Key = keys.MakeFamilyKey(tempSpan.Key, uint32(familyID))
 		tempSpan.EndKey = tempSpan.Key.PrefixEnd()
 		if i > 0 && familyID == neededFamilies[i-1]+1 {
-			// the family ID is the same, so collapse these spans
+			// This column family is adjacent to the previous one. We can merge
+			// the two spans into one.
 			resultSpans[len(resultSpans)-1].EndKey = tempSpan.EndKey
 		} else {
 			resultSpans = append(resultSpans, tempSpan)
