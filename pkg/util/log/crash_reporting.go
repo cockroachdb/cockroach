@@ -602,3 +602,19 @@ func ErrorSource(i interface{}) string {
 	}
 	return ""
 }
+
+// GetRegisteredTagsString returns a string with the values of registered tags
+// in the context. The format is "key1: val1; key2: val2".
+func GetRegisteredTagsString(ctx context.Context) string {
+	var buf bytes.Buffer
+	for _, f := range tagFns {
+		v := f.value(ctx)
+		if v != "" {
+			if buf.Len() > 0 {
+				buf.WriteString("; ")
+			}
+			fmt.Fprintf(&buf, "%s: %s", f.key, maybeTruncate(v))
+		}
+	}
+	return buf.String()
+}

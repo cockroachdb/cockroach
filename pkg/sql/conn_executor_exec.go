@@ -880,7 +880,20 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 	}
 
-	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
+	defer func() {
+		planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err())
+
+		if err := res.Err(); err != nil {
+			if pgErr, ok := pgerror.GetPGCause(err); ok && pgErr.Code == pgerror.CodeInternalError {
+				// If this is an internal error, append the anonymized statement;
+				// see #37514.
+				pgErr.SafeDetail = append(pgErr.SafeDetail, &pgerror.Error_SafeDetail{
+					SafeMessage: log.GetRegisteredTagsString(ctx),
+				})
+				res.SetError(pgErr)
+			}
+		}
+	}()
 
 	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
 	ex.sessionTracing.TracePlanEnd(ctx, err)
