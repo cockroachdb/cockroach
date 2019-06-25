@@ -296,11 +296,7 @@ tar cvf certs.tar certs
 
 		var args []string
 		if c.Secure {
-			if c.IsLocal() {
-				args = append(args, fmt.Sprintf("--certs-dir=${HOME}/local/%d/certs", nodes[i]))
-			} else {
-				args = append(args, "--certs-dir=certs")
-			}
+			args = append(args, "--certs-dir="+c.Impl.CertsDir(c, nodes[i]))
 		} else {
 			args = append(args, "--insecure")
 		}
@@ -458,6 +454,15 @@ func (Cockroach) LogDir(c *SyncedCluster, index int) string {
 	dir := "${HOME}/logs"
 	if c.IsLocal() {
 		dir = os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/logs", index))
+	}
+	return dir
+}
+
+// CertsDir implements the ClusterImpl.NodeDir interface.
+func (Cockroach) CertsDir(c *SyncedCluster, index int) string {
+	dir := "${HOME}/certs"
+	if c.IsLocal() {
+		dir = os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/certs", index))
 	}
 	return dir
 }

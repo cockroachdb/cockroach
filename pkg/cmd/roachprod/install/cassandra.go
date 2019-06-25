@@ -98,6 +98,11 @@ func (Cassandra) LogDir(c *SyncedCluster, index int) string {
 	panic("Cassandra.LogDir unimplemented")
 }
 
+// CertsDir implements the ClusterImpl.NodeDir interface.
+func (Cassandra) CertsDir(c *SyncedCluster, index int) string {
+	panic("Cassandra.CertsDir unimplemented")
+}
+
 // NodeURL implements the ClusterImpl.NodeDir interface.
 func (Cassandra) NodeURL(_ *SyncedCluster, host string, port int) string {
 	return fmt.Sprintf("'cassandra://%s:%d'", host, port)
