@@ -3505,27 +3505,43 @@ class MixedSuccessError : public ::google::protobuf::MessageLite /* @@protoc_ins
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.Error wrapped = 1;
+  bool has_wrapped_message() const;
+  void clear_wrapped_message();
+  static const int kWrappedMessageFieldNumber = 2;
+  const ::std::string& wrapped_message() const;
+  void set_wrapped_message(const ::std::string& value);
+  #if LANG_CXX11
+  void set_wrapped_message(::std::string&& value);
+  #endif
+  void set_wrapped_message(const char* value);
+  void set_wrapped_message(const char* value, size_t size);
+  ::std::string* mutable_wrapped_message();
+  ::std::string* release_wrapped_message();
+  void set_allocated_wrapped_message(::std::string* wrapped_message);
+
   bool has_wrapped() const;
   void clear_wrapped();
   static const int kWrappedFieldNumber = 1;
   private:
-  const ::cockroach::roachpb::Error& _internal_wrapped() const;
+  const ::cockroach::roachpb::ErrorDetail& _internal_wrapped() const;
   public:
-  const ::cockroach::roachpb::Error& wrapped() const;
-  ::cockroach::roachpb::Error* release_wrapped();
-  ::cockroach::roachpb::Error* mutable_wrapped();
-  void set_allocated_wrapped(::cockroach::roachpb::Error* wrapped);
+  const ::cockroach::roachpb::ErrorDetail& wrapped() const;
+  ::cockroach::roachpb::ErrorDetail* release_wrapped();
+  ::cockroach::roachpb::ErrorDetail* mutable_wrapped();
+  void set_allocated_wrapped(::cockroach::roachpb::ErrorDetail* wrapped);
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.MixedSuccessError)
  private:
   void set_has_wrapped();
   void clear_has_wrapped();
+  void set_has_wrapped_message();
+  void clear_has_wrapped_message();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
-  ::cockroach::roachpb::Error* wrapped_;
+  ::google::protobuf::internal::ArenaStringPtr wrapped_message_;
+  ::cockroach::roachpb::ErrorDetail* wrapped_;
   friend struct ::protobuf_roachpb_2ferrors_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -7196,46 +7212,45 @@ inline void IntegerOverflowError::set_increment_value(::google::protobuf::int64 
 
 // MixedSuccessError
 
-// optional .cockroach.roachpb.Error wrapped = 1;
 inline bool MixedSuccessError::has_wrapped() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
+  return (_has_bits_[0] & 0x00000002u) != 0;
 }
 inline void MixedSuccessError::set_has_wrapped() {
-  _has_bits_[0] |= 0x00000001u;
+  _has_bits_[0] |= 0x00000002u;
 }
 inline void MixedSuccessError::clear_has_wrapped() {
-  _has_bits_[0] &= ~0x00000001u;
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void MixedSuccessError::clear_wrapped() {
   if (wrapped_ != NULL) wrapped_->Clear();
   clear_has_wrapped();
 }
-inline const ::cockroach::roachpb::Error& MixedSuccessError::_internal_wrapped() const {
+inline const ::cockroach::roachpb::ErrorDetail& MixedSuccessError::_internal_wrapped() const {
   return *wrapped_;
 }
-inline const ::cockroach::roachpb::Error& MixedSuccessError::wrapped() const {
-  const ::cockroach::roachpb::Error* p = wrapped_;
+inline const ::cockroach::roachpb::ErrorDetail& MixedSuccessError::wrapped() const {
+  const ::cockroach::roachpb::ErrorDetail* p = wrapped_;
   // @@protoc_insertion_point(field_get:cockroach.roachpb.MixedSuccessError.wrapped)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Error*>(
-      &::cockroach::roachpb::_Error_default_instance_);
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ErrorDetail*>(
+      &::cockroach::roachpb::_ErrorDetail_default_instance_);
 }
-inline ::cockroach::roachpb::Error* MixedSuccessError::release_wrapped() {
+inline ::cockroach::roachpb::ErrorDetail* MixedSuccessError::release_wrapped() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.MixedSuccessError.wrapped)
   clear_has_wrapped();
-  ::cockroach::roachpb::Error* temp = wrapped_;
+  ::cockroach::roachpb::ErrorDetail* temp = wrapped_;
   wrapped_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::Error* MixedSuccessError::mutable_wrapped() {
+inline ::cockroach::roachpb::ErrorDetail* MixedSuccessError::mutable_wrapped() {
   set_has_wrapped();
   if (wrapped_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::roachpb::Error>(GetArenaNoVirtual());
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ErrorDetail>(GetArenaNoVirtual());
     wrapped_ = p;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MixedSuccessError.wrapped)
   return wrapped_;
 }
-inline void MixedSuccessError::set_allocated_wrapped(::cockroach::roachpb::Error* wrapped) {
+inline void MixedSuccessError::set_allocated_wrapped(::cockroach::roachpb::ErrorDetail* wrapped) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
     delete wrapped_;
@@ -7252,6 +7267,71 @@ inline void MixedSuccessError::set_allocated_wrapped(::cockroach::roachpb::Error
   }
   wrapped_ = wrapped;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MixedSuccessError.wrapped)
+}
+
+inline bool MixedSuccessError::has_wrapped_message() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void MixedSuccessError::set_has_wrapped_message() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void MixedSuccessError::clear_has_wrapped_message() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void MixedSuccessError::clear_wrapped_message() {
+  wrapped_message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_wrapped_message();
+}
+inline const ::std::string& MixedSuccessError::wrapped_message() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.MixedSuccessError.wrapped_message)
+  return wrapped_message_.GetNoArena();
+}
+inline void MixedSuccessError::set_wrapped_message(const ::std::string& value) {
+  set_has_wrapped_message();
+  wrapped_message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.MixedSuccessError.wrapped_message)
+}
+#if LANG_CXX11
+inline void MixedSuccessError::set_wrapped_message(::std::string&& value) {
+  set_has_wrapped_message();
+  wrapped_message_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.MixedSuccessError.wrapped_message)
+}
+#endif
+inline void MixedSuccessError::set_wrapped_message(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  set_has_wrapped_message();
+  wrapped_message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.MixedSuccessError.wrapped_message)
+}
+inline void MixedSuccessError::set_wrapped_message(const char* value, size_t size) {
+  set_has_wrapped_message();
+  wrapped_message_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.MixedSuccessError.wrapped_message)
+}
+inline ::std::string* MixedSuccessError::mutable_wrapped_message() {
+  set_has_wrapped_message();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.MixedSuccessError.wrapped_message)
+  return wrapped_message_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MixedSuccessError::release_wrapped_message() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.MixedSuccessError.wrapped_message)
+  if (!has_wrapped_message()) {
+    return NULL;
+  }
+  clear_has_wrapped_message();
+  return wrapped_message_.ReleaseNonDefaultNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MixedSuccessError::set_allocated_wrapped_message(::std::string* wrapped_message) {
+  if (wrapped_message != NULL) {
+    set_has_wrapped_message();
+  } else {
+    clear_has_wrapped_message();
+  }
+  wrapped_message_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), wrapped_message);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MixedSuccessError.wrapped_message)
 }
 
 // -------------------------------------------------------------------
