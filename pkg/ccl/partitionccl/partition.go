@@ -179,6 +179,10 @@ func createPartitioningImpl(
 		cols = append(cols, col)
 		if string(partBy.Fields[i]) != col.Name {
 			n := colOffset + len(partBy.Fields)
+			// if n exceed the number of index column, set it to max number of index column
+			if n > len(indexDesc.ColumnNames) {
+				n = indexDesc.ColumnNames
+			}
 			return partDesc, fmt.Errorf(
 				"declared partition columns (%s) do not match first %d columns in index being partitioned (%s)",
 				partitioningString(), n, strings.Join(indexDesc.ColumnNames[:n], ", "))
