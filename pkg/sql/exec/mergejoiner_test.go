@@ -747,6 +747,19 @@ func TestMergeJoiner(t *testing.T) {
 			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
 		},
+		{
+			description:     "non-equality columns with nulls",
+			leftTypes:       []types.T{types.Int64, types.Int64},
+			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTuples:      tuples{{1, nil}, {2, 2}, {2, 2}, {3, nil}, {4, nil}},
+			rightTuples:     tuples{{1, 1}, {2, nil}, {2, nil}, {3, nil}, {4, 4}, {4, 4}},
+			leftOutCols:     []uint32{0, 1},
+			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{1, nil, 1, 1}, {2, 2, 2, nil}, {2, 2, 2, nil}, {2, 2, 2, nil}, {2, 2, 2, nil}, {3, nil, 3, nil}, {4, nil, 4, 4}, {4, nil, 4, 4}},
+			expectedOutCols: []int{0, 1, 2, 3},
+		},
 	}
 
 	for _, tc := range tcs {

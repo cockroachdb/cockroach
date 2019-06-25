@@ -165,9 +165,9 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 
 					// Last equality column and either group is incomplete. Save state and have it handled in the next iteration.
 					if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
-						o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lGroup, &o.proberState.lGroupEndIdx)
+						o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lBufferedGroup, &o.proberState.lGroupEndIdx, &o.proberState.needToResetLeftBufferedGroup)
 						o.proberState.lIdx = lGroupLength + beginLIdx
-						o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rGroup, &o.proberState.rGroupEndIdx)
+						o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rBufferedGroup, &o.proberState.rGroupEndIdx, &o.proberState.needToResetRightBufferedGroup)
 						o.proberState.rIdx = rGroupLength + beginRIdx
 
 						o.groups.finishedCol()
@@ -274,10 +274,9 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 				// Repeat each row numRepeats times.
 				srcStartIdx = o.builderState.left.curSrcStartIdx
 				// {{ if $.IsSel }}
-				val = srcCol[sel[srcStartIdx]]
-				// {{ else }}
-				val = srcCol[srcStartIdx]
+				srcStartIdx = int(sel[srcStartIdx])
 				// {{ end }}
+				val = srcCol[srcStartIdx]
 
 				repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 				toAppend := repeatsLeft
@@ -404,7 +403,11 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 				}
 
 				// {{ if $.HasNulls }}
+				// {{ if $.IsSel }}
+				out.Nulls().ExtendWithSel(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend), sel)
+				// {{ else }}
 				out.Nulls().Extend(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
+				// {{ end }}
 				// {{ end }}
 
 				// Optimization in the case that group length is 1, use assign instead of copy.
