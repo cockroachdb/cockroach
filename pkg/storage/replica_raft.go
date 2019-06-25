@@ -646,24 +646,43 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Since this is all handled in handleRaftReadyRaftMuLocked, we're assured
 	// that even though we may sync new entries to disk after sending them in
 	// MsgApps to followers, we'll always have them synced to disk before we
-	// process followers' MsgAppResps for the corresponding entries because this
-	// entire method requires RaftMu to be locked. This is a requirement because
-	// etcd/raft does not support commit quorums that do not include the leader,
-	// even though the Raft thesis states that this would technically be safe:
+	// process followers' MsgAppResps for the corresponding entries because
+	// Ready processing is sequential (and because a restart of the leader would
+	// prevent the MsgAppResp from being handled by it). This is important
+	// because it makes sure that the leader always has all of the entries in
+	// the log for its term, which is required in etcd/raft for technical
+	// reasons[1].
+	//
+	// MsgApps are also used to inform followers of committed entries through
+	// the Commit index that they contain. Due to the optimization described
+	// above, a Commit index may be sent out to a follower before it is
+	// persisted on the leader. This is safe because the Commit index can be
+	// treated as volatile state, as is supported by raft.MustSync[2].
+	// Additionally, the Commit index can never refer to entries from the
+	// current Ready (due to the MsgAppResp argument above) except in
+	// single-node groups, in which as a result we have to be careful to not
+	// persist a Commit index without the entries its commit index might refer
+	// to (see the HardState update below for details).
+	//
+	// [1]: the Raft thesis states that this can be made safe:
+	//
 	// > The leader may even commit an entry before it has been written to its
 	// > own disk, if a majority of followers have written it to their disks;
 	// > this is still safe.
 	//
-	// However, MsgApps are also used to inform followers of committed entries
-	// through the Commit index that they contains. Because the optimization
-	// sends all MsgApps before syncing to disc, we may send out a commit index
-	// in a MsgApp that we have not ourselves written in HardState.Commit. This
-	// is ok, because the Commit index can be treated as volatile state, as is
-	// supported by raft.MustSync. The Raft thesis corroborates this, stating in
-	// section: `3.8 Persisted state and server restarts` that:
+	// [2]: Raft thesis section: `3.8 Persisted state and server restarts`:
+	//
 	// > Other state variables are safe to lose on a restart, as they can all be
 	// > recreated. The most interesting example is the commit index, which can
 	// > safely be reinitialized to zero on a restart.
+	//
+	// Note that this will change when joint quorums are implemented, at which
+	// point we have to introduce coupling between the Commit index and
+	// persisted config changes, and also require some commit indexes to be
+	// durably synced.
+	// See:
+	// https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
+
 	msgApps, otherMsgs := splitMsgApps(rd.Messages)
 	r.traceMessageSends(msgApps, "sending msgApp")
 	r.sendRaftMessages(ctx, msgApps)
@@ -697,6 +716,19 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if !r.IsInitialized() && rd.HardState.Commit != 0 {
 			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
 		}
+		// NB: Note that without additional safeguards, it's incorrect to write
+		// the HardState before appending rd.Entries. This is because in a
+		// single node group, HardState.Commit can refer to an entry that is
+		// appended in the same rd.Entries. If the HardState were written
+		// first, followed immediately by a crash, the group would reboot with a
+		// committed index larger than the last index, which will set off
+		// alarms. Right now everything is in the same batch and so that problem
+		// does not exist, but should that change we can manually lower
+		// Committed before writing the HardState so that it does not exceed any
+		// rd.Entries' index (or take care to persist the HardState after
+		// appending). When the group is not a singleton, this problem does not
+		// exist because an Entry can be committed in no less than two Ready
+		// cycles. See splitMsgApps above for a similar argument.
 		if err := r.raftMu.stateLoader.SetHardState(ctx, writer, rd.HardState); err != nil {
 			const expl = "during setHardState"
 			return stats, expl, errors.Wrap(err, expl)
