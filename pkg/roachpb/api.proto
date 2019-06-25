@@ -1432,6 +1432,7 @@ message AddSSTableRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes data = 2;
+  bool disallow_shadowing = 3;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
