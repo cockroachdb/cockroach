@@ -64,7 +64,6 @@ type SyncedCluster struct {
 	VPCs       []string
 	// all other fields are populated in newCluster.
 	Nodes       []int
-	LoadGen     int
 	Secure      bool
 	Env         string
 	Args        []string
@@ -101,16 +100,7 @@ func (c *SyncedCluster) IsLocal() bool {
 
 // ServerNodes TODO(peter): document
 func (c *SyncedCluster) ServerNodes() []int {
-	if c.LoadGen == -1 {
-		return c.Nodes
-	}
-	newNodes := make([]int, 0, len(c.Nodes))
-	for _, i := range c.Nodes {
-		if i != c.LoadGen {
-			newNodes = append(newNodes, i)
-		}
-	}
-	return newNodes
+	return append([]int{}, c.Nodes...)
 }
 
 // GetInternalIP returns the internal IP address of the specified node.
@@ -748,83 +738,6 @@ fi
 	return nil
 }
 
-// CockroachVersions TODO(peter): document
-func (c *SyncedCluster) CockroachVersions() map[string]int {
-	sha := make(map[string]int)
-	var mu syncutil.Mutex
-
-	display := fmt.Sprintf("%s: cockroach version", c.Name)
-	nodes := c.ServerNodes()
-	c.Parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
-		sess, err := c.newSession(c.Nodes[i])
-		if err != nil {
-			return nil, err
-		}
-		defer sess.Close()
-
-		cmd := config.Binary + " version | awk '/Build Tag:/ {print $NF}'"
-		out, err := sess.CombinedOutput(cmd)
-		var s string
-		if err != nil {
-			s = fmt.Sprintf("%s: %v", out, err)
-		} else {
-			s = strings.TrimSpace(string(out))
-		}
-		mu.Lock()
-		sha[s]++
-		mu.Unlock()
-		return nil, err
-	})
-
-	return sha
-}
-
-// RunLoad TODO(peter): document
-func (c *SyncedCluster) RunLoad(cmd string, stdout, stderr io.Writer) error {
-	if c.LoadGen == 0 {
-		log.Fatalf("%s: no load generator node specified", c.Name)
-	}
-
-	display := fmt.Sprintf("%s: retrieving IP addresses", c.Name)
-	nodes := c.ServerNodes()
-	ips := make([]string, len(nodes))
-	c.Parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
-		var err error
-		ips[i], err = c.GetInternalIP(nodes[i])
-		return nil, err
-	})
-
-	session, err := ssh.NewSSHSession(c.user(c.LoadGen), c.host(c.LoadGen))
-	if err != nil {
-		return err
-	}
-	defer session.Close()
-
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	defer func() {
-		signal.Stop(ch)
-		close(ch)
-	}()
-	go func() {
-		_, ok := <-ch
-		if ok {
-			c.stopLoad()
-		}
-	}()
-
-	session.Stdout = stdout
-	session.Stderr = stderr
-	fmt.Fprintln(stdout, cmd)
-
-	var urls []string
-	for i, ip := range ips {
-		urls = append(urls, c.Impl.NodeURL(c, ip, c.Impl.NodePort(c, nodes[i])))
-	}
-	prefix := fmt.Sprintf("ulimit -n 16384; export ROACHPROD=%d%s && ", c.LoadGen, c.Tag)
-	return session.Run(prefix + cmd + " " + strings.Join(urls, " "))
-}
-
 const progressDone = "=======================================>"
 const progressTodo = "----------------------------------------"
 
@@ -1428,26 +1341,6 @@ func (c *SyncedCluster) scp(src, dest string) error {
 		return errors.Wrapf(err, "~ %s\n%s", strings.Join(args, " "), out)
 	}
 	return nil
-}
-
-func (c *SyncedCluster) stopLoad() {
-	if c.LoadGen == 0 {
-		log.Fatalf("no load generator node specified for cluster: %s", c.Name)
-	}
-
-	display := fmt.Sprintf("%s: stopping load", c.Name)
-	c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
-		sess, err := c.newSession(c.LoadGen)
-		if err != nil {
-			return nil, err
-		}
-		defer sess.Close()
-
-		cmd := fmt.Sprintf("kill -9 $(lsof -t -i :%d -i :%d) 2>/dev/null || true",
-			Cockroach{}.NodePort(c, c.Nodes[i]),
-			Cassandra{}.NodePort(c, c.Nodes[i]))
-		return sess.CombinedOutput(cmd)
-	})
 }
 
 // Parallel TODO(peter): document
