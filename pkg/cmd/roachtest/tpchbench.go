@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -20,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/workload/querybench"
@@ -53,6 +52,9 @@ type tpchBenchSpec struct {
 	// minVersion specifies the minimum version of CRDB nodes. If omitted, it
 	// will default to maybeMinVersionForFixturesImport.
 	minVersion string
+	// maxLatency is the expected maximum time that a query will take to execute
+	// needed to correctly initialize histograms.
+	maxLatency time.Duration
 }
 
 // runTPCHBench runs sets of queries against CockroachDB clusters in different
@@ -104,12 +106,14 @@ func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 		// Run with only one worker to get best-case single-query performance.
 		cmd := fmt.Sprintf(
 			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
-				"--num-runs=%d --max-ops=%d --vectorized=%t {pgurl%s} --histograms=logs/stats.json",
+				"--num-runs=%d --max-ops=%d --vectorized=%t {pgurl%s} "+
+				"--histograms=logs/stats.json --histograms-max-latency=%s",
 			filename,
 			b.numRunsPerQuery,
 			maxOps,
 			b.benchType == tpchVec,
 			roachNodes,
+			b.maxLatency.String(),
 		)
 		if err := c.RunE(ctx, loadNode, cmd); err != nil {
 			t.Fatal(err)
@@ -250,6 +254,7 @@ func registerTPCHBench(r *registry) {
 			ScaleFactor:     1,
 			benchType:       sql20,
 			numRunsPerQuery: 3,
+			maxLatency:      100 * time.Second,
 		},
 		{
 			Nodes:           3,
@@ -258,6 +263,7 @@ func registerTPCHBench(r *registry) {
 			benchType:       tpch,
 			numRunsPerQuery: 3,
 			minVersion:      `v19.1.0`,
+			maxLatency:      500 * time.Second,
 		},
 		{
 			Nodes:           3,
@@ -266,6 +272,7 @@ func registerTPCHBench(r *registry) {
 			benchType:       tpchVec,
 			numRunsPerQuery: 3,
 			minVersion:      `v19.1.0`,
+			maxLatency:      500 * time.Second,
 		},
 	}
 

@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package cli
 
@@ -59,6 +57,9 @@ var pprofport = initFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
 var histograms = runFlags.String(
 	"histograms", "",
 	"File to write per-op incremental and cumulative histogram data.")
+var histogramsMaxLatency = runFlags.Duration(
+	"histograms-max-latency", 100*time.Second,
+	"Expected maximum latency of running a query")
 
 func init() {
 	AddSubCmd(func(userFacing bool) *cobra.Command {
@@ -322,7 +323,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	if !ok {
 		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
 	}
-	reg := histogram.NewRegistry()
+	reg := histogram.NewRegistry(*histogramsMaxLatency)
 	var ops workload.QueryLoad
 	for {
 		ops, err = o.Ops(urls, reg)

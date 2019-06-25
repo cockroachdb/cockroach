@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -591,7 +589,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   service_lat_avg     FLOAT NOT NULL,
   service_lat_var     FLOAT NOT NULL,
   overhead_lat_avg    FLOAT NOT NULL,
-  overhead_lat_var    FLOAT NOT NULL
+  overhead_lat_var    FLOAT NOT NULL,
+  bytes_read          INT NOT NULL,
+  rows_read           INT NOT NULL,
+  implicit_txn        BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireSuperUser(ctx, "access application statistics"); err != nil {
@@ -667,6 +668,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					tree.NewDFloat(tree.DFloat(s.data.ServiceLat.GetVariance(s.data.Count))),
 					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.Mean)),
 					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.GetVariance(s.data.Count))),
+					tree.NewDInt(tree.DInt(s.data.BytesRead)),
+					tree.NewDInt(tree.DInt(s.data.RowsRead)),
+					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),
 				)
 				s.Unlock()
 				if err != nil {

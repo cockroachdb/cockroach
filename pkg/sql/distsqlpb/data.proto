@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 //
 // Data structures and basic infrastructure for distributed SQL APIs. See
 // docs/RFCS/distributed_sql.md.
@@ -281,6 +279,13 @@ message RemoteProducerMetadata {
     // update.
     optional uint64 rows_processed = 1 [(gogoproto.nullable) = false];
   }
+  // Metrics are unconditionally emitted by table readers.
+  message Metrics {
+    // Total number of bytes read while executing a statement.
+    optional int64 bytes_read = 1 [(gogoproto.nullable) = false];
+    // Total number of rows read while executing a statement.
+    optional int64 rows_read = 2 [(gogoproto.nullable) = false];
+  }
   oneof value {
     RangeInfos range_info = 1;
     Error error = 2;
@@ -288,6 +293,7 @@ message RemoteProducerMetadata {
     roachpb.TxnCoordMeta txn_coord_meta = 4;
     RowNum row_num = 5;
     SamplerProgress sampler_progress = 7;
+    Metrics metrics = 8;
   }
   reserved 6;
 }

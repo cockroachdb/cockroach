@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package jobs
 
@@ -136,7 +134,7 @@ func (j *Job) Started(ctx context.Context) error {
 			return nil
 		}
 		ju.UpdateStatus(StatusRunning)
-		md.Payload.StartedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -325,7 +323,7 @@ func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn
 			}
 		}
 		ju.UpdateStatus(StatusCanceled)
-		md.Payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -349,7 +347,7 @@ func (j *Job) Failed(
 		}
 		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
-		md.Payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -367,7 +365,7 @@ func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *client.Tx
 			return err
 		}
 		ju.UpdateStatus(StatusSucceeded)
-		md.Payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
 			FractionCompleted: 1.0,

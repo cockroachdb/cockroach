@@ -47,7 +47,7 @@ project
       │    │    └── interesting orderings: (+1)
       │    └── const: 10 [type=int]
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 build
 SELECT k, rank() OVER (PARTITION BY v ORDER BY f) FROM (SELECT * FROM kv LIMIT 10)
@@ -79,7 +79,7 @@ project
       │    │    └── interesting orderings: (+1)
       │    └── const: 10 [type=int]
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 # Outer cols.
 
@@ -134,7 +134,7 @@ project
                      │    │    └── projections
                      │    │         └── variable: k [type=int, outer=(1)]
                      │    └── windows
-                     │         └── rank [type=undefined]
+                     │         └── rank [type=int]
                      └── projections
                           └── plus [type=int, outer=(8,9)]
                                ├── variable: rank [type=int]

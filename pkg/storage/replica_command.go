@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage
 
@@ -49,46 +47,12 @@ func (r *Replica) AdminSplit(
 		return roachpb.AdminSplitResponse{}, roachpb.NewErrorf("cannot split range with no key provided")
 	}
 
-	var lastErr error
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.MaxRetries = 10
-	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
-		// The replica may have been destroyed since the start of the retry loop. We
-		// need to explicitly check this condition. Having a valid lease, as we
-		// verify below, does not imply that the range still exists: even after a
-		// range has been merged into its left-hand neighbor, its final lease (i.e.,
-		// the lease we have in r.mu.state.Lease) can remain valid indefinitely.
-		if _, err := r.IsDestroyed(); err != nil {
-			return reply, roachpb.NewError(err)
-		}
-
-		// Admin commands always require the range lease to begin (see
-		// executeAdminBatch), but we may have lost it while in this retry loop.
-		// Without the lease, a replica's local descriptor can be arbitrarily
-		// stale, which will result in a ConditionFailedError. To avoid this,
-		// we make sure that we still have the lease before each attempt.
-		if _, pErr := r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return roachpb.AdminSplitResponse{}, pErr
-		}
-
-		reply, lastErr = r.adminSplitWithDescriptor(ctx, args, r.Desc(), true /* delayable */, reason)
-		// On seeing a ConditionFailedError or an AmbiguousResultError, retry
-		// the command with the updated descriptor.
-		if retry := causer.Visit(lastErr, func(err error) bool {
-			switch err.(type) {
-			case *roachpb.ConditionFailedError:
-				return true
-			case *roachpb.AmbiguousResultError:
-				return true
-			default:
-				return false
-			}
-		}); !retry {
-			return reply, roachpb.NewError(lastErr)
-		}
-	}
-	// If we broke out of the loop after MaxRetries, return the last error.
-	return roachpb.AdminSplitResponse{}, roachpb.NewError(lastErr)
+	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
+		var err error
+		reply, err = r.adminSplitWithDescriptor(ctx, args, desc, true /* delayable */, reason)
+		return err
+	})
+	return reply, err
 }
 
 func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (string, bool) {
@@ -227,9 +191,14 @@ func (r *Replica) adminSplitWithDescriptor(
 			newDesc := *desc
 			newDesc.StickyBit = args.ExpirationTime
 			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+				if err != nil {
+					return err
+				}
+
 				b := txn.NewBatch()
 				descKey := keys.RangeDescriptorKey(desc.StartKey)
-				if err := updateRangeDescriptor(b, descKey, desc, &newDesc); err != nil {
+				if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
 					return err
 				}
 				if err := updateRangeAddressing(b, &newDesc); err != nil {
@@ -298,9 +267,14 @@ func (r *Replica) adminSplitWithDescriptor(
 		// split. Note that we mutate the descriptor for the left hand
 		// side of the split first to locate the txn record there.
 		{
+			dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+			if err != nil {
+				return err
+			}
+
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, dbDescValue, &leftDesc); err != nil {
 				return err
 			}
 			// Commit this batch first to ensure that the transaction record
@@ -380,13 +354,24 @@ func (r *Replica) adminSplitWithDescriptor(
 func (r *Replica) AdminUnsplit(
 	ctx context.Context, args roachpb.AdminUnsplitRequest, reason string,
 ) (roachpb.AdminUnsplitResponse, *roachpb.Error) {
-	// TODO(jeffreyxiao): Have a retry loop for ConditionalFailed errors similar
-	// to AdminSplit
 	var reply roachpb.AdminUnsplitResponse
+	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
+		var err error
+		reply, err = r.adminUnsplitWithDescriptor(ctx, args, desc, reason)
+		return err
+	})
+	return reply, err
+}
 
-	desc := *r.Desc()
+func (r *Replica) adminUnsplitWithDescriptor(
+	ctx context.Context,
+	args roachpb.AdminUnsplitRequest,
+	desc *roachpb.RangeDescriptor,
+	reason string,
+) (roachpb.AdminUnsplitResponse, error) {
+	var reply roachpb.AdminUnsplitResponse
 	if !bytes.Equal(desc.StartKey.AsRawKey(), args.Header().Key) {
-		return reply, roachpb.NewErrorf("key %s is not the start of a range", args.Header().Key)
+		return reply, errors.Errorf("key %s is not the start of a range", args.Header().Key)
 	}
 
 	// If the range's sticky bit is already hlc.Timestamp{}, we treat the
@@ -397,12 +382,16 @@ func (r *Replica) AdminUnsplit(
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+		if err != nil {
+			return err
+		}
+
 		b := txn.NewBatch()
-		newDesc := desc
+		newDesc := *desc
 		newDesc.StickyBit = hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
-
-		if err := updateRangeDescriptor(b, descKey, &desc, &newDesc); err != nil {
+		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
 			return err
 		}
 		if err := updateRangeAddressing(b, &newDesc); err != nil {
@@ -421,10 +410,65 @@ func (r *Replica) AdminUnsplit(
 		})
 		return txn.Run(ctx, b)
 	}); err != nil {
-		return reply, roachpb.NewErrorf("unsplit at key %s failed: %s", args.Header().Key, err)
+		// The ConditionFailedError can occur because the descriptors acting as
+		// expected values in the CPuts used to update the range descriptor are
+		// picked outside the transaction. Return ConditionFailedError in the error
+		// detail so that the command can be retried.
+		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
+			// NB: we have to wrap the existing error here as consumers of this code
+			// look at the root cause to sniff out the changed descriptor.
+			err = &benignError{errors.Wrap(err, msg)}
+		}
 	}
-
 	return reply, nil
+}
+
+// executeAdminCommandWithDescriptor wraps a read-modify-write operation for RangeDescriptors in a
+// retry loop.
+func (r *Replica) executeAdminCommandWithDescriptor(
+	ctx context.Context, updateDesc func(*roachpb.RangeDescriptor) error,
+) *roachpb.Error {
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxRetries = 10
+	var lastErr error
+	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
+		// The replica may have been destroyed since the start of the retry loop.
+		// We need to explicitly check this condition. Having a valid lease, as we
+		// verify below, does not imply that the range still exists: even after a
+		// range has been merged into its left-hand neighbor, its final lease
+		// (i.e., the lease we have in r.mu.state.Lease) can remain valid
+		// indefinitely.
+		if _, err := r.IsDestroyed(); err != nil {
+			return roachpb.NewError(err)
+		}
+
+		// Admin commands always require the range lease to begin (see
+		// executeAdminBatch), but we may have lost it while in this retry loop.
+		// Without the lease, a replica's local descriptor can be arbitrarily
+		// stale, which will result in a ConditionFailedError. To avoid this, we
+		// make sure that we still have the lease before each attempt.
+		if _, pErr := r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			return pErr
+		}
+
+		lastErr = updateDesc(r.Desc())
+		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
+		// command with the updated descriptor.
+		if retry := causer.Visit(lastErr, func(err error) bool {
+			switch err.(type) {
+			case *roachpb.ConditionFailedError:
+				return true
+			case *roachpb.AmbiguousResultError:
+				return true
+			default:
+				return false
+			}
+		}); !retry {
+			return roachpb.NewError(lastErr)
+		}
+	}
+	// If we broke out of the loop after MaxRetries, return the last error.
+	return roachpb.NewError(lastErr)
 }
 
 // AdminMerge extends this range to subsume the range that comes next
@@ -483,7 +527,11 @@ func (r *Replica) AdminMerge(
 		// NB: this read does NOT impact transaction record placement.
 		var rightDesc roachpb.RangeDescriptor
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
-		if err := txn.GetProto(ctx, rightDescKey, &rightDesc); err != nil {
+		dbRightDescKV, err := txn.Get(ctx, rightDescKey)
+		if err != nil {
+			return err
+		}
+		if err := dbRightDescKV.Value.GetProto(&rightDesc); err != nil {
 			return err
 		}
 
@@ -511,9 +559,16 @@ func (r *Replica) AdminMerge(
 		// transaction is this conditional put to change the left hand side's
 		// descriptor end key.
 		{
+			dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(ctx, txn, origLeftDesc)
+			if err != nil {
+				return err
+			}
+
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
+			if err := updateRangeDescriptor(
+				b, leftDescKey, dbOrigLeftDescValue, &updatedLeftDesc,
+			); err != nil {
 				return err
 			}
 			// Commit this batch on its own to ensure that the transaction record
@@ -541,7 +596,7 @@ func (r *Replica) AdminMerge(
 		}
 
 		// Remove the range descriptor for the deleted range.
-		if err := updateRangeDescriptor(b, rightDescKey, &rightDesc, nil); err != nil {
+		if err := updateRangeDescriptor(b, rightDescKey, dbRightDescKV.Value, nil); err != nil {
 			return err
 		}
 
@@ -568,7 +623,7 @@ func (r *Replica) AdminMerge(
 		}
 		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
-		err := waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
+		err = waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
 		if err != nil {
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
@@ -792,6 +847,7 @@ func (r *Replica) changeReplicas(
 	if desc == nil {
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
+
 	repDesc := roachpb.ReplicaDescriptor{
 		NodeID:  target.NodeID,
 		StoreID: target.StoreID,
@@ -870,24 +926,18 @@ func (r *Replica) changeReplicas(
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
-		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
-		// Remove when that has been solved. The failure mode is likely based on
-		// prior divergence of the Replica (in which case the check below does not
-		// fire because everything reads from the local, diverged, set of data),
-		// so we don't expect to see this fail in practice ever.
-		oldDesc := new(roachpb.RangeDescriptor)
-		if err := txn.GetProto(ctx, descKey, oldDesc); err != nil {
+		dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
+		if err != nil {
 			return err
 		}
-		log.Infof(ctx, "change replicas (%v %s): read existing descriptor %s",
-			changeType, repDesc, oldDesc)
+		log.Infof(ctx, "change replicas (%v %s): existing descriptor %s", changeType, repDesc, desc)
 
 		{
 			b := txn.NewBatch()
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
+			if err := updateRangeDescriptor(b, descKey, dbDescValue, &updatedDesc); err != nil {
 				return err
 			}
 
@@ -932,12 +982,6 @@ func (r *Replica) changeReplicas(
 			return err
 		}
 
-		if oldDesc.RangeID != 0 && !oldDesc.Equal(desc) {
-			// We read the previous value, it wasn't what we supposedly used in
-			// the CPut, but we still overwrote in the CPut above.
-			panic(fmt.Sprintf("committed replica change, but oldDesc != assumedOldDesc:\n%+v\n%+v\nnew desc:\n%+v",
-				oldDesc, desc, updatedDesc))
-		}
 		return nil
 	}); err != nil {
 		log.Event(ctx, err.Error())
@@ -1080,6 +1124,37 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 	return true
 }
 
+// conditionalGetDescValueFromDB fetches an encoded RangeDescriptor from kv,
+// checks that it matches the given expectation using proto Equals, and returns
+// the raw fetched roachpb.Value. If the fetched value doesn't match the
+// expectation, a ConditionFailedError is returned.
+//
+// This ConditionFailedError is a historical artifact. We used to pass the
+// parsed RangeDescriptor directly as the expected value in a CPut, but proto
+// message encodings aren't stable so this was fragile. Calling this method and
+// then passing the returned *roachpb.Value as the expected value in a CPut does
+// the same thing, but also correctly handles proto equality. See #38308.
+func conditionalGetDescValueFromDB(
+	ctx context.Context, txn *client.Txn, expectation *roachpb.RangeDescriptor,
+) (*roachpb.Value, error) {
+	descKey := keys.RangeDescriptorKey(expectation.StartKey)
+	existingDescKV, err := txn.Get(ctx, descKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching current range descriptor value")
+	}
+	var existingDesc *roachpb.RangeDescriptor
+	if existingDescKV.Value != nil {
+		existingDesc = &roachpb.RangeDescriptor{}
+		if err := existingDescKV.Value.GetProto(existingDesc); err != nil {
+			return nil, errors.Wrap(err, "decoding current range descriptor value")
+		}
+	}
+	if !existingDesc.Equal(expectation) {
+		return nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
+	}
+	return existingDescKV.Value, nil
+}
+
 // updateRangeDescriptor adds a ConditionalPut on the range descriptor. The
 // conditional put verifies that changes to the range descriptor are made in a
 // well-defined order, preventing a scenario where a wayward replica which is
@@ -1088,16 +1163,13 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // range descriptor. This is a last line of defense; other mechanisms should
 // prevent rogue replicas from getting this far (see #768).
 //
-// oldDesc can be nil, meaning that the key is expected to not exist.
+// oldValue can be nil, meaning that the key is expected to not exist.
 //
 // Note that in addition to using this method to update the on-disk range
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
 func updateRangeDescriptor(
-	b *client.Batch,
-	descKey roachpb.Key,
-	oldDesc *roachpb.RangeDescriptor,
-	newDesc *roachpb.RangeDescriptor,
+	b *client.Batch, descKey roachpb.Key, oldValue *roachpb.Value, newDesc *roachpb.RangeDescriptor,
 ) error {
 	// This is subtle: []byte(nil) != interface{}(nil). A []byte(nil) refers to
 	// an empty value. An interface{}(nil) refers to a non-existent value. So
@@ -1105,7 +1177,8 @@ func updateRangeDescriptor(
 	var newValue interface{}
 	if newDesc != nil {
 		if err := newDesc.Validate(); err != nil {
-			return errors.Wrapf(err, "validating new descriptor %+v (old descriptor is %+v)", newDesc, oldDesc)
+			return errors.Wrapf(err, "validating new descriptor %+v (old descriptor is %+v)",
+				newDesc, oldValue)
 		}
 		newBytes, err := protoutil.Marshal(newDesc)
 		if err != nil {
@@ -1113,15 +1186,14 @@ func updateRangeDescriptor(
 		}
 		newValue = newBytes
 	}
-	var oldValue interface{}
-	if oldDesc != nil {
-		oldBytes, err := protoutil.Marshal(oldDesc)
-		if err != nil {
-			return err
-		}
-		oldValue = oldBytes
+	var ov interface{}
+	if oldValue != nil {
+		// If the old value was fetched from kv, it may have a checksum set. This
+		// panics CPut, so clear it.
+		oldValue.ClearChecksum()
+		ov = oldValue
 	}
-	b.CPut(descKey, newValue, oldValue)
+	b.CPut(descKey, newValue, ov)
 	return nil
 }
 

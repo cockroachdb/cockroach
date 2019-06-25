@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto2";
 package cockroach.sql;
@@ -77,6 +75,10 @@ message StatementStatistics {
   // sent to the reg cluster.
   optional SensitiveInfo sensitive_info = 12 [(gogoproto.nullable) = false];
 
+  optional int64 bytes_read = 13 [(gogoproto.nullable) = false];
+
+  optional int64 rows_read = 14 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 
@@ -109,6 +111,7 @@ message StatementStatisticsKey {
   optional bool distSQL = 3 [(gogoproto.nullable) = false];
   optional bool failed = 4 [(gogoproto.nullable) = false];
   optional bool opt = 5 [(gogoproto.nullable) = false];
+  optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
 }
 
 // CollectedStats wraps collected timings and metadata for some query's execution.

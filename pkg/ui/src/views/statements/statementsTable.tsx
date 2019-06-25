@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 import React from "react";
 import { Link } from "react-router";
@@ -23,19 +21,22 @@ import { summarize, StatementSummary } from "src/util/sql/summarize";
 import { countBarChart, retryBarChart, rowsBarChart, latencyBarChart } from "./barCharts";
 
 import "./statements.styl";
+import * as docsURL from "oss/src/util/docs";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
 export interface AggregateStatistics {
+  // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
+  implicitTxn: boolean;
   stats: StatementStatistics;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
-function StatementLink(props: { statement: string, app: string }) {
+function StatementLink(props: { statement: string, app: string, implicitTxn: boolean }) {
   const summary = summarize(props.statement);
-  const base = props.app ? `/statements/${props.app}` : "/statement";
+  const base = props.app ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
 
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
@@ -71,12 +72,46 @@ function calculateCumulativeTime(stats: StatementStatistics) {
 
 export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string)
     : ColumnDescriptor<AggregateStatistics>[] {
+  const transactionTypeText = (
+    <React.Fragment>
+      Statements in explicit transactions are wrapped by <code>BEGIN</code> and <code>COMMIT</code> statements
+      by the client. CockroachDB wraps individual statements in implicit transactions.
+      Explicit transactions employ{" "}
+      <a href={docsURL.transactionalPipelining} target="_blank">
+        transactional pipelining
+      </a>
+      {" "}and therefore report latencies that do not account for replication.
+    </React.Fragment>
+  );
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
       className: "statements-table__col-query-text",
-      cell: (stmt) => <StatementLink statement={ stmt.label } app={ selectedApp } />,
+      cell: (stmt) => (
+        <StatementLink
+          statement={ stmt.label }
+          implicitTxn={ stmt.implicitTxn }
+          app={ selectedApp }
+        />
+      ),
       sort: (stmt) => stmt.label,
+    },
+    {
+      title: (
+        <React.Fragment>
+          Txn Type
+          <div className="numeric-stats-table__tooltip">
+            <ToolTipWrapper text={transactionTypeText}>
+              <div className="numeric-stats-table__tooltip-hover-area">
+                <div className="numeric-stats-table__info-icon">i</div>
+              </div>
+            </ToolTipWrapper>
+          </div>
+        </React.Fragment>
+      ),
+      className: "statements-table__col-time",
+      cell: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
+      sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
     },
   ];
 

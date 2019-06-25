@@ -851,7 +851,8 @@ union
  │    │    ├── columns: column1:1(unknown) column2:2(string)
  │    │    ├── tuple [type=tuple{unknown, string}]
  │    │    │    ├── null [type=unknown]
- │    │    │    └── null [type=unknown]
+ │    │    │    └── cast: STRING [type=string]
+ │    │    │         └── null [type=unknown]
  │    │    └── tuple [type=tuple{unknown, string}]
  │    │         ├── null [type=unknown]
  │    │         └── const: 'x' [type=string]
@@ -878,9 +879,11 @@ intersect
  │    ├── columns: column1:1(int) column2:2(string)
  │    ├── tuple [type=tuple{int, string}]
  │    │    ├── const: 3 [type=int]
- │    │    └── null [type=unknown]
+ │    │    └── cast: STRING [type=string]
+ │    │         └── null [type=unknown]
  │    └── tuple [type=tuple{int, string}]
- │         ├── null [type=unknown]
+ │         ├── cast: INT8 [type=int]
+ │         │    └── null [type=unknown]
  │         └── const: 'x' [type=string]
  └── project
       ├── columns: column2:5(string) column1:3(int!null)
@@ -909,7 +912,8 @@ union-all
  │    │    ├── columns: column1:1(unknown) column2:2(string)
  │    │    ├── tuple [type=tuple{unknown, string}]
  │    │    │    ├── null [type=unknown]
- │    │    │    └── null [type=unknown]
+ │    │    │    └── cast: STRING [type=string]
+ │    │    │         └── null [type=unknown]
  │    │    └── tuple [type=tuple{unknown, string}]
  │    │         ├── null [type=unknown]
  │    │         └── const: 'x' [type=string]

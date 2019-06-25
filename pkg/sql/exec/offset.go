@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package exec
 
@@ -23,8 +21,7 @@ import (
 type offsetOp struct {
 	input Operator
 
-	internalBatch coldata.Batch
-	offset        uint64
+	offset uint64
 
 	// seen is the number of tuples seen so far.
 	seen uint64
@@ -42,7 +39,6 @@ func NewOffsetOp(input Operator, offset uint64) Operator {
 }
 
 func (c *offsetOp) Init() {
-	c.internalBatch = coldata.NewMemBatch(nil)
 	c.input.Init()
 }
 

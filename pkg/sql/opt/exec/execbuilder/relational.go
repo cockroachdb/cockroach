@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package execbuilder
 
@@ -204,12 +202,6 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ZigzagJoinExpr:
 		ep, err = b.buildZigzagJoin(t)
 
-	case *memo.ExplainExpr:
-		ep, err = b.buildExplain(t)
-
-	case *memo.ShowTraceForSessionExpr:
-		ep, err = b.buildShowTrace(t)
-
 	case *memo.OrdinalityExpr:
 		ep, err = b.buildOrdinality(t)
 
@@ -224,6 +216,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.WindowExpr:
 		ep, err = b.buildWindow(t)
+
+	case *memo.SequenceSelectExpr:
+		ep, err = b.buildSequenceSelect(t)
 
 	case *memo.InsertExpr:
 		ep, err = b.buildInsert(t)
@@ -240,8 +235,11 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
-	case *memo.SequenceSelectExpr:
-		ep, err = b.buildSequenceSelect(t)
+	case *memo.ExplainExpr:
+		ep, err = b.buildExplain(t)
+
+	case *memo.ShowTraceForSessionExpr:
+		ep, err = b.buildShowTrace(t)
 
 	default:
 		if opt.IsSetOp(e) {
@@ -1588,296 +1586,6 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	}, nil
 }
 
-func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
-	// Build the input query and ensure that the input columns that correspond to
-	// the table columns are projected.
-	input, err := b.buildRelational(ins.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Construct list of columns that only contains columns that need to be
-	// inserted (e.g. delete-only mutation columns don't need to be inserted).
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
-	colList = appendColsWhenPresent(colList, ins.InsertCols)
-	colList = appendColsWhenPresent(colList, ins.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, ins.Input.ProvidedPhysical().Ordering)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Construct the Insert node.
-	tab := b.mem.Metadata().Table(ins.Table)
-	insertOrds := ordinalSetFromColList(ins.InsertCols)
-	checkOrds := ordinalSetFromColList(ins.CheckCols)
-	node, err := b.factory.ConstructInsert(
-		input.root,
-		tab,
-		insertOrds,
-		checkOrds,
-		ins.NeedResults(),
-	)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Construct the output column map.
-	ep := execPlan{root: node}
-	if ins.NeedResults() {
-		ep.outputCols = mutationOutputColMap(ins)
-	}
-	return ep, nil
-}
-
-func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
-	// Build the input query and ensure that the fetch and update columns are
-	// projected.
-	input, err := b.buildRelational(upd.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Currently, the execution engine requires one input column for each fetch
-	// and update expression, so use ensureColumns to map and reorder colums so
-	// that they correspond to target table columns. For example:
-	//
-	//   UPDATE xyz SET x=1, y=1
-	//
-	// Here, the input has just one column (because the constant is shared), and
-	// so must be mapped to two separate update columns.
-	//
-	// TODO(andyk): Using ensureColumns here can result in an extra Render.
-	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols))
-	colList = appendColsWhenPresent(colList, upd.FetchCols)
-	colList = appendColsWhenPresent(colList, upd.UpdateCols)
-	colList = appendColsWhenPresent(colList, upd.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, upd.Input.ProvidedPhysical().Ordering)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Construct the Update node.
-	md := b.mem.Metadata()
-	tab := md.Table(upd.Table)
-	fetchColOrds := ordinalSetFromColList(upd.FetchCols)
-	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
-	checkOrds := ordinalSetFromColList(upd.CheckCols)
-	node, err := b.factory.ConstructUpdate(
-		input.root,
-		tab,
-		fetchColOrds,
-		updateColOrds,
-		checkOrds,
-		upd.NeedResults(),
-	)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Construct the output column map.
-	ep := execPlan{root: node}
-	if upd.NeedResults() {
-		ep.outputCols = mutationOutputColMap(upd)
-	}
-	return ep, nil
-}
-
-func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
-	// Build the input query and ensure that the insert, fetch, and update columns
-	// are projected.
-	input, err := b.buildRelational(ups.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Currently, the execution engine requires one input column for each insert,
-	// fetch, and update expression, so use ensureColumns to map and reorder
-	// columns so that they correspond to target table columns. For example:
-	//
-	//   INSERT INTO xyz (x, y) VALUES (1, 1)
-	//   ON CONFLICT (x) DO UPDATE SET x=2, y=2
-	//
-	// Here, both insert values and update values come from the same input column
-	// (because the constants are shared), and so must be mapped to separate
-	// output columns.
-	//
-	// If CanaryCol = 0, then this is the "blind upsert" case, which uses a KV
-	// "Put" to insert new rows or blindly overwrite existing rows. Existing rows
-	// do not need to be fetched or separately updated (i.e. ups.FetchCols and
-	// ups.UpdateCols are both empty).
-	//
-	// TODO(andyk): Using ensureColumns here can result in an extra Render.
-	// Upgrade execution engine to not require this.
-	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) + 1
-	colList := make(opt.ColList, 0, cnt)
-	colList = appendColsWhenPresent(colList, ups.InsertCols)
-	colList = appendColsWhenPresent(colList, ups.FetchCols)
-	colList = appendColsWhenPresent(colList, ups.UpdateCols)
-	if ups.CanaryCol != 0 {
-		colList = append(colList, ups.CanaryCol)
-	}
-	colList = appendColsWhenPresent(colList, ups.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, ups.Input.ProvidedPhysical().Ordering)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Construct the Upsert node.
-	md := b.mem.Metadata()
-	tab := md.Table(ups.Table)
-	canaryCol := exec.ColumnOrdinal(-1)
-	if ups.CanaryCol != 0 {
-		canaryCol = input.getColumnOrdinal(ups.CanaryCol)
-	}
-	insertColOrds := ordinalSetFromColList(ups.InsertCols)
-	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
-	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
-	checkOrds := ordinalSetFromColList(ups.CheckCols)
-	node, err := b.factory.ConstructUpsert(
-		input.root,
-		tab,
-		canaryCol,
-		insertColOrds,
-		fetchColOrds,
-		updateColOrds,
-		checkOrds,
-		ups.NeedResults(),
-	)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// If UPSERT returns rows, they contain all non-mutation columns from the
-	// table, in the same order they're defined in the table. Each output column
-	// value is taken from an insert, fetch, or update column, depending on the
-	// result of the UPSERT operation for that row.
-	ep := execPlan{root: node}
-	if ups.NeedResults() {
-		ep.outputCols = mutationOutputColMap(ups)
-	}
-	return ep, nil
-}
-
-func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
-	// Check for the fast-path delete case that can use a range delete.
-	if b.canUseDeleteRange(del) {
-		return b.buildDeleteRange(del)
-	}
-
-	// Build the input query and ensure that the fetch columns are projected.
-	input, err := b.buildRelational(del.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Ensure that order of input columns matches order of target table columns.
-	//
-	// TODO(andyk): Using ensureColumns here can result in an extra Render.
-	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(del.FetchCols))
-	colList = appendColsWhenPresent(colList, del.FetchCols)
-	input, err = b.ensureColumns(input, colList, nil, del.Input.ProvidedPhysical().Ordering)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Construct the Delete node.
-	md := b.mem.Metadata()
-	tab := md.Table(del.Table)
-	fetchColOrds := ordinalSetFromColList(del.FetchCols)
-	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, del.NeedResults())
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	// Construct the output column map.
-	ep := execPlan{root: node}
-	if del.NeedResults() {
-		ep.outputCols = mutationOutputColMap(del)
-	}
-	return ep, nil
-}
-
-// canUseDeleteRange checks whether a logical Delete operator can be implemented
-// by a fast delete range execution operator. This logic should be kept in sync
-// with canDeleteFast.
-func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
-	// If rows need to be returned from the Delete operator (i.e. RETURNING
-	// clause), no fast path is possible, because row values must be fetched.
-	if del.NeedResults() {
-		return false
-	}
-
-	tab := b.mem.Metadata().Table(del.Table)
-	if tab.DeletableIndexCount() > 1 {
-		// Any secondary index prevents fast path, because separate delete batches
-		// must be formulated to delete rows from them.
-		return false
-	}
-	if tab.IsInterleaved() {
-		// There is a separate fast path for interleaved tables in sql/delete.go.
-		return false
-	}
-	if tab.InboundForeignKeyCount() > 0 {
-		// If the table is referenced by other tables' foreign keys, no fast path
-		// is possible, because the integrity of those references must be checked.
-		return false
-	}
-
-	// Check for simple Scan input operator without a limit; anything else is not
-	// supported by a range delete.
-	if scan, ok := del.Input.(*memo.ScanExpr); !ok || scan.HardLimit != 0 {
-		return false
-	}
-
-	return true
-}
-
-// buildDeleteRange constructs a DeleteRange operator that deletes contiguous
-// rows in the primary index. canUseDeleteRange should have already been called.
-func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
-	// canUseDeleteRange has already validated that input is a Scan operator.
-	scan := del.Input.(*memo.ScanExpr)
-	tab := b.mem.Metadata().Table(scan.Table)
-	needed, _ := b.getColumns(scan.Cols, scan.Table)
-
-	root, err := b.factory.ConstructDeleteRange(tab, needed, scan.Constraint)
-	if err != nil {
-		return execPlan{}, err
-	}
-	return execPlan{root: root}, nil
-}
-
-func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
-	var root exec.Node
-	if ct.Syntax.As() {
-		// Construct AS input to CREATE TABLE.
-		input, err := b.buildRelational(ct.Input)
-		if err != nil {
-			return execPlan{}, err
-		}
-		// Impose ordering and naming on input columns, so that they match the
-		// order and names of the table columns into which values will be
-		// inserted.
-		colList := make(opt.ColList, len(ct.InputCols))
-		colNames := make([]string, len(ct.InputCols))
-		for i := range ct.InputCols {
-			colList[i] = ct.InputCols[i].ID
-			colNames[i] = ct.InputCols[i].Alias
-		}
-		input, err = b.ensureColumns(input, colList, colNames, nil /* provided */)
-		if err != nil {
-			return execPlan{}, err
-		}
-		root = input.root
-	}
-
-	schema := b.mem.Metadata().Schema(ct.Schema)
-	root, err := b.factory.ConstructCreateTable(root, schema, ct.Syntax)
-	return execPlan{root: root}, err
-}
-
 func (b *Builder) buildSequenceSelect(seqSel *memo.SequenceSelectExpr) (execPlan, error) {
 	seq := b.mem.Metadata().Sequence(seqSel.Sequence)
 	node, err := b.factory.ConstructSequenceSelect(seq)
@@ -2018,78 +1726,6 @@ func (b *Builder) getEnvData() exec.ExplainEnvData {
 	return envOpts
 }
 
-func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
-	var node exec.Node
-
-	if explain.Options.Mode == tree.ExplainOpt {
-		fmtFlags := memo.ExprFmtHideAll
-		switch {
-		case explain.Options.Flags.Contains(tree.ExplainFlagVerbose):
-			fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
-
-		case explain.Options.Flags.Contains(tree.ExplainFlagTypes):
-			fmtFlags = memo.ExprFmtHideQualifications
-		}
-
-		// Format the plan here and pass it through to the exec factory.
-		f := memo.MakeExprFmtCtx(fmtFlags, b.mem)
-		f.FormatExpr(explain.Input)
-		planText := f.Buffer.String()
-
-		// If we're going to display the environment, there's a bunch of queries we
-		// need to run to get that information, and we can't run them from here, so
-		// tell the exec factory what information it needs to fetch.
-		var envOpts exec.ExplainEnvData
-		if explain.Options.Flags.Contains(tree.ExplainFlagEnv) {
-			envOpts = b.getEnvData()
-		}
-
-		var err error
-		node, err = b.factory.ConstructExplainOpt(planText, envOpts)
-		if err != nil {
-			return execPlan{}, err
-		}
-	} else {
-		input, err := b.buildRelational(explain.Input)
-		if err != nil {
-			return execPlan{}, err
-		}
-
-		plan, err := b.factory.ConstructPlan(input.root, b.subqueries)
-		if err != nil {
-			return execPlan{}, err
-		}
-
-		node, err = b.factory.ConstructExplain(&explain.Options, explain.StmtType, plan)
-		if err != nil {
-			return execPlan{}, err
-		}
-	}
-
-	ep := execPlan{root: node}
-	for i := range explain.ColList {
-		ep.outputCols.Set(int(explain.ColList[i]), i)
-	}
-	// The subqueries are now owned by the explain node; remove them so they don't
-	// also show up in the final plan.
-	b.subqueries = b.subqueries[:0]
-	return ep, nil
-}
-
-func (b *Builder) buildShowTrace(show *memo.ShowTraceForSessionExpr) (execPlan, error) {
-	node, err := b.factory.ConstructShowTrace(show.TraceType, show.Compact)
-	if err != nil {
-		return execPlan{}, err
-	}
-	ep := execPlan{root: node}
-	for i := range show.ColList {
-		ep.outputCols.Set(int(show.ColList[i]), i)
-	}
-	// The subqueries are now owned by the explain node; remove them so they don't
-	// also show up in the final plan.
-	return ep, nil
-}
-
 // buildSortedInput is a helper method that can be reused to sort any input plan
 // by the given ordering.
 func (b *Builder) buildSortedInput(input execPlan, ordering opt.Ordering) (execPlan, error) {
@@ -2098,49 +1734,4 @@ func (b *Builder) buildSortedInput(input execPlan, ordering opt.Ordering) (execP
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
-}
-
-// appendColsWhenPresent appends non-zero column IDs from the src list into the
-// dst list, and returns the possibly grown list.
-func appendColsWhenPresent(dst, src opt.ColList) opt.ColList {
-	for _, col := range src {
-		if col != 0 {
-			dst = append(dst, col)
-		}
-	}
-	return dst
-}
-
-// ordinalSetFromColList returns the set of ordinal positions of each non-zero
-// column ID in the given list. This is used with mutation operators, which
-// maintain lists that correspond to the target table, with zero column IDs
-// indicating columns that are not involved in the mutation.
-func ordinalSetFromColList(colList opt.ColList) exec.ColumnOrdinalSet {
-	var res util.FastIntSet
-	for i, col := range colList {
-		if col != 0 {
-			res.Add(i)
-		}
-	}
-	return res
-}
-
-// mutationOutputColMap constructs a ColMap for the execPlan that maps from the
-// opt.ColumnID of each output column to the ordinal position of that column in
-// the result.
-func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
-	private := mutation.Private().(*memo.MutationPrivate)
-	tab := mutation.Memo().Metadata().Table(private.Table)
-	outCols := mutation.Relational().OutputCols
-
-	var colMap opt.ColMap
-	ord := 0
-	for i, n := 0, tab.DeletableColumnCount(); i < n; i++ {
-		colID := private.Table.ColumnID(i)
-		if outCols.Contains(colID) {
-			colMap.Set(int(colID), ord)
-			ord++
-		}
-	}
-	return colMap
 }

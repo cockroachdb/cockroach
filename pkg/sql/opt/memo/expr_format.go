@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
@@ -548,6 +546,12 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		f.formatExpr(scalar.Child(1), tp.Child("filter"))
 
 		return
+
+	case opt.FKChecksOp:
+		if scalar.ChildCount() == 0 {
+			// Hide the FK checks field when there are no checks.
+			return
+		}
 	}
 
 	// Don't show scalar-list, as it's redundant with its parent.
@@ -588,7 +592,9 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 	// expression.
 	typ := scalar.DataType()
 	if typ == nil {
-		f.Buffer.WriteString(" [type=undefined]")
+		if scalar.Op() != opt.FKChecksItemOp {
+			f.Buffer.WriteString(" [type=undefined]")
+		}
 	} else {
 		first := true
 		writeProp := func(format string, args ...interface{}) {

@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package rpc
 
@@ -880,15 +878,18 @@ func (ctx *Context) runHeartbeat(
 
 			var response *PingResponse
 			sendTime := ctx.LocalClock.PhysicalTime()
-			err := contextutil.RunWithTimeout(goCtx, "rpc heartbeat", ctx.heartbeatTimeout,
-				func(goCtx context.Context) error {
-					// NB: We want the request to fail-fast (the default), otherwise we won't
-					// be notified of transport failures.
-					var err error
-					response, err = heartbeatClient.Ping(goCtx, request)
-					return err
-				})
-
+			ping := func(goCtx context.Context) (err error) {
+				// NB: We want the request to fail-fast (the default), otherwise we won't
+				// be notified of transport failures.
+				response, err = heartbeatClient.Ping(goCtx, request)
+				return err
+			}
+			var err error
+			if ctx.heartbeatTimeout > 0 {
+				err = contextutil.RunWithTimeout(goCtx, "rpc heartbeat", ctx.heartbeatTimeout, ping)
+			} else {
+				err = ping(goCtx)
+			}
 			if err == nil {
 				err = errors.Wrap(
 					checkVersion(ctx.version, response.ServerVersion),

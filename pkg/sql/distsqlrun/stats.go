@@ -1,23 +1,27 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -86,4 +90,110 @@ func (is InputStats) StatsForQueryPlan(prefix string) []string {
 // time.Millisecond.
 func (is InputStats) RoundStallTime() time.Duration {
 	return is.StallTime.Round(time.Microsecond)
+}
+
+// rowFetcher is an interface used to abstract a row fetcher so that a stat
+// collector wrapper can be plugged in.
+type rowFetcher interface {
+	RowSource
+	StartScan(
+		_ context.Context, _ *client.Txn, _ roachpb.Spans, limitBatches bool, limitHint int64, traceKV bool,
+	) error
+	StartInconsistentScan(
+		_ context.Context,
+		_ *client.DB,
+		initialTimestamp hlc.Timestamp,
+		maxTimestampAge time.Duration,
+		spans roachpb.Spans,
+		limitBatches bool,
+		limitHint int64,
+		traceKV bool,
+	) error
+
+	// PartialKey is not stat-related but needs to be supported.
+	PartialKey(int) (roachpb.Key, error)
+	Reset()
+	GetBytesRead() int64
+	GetRangesInfo() []roachpb.RangeInfo
+	NextRowWithErrors(context.Context) (sqlbase.EncDatumRow, error)
+}
+
+// rowFetcherWrapper is used only by processors that need to wrap calls to
+// Fetcher.NextRow() in a RowSource implementation.
+type rowFetcherWrapper struct {
+	ctx context.Context
+	*row.Fetcher
+}
+
+var _ RowSource = &rowFetcherWrapper{}
+
+// Start is part of the RowSource interface.
+func (w *rowFetcherWrapper) Start(ctx context.Context) context.Context {
+	w.ctx = ctx
+	return ctx
+}
+
+// Next() calls NextRow() on the underlying Fetcher. If an error is encountered,
+// it is returned via a ProducerMetadata.
+func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+	row, _, _, err := w.NextRow(w.ctx)
+	if err != nil {
+		return row, &distsqlpb.ProducerMetadata{Err: err}
+	}
+	return row, nil
+}
+func (w rowFetcherWrapper) OutputTypes() []types.T { return nil }
+func (w rowFetcherWrapper) ConsumerDone()          {}
+func (w rowFetcherWrapper) ConsumerClosed()        {}
+
+type rowFetcherStatCollector struct {
+	*rowFetcherWrapper
+	inputStatCollector *InputStatCollector
+	startScanStallTime time.Duration
+}
+
+var _ rowFetcher = &rowFetcherStatCollector{}
+
+func newRowFetcherStatCollector(f *row.Fetcher) *rowFetcherStatCollector {
+	fWrapper := &rowFetcherWrapper{Fetcher: f}
+	return &rowFetcherStatCollector{
+		rowFetcherWrapper:  fWrapper,
+		inputStatCollector: NewInputStatCollector(fWrapper),
+	}
+}
+
+func (c *rowFetcherStatCollector) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+	return c.inputStatCollector.Next()
+}
+
+func (c *rowFetcherStatCollector) StartScan(
+	ctx context.Context,
+	txn *client.Txn,
+	spans roachpb.Spans,
+	limitBatches bool,
+	limitHint int64,
+	traceKV bool,
+) error {
+	start := timeutil.Now()
+	err := c.rowFetcherWrapper.StartScan(ctx, txn, spans, limitBatches, limitHint, traceKV)
+	c.startScanStallTime += timeutil.Since(start)
+	return err
+}
+
+func (c *rowFetcherStatCollector) StartInconsistentScan(
+	ctx context.Context,
+	db *client.DB,
+	initialTimestamp hlc.Timestamp,
+	maxTimestampAge time.Duration,
+	spans roachpb.Spans,
+	limitBatches bool,
+	limitHint int64,
+	traceKV bool,
+) error {
+	start := timeutil.Now()
+	err := c.rowFetcherWrapper.StartInconsistentScan(
+		ctx, db, initialTimestamp, maxTimestampAge, spans, limitBatches, limitHint, traceKV,
+	)
+	c.startScanStallTime += timeutil.Since(start)
+	return err
 }

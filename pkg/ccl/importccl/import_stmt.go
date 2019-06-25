@@ -406,6 +406,12 @@ func importPlanHook(
 				return err
 			}
 
+			// The IMPORT INTO prototype currently breaks secondary indexes in the
+			// target table, as explained in issue #38044.
+			if len(found.AllNonDropIndexes()) != 0 {
+				return errors.Errorf("cannot IMPORT INTO a table with secondary indexes.")
+			}
+
 			if len(found.Mutations) > 0 {
 				return errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", found.Mutations[0].String())
 			}
@@ -771,9 +777,13 @@ func (r *importResumer) Resume(
 		}
 	}
 
-	{
-		// Disable merging for the table IDs being imported into. We don't want the
-		// merge queue undoing the splits performed during IMPORT.
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// If the cluster supports sticky bits, then we don't have to worry about the
+	// merge queue automatically merging the splits performed during IMPORT.
+	// Otherwise, we have to rely on the gossip mechanism to disable the merge
+	// queue for the table IDs being imported into.
+	stickyBitEnabled := r.settings.Version.IsActive(cluster.VersionStickyBit)
+	if !stickyBitEnabled {
 		tableIDs := make([]uint32, 0, len(tables))
 		for _, t := range tables {
 			tableIDs = append(tableIDs, uint32(t.ID))

@@ -410,7 +410,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 build
 SELECT k, v, first_value(v) OVER () FROM kv
@@ -447,7 +447,7 @@ project
  │    │         └── min [type=int]
  │    │              └── variable: w [type=int]
  │    └── windows
- │         └── row-number [type=undefined]
+ │         └── row-number [type=int]
  └── projections
       └── plus [type=int]
            ├── const: 2 [type=int]
@@ -463,10 +463,10 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           ├── rank [type=undefined]
-           ├── dense-rank [type=undefined]
-           ├── percent-rank [type=undefined]
-           └── cume-dist [type=undefined]
+           ├── rank [type=int]
+           ├── dense-rank [type=int]
+           ├── percent-rank [type=float]
+           └── cume-dist [type=float]
 
 build
 SELECT k, rank() OVER (), rank() OVER () FROM kv
@@ -478,7 +478,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 build
 SELECT k, rank() OVER (), row_number() OVER () FROM kv
@@ -490,8 +490,8 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           ├── rank [type=undefined]
-           └── row-number [type=undefined]
+           ├── rank [type=int]
+           └── row-number [type=int]
 
 build
 SELECT k, rank() OVER (), row_number() OVER () FROM kv ORDER BY 1
@@ -506,8 +506,8 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                ├── rank [type=undefined]
-                └── row-number [type=undefined]
+                ├── rank [type=int]
+                └── row-number [type=int]
 
 build
 SELECT k, v, rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
@@ -522,7 +522,7 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                └── rank [type=undefined]
+                └── rank [type=int]
 
 build
 SELECT k, row_number() OVER (PARTITION BY v), rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
@@ -537,8 +537,8 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                ├── row-number [type=undefined]
-                └── rank [type=undefined]
+                ├── row-number [type=int]
+                └── rank [type=int]
 
 build
 SELECT k, v, ntile(1) OVER () FROM kv
@@ -636,7 +636,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 build
 SELECT v, row_number() OVER (PARTITION BY v) FROM kv
@@ -648,7 +648,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 build
 SELECT v, row_number() OVER (PARTITION BY v+1) FROM kv
@@ -666,7 +666,7 @@ project
       │              ├── variable: v [type=int]
       │              └── const: 1 [type=int]
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 build
 SELECT v, row_number() OVER (PARTITION BY avg(k)) FROM kv GROUP BY v
@@ -686,7 +686,7 @@ project
       │         └── avg [type=decimal]
       │              └── variable: k [type=int]
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 # TODO(justin): expand these tuples.
 build
@@ -699,7 +699,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 build
 SELECT k, row_number() OVER (PARTITION BY kv.*) FROM kv
@@ -711,7 +711,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 build
 SELECT row_number() OVER (PARTITION BY v), rank() OVER (PARTITION BY v, f) FROM kv
@@ -725,9 +725,9 @@ project
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    └── windows
-      │         └── row-number [type=undefined]
+      │         └── row-number [type=int]
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 # Ordering
 
@@ -741,7 +741,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 build
 SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
@@ -756,7 +756,7 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                └── rank [type=undefined]
+                └── rank [type=int]
 
 # Ensure tuples in orderings get expanded.
 
@@ -783,11 +783,11 @@ sort
            │    │    ├── scan kv
            │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            │    │    └── windows
-           │    │         └── rank [type=undefined]
+           │    │         └── rank [type=int]
            │    └── windows
-           │         └── row-number [type=undefined]
+           │         └── row-number [type=int]
            └── windows
-                └── dense-rank [type=undefined]
+                └── dense-rank [type=int]
 
 build
 SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
@@ -802,7 +802,7 @@ sort
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    └── windows
-      │         └── row-number [type=undefined]
+      │         └── row-number [type=int]
       └── projections
            └── plus [type=int]
                 ├── plus [type=int]
@@ -834,7 +834,7 @@ distinct-on
  │              ├── scan kv
  │              │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
  │              └── windows
- │                   └── row-number [type=undefined]
+ │                   └── row-number [type=int]
  └── aggregations
       └── first-agg [type=int]
            └── variable: w [type=int]
@@ -1113,12 +1113,12 @@ project
 
 build
 SELECT
-    avg(v) OVER (GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)
+    avg(v) OVER (ORDER BY k GROUPS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING)
 FROM kv
 ----
 project
  ├── columns: avg:8(decimal)
- └── window partition=()
+ └── window partition=() ordering=+1
       ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
@@ -1184,10 +1184,10 @@ SELECT
     avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
     avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
     avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW),
-    avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
-    avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
-    avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
-    avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW),
+    avg(k) OVER (ORDER BY v GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ORDER BY v GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    avg(k) OVER (ORDER BY v GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    avg(k) OVER (ORDER BY v GROUPS BETWEEN CURRENT ROW AND CURRENT ROW),
     1 + avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
     1 + avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
     1 + avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
@@ -1196,43 +1196,46 @@ SELECT
     1 + avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
     1 + avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
     1 + avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW),
-    1 + avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
-    1 + avg(k) OVER (GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
-    1 + avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
-    1 + avg(k) OVER (GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)
+    1 + avg(k) OVER (ORDER BY v GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+    1 + avg(k) OVER (ORDER BY v GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING),
+    1 + avg(k) OVER (ORDER BY v GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)
 FROM
     kv
 ----
 project
  ├── columns: avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal) avg:12(decimal) avg:13(decimal) avg:14(decimal) avg:15(decimal) avg:16(decimal) avg:17(decimal) avg:18(decimal) avg:19(decimal) "?column?":20(decimal) "?column?":21(decimal) "?column?":22(decimal) "?column?":23(decimal) "?column?":24(decimal) "?column?":25(decimal) "?column?":26(decimal) "?column?":27(decimal) "?column?":28(decimal) "?column?":29(decimal) "?column?":30(decimal) "?column?":31(decimal)
- ├── window partition=()
+ ├── window partition=() ordering=+2
  │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal) avg:12(decimal) avg:13(decimal) avg:14(decimal) avg:15(decimal) avg:16(decimal) avg:17(decimal) avg:18(decimal) avg:19(decimal)
- │    ├── scan kv
- │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+ │    ├── window partition=()
+ │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg:9(decimal) avg:10(decimal) avg:11(decimal) avg:12(decimal) avg:13(decimal) avg:14(decimal) avg:15(decimal)
+ │    │    ├── scan kv
+ │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+ │    │    └── windows
+ │    │         ├── windows-item: range from unbounded to unbounded [type=decimal]
+ │    │         │    └── avg [type=decimal]
+ │    │         │         └── variable: k [type=int]
+ │    │         ├── avg [type=decimal]
+ │    │         │    └── variable: k [type=int]
+ │    │         ├── windows-item: range from current-row to unbounded [type=decimal]
+ │    │         │    └── avg [type=decimal]
+ │    │         │         └── variable: k [type=int]
+ │    │         ├── windows-item: range from current-row to current-row [type=decimal]
+ │    │         │    └── avg [type=decimal]
+ │    │         │         └── variable: k [type=int]
+ │    │         ├── windows-item: rows from unbounded to unbounded [type=decimal]
+ │    │         │    └── avg [type=decimal]
+ │    │         │         └── variable: k [type=int]
+ │    │         ├── windows-item: rows from unbounded to current-row [type=decimal]
+ │    │         │    └── avg [type=decimal]
+ │    │         │         └── variable: k [type=int]
+ │    │         ├── windows-item: rows from current-row to unbounded [type=decimal]
+ │    │         │    └── avg [type=decimal]
+ │    │         │         └── variable: k [type=int]
+ │    │         └── windows-item: rows from current-row to current-row [type=decimal]
+ │    │              └── avg [type=decimal]
+ │    │                   └── variable: k [type=int]
  │    └── windows
- │         ├── windows-item: range from unbounded to unbounded [type=decimal]
- │         │    └── avg [type=decimal]
- │         │         └── variable: k [type=int]
- │         ├── avg [type=decimal]
- │         │    └── variable: k [type=int]
- │         ├── windows-item: range from current-row to unbounded [type=decimal]
- │         │    └── avg [type=decimal]
- │         │         └── variable: k [type=int]
- │         ├── windows-item: range from current-row to current-row [type=decimal]
- │         │    └── avg [type=decimal]
- │         │         └── variable: k [type=int]
- │         ├── windows-item: rows from unbounded to unbounded [type=decimal]
- │         │    └── avg [type=decimal]
- │         │         └── variable: k [type=int]
- │         ├── windows-item: rows from unbounded to current-row [type=decimal]
- │         │    └── avg [type=decimal]
- │         │         └── variable: k [type=int]
- │         ├── windows-item: rows from current-row to unbounded [type=decimal]
- │         │    └── avg [type=decimal]
- │         │         └── variable: k [type=int]
- │         ├── windows-item: rows from current-row to current-row [type=decimal]
- │         │    └── avg [type=decimal]
- │         │         └── variable: k [type=int]
  │         ├── windows-item: groups from unbounded to unbounded [type=decimal]
  │         │    └── avg [type=decimal]
  │         │         └── variable: k [type=int]
@@ -1432,7 +1435,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 build
 SELECT
@@ -1446,7 +1449,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 build
 SELECT
@@ -1468,13 +1471,13 @@ project
       │    │    ├── scan kv
       │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    │    └── windows
-      │    │         ├── rank [type=undefined]
-      │    │         └── rank [type=undefined]
+      │    │         ├── rank [type=int]
+      │    │         └── rank [type=int]
       │    └── windows
-      │         ├── row-number [type=undefined]
-      │         └── row-number [type=undefined]
+      │         ├── row-number [type=int]
+      │         └── row-number [type=int]
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 build
 SELECT
@@ -1488,7 +1491,7 @@ project
       ├── scan kv
       │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 build
 SELECT
@@ -1506,7 +1509,7 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── windows
-                └── rank [type=undefined]
+                └── rank [type=int]
 
 build
 SELECT

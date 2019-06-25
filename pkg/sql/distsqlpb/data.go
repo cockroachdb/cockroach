@@ -1,20 +1,19 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlpb
 
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -210,6 +209,51 @@ type ProducerMetadata struct {
 	// SamplerProgress contains incremental progress information from the sampler
 	// processor.
 	SamplerProgress *RemoteProducerMetadata_SamplerProgress
+	// Metrics contains information about goodput of the node.
+	Metrics *RemoteProducerMetadata_Metrics
+}
+
+var (
+	// TODO(yuzefovich): use this pool in other places apart from metrics
+	// collection.
+	// producerMetadataPool is a pool of producer metadata objects.
+	producerMetadataPool = sync.Pool{
+		New: func() interface{} {
+			return &ProducerMetadata{}
+		},
+	}
+
+	// rpmMetricsPool is a pool of metadata used to propagate metrics.
+	rpmMetricsPool = sync.Pool{
+		New: func() interface{} {
+			return &RemoteProducerMetadata_Metrics{}
+		},
+	}
+)
+
+// Release is part of Releasable interface.
+func (meta *ProducerMetadata) Release() {
+	*meta = ProducerMetadata{}
+	producerMetadataPool.Put(meta)
+}
+
+// Release is part of Releasable interface. Note that although this meta is
+// only used together with a ProducerMetadata that comes from another pool, we
+// do not combine two Release methods into one because two objects have a
+// different lifetime.
+func (meta *RemoteProducerMetadata_Metrics) Release() {
+	*meta = RemoteProducerMetadata_Metrics{}
+	rpmMetricsPool.Put(meta)
+}
+
+// GetProducerMeta returns a producer metadata object from the pool.
+func GetProducerMeta() *ProducerMetadata {
+	return producerMetadataPool.Get().(*ProducerMetadata)
+}
+
+// GetMetricsMeta returns a metadata object from the pool of metrics metadata.
+func GetMetricsMeta() *RemoteProducerMetadata_Metrics {
+	return rpmMetricsPool.Get().(*RemoteProducerMetadata_Metrics)
 }
 
 // RemoteProducerMetaToLocalMeta converts a RemoteProducerMetadata struct to
@@ -217,7 +261,7 @@ type ProducerMetadata struct {
 func RemoteProducerMetaToLocalMeta(
 	ctx context.Context, rpm RemoteProducerMetadata,
 ) (ProducerMetadata, bool) {
-	var meta ProducerMetadata
+	meta := GetProducerMeta()
 	switch v := rpm.Value.(type) {
 	case *RemoteProducerMetadata_RangeInfo:
 		meta.Ranges = v.RangeInfo.RangeInfo
@@ -231,10 +275,12 @@ func RemoteProducerMetaToLocalMeta(
 		meta.SamplerProgress = v.SamplerProgress
 	case *RemoteProducerMetadata_Error:
 		meta.Err = v.Error.ErrorDetail(ctx)
+	case *RemoteProducerMetadata_Metrics_:
+		meta.Metrics = v.Metrics
 	default:
-		return meta, false
+		return *meta, false
 	}
-	return meta, true
+	return *meta, true
 }
 
 // LocalMetaToRemoteProducerMeta converts a ProducerMetadata struct to
@@ -266,6 +312,10 @@ func LocalMetaToRemoteProducerMeta(
 	} else if meta.SamplerProgress != nil {
 		rpm.Value = &RemoteProducerMetadata_SamplerProgress_{
 			SamplerProgress: meta.SamplerProgress,
+		}
+	} else if meta.Metrics != nil {
+		rpm.Value = &RemoteProducerMetadata_Metrics_{
+			Metrics: meta.Metrics,
 		}
 	} else {
 		rpm.Value = &RemoteProducerMetadata_Error{

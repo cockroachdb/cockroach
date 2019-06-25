@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
@@ -340,12 +338,18 @@ message ConstraintToUpdate {
   enum ConstraintType {
     CHECK = 0;
     FOREIGN_KEY = 1;
+    // NOT NULL constraints being added are represented by a dummy check
+    // constraint so that a multi-state schema change, including a bulk
+    // validation step, can occur. The check field contains the dummy
+    // constraint.
+    NOT_NULL = 2;
   }
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
   optional TableDescriptor.CheckConstraint check = 3 [(gogoproto.nullable) = false];
   optional ForeignKeyReference foreign_key = 4 [(gogoproto.nullable) = false];
   optional uint32 foreign_key_index = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
 }
 
 // A DescriptorMutation represents a column or an index that
@@ -521,6 +525,7 @@ message TableDescriptor {
     // An ordered list of column IDs used by the check constraint.
     repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
+    optional bool is_non_null_constraint = 6 [(gogoproto.nullable) = false];
   }
 
   repeated CheckConstraint checks = 20;
@@ -732,6 +737,9 @@ message TableDescriptor {
   // index case. Also use for dropped interleaved indexes and columns.
   repeated GCDescriptorMutation gc_mutations = 33 [(gogoproto.nullable) = false,
                                                   (gogoproto.customname) = "GCMutations"];
+
+  optional string create_query = 34 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp create_as_of_time = 35 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

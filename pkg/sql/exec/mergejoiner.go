@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package exec
 
@@ -77,10 +75,15 @@ type mjProberState struct {
 	// Local buffer for the last left and right groups.
 	// Used when the group ends with a batch and the group on each side needs to be saved to state
 	// in order to be able to continue it in the next batch.
-	lGroup       coldata.Batch
-	lGroupEndIdx int
-	rGroup       coldata.Batch
-	rGroupEndIdx int
+	lBufferedGroup coldata.Batch
+	lGroupEndIdx   int
+	rBufferedGroup coldata.Batch
+	rGroupEndIdx   int
+	// These two flags indicate that the buffered groups need to be reset before
+	// being appended to, and it should be set to true once the output
+	// corresponding to the buffered group has been fully materialized.
+	needToResetLeftBufferedGroup  bool
+	needToResetRightBufferedGroup bool
 
 	// inputDone is a flag to indicate whether the merge joiner has reached the end
 	// of input, and thus should wrap up execution.
@@ -260,8 +263,8 @@ func (o *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 		o.outputCeil = 1<<16 - 1
 	}
 
-	o.proberState.lGroup = coldata.NewMemBatchWithSize(o.left.sourceTypes, coldata.BatchSize)
-	o.proberState.rGroup = coldata.NewMemBatchWithSize(o.right.sourceTypes, coldata.BatchSize)
+	o.proberState.lBufferedGroup = coldata.NewMemBatchWithSize(o.left.sourceTypes, coldata.BatchSize)
+	o.proberState.rBufferedGroup = coldata.NewMemBatchWithSize(o.right.sourceTypes, coldata.BatchSize)
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
@@ -356,11 +359,13 @@ func (o *mergeJoinOp) completeGroup(
 ) (idx int, batch coldata.Batch, length int) {
 	length = int(bat.Length())
 	sel := bat.Selection()
-	savedGroup := o.proberState.lGroup
+	savedGroup := o.proberState.lBufferedGroup
 	savedGroupIdx := &o.proberState.lGroupEndIdx
+	needToResetBufferedGroup := &o.proberState.needToResetLeftBufferedGroup
 	if input == &o.right {
-		savedGroup = o.proberState.rGroup
+		savedGroup = o.proberState.rBufferedGroup
 		savedGroupIdx = &o.proberState.rGroupEndIdx
+		needToResetBufferedGroup = &o.proberState.needToResetRightBufferedGroup
 	}
 
 	if o.isGroupFinished(input, savedGroup, *savedGroupIdx, bat, rowIdx, sel) {
@@ -401,7 +406,7 @@ func (o *mergeJoinOp) completeGroup(
 		loopStartIndex = 0
 
 		// Save the group to state.
-		o.saveGroupToState(rowIdx, groupLength, bat, sel, input, savedGroup, savedGroupIdx)
+		o.saveGroupToState(rowIdx, groupLength, bat, sel, input, savedGroup, savedGroupIdx, needToResetBufferedGroup)
 		rowIdx += groupLength
 
 		if !isGroupComplete {
@@ -417,9 +422,10 @@ func (o *mergeJoinOp) completeGroup(
 	return rowIdx, bat, length
 }
 
-// saveGroupToState puts each column of the batch in a group into state, to be able to build
-// output from this set of rows later.
-// SIDE EFFECT: increments destStartIdx by the groupLength.
+// saveGroupToState puts each column of the batch in a group into state, to be
+// able to build output from this set of rows later.
+// SIDE EFFECT: increments destStartIdx by the groupLength and updates
+// needToResetBufferedGroup.
 func (o *mergeJoinOp) saveGroupToState(
 	idx int,
 	groupLength int,
@@ -428,18 +434,38 @@ func (o *mergeJoinOp) saveGroupToState(
 	src *mergeJoinInput,
 	destBatch coldata.Batch,
 	destStartIdx *int,
+	needToResetBufferedGroup *bool,
 ) {
 	endIdx := idx + groupLength
-	if sel != nil {
-		for cIdx, cType := range src.sourceTypes {
-			destBatch.ColVec(cIdx).AppendSliceWithSel(bat.ColVec(cIdx), cType, uint64(*destStartIdx), uint16(idx), uint16(endIdx), sel)
-		}
-	} else {
-		for cIdx, cType := range src.sourceTypes {
-			destBatch.ColVec(cIdx).AppendSlice(bat.ColVec(cIdx), cType, uint64(*destStartIdx), uint16(idx), uint16(endIdx))
+	for cIdx, cType := range src.sourceTypes {
+		destBatch.ColVec(cIdx).Append(
+			coldata.AppendArgs{
+				ColType:     cType,
+				Src:         bat.ColVec(cIdx),
+				Sel:         sel,
+				DestIdx:     uint64(*destStartIdx),
+				SrcStartIdx: uint16(idx),
+				SrcEndIdx:   uint16(endIdx),
+			},
+		)
+		if sel != nil {
+			if *needToResetBufferedGroup {
+				// Note that we don't need to explicitly reset the values vector, so we
+				// only reset the nulls.
+				destBatch.ColVec(cIdx).Nulls().UnsetNulls()
+			}
+			destBatch.ColVec(cIdx).Nulls().ExtendWithSel(bat.ColVec(cIdx).Nulls(), uint64(*destStartIdx), uint16(idx), uint16(groupLength), sel)
+		} else {
+			if *needToResetBufferedGroup {
+				// Note that we don't need to explicitly reset the values vector, so we
+				// only reset the nulls.
+				destBatch.ColVec(cIdx).Nulls().UnsetNulls()
+			}
+			destBatch.ColVec(cIdx).Nulls().Extend(bat.ColVec(cIdx).Nulls(), uint64(*destStartIdx), uint16(idx), uint16(groupLength))
 		}
 	}
 
+	*needToResetBufferedGroup = false
 	*destStartIdx += groupLength
 }
 
@@ -506,11 +532,13 @@ func (o *mergeJoinOp) setBuilderSourceToGroupBuffer() {
 	}
 	o.builderState.groupsLen = 1
 
-	o.builderState.lBatch = o.proberState.lGroup
-	o.builderState.rBatch = o.proberState.rGroup
+	o.builderState.lBatch = o.proberState.lBufferedGroup
+	o.builderState.rBatch = o.proberState.rBufferedGroup
 
 	o.proberState.lGroupEndIdx = 0
 	o.proberState.rGroupEndIdx = 0
+	o.proberState.needToResetLeftBufferedGroup = true
+	o.proberState.needToResetRightBufferedGroup = true
 }
 
 // build creates the cross product, and writes it to the output member.

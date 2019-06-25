@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -23,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // A windowNode implements the planNode interface and handles windowing logic.
@@ -171,6 +170,11 @@ func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 	return nil
 }
 
+var (
+	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
+	errVarOffsetGroups      = pgerror.New(pgcode.Syntax, "GROUPS offset cannot contain variables")
+)
+
 // constructWindowDefinitions creates window definitions for each window
 // function application by combining specific window definition from a
 // given window function application with referenced window specifications
@@ -223,8 +227,12 @@ func (p *planner) constructWindowDefinitions(
 			windowFn.filterColIdx = s.addOrReuseRender(col, renderExpr, true /* reuse */)
 		}
 
-		// Validate PARTITION BY clause.
-		for _, partition := range windowDef.Partitions {
+		// Perform semantic analysis and validation of PARTITION BY clause.
+		for i, partition := range windowDef.Partitions {
+			windowDef.Partitions[i], err = p.analyzeExpr(ctx, partition, s.sourceInfo, s.ivarHelper, types.Any, true, "WINDOW PARTITION BY")
+			if err != nil {
+				return err
+			}
 			if containsWindowVisitor.ContainsWindowFunc(partition) {
 				return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 			}
@@ -239,8 +247,15 @@ func (p *planner) constructWindowDefinitions(
 			windowFn.partitionIdxs = append(windowFn.partitionIdxs, colIdxs...)
 		}
 
-		// Validate ORDER BY clause.
-		for _, orderBy := range windowDef.OrderBy {
+		// Perform semantic analysis and validation of ORDER BY clause.
+		for i, orderBy := range windowDef.OrderBy {
+			if orderBy.OrderType != tree.OrderByColumn {
+				return errOrderByIndexInWindow
+			}
+			windowDef.OrderBy[i].Expr, err = p.analyzeExpr(ctx, orderBy.Expr, s.sourceInfo, s.ivarHelper, types.Any, true, "WINDOW ORDER BY")
+			if err != nil {
+				return err
+			}
 			if containsWindowVisitor.ContainsWindowFunc(orderBy.Expr) {
 				return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 			}
@@ -268,7 +283,7 @@ func (p *planner) constructWindowDefinitions(
 
 		// Validate frame of the window definition if present.
 		if windowDef.Frame != nil {
-			if err := windowDef.Frame.TypeCheck(&p.semaCtx, &windowDef); err != nil {
+			if err := analyzeWindowFrame(ctx, p, s, &windowDef); err != nil {
 				return err
 			}
 			if windowDef.Frame.Mode == tree.RANGE && windowDef.Frame.Bounds.HasOffset() {
@@ -279,6 +294,76 @@ func (p *planner) constructWindowDefinitions(
 		windowFn.frame = windowDef.Frame
 	}
 
+	return nil
+}
+
+// analyzeWindowFrame performs semantic analysis of offset expressions of
+// the window frame.
+func analyzeWindowFrame(
+	ctx context.Context, p *planner, r *renderNode, windowDef *tree.WindowDef,
+) error {
+	frame := windowDef.Frame
+	bounds := frame.Bounds
+	startBound, endBound := bounds.StartBound, bounds.EndBound
+	var requiredType *types.T
+	switch frame.Mode {
+	case tree.ROWS:
+		// In ROWS mode, offsets must be non-null, non-negative integers. Non-nullity
+		// and non-negativity will be checked later.
+		requiredType = types.Int
+	case tree.RANGE:
+		// In RANGE mode, offsets must be non-null and non-negative datums of a type
+		// dependent on the type of the ordering column. Non-nullity and
+		// non-negativity will be checked later.
+		if bounds.HasOffset() {
+			// At least one of the bounds is of type 'value' PRECEDING or 'value' FOLLOWING.
+			// We require ordering on a single column that supports addition/subtraction.
+			if len(windowDef.OrderBy) != 1 {
+				return pgerror.Newf(pgcode.Windowing, "RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column")
+			}
+			requiredType = windowDef.OrderBy[0].Expr.(tree.TypedExpr).ResolvedType()
+			if !types.IsAdditiveType(requiredType) {
+				return pgerror.Newf(pgcode.Windowing, fmt.Sprintf("RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s", requiredType))
+			}
+			if types.IsDateTimeType(requiredType) {
+				// Spec: for datetime ordering columns, the required type is an 'interval'.
+				requiredType = types.Interval
+			}
+		}
+	case tree.GROUPS:
+		if startBound != nil && startBound.HasOffset() {
+			if tree.ContainsVars(startBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
+		if endBound != nil && endBound.HasOffset() {
+			if tree.ContainsVars(endBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
+		if len(windowDef.OrderBy) == 0 {
+			return pgerror.Newf(pgcode.Windowing, "GROUPS mode requires an ORDER BY clause")
+		}
+		// In GROUPS mode, offsets must be non-null, non-negative integers.
+		// Non-nullity and non-negativity will be checked later.
+		requiredType = types.Int
+	default:
+		return errors.AssertionFailedf("unexpected WindowFrameMode: %d", errors.Safe(frame.Mode))
+	}
+	if startBound.HasOffset() {
+		typedStartOffsetExpr, err := p.analyzeExpr(ctx, startBound.OffsetExpr, r.sourceInfo, r.ivarHelper, requiredType, true, "WINDOW FRAME START")
+		if err != nil {
+			return err
+		}
+		startBound.OffsetExpr = typedStartOffsetExpr
+	}
+	if endBound != nil && endBound.HasOffset() {
+		typedEndOffsetExpr, err := p.analyzeExpr(ctx, endBound.OffsetExpr, r.sourceInfo, r.ivarHelper, requiredType, true, "WINDOW FRAME END")
+		if err != nil {
+			return err
+		}
+		endBound.OffsetExpr = typedEndOffsetExpr
+	}
 	return nil
 }
 

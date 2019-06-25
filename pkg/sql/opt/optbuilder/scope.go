@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
@@ -1088,6 +1086,36 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 
 	f = typedFunc.(*tree.FuncExpr)
 
+	// We will be performing type checking on expressions from PARTITION BY and
+	// ORDER BY clauses below, and we need the semantic context to know that we
+	// are in a window function. InWindowFunc is updated when type checking
+	// FuncExpr above, but it is reset upon returning from that, so we need to do
+	// this update manually.
+	defer func(ctx *tree.SemaContext, prevWindow bool) {
+		ctx.Properties.Derived.InWindowFunc = prevWindow
+	}(
+		s.builder.semaCtx,
+		s.builder.semaCtx.Properties.Derived.InWindowFunc,
+	)
+	s.builder.semaCtx.Properties.Derived.InWindowFunc = true
+
+	for i, e := range f.WindowDef.Partitions {
+		typedExpr := s.resolveType(e, types.Any)
+		f.WindowDef.Partitions[i] = typedExpr
+	}
+	for i, e := range f.WindowDef.OrderBy {
+		if e.OrderType != tree.OrderByColumn {
+			panic(builderError{errOrderByIndexInWindow})
+		}
+		typedExpr := s.resolveType(e.Expr, types.Any)
+		f.WindowDef.OrderBy[i].Expr = typedExpr
+	}
+	if f.WindowDef.Frame != nil {
+		if err := analyzeWindowFrame(s, f.WindowDef); err != nil {
+			panic(builderError{err})
+		}
+	}
+
 	info := windowInfo{
 		FuncExpr: f,
 		def: memo.FunctionPrivate{
@@ -1111,6 +1139,77 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 	s.windows = append(s.windows, *info.col)
 
 	return &info
+}
+
+var (
+	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
+	errVarOffsetGroups      = pgerror.New(pgcode.Syntax, "GROUPS offset cannot contain variables")
+)
+
+// analyzeWindowFrame performs semantic analysis of offset expressions of
+// the window frame.
+func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
+	frame := windowDef.Frame
+	bounds := frame.Bounds
+	startBound, endBound := bounds.StartBound, bounds.EndBound
+	var requiredType *types.T
+	switch frame.Mode {
+	case tree.ROWS:
+		// In ROWS mode, offsets must be non-null, non-negative integers. Non-nullity
+		// and non-negativity will be checked later.
+		requiredType = types.Int
+	case tree.RANGE:
+		// In RANGE mode, offsets must be non-null and non-negative datums of a type
+		// dependent on the type of the ordering column. Non-nullity and
+		// non-negativity will be checked later.
+		if bounds.HasOffset() {
+			// At least one of the bounds is of type 'value' PRECEDING or 'value' FOLLOWING.
+			// We require ordering on a single column that supports addition/subtraction.
+			if len(windowDef.OrderBy) != 1 {
+				return pgerror.Newf(pgcode.Windowing, "RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column")
+			}
+			requiredType = windowDef.OrderBy[0].Expr.(tree.TypedExpr).ResolvedType()
+			if !types.IsAdditiveType(requiredType) {
+				return pgerror.Newf(pgcode.Windowing, fmt.Sprintf("RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s", requiredType))
+			}
+			if types.IsDateTimeType(requiredType) {
+				// Spec: for datetime ordering columns, the required type is an 'interval'.
+				requiredType = types.Interval
+			}
+		}
+	case tree.GROUPS:
+		if startBound != nil && startBound.HasOffset() {
+			if tree.ContainsVars(startBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
+		if endBound != nil && endBound.HasOffset() {
+			if tree.ContainsVars(endBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
+		if len(windowDef.OrderBy) == 0 {
+			return pgerror.Newf(pgcode.Windowing, "GROUPS mode requires an ORDER BY clause")
+		}
+		// In GROUPS mode, offsets must be non-null, non-negative integers.
+		// Non-nullity and non-negativity will be checked later.
+		requiredType = types.Int
+	default:
+		return errors.AssertionFailedf("unexpected WindowFrameMode: %d", errors.Safe(frame.Mode))
+	}
+	if startBound != nil && startBound.OffsetExpr != nil {
+		oldContext := s.context
+		s.context = "WINDOW FRAME START"
+		startBound.OffsetExpr = s.resolveAndRequireType(startBound.OffsetExpr, requiredType)
+		s.context = oldContext
+	}
+	if endBound != nil && endBound.OffsetExpr != nil {
+		oldContext := s.context
+		s.context = "WINDOW FRAME END"
+		endBound.OffsetExpr = s.resolveAndRequireType(endBound.OffsetExpr, requiredType)
+		s.context = oldContext
+	}
+	return nil
 }
 
 // replaceCount replaces count(*) with count_rows().

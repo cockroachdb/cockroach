@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package execbuilder
 
@@ -35,6 +33,9 @@ type Builder struct {
 	// expressions we built. Each entry is associated with a tree.Subquery
 	// expression node.
 	subqueries []exec.Subquery
+
+	// postqueries accumulates check queries that are run after the main query.
+	postqueries []exec.Node
 
 	// nullifyMissingVarExprs, if greater than 0, tells the builder to replace
 	// VariableExprs that have no bindings with DNull. This is useful for apply
@@ -87,7 +88,7 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.factory.ConstructPlan(root, b.subqueries)
+	return b.factory.ConstructPlan(root, b.subqueries, b.postqueries)
 }
 
 func (b *Builder) build(e opt.Expr) (exec.Node, error) {

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -649,6 +647,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// defer is a catch-all in case some other return path is taken.
 	defer planner.curPlan.close(ctx)
 
+	if planner.autoCommit {
+		planner.curPlan.flags.Set(planFlagImplicitTxn)
+	}
+
 	// Certain statements want their results to go to the client
 	// directly. Configure this here.
 	if planner.curPlan.avoidBuffering {
@@ -729,7 +731,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagDistSQLLocal)
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
-	err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
+	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
@@ -737,7 +739,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// plan has not been closed earlier.
 	ex.recordStatementSummary(
 		ctx, planner,
-		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
+		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(), bytesRead, rowsRead,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -794,10 +796,10 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 // for its corresponding fingerprint. We use `logicalPlanCollectionPeriod`
 // to assess how frequently to sample logical plans.
 func (ex *connExecutor) saveLogicalPlanDescription(
-	stmt *Statement, useDistSQL bool, optimizerUsed bool, err error,
+	stmt *Statement, useDistSQL bool, optimizerUsed bool, implicitTxn bool, err error,
 ) bool {
 	stats := ex.appStats.getStatsForStmt(
-		stmt, useDistSQL, optimizerUsed, err, false /* createIfNonexistent */)
+		stmt, useDistSQL, optimizerUsed, implicitTxn, err, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
@@ -852,7 +854,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	stmtType tree.StatementType,
 	res RestrictedCommandResult,
 	distribute bool,
-) error {
+) (bytesRead, rowsRead int64, _ error) {
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache, ex.server.cfg.LeaseHolderCache,
@@ -875,19 +877,23 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.planner = planner
 	planCtx.stmtType = recv.stmtType
 
-	if len(planner.curPlan.subqueryPlans) != 0 {
+	var evalCtxFactory func() *extendedEvalContext
+	if len(planner.curPlan.subqueryPlans) != 0 || len(planner.curPlan.postqueryPlans) != 0 {
 		var evalCtx extendedEvalContext
 		ex.initEvalCtx(ctx, &evalCtx, planner)
-		evalCtxFactory := func() *extendedEvalContext {
+		evalCtxFactory = func() *extendedEvalContext {
 			ex.resetEvalCtx(&evalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			evalCtx.Placeholders = &planner.semaCtx.Placeholders
 			evalCtx.Annotations = &planner.semaCtx.Annotations
 			return &evalCtx
 		}
+	}
+
+	if len(planner.curPlan.subqueryPlans) != 0 {
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute,
 		) {
-			return recv.commErr
+			return recv.bytesRead, recv.rowsRead, recv.commErr
 		}
 	}
 	recv.discardRows = planner.discardRows
@@ -895,7 +901,17 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// the planner whether or not to plan remote table readers.
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
 		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv)
-	return recv.commErr
+	if recv.commErr != nil {
+		return recv.bytesRead, recv.rowsRead, recv.commErr
+	}
+
+	if len(planner.curPlan.postqueryPlans) != 0 {
+		ex.server.cfg.DistSQLPlanner.PlanAndRunPostqueries(
+			ctx, planner, evalCtxFactory, planner.curPlan.postqueryPlans, recv, distribute,
+		)
+	}
+
+	return recv.bytesRead, recv.rowsRead, recv.commErr
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and

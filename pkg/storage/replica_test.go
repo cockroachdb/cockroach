@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage
 
@@ -347,6 +345,18 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	newDesc.InternalReplicas = append(newDesc.InternalReplicas, secondReplica)
 	newDesc.NextReplicaID = 3
 
+	dbDescKV, err := tc.store.DB().Get(ctx, keys.RangeDescriptorKey(oldDesc.StartKey))
+	if err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+	var dbDesc roachpb.RangeDescriptor
+	if err := dbDescKV.Value.GetProto(&dbDesc); err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+	if !oldDesc.Equal(&dbDesc) {
+		return roachpb.ReplicaDescriptor{}, errors.Errorf(`descs didn't match: %v vs %v`, oldDesc, dbDesc)
+	}
+
 	// Update the "on-disk" replica state, so that it doesn't diverge from what we
 	// have in memory. At the time of this writing, this is not actually required
 	// by the tests using this functionality, but it seems sane to do.
@@ -354,7 +364,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		Header: roachpb.Header{Timestamp: tc.Clock().Now()},
 	}
 	descKey := keys.RangeDescriptorKey(oldDesc.StartKey)
-	if err := updateRangeDescriptor(&ba, descKey, &oldDesc, &newDesc); err != nil {
+	if err := updateRangeDescriptor(&ba, descKey, dbDescKV.Value, &newDesc); err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
 	if err := tc.store.DB().Run(ctx, &ba); err != nil {
@@ -2807,7 +2817,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	// CPut args which expect value "1" to write "0".
 	key := []byte("a")
 	cpArgs1 := cPutArgs(key, []byte("1"), []byte("0"))
-	_, pErr := tc.SendWrapped(&cpArgs1)
+	_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: t2}, &cpArgs1)
 	if cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 		t.Errorf("expected ConditionFailedError; got %v", pErr)
 	} else if cfErr.ActualValue != nil {
@@ -2895,7 +2905,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 
 	// InitPut args to write "1" to same key. Should fail.
 	ipArgs2 := iPutArgs(key, []byte("1"))
-	_, pErr = tc.SendWrapped(&ipArgs2)
+	_, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: t2}, &ipArgs2)
 	if cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 		t.Errorf("expected ConditionFailedError; got %v", pErr)
 	} else if valueBytes, err := cfErr.ActualValue.GetBytes(); err != nil {

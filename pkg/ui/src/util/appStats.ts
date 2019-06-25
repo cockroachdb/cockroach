@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // This file significantly duplicates the algorithms available in
 // pkg/roachpb/app_stats.go, in particular the functions on NumericStats
@@ -94,6 +92,7 @@ export interface ExecutionStatistics {
   app: string;
   distSQL: boolean;
   opt: boolean;
+  implicit_txn: boolean;
   failed: boolean;
   node_id: number;
   stats: StatementStatistics;
@@ -101,13 +100,14 @@ export interface ExecutionStatistics {
 
 export function flattenStatementStats(statementStats: CollectedStatementStatistics[]): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
-    statement: stmt.key.key_data.query,
-    app:       stmt.key.key_data.app,
-    distSQL:   stmt.key.key_data.distSQL,
-    opt:       stmt.key.key_data.opt,
-    failed:    stmt.key.key_data.failed,
-    node_id:   stmt.key.node_id,
-    stats:     stmt.stats,
+    statement:    stmt.key.key_data.query,
+    app:          stmt.key.key_data.app,
+    distSQL:      stmt.key.key_data.distSQL,
+    opt:          stmt.key.key_data.opt,
+    implicit_txn: stmt.key.key_data.implicit_txn,
+    failed:       stmt.key.key_data.failed,
+    node_id:      stmt.key.node_id,
+    stats:        stmt.stats,
   }));
 }
 

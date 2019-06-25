@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -246,8 +244,9 @@ func emitHelper(
 			panic("both row data and metadata in the same emitHelper call")
 		}
 		// Bypass EmitRow() and send directly to output.output.
+		foundErr := meta.Err != nil
 		consumerStatus = output.output.Push(nil /* row */, meta)
-		if meta.Err != nil {
+		if foundErr {
 			consumerStatus = ConsumerClosed
 		}
 	} else {
@@ -858,12 +857,10 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta distsqlpb.ProducerMetadata) {
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the
-// annotated context that's also stored in pb.ctx.
+// annotated context that's also stored in pb.Ctx.
 func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {
-	pb.Ctx = ctx
-
-	pb.origCtx = pb.Ctx
-	pb.Ctx, pb.span = processorSpan(pb.Ctx, name)
+	pb.origCtx = ctx
+	pb.Ctx, pb.span = processorSpan(ctx, name)
 	if pb.span != nil {
 		pb.span.SetTag(tracing.TagPrefix+"processorid", pb.processorID)
 	}
@@ -929,6 +926,22 @@ func getInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
 		isc.InputStats.StallTime = 0
 	}
 	return isc.InputStats, true
+}
+
+func getFetcherInputStats(flowCtx *FlowCtx, f rowFetcher) (InputStats, bool) {
+	rfsc, ok := f.(*rowFetcherStatCollector)
+	if !ok {
+		return InputStats{}, false
+	}
+	is, ok := getInputStats(flowCtx, rfsc.inputStatCollector)
+	if !ok {
+		return InputStats{}, false
+	}
+	// Add row fetcher start scan stall time to Next() stall time.
+	if !flowCtx.testingKnobs.DeterministicStats {
+		is.StallTime += rfsc.startScanStallTime
+	}
+	return is, true
 }
 
 // rowSourceBase provides common functionality for RowSource implementations
@@ -1019,6 +1032,12 @@ func newProcessor(
 			return nil, err
 		}
 		return NewDistinct(flowCtx, processorID, core.Distinct, inputs[0], post, outputs[0])
+	}
+	if core.Ordinality != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newOrdinalityProcessor(flowCtx, processorID, core.Ordinality, inputs[0], post, outputs[0])
 	}
 	if core.Aggregator != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {

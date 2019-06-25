@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package pgwire
 
@@ -176,21 +174,8 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DArray:
-		switch d.ResolvedType().Oid() {
-		case oid.T_int2vector, oid.T_oidvector:
-			// vectors are serialized as a string of space-separated values.
-			sep := ""
-			// TODO(justin): add a test for nested arrays when #32552 is
-			// addressed.
-			for _, d := range v.Array {
-				b.textFormatter.WriteString(sep)
-				b.textFormatter.FormatNode(d)
-				sep = " "
-			}
-		default:
-			// Uses the default pgwire text format for arrays.
-			b.textFormatter.FormatNode(v)
-		}
+		// Arrays have custom formatting depending on their OID.
+		b.textFormatter.FormatNode(d)
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DOid:

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
@@ -563,6 +561,12 @@ func (h *hasher) HashZipExpr(val ZipExpr) {
 	}
 }
 
+func (h *hasher) HashFKChecksExpr(val FKChecksExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].Check)
+	}
+}
+
 func (h *hasher) HashPresentation(val physical.Presentation) {
 	for i := range val {
 		col := &val[i]
@@ -862,6 +866,18 @@ func (h *hasher) IsZipExprEqual(l, r ZipExpr) bool {
 	}
 	for i := range l {
 		if !l[i].Cols.Equals(r[i].Cols) || l[i].Func != r[i].Func {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsFKChecksExprEqual(l, r FKChecksExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Check != r[i].Check {
 			return false
 		}
 	}

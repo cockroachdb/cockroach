@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package pgtest
 
@@ -16,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -40,7 +39,10 @@ func Walk(t *testing.T, path, addr, user string) {
 // "until": Receives all messages from a server until messages of the given
 // types have been seen. Converts them to JSON one per line as output. Takes
 // a newline-delimited list of pgproto3.BackendMessage types. An ignore option
-// can be used to specify types to ignore.
+// can be used to specify types to ignore. ErrorResponse messages are
+// immediately returned as errors unless they are the expected type, in which
+// case they will marshal to an empty ErrorResponse message since our error
+// detail specifics differ from Postgres.
 //
 // "receive": Like "until", but only output matching messages instead of all
 // messages.
@@ -113,7 +115,15 @@ func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 		if ignore[fmt.Sprintf("%T", msg)] {
 			continue
 		}
-		if err := enc.Encode(msg); err != nil {
+		if reflect.TypeOf(msg) == typErrorResponse {
+			if err := enc.Encode(struct {
+				Type string
+			}{
+				Type: "ErrorResponse",
+			}); err != nil {
+				panic(err)
+			}
+		} else if err := enc.Encode(msg); err != nil {
 			panic(err)
 		}
 	}
@@ -128,6 +138,8 @@ func toMessage(typ string) interface{} {
 		return &pgproto3.CommandComplete{}
 	case "DataRow":
 		return &pgproto3.DataRow{}
+	case "ErrorResponse":
+		return &pgproto3.ErrorResponse{}
 	case "Execute":
 		return &pgproto3.Execute{}
 	case "Parse":

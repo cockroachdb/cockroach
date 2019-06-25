@@ -62,3 +62,67 @@ TABLE child2
  │    ├── p int
  │    └── c int not null
  └── CONSTRAINT fk_p_ref_parent2 FOREIGN KEY t.public.child2 (p) REFERENCES t.public.parent2 (p)
+
+exec-ddl
+CREATE TABLE parent_multicol (p INT, q INT, r INT, PRIMARY KEY (p,q,r))
+----
+
+exec-ddl
+CREATE TABLE child_multicol (
+  p INT,
+  q INT,
+  r INT,
+  PRIMARY KEY (p,q,r),
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent_multicol(p,q,r)
+)
+----
+
+exec-ddl
+CREATE TABLE child_multicol_full (
+  p INT,
+  q INT,
+  r INT,
+  PRIMARY KEY (p,q,r),
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES parent_multicol(p,q,r) MATCH FULL
+)
+----
+
+exec-ddl
+SHOW CREATE parent_multicol
+----
+TABLE parent_multicol
+ ├── p int not null
+ ├── q int not null
+ ├── r int not null
+ ├── INDEX primary
+ │    ├── p int not null
+ │    ├── q int not null
+ │    └── r int not null
+ ├── REFERENCED BY CONSTRAINT fk FOREIGN KEY t.public.child_multicol (p, q, r) REFERENCES t.public.parent_multicol (p, q, r)
+ └── REFERENCED BY CONSTRAINT fk FOREIGN KEY t.public.child_multicol_full (p, q, r) REFERENCES t.public.parent_multicol (p, q, r) MATCH FULL
+
+exec-ddl
+SHOW CREATE child_multicol
+----
+TABLE child_multicol
+ ├── p int not null
+ ├── q int not null
+ ├── r int not null
+ ├── INDEX primary
+ │    ├── p int not null
+ │    ├── q int not null
+ │    └── r int not null
+ └── CONSTRAINT fk FOREIGN KEY t.public.child_multicol (p, q, r) REFERENCES t.public.parent_multicol (p, q, r)
+
+exec-ddl
+SHOW CREATE child_multicol_full
+----
+TABLE child_multicol_full
+ ├── p int not null
+ ├── q int not null
+ ├── r int not null
+ ├── INDEX primary
+ │    ├── p int not null
+ │    ├── q int not null
+ │    └── r int not null
+ └── CONSTRAINT fk FOREIGN KEY t.public.child_multicol_full (p, q, r) REFERENCES t.public.parent_multicol (p, q, r) MATCH FULL

@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -514,9 +512,10 @@ type PlanningCtx struct {
 	isLocal bool
 	planner *planner
 	// ignoreClose, when set to true, will prevent the closing of the planner's
-	// current plan. The top-level query needs to close it, but everything else
-	// (like subqueries or EXPLAIN ANALYZE) should set this to true to avoid
-	// double closes of the planNode tree.
+	// current plan. Only the top-level query needs to close it, but everything
+	// else (like subqueries or EXPLAIN ANALYZE) should set this to true to avoid
+	// double closes of the planNode tree. Postqueries also need to set it to
+	// true, and they are responsible for closing their own plan.
 	ignoreClose bool
 	stmtType    tree.StatementType
 	// planDepth is set to the current depth of the planNode tree. It's used to
@@ -2361,6 +2360,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *distinctNode:
 		plan, err = dsp.createPlanForDistinct(planCtx, n)
 
+	case *ordinalityNode:
+		plan, err = dsp.createPlanForOrdinality(planCtx, n)
+
 	case *unionNode:
 		plan, err = dsp.createPlanForSetOp(planCtx, n)
 
@@ -2710,6 +2712,28 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 
 	// TODO(arjun): We could distribute this final stage by hash.
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlpb.PostProcessSpec{}, plan.ResultTypes)
+
+	return plan, nil
+}
+
+func (dsp *DistSQLPlanner) createPlanForOrdinality(
+	planCtx *PlanningCtx, n *ordinalityNode,
+) (PhysicalPlan, error) {
+	plan, err := dsp.createPlanForNode(planCtx, n.source)
+	if err != nil {
+		return PhysicalPlan{}, err
+	}
+
+	ordinalitySpec := distsqlpb.ProcessorCoreUnion{
+		Ordinality: &distsqlpb.OrdinalitySpec{},
+	}
+
+	plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, len(plan.ResultTypes))
+	plan.ResultTypes = append(plan.ResultTypes, *types.Int)
+
+	// WITH ORDINALITY never gets distributed so that the gateway node can
+	// always number each row in order.
+	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, ordinalitySpec, distsqlpb.PostProcessSpec{}, plan.ResultTypes)
 
 	return plan, nil
 }

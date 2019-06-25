@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 import d3 from "d3";
 import _ from "lodash";
@@ -23,7 +21,7 @@ import { refreshStatements } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { NumericStat, stdDev, combineStatementStats, flattenStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
-import { statementAttr, appAttr } from "src/util/constants";
+import { statementAttr, appAttr, implicitTxnAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
 import { intersperse } from "src/util/intersperse";
@@ -36,6 +34,8 @@ import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import { countBreakdown, rowsBreakdown, latencyBreakdown, approximify } from "./barCharts";
 import { AggregateStatistics, StatementsSortedTable, makeNodesColumns } from "./statementsTable";
+import { Params } from "react-router/lib/Router";
+import { ListIterateeBoolean } from "lodash";
 
 interface Fraction {
   numerator: number;
@@ -47,6 +47,7 @@ interface SingleStatementStatistics {
   app: string[];
   distSQL: Fraction;
   opt: Fraction;
+  implicit_txn: Fraction;
   failed: Fraction;
   node_id: number[];
   stats: StatementStatistics;
@@ -148,7 +149,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
     super(props);
     this.state = {
       sortSetting: {
-        sortKey: 1,
+        sortKey: 5,  // Latency
         ascending: false,
       },
     };
@@ -193,7 +194,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
       return null;
     }
 
-    const { stats, statement, app, distSQL, opt, failed } = this.props.statement;
+    const { stats, statement, app, distSQL, opt, failed, implicit_txn } = this.props.statement;
 
     if (!stats) {
       const sourceApp = this.props.params[appAttr];
@@ -345,6 +346,10 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
                 </td>
               </tr>
               <tr className="numeric-stats-table__row--body">
+                <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Transaction Type</th>
+                <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderTransactionType(implicit_txn) }</td>
+              </tr>
+              <tr className="numeric-stats-table__row--body">
                 <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>Distributed execution?</th>
                 <td className="numeric-stats-table__cell" style={{ textAlign: "right" }}>{ renderBools(distSQL) }</td>
               </tr>
@@ -364,6 +369,20 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
   }
 }
 
+function renderTransactionType(implicitTxn: Fraction) {
+  if (Number.isNaN(implicitTxn.numerator)) {
+    return "(unknown)";
+  }
+  if (implicitTxn.numerator === 0) {
+    return "Explicit";
+  }
+  if (implicitTxn.numerator === implicitTxn.denominator) {
+    return "Implicit";
+  }
+  const fraction = approximify(implicitTxn.numerator) + " of " + approximify(implicitTxn.denominator);
+  return `${fraction} were Implicit Txns`;
+}
+
 function renderBools(fraction: Fraction) {
   if (Number.isNaN(fraction.numerator)) {
     return "(unknown)";
@@ -379,18 +398,39 @@ function renderBools(fraction: Fraction) {
 
 type StatementsState = Pick<AdminUIState, "cachedData", "statements">;
 
+interface StatementDetailsData {
+  nodeId: number;
+  implicitTxn: boolean;
+  stats: StatementStatistics[];
+}
+
+function keyByNodeAndImplicitTxn(stmt: ExecutionStatistics): string {
+  return stmt.node_id.toString() + stmt.implicit_txn;
+}
+
 function coalesceNodeStats(stats: ExecutionStatistics[]): AggregateStatistics[] {
-  const byNode: { [nodeId: string]: StatementStatistics[] } = {};
+  const byNodeAndImplicitTxn: { [nodeId: string]: StatementDetailsData } = {};
 
   stats.forEach(stmt => {
-    const nodeStats = (byNode[stmt.node_id] = byNode[stmt.node_id] || []);
-    nodeStats.push(stmt.stats);
+    const key = keyByNodeAndImplicitTxn(stmt);
+    if (!(key in byNodeAndImplicitTxn)) {
+      byNodeAndImplicitTxn[key] = {
+        nodeId: stmt.node_id,
+        implicitTxn: stmt.implicit_txn,
+        stats: [],
+      };
+    }
+    byNodeAndImplicitTxn[key].stats.push(stmt.stats);
   });
 
-  return Object.keys(byNode).map(nodeId => ({
-      label: nodeId,
-      stats: combineStatementStats(byNode[nodeId]),
-  }));
+  return Object.keys(byNodeAndImplicitTxn).map(key => {
+    const stmt = byNodeAndImplicitTxn[key];
+    return {
+      label: stmt.nodeId.toString(),
+      implicitTxn: stmt.implicitTxn,
+      stats: combineStatementStats(stmt.stats),
+    };
+  });
 }
 
 function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: ExecutionStatistics) => boolean): Fraction {
@@ -408,6 +448,21 @@ function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: Execut
   return { numerator, denominator };
 }
 
+function filterByRouterParamsPredicate(params: Params): ListIterateeBoolean<ExecutionStatistics> {
+  const statement = params[statementAttr];
+  const implicitTxn = (params[implicitTxnAttr] === "true");
+  let app = params[appAttr];
+
+  if (!app) {
+    return (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.implicit_txn === implicitTxn;
+  }
+
+  if (app === "(unset)") {
+    app = "";
+  }
+  return (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.implicit_txn === implicitTxn && stmt.app === app;
+}
+
 export const selectStatement = createSelector(
   (state: StatementsState) => state.cachedData.statements.data && state.cachedData.statements.data.statements,
   (_state: StatementsState, props: { params: { [key: string]: string } }) => props,
@@ -416,20 +471,10 @@ export const selectStatement = createSelector(
       return null;
     }
 
-    const statement = props.params[statementAttr];
-    let app = props.params[appAttr];
-    let predicate = (stmt: ExecutionStatistics) => stmt.statement === statement;
-
-    if (app) {
-        if (app === "(unset)") {
-            app = "";
-        }
-        predicate = (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.app === app;
-    }
-
     const flattened = flattenStatementStats(statements);
-    const results = _.filter(flattened, predicate);
+    const results = _.filter(flattened, filterByRouterParamsPredicate(props.params));
 
+    const statement = props.params[statementAttr];
     return {
       statement,
       stats: combineStatementStats(results.map(s => s.stats)),
@@ -437,6 +482,7 @@ export const selectStatement = createSelector(
       app: _.uniq(results.map(s => s.app)),
       distSQL: fractionMatching(results, s => s.distSQL),
       opt: fractionMatching(results, s => s.opt),
+      implicit_txn: fractionMatching(results, s => s.implicit_txn),
       failed: fractionMatching(results, s => s.failed),
       node_id: _.uniq(results.map(s => s.node_id)),
     };

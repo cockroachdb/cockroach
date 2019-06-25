@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sessiondata
 
@@ -40,9 +38,11 @@ type SessionData struct {
 	// ForceSplitAt indicates whether checks to prevent incorrect usage of ALTER
 	// TABLE ... SPLIT AT should be skipped.
 	ForceSplitAt bool
-	// OptimizerMode indicates whether to use the experimental optimizer for
-	// query planning.
+	// OptimizerMode indicates whether to use the optimizer for query planning.
 	OptimizerMode OptimizerMode
+	// OptimizerFKs indicates whether we should use the new paths to plan foreign
+	// key checks in the optimizer.
+	OptimizerFKs bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of namespaces to search builtins in.

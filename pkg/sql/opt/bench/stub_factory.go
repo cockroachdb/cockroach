@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package bench
 
@@ -197,7 +195,9 @@ func (f *stubFactory) RenameColumns(input exec.Node, colNames []string) (exec.No
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructPlan(root exec.Node, subqueries []exec.Subquery) (exec.Plan, error) {
+func (f *stubFactory) ConstructPlan(
+	root exec.Node, subqueries []exec.Subquery, postqueries []exec.Node,
+) (exec.Plan, error) {
 	return struct{}{}, nil
 }
 
@@ -223,6 +223,7 @@ func (f *stubFactory) ConstructInsert(
 	insertCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	rowsNeeded bool,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -276,5 +277,9 @@ func (f *stubFactory) ConstructSequenceSelect(seq cat.Sequence) (exec.Node, erro
 func (f *stubFactory) ConstructSaveTable(
 	input exec.Node, table *cat.DataSourceName, colNames []string,
 ) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructErrorIfRows(input exec.Node) (exec.Node, error) {
 	return struct{}{}, nil
 }

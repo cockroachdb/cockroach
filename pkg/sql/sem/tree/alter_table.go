@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -59,6 +57,7 @@ func (*AlterTableDropColumn) alterTableCmd()         {}
 func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
 func (*AlterTableDropStored) alterTableCmd()         {}
+func (*AlterTableSetNotNull) alterTableCmd()         {}
 func (*AlterTableRenameColumn) alterTableCmd()       {}
 func (*AlterTableRenameConstraint) alterTableCmd()   {}
 func (*AlterTableRenameTable) alterTableCmd()        {}
@@ -75,6 +74,7 @@ var _ AlterTableCmd = &AlterTableDropColumn{}
 var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
 var _ AlterTableCmd = &AlterTableDropStored{}
+var _ AlterTableCmd = &AlterTableSetNotNull{}
 var _ AlterTableCmd = &AlterTableRenameColumn{}
 var _ AlterTableCmd = &AlterTableRenameConstraint{}
 var _ AlterTableCmd = &AlterTableRenameTable{}
@@ -315,6 +315,24 @@ func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
 		ctx.WriteString(" SET DEFAULT ")
 		ctx.FormatNode(node.Default)
 	}
+}
+
+// AlterTableSetNotNull represents an ALTER COLUMN SET NOT NULL
+// command.
+type AlterTableSetNotNull struct {
+	Column Name
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableSetNotNull) GetColumn() Name {
+	return node.Column
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetNotNull) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	ctx.WriteString(" SET NOT NULL")
 }
 
 // AlterTableDropNotNull represents an ALTER COLUMN DROP NOT NULL

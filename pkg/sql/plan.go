@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -234,7 +232,6 @@ var _ planNode = &zeroNode{}
 var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &alterUserSetPasswordNode{}
-var _ planNodeFastPath = &createTableNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}
@@ -298,6 +295,10 @@ type planTop struct {
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 
+	// postqueryPlans contains all the plans for subqueries that are to be
+	// executed after the main query (for example, foreign key checks).
+	postqueryPlans []postquery
+
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
@@ -321,7 +322,13 @@ type planTop struct {
 	avoidBuffering bool
 }
 
-// makePlan implements the Planner interface. It populates the
+// postquery is a query tree that is executed after the main one. It can only
+// return an error (for example, foreign key violation).
+type postquery struct {
+	plan planNode
+}
+
+// makePlan implements the planMaker interface. It populates the
 // planner's curPlan field.
 //
 // The caller is responsible for populating the placeholders
@@ -887,6 +894,10 @@ const (
 
 	// planFlagExecDone marks that execution has been completed.
 	planFlagExecDone
+
+	// planFlagImplicitTxn marks that the plan was run inside of an implicit
+	// transaction.
+	planFlagImplicitTxn
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {

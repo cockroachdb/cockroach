@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package coldata
 
@@ -18,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMemColumnSlice(t *testing.T) {
@@ -129,5 +128,126 @@ func TestNullRanges(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestAppend(t *testing.T) {
+	const typ = types.Int64
+
+	src := NewMemColumn(typ, BatchSize)
+	sel := make([]uint16, len(src.Int64()))
+	for i := range sel {
+		sel[i] = uint16(i)
+	}
+
+	testCases := []struct {
+		name           string
+		args           AppendArgs
+		expectedLength int
+	}{
+		{
+			name: "AppendSimple",
+			args: AppendArgs{
+				// DestIdx must be specified to append to the end of dest.
+				DestIdx: BatchSize,
+			},
+			expectedLength: BatchSize * 2,
+		},
+		{
+			name: "AppendOverwriteSimple",
+			args: AppendArgs{
+				// DestIdx 0, the default value, will start appending at index 0.
+				DestIdx: 0,
+			},
+			expectedLength: BatchSize,
+		},
+		{
+			name: "AppendOverwriteSlice",
+			args: AppendArgs{
+				// Start appending at index 10.
+				DestIdx: 10,
+			},
+			expectedLength: BatchSize + 10,
+		},
+		{
+			name: "AppendSlice",
+			args: AppendArgs{
+				DestIdx:     20,
+				SrcStartIdx: 10,
+				SrcEndIdx:   20,
+			},
+			expectedLength: 30,
+		},
+		{
+			name: "AppendWithSel",
+			args: AppendArgs{
+				DestIdx:     5,
+				SrcStartIdx: 10,
+				SrcEndIdx:   20,
+				Sel:         sel,
+			},
+			expectedLength: 15,
+		},
+		{
+			name: "AppendWithHalfSel",
+			args: AppendArgs{
+				DestIdx:   5,
+				Sel:       sel[:len(sel)/2],
+				SrcEndIdx: uint16(len(sel) / 2),
+			},
+			expectedLength: 5 + (BatchSize / 2),
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.args.Src = src
+		tc.args.ColType = typ
+		if tc.args.SrcEndIdx == 0 {
+			// SrcEndIdx is always required.
+			tc.args.SrcEndIdx = BatchSize
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			dest := NewMemColumn(typ, BatchSize)
+			dest.Append(tc.args)
+			require.Equal(t, tc.expectedLength, len(dest.Int64()))
+		})
+	}
+}
+
+func BenchmarkAppend(b *testing.B) {
+	const typ = types.Int64
+
+	src := NewMemColumn(typ, BatchSize)
+	sel := make([]uint16, len(src.Int64()))
+
+	benchCases := []struct {
+		name string
+		args AppendArgs
+	}{
+		{
+			name: "AppendSimple",
+			args: AppendArgs{},
+		},
+		{
+			name: "AppendWithSel",
+			args: AppendArgs{
+				Sel: sel,
+			},
+		},
+	}
+
+	for _, bc := range benchCases {
+		bc.args.Src = src
+		bc.args.ColType = typ
+		bc.args.SrcEndIdx = BatchSize
+		dest := NewMemColumn(typ, BatchSize)
+		b.Run(bc.name, func(b *testing.B) {
+			b.SetBytes(8 * BatchSize)
+			for i := 0; i < b.N; i++ {
+				dest.Append(bc.args)
+				// "Reset" dest for another round.
+				dest.SetCol(dest.Int64()[:BatchSize])
+			}
+		})
 	}
 }

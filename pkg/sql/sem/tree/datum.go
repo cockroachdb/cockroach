@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -2993,6 +2991,9 @@ type DArray struct {
 	// HasNonNulls is set to true if any of the datums within the are non-null.
 	// This is used in expression serialization (FmtParsable).
 	HasNonNulls bool
+
+	// customOid, if non-0, is the oid of this array datum.
+	customOid oid.Oid
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
@@ -3026,6 +3027,12 @@ func MustBeDArray(e Expr) *DArray {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() *types.T {
+	switch d.customOid {
+	case oid.T_int2vector:
+		return types.Int2Vector
+	case oid.T_oidvector:
+		return types.OidVector
+	}
 	return types.MakeArray(d.ParamTyp)
 }
 
@@ -3514,13 +3521,19 @@ func NewDName(d string) Datum {
 // NewDIntVectorFromDArray is a helper routine to create a *DIntVector
 // (implemented as a *DOidWrapper) initialized from an existing *DArray.
 func NewDIntVectorFromDArray(d *DArray) Datum {
-	return wrapWithOid(d, oid.T_int2vector)
+	ret := new(DArray)
+	*ret = *d
+	ret.customOid = oid.T_int2vector
+	return ret
 }
 
 // NewDOidVectorFromDArray is a helper routine to create a *DOidVector
 // (implemented as a *DOidWrapper) initialized from an existing *DArray.
 func NewDOidVectorFromDArray(d *DArray) Datum {
-	return wrapWithOid(d, oid.T_oidvector)
+	ret := new(DArray)
+	*ret = *d
+	ret.customOid = oid.T_oidvector
+	return ret
 }
 
 // DatumTypeSize returns a lower bound on the total size of a Datum
