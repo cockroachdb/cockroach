@@ -176,6 +176,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"RelProps":       {fullName: "props.Relational"},
 		"RelPropsPtr":    {fullName: "*props.Relational", isPointer: true, usePointerIntern: true},
 		"ScalarProps":    {fullName: "props.Scalar"},
+		"OpaqueMetadata": {fullName: "opt.OpaqueMetadata", isPointer: true},
 	}
 
 	// Add types of generated op and private structs.
@@ -212,8 +213,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 
 		if define.Tags.Contains("List") {
 			listTyp := md.typeOf(define)
-			itemTyp := md.lookupType(fmt.Sprintf("%sItem", define.Name))
-			if itemTyp != nil {
+			if itemTyp, ok := md.types[fmt.Sprintf("%sItem", define.Name)]; ok {
 				listTyp.listItemType = itemTyp
 			} else {
 				listTyp.listItemType = md.lookupType("ScalarExpr")
@@ -252,7 +252,11 @@ func (m *metadata) typeOf(e lang.Expr) *typeDef {
 // lookupType returns the type definition with the given friendly name (e.g.
 // RelExpr, DatumType, ScanExpr, etc.).
 func (m *metadata) lookupType(friendlyName string) *typeDef {
-	return m.types[friendlyName]
+	res, ok := m.types[friendlyName]
+	if !ok {
+		panic(fmt.Sprintf("%s is not registered as a valid type in metadata.go", friendlyName))
+	}
+	return res
 }
 
 // fieldName maps the Optgen field name to the corresponding Go field name. In
