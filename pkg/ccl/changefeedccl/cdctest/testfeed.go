@@ -622,13 +622,11 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
 		return nil
 	}
 
-	var rows []cloudFeedEntry
 	if strings.Compare(c.resolved, path) >= 0 {
 		// Already output this in a previous walkDir.
 		return nil
 	}
 	if strings.HasSuffix(path, `RESOLVED`) {
-		c.rows = append(c.rows, rows...)
 		resolvedPayload, err := ioutil.ReadFile(path)
 		if err != nil {
 			return err
