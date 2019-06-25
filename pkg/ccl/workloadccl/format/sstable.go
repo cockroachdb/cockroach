@@ -104,7 +104,9 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 
 type addSSTableSender [][]byte
 
-func (s *addSSTableSender) AddSSTable(_ context.Context, _, _ interface{}, data []byte) error {
+func (s *addSSTableSender) AddSSTable(
+	_ context.Context, _, _ interface{}, data []byte, _ bool,
+) error {
 	*s = append(*s, data)
 	return nil
 }
