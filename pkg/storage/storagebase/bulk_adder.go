@@ -40,6 +40,9 @@ type BulkAdder interface {
 	// sorted batch. Once a batch is flushed – explicitly or automatically – local
 	// duplicate detection does not apply.
 	SkipLocalDuplicates(bool)
+	// SetDisallowShadowing sets the flag which controls whether shadowing of
+	// existing keys is permitted in the AddSSTable method.
+	SetDisallowShadowing(bool)
 }
 
 // DuplicateKeyError represents a failed attempt to ingest the same key twice
