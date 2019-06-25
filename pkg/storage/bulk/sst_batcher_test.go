@@ -210,7 +210,9 @@ func runTestImport(t *testing.T, batchSize int64) {
 
 type mockSender func(span roachpb.Span) error
 
-func (m mockSender) AddSSTable(ctx context.Context, begin, end interface{}, data []byte) error {
+func (m mockSender) AddSSTable(
+	ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool,
+) error {
 	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
 }
 
@@ -286,7 +288,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 	const kb = 1 << 10
 
 	t.Logf("Adding %dkb sst spanning %d splits", len(sst)/kb, len(splits))
-	if err := bulk.AddSSTable(context.TODO(), mock, key(0), key(numKeys), sst); err != nil {
+	if err := bulk.AddSSTable(context.TODO(), mock, key(0), key(numKeys), sst, false /* disallowShadowing */); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("Adding took %d total attempts", totalAdditionAttempts)

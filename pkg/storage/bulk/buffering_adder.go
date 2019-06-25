@@ -142,3 +142,9 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 func (b *BufferingAdder) GetSummary() roachpb.BulkOpSummary {
 	return b.sink.GetSummary()
 }
+
+// SetDisallowShadowing controls whether or not shadowing of existing keys is
+// permitted.
+func (b *BufferingAdder) SetDisallowShadowing(disallowShadowing bool) {
+	b.sink.disallowShadowing = disallowShadowing
+}

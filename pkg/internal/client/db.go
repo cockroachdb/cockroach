@@ -566,9 +566,11 @@ func (db *DB) WriteBatch(ctx context.Context, begin, end interface{}, data []byt
 
 // AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
 // data in the range is cleared.
-func (db *DB) AddSSTable(ctx context.Context, begin, end interface{}, data []byte) error {
+func (db *DB) AddSSTable(
+	ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool,
+) error {
 	b := &Batch{}
-	b.addSSTable(begin, end, data)
+	b.addSSTable(begin, end, data, disallowShadowing)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
