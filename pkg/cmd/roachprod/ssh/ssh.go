@@ -174,15 +174,6 @@ func NewSSHSession(user, host string) (*ssh.Session, error) {
 	return client.NewSession()
 }
 
-// IsSigKill TODO(peter): document
-func IsSigKill(err error) bool {
-	switch t := err.(type) {
-	case *ssh.ExitError:
-		return t.Signal() == string(ssh.SIGKILL)
-	}
-	return false
-}
-
 // ProgressWriter TODO(peter): document
 type ProgressWriter struct {
 	Writer   io.Writer

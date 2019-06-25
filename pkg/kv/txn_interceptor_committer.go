@@ -178,14 +178,6 @@ func (tc *txnCommitter) SendLocked(
 		if txn := pErr.GetTxn(); txn != nil && txn.Status == roachpb.STAGING {
 			pErr.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
 		}
-		// Same deal with MixedSuccessErrors.
-		// TODO(nvanbenschoten): We can remove this once MixedSuccessErrors
-		// are removed.
-		if aPSErr, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); ok {
-			if txn := aPSErr.Wrapped.GetTxn(); txn != nil && txn.Status == roachpb.STAGING {
-				aPSErr.Wrapped.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
-			}
-		}
 		return nil, pErr
 	}
 

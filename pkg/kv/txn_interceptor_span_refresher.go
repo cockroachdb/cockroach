@@ -161,9 +161,10 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	// splits up batches to send to multiple ranges in parallel, and
 	// then combines the results, partial success makes it very
 	// difficult to determine what can be retried.
-	if aPSErr, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); ok {
-		log.VEventf(ctx, 2, "got partial success; cannot retry %s (pErr=%s)", ba, aPSErr.Wrapped)
-		return nil, aPSErr.Wrapped, hlc.Timestamp{}
+	if mse, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); ok {
+		pErr.SetDetail(mse.GetWrapped())
+		log.VEventf(ctx, 2, "got partial success; cannot retry %s (pErr=%s)", ba, pErr)
+		return nil, pErr, hlc.Timestamp{}
 	}
 
 	// Check for an error which can be retried after updating spans.

@@ -6439,11 +6439,12 @@ void IntegerOverflowError::InternalSwap(IntegerOverflowError* other) {
 // ===================================================================
 
 void MixedSuccessError::InitAsDefaultInstance() {
-  ::cockroach::roachpb::_MixedSuccessError_default_instance_._instance.get_mutable()->wrapped_ = const_cast< ::cockroach::roachpb::Error*>(
-      ::cockroach::roachpb::Error::internal_default_instance());
+  ::cockroach::roachpb::_MixedSuccessError_default_instance_._instance.get_mutable()->wrapped_ = const_cast< ::cockroach::roachpb::ErrorDetail*>(
+      ::cockroach::roachpb::ErrorDetail::internal_default_instance());
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MixedSuccessError::kWrappedFieldNumber;
+const int MixedSuccessError::kWrappedMessageFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MixedSuccessError::MixedSuccessError()
@@ -6458,8 +6459,12 @@ MixedSuccessError::MixedSuccessError(const MixedSuccessError& from)
       _internal_metadata_(NULL),
       _has_bits_(from._has_bits_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  wrapped_message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.has_wrapped_message()) {
+    wrapped_message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.wrapped_message_);
+  }
   if (from.has_wrapped()) {
-    wrapped_ = new ::cockroach::roachpb::Error(*from.wrapped_);
+    wrapped_ = new ::cockroach::roachpb::ErrorDetail(*from.wrapped_);
   } else {
     wrapped_ = NULL;
   }
@@ -6467,6 +6472,7 @@ MixedSuccessError::MixedSuccessError(const MixedSuccessError& from)
 }
 
 void MixedSuccessError::SharedCtor() {
+  wrapped_message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   wrapped_ = NULL;
 }
 
@@ -6476,6 +6482,7 @@ MixedSuccessError::~MixedSuccessError() {
 }
 
 void MixedSuccessError::SharedDtor() {
+  wrapped_message_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete wrapped_;
 }
 
@@ -6495,9 +6502,14 @@ void MixedSuccessError::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 0x00000001u) {
-    GOOGLE_DCHECK(wrapped_ != NULL);
-    wrapped_->Clear();
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
+      wrapped_message_.ClearNonDefaultToEmptyNoArena();
+    }
+    if (cached_has_bits & 0x00000002u) {
+      GOOGLE_DCHECK(wrapped_ != NULL);
+      wrapped_->Clear();
+    }
   }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
@@ -6519,12 +6531,22 @@ bool MixedSuccessError::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.roachpb.Error wrapped = 1;
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_wrapped()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_wrapped_message()));
         } else {
           goto handle_unusual;
         }
@@ -6558,10 +6580,14 @@ void MixedSuccessError::SerializeWithCachedSizes(
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  // optional .cockroach.roachpb.Error wrapped = 1;
-  if (cached_has_bits & 0x00000001u) {
+  if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       1, this->_internal_wrapped(), output);
+  }
+
+  if (cached_has_bits & 0x00000001u) {
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      2, this->wrapped_message(), output);
   }
 
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
@@ -6575,13 +6601,20 @@ size_t MixedSuccessError::ByteSizeLong() const {
 
   total_size += _internal_metadata_.unknown_fields().size();
 
-  // optional .cockroach.roachpb.Error wrapped = 1;
-  if (has_wrapped()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *wrapped_);
-  }
+  if (_has_bits_[0 / 32] & 3u) {
+    if (has_wrapped_message()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->wrapped_message());
+    }
 
+    if (has_wrapped()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *wrapped_);
+    }
+
+  }
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -6599,8 +6632,15 @@ void MixedSuccessError::MergeFrom(const MixedSuccessError& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  if (from.has_wrapped()) {
-    mutable_wrapped()->::cockroach::roachpb::Error::MergeFrom(from.wrapped());
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
+      set_has_wrapped_message();
+      wrapped_message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.wrapped_message_);
+    }
+    if (cached_has_bits & 0x00000002u) {
+      mutable_wrapped()->::cockroach::roachpb::ErrorDetail::MergeFrom(from.wrapped());
+    }
   }
 }
 
@@ -6621,6 +6661,8 @@ void MixedSuccessError::Swap(MixedSuccessError* other) {
 }
 void MixedSuccessError::InternalSwap(MixedSuccessError* other) {
   using std::swap;
+  wrapped_message_.Swap(&other->wrapped_message_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
   swap(wrapped_, other->wrapped_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
