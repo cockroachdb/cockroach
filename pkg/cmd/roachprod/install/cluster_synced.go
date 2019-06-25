@@ -43,6 +43,7 @@ import (
 // ClusterImpl TODO(peter): document
 type ClusterImpl interface {
 	Start(c *SyncedCluster, extraArgs []string)
+	CertsDir(c *SyncedCluster, index int) string
 	NodeDir(c *SyncedCluster, index int) string
 	LogDir(c *SyncedCluster, index int) string
 	NodeURL(c *SyncedCluster, host string, port int) string
