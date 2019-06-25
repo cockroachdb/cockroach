@@ -134,7 +134,6 @@ func newIndexSkipTableReader(
 		ValNeededForCol:  neededColumns,
 	}
 
-	// TODO: support reverse scans
 	if err := t.fetcher.Init(t.reverse, true, /* returnRangeInfo */
 		false /* isCheck */, &t.alloc, tableArgs); err != nil {
 		return nil, err
@@ -189,10 +188,8 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		// the range info we get after each scan
 		if !t.ignoreMisplannedRanges {
 			ranges := misplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.flowCtx.nodeID)
-			if len(ranges) != 0 {
-				for _, r := range ranges {
-					t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
-				}
+			for _, r := range ranges {
+				t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
 			}
 		}
 
@@ -270,7 +267,7 @@ func (t *indexSkipTableReader) generateTrailingMeta(
 func (t *indexSkipTableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !t.ignoreMisplannedRanges {
-		if t.misplannedRanges != nil && len(t.misplannedRanges) != 0 {
+		if len(t.misplannedRanges) != 0 {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: t.misplannedRanges})
 		}
 	}

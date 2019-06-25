@@ -461,7 +461,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 				count := 0
 				for {
 					row, meta := reader.Next()
-					if meta != nil && meta.TxnCoordMeta == nil {
+					if meta != nil && meta.TxnCoordMeta == nil && meta.Metrics == nil {
 						b.Fatalf("unexpected metadata: %+v", meta)
 					}
 					if row == nil {
