@@ -210,7 +210,7 @@ func (c *SyncedCluster) Wipe() {
 		var cmd string
 		if c.IsLocal() {
 			// Not all shells like brace expansion, so we'll do it here
-			for _, dir := range []string{"certs*", "data", "logs"} {
+			for _, dir := range []string{"certs*", "data"} {
 				cmd += fmt.Sprintf(`rm -fr ${HOME}/local/%d/%s ;`, c.Nodes[i], dir)
 			}
 		} else {
