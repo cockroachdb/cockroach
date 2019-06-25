@@ -146,7 +146,7 @@ func (r *Replica) executeWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
-	ch, tryAbandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, lease, ba, endCmds, spans)
+	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, lease, ba, endCmds, spans)
 	if pErr != nil {
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
@@ -230,30 +230,19 @@ and the following Raft status: %+v`,
 			}()
 
 		case <-ctxDone:
-			// If our context was canceled, return an AmbiguousResultError
-			// if the command isn't already being executed and using our
-			// context, in which case we expect it to finish soon. The
-			// AmbiguousResultError indicates to caller that the command may
-			// have executed.
-			if tryAbandon() {
-				log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
-					timeutil.Since(startTime).Seconds(), ba)
-				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error()))
-			}
-			ctxDone = nil
+			// If our context was canceled, return an AmbiguousResultError,
+			// which indicates to the caller that the command may have executed.
+			abandon()
+			log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
+				timeutil.Since(startTime).Seconds(), ba)
+			return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error()))
 		case <-shouldQuiesce:
-			// If shutting down, return an AmbiguousResultError if the
-			// command isn't already being executed and using our context,
-			// in which case we expect it to finish soon. AmbiguousResultError
-			// indicates to caller that the command may have executed. If
-			// tryAbandon fails, we iterate through the loop again to wait
-			// for the command to finish.
-			if tryAbandon() {
-				log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
-					timeutil.Since(startTime).Seconds(), ba)
-				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown"))
-			}
-			shouldQuiesce = nil
+			// If shutting down, return an AmbiguousResultError, which indicates
+			// to the caller that the command may have executed.
+			abandon()
+			log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
+				timeutil.Since(startTime).Seconds(), ba)
+			return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown"))
 		}
 	}
 }

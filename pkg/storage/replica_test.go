@@ -6936,10 +6936,10 @@ func TestReplicaCancelRaft(t *testing.T) {
 	}
 }
 
-// TestReplicaTryAbandon checks that canceling a request that has been
-// proposed to Raft but before it has been executed correctly releases
-// its latches. See #11986.
-func TestReplicaTryAbandon(t *testing.T) {
+// TestReplicaAbandonProposal checks that canceling a request that has been
+// proposed to Raft but before it has been executed correctly releases its
+// latches. See #11986.
+func TestReplicaAbandonProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
