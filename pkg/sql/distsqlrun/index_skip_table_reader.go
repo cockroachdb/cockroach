@@ -116,6 +116,9 @@ func newIndexSkipTableReader(
 	}
 	t.indexLen = len(index.ColumnIDs)
 
+	// to allow for interleaved tables, we need to know how nested
+	// this interleaved index is
+
 	cols := immutDesc.Columns
 	if returnMutations {
 		cols = immutDesc.ReadableColumns
@@ -148,6 +151,19 @@ func newIndexSkipTableReader(
 	}
 
 	return t, nil
+}
+
+func (t *indexSkipTableReader) computeMaxIndexInterleaveLen(index *distsqlpb.IndexDescriptor) int {
+	// no one interleaves into this index, so there is nothing else needed
+	if len(index.InterleavedBy) == 0 {
+		return 0
+	}
+
+	// else, we want to know the length of the largest index
+	// that is interleaved into this index
+	// for _,
+
+	return 0
 }
 
 func (t *indexSkipTableReader) Start(ctx context.Context) context.Context {
