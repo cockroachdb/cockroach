@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -17,6 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
@@ -50,7 +49,7 @@ var (
 		return &ctx
 	}()
 
-	errScaleOutOfRange = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "scale out of range")
+	errScaleOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "scale out of range")
 )
 
 // LimitDecimalWidth limits d's precision (total number of digits) and scale
@@ -65,7 +64,7 @@ func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 		return errScaleOutOfRange
 	}
 	if scale > precision {
-		return pgerror.Newf(pgerror.CodeInvalidParameterValueError, "scale (%d) must be between 0 and precision (%d)", scale, precision)
+		return pgerror.Newf(pgcode.InvalidParameterValue, "scale (%d) must be between 0 and precision (%d)", scale, precision)
 	}
 
 	// http://www.postgresql.org/docs/9.5/static/datatype-numeric.html
@@ -87,7 +86,7 @@ func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 		default:
 			lt = fmt.Sprintf("10^%d", v)
 		}
-		return pgerror.Newf(pgerror.CodeNumericValueOutOfRangeError, "value with precision %d, scale %d must round to an absolute value less than %s", precision, scale, lt)
+		return pgerror.Newf(pgcode.NumericValueOutOfRange, "value with precision %d, scale %d must round to an absolute value less than %s", precision, scale, lt)
 	}
 	return nil
 }

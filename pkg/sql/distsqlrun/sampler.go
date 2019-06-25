@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -19,16 +17,16 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // sketchInfo contains the specification and run-time state for each sketch.
@@ -97,7 +95,7 @@ func newSamplerProcessor(
 			return nil, errors.Errorf("unsupported sketch type %s", s.SketchType)
 		}
 		if len(s.Columns) != 1 {
-			return nil, pgerror.UnimplementedWithIssue(34422, "multi-column statistics are not supported yet.")
+			return nil, unimplemented.NewWithIssue(34422, "multi-column statistics are not supported yet.")
 		}
 	}
 
@@ -264,11 +262,11 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			// columns.
 			col := s.sketches[i].spec.Columns[0]
 			s.sketches[i].numRows++
-			if row[col].IsNull() {
+			isNull := row[col].IsNull()
+			if isNull {
 				s.sketches[i].numNulls++
-				continue
 			}
-			if s.outTypes[col].Family() == types.IntFamily {
+			if s.outTypes[col].Family() == types.IntFamily && !isNull {
 				// Fast path for integers.
 				// TODO(radu): make this more general.
 				val, err := row[col].GetInt()

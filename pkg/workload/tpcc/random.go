@@ -1,20 +1,17 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tpcc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/exp/rand"
 )
 
@@ -22,21 +19,11 @@ var cLastTokens = [...]string{
 	"BAR", "OUGHT", "ABLE", "PRI", "PRES",
 	"ESE", "ANTI", "CALLY", "ATION", "EING"}
 
-// cLoad is the value of C at load time. See 2.1.6.1.
-// It's used for the non-uniform random generator.
-var cLoad int
-
-// cCustomerID is the value of C for the customer id generator. 2.1.6.
-var cCustomerID int
-
-// cCustomerID is the value of C for the item id generator. 2.1.6.
-var cItemID int
-
-func init() {
-	rand.Seed(uint64(timeutil.Now().UnixNano()))
-	cLoad = rand.Intn(256)
-	cItemID = rand.Intn(1024)
-	cCustomerID = rand.Intn(8192)
+func (w *tpcc) initNonUniformRandomConstants() {
+	rng := rand.New(rand.NewSource(w.seed))
+	w.cLoad = rng.Intn(256)
+	w.cItemID = rng.Intn(1024)
+	w.cCustomerID = rng.Intn(8192)
 }
 
 func randStringFromAlphabet(
@@ -148,18 +135,18 @@ func randCLastSyllables(n int, a *bufalloc.ByteAllocator) []byte {
 }
 
 // See 4.3.2.3.
-func randCLast(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
-	return randCLastSyllables(((rng.Intn(256)|rng.Intn(1000))+cLoad)%1000, a)
+func (w *tpcc) randCLast(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
+	return randCLastSyllables(((rng.Intn(256)|rng.Intn(1000))+w.cLoad)%1000, a)
 }
 
 // Return a non-uniform random customer ID. See 2.1.6.
-func randCustomerID(rng *rand.Rand) int {
-	return ((rng.Intn(1024) | (rng.Intn(3000) + 1) + cCustomerID) % 3000) + 1
+func (w *tpcc) randCustomerID(rng *rand.Rand) int {
+	return ((rng.Intn(1024) | (rng.Intn(3000) + 1) + w.cCustomerID) % 3000) + 1
 }
 
 // Return a non-uniform random item ID. See 2.1.6.
-func randItemID(rng *rand.Rand) int {
-	return ((rng.Intn(8190) | (rng.Intn(100000) + 1) + cItemID) % 100000) + 1
+func (w *tpcc) randItemID(rng *rand.Rand) int {
+	return ((rng.Intn(8190) | (rng.Intn(100000) + 1) + w.cItemID) % 100000) + 1
 }
 
 // NOTE: The following are intentionally duplicated. They're a very hot path in

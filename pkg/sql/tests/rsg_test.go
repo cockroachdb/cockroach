@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tests_test
 
@@ -33,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -140,7 +138,7 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		if err != nil {
 			if pqerr, ok := err.(*pq.Error); ok {
 				// Output Postgres error code if it's available.
-				if pqerr.Code == pgerror.CodeCrashShutdownError {
+				if pqerr.Code == pgcode.CrashShutdown {
 					return crasher{
 						sql:    sql,
 						err:    err,
@@ -481,7 +479,7 @@ var ignoredErrorPatterns = []string{
 	"invalid destination encoding name",
 	"invalid IP format",
 	"invalid format code",
-	`.*val\(\): syntax error at or near`,
+	`.*val\(\): syntax error`,
 	"invalid source encoding name",
 	"strconv.Atoi: parsing .*: invalid syntax",
 	"field position .* must be greater than zero",
@@ -501,7 +499,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 
 	var smither *sqlsmith.Smither
 
-	tableStmts := make([]string, 10)
+	tableStmts := make([]string, 2)
 	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		// Create some random tables for the smither's column references and INSERT.
 		for i := 0; i < len(tableStmts); i++ {
@@ -510,10 +508,11 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 			if err := db.exec(ctx, stmt); err != nil {
 				return err
 			}
+			fmt.Printf("%s;\n", stmt)
 			tableStmts[i] = stmt
 		}
 		var err error
-		smither, err = sqlsmith.NewSmither(db.db, r.Rnd)
+		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())
 		return err
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := smither.Generate()
@@ -533,7 +532,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		if ignoredRegex.MatchString(msg) {
 			shouldLogErr = false
 		}
-		if shouldLogErr {
+		if testing.Verbose() && shouldLogErr {
 			fmt.Printf("ERROR: %s\ncaused by:\n%s;\n\n", err, s)
 		}
 		return err

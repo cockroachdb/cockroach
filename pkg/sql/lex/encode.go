@@ -7,15 +7,13 @@
 //
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // This code was derived from https://github.com/youtube/vitess.
 
@@ -28,9 +26,11 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
+	"github.com/cockroachdb/errors"
 )
 
 var mustQuoteMap = map[byte]bool{
@@ -305,7 +305,7 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 				continue
 			}
 			if i >= len(data)-1 {
-				return nil, pgerror.New(pgerror.CodeInvalidEscapeSequenceError,
+				return nil, pgerror.New(pgcode.InvalidEscapeSequence,
 					"bytea encoded value ends with escape character")
 			}
 			if data[i+1] == '\\' {
@@ -314,14 +314,14 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 				continue
 			}
 			if i+3 >= len(data) {
-				return nil, pgerror.New(pgerror.CodeInvalidEscapeSequenceError,
+				return nil, pgerror.New(pgcode.InvalidEscapeSequence,
 					"bytea encoded value ends with incomplete escape sequence")
 			}
 			b := byte(0)
 			for j := 1; j <= 3; j++ {
 				octDigit := data[i+j]
 				if octDigit < '0' || octDigit > '7' {
-					return nil, pgerror.New(pgerror.CodeInvalidEscapeSequenceError,
+					return nil, pgerror.New(pgcode.InvalidEscapeSequence,
 						"invalid bytea escape sequence")
 				}
 				b = (b << 3) | (octDigit - '0')
@@ -335,7 +335,7 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 		return base64.StdEncoding.DecodeString(data)
 
 	default:
-		return nil, pgerror.AssertionFailedf("unhandled format: %s", be)
+		return nil, errors.AssertionFailedf("unhandled format: %s", be)
 	}
 }
 

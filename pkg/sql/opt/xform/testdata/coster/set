@@ -1,23 +1,10 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── s string
- ├── d decimal not null
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE b (x INT, z INT NOT NULL)
 ----
-TABLE b
- ├── x int
- ├── z int not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 opt
 SELECT k, i FROM a UNION SELECT * FROM b
@@ -26,12 +13,12 @@ union
  ├── columns: k:8(int) i:9(int)
  ├── left columns: a.k:1(int) a.i:2(int)
  ├── right columns: x:5(int) z:6(int)
- ├── stats: [rows=2000, distinct(8,9)=1990, null(8,9)=20]
- ├── cost: 2150.05
+ ├── stats: [rows=1991, distinct(8,9)=1991, null(8,9)=20]
+ ├── cost: 2149.96
  ├── key: (8,9)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
+ │    ├── stats: [rows=1000, distinct(1,2)=991, null(1,2)=10]
  │    ├── cost: 1060.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
@@ -67,12 +54,12 @@ intersect
  ├── columns: k:1(int) i:2(int)
  ├── left columns: k:1(int) i:2(int)
  ├── right columns: x:5(int) z:6(int)
- ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
- ├── cost: 2140.05
+ ├── stats: [rows=991, distinct(1,2)=991, null(1,2)=10]
+ ├── cost: 2139.96
  ├── key: (1,2)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
+ │    ├── stats: [rows=1000, distinct(1,2)=991, null(1,2)=10]
  │    ├── cost: 1060.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
@@ -108,12 +95,12 @@ except
  ├── columns: k:1(int) i:2(int)
  ├── left columns: k:1(int) i:2(int)
  ├── right columns: x:5(int) z:6(int)
- ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
- ├── cost: 2140.05
+ ├── stats: [rows=991, distinct(1,2)=991, null(1,2)=10]
+ ├── cost: 2139.96
  ├── key: (1,2)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
+ │    ├── stats: [rows=1000, distinct(1,2)=991, null(1,2)=10]
  │    ├── cost: 1060.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)

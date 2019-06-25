@@ -620,6 +620,7 @@ unreserved_keyword ::=
 	| 'EXPERIMENTAL_RANGES'
 	| 'EXPERIMENTAL_RELOCATE'
 	| 'EXPERIMENTAL_REPLICA'
+	| 'EXPIRATION'
 	| 'EXPLAIN'
 	| 'EXPORT'
 	| 'EXTENSION'
@@ -1228,9 +1229,11 @@ alter_onetable_stmt ::=
 
 alter_split_stmt ::=
 	'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt
+	| 'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr
 
 alter_unsplit_stmt ::=
 	'ALTER' 'TABLE' table_name 'UNSPLIT' 'AT' select_stmt
+	| 'ALTER' 'TABLE' table_name 'UNSPLIT' 'ALL'
 
 alter_scatter_stmt ::=
 	'ALTER' 'TABLE' table_name 'SCATTER'
@@ -1250,9 +1253,11 @@ alter_oneindex_stmt ::=
 
 alter_split_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'SPLIT' 'AT' select_stmt
+	| 'ALTER' 'INDEX' table_index_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr
 
 alter_unsplit_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'UNSPLIT' 'AT' select_stmt
+	| 'ALTER' 'INDEX' table_index_name 'UNSPLIT' 'ALL'
 
 alter_scatter_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name 'SCATTER'
@@ -1866,6 +1871,7 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name alter_column_default
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
+	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
 	| 'DROP' opt_column column_name opt_drop_behavior
 	| 'ALTER' opt_column column_name opt_set_data 'TYPE' typename opt_collate opt_alter_column_using
@@ -1973,8 +1979,8 @@ opt_interval ::=
 
 func_application ::=
 	func_name '(' ')'
-	| func_name '(' expr_list ')'
-	| func_name '(' 'ALL' expr_list ')'
+	| func_name '(' expr_list opt_sort_clause ')'
+	| func_name '(' 'ALL' expr_list opt_sort_clause ')'
 	| func_name '(' 'DISTINCT' expr_list ')'
 	| func_name '(' '*' ')'
 

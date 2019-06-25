@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package telemetry
 
@@ -16,10 +14,11 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Bucket10 buckets a number by order of magnitude base 10, eg 637 -> 100.
@@ -219,26 +218,23 @@ func RecordError(err error) {
 		return
 	}
 
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		Count("errorcodes." + pgErr.Code)
+	code := pgerror.GetPGCode(err)
+	Count("errorcodes." + code)
 
-		if details := pgErr.TelemetryKey; details != "" {
-			var prefix string
-			switch pgErr.Code {
-			case pgerror.CodeFeatureNotSupportedError:
-				prefix = "unimplemented."
-			case pgerror.CodeInternalError:
-				prefix = "internalerror."
-			default:
-				prefix = "othererror." + pgErr.Code + "."
-			}
-			Count(prefix + details)
+	tkeys := errors.GetTelemetryKeys(err)
+	if len(tkeys) > 0 {
+		var prefix string
+		switch code {
+		case pgcode.FeatureNotSupported:
+			prefix = "unimplemented."
+		case pgcode.Internal:
+			prefix = "internalerror."
+		default:
+			prefix = "othererror." + code + "."
 		}
-	} else {
-		typ := log.ErrorSource(err)
-		if typ == "" {
-			typ = "unknown"
+
+		for _, tk := range tkeys {
+			Count(prefix + tk)
 		}
-		Count("othererror." + typ)
 	}
 }

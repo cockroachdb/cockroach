@@ -1,23 +1,21 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // Function names are used in expressions in the FuncExpr node.
@@ -58,7 +56,7 @@ func (fn *ResolvableFunctionReference) Resolve(
 		fn.FunctionReference = fd
 		return fd, nil
 	default:
-		return nil, pgerror.AssertionFailedf("unknown function name type: %+v (%T)",
+		return nil, errors.AssertionFailedf("unknown function name type: %+v (%T)",
 			fn.FunctionReference, fn.FunctionReference,
 		)
 	}
@@ -69,7 +67,7 @@ func (fn *ResolvableFunctionReference) Resolve(
 func WrapFunction(n string) ResolvableFunctionReference {
 	fd, ok := FunDefs[n]
 	if !ok {
-		panic(pgerror.AssertionFailedf("function %s() not defined", log.Safe(n)))
+		panic(errors.AssertionFailedf("function %s() not defined", log.Safe(n)))
 	}
 	return ResolvableFunctionReference{fd}
 }

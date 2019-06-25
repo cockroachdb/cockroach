@@ -1,22 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT, f FLOAT, s STRING)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- ├── f float
- ├── s string
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x INT PRIMARY KEY, z INT)
 ----
-TABLE b
- ├── x int not null
- ├── z int
- └── INDEX primary
-      └── x int not null
 
 # --------------------------------------------------
 # EliminateProject
@@ -168,7 +156,7 @@ opt expect=MergeProjectWithValues
 SELECT column1, 3 FROM (VALUES (1, 2))
 ----
 values
- ├── columns: column1:1(int) "?column?":3(int)
+ ├── columns: column1:1(int!null) "?column?":3(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,3)
@@ -179,7 +167,7 @@ opt expect=MergeProjectWithValues
 SELECT column1, column3 FROM (VALUES (1, 2, 3))
 ----
 values
- ├── columns: column1:1(int) column3:3(int)
+ ├── columns: column1:1(int!null) column3:3(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,3)
@@ -190,7 +178,7 @@ opt expect=MergeProjectWithValues
 SELECT 4, 5 FROM (VALUES (1, 2, 3))
 ----
 values
- ├── columns: "?column?":4(int) "?column?":5(int)
+ ├── columns: "?column?":4(int!null) "?column?":5(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(4,5)
@@ -201,11 +189,11 @@ opt expect-not=MergeProjectWithValues
 SELECT column1, 3 FROM (VALUES (1, 2), (1, 4))
 ----
 project
- ├── columns: column1:1(int) "?column?":3(int!null)
+ ├── columns: column1:1(int!null) "?column?":3(int!null)
  ├── cardinality: [2 - 2]
  ├── fd: ()-->(3)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── cardinality: [2 - 2]
  │    ├── (1,) [type=tuple{int}]
  │    └── (1,) [type=tuple{int}]

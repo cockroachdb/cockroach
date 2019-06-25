@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -29,6 +27,11 @@ type AggregateFunc interface {
 	// will be a deep copy of any AggregateFunc internal state, so that
 	// it will not be mutated by additional calls to Add.
 	Result() (Datum, error)
+
+	// Reset resets the aggregate function which allows for reusing the same
+	// instance for computation without the need to create a new instance.
+	// Any memory is kept, if possible.
+	Reset(context.Context)
 
 	// Close closes out the AggregateFunc and allows it to release any memory it
 	// requested during aggregation, and must be called upon completion of the

@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -18,13 +16,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 //
@@ -208,16 +208,17 @@ type virtualDefEntry struct {
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
 
-var errInvalidDbPrefix = pgerror.New(pgerror.CodeUndefinedObjectError,
-	"cannot access virtual schema in anonymous database",
-).SetHintf("verify that the current database is set")
+var errInvalidDbPrefix = errors.WithHint(
+	pgerror.New(pgcode.UndefinedObject,
+		"cannot access virtual schema in anonymous database"),
+	"verify that the current database is set")
 
 func newInvalidVirtualSchemaError() error {
-	return pgerror.AssertionFailedf("virtualSchema cannot have both the populate and generator functions defined")
+	return errors.AssertionFailedf("virtualSchema cannot have both the populate and generator functions defined")
 }
 
 func newInvalidVirtualDefEntryError() error {
-	return pgerror.AssertionFailedf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
+	return errors.AssertionFailedf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
 }
 
 // getPlanInfo returns the column metadata and a constructor for a new
@@ -239,7 +240,7 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 		if dbName != "" {
 			var err error
 			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, dbName,
-				DatabaseLookupFlags{required: true})
+				DatabaseLookupFlags{required: true, avoidCached: p.avoidCachedDescriptors})
 			if err != nil {
 				return nil, err
 			}
@@ -320,13 +321,13 @@ func NewVirtualSchemaHolder(
 			tableDesc, err := def.initVirtualTableDesc(ctx, st, id)
 
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to initialize %s", log.Safe(def.getSchema()))
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to initialize %s", errors.Safe(def.getSchema()))
 			}
 
 			if schema.tableValidator != nil {
 				if err := schema.tableValidator(&tableDesc); err != nil {
-					return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "programmer error")
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programmer error")
 				}
 			}
 
@@ -397,7 +398,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 			return t, nil
 		}
 		if _, ok := db.allTableNames[tableName]; ok {
-			return virtualDefEntry{}, pgerror.Unimplementedf(tn.Schema()+"."+tableName,
+			return virtualDefEntry{}, unimplemented.Newf(tn.Schema()+"."+tableName,
 				"virtual schema table not implemented: %s.%s", tn.Schema(), tableName)
 		}
 		return virtualDefEntry{}, sqlbase.NewUndefinedRelationError(tn)

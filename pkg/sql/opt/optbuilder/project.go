@@ -1,20 +1,19 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -43,16 +42,16 @@ func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.
 	colSet := opt.ColSet{}
 	for i := range cols {
 		id, scalar := cols[i].id, cols[i].scalar
-		if !colSet.Contains(int(id)) {
+		if !colSet.Contains(id) {
 			if scalar == nil {
-				passthrough.Add(int(id))
+				passthrough.Add(id)
 			} else {
 				projections = append(projections, memo.ProjectionsItem{
 					Element:    scalar,
 					ColPrivate: memo.ColPrivate{Col: id},
 				})
 			}
-			colSet.Add(int(id))
+			colSet.Add(id)
 		}
 	}
 
@@ -121,7 +120,7 @@ func (b *Builder) analyzeSelectList(
 				switch v.(type) {
 				case tree.UnqualifiedStar, *tree.AllColumnsSelector, *tree.TupleStar:
 					if e.As != "" {
-						panic(pgerror.Newf(pgerror.CodeSyntaxError,
+						panic(pgerror.Newf(pgcode.Syntax,
 							"%q cannot be aliased", tree.ErrString(v)))
 					}
 
@@ -249,13 +248,13 @@ func (b *Builder) finishBuildScalarRef(
 ) (out opt.ScalarExpr) {
 	// Update the sets of column references and outer columns if needed.
 	if colRefs != nil {
-		colRefs.Add(int(col.id))
+		colRefs.Add(col.id)
 	}
 
 	// Collect the outer columns of the current subquery, if any.
 	isOuterColumn := inScope == nil || inScope.isOuterColumn(col.id)
 	if isOuterColumn && b.subquery != nil {
-		b.subquery.outerCols.Add(int(col.id))
+		b.subquery.outerCols.Add(col.id)
 	}
 
 	// If this is not a projection context, then wrap the column reference with

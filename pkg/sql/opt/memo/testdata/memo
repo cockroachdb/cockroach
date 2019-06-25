@@ -1,20 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x STRING PRIMARY KEY, z DECIMAL NOT NULL)
 ----
-TABLE b
- ├── x string not null
- ├── z decimal not null
- └── INDEX primary
-      └── x string not null
 
 build
 SELECT y, b.x, y+1 AS c
@@ -274,7 +264,7 @@ memo (optimized, ~4KB, required=[presentation: x:7,y:8])
  ├── G1: (union G2 G3)
  │    └── [presentation: x:7,y:8]
  │         ├── best: (union G2 G3)
- │         └── cost: 2150.06
+ │         └── cost: 2149.88
  ├── G2: (scan a)
  │    └── []
  │         ├── best: (scan a)
@@ -317,11 +307,11 @@ memo (optimized, ~3KB, required=[presentation: array_agg:3])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:3]
  │         ├── best: (project G2 G3 array_agg)
- │         └── cost: 1072.06
+ │         └── cost: 1072.04
  ├── G2: (group-by G4 G5 cols=(2))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(2))
- │         └── cost: 1071.04
+ │         └── cost: 1071.03
  ├── G3: (projections)
  ├── G4: (scan a)
  │    └── []

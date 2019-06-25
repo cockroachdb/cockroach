@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
@@ -106,6 +104,55 @@ func TestInterner(t *testing.T) {
 		{Agg: CountRowsSingleton, ColPrivate: ColPrivate{Col: 2}},
 	}
 	aggs5 := AggregationsExpr{{Agg: &CountRowsExpr{}, ColPrivate: ColPrivate{Col: 1}}}
+
+	int1 := &ConstExpr{Value: tree.NewDInt(10)}
+	int2 := &ConstExpr{Value: tree.NewDInt(20)}
+	frame1 := WindowFrame{
+		Mode:           tree.RANGE,
+		StartBoundType: tree.UnboundedPreceding,
+		EndBoundType:   tree.CurrentRow,
+	}
+	frame2 := WindowFrame{
+		Mode:           tree.ROWS,
+		StartBoundType: tree.UnboundedPreceding,
+		EndBoundType:   tree.CurrentRow,
+	}
+
+	wins1 := WindowsExpr{{
+		Function: RankSingleton,
+		WindowsItemPrivate: WindowsItemPrivate{
+			ColPrivate: ColPrivate{Col: 0},
+			Frame:      frame1,
+		},
+	}}
+	wins2 := WindowsExpr{{
+		Function: RankSingleton,
+		WindowsItemPrivate: WindowsItemPrivate{
+			ColPrivate: ColPrivate{Col: 0},
+			Frame:      frame1,
+		},
+	}}
+	wins3 := WindowsExpr{{
+		Function: &WindowFromOffsetExpr{Input: RankSingleton, Offset: int1},
+		WindowsItemPrivate: WindowsItemPrivate{
+			ColPrivate: ColPrivate{Col: 0},
+			Frame:      frame1,
+		},
+	}}
+	wins4 := WindowsExpr{{
+		Function: &WindowFromOffsetExpr{Input: RankSingleton, Offset: int2},
+		WindowsItemPrivate: WindowsItemPrivate{
+			ColPrivate: ColPrivate{Col: 0},
+			Frame:      frame1,
+		},
+	}}
+	wins5 := WindowsExpr{{
+		Function: RankSingleton,
+		WindowsItemPrivate: WindowsItemPrivate{
+			ColPrivate: ColPrivate{Col: 0},
+			Frame:      frame2,
+		},
+	}}
 
 	type testVariation struct {
 		val1  interface{}
@@ -246,9 +293,9 @@ func TestInterner(t *testing.T) {
 		}},
 
 		{hashFn: in.hasher.HashColSet, eqFn: in.hasher.IsColSetEqual, variations: []testVariation{
-			{val1: util.MakeFastIntSet(), val2: util.MakeFastIntSet(), equal: true},
-			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(3, 2, 1), equal: true},
-			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(1, 2), equal: false},
+			{val1: opt.MakeColSet(), val2: opt.MakeColSet(), equal: true},
+			{val1: opt.MakeColSet(1, 2, 3), val2: opt.MakeColSet(3, 2, 1), equal: true},
+			{val1: opt.MakeColSet(1, 2, 3), val2: opt.MakeColSet(1, 2), equal: false},
 		}},
 
 		{hashFn: in.hasher.HashColList, eqFn: in.hasher.IsColListEqual, variations: []testVariation{
@@ -317,34 +364,23 @@ func TestInterner(t *testing.T) {
 
 		{hashFn: in.hasher.HashWindowFrame, eqFn: in.hasher.IsWindowFrameEqual, variations: []testVariation{
 			{
-				val1: &tree.WindowFrame{
-					Bounds: tree.WindowFrameBounds{
-						StartBound: &tree.WindowFrameBound{},
-						EndBound:   &tree.WindowFrameBound{},
-					},
-				},
-				val2: &tree.WindowFrame{
-					Bounds: tree.WindowFrameBounds{
-						StartBound: &tree.WindowFrameBound{},
-						EndBound:   &tree.WindowFrameBound{},
-					},
-				},
+				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
+				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
 				equal: true,
 			},
 			{
-				val1: &tree.WindowFrame{
-					Bounds: tree.WindowFrameBounds{
-						StartBound: &tree.WindowFrameBound{},
-						EndBound:   &tree.WindowFrameBound{},
-					},
-				},
-				val2: &tree.WindowFrame{
-					Mode: tree.ROWS,
-					Bounds: tree.WindowFrameBounds{
-						StartBound: &tree.WindowFrameBound{},
-						EndBound:   &tree.WindowFrameBound{},
-					},
-				},
+				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
+				val2:  WindowFrame{tree.ROWS, tree.UnboundedPreceding, tree.CurrentRow},
+				equal: false,
+			},
+			{
+				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
+				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.UnboundedFollowing},
+				equal: false,
+			},
+			{
+				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow},
+				val2:  WindowFrame{tree.RANGE, tree.CurrentRow, tree.CurrentRow},
 				equal: false,
 			},
 		}},
@@ -392,6 +428,14 @@ func TestInterner(t *testing.T) {
 			{val1: aggs2, val2: aggs3, equal: false},
 			{val1: aggs3, val2: aggs4, equal: false},
 			{val1: aggs3, val2: aggs5, equal: false},
+		}},
+
+		{hashFn: in.hasher.HashWindowsExpr, eqFn: in.hasher.IsWindowsExprEqual, variations: []testVariation{
+			{val1: wins1, val2: wins2, equal: true},
+			{val1: wins1, val2: wins3, equal: false},
+			{val1: wins2, val2: wins3, equal: false},
+			{val1: wins3, val2: wins4, equal: false},
+			{val1: wins1, val2: wins5, equal: false},
 		}},
 	}
 

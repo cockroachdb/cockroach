@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -22,15 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 type chunkBackfiller interface {
@@ -235,8 +232,8 @@ func GetResumeSpans(
 	}
 
 	if mutationIdx == noIndex {
-		return nil, nil, 0, pgerror.AssertionFailedf(
-			"mutation %d has completed", log.Safe(mutationID))
+		return nil, nil, 0, errors.AssertionFailedf(
+			"mutation %d has completed", errors.Safe(mutationID))
 	}
 
 	// Find the job.
@@ -251,18 +248,17 @@ func GetResumeSpans(
 	}
 
 	if jobID == 0 {
-		return nil, nil, 0, pgerror.AssertionFailedf(
-			"no job found for mutation %d", log.Safe(mutationID))
+		return nil, nil, 0, errors.AssertionFailedf(
+			"no job found for mutation %d", errors.Safe(mutationID))
 	}
 
 	job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
-		return nil, nil, 0, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"can't find job %d", log.Safe(jobID))
+		return nil, nil, 0, errors.Wrapf(err, "can't find job %d", errors.Safe(jobID))
 	}
 	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return nil, nil, 0, pgerror.AssertionFailedf(
+		return nil, nil, 0, errors.AssertionFailedf(
 			"expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	// Return the resume spans from the job using the mutation idx.

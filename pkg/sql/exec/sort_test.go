@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package exec
 
@@ -135,6 +133,7 @@ func TestSort(t *testing.T) {
 func TestSortRandomized(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	nTups := 8
+	k := uint16(4)
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
 	typs := make([]types.T, maxCols)
@@ -144,35 +143,52 @@ func TestSortRandomized(t *testing.T) {
 
 	for nCols := 1; nCols < maxCols; nCols++ {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-			ordCols := generateColumnOrdering(rng, nCols, nOrderingCols)
-			tups := make(tuples, nTups)
-			for i := range tups {
-				tups[i] = make(tuple, nCols)
-				for j := range tups[i] {
-					// Small range so we can test partitioning
-					tups[i][j] = rng.Int63() % 2048
-				}
+			for _, topK := range []bool{false, true} {
+				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/topK=%t", nCols, nOrderingCols, topK)
+				t.Run(name, func(t *testing.T) {
+					ordCols := generateColumnOrdering(rng, nCols, nOrderingCols)
+					tups := make(tuples, nTups)
+					for i := range tups {
+						tups[i] = make(tuple, nCols)
+						for j := range tups[i] {
+							// Small range so we can test partitioning
+							tups[i][j] = rng.Int63() % 2048
+						}
+						// Enforce that the last ordering column is always unique. Otherwise
+						// there would be multiple valid sort orders.
+						tups[i][ordCols[nOrderingCols-1].ColIdx] = int64(i)
+					}
+
+					expected := make(tuples, nTups)
+					copy(expected, tups)
+					sort.Slice(expected, less(expected, ordCols))
+					if topK {
+						expected = expected[:k]
+					}
+
+					runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
+						var sorter Operator
+						if topK {
+							sorter = NewTopKSorter(input[0], typs[:nCols], ordCols, k)
+						} else {
+							var err error
+							sorter, err = NewSorter(input[0], typs[:nCols], ordCols)
+							if err != nil {
+								t.Fatal(err)
+							}
+						}
+						cols := make([]int, nCols)
+						for i := range cols {
+							cols[i] = i
+						}
+						out := newOpTestOutput(sorter, cols, expected)
+
+						if err := out.Verify(); err != nil {
+							t.Fatalf("for input %v:\n%v", tups, err)
+						}
+					})
+				})
 			}
-
-			expected := make(tuples, nTups)
-			copy(expected, tups)
-			sort.Slice(expected, less(expected, ordCols))
-
-			runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-				sorter, err := NewSorter(input[0], typs[:nCols], ordCols)
-				if err != nil {
-					t.Fatal(err)
-				}
-				cols := make([]int, nCols)
-				for i := range cols {
-					cols[i] = i
-				}
-				out := newOpTestOutput(sorter, cols, expected)
-
-				if err := out.Verify(); err != nil {
-					t.Fatalf("for input %v:\n%v", tups, err)
-				}
-			})
 		}
 	}
 }
@@ -246,46 +262,58 @@ func TestAllSpooler(t *testing.T) {
 func BenchmarkSort(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
+	k := uint16(128)
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
-			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*int(coldata.BatchSize), nCols), func(b *testing.B) {
-				// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize (rows /
-				// batch) * nCols (number of columns / row).
-				b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize) * nCols))
-				typs := make([]types.T, nCols)
-				for i := range typs {
-					typs[i] = types.Int64
-				}
-				batch := coldata.NewMemBatch(typs)
-				batch.SetLength(coldata.BatchSize)
-				ordCols := make([]distsqlpb.Ordering_Column, nCols)
-				for i := range ordCols {
-					ordCols[i].ColIdx = uint32(i)
-					ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
-
-					col := batch.ColVec(i).Int64()
-					for j := 0; j < coldata.BatchSize; j++ {
-						col[j] = rng.Int63() % int64((i*1024)+1)
+			for _, topK := range []bool{false, true} {
+				name := fmt.Sprintf("rows=%d/cols=%d/topK=%t", nBatches*int(coldata.BatchSize), nCols, topK)
+				b.Run(name, func(b *testing.B) {
+					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize (rows /
+					// batch) * nCols (number of columns / row).
+					b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize) * nCols))
+					typs := make([]types.T, nCols)
+					for i := range typs {
+						typs[i] = types.Int64
 					}
-				}
-				b.ResetTimer()
-				for n := 0; n < b.N; n++ {
-					source := newFiniteBatchSource(batch, nBatches)
-					sort, err := NewSorter(source, typs, ordCols)
-					if err != nil {
-						b.Fatal(err)
-					}
+					batch := coldata.NewMemBatch(typs)
+					batch.SetLength(coldata.BatchSize)
+					ordCols := make([]distsqlpb.Ordering_Column, nCols)
+					for i := range ordCols {
+						ordCols[i].ColIdx = uint32(i)
+						ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
 
-					sort.Init()
-					for i := 0; i < nBatches; i++ {
-						out := sort.Next(ctx)
-						if out.Length() == 0 {
-							b.Fail()
+						col := batch.ColVec(i).Int64()
+						for j := 0; j < coldata.BatchSize; j++ {
+							col[j] = rng.Int63() % int64((i*1024)+1)
 						}
 					}
-				}
-			})
+					b.ResetTimer()
+					for n := 0; n < b.N; n++ {
+						source := newFiniteBatchSource(batch, nBatches)
+						var sorter Operator
+						var resultBatches int
+						if topK {
+							sorter = NewTopKSorter(source, typs, ordCols, k)
+							resultBatches = 1
+						} else {
+							var err error
+							sorter, err = NewSorter(source, typs, ordCols)
+							if err != nil {
+								b.Fatal(err)
+							}
+							resultBatches = nBatches
+						}
+						sorter.Init()
+						for i := 0; i < resultBatches; i++ {
+							out := sorter.Next(ctx)
+							if out.Length() == 0 {
+								b.Fail()
+							}
+						}
+					}
+				})
+			}
 		}
 	}
 }

@@ -1,20 +1,19 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -26,7 +25,7 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	var private memo.GroupingPrivate
 	for i := range inScope.cols {
 		if !inScope.cols[i].hidden {
-			private.GroupingCols.Add(int(inScope.cols[i].id))
+			private.GroupingCols.Add(inScope.cols[i].id)
 		}
 	}
 
@@ -35,9 +34,9 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	//   SELECT DISTINCT a FROM t ORDER BY b
 	// Note: this behavior is consistent with PostgreSQL.
 	for _, col := range inScope.ordering {
-		if !private.GroupingCols.Contains(int(col.ID())) {
+		if !private.GroupingCols.Contains(col.ID()) {
 			panic(pgerror.Newf(
-				pgerror.CodeInvalidColumnReferenceError,
+				pgcode.InvalidColumnReference,
 				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
 			))
 		}
@@ -76,13 +75,13 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	// expressions.
 	var seen opt.ColSet
 	for _, col := range inScope.ordering {
-		if !distinctOnCols.Contains(int(col.ID())) {
+		if !distinctOnCols.Contains(col.ID()) {
 			panic(pgerror.Newf(
-				pgerror.CodeInvalidColumnReferenceError,
+				pgcode.InvalidColumnReference,
 				"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 			))
 		}
-		seen.Add(int(col.ID()))
+		seen.Add(col.ID())
 		if seen.Equals(distinctOnCols) {
 			// All DISTINCT ON columns showed up; other columns are allowed in the
 			// rest of the ORDER BY (case 2 above).
@@ -120,7 +119,7 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	// Add any extra ON columns.
 	outScope.extraCols = make([]scopeColumn, 0, len(inScope.extraCols))
 	for i := range inScope.extraCols {
-		if distinctOnCols.Contains(int(inScope.extraCols[i].id)) {
+		if distinctOnCols.Contains(inScope.extraCols[i].id) {
 			outScope.extraCols = append(outScope.extraCols, inScope.extraCols[i])
 		}
 	}
@@ -128,7 +127,7 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	// Retain the prefix of the ordering that refers to the ON columns.
 	outScope.ordering = inScope.ordering
 	for i, col := range inScope.ordering {
-		if !distinctOnCols.Contains(int(col.ID())) {
+		if !distinctOnCols.Contains(col.ID()) {
 			outScope.ordering = outScope.ordering[:i]
 			break
 		}
@@ -140,8 +139,8 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	// (and eliminate duplicates).
 	excluded := distinctOnCols.Copy()
 	for i := range outScope.cols {
-		if id := outScope.cols[i].id; !excluded.Contains(int(id)) {
-			excluded.Add(int(id))
+		if id := outScope.cols[i].id; !excluded.Contains(id) {
+			excluded.Add(id)
 			aggs = append(aggs, memo.AggregationsItem{
 				Agg:        b.factory.ConstructFirstAgg(b.factory.ConstructVariable(id)),
 				ColPrivate: memo.ColPrivate{Col: id},

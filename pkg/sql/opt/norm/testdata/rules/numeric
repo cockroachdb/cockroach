@@ -1,14 +1,6 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, d DECIMAL, t TIME)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── d decimal
- ├── t time
- └── INDEX primary
-      └── k int not null
 
 # --------------------------------------------------
 # FoldPlusZero, FoldZeroPlus
@@ -93,7 +85,7 @@ opt expect-not=FoldMinusZero
 SELECT '[123]'::jsonb - 0
 ----
 values
- ├── columns: "?column?":1(jsonb)
+ ├── columns: "?column?":1(jsonb!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)

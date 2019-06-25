@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -17,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // TODO(radu): we currently create one batch at a time and run the KV operations
@@ -67,11 +64,9 @@ type joinReader struct {
 	index     *sqlbase.IndexDescriptor
 	colIdxMap map[sqlbase.ColumnID]int
 
-	// fetcherInput wraps fetcher in a RowSource implementation and should be used
-	// to get rows from the fetcher. This enables the joinReader to wrap the
-	// fetcherInput with a stat collector when necessary.
-	fetcherInput   RowSource
-	fetcher        row.Fetcher
+	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
+	// joinReader to wrap the fetcher with a stat collector when necessary.
+	fetcher        rowFetcher
 	indexKeyPrefix []byte
 	alloc          sqlbase.DatumAlloc
 	rowAlloc       sqlbase.EncDatumRowAlloc
@@ -127,7 +122,7 @@ func newJoinReader(
 	output RowReceiver,
 ) (*joinReader, error) {
 	if spec.Visibility != distsqlpb.ScanVisibility_PUBLIC {
-		return nil, pgerror.AssertionFailedf("joinReader specified with visibility %+v", spec.Visibility)
+		return nil, errors.AssertionFailedf("joinReader specified with visibility %+v", spec.Visibility)
 	}
 
 	jr := &joinReader{
@@ -193,19 +188,21 @@ func newJoinReader(
 		return nil, errors.Errorf("joinreader index does not cover all columns")
 	}
 
+	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
-		&jr.fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+		&fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		jr.neededRightCols(), false /* isCheck */, &jr.alloc,
 		distsqlpb.ScanVisibility_PUBLIC,
 	)
 	if err != nil {
 		return nil, err
 	}
-	jr.fetcherInput = &rowFetcherWrapper{Fetcher: &jr.fetcher}
 	if collectingStats {
 		jr.input = NewInputStatCollector(jr.input)
-		jr.fetcherInput = NewInputStatCollector(jr.fetcherInput)
+		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.finishTrace = jr.outputStatsToTrace
+	} else {
+		jr.fetcher = &rowFetcherWrapper{Fetcher: &fetcher}
 	}
 
 	jr.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
@@ -407,7 +404,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 			return jrStateUnknown, jr.DrainHelper()
 		}
 
-		indexRow, meta := jr.fetcherInput.Next()
+		indexRow, meta := jr.fetcher.Next()
 		if meta != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
 			return jrStateUnknown, jr.DrainHelper()
@@ -423,6 +420,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 
 	// Iterate over the lookup results, map them to the input rows, and emit the
 	// rendered rows.
+	isJoinTypeLeftSemiJoin := jr.joinType == sqlbase.LeftSemiJoin
 	for _, lookupRow := range jr.lookupRows {
 		if jr.indexFilter.expr != nil {
 			// Apply index filter.
@@ -436,15 +434,18 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 			}
 		}
 		for _, inputRowIdx := range jr.keyToInputRowIndices[lookupRow.key] {
-			renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
-			if err != nil {
-				jr.MoveToDraining(err)
-				return jrStateUnknown, jr.DrainHelper()
-			}
-			if renderedRow != nil {
-				rowCopy := jr.out.rowAlloc.CopyRow(renderedRow)
-				jr.inputRowIdxToOutputRows[inputRowIdx] = append(
-					jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
+			// Only add to output if joinType is not LeftSemiJoin or if we have not gotten the match
+			if !isJoinTypeLeftSemiJoin || len(jr.inputRowIdxToOutputRows[inputRowIdx]) == 0 {
+				renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
+				if err != nil {
+					jr.MoveToDraining(err)
+					return jrStateUnknown, jr.DrainHelper()
+				}
+				if renderedRow != nil {
+					rowCopy := jr.out.rowAlloc.CopyRow(renderedRow)
+					jr.inputRowIdxToOutputRows[inputRowIdx] = append(
+						jr.inputRowIdxToOutputRows[inputRowIdx], rowCopy)
+				}
 			}
 		}
 	}
@@ -458,17 +459,19 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 
 // collectOutputRows iterates over jr.inputRowIdxToOutputRows and adds output
 // rows to jr.Emit, rendering rows for unmatched inputs if the join is a left
-// outer join, while preserving the input order.
+// outer join or left anti join, while preserving the input order.
 func (jr *joinReader) collectOutputRows() joinReaderState {
 	for i, outputRows := range jr.inputRowIdxToOutputRows {
 		if len(outputRows) == 0 {
-			if jr.joinType == sqlbase.LeftOuterJoin {
+			if jr.joinType == sqlbase.LeftOuterJoin || jr.joinType == sqlbase.LeftAntiJoin {
 				if row := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); row != nil {
 					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
 				}
 			}
 		} else {
-			jr.toEmit = append(jr.toEmit, outputRows...)
+			if jr.joinType != sqlbase.LeftAntiJoin {
+				jr.toEmit = append(jr.toEmit, outputRows...)
+			}
 		}
 	}
 	return jrEmittingRows
@@ -505,7 +508,7 @@ func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
 // Start is part of the RowSource interface.
 func (jr *joinReader) Start(ctx context.Context) context.Context {
 	jr.input.Start(ctx)
-	jr.fetcherInput.Start(ctx)
+	jr.fetcher.Start(ctx)
 	jr.runningState = jrReadingInput
 	return jr.StartInternal(ctx, joinReaderProcName)
 }
@@ -546,7 +549,7 @@ func (jr *joinReader) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	ils, ok := getInputStats(jr.flowCtx, jr.fetcherInput)
+	ils, ok := getFetcherInputStats(jr.flowCtx, jr.fetcher)
 	if !ok {
 		return
 	}

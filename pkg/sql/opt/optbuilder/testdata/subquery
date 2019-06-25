@@ -65,7 +65,7 @@ project
       └── indirection [type=int]
            ├── array-flatten [type=int[]]
            │    └── values
-           │         ├── columns: column1:1(int)
+           │         ├── columns: column1:1(int!null)
            │         ├── tuple [type=tuple{int}]
            │         │    └── const: 1 [type=int]
            │         └── tuple [type=tuple{int}]
@@ -644,12 +644,6 @@ error (22023): unsupported comparison operator: <tuple{int, int}> IN <tuple{int}
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
 ----
-TABLE abc
- ├── a int not null
- ├── b int
- ├── c int
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT (1, 2) IN (SELECT * FROM abc) AS r
@@ -782,11 +776,6 @@ project
 exec-ddl
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 ----
-TABLE kv
- ├── k int not null
- ├── v int
- └── INDEX primary
-      └── k int not null
 
 build
 SELECT (SELECT abc.k FROM abc) FROM kv AS abc
@@ -797,7 +786,7 @@ build
 VALUES (1, (SELECT (2) AS a))
 ----
 values
- ├── columns: column1:2(int) column2:3(int)
+ ├── columns: column1:2(int!null) column2:3(int)
  └── tuple [type=tuple{int, int}]
       ├── const: 1 [type=int]
       └── subquery [type=int]
@@ -825,12 +814,6 @@ select
 exec-ddl
 CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
 ----
-TABLE xyz
- ├── x int not null
- ├── y int
- ├── z int
- └── INDEX primary
-      └── x int not null
 
 build
 SELECT * FROM xyz
@@ -907,11 +890,6 @@ DROP TABLE kv
 exec-ddl
 CREATE TABLE kv (k INT PRIMARY KEY, v STRING)
 ----
-TABLE kv
- ├── k int not null
- ├── v string
- └── INDEX primary
-      └── k int not null
 
 build
 SELECT * FROM kv WHERE k = (SELECT k FROM kv WHERE (k, v) = (1, 'one'))
@@ -992,7 +970,7 @@ build
 SELECT * FROM (VALUES (1, 2)) AS foo
 ----
 values
- ├── columns: column1:1(int) column2:2(int)
+ ├── columns: column1:1(int!null) column2:2(int!null)
  └── tuple [type=tuple{int, int}]
       ├── const: 1 [type=int]
       └── const: 2 [type=int]
@@ -1001,7 +979,7 @@ build
 SELECT * FROM (VALUES (1, 2))
 ----
 values
- ├── columns: column1:1(int) column2:2(int)
+ ├── columns: column1:1(int!null) column2:2(int!null)
  └── tuple [type=tuple{int, int}]
       ├── const: 1 [type=int]
       └── const: 2 [type=int]
@@ -1010,7 +988,7 @@ build
 SELECT * FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo
 ----
 values
- ├── columns: column1:1(int) column2:2(string)
+ ├── columns: column1:1(int!null) column2:2(string!null)
  ├── tuple [type=tuple{int, string}]
  │    ├── const: 1 [type=int]
  │    └── const: 'one' [type=string]
@@ -1025,7 +1003,7 @@ build
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo
 ----
 values
- ├── columns: column1:1(int) column2:2(int) column3:3(int)
+ ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
  ├── tuple [type=tuple{int, int, int}]
  │    ├── const: 1 [type=int]
  │    ├── const: 2 [type=int]
@@ -1039,7 +1017,7 @@ build
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2, foo3)
 ----
 values
- ├── columns: foo1:1(int) foo2:2(int) foo3:3(int)
+ ├── columns: foo1:1(int!null) foo2:2(int!null) foo3:3(int!null)
  ├── tuple [type=tuple{int, int, int}]
  │    ├── const: 1 [type=int]
  │    ├── const: 2 [type=int]
@@ -1053,7 +1031,7 @@ build
 SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS foo (foo1, foo2)
 ----
 values
- ├── columns: foo1:1(int) foo2:2(int) column3:3(int)
+ ├── columns: foo1:1(int!null) foo2:2(int!null) column3:3(int!null)
  ├── tuple [type=tuple{int, int, int}]
  │    ├── const: 1 [type=int]
  │    ├── const: 2 [type=int]
@@ -1130,9 +1108,9 @@ build
 SELECT * FROM (SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS moo (moo1, moo2, moo3) WHERE moo1 = 4) as foo (foo1)
 ----
 select
- ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
+ ├── columns: foo1:1(int!null) moo2:2(int!null) moo3:3(int!null)
  ├── values
- │    ├── columns: column1:1(int) column2:2(int) column3:3(int)
+ │    ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
  │    ├── tuple [type=tuple{int, int, int}]
  │    │    ├── const: 1 [type=int]
  │    │    ├── const: 2 [type=int]
@@ -1150,10 +1128,10 @@ build
 SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
 sort
- ├── columns: foo1:1(int) moo2:2(int) moo3:3(int)
+ ├── columns: foo1:1(int!null) moo2:2(int!null) moo3:3(int!null)
  ├── ordering: +1
  └── values
-      ├── columns: column1:1(int) column2:2(int) column3:3(int)
+      ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
       ├── tuple [type=tuple{int, int, int}]
       │    ├── const: 1 [type=int]
       │    ├── const: 8 [type=int]
@@ -1171,11 +1149,11 @@ build
 SELECT a, b FROM (VALUES (1, 2, 3), (3, 4, 7), (5, 6, 10)) AS foo (a, b, c) WHERE a + b = c
 ----
 project
- ├── columns: a:1(int) b:2(int)
+ ├── columns: a:1(int!null) b:2(int!null)
  └── select
-      ├── columns: column1:1(int) column2:2(int) column3:3(int)
+      ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
       ├── values
-      │    ├── columns: column1:1(int) column2:2(int) column3:3(int)
+      │    ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
       │    ├── tuple [type=tuple{int, int, int}]
       │    │    ├── const: 1 [type=int]
       │    │    ├── const: 2 [type=int]
@@ -1199,7 +1177,7 @@ build
 SELECT foo.a FROM (VALUES (1), (2), (3)) AS foo (a)
 ----
 values
- ├── columns: a:1(int)
+ ├── columns: a:1(int!null)
  ├── tuple [type=tuple{int}]
  │    └── const: 1 [type=int]
  ├── tuple [type=tuple{int}]
@@ -1211,7 +1189,7 @@ build
 SELECT foo.a, a, column2, foo.column2 FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS foo (a)
 ----
 values
- ├── columns: a:1(int) a:1(int) column2:2(string) column2:2(string)
+ ├── columns: a:1(int!null) a:1(int!null) column2:2(string!null) column2:2(string!null)
  ├── tuple [type=tuple{int, string}]
  │    ├── const: 1 [type=int]
  │    └── const: 'one' [type=string]
@@ -1325,18 +1303,6 @@ project
 exec-ddl
 CREATE TABLE tab4 (col0 INTEGER, col1 FLOAT, col3 INTEGER, col4 FLOAT, INDEX idx_tab4_0 (col4,col0))
 ----
-TABLE tab4
- ├── col0 int
- ├── col1 float
- ├── col3 int
- ├── col4 float
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX idx_tab4_0
-      ├── col4 float
-      ├── col0 int
-      └── rowid int not null (hidden)
 
 build
 SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
@@ -1493,11 +1459,6 @@ project
 exec-ddl
 CREATE TABLE db1.kv (k INT PRIMARY KEY, v INT)
 ----
-TABLE kv
- ├── k int not null
- ├── v int
- └── INDEX primary
-      └── k int not null
 
 build fully-qualify-names
 SELECT (SELECT t.kv.k) FROM db1.kv, kv
@@ -1623,32 +1584,14 @@ project
 exec-ddl
 CREATE TABLE t1 (a INT, b INT)
 ----
-TABLE t1
- ├── a int
- ├── b int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE t2 (a INT, b INT)
 ----
-TABLE t2
- ├── a int
- ├── b int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE t3 (a INT, b INT)
 ----
-TABLE t3
- ├── a int
- ├── b int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT (SELECT (SELECT DISTINCT t3.a FROM t1) FROM t2) FROM t3
@@ -1871,14 +1814,6 @@ project
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 # Regression test for #27330. Ensure that the subquery only returns one column
 # and is correctly typed.
@@ -1920,20 +1855,10 @@ select
 exec-ddl
 CREATE TABLE t (a string)
 ----
-TABLE t
- ├── a string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE u (b string)
 ----
-TABLE u
- ├── b string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Regression test for #27846. Ensure that an aggregate combined with ANY does
 # not cause a panic.
@@ -2418,20 +2343,10 @@ project
 exec-ddl
 CREATE TABLE v (x INT)
 ----
-TABLE v
- ├── x int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE w (y INT[])
 ----
-TABLE w
- ├── y int[]
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Regression test for #30191. Ensure ArrayFlatten returns correct type.
 build
@@ -2499,27 +2414,10 @@ group-by
 exec-ddl
 CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z));
 ----
-TABLE xyzs
- ├── x int not null
- ├── y int
- ├── z float not null
- ├── s string
- ├── INDEX primary
- │    └── x int not null
- └── INDEX secondary
-      ├── s string desc
-      ├── z float not null
-      └── x int not null (storing)
 
 exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING);
 ----
-TABLE kuv
- ├── k int not null
- ├── u float
- ├── v string
- └── INDEX primary
-      └── k int not null
 
 # Regression test for #29114.
 build

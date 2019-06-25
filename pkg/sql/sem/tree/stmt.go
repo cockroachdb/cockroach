@@ -7,15 +7,13 @@
 //
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // This code was derived from https://github.com/youtube/vitess.
 
@@ -297,17 +295,12 @@ func (*CreateIndex) StatementType() StatementType { return DDL }
 func (*CreateIndex) StatementTag() string { return "CREATE INDEX" }
 
 // StatementType implements the Statement interface.
-func (n *CreateTable) StatementType() StatementType {
-	if n.As() {
-		return RowsAffected
-	}
-	return DDL
-}
+func (n *CreateTable) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *CreateTable) StatementTag() string {
 	if n.As() {
-		return "SELECT"
+		return "CREATE TABLE AS"
 	}
 	return "CREATE TABLE"
 }
@@ -850,6 +843,7 @@ func (n *AlterTableDropConstraint) String() string  { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string     { return AsString(n) }
 func (n *AlterTableDropStored) String() string      { return AsString(n) }
 func (n *AlterTableSetDefault) String() string      { return AsString(n) }
+func (n *AlterTableSetNotNull) String() string      { return AsString(n) }
 func (n *AlterUserSetPassword) String() string      { return AsString(n) }
 func (n *AlterSequence) String() string             { return AsString(n) }
 func (n *Backup) String() string                    { return AsString(n) }

@@ -1,15 +1,13 @@
 // Copyright 2013 Google Inc. All Rights Reserved.
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // This code originated in the github.com/golang/glog package.
 
@@ -359,7 +357,7 @@ type EntryDecoder struct {
 
 // NewEntryDecoder creates a new instance of EntryDecoder.
 func NewEntryDecoder(in io.Reader) *EntryDecoder {
-	d := &EntryDecoder{scanner: bufio.NewScanner(in), re: entryRE.Copy()}
+	d := &EntryDecoder{scanner: bufio.NewScanner(in), re: entryRE}
 	d.scanner.Split(d.split)
 	return d
 }
@@ -1381,8 +1379,10 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 
 // NewStdLogger creates a *stdLog.Logger that forwards messages to the
 // CockroachDB logs with the specified severity.
-func NewStdLogger(severity Severity) *stdLog.Logger {
-	return stdLog.New(logBridge(severity), "", stdLog.Lshortfile)
+//
+// The prefix appears at the beginning of each generated log line.
+func NewStdLogger(severity Severity, prefix string) *stdLog.Logger {
+	return stdLog.New(logBridge(severity), prefix, stdLog.Lshortfile)
 }
 
 // setV computes and remembers the V level for a given PC

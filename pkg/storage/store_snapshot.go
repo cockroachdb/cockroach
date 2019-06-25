@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage
 
@@ -106,7 +104,7 @@ type kvBatchSnapshotStrategy struct {
 	newBatch  func() engine.Batch
 }
 
-// Send implements the snapshotStrategy interface.
+// Receive implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Receive(
 	ctx context.Context, stream incomingSnapshotStream, header SnapshotRequest_Header,
 ) (IncomingSnapshot, error) {
@@ -143,11 +141,22 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				Batches:                        batches,
 				LogEntries:                     logEntries,
 				State:                          &header.State,
-				snapType:                       snapTypeRaft,
+				snapType:                       header.Type,
 			}
-			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
-				inSnap.snapType = snapTypePreemptive
+
+			// 19.1 nodes don't set the Type field on the SnapshotRequest_Header proto
+			// when sending this RPC, so in a mixed cluster setting we may have gotten
+			// the zero value of RAFT. Since the RPC didn't have type information
+			// previously, a 19.1 node receiving a snapshot distinguished between RAFT
+			// and PREEMPTIVE (19.1 nodes never sent LEARNER snapshots) by checking
+			// whether the replica was a placeholder (ReplicaID == 0).
+			//
+			// This adjustment can be removed after 19.2.
+			if inSnap.snapType == SnapshotRequest_RAFT &&
+				header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
+				inSnap.snapType = SnapshotRequest_PREEMPTIVE
 			}
+
 			kvSS.status = fmt.Sprintf("kv batches: %d, log entries: %d", len(batches), len(logEntries))
 			return inSnap, nil
 		}
@@ -229,7 +238,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		if err == nil {
 			logEntries = append(logEntries, bytes)
 			raftLogBytes += int64(len(bytes))
-			if snap.snapType == snapTypePreemptive &&
+			if snap.snapType == SnapshotRequest_PREEMPTIVE &&
 				raftLogBytes > 4*kvSS.raftCfg.RaftLogTruncationThreshold {
 				// If the raft log is too large, abort the snapshot instead of
 				// potentially running out of memory. However, if this is a

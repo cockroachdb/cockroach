@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -18,12 +16,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // SchemaResolver abstracts the interfaces needed from the logical
@@ -222,14 +222,16 @@ func ResolveTargetObject(
 	}
 	if !found {
 		if !tn.ExplicitSchema && !tn.ExplicitCatalog {
-			return nil, pgerror.New(pgerror.CodeInvalidNameError, "no database specified")
+			return nil, pgerror.New(pgcode.InvalidName, "no database specified")
 		}
-		return nil, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
+		err = pgerror.Newf(pgcode.InvalidSchemaName,
 			"cannot create %q because the target database or schema does not exist",
-			tree.ErrString(tn)).SetHintf("verify that the current database and search_path are valid and/or the target database exists")
+			tree.ErrString(tn))
+		err = errors.WithHint(err, "verify that the current database and search_path are valid and/or the target database exists")
+		return nil, err
 	}
 	if tn.Schema() != tree.PublicSchema {
-		return nil, pgerror.Newf(pgerror.CodeInvalidNameError,
+		return nil, pgerror.Newf(pgcode.InvalidName,
 			"schema cannot be modified: %q", tree.ErrString(&tn.TableNamePrefix))
 	}
 	return descI.(*DatabaseDescriptor), nil
@@ -408,7 +410,7 @@ func findTableContainingIndex(
 			continue
 		}
 		if result != nil {
-			return nil, nil, pgerror.Newf(pgerror.CodeAmbiguousParameterError,
+			return nil, nil, pgerror.Newf(pgcode.AmbiguousParameter,
 				"index name %q is ambiguous (found in %s and %s)",
 				idxName, tn.String(), result.String())
 		}
@@ -416,7 +418,7 @@ func findTableContainingIndex(
 		desc = tableDesc
 	}
 	if result == nil && lookupFlags.required {
-		return nil, nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
+		return nil, nil, pgerror.Newf(pgcode.UndefinedObject,
 			"index %q does not exist", idxName)
 	}
 	return result, desc, nil
@@ -469,10 +471,11 @@ func expandIndexName(
 	}
 	if !found {
 		if requireTable {
-			return nil, nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
+			err = pgerror.Newf(pgcode.UndefinedObject,
 				"schema or database was not found while searching index: %q",
-				tree.ErrString(&index.Index)).SetHintf(
-				"check the current database and search_path are valid")
+				tree.ErrString(&index.Index))
+			err = errors.WithHint(err, "check the current database and search_path are valid")
+			return nil, nil, err
 		}
 		return nil, nil, nil
 	}

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package norm
 
@@ -22,13 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // CustomFuncs contains all the custom match and replace functions used by
@@ -188,14 +186,14 @@ func (c *CustomFuncs) CandidateKey(input memo.RelExpr) (key opt.ColSet, ok bool)
 
 // IsColNotNull returns true if the given input column is never null.
 func (c *CustomFuncs) IsColNotNull(col opt.ColumnID, input memo.RelExpr) bool {
-	return input.Relational().NotNullCols.Contains(int(col))
+	return input.Relational().NotNullCols.Contains(col)
 }
 
 // IsColNotNull2 returns true if the given column is part of the left or right
 // expressions' set of not-null columns.
 func (c *CustomFuncs) IsColNotNull2(col opt.ColumnID, left, right memo.RelExpr) bool {
-	return left.Relational().NotNullCols.Contains(int(col)) ||
-		right.Relational().NotNullCols.Contains(int(col))
+	return left.Relational().NotNullCols.Contains(col) ||
+		right.Relational().NotNullCols.Contains(col)
 }
 
 // OuterCols returns the set of outer columns associated with the given
@@ -338,7 +336,7 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 	case memo.ScalarPropsExpr:
 		return &t.ScalarProps(c.mem).Shared
 	}
-	panic(pgerror.AssertionFailedf("no logical properties available for node: %v", e))
+	panic(errors.AssertionFailedf("no logical properties available for node: %v", e))
 }
 
 // ----------------------------------------------------------------------
@@ -448,7 +446,7 @@ func (c *CustomFuncs) RemoveFiltersItem(
 			return newFilters
 		}
 	}
-	panic(pgerror.AssertionFailedf("item to remove is not in the list: %v", search))
+	panic(errors.AssertionFailedf("item to remove is not in the list: %v", search))
 }
 
 // ReplaceFiltersItem returns a new list that is a copy of the given list,
@@ -468,7 +466,7 @@ func (c *CustomFuncs) ReplaceFiltersItem(
 			return newFilters
 		}
 	}
-	panic(pgerror.AssertionFailedf("item to replace is not in the list: %v", search))
+	panic(errors.AssertionFailedf("item to replace is not in the list: %v", search))
 }
 
 // FiltersBoundBy returns true if all outer references in any of the filter
@@ -589,7 +587,7 @@ func (c *CustomFuncs) CanConsolidateFilters(filters memo.FiltersExpr) bool {
 // x IS NULL. If the filter can be consolidated, canConsolidateFilter returns
 // the column ID of the variable and ok=true. Otherwise, canConsolidateFilter
 // returns ok=false.
-func (c *CustomFuncs) canConsolidateFilter(filter *memo.FiltersItem) (col int, ok bool) {
+func (c *CustomFuncs) canConsolidateFilter(filter *memo.FiltersItem) (col opt.ColumnID, ok bool) {
 	if !filter.ScalarProps(c.mem).TightConstraints {
 		return 0, false
 	}
@@ -632,7 +630,7 @@ func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersE
 	var rangeMap util.FastIntMap
 	i := 0
 	for col, ok := seenTwice.Next(0); ok; col, ok = seenTwice.Next(col + 1) {
-		rangeMap.Set(col, i)
+		rangeMap.Set(int(col), i)
 		i++
 	}
 
@@ -649,7 +647,7 @@ func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersE
 				// If it is already a range expression, unwrap it.
 				cond = t.And
 			}
-			rangeIdx, _ := rangeMap.Get(col)
+			rangeIdx, _ := rangeMap.Get(int(col))
 			rangeItem := &newFilters[rangeIdx]
 			if rangeItem.Condition == nil {
 				// This is the first condition.
@@ -733,7 +731,7 @@ func (c *CustomFuncs) MergeProjections(
 	copy(newProjections, outer)
 	for i := range inner {
 		item := &inner[i]
-		if passthrough.Contains(int(item.Col)) {
+		if passthrough.Contains(item.Col) {
 			newProjections = append(newProjections, *item)
 		}
 	}
@@ -762,7 +760,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	values := input.(*memo.ValuesExpr)
 	tuple := values.Rows[0].(*memo.TupleExpr)
 	for i, colID := range values.Cols {
-		if passthrough.Contains(int(colID)) {
+		if passthrough.Contains(colID) {
 			newExprs = append(newExprs, tuple.Elems[i])
 			newTypes = append(newTypes, *tuple.Elems[i].DataType())
 			newCols = append(newCols, colID)
@@ -789,7 +787,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 func (c *CustomFuncs) ProjectionCols(projections memo.ProjectionsExpr) opt.ColSet {
 	var colSet opt.ColSet
 	for i := range projections {
-		colSet.Add(int(projections[i].Col))
+		colSet.Add(projections[i].Col)
 	}
 	return colSet
 }
@@ -951,7 +949,7 @@ func (c *CustomFuncs) GroupingAndConstCols(
 		if constAgg, ok := item.Agg.(*memo.ConstAggExpr); ok {
 			// Verify that the input and output column IDs match.
 			if item.Col == constAgg.Input.(*memo.VariableExpr).Col {
-				result.Add(int(item.Col))
+				result.Add(item.Col)
 			}
 		}
 	}
@@ -1209,7 +1207,7 @@ func (c *CustomFuncs) CommuteInequality(
 	case opt.LtOp:
 		return c.f.ConstructGt(right, left)
 	}
-	panic(pgerror.AssertionFailedf("called commuteInequality with operator %s", log.Safe(op)))
+	panic(errors.AssertionFailedf("called commuteInequality with operator %s", log.Safe(op)))
 }
 
 // FindRedundantConjunct takes the left and right operands of an Or operator as
@@ -1320,7 +1318,7 @@ func (c *CustomFuncs) extractConjunct(conjunct opt.ScalarExpr, and *memo.AndExpr
 //   (a = x) AND (b = y) AND (c = z)
 func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ScalarListExpr) opt.ScalarExpr {
 	if len(left) != len(right) {
-		panic(pgerror.AssertionFailedf("tuple length mismatch"))
+		panic(errors.AssertionFailedf("tuple length mismatch"))
 	}
 	if len(left) == 0 {
 		// () = (), which is always true.
@@ -1408,7 +1406,7 @@ func (c *CustomFuncs) IsConstValueEqual(const1, const2 opt.ScalarExpr) bool {
 		datum2 := const2.(*memo.ConstExpr).Value
 		return datum1.Compare(c.f.evalCtx, datum2) == 0
 	default:
-		panic(pgerror.AssertionFailedf("unexpected Op type: %v", log.Safe(op1)))
+		panic(errors.AssertionFailedf("unexpected Op type: %v", log.Safe(op1)))
 	}
 }
 
@@ -1498,7 +1496,7 @@ func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) op
 	case *tree.DCollatedString:
 		value = t.Contents
 	default:
-		panic(pgerror.AssertionFailedf("unexpected type for COLLATE: %T", log.Safe(str.(*memo.ConstExpr).Value)))
+		panic(errors.AssertionFailedf("unexpected type for COLLATE: %T", log.Safe(str.(*memo.ConstExpr).Value)))
 	}
 
 	return c.f.ConstructConst(tree.NewDCollatedString(value, locale, &c.f.evalCtx.CollationEnv))

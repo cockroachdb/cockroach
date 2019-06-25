@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -16,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -154,7 +153,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 			}
 			fnl.FormatName(name)
 		}
-		return pgerror.Newf(pgerror.CodeGroupingError,
+		return pgerror.Newf(pgcode.Grouping,
 			"cannot drop user%s or role%s %s: grants still exist on %s",
 			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
 			fnl.String(), f.String(),
@@ -168,11 +167,11 @@ func (n *DropUserNode) startExec(params runParams) error {
 		// "privileges still exist" first.
 		if normalizedUsername == sqlbase.AdminRole || normalizedUsername == sqlbase.PublicRole {
 			return pgerror.Newf(
-				pgerror.CodeInvalidParameterValueError, "cannot drop special role %s", normalizedUsername)
+				pgcode.InvalidParameterValue, "cannot drop special role %s", normalizedUsername)
 		}
 		if normalizedUsername == security.RootUser {
 			return pgerror.Newf(
-				pgerror.CodeInvalidParameterValueError, "cannot drop special user %s", normalizedUsername)
+				pgcode.InvalidParameterValue, "cannot drop special user %s", normalizedUsername)
 		}
 
 		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(

@@ -1,16 +1,16 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package roachpb
+
+import "sort"
 
 // ReplicaDescriptors is a set of replicas, usually the nodes/stores on which
 // replicas of a range are stored.
@@ -20,7 +20,12 @@ type ReplicaDescriptors struct {
 
 // MakeReplicaDescriptors creates a ReplicaDescriptors wrapper from a raw slice
 // of individual descriptors.
+//
+// All construction of ReplicaDescriptors is required to go through this method
+// so we can guarantee sortedness, which is used to speed up accessor
+// operations.
 func MakeReplicaDescriptors(replicas []ReplicaDescriptor) ReplicaDescriptors {
+	sort.Sort(byTypeThenReplicaID(replicas))
 	return ReplicaDescriptors{wrapped: replicas}
 }
 
@@ -39,12 +44,24 @@ func (d ReplicaDescriptors) All() []ReplicaDescriptor {
 
 // Voters returns the voter replicas in the set.
 func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
+	// Note that the wrapped replicas are sorted first by type.
+	for i := range d.wrapped {
+		if d.wrapped[i].Type == ReplicaType_LEARNER {
+			return d.wrapped[:i]
+		}
+	}
 	return d.wrapped
 }
 
 // Learners returns the learner replicas in the set.
 func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
-	return d.wrapped
+	// Note that the wrapped replicas are sorted first by type.
+	for i := range d.wrapped {
+		if d.wrapped[i].Type == ReplicaType_LEARNER {
+			return d.wrapped[i:]
+		}
+	}
+	return nil
 }
 
 var _, _ = ReplicaDescriptors.All, ReplicaDescriptors.Learners
@@ -70,27 +87,43 @@ func (d *ReplicaDescriptors) AddReplica(r ReplicaDescriptor) {
 	d.wrapped = append(d.wrapped, r)
 }
 
-// RemoveReplica removes the given replica from this set. If it wasn't found to
-// remove, false is returned.
-func (d *ReplicaDescriptors) RemoveReplica(r ReplicaDescriptor) bool {
+// RemoveReplica removes the matching replica from this set. If it wasn't found
+// to remove, false is returned.
+func (d *ReplicaDescriptors) RemoveReplica(
+	nodeID NodeID, storeID StoreID,
+) (ReplicaDescriptor, bool) {
 	idx := -1
 	for i := range d.wrapped {
-		if d.wrapped[i].Equal(r) {
+		if d.wrapped[i].NodeID == nodeID && d.wrapped[i].StoreID == storeID {
 			idx = i
 			break
 		}
 	}
 	if idx == -1 {
-		return false
+		return ReplicaDescriptor{}, false
 	}
 	// Swap with the last element so we can simply truncate the slice.
 	d.wrapped[idx], d.wrapped[len(d.wrapped)-1] = d.wrapped[len(d.wrapped)-1], d.wrapped[idx]
+	removed := d.wrapped[len(d.wrapped)-1]
 	d.wrapped = d.wrapped[:len(d.wrapped)-1]
-	return true
+	// The swap may have broken our sortedness invariant, so re-sort.
+	sort.Sort(byTypeThenReplicaID(d.wrapped))
+	return removed, true
 }
 
 // QuorumSize returns the number of voter replicas required for quorum in a raft
 // group consisting of this set of replicas.
 func (d ReplicaDescriptors) QuorumSize() int {
 	return (len(d.Voters()) / 2) + 1
+}
+
+type byTypeThenReplicaID []ReplicaDescriptor
+
+func (x byTypeThenReplicaID) Len() int      { return len(x) }
+func (x byTypeThenReplicaID) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
+func (x byTypeThenReplicaID) Less(i, j int) bool {
+	if x[i].Type == x[j].Type {
+		return x[i].ReplicaID < x[j].ReplicaID
+	}
+	return x[i].Type < x[j].Type
 }

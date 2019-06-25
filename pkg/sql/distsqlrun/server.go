@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -28,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -39,13 +36,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // Version identifies the distsqlrun protocol version.
@@ -306,7 +303,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 	nodeID := ds.ServerConfig.NodeID.Get()
 	if nodeID == 0 {
-		return nil, nil, pgerror.AssertionFailedf("setupFlow called before the NodeID was resolved")
+		return nil, nil, errors.AssertionFailedf("setupFlow called before the NodeID was resolved")
 	}
 
 	const opName = "flow"
@@ -314,6 +311,10 @@ func (ds *ServerImpl) setupFlow(
 	if parentSpan == nil {
 		sp = ds.Tracer.(*tracing.Tracer).StartRootSpan(
 			opName, logtags.FromContext(ctx), tracing.NonRecordableSpan)
+	} else if localState.IsLocal {
+		// If we're a local flow, we don't need a "follows from" relationship: we're
+		// going to run this flow synchronously.
+		sp = tracing.StartChildSpan(opName, parentSpan, logtags.FromContext(ctx), false /* separateRecording */)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
 		// TODO(andrei): We should use something more efficient than StartSpan; we
@@ -379,8 +380,8 @@ func (ds *ServerImpl) setupFlow(
 		case distsqlpb.BytesEncodeFormat_BASE64:
 			be = sessiondata.BytesEncodeBase64
 		default:
-			return nil, nil, pgerror.AssertionFailedf("unknown byte encode format: %s",
-				log.Safe(req.EvalContext.BytesEncodeFormat))
+			return nil, nil, errors.AssertionFailedf("unknown byte encode format: %s",
+				errors.Safe(req.EvalContext.BytesEncodeFormat))
 		}
 		sd := &sessiondata.SessionData{
 			ApplicationName: req.EvalContext.ApplicationName,
@@ -526,7 +527,7 @@ func (ds *ServerImpl) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) er
 		return err
 	}
 	if firstMsg.SetupFlowRequest == nil {
-		return pgerror.AssertionFailedf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
+		return errors.AssertionFailedf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
 	}
 	req := firstMsg.SetupFlowRequest
 	ctx, f, err := ds.SetupSyncFlow(stream.Context(), &ds.memMonitor, req, mbox)
@@ -570,7 +571,7 @@ func (ds *ServerImpl) SetupFlow(
 		// We return flow deployment errors in the response so that they are
 		// packaged correctly over the wire. If we return them directly to this
 		// function, they become part of an rpc error.
-		return &distsqlpb.SimpleResponse{Error: distsqlpb.NewError(err)}, nil
+		return &distsqlpb.SimpleResponse{Error: distsqlpb.NewError(ctx, err)}, nil
 	}
 	return &distsqlpb.SimpleResponse{}, nil
 }
@@ -582,12 +583,12 @@ func (ds *ServerImpl) flowStreamInt(
 	msg, err := stream.Recv()
 	if err != nil {
 		if err == io.EOF {
-			return pgerror.AssertionFailedf("missing header message")
+			return errors.AssertionFailedf("missing header message")
 		}
 		return err
 	}
 	if msg.Header == nil {
-		return pgerror.AssertionFailedf("no header in first message")
+		return errors.AssertionFailedf("no header in first message")
 	}
 	flowID := msg.Header.FlowID
 	streamID := msg.Header.StreamID

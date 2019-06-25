@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package engine
 
@@ -43,25 +41,6 @@ var (
 	// NilKey is the nil MVCCKey.
 	NilKey = MVCCKey{}
 )
-
-// AccountForLegacyMVCCStats adjusts ms to account for the predicted impact it
-// will have on the values that it records when the structure is initially stored.
-// Specifically, MVCCStats is stored on the RangeStats legacy key, which means
-// that its creation will have an impact on system-local data size and key count.
-func AccountForLegacyMVCCStats(ms *enginepb.MVCCStats, rangeID roachpb.RangeID) error {
-	key := keys.RangeStatsLegacyKey(rangeID)
-	metaKey := MakeMVCCMetadataKey(key)
-
-	// MVCCStats is stored inline, so compute MVCCMetadata accordingly.
-	value := roachpb.Value{}
-	if err := value.SetProto(ms); err != nil {
-		return err
-	}
-	meta := enginepb.MVCCMetadata{RawBytes: value.RawBytes}
-
-	updateStatsForInline(ms, key, 0, 0, int64(metaKey.EncodedSize()), int64(meta.Size()))
-	return nil
-}
 
 // MakeValue returns the inline value.
 func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
@@ -859,7 +838,7 @@ func mvccGetInternal(
 		// by this transaction or not an intent at all (so there's no
 		// conflict). Note that when reading the own intent, the timestamp
 		// specified is irrelevant; we always want to see the intent (see
-		// TestMVCCReadWithPushedTimestamp).
+		// TestMVCCGetWithPushedTimestamp).
 		seekKey.Timestamp = metaTimestamp
 
 		// Check for case where we're reading our own txn's intent
@@ -872,7 +851,15 @@ func mvccGetInternal(
 					"failed to read with epoch %d due to a write intent with epoch %d",
 					txn.Epoch, meta.Txn.Epoch)
 			}
-			seekKey = seekKey.Next()
+			// Seek past the intent's timestamp and at least as far
+			// back as the read timestamp. This is necessary if the
+			// intent is at a higher timestamp than we're trying to
+			// read at.
+			if timestamp.Less(metaTimestamp) {
+				seekKey.Timestamp = timestamp
+			} else {
+				seekKey.Timestamp = metaTimestamp.Prev()
+			}
 		}
 	} else if txn != nil && timestamp.Less(txn.MaxTimestamp) {
 		// In this branch, the latest timestamp is ahead, and so the read of an
@@ -898,9 +885,9 @@ func mvccGetInternal(
 		// transaction, or in the absence of future versions that clock uncertainty
 		// would apply to.
 		seekKey.Timestamp = timestamp
-		if seekKey.Timestamp == (hlc.Timestamp{}) {
-			return nil, ignoredIntent, safeValue, nil
-		}
+	}
+	if seekKey.Timestamp == (hlc.Timestamp{}) {
+		return nil, ignoredIntent, safeValue, nil
 	}
 
 	iter.Seek(seekKey)

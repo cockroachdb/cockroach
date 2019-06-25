@@ -1,21 +1,23 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sqlsmith
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 var (
@@ -28,7 +30,7 @@ func init() {
 		{10, scalarNoContext(makeAnd)},
 		{1, scalarNoContext(makeCaseExpr)},
 		{1, scalarNoContext(makeCoalesceExpr)},
-		{20, scalarNoContext(makeColRef)},
+		{50, scalarNoContext(makeColRef)},
 		{10, scalarNoContext(makeBinOp)},
 		{2, scalarNoContext(makeScalarSubquery)},
 		{2, scalarNoContext(makeExists)},
@@ -128,7 +130,7 @@ func makeScalarSample(
 	}
 	// Sometimes try to find a col ref or a const if there's no columns
 	// with a matching type.
-	if coin() {
+	if s.coin() {
 		if expr, ok := makeColRef(s, typ, refs); ok {
 			return expr
 		}
@@ -169,9 +171,50 @@ func makeCoalesceExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, boo
 func makeConstExpr(s *scope, typ *types.T, refs colRefs) tree.TypedExpr {
 	typ = pickAnyType(s, typ)
 
+	if s.schema.avoidConsts {
+		if expr, ok := makeColRef(s, typ, refs); ok {
+			return expr
+		}
+	}
+
 	var datum tree.Datum
 	s.schema.lock.Lock()
 	datum = sqlbase.RandDatumWithNullChance(s.schema.rnd, typ, 6)
+	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.schema.simpleDatums {
+		switch f {
+		case types.TupleFamily:
+			// TODO(mjibson): improve
+			datum = tree.DNull
+		case types.StringFamily:
+			p := make([]byte, s.schema.rnd.Intn(5))
+			for i := range p {
+				p[i] = byte('A' + s.schema.rnd.Intn(26))
+			}
+			datum = tree.NewDString(string(p))
+		case types.BytesFamily:
+			p := make([]byte, s.schema.rnd.Intn(5))
+			for i := range p {
+				p[i] = byte('A' + s.schema.rnd.Intn(26))
+			}
+			datum = tree.NewDBytes(tree.DBytes(p))
+		case types.IntervalFamily:
+			datum = &tree.DInterval{Duration: duration.MakeDuration(
+				s.schema.rnd.Int63n(3),
+				s.schema.rnd.Int63n(3),
+				s.schema.rnd.Int63n(3),
+			)}
+		case types.JsonFamily:
+			p := make([]byte, s.schema.rnd.Intn(5))
+			for i := range p {
+				p[i] = byte('A' + s.schema.rnd.Intn(26))
+			}
+			datum = tree.NewDJSON(json.FromString(string(p)))
+		case types.TimestampFamily:
+			datum = tree.MakeDTimestamp(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Microsecond)
+		case types.TimestampTZFamily:
+			datum = tree.MakeDTimestampTZ(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Microsecond)
+		}
+	}
 	s.schema.lock.Unlock()
 
 	return datum
@@ -281,13 +324,11 @@ func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	op := ops[n]
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
-	return typedParen(
-		&tree.BinaryExpr{
-			Operator: op.Operator,
-			// Cast both of these to prevent ambiguity in execution choice.
-			Left:  castType(left, op.LeftType),
-			Right: castType(right, op.RightType),
-		},
+	return castType(
+		typedParen(
+			tree.NewTypedBinaryExpr(op.Operator, castType(left, op.LeftType), castType(right, op.RightType), typ),
+			typ,
+		),
 		typ,
 	), true
 }
@@ -299,7 +340,7 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 	// Turn off window functions most of the time because they are
 	// enabled for the entire select exprs instead of on a per-expr
 	// basis.
-	if class == tree.WindowClass && d6() != 1 {
+	if class == tree.WindowClass && s.d6() != 1 {
 		class = tree.NormalClass
 	}
 	fns := functions[class][typ.Oid()]
@@ -307,6 +348,14 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 		return nil, false
 	}
 	fn := fns[s.schema.rnd.Intn(len(fns))]
+	if s.schema.disableImpureFns && fn.def.Impure {
+		return nil, false
+	}
+	for _, ignore := range s.schema.ignoreFNs {
+		if ignore.MatchString(fn.def.Name) {
+			return nil, false
+		}
+	}
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
@@ -332,27 +381,20 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 	// Use a window function if:
 	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
 	// - we explicitly chose a window function
-	if fn.def.Class == tree.WindowClass || (!ctx.noWindow && d6() == 1 && fn.def.Class == tree.AggregateClass) {
-		// Pick some random subset of cols for the partition.
-		wrefs := refs.extend()
-		s.schema.rnd.Shuffle(len(wrefs), func(i, j int) {
-			wrefs[i], wrefs[j] = wrefs[j], wrefs[i]
-		})
+	if fn.def.Class == tree.WindowClass || (!ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
 		var parts tree.Exprs
-		for coin() && len(wrefs) > 0 {
-			parts = append(parts, wrefs[0].item)
-			wrefs = wrefs[1:]
-		}
+		s.schema.sample(len(refs), 2, func(i int) {
+			parts = append(parts, refs[i].item)
+		})
 		var order tree.OrderBy
-		for coin() && len(wrefs) > 0 {
+		s.schema.sample(len(refs)-len(parts), 2, func(i int) {
 			order = append(order, &tree.Order{
-				Expr:      wrefs[0].item,
+				Expr:      refs[i+len(parts)].item,
 				Direction: s.schema.randDirection(),
 			})
-			wrefs = wrefs[1:]
-		}
+		})
 		var frame *tree.WindowFrame
-		if coin() {
+		if s.coin() {
 			frame = makeWindowFrame(s, refs)
 		}
 		window = &tree.WindowDef{
@@ -399,14 +441,14 @@ func makeWindowFrame(s *scope, refs colRefs) *tree.WindowFrame {
 		// DInt, DFloat, DDecimal, DInterval; so for now let's avoid this
 		// complication and not choose offset bound types.
 		// TODO(yuzefovich): fix this.
-		if coin() {
+		if s.coin() {
 			startBound.BoundType = tree.UnboundedPreceding
 		} else {
 			startBound.BoundType = tree.CurrentRow
 		}
-		if coin() {
+		if s.coin() {
 			endBound = new(tree.WindowFrameBound)
-			if coin() {
+			if s.coin() {
 				endBound.BoundType = tree.CurrentRow
 			} else {
 				endBound.BoundType = tree.UnboundedFollowing
@@ -419,13 +461,13 @@ func makeWindowFrame(s *scope, refs colRefs) *tree.WindowFrame {
 			// With OffsetFollowing as the start bound, the end bound must be
 			// present and can either be OffsetFollowing or UnboundedFollowing.
 			endBound = new(tree.WindowFrameBound)
-			if coin() {
+			if s.coin() {
 				endBound.BoundType = tree.OffsetFollowing
 			} else {
 				endBound.BoundType = tree.UnboundedFollowing
 			}
 		}
-		if endBound == nil && coin() {
+		if endBound == nil && s.coin() {
 			endBound = new(tree.WindowFrameBound)
 			// endBound cannot be "smaller" than startBound, so we will "prohibit" all
 			// such choices.
@@ -461,7 +503,7 @@ func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 
-	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(s.schema.rnd), refs)
+	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(s), refs)
 	if !ok {
 		return nil, false
 	}
@@ -483,7 +525,7 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 	t := sqlbase.RandScalarType(s.schema.rnd)
 	var rhs tree.TypedExpr
-	if coin() {
+	if s.coin() {
 		rhs = makeTuple(s, t, refs)
 	} else {
 		selectStmt, _, ok := s.makeSelect([]*types.T{t}, refs)
@@ -505,7 +547,7 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		rhs = subq
 	}
 	op := tree.In
-	if coin() {
+	if s.coin() {
 		op = tree.NotIn
 	}
 	return tree.NewTypedComparisonExpr(
@@ -530,7 +572,12 @@ func makeStringComparison(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr,
 }
 
 func makeTuple(s *scope, typ *types.T, refs colRefs) *tree.Tuple {
-	exprs := make(tree.Exprs, s.schema.rnd.Intn(5))
+	n := s.schema.rnd.Intn(5)
+	// Don't allow empty tuples in simple/postgres mode.
+	if s.schema.simpleDatums && n == 0 {
+		n++
+	}
+	exprs := make(tree.Exprs, n)
 	for i := range exprs {
 		exprs[i] = makeScalar(s, typ, refs)
 	}
@@ -538,6 +585,10 @@ func makeTuple(s *scope, typ *types.T, refs colRefs) *tree.Tuple {
 }
 
 func makeScalarSubquery(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if s.schema.disableLimits {
+		// This query must use a LIMIT, so bail if they are disabled.
+		return nil, false
+	}
 	selectStmt, _, ok := s.makeSelect([]*types.T{typ}, refs)
 	if !ok {
 		return nil, false

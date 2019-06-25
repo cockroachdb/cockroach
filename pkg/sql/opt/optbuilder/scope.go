@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
@@ -21,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // scopeOrdinal identifies an ordinal position with a list of scope columns.
@@ -44,6 +44,10 @@ type scope struct {
 	// windows contains the set of window functions encountered while building
 	// the current SELECT statement.
 	windows []scopeColumn
+
+	// windowDefs is the set of named window definitions present in the nearest
+	// SELECT.
+	windowDefs []*tree.WindowDef
 
 	// ordering records the ORDER BY columns associated with this scope. Each
 	// column is either in cols or in extraCols.
@@ -180,7 +184,7 @@ func (s *scope) appendColumn(col *scopeColumn) {
 func (s *scope) addExtraColumns(cols []scopeColumn) {
 	existing := s.colSetWithExtraCols()
 	for i := range cols {
-		if !existing.Contains(int(cols[i].id)) {
+		if !existing.Contains(cols[i].id) {
 			s.extraCols = append(s.extraCols, cols[i])
 		}
 	}
@@ -203,7 +207,7 @@ func (s *scope) copyOrdering(src *scope) {
 	// Copy any columns that the scope doesn't already have.
 	existing := s.colSetWithExtraCols()
 	for _, ordCol := range src.ordering {
-		if !existing.Contains(int(ordCol.ID())) {
+		if !existing.Contains(ordCol.ID()) {
 			col := *src.getColumn(ordCol.ID())
 			// We want to reset the group, as this becomes a pass-through column in
 			// the new scope.
@@ -371,7 +375,7 @@ func (s *scope) isOuterColumn(id opt.ColumnID) bool {
 func (s *scope) colSet() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range s.cols {
-		colSet.Add(int(s.cols[i].id))
+		colSet.Add(s.cols[i].id)
 	}
 	return colSet
 }
@@ -381,7 +385,7 @@ func (s *scope) colSet() opt.ColSet {
 func (s *scope) colSetWithExtraCols() opt.ColSet {
 	colSet := s.colSet()
 	for i := range s.extraCols {
-		colSet.Add(int(s.extraCols[i].id))
+		colSet.Add(s.extraCols[i].id)
 	}
 	return colSet
 }
@@ -495,6 +499,21 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 						break
 					}
 				}
+
+				// If agg is ordering sensitive, check if the orders match as well.
+				if match && !agg.isCommutative() {
+					if len(a.OrderBy) != len(agg.OrderBy) {
+						match = false
+					} else {
+						for j := range a.OrderBy {
+							if !a.OrderBy[j].Equal(agg.OrderBy[j]) {
+								match = false
+								break
+							}
+						}
+					}
+				}
+
 				if match {
 					// Aggregate already exists, so return information about the
 					// existing column that computes it.
@@ -543,7 +562,7 @@ func (s *scope) startAggFunc() *scope {
 // are only used in a groupings scope.
 func (s *scope) endAggFunc(cols opt.ColSet) (aggInScope, aggOutScope *scope) {
 	if !s.groupby.inAgg {
-		panic(pgerror.AssertionFailedf("mismatched calls to start/end aggFunc"))
+		panic(errors.AssertionFailedf("mismatched calls to start/end aggFunc"))
 	}
 	s.groupby.inAgg = false
 
@@ -559,7 +578,7 @@ func (s *scope) endAggFunc(cols opt.ColSet) (aggInScope, aggOutScope *scope) {
 		}
 	}
 
-	panic(pgerror.AssertionFailedf("aggregate function is not allowed in this context"))
+	panic(errors.AssertionFailedf("aggregate function is not allowed in this context"))
 }
 
 // startBuildingGroupingCols is called when the builder starts building the
@@ -580,7 +599,7 @@ func (s *scope) startBuildingGroupingCols() {
 // to ensure that a grouping error is not called prematurely.
 func (s *scope) endBuildingGroupingCols() {
 	if !s.groupby.buildingGroupingCols {
-		panic(pgerror.AssertionFailedf("mismatched calls to start/end groupings"))
+		panic(errors.AssertionFailedf("mismatched calls to start/end groupings"))
 	}
 	s.groupby.buildingGroupingCols = false
 }
@@ -1009,39 +1028,36 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	return s.builder.buildAggregateFunction(f, &private, s)
 }
 
-func isSupportedFrame(f *tree.WindowDef) bool {
-	if f == nil {
-		return true
+func (s *scope) lookupWindowDef(name tree.Name) *tree.WindowDef {
+	for i := range s.windowDefs {
+		if s.windowDefs[i].Name == name {
+			return s.windowDefs[i]
+		}
 	}
+	panic(builderError{pgerror.Newf(pgcode.UndefinedObject, "window %q does not exist", name)})
+}
 
-	if f.Frame == nil {
-		return true
+func (s *scope) constructWindowDef(def tree.WindowDef) *tree.WindowDef {
+	switch {
+	case def.RefName != "":
+		// SELECT rank() OVER (w) FROM t WINDOW w AS (...)
+		// We copy the referenced window specification, and modify it if necessary.
+		result, err := tree.OverrideWindowDef(s.lookupWindowDef(def.RefName), def)
+		if err != nil {
+			panic(builderError{err})
+		}
+		return &result
+	case def.Name != "":
+		// SELECT rank() OVER w FROM t WINDOW w AS (...)
+		// Note the lack of parens around w, compared to the first case.
+		// We use the referenced window specification directly, without modification.
+		return s.lookupWindowDef(def.Name)
+	default:
+		return &def
 	}
-
-	if f.Frame.Mode != tree.RANGE {
-		return false
-	}
-	if f.Frame.Bounds.StartBound != nil &&
-		(f.Frame.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
-			f.Frame.Bounds.StartBound.BoundType == tree.OffsetFollowing) {
-		return false
-	}
-	if f.Frame.Bounds.EndBound != nil &&
-		(f.Frame.Bounds.EndBound.BoundType == tree.OffsetFollowing ||
-			f.Frame.Bounds.EndBound.BoundType == tree.OffsetPreceding) {
-		return false
-	}
-	return true
 }
 
 func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
-	if f.Filter != nil ||
-		f.Type == tree.DistinctFuncType ||
-		f.WindowDef.RefName != "" ||
-		!isSupportedFrame(f.WindowDef) {
-		panic(unimplementedWithIssueDetailf(34251, "", "unsupported window function"))
-	}
-
 	f, def = s.replaceCount(f, def)
 
 	if err := tree.CheckIsWindowOrAgg(def); err != nil {
@@ -1056,6 +1072,8 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 	s.builder.semaCtx.Properties.Require("window",
 		tree.RejectNestedWindowFunctions)
 
+	f.WindowDef = s.constructWindowDef(*f.WindowDef)
+
 	expr := f.Walk(s)
 
 	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
@@ -1068,9 +1086,34 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 
 	f = typedFunc.(*tree.FuncExpr)
 
-	partition := make([]tree.TypedExpr, len(f.WindowDef.Partitions))
+	// We will be performing type checking on expressions from PARTITION BY and
+	// ORDER BY clauses below, and we need the semantic context to know that we
+	// are in a window function. InWindowFunc is updated when type checking
+	// FuncExpr above, but it is reset upon returning from that, so we need to do
+	// this update manually.
+	defer func(ctx *tree.SemaContext, prevWindow bool) {
+		ctx.Properties.Derived.InWindowFunc = prevWindow
+	}(
+		s.builder.semaCtx,
+		s.builder.semaCtx.Properties.Derived.InWindowFunc,
+	)
+	s.builder.semaCtx.Properties.Derived.InWindowFunc = true
+
 	for i, e := range f.WindowDef.Partitions {
-		partition[i] = e.(tree.TypedExpr)
+		typedExpr := s.resolveType(e, types.Any)
+		f.WindowDef.Partitions[i] = typedExpr
+	}
+	for i, e := range f.WindowDef.OrderBy {
+		if e.OrderType != tree.OrderByColumn {
+			panic(builderError{errOrderByIndexInWindow})
+		}
+		typedExpr := s.resolveType(e.Expr, types.Any)
+		f.WindowDef.OrderBy[i].Expr = typedExpr
+	}
+	if f.WindowDef.Frame != nil {
+		if err := analyzeWindowFrame(s, f.WindowDef); err != nil {
+			panic(builderError{err})
+		}
 	}
 
 	info := windowInfo{
@@ -1080,9 +1123,6 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 			Properties: &def.FunctionProperties,
 			Overload:   f.ResolvedOverload(),
 		},
-		partition: partition,
-		orderBy:   f.WindowDef.OrderBy,
-		frame:     f.WindowDef.Frame,
 	}
 
 	if col := s.findExistingColInList(&info, s.windows); col != nil {
@@ -1099,6 +1139,77 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 	s.windows = append(s.windows, *info.col)
 
 	return &info
+}
+
+var (
+	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
+	errVarOffsetGroups      = pgerror.New(pgcode.Syntax, "GROUPS offset cannot contain variables")
+)
+
+// analyzeWindowFrame performs semantic analysis of offset expressions of
+// the window frame.
+func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
+	frame := windowDef.Frame
+	bounds := frame.Bounds
+	startBound, endBound := bounds.StartBound, bounds.EndBound
+	var requiredType *types.T
+	switch frame.Mode {
+	case tree.ROWS:
+		// In ROWS mode, offsets must be non-null, non-negative integers. Non-nullity
+		// and non-negativity will be checked later.
+		requiredType = types.Int
+	case tree.RANGE:
+		// In RANGE mode, offsets must be non-null and non-negative datums of a type
+		// dependent on the type of the ordering column. Non-nullity and
+		// non-negativity will be checked later.
+		if bounds.HasOffset() {
+			// At least one of the bounds is of type 'value' PRECEDING or 'value' FOLLOWING.
+			// We require ordering on a single column that supports addition/subtraction.
+			if len(windowDef.OrderBy) != 1 {
+				return pgerror.Newf(pgcode.Windowing, "RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column")
+			}
+			requiredType = windowDef.OrderBy[0].Expr.(tree.TypedExpr).ResolvedType()
+			if !types.IsAdditiveType(requiredType) {
+				return pgerror.Newf(pgcode.Windowing, fmt.Sprintf("RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s", requiredType))
+			}
+			if types.IsDateTimeType(requiredType) {
+				// Spec: for datetime ordering columns, the required type is an 'interval'.
+				requiredType = types.Interval
+			}
+		}
+	case tree.GROUPS:
+		if startBound != nil && startBound.HasOffset() {
+			if tree.ContainsVars(startBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
+		if endBound != nil && endBound.HasOffset() {
+			if tree.ContainsVars(endBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
+		if len(windowDef.OrderBy) == 0 {
+			return pgerror.Newf(pgcode.Windowing, "GROUPS mode requires an ORDER BY clause")
+		}
+		// In GROUPS mode, offsets must be non-null, non-negative integers.
+		// Non-nullity and non-negativity will be checked later.
+		requiredType = types.Int
+	default:
+		return errors.AssertionFailedf("unexpected WindowFrameMode: %d", errors.Safe(frame.Mode))
+	}
+	if startBound != nil && startBound.OffsetExpr != nil {
+		oldContext := s.context
+		s.context = "WINDOW FRAME START"
+		startBound.OffsetExpr = s.resolveAndRequireType(startBound.OffsetExpr, requiredType)
+		s.context = oldContext
+	}
+	if endBound != nil && endBound.OffsetExpr != nil {
+		oldContext := s.context
+		s.context = "WINDOW FRAME END"
+		endBound.OffsetExpr = s.resolveAndRequireType(endBound.OffsetExpr, requiredType)
+		s.context = oldContext
+	}
+	return nil
 }
 
 // replaceCount replaces count(*) with count_rows().
@@ -1214,17 +1325,17 @@ var _ tree.IndexedVarContainer = &scope{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.AssertionFailedf("unimplemented: scope.IndexedVarEval"))
+	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarEval"))
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarResolvedType(idx int) *types.T {
 	if idx >= len(s.cols) {
 		if len(s.cols) == 0 {
-			panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
+			panic(pgerror.Newf(pgcode.UndefinedColumn,
 				"column reference @%d not allowed in this context", idx+1))
 		}
-		panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
+		panic(pgerror.Newf(pgcode.UndefinedColumn,
 			"invalid column ordinal: @%d", idx+1))
 	}
 	return s.cols[idx].typ
@@ -1232,7 +1343,7 @@ func (s *scope) IndexedVarResolvedType(idx int) *types.T {
 
 // IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	panic(pgerror.AssertionFailedf("unimplemented: scope.IndexedVarNodeFormatter"))
+	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarNodeFormatter"))
 }
 
 // newAmbiguousColumnError returns an error with a helpful error message to be
@@ -1273,7 +1384,7 @@ func (s *scope) newAmbiguousColumnError(
 		}
 	}
 
-	return pgerror.Newf(pgerror.CodeAmbiguousColumnError,
+	return pgerror.Newf(pgcode.AmbiguousColumn,
 		"column reference %q is ambiguous (candidates: %s)", colString, msgBuf.String(),
 	)
 }
@@ -1282,11 +1393,11 @@ func (s *scope) newAmbiguousColumnError(
 // used in case of an ambiguous table name.
 func newAmbiguousSourceError(tn *tree.TableName) error {
 	if tn.Catalog() == "" {
-		return pgerror.Newf(pgerror.CodeAmbiguousAliasError,
+		return pgerror.Newf(pgcode.AmbiguousAlias,
 			"ambiguous source name: %q", tree.ErrString(tn))
 
 	}
-	return pgerror.Newf(pgerror.CodeAmbiguousAliasError,
+	return pgerror.Newf(pgcode.AmbiguousAlias,
 		"ambiguous source name: %q (within database %q)",
 		tree.ErrString(&tn.TableName), tree.ErrString(&tn.CatalogName))
 }

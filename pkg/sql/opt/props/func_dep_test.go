@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package props_test
 
@@ -17,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Other tests also exercise the ColsAreKey methods.
@@ -125,20 +122,20 @@ func TestFuncDeps_InClosureOf(t *testing.T) {
 	verifyFD(t, fd, "()-->(2,3), ()~~>(1), (1)~~>(4), (2)==(3), (3)==(2), (4)-->(5)")
 
 	testcases := []struct {
-		cols     []int
-		in       []int
+		cols     []opt.ColumnID
+		in       []opt.ColumnID
 		expected bool
 	}{
-		{cols: []int{}, in: []int{}, expected: true},
-		{cols: []int{}, in: []int{1}, expected: true},
-		{cols: []int{2, 3}, in: []int{}, expected: true},
-		{cols: []int{2}, in: []int{3}, expected: true},
-		{cols: []int{3}, in: []int{2}, expected: true},
-		{cols: []int{3, 5}, in: []int{2, 4}, expected: true},
+		{cols: []opt.ColumnID{}, in: []opt.ColumnID{}, expected: true},
+		{cols: []opt.ColumnID{}, in: []opt.ColumnID{1}, expected: true},
+		{cols: []opt.ColumnID{2, 3}, in: []opt.ColumnID{}, expected: true},
+		{cols: []opt.ColumnID{2}, in: []opt.ColumnID{3}, expected: true},
+		{cols: []opt.ColumnID{3}, in: []opt.ColumnID{2}, expected: true},
+		{cols: []opt.ColumnID{3, 5}, in: []opt.ColumnID{2, 4}, expected: true},
 
-		{cols: []int{1}, in: []int{}, expected: false},
-		{cols: []int{4}, in: []int{5}, expected: false},
-		{cols: []int{2, 3, 4}, in: []int{1, 2, 3}, expected: false},
+		{cols: []opt.ColumnID{1}, in: []opt.ColumnID{}, expected: false},
+		{cols: []opt.ColumnID{4}, in: []opt.ColumnID{5}, expected: false},
+		{cols: []opt.ColumnID{2, 3, 4}, in: []opt.ColumnID{1, 2, 3}, expected: false},
 	}
 
 	for _, tc := range testcases {
@@ -1161,6 +1158,6 @@ func testColsAreLaxKey(t *testing.T, f *props.FuncDepSet, cols opt.ColSet, expec
 	}
 }
 
-func c(cols ...int) opt.ColSet {
-	return util.MakeFastIntSet(cols...)
+func c(cols ...opt.ColumnID) opt.ColSet {
+	return opt.MakeColSet(cols...)
 }

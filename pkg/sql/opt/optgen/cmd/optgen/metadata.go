@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -158,6 +156,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ScanLimit":      {fullName: "memo.ScanLimit", passByVal: true},
 		"ScanFlags":      {fullName: "memo.ScanFlags", passByVal: true},
 		"JoinFlags":      {fullName: "memo.JoinFlags", passByVal: true},
+		"WindowFrame":    {fullName: "memo.WindowFrame", passByVal: true},
 		"ExplainOptions": {fullName: "tree.ExplainOptions", passByVal: true},
 		"StatementType":  {fullName: "tree.StatementType", passByVal: true},
 		"ShowTraceType":  {fullName: "tree.ShowTraceType", passByVal: true},
@@ -172,7 +171,6 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Constraint":     {fullName: "*constraint.Constraint", isPointer: true, usePointerIntern: true},
 		"FuncProps":      {fullName: "*tree.FunctionProperties", isPointer: true, usePointerIntern: true},
 		"FuncOverload":   {fullName: "*tree.Overload", isPointer: true, usePointerIntern: true},
-		"WindowFrame":    {fullName: "*tree.WindowFrame", isPointer: true},
 		"PhysProps":      {fullName: "*physical.Required", isPointer: true},
 		"Presentation":   {fullName: "physical.Presentation", passByVal: true},
 		"RelProps":       {fullName: "props.Relational"},

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -41,9 +39,9 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")
-	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
+	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/errors\"\n")
 	fmt.Fprintf(g.w, ")\n\n")
 
 	for _, define := range g.compiled.Defines {
@@ -260,7 +258,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		}
 		fmt.Fprintf(g.w, "  }\n")
 	}
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"child index out of range\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"child index out of range\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Private method.
@@ -309,14 +307,13 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		}
 		fmt.Fprintf(g.w, "  }\n")
 	}
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"child index out of range\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"child index out of range\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	if define.Tags.Contains("Scalar") {
 		// Generate the DataType method.
 		fmt.Fprintf(g.w, "func (e *%s) DataType() *types.T {\n", opTyp.name)
-		dataType := g.constDataType(define)
-		if dataType != "" {
+		if dataType, ok := g.constDataType(define); ok {
 			fmt.Fprintf(g.w, "  return %s\n", dataType)
 		} else {
 			fmt.Fprintf(g.w, "  return e.Typ\n")
@@ -381,7 +378,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		// Generate the setNext method.
 		fmt.Fprintf(g.w, "func (e *%s) setNext(member RelExpr) {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  if e.next != nil {\n")
-		fmt.Fprintf(g.w, "    panic(pgerror.AssertionFailedf(\"expression already has its next defined: %%s\", e))\n")
+		fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"expression already has its next defined: %%s\", e))\n")
 		fmt.Fprintf(g.w, "  }\n")
 		fmt.Fprintf(g.w, "  e.next = member\n")
 		fmt.Fprintf(g.w, "}\n\n")
@@ -389,7 +386,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		// Generate the setGroup method.
 		fmt.Fprintf(g.w, "func (e *%s) setGroup(member RelExpr) {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  if e.grp != nil {\n")
-		fmt.Fprintf(g.w, "    panic(pgerror.AssertionFailedf(\"expression is already in a group: %%s\", e))\n")
+		fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"expression is already in a group: %%s\", e))\n")
 		fmt.Fprintf(g.w, "  }\n")
 		fmt.Fprintf(g.w, "  e.grp = member.group()\n")
 		fmt.Fprintf(g.w, "  LastGroupMember(member).setNext(e)\n")
@@ -417,7 +414,7 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "  if nth == 0 {\n")
 	fmt.Fprintf(g.w, "    return e.Input\n")
 	fmt.Fprintf(g.w, "  }\n")
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"child index out of range\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"child index out of range\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Private method.
@@ -438,7 +435,7 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "    e.Input = child.(RelExpr)\n")
 	fmt.Fprintf(g.w, "    return\n")
 	fmt.Fprintf(g.w, "  }\n")
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"child index out of range\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"child index out of range\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Memo method.
@@ -488,12 +485,12 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 
 	// Generate the setNext method.
 	fmt.Fprintf(g.w, "func (e *%s) setNext(member RelExpr) {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"setNext cannot be called on enforcers\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"setNext cannot be called on enforcers\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the setGroup method.
 	fmt.Fprintf(g.w, "func (e *%s) setGroup(member exprGroup) {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"setGroup cannot be called on enforcers\"))\n")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"setGroup cannot be called on enforcers\"))\n")
 	fmt.Fprintf(g.w, "}\n\n")
 }
 
@@ -509,7 +506,7 @@ func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
 
 	// Generate the ID method.
 	fmt.Fprintf(g.w, "func (e *%s) ID() opt.ScalarID {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  panic(pgerror.AssertionFailedf(\"lists have no id\"))")
+	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"lists have no id\"))")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Op method.
@@ -704,7 +701,7 @@ func (g *exprsGen) genInternFuncs() {
 		fmt.Fprintf(g.w, "    return in.Intern%s(t)\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "  default:\n")
-	fmt.Fprintf(g.w, "    panic(pgerror.AssertionFailedf(\"unhandled op: %%s\", e.Op()))\n")
+	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled op: %%s\", e.Op()))\n")
 	fmt.Fprintf(g.w, "  }\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
@@ -802,7 +799,7 @@ func (g *exprsGen) genBuildPropsFunc() {
 		fmt.Fprintf(g.w, "    b.build%sProps(t, rel)\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "  default:\n")
-	fmt.Fprintf(g.w, "    panic(pgerror.AssertionFailedf(\"unhandled type: %%s\", t.Op()))\n")
+	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled type: %%s\", t.Op()))\n")
 
 	fmt.Fprintf(g.w, "  }\n")
 	fmt.Fprintf(g.w, "}\n\n")
@@ -818,23 +815,22 @@ func (g *exprsGen) scalarPropsFieldName(define *lang.DefineExpr) string {
 }
 
 func (g *exprsGen) needsDataTypeField(define *lang.DefineExpr) bool {
+	if _, ok := g.constDataType(define); ok {
+		return false
+	}
 	for _, field := range expandFields(g.compiled, define) {
 		if field.Name == "Typ" && field.Type == "Type" {
 			return false
 		}
 	}
-	return g.constDataType(define) == ""
+	return true
 }
 
-func (g *exprsGen) constDataType(define *lang.DefineExpr) string {
-	switch define.Name {
-	case "Exists", "Any", "AnyScalar":
-		return "types.Bool"
-	case "CountRows":
-		return "types.Int"
+func (g *exprsGen) constDataType(define *lang.DefineExpr) (_ string, ok bool) {
+	for _, typ := range []string{"Bool", "Int", "Float"} {
+		if define.Tags.Contains(typ) {
+			return "types." + typ, true
+		}
 	}
-	if define.Tags.Contains("Comparison") || define.Tags.Contains("Boolean") {
-		return "types.Bool"
-	}
-	return ""
+	return "", false
 }

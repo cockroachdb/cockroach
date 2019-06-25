@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package roachpb
 
@@ -936,9 +934,6 @@ func (t *Transaction) Restart(
 	t.UpgradePriority(upgradePriority)
 	t.WriteTooOld = false
 	t.Sequence = 0
-	// Reset Writing. Since we're using a new epoch, we don't care about the abort
-	// cache.
-	t.DeprecatedWriting = false
 }
 
 // BumpEpoch increments the transaction's epoch, allowing for an in-place
@@ -1011,10 +1006,6 @@ func (t *Transaction) Update(o *Transaction) {
 		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
 	}
 	t.UpgradePriority(o.Priority)
-
-	// We can't assert against regression here since it can actually happen
-	// that we update from a transaction which isn't Writing.
-	t.DeprecatedWriting = t.DeprecatedWriting || o.DeprecatedWriting
 
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence

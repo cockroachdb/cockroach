@@ -8,62 +8,18 @@ CREATE TABLE a
     PRIMARY KEY (x, y DESC)
 )
 ----
-TABLE a
- ├── x int not null
- ├── y float not null
- ├── z decimal
- ├── s string not null
- └── INDEX primary
-      ├── x int not null
-      └── y float not null desc
 
 exec-ddl
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b, c))
 ----
-TABLE abc
- ├── a int not null
- ├── b int not null
- ├── c int not null
- └── INDEX primary
-      ├── a int not null
-      ├── b int not null
-      └── c int not null
 
 exec-ddl
 CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY (x, y, z))
 ----
-TABLE xyz
- ├── x int not null
- ├── y int not null
- ├── z int not null
- └── INDEX primary
-      ├── x int not null
-      ├── y int not null
-      └── z int not null
 
 exec-ddl
 CREATE TABLE abcd (a INT, b INT, c INT, d INT, INDEX ab(a, b) STORING (c, d), INDEX cd(c, d) STORING (a, b))
 ----
-TABLE abcd
- ├── a int
- ├── b int
- ├── c int
- ├── d int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX ab
- │    ├── a int
- │    ├── b int
- │    ├── rowid int not null (hidden)
- │    ├── c int (storing)
- │    └── d int (storing)
- └── INDEX cd
-      ├── c int
-      ├── d int
-      ├── rowid int not null (hidden)
-      ├── a int (storing)
-      └── b int (storing)
 
 # --------------------------------------------------
 # Scan operator.
@@ -1586,4 +1542,4 @@ sort
       ├── scan abc
       │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]

@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package pgwire
 
@@ -25,18 +23,18 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 // pgType contains type metadata used in RowDescription messages.
@@ -72,12 +70,6 @@ var resultOidMap = map[oid.Oid]oid.Oid{
 	oid.T__bpchar:  oid.T__text,
 	oid.T_char:     oid.T_text,
 	oid.T__char:    oid.T__text,
-	oid.T_float4:   oid.T_float8,
-	oid.T__float4:  oid.T__float8,
-	oid.T_int2:     oid.T_int8,
-	oid.T__int2:    oid.T__int8,
-	oid.T_int4:     oid.T_int8,
-	oid.T__int4:    oid.T__int8,
 	oid.T_varchar:  oid.T_text,
 	oid.T__varchar: oid.T__text,
 }
@@ -182,21 +174,8 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DArray:
-		switch d.ResolvedType().Oid() {
-		case oid.T_int2vector, oid.T_oidvector:
-			// vectors are serialized as a string of space-separated values.
-			sep := ""
-			// TODO(justin): add a test for nested arrays when #32552 is
-			// addressed.
-			for _, d := range v.Array {
-				b.textFormatter.WriteString(sep)
-				b.textFormatter.FormatNode(d)
-				sep = " "
-			}
-		default:
-			// Uses the default pgwire text format for arrays.
-			b.textFormatter.FormatNode(v)
-		}
+		// Arrays have custom formatting depending on their OID.
+		b.textFormatter.FormatNode(d)
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DOid:
@@ -456,7 +435,7 @@ func (b *writeBuffer) writeBinaryDatum(
 
 	case *tree.DArray:
 		if v.ParamTyp.Family() == types.ArrayFamily {
-			b.setError(pgerror.UnimplementedWithIssueDetail(32552,
+			b.setError(unimplemented.NewWithIssueDetail(32552,
 				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return
 		}
@@ -488,7 +467,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(4)
 		b.putInt32(int32(v.DInt))
 	default:
-		b.setError(pgerror.AssertionFailedf("unsupported type %T", d))
+		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}
 }
 

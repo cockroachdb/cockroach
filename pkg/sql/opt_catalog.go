@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -21,12 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // optCatalog implements the cat.Catalog interface over the SchemaResolver
@@ -140,11 +140,11 @@ func (oc *optCatalog) ResolveSchema(
 	if !found {
 		if !name.ExplicitSchema && !name.ExplicitCatalog {
 			return nil, cat.SchemaName{}, pgerror.New(
-				pgerror.CodeInvalidNameError, "no database specified",
+				pgcode.InvalidName, "no database specified",
 			)
 		}
 		return nil, cat.SchemaName{}, pgerror.Newf(
-			pgerror.CodeInvalidSchemaNameError, "target database or schema does not exist",
+			pgcode.InvalidSchemaName, "target database or schema does not exist",
 		)
 	}
 	return &optSchema{
@@ -212,7 +212,7 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 	case *optSequence:
 		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
 	default:
-		return pgerror.AssertionFailedf("invalid object type: %T", o)
+		return errors.AssertionFailedf("invalid object type: %T", o)
 	}
 }
 
@@ -228,7 +228,7 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 	case *optSequence:
 		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
 	default:
-		return pgerror.AssertionFailedf("invalid object type: %T", o)
+		return errors.AssertionFailedf("invalid object type: %T", o)
 	}
 }
 
@@ -263,7 +263,7 @@ func (oc *optCatalog) dataSourceForDesc(
 		ds = newOptSequence(desc, name)
 
 	default:
-		return nil, pgerror.AssertionFailedf("unexpected table descriptor: %+v", desc)
+		return nil, errors.AssertionFailedf("unexpected table descriptor: %+v", desc)
 	}
 
 	oc.dataSources[desc] = ds
@@ -835,7 +835,7 @@ func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
 	if ok {
 		return col, nil
 	}
-	return col, pgerror.Newf(pgerror.CodeUndefinedColumnError,
+	return col, pgerror.Newf(pgcode.UndefinedColumn,
 		"column [%d] does not exist", colID)
 }
 
@@ -1152,7 +1152,7 @@ func (fk *optForeignKeyConstraint) ColumnCount() int {
 // OriginColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i int) int {
 	if originTable.ID() != fk.originTable {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"invalid table %d passed to OriginColumnOrdinal (expected %d)",
 			originTable.ID(), fk.originTable,
 		))
@@ -1161,7 +1161,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 	tab := originTable.(*optTable)
 	index, err := tab.desc.FindIndexByID(fk.originIndex)
 	if err != nil {
-		panic(pgerror.AssertionFailedf("%v", err))
+		panic(errors.AssertionFailedf("%v", err))
 	}
 
 	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])
@@ -1171,7 +1171,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 // ReferencedColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.Table, i int) int {
 	if referencedTable.ID() != fk.referencedTable {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"invalid table %d passed to ReferencedColumnOrdinal (expected %d)",
 			referencedTable.ID(), fk.referencedTable,
 		))
@@ -1179,7 +1179,7 @@ func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.T
 	tab := referencedTable.(*optTable)
 	index, err := tab.desc.FindIndexByID(fk.referencedIndex)
 	if err != nil {
-		panic(pgerror.AssertionFailedf("%v", err))
+		panic(errors.AssertionFailedf("%v", err))
 	}
 
 	ord, _ := tab.lookupColumnOrdinal(index.ColumnIDs[i])

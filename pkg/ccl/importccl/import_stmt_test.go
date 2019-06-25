@@ -469,7 +469,7 @@ COPY t (a, b, c) FROM stdin;
 
 				// Verify the constraint is unvalidated.
 				`SHOW CONSTRAINTS FROM weather
-				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities (city)", "false"}},
+				`: {{"weather", "weather_city_fkey", "FOREIGN KEY", "FOREIGN KEY (city) REFERENCES cities(city)", "false"}},
 			},
 		},
 		{
@@ -497,26 +497,26 @@ COPY t (a, b, c) FROM stdin;
 	i INT8 NOT NULL,
 	k INT8 NULL,
 	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
-	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES a (i),
+	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES a(i),
 	INDEX a_auto_index_a_k_fkey (k ASC),
-	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES b (j),
+	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES b(j),
 	FAMILY "primary" (i, k)
 )`}, {
 					`CREATE TABLE b (
 	j INT8 NOT NULL,
 	CONSTRAINT b_pkey PRIMARY KEY (j ASC),
-	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES a (i),
+	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES a(i),
 	FAMILY "primary" (j)
 )`,
 				}},
 
 				`SHOW CONSTRAINTS FROM a`: {
-					{"a", "a_i_fkey", "FOREIGN KEY", "FOREIGN KEY (i) REFERENCES b (j)", "false"},
-					{"a", "a_k_fkey", "FOREIGN KEY", "FOREIGN KEY (k) REFERENCES a (i)", "false"},
+					{"a", "a_i_fkey", "FOREIGN KEY", "FOREIGN KEY (i) REFERENCES b(j)", "false"},
+					{"a", "a_k_fkey", "FOREIGN KEY", "FOREIGN KEY (k) REFERENCES a(i)", "false"},
 					{"a", "a_pkey", "PRIMARY KEY", "PRIMARY KEY (i ASC)", "true"},
 				},
 				`SHOW CONSTRAINTS FROM b`: {
-					{"b", "b_j_fkey", "FOREIGN KEY", "FOREIGN KEY (j) REFERENCES a (i)", "false"},
+					{"b", "b_j_fkey", "FOREIGN KEY", "FOREIGN KEY (j) REFERENCES a(i)", "false"},
 					{"b", "b_pkey", "PRIMARY KEY", "PRIMARY KEY (j ASC)", "true"},
 				},
 			},
@@ -698,7 +698,7 @@ const (
 	temp_hi INT8 NULL,
 	prcp FLOAT4 NULL,
 	date DATE NULL,
-	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities (city),
+	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES cities(city),
 	INDEX weather_auto_index_weather_city_fkey (city ASC),
 	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
 )`
@@ -1334,6 +1334,15 @@ func TestImportCSVStmt(t *testing.T) {
 				sqlDB.QueryStr(t, `SELECT 2, 5, 'e', -1, NULL, NULL`),
 			)
 		})
+	})
+
+	//TODO(adityamaru): Remove once issue #38044 is resolved.
+	t.Run("import-into-table-with-secondary-index", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE s; USE s; CREATE TABLE t (a int8 primary key, b string, index (b))")
+		sqlDB.ExpectErr(
+			t, `cannot IMPORT INTO a table with secondary indexes.`,
+			fmt.Sprintf(`IMPORT INTO t(a, b) CSV DATA (%s)`, files[0]),
+		)
 	})
 }
 
@@ -2376,7 +2385,7 @@ func TestImportCockroachDump(t *testing.T) {
 		{"a", `CREATE TABLE a (
 	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES t (i),
+	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES t(i),
 	FAMILY "primary" (i)
 )`},
 	})

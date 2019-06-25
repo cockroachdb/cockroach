@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -17,11 +15,12 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // CreateUserNode creates entries in the system.users table.
@@ -81,7 +80,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 
 	// Reject the "public" role. It does not have an entry in the users table but is reserved.
 	if normalizedUsername == sqlbase.PublicRole {
-		return pgerror.Newf(pgerror.CodeReservedNameError, "role name %q is reserved", sqlbase.PublicRole)
+		return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", sqlbase.PublicRole)
 	}
 
 	var opName string
@@ -100,7 +99,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		normalizedUsername,
 	)
 	if err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "error looking up user")
+		return errors.Wrapf(err, "error looking up user")
 	}
 	if row != nil {
 		isRole := bool(*row[0].(*tree.DBool))
@@ -113,7 +112,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		if isRole {
 			msg = "a role"
 		}
-		return pgerror.Newf(pgerror.CodeDuplicateObjectError,
+		return pgerror.Newf(pgcode.DuplicateObject,
 			"%s named %s already exists",
 			msg, normalizedUsername)
 	}
@@ -130,7 +129,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	} else if n.run.rowsAffected != 1 {
-		return pgerror.AssertionFailedf("%d rows affected by user creation; expected exactly one row affected",
+		return errors.AssertionFailedf("%d rows affected by user creation; expected exactly one row affected",
 			n.run.rowsAffected,
 		)
 	}

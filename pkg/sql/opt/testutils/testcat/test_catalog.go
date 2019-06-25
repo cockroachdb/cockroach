@@ -1,19 +1,18 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package testcat
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -21,13 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -157,7 +157,7 @@ func (tc *Catalog) ResolveDataSourceByID(
 			return ds, nil
 		}
 	}
-	return nil, pgerror.Newf(pgerror.CodeUndefinedTableError,
+	return nil, pgerror.Newf(pgcode.UndefinedTable,
 		"relation [%d] does not exist", id)
 }
 
@@ -171,19 +171,19 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	switch t := o.(type) {
 	case *Schema:
 		if t.Revoked {
-			return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError, "user does not have privilege to access %v", t.SchemaName)
+			return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to access %v", t.SchemaName)
 		}
 	case *Table:
 		if t.Revoked {
-			return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError, "user does not have privilege to access %v", t.TabName)
+			return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to access %v", t.TabName)
 		}
 	case *View:
 		if t.Revoked {
-			return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError, "user does not have privilege to access %v", t.ViewName)
+			return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to access %v", t.ViewName)
 		}
 	case *Sequence:
 		if t.Revoked {
-			return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError, "user does not have privilege to access %v", t.SeqName)
+			return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to access %v", t.SeqName)
 		}
 	default:
 		panic("invalid Object")
@@ -198,12 +198,12 @@ func (tc *Catalog) RequireSuperUser(ctx context.Context, action string) error {
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
 	if string(toResolve.CatalogName) != testDB {
-		return nil, cat.SchemaName{}, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
+		return nil, cat.SchemaName{}, pgerror.Newf(pgcode.InvalidSchemaName,
 			"target database or schema does not exist")
 	}
 
 	if string(toResolve.SchemaName) != tree.PublicSchema {
-		return nil, cat.SchemaName{}, pgerror.Newf(pgerror.CodeInvalidNameError,
+		return nil, cat.SchemaName{}, pgerror.Newf(pgcode.InvalidName,
 			"schema cannot be modified: %q", tree.ErrString(toResolve))
 	}
 
@@ -217,7 +217,7 @@ func (tc *Catalog) resolveDataSource(toResolve *cat.DataSourceName) (cat.DataSou
 	if table, ok := tc.testSchema.dataSources[toResolve.FQString()]; ok {
 		return table, nil
 	}
-	return nil, pgerror.Newf(pgerror.CodeUndefinedTableError,
+	return nil, pgerror.Newf(pgcode.UndefinedTable,
 		"no data source matches prefix: %q", tree.ErrString(toResolve))
 }
 
@@ -235,7 +235,7 @@ func (tc *Catalog) Table(name *tree.TableName) *Table {
 	if tab, ok := ds.(*Table); ok {
 		return tab
 	}
-	panic(pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+	panic(pgerror.Newf(pgcode.WrongObjectType,
 		"\"%q\" is not a table", tree.ErrString(name)))
 }
 
@@ -243,7 +243,7 @@ func (tc *Catalog) Table(name *tree.TableName) *Table {
 func (tc *Catalog) AddTable(tab *Table) {
 	fq := tab.TabName.FQString()
 	if _, ok := tc.testSchema.dataSources[fq]; ok {
-		panic(pgerror.Newf(pgerror.CodeDuplicateObjectError,
+		panic(pgerror.Newf(pgcode.DuplicateObject,
 			"table %q already exists", tree.ErrString(&tab.TabName)))
 	}
 	tc.testSchema.dataSources[fq] = tab
@@ -258,7 +258,7 @@ func (tc *Catalog) View(name *cat.DataSourceName) *View {
 	if vw, ok := ds.(*View); ok {
 		return vw
 	}
-	panic(pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+	panic(pgerror.Newf(pgcode.WrongObjectType,
 		"\"%q\" is not a view", tree.ErrString(name)))
 }
 
@@ -266,7 +266,7 @@ func (tc *Catalog) View(name *cat.DataSourceName) *View {
 func (tc *Catalog) AddView(view *View) {
 	fq := view.ViewName.FQString()
 	if _, ok := tc.testSchema.dataSources[fq]; ok {
-		panic(pgerror.Newf(pgerror.CodeDuplicateObjectError,
+		panic(pgerror.Newf(pgcode.DuplicateObject,
 			"view %q already exists", tree.ErrString(&view.ViewName)))
 	}
 	tc.testSchema.dataSources[fq] = view
@@ -276,7 +276,7 @@ func (tc *Catalog) AddView(view *View) {
 func (tc *Catalog) AddSequence(seq *Sequence) {
 	fq := seq.SeqName.FQString()
 	if _, ok := tc.testSchema.dataSources[fq]; ok {
-		panic(pgerror.Newf(pgerror.CodeDuplicateObjectError,
+		panic(pgerror.Newf(pgcode.DuplicateObject,
 			"sequence %q already exists", tree.ErrString(&seq.SeqName)))
 	}
 	tc.testSchema.dataSources[fq] = seq
@@ -308,20 +308,14 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", err
 	}
 
-	switch stmt.AST.StatementType() {
-	case tree.DDL, tree.RowsAffected:
-	default:
-		return "", pgerror.AssertionFailedf("statement type is not DDL or RowsAffected: %v", log.Safe(stmt.AST.StatementType()))
-	}
-
 	switch stmt := stmt.AST.(type) {
 	case *tree.CreateTable:
-		tab := tc.CreateTable(stmt)
-		return tab.String(), nil
+		tc.CreateTable(stmt)
+		return "", nil
 
 	case *tree.CreateView:
-		view := tc.CreateView(stmt)
-		return view.String(), nil
+		tc.CreateView(stmt)
+		return "", nil
 
 	case *tree.AlterTable:
 		tc.AlterTable(stmt)
@@ -332,17 +326,23 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", nil
 
 	case *tree.CreateSequence:
-		seq := tc.CreateSequence(stmt)
-		return seq.String(), nil
+		tc.CreateSequence(stmt)
+		return "", nil
 
 	case *tree.SetZoneConfig:
-		zone := tc.SetZoneConfig(stmt)
-		tp := treeprinter.New()
-		cat.FormatZone(zone, tp)
-		return tp.String(), nil
+		tc.SetZoneConfig(stmt)
+		return "", nil
+
+	case *tree.ShowCreate:
+		tn := stmt.Name.ToTableName()
+		ds, _, err := tc.ResolveDataSource(context.Background(), cat.Flags{}, &tn)
+		if err != nil {
+			return "", err
+		}
+		return ds.(fmt.Stringer).String(), nil
 
 	default:
-		return "", pgerror.AssertionFailedf("unsupported statement: %v", stmt)
+		return "", errors.AssertionFailedf("unsupported statement: %v", stmt)
 	}
 }
 
@@ -647,7 +647,7 @@ func (tt *Table) FindOrdinal(name string) int {
 			return i
 		}
 	}
-	panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
+	panic(pgerror.Newf(pgcode.UndefinedColumn,
 		"cannot find column %q in table %q",
 		tree.ErrString((*tree.Name)(&name)),
 		tree.ErrString(&tt.TabName),
@@ -779,7 +779,7 @@ func (tc *Column) DatumType() *types.T {
 func (tc *Column) ColTypePrecision() int {
 	if tc.ColType.Family() == types.ArrayFamily {
 		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
-			panic(pgerror.AssertionFailedf("column type should never be a nested array"))
+			panic(errors.AssertionFailedf("column type should never be a nested array"))
 		}
 		return int(tc.ColType.ArrayContents().Precision())
 	}
@@ -790,7 +790,7 @@ func (tc *Column) ColTypePrecision() int {
 func (tc *Column) ColTypeWidth() int {
 	if tc.ColType.Family() == types.ArrayFamily {
 		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
-			panic(pgerror.AssertionFailedf("column type should never be a nested array"))
+			panic(errors.AssertionFailedf("column type should never be a nested array"))
 		}
 		return int(tc.ColType.ArrayContents().Width())
 	}
@@ -925,7 +925,7 @@ func (fk *ForeignKeyConstraint) ColumnCount() int {
 // OriginColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
 func (fk *ForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i int) int {
 	if originTable.ID() != fk.originTableID {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"invalid table %d passed to OriginColumnOrdinal (expected %d)",
 			originTable.ID(), fk.originTableID,
 		))
@@ -937,7 +937,7 @@ func (fk *ForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i int
 // ReferencedColumnOrdinal is part of the cat.ForeignKeyConstraint interface.
 func (fk *ForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.Table, i int) int {
 	if referencedTable.ID() != fk.referencedTableID {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"invalid table %d passed to ReferencedColumnOrdinal (expected %d)",
 			referencedTable.ID(), fk.referencedTableID,
 		))

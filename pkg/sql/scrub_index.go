@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -18,14 +16,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // indexCheckOperation implements the checkOperation interface. It is a
@@ -97,7 +94,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	plan, err := params.p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
 	if err != nil {
 		log.Errorf(ctx, "failed to create query plan for query: %s", checkQuery)
-		return pgerror.NewAssertionErrorWithWrappedErrf(err, "could not create query plan")
+		return errors.NewAssertionErrorWithWrappedErrf(err, "could not create query plan")
 	}
 
 	// All columns projected in the plan generated from the query are
@@ -314,16 +311,17 @@ func createIndexCheckQuery(
 					ON %[6]s
 				WHERE (%[7]s) OR
 							(%[8]s)`
+	columnNamesList := fmt.Sprintf(`"%s"`, strings.Join(columnNames, `","`))
 	return fmt.Sprintf(checkIndexQuery,
 		tableColumnsProjection("leftside", columnNames),  // 1
 		tableColumnsProjection("rightside", columnNames), // 2
-		tableName.String(),             // 3
-		indexDesc.ID,                   // 4
-		strings.Join(columnNames, ","), // 5
+		tableName.String(), // 3
+		indexDesc.ID,       // 4
+		columnNamesList,    // 5
 		tableColumnsEQ("leftside", "rightside", columnNames, columnNames),                                      // 6
 		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */),  // 7
 		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */), // 8
-		strings.Join(columnNames, ","), // 9
-		asOfClauseStr,                  // 10
+		columnNamesList, // 9
+		asOfClauseStr,   // 10
 	)
 }

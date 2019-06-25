@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package cli
 
@@ -26,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -98,12 +97,16 @@ func setupTransientServer(
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
 
+	sysCfg := config.DefaultSystemZoneConfig()
+	sysCfg.NumReplicas = proto.Int32(1)
+
 	// Create the transient server.
 	args := base.TestServerArgs{
 		Insecure: true,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				DefaultZoneConfigOverride: &cfg,
+				DefaultZoneConfigOverride:       &cfg,
+				DefaultSystemZoneConfigOverride: &sysCfg,
 			},
 		},
 	}
@@ -144,7 +147,7 @@ func setupTransientServer(
 
 		ctx := context.TODO()
 		const batchSize, concurrency = 0, 0
-		if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+		if _, err := workloadsql.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
 			return ``, ``, cleanup, err
 		}
 	}
@@ -172,6 +175,8 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) error {
 #
 `, adminURL)
 	}
+
+	checkTzDatabaseAvailability(context.Background())
 
 	conn := makeSQLConn(connURL)
 	defer conn.Close()

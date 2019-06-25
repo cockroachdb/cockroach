@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package install
 
@@ -123,14 +121,16 @@ func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
 
 	session, err := c.newSession(index)
 	if err != nil {
-		return "", nil
+		return "", errors.Wrapf(err, "GetInternalIP: failed dial %s:%d", c.Name, index)
 	}
 	defer session.Close()
 
 	cmd := `hostname --all-ip-addresses`
 	out, err := session.CombinedOutput(cmd)
 	if err != nil {
-		return "", nil
+		return "", errors.Wrapf(err,
+			"GetInternalIP: failed to execute hostname on %s:%d: (output) %s",
+			c.Name, index, out)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -703,6 +703,11 @@ fi
 		return nil, nil
 	})
 	if len(c.AuthorizedKeys) > 0 {
+		// When clusters are created using cloud APIs they only have a subset of
+		// desired keys installed on a subset of users. This code distributes
+		// additional authorized_keys to both the current user (your username on
+		// gce and the shared user on aws) as well as to the shared user on both
+		// platforms.
 		c.Parallel("adding additional authorized keys", len(c.Nodes), 0, func(i int) ([]byte, error) {
 			sess, err := c.newSession(c.Nodes[i])
 			if err != nil {
@@ -711,7 +716,6 @@ fi
 			defer sess.Close()
 
 			sess.SetStdin(bytes.NewReader(c.AuthorizedKeys))
-
 			const cmd = `
 keys_data="$(cat)"
 set -e
@@ -721,12 +725,19 @@ on_exit() {
     rm -f "${tmp1}" "${tmp2}"
 }
 trap on_exit EXIT
-[[ -f ~/.ssh/authorized_keys ]] && cat ~/.ssh/authorized_keys > "${tmp1}"
+if [[ -f ~/.ssh/authorized_keys ]]; then
+    cat ~/.ssh/authorized_keys > "${tmp1}"
+fi
 echo "${keys_data}" >> "${tmp1}"
 sort -u < "${tmp1}" > "${tmp2}"
-sudo install --mode 0600 --owner ` + sharedUser +
-				` --group ` + sharedUser +
-				` "${tmp2}" ~` + sharedUser + `/.ssh/authorized_keys`
+install --mode 0600 "${tmp2}" ~/.ssh/authorized_keys
+if [[ "$(whoami)" != "` + sharedUser + `" ]]; then
+    sudo install --mode 0600 \
+        --owner ` + sharedUser + `\
+        --group ` + sharedUser + `\
+        "${tmp2}" ~` + sharedUser + `/.ssh/authorized_keys
+fi
+`
 			if out, err := sess.CombinedOutput(cmd); err != nil {
 				return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 			}

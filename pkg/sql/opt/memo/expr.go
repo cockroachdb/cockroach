@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
@@ -19,10 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // RelExpr is implemented by all operators tagged as Relational. Relational
@@ -221,12 +219,31 @@ func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
 	*n = common
 }
 
+// RemoveCommonFilters removes the filters found in other from n.
+func (n *FiltersExpr) RemoveCommonFilters(other FiltersExpr) {
+	// TODO(ridwanmsharif): Faster intersection using a map
+	common := (*n)[:0]
+	for _, filter := range *n {
+		found := false
+		for _, otherFilter := range other {
+			if filter.Condition == otherFilter.Condition {
+				found = true
+				break
+			}
+		}
+		if !found {
+			common = append(common, filter)
+		}
+	}
+	*n = common
+}
+
 // OutputCols returns the set of columns constructed by the Aggregations
 // expression.
 func (n AggregationsExpr) OutputCols() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
-		colSet.Add(int(n[i].Col))
+		colSet.Add(n[i].Col)
 	}
 	return colSet
 }
@@ -246,7 +263,7 @@ func (n ZipExpr) OutputCols() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
 		for _, col := range n[i].Cols {
-			colSet.Add(int(col))
+			colSet.Add(col)
 		}
 	}
 	return colSet
@@ -350,6 +367,14 @@ func (jf JoinFlags) String() string {
 	return b.String()
 }
 
+// WindowFrame denotes the definition of a window frame for an individual
+// window function, excluding the OFFSET expressions, if present.
+type WindowFrame struct {
+	Mode           tree.WindowFrameMode
+	StartBoundType tree.WindowFrameBoundType
+	EndBoundType   tree.WindowFrameBoundType
+}
+
 // NeedResults returns true if the mutation operator can return the rows that
 // were mutated.
 func (m *MutationPrivate) NeedResults() bool {
@@ -363,7 +388,7 @@ func (m *MutationPrivate) NeedResults() bool {
 // NOTE: This can only be called if the mutation operator returns rows.
 func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
 	if m.ReturnCols == nil {
-		panic(pgerror.AssertionFailedf("MapToInputID cannot be called if ReturnCols is not defined"))
+		panic(errors.AssertionFailedf("MapToInputID cannot be called if ReturnCols is not defined"))
 	}
 	ord := m.Table.ColumnOrdinal(tabColID)
 	return m.ReturnCols[ord]
@@ -373,12 +398,12 @@ func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
 // input columns using the MapToInputID function.
 func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 	var inCols opt.ColSet
-	tabCols.ForEach(func(t int) {
-		id := m.MapToInputID(opt.ColumnID(t))
+	tabCols.ForEach(func(t opt.ColumnID) {
+		id := m.MapToInputID(t)
 		if id == 0 {
-			panic(pgerror.AssertionFailedf("could not find input column for %d", log.Safe(t)))
+			panic(errors.AssertionFailedf("could not find input column for %d", log.Safe(t)))
 		}
-		inCols.Add(int(id))
+		inCols.Add(id)
 	})
 	return inCols
 }
@@ -409,7 +434,7 @@ func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncD
 func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 	switch t := e.(type) {
 	case *VariableExpr:
-		return notNullCols.Contains(int(t.Col))
+		return notNullCols.Contains(t.Col)
 
 	case *TrueExpr, *FalseExpr, *ConstExpr, *IsExpr, *IsNotExpr:
 		return true

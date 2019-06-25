@@ -1,27 +1,10 @@
 exec-ddl
 CREATE TABLE xysd (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
 ----
-TABLE xysd
- ├── x int not null
- ├── y int
- ├── s string
- ├── d decimal not null
- ├── INDEX primary
- │    └── x int not null
- └── INDEX secondary
-      ├── s string desc
-      ├── d decimal not null
-      └── x int not null (storing)
 
 exec-ddl
 CREATE TABLE uv (u INT, v INT NOT NULL)
 ----
-TABLE uv
- ├── u int
- ├── v int not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE xysd INJECT STATISTICS '[
@@ -101,7 +84,7 @@ norm
 SELECT * FROM xysd JOIN uv ON false
 ----
 values
- ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int)
+ ├── columns: x:1(int!null) y:2(int!null) s:3(string!null) d:4(decimal!null) u:5(int!null) v:6(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -523,11 +506,11 @@ GROUP BY y
 ----
 project
  ├── columns: count:8(int)
- ├── stats: [rows=400.903879]
+ ├── stats: [rows=399.903879]
  └── group-by
       ├── columns: y:2(int) count_rows:8(int)
       ├── grouping columns: y:2(int)
-      ├── stats: [rows=400.903879, distinct(2)=399.903879, null(2)=400.903879]
+      ├── stats: [rows=399.903879, distinct(2)=399.903879, null(2)=399.903879]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── right-join
@@ -556,11 +539,11 @@ GROUP BY y
 ----
 project
  ├── columns: count:8(int)
- ├── stats: [rows=401]
+ ├── stats: [rows=400]
  └── group-by
       ├── columns: y:2(int) count_rows:8(int)
       ├── grouping columns: y:2(int)
-      ├── stats: [rows=401, distinct(2)=400, null(2)=401]
+      ├── stats: [rows=400, distinct(2)=400, null(2)=400]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── full-join
@@ -584,24 +567,10 @@ project
 exec-ddl
 CREATE TABLE uvw (u INT, v INT, w INT)
 ----
-TABLE uvw
- ├── u int
- ├── v int
- ├── w int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE xyz (x INT, y INT, z INT)
 ----
-TABLE xyz
- ├── x int
- ├── y int
- ├── z int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Verify that two equivalent formulations of a join lead to similar statistics.
 # In the first case, x=10 is pushed down; in the second case it is part of the
@@ -712,7 +681,7 @@ inner-join
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2500, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -733,7 +702,7 @@ left-join
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2500, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -754,7 +723,7 @@ right-join
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2500, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -775,7 +744,7 @@ full-join
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2500, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -802,7 +771,7 @@ select
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  │    ├── scan xysd
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2500, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── scan uv
@@ -822,12 +791,12 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON u > 4 AND u < 2
 ----
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
- ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(3)=500, null(3)=500000, distinct(5)=500, null(5)=25000000, distinct(2,3)=5000, null(2,3)=25250000, distinct(3,5)=250000, null(3,5)=25250000, distinct(1,2,7)=25000000, null(1,2,7)=25000000]
+ ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(3)=500, null(3)=500000, distinct(5)=500, null(5)=25000000, distinct(2,3)=5000, null(2,3)=25250000, distinct(3,5)=250000, null(3,5)=25250000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2500, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -843,16 +812,16 @@ SELECT * FROM xysd, uv
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
- ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25000000, null(1,2,7)=25000000]
+ ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── inner-join
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
-      ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25000000, null(1,2,7)=25000000]
+      ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
       ├── key: (1,7)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
-      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(1,2)=2500, null(1,2)=2500]
+      │    ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(1,2)=2501, null(1,2)=2500]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── scan uv
@@ -886,7 +855,7 @@ inner-join (merge)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
  ├── scan t.public.xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2500, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── ordering: +1
@@ -927,7 +896,7 @@ left-join (merge)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
  ├── scan t.public.xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2500, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=2501, null(1,2)=2500, distinct(2,3)=5000, null(2,3)=2525]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── ordering: +1
@@ -950,7 +919,7 @@ norm
 SELECT * FROM (SELECT 1) JOIN (SELECT 1 WHERE false) ON true
 ----
 values
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -960,20 +929,20 @@ norm
 SELECT * FROM (SELECT 1) LEFT JOIN (SELECT 1 WHERE false) ON true
 ----
 left-join
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1,) [type=tuple{int}]
  ├── values
- │    ├── columns: "?column?":2(int)
+ │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── stats: [rows=0]
  │    ├── key: ()
@@ -984,7 +953,7 @@ norm
 SELECT * FROM (SELECT 1) RIGHT JOIN (SELECT 1 WHERE false) ON true
 ----
 values
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -994,20 +963,20 @@ norm
 SELECT * FROM (SELECT 1) FULL JOIN (SELECT 1 WHERE false) ON true
 ----
 left-join
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1,) [type=tuple{int}]
  ├── values
- │    ├── columns: "?column?":2(int)
+ │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── stats: [rows=0]
  │    ├── key: ()
@@ -1018,7 +987,7 @@ norm
 SELECT * FROM (SELECT 1 WHERE false) JOIN (SELECT 1) ON true
 ----
 values
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -1028,7 +997,7 @@ norm
 SELECT * FROM (SELECT 1 WHERE false) LEFT JOIN (SELECT 1) ON true
 ----
 values
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int!null) "?column?":2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -1038,19 +1007,19 @@ norm
 SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
 ----
 right-join
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── stats: [rows=0]
  │    ├── key: ()
  │    └── fd: ()-->(1)
  ├── values
- │    ├── columns: "?column?":2(int)
+ │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
@@ -1062,19 +1031,19 @@ norm
 SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
 ----
 right-join
- ├── columns: "?column?":1(int) "?column?":2(int)
+ ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── stats: [rows=0]
  │    ├── key: ()
  │    └── fd: ()-->(1)
  ├── values
- │    ├── columns: "?column?":2(int)
+ │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
@@ -1086,21 +1055,108 @@ norm
 SELECT * FROM (SELECT 1) FULL JOIN (VALUES (1), (2)) ON true
 ----
 inner-join
- ├── columns: "?column?":1(int) column1:2(int)
+ ├── columns: "?column?":1(int!null) column1:2(int!null)
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
  ├── fd: ()-->(1)
  ├── values
- │    ├── columns: "?column?":1(int)
+ │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1,) [type=tuple{int}]
  ├── values
- │    ├── columns: column1:2(int)
+ │    ├── columns: column1:2(int!null)
  │    ├── cardinality: [2 - 2]
  │    ├── stats: [rows=2]
  │    ├── (1,) [type=tuple{int}]
  │    └── (2,) [type=tuple{int}]
+ └── filters (true)
+
+exec-ddl
+CREATE TABLE table0 (
+    col0 INT4,
+    col1 BOOL NULL,
+    col2 BIT(40) NOT NULL
+)
+----
+
+exec-ddl
+CREATE TABLE table1 (
+    col0 BIT(23) NULL,
+    col1 INET NULL
+)
+----
+
+# Regression test for #38091.
+norm
+SELECT (
+        SELECT 1
+          FROM table1
+               LEFT JOIN table1 AS t1
+                INNER JOIN table0 ON false ON t0.col1
+       )
+  FROM table0 AS t0
+----
+project
+ ├── columns: "?column?":16(int)
+ ├── stats: [rows=1000]
+ ├── left-join-apply
+ │    ├── columns: t0.col1:2(bool) "?column?":15(int)
+ │    ├── stats: [rows=1000]
+ │    ├── scan t0
+ │    │    ├── columns: t0.col1:2(bool)
+ │    │    └── stats: [rows=1000]
+ │    ├── max1-row
+ │    │    ├── columns: "?column?":15(int!null)
+ │    │    ├── outer: (2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(15)
+ │    │    └── project
+ │    │         ├── columns: "?column?":15(int!null)
+ │    │         ├── outer: (2)
+ │    │         ├── stats: [rows=1000]
+ │    │         ├── fd: ()-->(15)
+ │    │         ├── left-join
+ │    │         │    ├── outer: (2)
+ │    │         │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+ │    │         │    ├── scan table1
+ │    │         │    │    └── stats: [rows=1000]
+ │    │         │    ├── values
+ │    │         │    │    ├── cardinality: [0 - 0]
+ │    │         │    │    ├── stats: [rows=0]
+ │    │         │    │    └── key: ()
+ │    │         │    └── filters
+ │    │         │         └── variable: t0.col1 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ │    │         └── projections
+ │    │              └── const: 1 [type=int]
+ │    └── filters (true)
+ └── projections
+      └── variable: ?column? [type=int, outer=(15)]
+
+norm colstat=1 colstat=2
+SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
+----
+left-join
+ ├── columns: x:1(int!null) x:2(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,) [type=tuple{int}]
+ ├── values
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0, distinct(2)=0, null(2)=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(2)
  └── filters (true)

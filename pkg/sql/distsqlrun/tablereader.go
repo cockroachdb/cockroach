@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -22,12 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -56,12 +53,13 @@ type tableReader struct {
 
 	ignoreMisplannedRanges bool
 
-	// input is really the fetcher below, possibly wrapped in a stats generator.
-	input RowSource
-	// fetcher is the underlying Fetcher, should only be used for
-	// initialization, call input.Next() to retrieve rows once initialized.
-	fetcher row.Fetcher
+	// fetcher wraps a row.Fetcher, allowing the tableReader to add a stat
+	// collection layer.
+	fetcher rowFetcher
 	alloc   sqlbase.DatumAlloc
+
+	// rowsRead is the number of rows read and is tracked unconditionally.
+	rowsRead int64
 }
 
 var _ Processor = &tableReader{}
@@ -119,9 +117,10 @@ func newTableReader(
 
 	neededColumns := tr.out.neededColumns()
 
+	var fetcher row.Fetcher
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
+		&fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
 		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility,
 	); err != nil {
 		return nil, err
@@ -136,43 +135,16 @@ func newTableReader(
 	for i, s := range spec.Spans {
 		tr.spans[i] = s.Span
 	}
-	tr.input = &rowFetcherWrapper{Fetcher: &tr.fetcher}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
-		tr.input = NewInputStatCollector(tr.input)
+		tr.fetcher = newRowFetcherStatCollector(&fetcher)
 		tr.finishTrace = tr.outputStatsToTrace
+	} else {
+		tr.fetcher = &rowFetcherWrapper{Fetcher: &fetcher}
 	}
 
 	return tr, nil
 }
-
-// rowFetcherWrapper is used only by a tableReader to wrap calls to
-// Fetcher.NextRow() in a RowSource implementation.
-type rowFetcherWrapper struct {
-	ctx context.Context
-	*row.Fetcher
-}
-
-var _ RowSource = &rowFetcherWrapper{}
-
-// Start is part of the RowSource interface.
-func (w *rowFetcherWrapper) Start(ctx context.Context) context.Context {
-	w.ctx = ctx
-	return ctx
-}
-
-// Next() calls NextRow() on the underlying Fetcher. If the returned
-// ProducerMetadata is not nil, only its Err field will be set.
-func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
-	row, _, _, err := w.NextRow(w.ctx)
-	if err != nil {
-		return row, &distsqlpb.ProducerMetadata{Err: err}
-	}
-	return row, nil
-}
-func (w rowFetcherWrapper) OutputTypes() []types.T { return nil }
-func (w rowFetcherWrapper) ConsumerDone()          {}
-func (w rowFetcherWrapper) ConsumerClosed()        {}
 
 func initRowFetcher(
 	fetcher *row.Fetcher,
@@ -234,7 +206,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	}
 
 	// This call doesn't do much; the real "starting" is below.
-	tr.input.Start(fetcherCtx)
+	tr.fetcher.Start(fetcherCtx)
 
 	limitBatches := true
 	// We turn off limited batches if we know we have no limit and if the
@@ -277,6 +249,7 @@ func (tr *tableReader) Release() {
 		ProcessorBase: tr.ProcessorBase,
 		fetcher:       tr.fetcher,
 		spans:         tr.spans[:0],
+		rowsRead:      0,
 	}
 	trPool.Put(tr)
 }
@@ -284,7 +257,7 @@ func (tr *tableReader) Release() {
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for tr.State == StateRunning {
-		row, meta := tr.input.Next()
+		row, meta := tr.fetcher.Next()
 
 		if meta != nil {
 			if meta.Err != nil {
@@ -297,6 +270,11 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 			break
 		}
 
+		// When tracing is enabled, number of rows read is tracked twice (once
+		// here, and once through InputStats). This is done so that non-tracing
+		// case can avoid tracking of the stall time which gives a noticeable
+		// performance hit.
+		tr.rowsRead++
 		if outRow := tr.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
@@ -332,7 +310,7 @@ func (trs *TableReaderStats) StatsForQueryPlan() []string {
 // outputStatsToTrace outputs the collected tableReader stats to the trace. Will
 // fail silently if the tableReader is not collecting stats.
 func (tr *tableReader) outputStatsToTrace() {
-	is, ok := getInputStats(tr.flowCtx, tr.input)
+	is, ok := getFetcherInputStats(tr.flowCtx, tr.fetcher)
 	if !ok {
 		return
 	}
@@ -355,6 +333,11 @@ func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMet
 	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
+
+	meta := distsqlpb.GetProducerMeta()
+	meta.Metrics = distsqlpb.GetMetricsMeta()
+	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.fetcher.GetBytesRead(), tr.rowsRead
+	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
 }
 

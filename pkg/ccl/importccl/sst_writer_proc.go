@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -146,6 +148,17 @@ func (sp *sstWriter) Run(ctx context.Context) {
 			return err
 		}
 
+		// TODO(jeffreyxiao): Remove this check in 20.1.
+		// If the cluster supports sticky bits, then we should use the sticky bit
+		// to ensure that the splits are not automatically split by the merge
+		// queue. If the cluster does not support sticky bits, we disable the merge
+		// queue via gossip, so we can just set the split to expire immediately.
+		stickyBitEnabled := sp.flowCtx.Settings.Version.IsActive(cluster.VersionStickyBit)
+		expirationTime := hlc.Timestamp{}
+		if stickyBitEnabled {
+			expirationTime = sp.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+		}
+
 		// Fetch all the keys in each span and write them to storage.
 		iter := store.NewIterator()
 		defer iter.Close()
@@ -176,7 +189,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 						end = sst.span.EndKey
 					}
 
-					if err := sp.db.AdminSplit(ctx, end, end, false /* manual */); err != nil {
+					if err := sp.db.AdminSplit(ctx, end, end, expirationTime); err != nil {
 						return err
 					}
 

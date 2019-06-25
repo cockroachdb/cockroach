@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -18,9 +16,11 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // Overload is one of the overloads of a built-in function.
@@ -393,7 +393,7 @@ func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired *types.T, overloads []overloadImpl, inBinOp bool, exprs ...Expr,
 ) ([]TypedExpr, []overloadImpl, error) {
 	if len(overloads) > math.MaxUint8 {
-		return nil, nil, pgerror.AssertionFailedf("too many overloads (%d > 255)", len(overloads))
+		return nil, nil, errors.AssertionFailedf("too many overloads (%d > 255)", len(overloads))
 	}
 
 	var s typeCheckOverloadState
@@ -406,7 +406,7 @@ func typeCheckOverloadedExprs(
 		// Only one overload can be provided if it has parameters with HomogeneousType.
 		if _, ok := overload.params().(HomogeneousType); ok {
 			if len(overloads) > 1 {
-				return nil, nil, pgerror.AssertionFailedf(
+				return nil, nil, errors.AssertionFailedf(
 					"only one overload can have HomogeneousType parameters")
 			}
 			typedExprs, _, err := TypeCheckSameTypedExprs(ctx, desired, exprs...)
@@ -426,7 +426,7 @@ func typeCheckOverloadedExprs(
 		for _, i := range s.resolvableIdxs {
 			typ, err := exprs[i].TypeCheck(ctx, types.Any)
 			if err != nil {
-				return nil, nil, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+				return nil, nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 					"error type checking resolved expression:")
 			}
 			s.typedExprs[i] = typ
@@ -736,7 +736,7 @@ func defaultTypeCheck(ctx *SemaContext, s *typeCheckOverloadState, errorOnPlaceh
 	for _, i := range s.constIdxs {
 		typ, err := s.exprs[i].TypeCheck(ctx, types.Any)
 		if err != nil {
-			return pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+			return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 				"error type checking constant value")
 		}
 		s.typedExprs[i] = typ
@@ -780,12 +780,12 @@ func checkReturn(
 			typ, err := s.exprs[i].TypeCheck(ctx, des)
 			if err != nil {
 				return false, s.typedExprs, nil, pgerror.Wrapf(
-					err, pgerror.CodeInvalidParameterValueError,
+					err, pgcode.InvalidParameterValue,
 					"error type checking constant value",
 				)
 			}
 			if des != nil && !typ.ResolvedType().Equivalent(des) {
-				return false, nil, nil, pgerror.AssertionFailedf(
+				return false, nil, nil, errors.AssertionFailedf(
 					"desired constant value type %s but set type %s",
 					log.Safe(des), log.Safe(typ.ResolvedType()),
 				)

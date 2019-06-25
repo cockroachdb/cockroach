@@ -139,7 +139,7 @@ CREATE TABLE y (
     u INT8 NOT NULL,
     v INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (u ASC),
-    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
+    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x(a),
     INDEX y_v_idx (v ASC),
     FAMILY "primary" (u, v)
 );
@@ -220,7 +220,7 @@ CREATE TABLE y (
     u INT8 NOT NULL,
     v INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (u ASC),
-    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
+    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x(a),
     INDEX y_v_idx (v ASC),
     FAMILY "primary" (u, v)
 );
@@ -247,7 +247,7 @@ CREATE TABLE y (
     u INT8 NOT NULL,
     v INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (u ASC),
-    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
+    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x(a),
     INDEX y_v_idx (v ASC),
     FAMILY "primary" (u, v)
 );
@@ -336,7 +336,7 @@ CREATE TABLE y (
     u INT8 NOT NULL,
     v INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (u ASC),
-    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
+    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x(a),
     INDEX y_v_idx (v ASC),
     FAMILY "primary" (u, v)
 );

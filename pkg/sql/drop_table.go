@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -19,14 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type dropTableNode struct {
@@ -205,7 +201,7 @@ func (p *planner) canRemoveInterleave(
 	// non-public state for referential integrity of the `InterleaveDescriptor`
 	// pointers.
 	if behavior != tree.DropCascade {
-		return pgerror.UnimplementedWithIssuef(
+		return unimplemented.NewWithIssuef(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
 	return p.CheckPrivilege(ctx, table, privilege.CREATE)
@@ -333,17 +329,15 @@ func (p *planner) initiateDropTable(
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
 	}
 
-	// If the table is not interleaved and the ClearRange feature is
-	// enabled in the cluster, use the delayed GC mechanism to schedule
-	// usage of the more efficient ClearRange pathway. ClearRange will
-	// only work if the entire hierarchy of interleaved tables are
-	// dropped at once, as with ON DELETE CASCADE where the top-level
-	// "root" table is dropped.
+	// If the table is not interleaved , use the delayed GC mechanism to
+	// schedule usage of the more efficient ClearRange pathway. ClearRange will
+	// only work if the entire hierarchy of interleaved tables are dropped at
+	// once, as with ON DELETE CASCADE where the top-level "root" table is
+	// dropped.
 	//
-	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be
-	// able to use this faster mechanism.
-	if tableDesc.IsTable() && !tableDesc.IsInterleaved() &&
-		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
+	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be able to use
+	// this faster mechanism.
+	if tableDesc.IsTable() && !tableDesc.IsInterleaved() {
 		// Get the zone config applying to this table in order to
 		// ensure there is a GC TTL.
 		_, _, _, err := GetZoneConfigInTxn(
@@ -388,8 +382,8 @@ func (p *planner) initiateDropTable(
 		}
 
 		if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-			return pgerror.NewAssertionErrorWithWrappedErrf(err,
-				"failed to mark job %d as as successful", log.Safe(jobID))
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to mark job %d as as successful", errors.Safe(jobID))
 		}
 	}
 

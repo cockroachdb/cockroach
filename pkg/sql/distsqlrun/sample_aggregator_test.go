@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -178,7 +176,7 @@ func TestSampleAggregator(t *testing.T) {
 			name:          "a",
 			colIDs:        "{100}",
 			rowCount:      11,
-			distinctCount: 2,
+			distinctCount: 3,
 			nullCount:     2,
 		},
 		{
@@ -186,7 +184,7 @@ func TestSampleAggregator(t *testing.T) {
 			name:          "<NULL>",
 			colIDs:        "{101}",
 			rowCount:      11,
-			distinctCount: 8,
+			distinctCount: 9,
 			nullCount:     1,
 			buckets: []resultBucket{
 				{numEq: 2, numRange: 0, upper: 1},

@@ -100,20 +100,10 @@ project-set
 exec-ddl
 CREATE TABLE t (a string)
 ----
-TABLE t
- ├── a string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE u (b string)
 ----
-TABLE u
- ├── b string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
@@ -921,14 +911,6 @@ project
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, j JSON, k JSON, m JSON, n JSON)
 ----
-TABLE a
- ├── x int not null
- ├── j jsonb
- ├── k jsonb
- ├── m jsonb
- ├── n jsonb
- └── INDEX primary
-      └── x int not null
 
 build
 SELECT

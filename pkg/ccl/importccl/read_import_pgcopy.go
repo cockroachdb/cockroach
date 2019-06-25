@@ -19,11 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // defaultScanBuffer is the default max row size of the PGCOPY and PGDUMP
@@ -274,10 +274,10 @@ func (d *pgCopyReader) readFile(
 			break
 		}
 		if err != nil {
-			return wrapRowErr(err, inputName, count, pgerror.CodeDataExceptionError, "")
+			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 		}
 		if len(row) != len(d.conv.visibleColTypes) {
-			return makeRowErr(inputName, count, pgerror.CodeSyntaxError,
+			return makeRowErr(inputName, count, pgcode.Syntax,
 				"expected %d values, got %d", len(d.conv.visibleColTypes), len(row))
 		}
 		for i, s := range row {
@@ -287,14 +287,14 @@ func (d *pgCopyReader) readFile(
 				d.conv.datums[i], err = tree.ParseDatumStringAs(d.conv.visibleColTypes[i], *s, d.conv.evalCtx)
 				if err != nil {
 					col := d.conv.visibleCols[i]
-					return wrapRowErr(err, inputName, count, pgerror.CodeSyntaxError,
+					return wrapRowErr(err, inputName, count, pgcode.Syntax,
 						"parse %q as %s", col.Name, col.Type.SQLString())
 				}
 			}
 		}
 
 		if err := d.conv.row(ctx, inputIdx, count); err != nil {
-			return wrapRowErr(err, inputName, count, pgerror.CodeDataExceptionError, "")
+			return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 		}
 	}
 

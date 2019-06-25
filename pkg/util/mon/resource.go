@@ -1,18 +1,20 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package mon
 
-import "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
+)
 
 // Resource is an interface used to abstract the specifics of tracking bytes
 // usage by different types of resources.
@@ -31,13 +33,13 @@ var MemoryResource Resource = memoryResource{}
 func (m memoryResource) NewBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
-	return pgerror.Newf(
-		pgerror.CodeOutOfMemoryError,
-		"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
-		requestedBytes,
-		reservedBytes,
-		budgetBytes,
-	)
+	return pgerror.WithCandidateCode(
+		errors.Newf(
+			"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
+			errors.Safe(requestedBytes),
+			errors.Safe(reservedBytes),
+			errors.Safe(budgetBytes),
+		), pgcode.OutOfMemory)
 }
 
 // diskResource is a Resource that represents disk.
@@ -51,11 +53,11 @@ var DiskResource Resource = diskResource{}
 func (d diskResource) NewBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
-	return pgerror.Newf(
-		pgerror.CodeDiskFullError,
-		"disk budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
-		requestedBytes,
-		reservedBytes,
-		budgetBytes,
-	)
+	return pgerror.WithCandidateCode(
+		errors.Newf(
+			"disk budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
+			errors.Safe(requestedBytes),
+			errors.Safe(reservedBytes),
+			errors.Safe(budgetBytes),
+		), pgcode.DiskFull)
 }

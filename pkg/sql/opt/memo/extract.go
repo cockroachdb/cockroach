@@ -1,22 +1,20 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // This file contains various helper functions that extract useful information
@@ -97,14 +95,14 @@ func ExtractConstDatum(e opt.Expr) tree.Datum {
 		}
 		return a
 	}
-	panic(pgerror.AssertionFailedf("non-const expression: %+v", e))
+	panic(errors.AssertionFailedf("non-const expression: %+v", e))
 }
 
 // ExtractAggSingleInputColumn returns the input ColumnID of an aggregate
 // operator that has a single input.
 func ExtractAggSingleInputColumn(e opt.ScalarExpr) opt.ColumnID {
 	if !opt.IsAggregateOp(e) {
-		panic(pgerror.AssertionFailedf("not an Aggregate"))
+		panic(errors.AssertionFailedf("not an Aggregate"))
 	}
 	return ExtractVarFromAggInput(e.Child(0).(opt.ScalarExpr)).Col
 }
@@ -112,7 +110,7 @@ func ExtractAggSingleInputColumn(e opt.ScalarExpr) opt.ColumnID {
 // ExtractAggInputColumns returns the set of columns the aggregate depends on.
 func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 	if !opt.IsAggregateOp(e) {
-		panic(pgerror.AssertionFailedf("not an Aggregate"))
+		panic(errors.AssertionFailedf("not an Aggregate"))
 	}
 
 	if e.ChildCount() == 0 {
@@ -122,17 +120,17 @@ func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 	arg := e.Child(0)
 	var res opt.ColSet
 	if filter, ok := arg.(*AggFilterExpr); ok {
-		res.Add(int(filter.Filter.(*VariableExpr).Col))
+		res.Add(filter.Filter.(*VariableExpr).Col)
 		arg = filter.Input
 	}
 	if distinct, ok := arg.(*AggDistinctExpr); ok {
 		arg = distinct.Input
 	}
 	if variable, ok := arg.(*VariableExpr); ok {
-		res.Add(int(variable.Col))
+		res.Add(variable.Col)
 		return res
 	}
-	panic(pgerror.AssertionFailedf("unhandled aggregate input %T", log.Safe(arg)))
+	panic(errors.AssertionFailedf("unhandled aggregate input %T", log.Safe(arg)))
 }
 
 // ExtractVarFromAggInput is given an argument to an Aggregate and returns the
@@ -147,7 +145,7 @@ func ExtractVarFromAggInput(arg opt.ScalarExpr) *VariableExpr {
 	if variable, ok := arg.(*VariableExpr); ok {
 		return variable
 	}
-	panic(pgerror.AssertionFailedf("aggregate input not a Variable"))
+	panic(errors.AssertionFailedf("aggregate input not a Variable"))
 }
 
 // ExtractJoinEqualityColumns returns pairs of columns (one from the left side,
@@ -204,10 +202,10 @@ func isJoinEquality(
 		return false, 0, 0
 	}
 
-	if leftCols.Contains(int(lvar.Col)) && rightCols.Contains(int(rvar.Col)) {
+	if leftCols.Contains(lvar.Col) && rightCols.Contains(rvar.Col) {
 		return true, lvar.Col, rvar.Col
 	}
-	if leftCols.Contains(int(rvar.Col)) && rightCols.Contains(int(lvar.Col)) {
+	if leftCols.Contains(rvar.Col) && rightCols.Contains(lvar.Col) {
 		return true, rvar.Col, lvar.Col
 	}
 
@@ -274,9 +272,23 @@ func ExtractValuesFromFilter(on FiltersExpr, cols opt.ColSet) map[opt.ColumnID]t
 	return vals
 }
 
+// ExtractConstantFilter returns a map of columns to the filters that constrain
+// value to a constant.
+func ExtractConstantFilter(on FiltersExpr, cols opt.ColSet) map[opt.ColumnID]FiltersItem {
+	vals := make(map[opt.ColumnID]FiltersItem)
+	for i := range on {
+		ok, col, _ := extractConstEquality(on[i].Condition)
+		if !ok || !cols.Contains(col) {
+			continue
+		}
+		vals[opt.ColumnID(col)] = on[i]
+	}
+	return vals
+}
+
 // extractConstEquality extracts a column that's being equated to a constant
 // value if possible.
-func extractConstEquality(condition opt.ScalarExpr) (bool, int, tree.Datum) {
+func extractConstEquality(condition opt.ScalarExpr) (bool, opt.ColumnID, tree.Datum) {
 	// TODO(justin): this is error-prone because this logic is different from the
 	// constraint logic. Extract these values directly from the constraints.
 	switch condition.(type) {
@@ -285,7 +297,7 @@ func extractConstEquality(condition opt.ScalarExpr) (bool, int, tree.Datum) {
 		// due to the CommuteVar norm rule.
 		if leftVar, ok := condition.Child(0).(*VariableExpr); ok {
 			if CanExtractConstDatum(condition.Child(1)) {
-				return true, int(leftVar.Col), ExtractConstDatum(condition.Child(1))
+				return true, leftVar.Col, ExtractConstDatum(condition.Child(1))
 			}
 		}
 	}

@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -25,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -76,7 +75,7 @@ func (req runnerRequest) run() {
 		if err != nil {
 			res.err = err
 		} else {
-			res.err = resp.Error.ErrorDetail()
+			res.err = resp.Error.ErrorDetail(req.ctx)
 		}
 	}
 	req.resultChan <- res
@@ -338,6 +337,11 @@ type DistSQLReceiver struct {
 	// A handler for clock signals arriving from remote nodes. This should update
 	// this node's clock.
 	updateClock func(observedTs hlc.Timestamp)
+
+	// bytesRead and rowsRead track the corresponding metrics while executing the
+	// statement.
+	bytesRead int64
+	rowsRead  int64
 }
 
 // errWrap is a container for an error, for use with atomic.Value, which
@@ -389,7 +393,7 @@ var receiverSyncPool = sync.Pool{
 
 // MakeDistSQLReceiver creates a DistSQLReceiver.
 //
-// ctx is the Context that the receiver will use throughput its
+// ctx is the Context that the receiver will use throughout its
 // lifetime. resultWriter is the container where the results will be
 // stored. If only the row count is needed, this can be nil.
 //
@@ -516,6 +520,12 @@ func (r *DistSQLReceiver) Push(
 			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
+		}
+		if meta.Metrics != nil {
+			r.bytesRead += meta.Metrics.BytesRead
+			r.rowsRead += meta.Metrics.RowsRead
+			meta.Metrics.Release()
+			meta.Release()
 		}
 		return r.status
 	}
@@ -803,7 +813,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 				subqueryPlans[planIdx].result = &tree.DTuple{D: rows.At(0)}
 			}
 		default:
-			return pgerror.Newf(pgerror.CodeCardinalityViolationError,
+			return pgerror.Newf(pgcode.CardinalityViolation,
 				"more than one row returned by a subquery used as an expression")
 		}
 	default:
@@ -837,4 +847,117 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	}
 	dsp.FinalizePlan(planCtx, &physPlan)
 	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+}
+
+// PlanAndRunPostqueries returns false if an error was encountered and sets
+// that error in the provided receiver.
+func (dsp *DistSQLPlanner) PlanAndRunPostqueries(
+	ctx context.Context,
+	planner *planner,
+	evalCtxFactory func() *extendedEvalContext,
+	postqueryPlans []postquery,
+	recv *DistSQLReceiver,
+	maybeDistribute bool,
+) bool {
+	for _, postqueryPlan := range postqueryPlans {
+		if err := dsp.planAndRunPostquery(
+			ctx,
+			postqueryPlan,
+			planner,
+			evalCtxFactory(),
+			recv,
+			maybeDistribute,
+		); err != nil {
+			recv.SetError(err)
+			return false
+		}
+	}
+
+	return true
+}
+
+func (dsp *DistSQLPlanner) planAndRunPostquery(
+	ctx context.Context,
+	postqueryPlan postquery,
+	planner *planner,
+	evalCtx *extendedEvalContext,
+	recv *DistSQLReceiver,
+	maybeDistribute bool,
+) error {
+	postqueryMonitor := mon.MakeMonitor(
+		"postquery",
+		mon.MemoryResource,
+		dsp.distSQLSrv.Metrics.CurBytesCount,
+		dsp.distSQLSrv.Metrics.MaxBytesHist,
+		-1, /* use default block size */
+		noteworthyMemoryUsageBytes,
+		dsp.distSQLSrv.Settings,
+	)
+	postqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+	defer postqueryMonitor.Stop(ctx)
+
+	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()
+	defer postqueryMemAccount.Close(ctx)
+
+	var postqueryPlanCtx *PlanningCtx
+	var distributePostquery bool
+	if maybeDistribute {
+		distributePostquery = shouldDistributePlan(
+			ctx, planner.SessionData().DistSQLMode, dsp, postqueryPlan.plan)
+	}
+	if distributePostquery {
+		postqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
+	} else {
+		postqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
+	}
+
+	postqueryPlanCtx.isLocal = !distributePostquery
+	postqueryPlanCtx.planner = planner
+	postqueryPlanCtx.stmtType = tree.Rows
+	// We cannot close the postqueries' plans through the plan top since
+	// postqueries haven't been executed yet, so we manually close each postquery
+	// plan right after the execution.
+	postqueryPlanCtx.ignoreClose = true
+	defer postqueryPlan.plan.Close(ctx)
+
+	postqueryPhysPlan, err := dsp.createPlanForNode(postqueryPlanCtx, postqueryPlan.plan)
+	if err != nil {
+		return err
+	}
+	dsp.FinalizePlan(postqueryPlanCtx, &postqueryPhysPlan)
+
+	postqueryRecv := recv.clone()
+	var postqueryRowReceiver postqueryRowResultWriter
+	postqueryRecv.resultWriter = &postqueryRowReceiver
+	dsp.Run(postqueryPlanCtx, planner.txn, &postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)
+	if postqueryRecv.commErr != nil {
+		return postqueryRecv.commErr
+	}
+	return postqueryRowReceiver.Err()
+}
+
+// postqueryRowResultWriter is a lightweight version of RowResultWriter that
+// can only write errors. It is used only for executing postqueries and is
+// sufficient for that case since those can only return errors.
+type postqueryRowResultWriter struct {
+	err error
+}
+
+var _ rowResultWriter = &postqueryRowResultWriter{}
+
+func (r *postqueryRowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	return errors.Errorf("unexpectedly AddRow is called on postqueryRowResultWriter")
+}
+
+func (r *postqueryRowResultWriter) IncrementRowsAffected(n int) {
+	// TODO(yuzefovich): this probably will need to change when we support
+	// cascades.
+}
+
+func (r *postqueryRowResultWriter) SetError(err error) {
+	r.err = err
+}
+
+func (r *postqueryRowResultWriter) Err() error {
+	return r.err
 }

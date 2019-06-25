@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package log
 
@@ -19,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/logtags"
 )
 
 // formatTags appends the tags to a strings.Builder. If there are no tags,
@@ -30,22 +28,7 @@ func formatTags(ctx context.Context, buf *strings.Builder) bool {
 		return false
 	}
 	buf.WriteByte('[')
-	for i, t := range tags.Get() {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-
-		buf.WriteString(t.Key())
-		if v := t.Value(); v != nil && v != "" {
-			// For tags that have a value and are longer than a character,
-			// we output "tag=value". For one character tags we don't use a
-			// separator (e.g. "n1").
-			if len(t.Key()) > 1 {
-				buf.WriteByte('=')
-			}
-			fmt.Fprint(buf, v)
-		}
-	}
+	tags.FormatToString(buf)
 	buf.WriteString("] ")
 	return true
 }

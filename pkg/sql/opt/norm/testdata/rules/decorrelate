@@ -1,41 +1,18 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
-TABLE uv
- ├── u int not null
- ├── v int
- └── INDEX primary
-      └── u int not null
 
 exec-ddl
 CREATE TABLE cd (c INT PRIMARY KEY, d INT NOT NULL)
 ----
-TABLE cd
- ├── c int not null
- ├── d int not null
- └── INDEX primary
-      └── c int not null
 
 # --------------------------------------------------
 # DecorrelateJoin
@@ -134,21 +111,21 @@ upsert xy
  ├── cardinality: [2 - ]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_x:9(int) upsert_y:10(int) column1:3(int) column2:4(int) x:5(int) y:6(int)
+      ├── columns: upsert_x:9(int) upsert_y:10(int) column1:3(int!null) column2:4(int!null) x:5(int) y:6(int)
       ├── cardinality: [2 - ]
       ├── fd: (5)-->(6)
       ├── left-join (lookup uv)
-      │    ├── columns: column1:3(int) column2:4(int) x:5(int) y:6(int) u:7(int) v:8(int)
+      │    ├── columns: column1:3(int!null) column2:4(int!null) x:5(int) y:6(int) u:7(int) v:8(int)
       │    ├── key columns: [3] = [7]
       │    ├── cardinality: [2 - ]
       │    ├── fd: (5)-->(6), (7)-->(8)
       │    ├── left-join (lookup xy)
-      │    │    ├── columns: column1:3(int) column2:4(int) x:5(int) y:6(int)
+      │    │    ├── columns: column1:3(int!null) column2:4(int!null) x:5(int) y:6(int)
       │    │    ├── key columns: [3] = [5]
       │    │    ├── cardinality: [2 - ]
       │    │    ├── fd: (5)-->(6)
       │    │    ├── values
-      │    │    │    ├── columns: column1:3(int) column2:4(int)
+      │    │    │    ├── columns: column1:3(int!null) column2:4(int!null)
       │    │    │    ├── cardinality: [2 - 2]
       │    │    │    ├── (1, 2) [type=tuple{int, int}]
       │    │    │    └── (3, 4) [type=tuple{int, int}]
@@ -323,7 +300,7 @@ project
       │    └── filters
       │         └── k = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 # TryDecorrelateWindow will trigger twice here: first to pull the window above
 # the non-apply join, and then again the pull it above the apply join.
@@ -399,12 +376,12 @@ project
       │    ├── key: (8)
       │    ├── fd: (8)-->(1), (2)-->(3), (1)==(2), (2)==(1)
       │    ├── ordinality
-      │    │    ├── columns: column1:1(int) rownum:8(int!null)
+      │    │    ├── columns: column1:1(int!null) rownum:8(int!null)
       │    │    ├── cardinality: [3 - 3]
       │    │    ├── key: (8)
       │    │    ├── fd: (8)-->(1)
       │    │    └── values
-      │    │         ├── columns: column1:1(int)
+      │    │         ├── columns: column1:1(int!null)
       │    │         ├── cardinality: [3 - 3]
       │    │         ├── (1,) [type=tuple{int}]
       │    │         ├── (1,) [type=tuple{int}]
@@ -416,7 +393,7 @@ project
       │    └── filters
       │         └── k = column1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 norm expect=TryDecorrelateWindow
 SELECT
@@ -439,12 +416,12 @@ project
       │    │    ├── key: (8)
       │    │    ├── fd: (8)-->(1)
       │    │    ├── ordinality
-      │    │    │    ├── columns: column1:1(int) rownum:8(int!null)
+      │    │    │    ├── columns: column1:1(int!null) rownum:8(int!null)
       │    │    │    ├── cardinality: [3 - 3]
       │    │    │    ├── key: (8)
       │    │    │    ├── fd: (8)-->(1)
       │    │    │    └── values
-      │    │    │         ├── columns: column1:1(int)
+      │    │    │         ├── columns: column1:1(int!null)
       │    │    │         ├── cardinality: [3 - 3]
       │    │    │         ├── (1,) [type=tuple{int}]
       │    │    │         ├── (1,) [type=tuple{int}]
@@ -455,7 +432,7 @@ project
       │    │    └── columns: i:3(int)
       │    └── filters (true)
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 # In this example, we introduce a key called rownum, and after TryDecorrelateWindow triggers
 # PARTITION BY x becomes PARTITION BY x, rownum. Then later, ReduceWindowPartitionCols triggers,
@@ -484,12 +461,12 @@ project
       │         ├── key: (9)
       │         ├── fd: (9)-->(1), (2)-->(3), (1)==(2), (2)==(1)
       │         ├── ordinality
-      │         │    ├── columns: column1:1(int) rownum:9(int!null)
+      │         │    ├── columns: column1:1(int!null) rownum:9(int!null)
       │         │    ├── cardinality: [3 - 3]
       │         │    ├── key: (9)
       │         │    ├── fd: (9)-->(1)
       │         │    └── values
-      │         │         ├── columns: column1:1(int)
+      │         │         ├── columns: column1:1(int!null)
       │         │         ├── cardinality: [3 - 3]
       │         │         ├── (1,) [type=tuple{int}]
       │         │         ├── (1,) [type=tuple{int}]
@@ -501,7 +478,7 @@ project
       │         └── filters
       │              └── k = column1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 norm expect=TryDecorrelateWindow
 SELECT
@@ -511,27 +488,27 @@ FROM
     LATERAL (SELECT row_number() OVER (PARTITION BY x ORDER BY y), i FROM (SELECT * FROM a WHERE k = x))
 ----
 project
- ├── columns: x:1(int!null) y:2(int) row_number:8(int) i:4(int)
+ ├── columns: x:1(int!null) y:2(int!null) row_number:8(int) i:4(int)
  ├── fd: (1)-->(4)
  └── window partition=(11)
-      ├── columns: column1:1(int!null) column2:2(int) i:4(int) row_number:8(int) rownum:11(int!null)
+      ├── columns: column1:1(int!null) column2:2(int!null) i:4(int) row_number:8(int) rownum:11(int!null)
       ├── key: (11)
       ├── fd: (11)-->(1,2), (1)-->(4)
       ├── project
-      │    ├── columns: column1:1(int!null) column2:2(int) i:4(int) rownum:11(int!null)
+      │    ├── columns: column1:1(int!null) column2:2(int!null) i:4(int) rownum:11(int!null)
       │    ├── key: (11)
       │    ├── fd: (11)-->(1,2), (1)-->(4)
       │    └── inner-join
-      │         ├── columns: column1:1(int!null) column2:2(int) k:3(int!null) i:4(int) rownum:11(int!null)
+      │         ├── columns: column1:1(int!null) column2:2(int!null) k:3(int!null) i:4(int) rownum:11(int!null)
       │         ├── key: (11)
       │         ├── fd: (11)-->(1,2), (3)-->(4), (1)==(3), (3)==(1)
       │         ├── ordinality
-      │         │    ├── columns: column1:1(int) column2:2(int) rownum:11(int!null)
+      │         │    ├── columns: column1:1(int!null) column2:2(int!null) rownum:11(int!null)
       │         │    ├── cardinality: [3 - 3]
       │         │    ├── key: (11)
       │         │    ├── fd: (11)-->(1,2)
       │         │    └── values
-      │         │         ├── columns: column1:1(int) column2:2(int)
+      │         │         ├── columns: column1:1(int!null) column2:2(int!null)
       │         │         ├── cardinality: [3 - 3]
       │         │         ├── (1, 2) [type=tuple{int, int}]
       │         │         ├── (1, 3) [type=tuple{int, int}]
@@ -543,7 +520,7 @@ project
       │         └── filters
       │              └── k = column1 [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 norm expect=TryDecorrelateWindow
 SELECT
@@ -575,7 +552,7 @@ window partition=(1)
  │         └── filters
  │              └── k = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
  └── windows
-      └── row-number [type=undefined]
+      └── row-number [type=int]
 
 norm expect=TryDecorrelateWindow
 SELECT
@@ -607,7 +584,7 @@ project
       │    └── filters
       │         └── k = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
 norm expect=TryDecorrelateWindow
 SELECT
@@ -634,8 +611,121 @@ project
       │    └── filters
       │         └── i = u [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
       └── windows
-           └── row-number [type=undefined]
+           └── row-number [type=int]
 
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    uv,
+    LATERAL (
+        SELECT
+            row_number() OVER (
+                PARTITION BY
+                    s
+                ORDER BY
+                    f
+                RANGE
+                    BETWEEN u::FLOAT PRECEDING AND UNBOUNDED FOLLOWING
+            ),
+            i
+        FROM
+            a
+    )
+----
+project
+ ├── columns: u:1(int!null) v:2(int) row_number:8(int) i:4(int)
+ ├── fd: (1)-->(2)
+ └── window partition=(1,6) ordering=+5 opt(1,2,6)
+      ├── columns: u:1(int!null) v:2(int) i:4(int) f:5(float) s:6(string) row_number:8(int)
+      ├── fd: (1)-->(2)
+      ├── inner-join
+      │    ├── columns: u:1(int!null) v:2(int) i:4(int) f:5(float) s:6(string)
+      │    ├── fd: (1)-->(2)
+      │    ├── scan uv
+      │    │    ├── columns: u:1(int!null) v:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan a
+      │    │    └── columns: i:4(int) f:5(float) s:6(string)
+      │    └── filters (true)
+      └── windows
+           └── windows-item: range from offset to unbounded [type=int, outer=(1)]
+                └── window-from-offset [type=int]
+                     ├── row-number [type=int]
+                     └── u::FLOAT8 [type=float]
+
+norm expect=TryDecorrelateWindow
+SELECT
+    *
+FROM
+    uv,
+    LATERAL (
+        SELECT
+            row_number() OVER (
+                PARTITION BY
+                    s
+                ORDER BY
+                    f
+                RANGE
+                    BETWEEN UNBOUNDED PRECEDING AND u::FLOAT FOLLOWING
+            ),
+            i
+        FROM
+            a
+    )
+----
+project
+ ├── columns: u:1(int!null) v:2(int) row_number:8(int) i:4(int)
+ ├── fd: (1)-->(2)
+ └── window partition=(1,6) ordering=+5 opt(1,2,6)
+      ├── columns: u:1(int!null) v:2(int) i:4(int) f:5(float) s:6(string) row_number:8(int)
+      ├── fd: (1)-->(2)
+      ├── inner-join
+      │    ├── columns: u:1(int!null) v:2(int) i:4(int) f:5(float) s:6(string)
+      │    ├── fd: (1)-->(2)
+      │    ├── scan uv
+      │    │    ├── columns: u:1(int!null) v:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan a
+      │    │    └── columns: i:4(int) f:5(float) s:6(string)
+      │    └── filters (true)
+      └── windows
+           └── windows-item: range from unbounded to offset [type=int, outer=(1)]
+                └── window-to-offset [type=int]
+                     ├── row-number [type=int]
+                     └── u::FLOAT8 [type=float]
+
+norm expect=TryDecorrelateWindow
+SELECT * FROM uv, LATERAL (SELECT avg(f) FILTER (WHERE u = 3) OVER (), i FROM a)
+----
+project
+ ├── columns: u:1(int!null) v:2(int) avg:8(float) i:4(int)
+ ├── fd: (1)-->(2)
+ └── window partition=(1)
+      ├── columns: u:1(int!null) v:2(int) i:4(int) f:5(float) avg:8(float) avg_1_filter:9(bool)
+      ├── fd: (1)-->(2,9)
+      ├── project
+      │    ├── columns: avg_1_filter:9(bool) u:1(int!null) v:2(int) i:4(int) f:5(float)
+      │    ├── fd: (1)-->(2,9)
+      │    ├── inner-join
+      │    │    ├── columns: u:1(int!null) v:2(int) i:4(int) f:5(float)
+      │    │    ├── fd: (1)-->(2)
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:1(int!null) v:2(int)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── scan a
+      │    │    │    └── columns: i:4(int) f:5(float)
+      │    │    └── filters (true)
+      │    └── projections
+      │         └── u = 3 [type=bool, outer=(1)]
+      └── windows
+           └── agg-filter [type=float, outer=(5,9)]
+                ├── avg [type=float]
+                │    └── variable: f [type=float]
+                └── variable: avg_1_filter [type=bool]
 
 # --------------------------------------------------
 # TryDecorrelateSelect
@@ -1557,10 +1647,10 @@ WHERE EXISTS(
 )
 ----
 semi-join-apply
- ├── columns: v1:1(int)
+ ├── columns: v1:1(int!null)
  ├── cardinality: [0 - 2]
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── cardinality: [2 - 2]
  │    ├── (1,) [type=tuple{int}]
  │    └── (2,) [type=tuple{int}]
@@ -4595,20 +4685,20 @@ opt expect=HoistProjectSetSubquery
 SELECT a, generate_series(1, (SELECT a)) FROM (VALUES (1)) AS v (a)
 ----
 project
- ├── columns: a:1(int) generate_series:3(int)
+ ├── columns: a:1(int!null) generate_series:3(int)
  ├── side-effects
  ├── fd: ()-->(1)
  └── project-set
-      ├── columns: column1:1(int) a:2(int) generate_series:3(int)
+      ├── columns: column1:1(int!null) a:2(int) generate_series:3(int)
       ├── side-effects
       ├── fd: ()-->(1,2)
       ├── inner-join-apply
-      │    ├── columns: column1:1(int) a:2(int)
+      │    ├── columns: column1:1(int!null) a:2(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(1,2)
       │    ├── values
-      │    │    ├── columns: column1:1(int)
+      │    │    ├── columns: column1:1(int!null)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(1)
@@ -4630,25 +4720,25 @@ opt expect=HoistProjectSetSubquery
 SELECT a, generate_series(1, (SELECT a)), generate_series(1, (SELECT a)) FROM (VALUES (1)) AS v (a)
 ----
 project
- ├── columns: a:1(int) generate_series:3(int) generate_series:5(int)
+ ├── columns: a:1(int!null) generate_series:3(int) generate_series:5(int)
  ├── side-effects
  ├── fd: ()-->(1)
  └── project-set
-      ├── columns: column1:1(int) a:2(int) generate_series:3(int) a:4(int) generate_series:5(int)
+      ├── columns: column1:1(int!null) a:2(int) generate_series:3(int) a:4(int) generate_series:5(int)
       ├── side-effects
       ├── fd: ()-->(1,2,4)
       ├── inner-join-apply
-      │    ├── columns: column1:1(int) a:2(int) a:4(int)
+      │    ├── columns: column1:1(int!null) a:2(int) a:4(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(1,2,4)
       │    ├── inner-join-apply
-      │    │    ├── columns: column1:1(int) a:2(int)
+      │    │    ├── columns: column1:1(int!null) a:2(int)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(1,2)
       │    │    ├── values
-      │    │    │    ├── columns: column1:1(int)
+      │    │    │    ├── columns: column1:1(int!null)
       │    │    │    ├── cardinality: [1 - 1]
       │    │    │    ├── key: ()
       │    │    │    ├── fd: ()-->(1)
@@ -4690,18 +4780,6 @@ CREATE TABLE articles (
   updated_at TIMESTAMP
 )
 ----
-TABLE articles
- ├── id int not null
- ├── body string
- ├── description string
- ├── title string
- ├── slug string
- ├── tag_list string[]
- ├── user_id string
- ├── created_at timestamp
- ├── updated_at timestamp
- └── INDEX primary
-      └── id int not null
 
 # Regression test for #31706.
 opt expect=(TryDecorrelateSemiJoin,TryDecorrelateProjectSet)

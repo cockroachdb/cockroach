@@ -1,23 +1,24 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // Explain represents an EXPLAIN statement.
@@ -98,7 +99,7 @@ func ExplainModeName(mode ExplainMode) (string, error) {
 			return k, nil
 		}
 	}
-	return "", fmt.Errorf("no name for explain mode %v", mode)
+	return "", errors.AssertionFailedf("no name for explain mode %v", log.Safe(mode))
 }
 
 // Explain flags.
@@ -133,7 +134,8 @@ func (node *Explain) ParseOptions() (ExplainOptions, error) {
 		optLower := strings.ToLower(opt)
 		if mode, ok := explainModeStrings[optLower]; ok {
 			if modeSet {
-				return ExplainOptions{}, fmt.Errorf("cannot set EXPLAIN mode more than once: %s", opt)
+				return ExplainOptions{}, pgerror.Newf(pgcode.Syntax,
+					"cannot set EXPLAIN mode more than once: %s", opt)
 			}
 			res.Mode = mode
 			modeSet = true
@@ -141,7 +143,8 @@ func (node *Explain) ParseOptions() (ExplainOptions, error) {
 		}
 		flag, ok := explainFlagStrings[optLower]
 		if !ok {
-			return ExplainOptions{}, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
+			return ExplainOptions{}, pgerror.Newf(pgcode.Syntax,
+				"unsupported EXPLAIN option: %s", opt)
 		}
 		res.Flags.Add(flag)
 	}

@@ -4,7 +4,7 @@ build
 VALUES (1)
 ----
 values
- ├── columns: column1:1(int)
+ ├── columns: column1:1(int!null)
  └── tuple [type=tuple{int}]
       └── const: 1 [type=int]
 
@@ -12,7 +12,7 @@ build
 VALUES (1, 2, 3), (4, 5, 6)
 ----
 values
- ├── columns: column1:1(int) column2:2(int) column3:3(int)
+ ├── columns: column1:1(int!null) column2:2(int!null) column3:3(int!null)
  ├── tuple [type=tuple{int, int, int}]
  │    ├── const: 1 [type=int]
  │    ├── const: 2 [type=int]
@@ -31,14 +31,14 @@ build
 VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
 ----
 limit
- ├── columns: column1:1(int)
+ ├── columns: column1:1(int!null)
  ├── internal-ordering: -1
  ├── ordering: -1
  ├── sort
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── ordering: -1
  │    └── values
- │         ├── columns: column1:1(int)
+ │         ├── columns: column1:1(int!null)
  │         ├── tuple [type=tuple{int}]
  │         │    └── const: 1 [type=int]
  │         ├── tuple [type=tuple{int}]
@@ -63,7 +63,7 @@ build
 VALUES ('one', 1, 1.0), ('two', 2, 2.0)
 ----
 values
- ├── columns: column1:1(string) column2:2(int) column3:3(decimal)
+ ├── columns: column1:1(string!null) column2:2(int!null) column3:3(decimal!null)
  ├── tuple [type=tuple{string, int, decimal}]
  │    ├── const: 'one' [type=string]
  │    ├── const: 1 [type=int]
@@ -77,7 +77,7 @@ build
 VALUES (true), (true), (false)
 ----
 values
- ├── columns: column1:1(bool)
+ ├── columns: column1:1(bool!null)
  ├── tuple [type=tuple{bool}]
  │    └── true [type=bool]
  ├── tuple [type=tuple{bool}]
@@ -97,7 +97,7 @@ build
 VALUES (NULL, 1)
 ----
 values
- ├── columns: column1:1(unknown) column2:2(int)
+ ├── columns: column1:1(unknown) column2:2(int!null)
  └── tuple [type=tuple{unknown, int}]
       ├── null [type=unknown]
       └── const: 1 [type=int]
@@ -108,11 +108,13 @@ VALUES (NULL, 1), (2, NULL)
 values
  ├── columns: column1:1(int) column2:2(int)
  ├── tuple [type=tuple{int, int}]
- │    ├── null [type=unknown]
+ │    ├── cast: INT8 [type=int]
+ │    │    └── null [type=unknown]
  │    └── const: 1 [type=int]
  └── tuple [type=tuple{int, int}]
       ├── const: 2 [type=int]
-      └── null [type=unknown]
+      └── cast: INT8 [type=int]
+           └── null [type=unknown]
 
 build
 VALUES (NULL, 1), (2, NULL)
@@ -120,11 +122,13 @@ VALUES (NULL, 1), (2, NULL)
 values
  ├── columns: column1:1(int) column2:2(int)
  ├── tuple [type=tuple{int, int}]
- │    ├── null [type=unknown]
+ │    ├── cast: INT8 [type=int]
+ │    │    └── null [type=unknown]
  │    └── const: 1 [type=int]
  └── tuple [type=tuple{int, int}]
       ├── const: 2 [type=int]
-      └── null [type=unknown]
+      └── cast: INT8 [type=int]
+           └── null [type=unknown]
 
 build
 VALUES (NULL, 1), (2, NULL), (NULL, 'a')
@@ -143,13 +147,17 @@ project
  │    │    └── const: 2 [type=int]
  │    ├── tuple [type=tuple{int, int}]
  │    │    ├── const: 3 [type=int]
- │    │    └── null [type=unknown]
+ │    │    └── cast: INT8 [type=int]
+ │    │         └── null [type=unknown]
  │    ├── tuple [type=tuple{int, int}]
- │    │    ├── null [type=unknown]
+ │    │    ├── cast: INT8 [type=int]
+ │    │    │    └── null [type=unknown]
  │    │    └── const: 4 [type=int]
  │    └── tuple [type=tuple{int, int}]
- │         ├── null [type=unknown]
- │         └── null [type=unknown]
+ │         ├── cast: INT8 [type=int]
+ │         │    └── null [type=unknown]
+ │         └── cast: INT8 [type=int]
+ │              └── null [type=unknown]
  └── projections
       └── coalesce [type=int]
            ├── variable: column1 [type=int]

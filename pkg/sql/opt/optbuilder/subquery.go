@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
@@ -16,10 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // subquery represents a subquery expression in an expression tree
@@ -195,7 +195,7 @@ func (s *subquery) ResolvedType() *types.T {
 
 // Eval is part of the tree.TypedExpr interface.
 func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.AssertionFailedf("subquery must be replaced before evaluation"))
+	panic(errors.AssertionFailedf("subquery must be replaced before evaluation"))
 }
 
 // buildSubquery builds a relational expression that represents this subquery.
@@ -228,10 +228,10 @@ func (s *subquery) buildSubquery(desiredTypes []*types.T) {
 		n := len(outScope.cols)
 		switch s.desiredNumColumns {
 		case 1:
-			panic(pgerror.Newf(pgerror.CodeSyntaxError,
+			panic(pgerror.Newf(pgcode.Syntax,
 				"subquery must return only one column, found %d", n))
 		default:
-			panic(pgerror.Newf(pgerror.CodeSyntaxError,
+			panic(pgerror.Newf(pgcode.Syntax,
 				"subquery must return %d columns, found %d", s.desiredNumColumns, n))
 		}
 	}
@@ -264,7 +264,7 @@ func (b *Builder) buildSubqueryProjection(
 		// This can be obtained with:
 		// CREATE TABLE t(x INT); ALTER TABLE t DROP COLUMN x;
 		// SELECT (SELECT * FROM t) = (SELECT * FROM t);
-		panic(pgerror.Newf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgcode.Syntax,
 			"subquery must return only one column"))
 
 	case 1:
@@ -366,7 +366,7 @@ func (b *Builder) buildMultiRowSubquery(
 		}
 
 	default:
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"buildMultiRowSubquery called with operator %v", c.Operator,
 		))
 	}

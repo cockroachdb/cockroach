@@ -1,22 +1,22 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // Discard implements the DISCARD statement.
@@ -25,7 +25,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 	switch s.Mode {
 	case tree.DiscardModeAll:
 		if !p.autoCommit {
-			return nil, pgerror.New(pgerror.CodeActiveSQLTransactionError,
+			return nil, pgerror.New(pgcode.ActiveSQLTransaction,
 				"DISCARD ALL cannot run inside a transaction block")
 		}
 
@@ -37,7 +37,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		// DEALLOCATE ALL
 		p.preparedStatements.DeleteAll(ctx)
 	default:
-		return nil, pgerror.AssertionFailedf("unknown mode for DISCARD: %d", s.Mode)
+		return nil, errors.AssertionFailedf("unknown mode for DISCARD: %d", s.Mode)
 	}
 	return newZeroNode(nil /* columns */), nil
 }

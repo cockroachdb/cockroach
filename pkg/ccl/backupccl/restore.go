@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"sort"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,8 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // TableRewriteMap maps old table IDs to new table and parent IDs.
@@ -68,13 +70,12 @@ func loadBackupDescs(
 	for i, uri := range uris {
 		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings)
 		if err != nil {
-			return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"failed to read backup descriptor")
+			return nil, errors.Wrapf(err, "failed to read backup descriptor")
 		}
 		backupDescs[i] = desc
 	}
 	if len(backupDescs) == 0 {
-		return nil, pgerror.Newf(pgerror.CodeDataExceptionError, "no backups found")
+		return nil, errors.Newf("no backups found")
 	}
 	return backupDescs, nil
 }
@@ -165,7 +166,7 @@ func selectTargets(
 func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error {
 	stmt, err := parser.ParseOne(table.ViewQuery)
 	if err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+		return pgerror.Wrapf(err, pgcode.Syntax,
 			"failed to parse underlying query from view %q", table.Name)
 	}
 	// Re-format to change all DB names to `newDB`.
@@ -319,8 +320,8 @@ func allocateTableRewrites(
 				{
 					parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, parentID)
 					if err != nil {
-						return pgerror.NewAssertionErrorWithWrappedErrf(err,
-							"failed to lookup parent DB %d", log.Safe(parentID))
+						return errors.NewAssertionErrorWithWrappedErrf(err,
+							"failed to lookup parent DB %d", errors.Safe(parentID))
 					}
 
 					if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
@@ -752,6 +753,7 @@ rangeLoop:
 // there's some way to test it without running an O(hour) long benchmark.
 func splitAndScatter(
 	restoreCtx context.Context,
+	settings *cluster.Settings,
 	db *client.DB,
 	kr *storageccl.KeyRewriter,
 	numClusterNodes int,
@@ -780,6 +782,16 @@ func splitAndScatter(
 	}
 
 	importSpanChunksCh := make(chan []importEntry)
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// If the cluster supports sticky bits, then we should use the sticky bit to
+	// ensure that the splits are not automatically split by the merge queue. If
+	// the cluster does not support sticky bits, we disable the merge queue via
+	// gossip, so we can just set the split to expire immediately.
+	stickyBitEnabled := settings.Version.IsActive(cluster.VersionStickyBit)
+	expirationTime := hlc.Timestamp{}
+	if stickyBitEnabled {
+		expirationTime = db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	}
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(importSpanChunksCh)
 		for idx, importSpanChunk := range importSpanChunks {
@@ -793,7 +805,7 @@ func splitAndScatter(
 			// TODO(dan): Really, this should be splitting the Key of the first
 			// entry in the _next_ chunk.
 			log.VEventf(restoreCtx, 1, "presplitting chunk %d of %d", idx, len(importSpanChunks))
-			if err := db.AdminSplit(ctx, chunkKey, chunkKey, false /* manual */); err != nil {
+			if err := db.AdminSplit(ctx, chunkKey, chunkKey, expirationTime); err != nil {
 				return err
 			}
 
@@ -849,7 +861,7 @@ func splitAndScatter(
 					// TODO(dan): Really, this should be splitting the Key of
 					// the _next_ entry.
 					log.VEventf(restoreCtx, 1, "presplitting %d of %d", idx, len(importSpans))
-					if err := db.AdminSplit(ctx, newSpanKey, newSpanKey, false /* manual */); err != nil {
+					if err := db.AdminSplit(ctx, newSpanKey, newSpanKey, expirationTime); err != nil {
 						return err
 					}
 
@@ -912,8 +924,8 @@ func WriteTableDescs(
 			} else {
 				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tables[i].ParentID)
 				if err != nil {
-					return pgerror.NewAssertionErrorWithWrappedErrf(err,
-						"failed to lookup parent DB %d", log.Safe(tables[i].ParentID))
+					return errors.NewAssertionErrorWithWrappedErrf(err,
+						"failed to lookup parent DB %d", errors.Safe(tables[i].ParentID))
 				}
 				// TODO(mberhault): CheckPrivilege wants a planner.
 				if err := sql.CheckPrivilegeForUser(ctx, user, parentDB, privilege.CREATE); err != nil {
@@ -930,22 +942,21 @@ func WriteTableDescs(
 			b.InitPut(kv.Key, &kv.Value, false)
 		}
 		if err := txn.Run(ctx, b); err != nil {
-			if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
-				return pgerror.Newf(pgerror.CodeDuplicateObjectError, "table already exists")
+			if _, ok := errors.UnwrapAll(err).(*roachpb.ConditionFailedError); ok {
+				return pgerror.Newf(pgcode.DuplicateObject, "table already exists")
 			}
 			return err
 		}
 
 		for _, table := range tables {
 			if err := table.Validate(ctx, txn, settings); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"validate table %d", log.Safe(table.ID))
+				return errors.NewAssertionErrorWithWrappedErrf(err,
+					"validate table %d", errors.Safe(table.ID))
 			}
 		}
 		return nil
 	}()
-	return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-		"restoring table desc and namespace entries")
+	return errors.Wrapf(err, "restoring table desc and namespace entries")
 }
 
 func restoreJobDescription(
@@ -992,12 +1003,12 @@ func restoreJobDescription(
 func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.Key, error) {
 	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
 	if err != nil {
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
 	}
 	if !rewritten && bytes.Equal(newKey, key) {
 		// if nothing was changed, we didn't match the top-level key at all.
-		return nil, pgerror.AssertionFailedf(
+		return nil, errors.AssertionFailedf(
 			"no rewrite for span start key: %s", key)
 	}
 	// Modify all spans that begin at the primary index to instead begin at the
@@ -1005,7 +1016,7 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
 	// will be created.
 	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
 	} else if idx == 1 && len(b) == 0 {
 		newKey = keys.MakeTablePrefix(uint32(id))
@@ -1019,6 +1030,7 @@ func restore(
 	restoreCtx context.Context,
 	db *client.DB,
 	gossip *gossip.Gossip,
+	settings *cluster.Settings,
 	backupDescs []BackupDescriptor,
 	endTime hlc.Timestamp,
 	sqlDescs []sqlbase.Descriptor,
@@ -1068,9 +1080,13 @@ func restore(
 		return mu.res, nil, nil, err
 	}
 
-	{
-		// Disable merging for the table IDs being restored into. We don't want the
-		// merge queue undoing the splits performed during RESTORE.
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// If the cluster supports sticky bits, then we don't have to worry about the
+	// merge queue automatically merging the splits performed during RESTORE.
+	// Otherwise, we have to rely on the gossip mechanism to disable the merge
+	// queue for the table IDs being restored into.
+	stickyBitEnabled := settings.Version.IsActive(cluster.VersionStickyBit)
+	if !stickyBitEnabled {
 		tableIDs := make([]uint32, 0, len(tables))
 		for _, t := range tables {
 			tableIDs = append(tableIDs, uint32(t.ID))
@@ -1085,7 +1101,7 @@ func restore(
 	for i := range tables {
 		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tables[i]))
 		if err != nil {
-			return mu.res, nil, nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+			return mu.res, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
@@ -1103,8 +1119,7 @@ func restore(
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 	importSpans, _, err := makeImportSpans(spans, backupDescs, highWaterMark, errOnMissingRange)
 	if err != nil {
-		return mu.res, nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"making import requests for %d backups", len(backupDescs))
+		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
 	for i := range importSpans {
@@ -1159,7 +1174,7 @@ func restore(
 	readyForImportCh := make(chan importEntry, presplitLeadLimit)
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(readyForImportCh)
-		return splitAndScatter(ctx, db, kr, numClusterNodes, importSpans, readyForImportCh)
+		return splitAndScatter(ctx, settings, db, kr, numClusterNodes, importSpans, readyForImportCh)
 	})
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
@@ -1204,8 +1219,7 @@ func restore(
 
 				importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
 				if pErr != nil {
-					return pgerror.Wrapf(pErr.GoError(), pgerror.CodeDataExceptionError,
-						"importing span %v", importRequest.DataSpan)
+					return errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan)
 
 				}
 
@@ -1215,8 +1229,7 @@ func restore(
 				// Assert that we're actually marking the correct span done. See #23977.
 				if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
 					mu.Unlock()
-					return pgerror.Newf(pgerror.CodeDataExceptionError,
-						"request %d for span %v (to %v) does not match import span for same idx: %v",
+					return errors.Newf("request %d for span %v (to %v) does not match import span for same idx: %v",
 						idx, importRequest.DataSpan, newSpanKey, importSpans[idx],
 					)
 				}
@@ -1238,8 +1251,7 @@ func restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return mu.res, nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"importing %d ranges", len(importSpans))
+		return mu.res, nil, nil, errors.Wrapf(err, "importing %d ranges", len(importSpans))
 	}
 
 	return mu.res, databases, tables, nil
@@ -1292,22 +1304,6 @@ func restorePlanHook(
 
 		if !p.ExtendedEvalContext().TxnImplicit {
 			return errors.Errorf("RESTORE cannot be used inside a transaction")
-		}
-
-		// Older nodes don't know about many new fields and flags, e.g. as-of-time,
-		// and our testing does not comprehensively cover mixed-version clusters.
-		// Refusing to initiate RESTOREs on a new node while old nodes may evaluate
-		// the RPCs it issues or even try to resume the RESTORE job and mishandle it
-		// avoid any potential unexepcted behavior. This errs on the side of being too
-		// restrictive, but an operator can still send the job to the remaining 1.x
-		// nodes if needed. VersionClearRange was introduced after many of these
-		// fields and the refactors to how jobs were saved and resumed, though we may
-		// want to bump this to 2.0 for simplicity.
-		if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
-			return errors.Errorf(
-				"running RESTORE on a 2.x node requires cluster version >= %s",
-				cluster.VersionByKey(cluster.VersionClearRange).String(),
-			)
 		}
 
 		from, err := fromFn()
@@ -1469,6 +1465,7 @@ func (r *restoreResumer) Resume(
 		ctx,
 		p.ExecCfg().DB,
 		p.ExecCfg().Gossip,
+		p.ExecCfg().Settings,
 		backupDescs,
 		details.EndTime,
 		sqlDescs,
@@ -1511,8 +1508,7 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
 	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, r.job.Payload().Username, r.settings, nil); err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"restoring %d TableDescriptors", len(r.tables))
+		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of

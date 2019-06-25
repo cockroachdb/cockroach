@@ -7,26 +7,25 @@
 //
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // This code was derived from https://github.com/youtube/vitess.
 
 package tree
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // SelectStatement represents any SELECT statement.
@@ -656,6 +655,12 @@ func (node *Order) Format(ctx *FmtCtx) {
 	}
 }
 
+// Equal checks if the node ordering is equivalent to other.
+func (node *Order) Equal(other *Order) bool {
+	return node.Expr.String() == other.Expr.String() && node.Direction == other.Direction &&
+		node.Table == other.Table && node.OrderType == other.OrderType
+}
+
 // Limit represents a LIMIT clause.
 type Limit struct {
 	Offset, Count Expr
@@ -758,6 +763,30 @@ const (
 	GROUPS
 )
 
+// OverrideWindowDef implements the logic to have a base window definition which
+// then gets augmented by a different window definition.
+func OverrideWindowDef(base *WindowDef, override WindowDef) (WindowDef, error) {
+	// referencedSpec.Partitions is always used.
+	if len(override.Partitions) > 0 {
+		return WindowDef{}, pgerror.Newf(pgcode.Windowing, "cannot override PARTITION BY clause of window %q", base.Name)
+	}
+	override.Partitions = base.Partitions
+
+	// referencedSpec.OrderBy is used if set.
+	if len(base.OrderBy) > 0 {
+		if len(override.OrderBy) > 0 {
+			return WindowDef{}, pgerror.Newf(pgcode.Windowing, "cannot override ORDER BY clause of window %q", base.Name)
+		}
+		override.OrderBy = base.OrderBy
+	}
+
+	if base.Frame != nil {
+		return WindowDef{}, pgerror.Newf(pgcode.Windowing, "cannot copy window %q because it has a frame clause", base.Name)
+	}
+
+	return override, nil
+}
+
 // WindowFrameBoundType indicates which type of boundary is used.
 type WindowFrameBoundType int
 
@@ -819,7 +848,7 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 	case UnboundedFollowing:
 		ctx.WriteString("UNBOUNDED FOLLOWING")
 	default:
-		panic(pgerror.AssertionFailedf("unhandled case: %d", log.Safe(node.BoundType)))
+		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node.BoundType)))
 	}
 }
 
@@ -833,7 +862,7 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 	case GROUPS:
 		ctx.WriteString("GROUPS ")
 	default:
-		panic(pgerror.AssertionFailedf("unhandled case: %d", log.Safe(node.Mode)))
+		panic(errors.AssertionFailedf("unhandled case: %d", log.Safe(node.Mode)))
 	}
 	if node.Bounds.EndBound != nil {
 		ctx.WriteString("BETWEEN ")

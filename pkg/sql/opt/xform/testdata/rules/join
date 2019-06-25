@@ -8,23 +8,6 @@ CREATE TABLE abc
     INDEX bc (b,c) STORING (a)
 )
 ----
-TABLE abc
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX ab
- │    ├── a int
- │    ├── b int
- │    ├── rowid int not null (hidden)
- │    └── c int (storing)
- └── INDEX bc
-      ├── b int
-      ├── c int
-      ├── rowid int not null (hidden)
-      └── a int (storing)
 
 exec-ddl
 CREATE TABLE stu
@@ -36,18 +19,6 @@ CREATE TABLE stu
     INDEX uts (u,t,s)
 )
 ----
-TABLE stu
- ├── s int not null
- ├── t int not null
- ├── u int not null
- ├── INDEX primary
- │    ├── s int not null
- │    ├── t int not null
- │    └── u int not null
- └── INDEX uts
-      ├── u int not null
-      ├── t int not null
-      └── s int not null
 
 exec-ddl
 CREATE TABLE xyz
@@ -59,23 +30,6 @@ CREATE TABLE xyz
     INDEX yz (y,z) STORING (x)
 )
 ----
-TABLE xyz
- ├── x int
- ├── y int
- ├── z int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- ├── INDEX xy
- │    ├── x int
- │    ├── y int
- │    ├── rowid int not null (hidden)
- │    └── z int (storing)
- └── INDEX yz
-      ├── y int
-      ├── z int
-      ├── rowid int not null (hidden)
-      └── x int (storing)
 
 exec-ddl
 CREATE TABLE pqr
@@ -92,32 +46,6 @@ CREATE TABLE pqr
     INDEX ts (t,s)
 )
 ----
-TABLE pqr
- ├── p int not null
- ├── q int
- ├── r int
- ├── s string
- ├── t string
- ├── INDEX primary
- │    └── p int not null
- ├── INDEX q
- │    ├── q int
- │    └── p int not null
- ├── INDEX r
- │    ├── r int
- │    └── p int not null
- ├── INDEX s
- │    ├── s string
- │    ├── p int not null
- │    └── r int (storing)
- ├── INDEX rs
- │    ├── r int
- │    ├── s string
- │    └── p int not null
- └── INDEX ts
-      ├── t string
-      ├── s string
-      └── p int not null
 
 exec-ddl
 CREATE TABLE zz (
@@ -128,18 +56,6 @@ CREATE TABLE zz (
     CONSTRAINT idx_c UNIQUE (c)
 )
 ----
-TABLE zz
- ├── a int not null
- ├── b int
- ├── c int
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX idx_b
- │    ├── b int
- │    └── a int not null
- └── INDEX idx_c
-      ├── c int
-      └── a int not null (storing)
 
 # --------------------------------------------------
 # CommuteJoin
@@ -769,10 +685,6 @@ memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:5,y:6,z:7])
 exec-ddl
 CREATE TABLE kfloat (k FLOAT PRIMARY KEY)
 ----
-TABLE kfloat
- ├── k float not null
- └── INDEX primary
-      └── k float not null
 
 memo
 SELECT * FROM abc JOIN kfloat ON a=k
@@ -875,27 +787,14 @@ left-join (merge)
 exec-ddl
 CREATE TABLE abcd (a INT, b INT, c INT, INDEX (a,b))
 ----
-TABLE abcd
- ├── a int
- ├── b int
- ├── c int
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX secondary
-      ├── a int
-      ├── b int
-      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE abcde (a INT, b INT, c INT, d INT, e INT, INDEX (a,b,c))
+----
 
 exec-ddl
 CREATE TABLE small (m INT, n INT)
 ----
-TABLE small
- ├── m int
- ├── n int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE small INJECT STATISTICS '[
@@ -1284,7 +1183,7 @@ memo (optimized, ~7KB, required=[presentation: a:4,b:5,n:2,m:1])
 # --------------------------------------------------
 # GenerateLookupJoinsWithFilter
 # --------------------------------------------------
-# 
+#
 # The rule and cases are similar to GenerateLookupJoins, except that we have a
 # filter that was pushed down to the lookup side (which needs to be pulled back
 # into the ON condition).
@@ -1425,9 +1324,133 @@ right-join
       ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
       └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
-# --------------------------
-# GenerateZigzagJoins
-# --------------------------
+# Constant columns are projected and used by lookup joiner.
+opt
+SELECT * FROM small INNER JOIN abcde ON a=m AND b=10
+----
+inner-join (lookup abcde)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int) d:7(int) e:8(int)
+ ├── key columns: [9] = [9]
+ ├── fd: ()-->(5), (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcde@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int) abcde.rowid:9(int!null)
+ │    ├── key columns: [1 10] = [4 5]
+ │    ├── fd: ()-->(5), (9)-->(4,6), (1)==(4), (4)==(1)
+ │    ├── project
+ │    │    ├── columns: "project_const_col_@5":10(int!null) m:1(int) n:2(int)
+ │    │    ├── fd: ()-->(10)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1(int) n:2(int)
+ │    │    └── projections
+ │    │         └── const: 10 [type=int]
+ │    └── filters (true)
+ └── filters (true)
+
+# Constant columns not projected if not prefix of an index.
+opt
+SELECT * FROM small INNER JOIN abcde ON a=m AND c=10
+----
+inner-join (lookup abcde)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) c:6(int!null) d:7(int) e:8(int)
+ ├── key columns: [9] = [9]
+ ├── fd: ()-->(6), (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcde@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) c:6(int!null) abcde.rowid:9(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: ()-->(6), (9)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters
+ │         └── c = 10 [type=bool, outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
+ └── filters (true)
+
+# Multiple constant columns projected and used by lookup joiner.
+opt
+SELECT * FROM small INNER JOIN abcde ON a=m AND b=10 AND c=10
+----
+inner-join (lookup abcde)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int!null) d:7(int) e:8(int)
+ ├── key columns: [9] = [9]
+ ├── fd: ()-->(5,6), (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcde@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int!null) abcde.rowid:9(int!null)
+ │    ├── key columns: [1 10 11] = [4 5 6]
+ │    ├── fd: ()-->(5,6), (9)-->(4), (1)==(4), (4)==(1)
+ │    ├── project
+ │    │    ├── columns: "project_const_col_@5":10(int!null) "project_const_col_@6":11(int!null) m:1(int) n:2(int)
+ │    │    ├── fd: ()-->(10,11)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1(int) n:2(int)
+ │    │    └── projections
+ │    │         ├── const: 10 [type=int]
+ │    │         └── const: 10 [type=int]
+ │    └── filters (true)
+ └── filters (true)
+
+# Filters are reduced properly as constant filters are extracted.
+opt
+SELECT * FROM small INNER JOIN abcde ON a=m AND b=10 AND c=10 AND d=10
+----
+inner-join (lookup abcde)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int!null) d:7(int!null) e:8(int)
+ ├── key columns: [9] = [9]
+ ├── fd: ()-->(5-7), (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcde@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int!null) abcde.rowid:9(int!null)
+ │    ├── key columns: [1 10 11] = [4 5 6]
+ │    ├── fd: ()-->(5,6), (9)-->(4), (1)==(4), (4)==(1)
+ │    ├── project
+ │    │    ├── columns: "project_const_col_@5":10(int!null) "project_const_col_@6":11(int!null) m:1(int) n:2(int)
+ │    │    ├── fd: ()-->(10,11)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1(int) n:2(int)
+ │    │    └── projections
+ │    │         ├── const: 10 [type=int]
+ │    │         └── const: 10 [type=int]
+ │    └── filters (true)
+ └── filters
+      └── d = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+
+# Non equality filters don't trigger constant projection.
+opt
+SELECT * FROM small INNER JOIN abcde ON a=m AND b<10
+----
+inner-join (lookup abcde)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int) d:7(int) e:8(int)
+ ├── key columns: [9] = [9]
+ ├── fd: (1)==(4), (4)==(1)
+ ├── inner-join (lookup abcde@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int) abcde.rowid:9(int!null)
+ │    ├── key columns: [1] = [4]
+ │    ├── fd: (9)-->(4-6), (1)==(4), (4)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1(int) n:2(int)
+ │    └── filters
+ │         └── b < 10 [type=bool, outer=(5), constraints=(/5: (/NULL - /9]; tight)]
+ └── filters (true)
+
+# Lookup Joiner uses the constant equality columns at the same time as the explicit
+# column equalities.
+opt
+SELECT a, b, c FROM small INNER LOOKUP JOIN abcde ON m=b AND a=10 AND c=10
+----
+project
+ ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
+ ├── fd: ()-->(4,6)
+ └── inner-join (lookup abcde@secondary)
+      ├── columns: m:1(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
+      ├── flags: no-merge-join;no-hash-join
+      ├── key columns: [10 1 11] = [4 5 6]
+      ├── fd: ()-->(4,6), (1)==(5), (5)==(1)
+      ├── project
+      │    ├── columns: "project_const_col_@4":10(int!null) "project_const_col_@6":11(int!null) m:1(int)
+      │    ├── fd: ()-->(10,11)
+      │    ├── scan small
+      │    │    └── columns: m:1(int)
+      │    └── projections
+      │         ├── const: 10 [type=int]
+      │         └── const: 10 [type=int]
+      └── filters (true)
 
 # Simple zigzag case - where all requested columns are in the indexes being
 # joined.
@@ -1883,15 +1906,6 @@ CREATE TABLE t5 (
     INVERTED INDEX b_idx(b)
 )
 ----
-TABLE t5
- ├── a int not null
- ├── b jsonb
- ├── c int
- ├── INDEX primary
- │    └── a int not null
- └── INVERTED INDEX b_idx
-      ├── b jsonb
-      └── a int not null
 
 # One path. Should generate a scan constrained on the inverted index.
 opt

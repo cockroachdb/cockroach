@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package builtins
 
@@ -16,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -242,7 +241,13 @@ func (w *aggregateWindowFunc) Compute(
 	return w.peerRes, nil
 }
 
-func (w *aggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.EvalContext) {
+// Reset implements tree.WindowFunc interface.
+func (w *aggregateWindowFunc) Reset(ctx context.Context) {
+	w.agg.Reset(ctx)
+	w.peerRes = nil
+}
+
+func (w *aggregateWindowFunc) Close(ctx context.Context, _ *tree.EvalContext) {
 	w.agg.Close(ctx)
 }
 
@@ -337,6 +342,11 @@ func (w *framableAggregateWindowFunc) Compute(
 	return w.agg.peerRes, nil
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *framableAggregateWindowFunc) Reset(ctx context.Context) {
+	w.agg.Reset(ctx)
+}
+
 func (w *framableAggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.EvalContext) {
 	w.agg.Close(ctx, evalCtx)
 }
@@ -354,6 +364,9 @@ func (rowNumberWindow) Compute(
 ) (tree.Datum, error) {
 	return tree.NewDInt(tree.DInt(wfr.RowIdx + 1 /* one-indexed */)), nil
 }
+
+// Reset implements tree.WindowFunc interface.
+func (rowNumberWindow) Reset(context.Context) {}
 
 func (rowNumberWindow) Close(context.Context, *tree.EvalContext) {}
 
@@ -373,6 +386,11 @@ func (w *rankWindow) Compute(
 		w.peerRes = tree.NewDInt(tree.DInt(wfr.Rank()))
 	}
 	return w.peerRes, nil
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *rankWindow) Reset(context.Context) {
+	w.peerRes = nil
 }
 
 func (w *rankWindow) Close(context.Context, *tree.EvalContext) {}
@@ -395,6 +413,12 @@ func (w *denseRankWindow) Compute(
 		w.peerRes = tree.NewDInt(tree.DInt(w.denseRank))
 	}
 	return w.peerRes, nil
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *denseRankWindow) Reset(context.Context) {
+	w.denseRank = 0
+	w.peerRes = nil
 }
 
 func (w *denseRankWindow) Close(context.Context, *tree.EvalContext) {}
@@ -426,6 +450,11 @@ func (w *percentRankWindow) Compute(
 	return w.peerRes, nil
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *percentRankWindow) Reset(context.Context) {
+	w.peerRes = nil
+}
+
 func (w *percentRankWindow) Close(context.Context, *tree.EvalContext) {}
 
 // cumulativeDistWindow computes the relative rank of the current row using:
@@ -448,6 +477,11 @@ func (w *cumulativeDistWindow) Compute(
 	return w.peerRes, nil
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *cumulativeDistWindow) Reset(context.Context) {
+	w.peerRes = nil
+}
+
 func (w *cumulativeDistWindow) Close(context.Context, *tree.EvalContext) {}
 
 // ntileWindow computes an integer ranging from 1 to the argument value, dividing
@@ -464,7 +498,7 @@ func newNtileWindow([]*types.T, *tree.EvalContext) tree.WindowFunc {
 }
 
 var errInvalidArgumentForNtile = pgerror.Newf(
-	pgerror.CodeInvalidParameterValueError, "argument of ntile() must be greater than zero")
+	pgcode.InvalidParameterValue, "argument of ntile() must be greater than zero")
 
 func (w *ntileWindow) Compute(
 	ctx context.Context, _ *tree.EvalContext, wfr *tree.WindowFrameRun,
@@ -514,6 +548,14 @@ func (w *ntileWindow) Compute(
 		w.curBucketCount = 1
 	}
 	return w.ntile, nil
+}
+
+// Reset implements tree.WindowFunc interface.
+func (w *ntileWindow) Reset(context.Context) {
+	w.boundary = 0
+	w.curBucketCount = 0
+	w.ntile = nil
+	w.remainder = 0
 }
 
 func (w *ntileWindow) Close(context.Context, *tree.EvalContext) {}
@@ -579,6 +621,9 @@ func (w *leadLagWindow) Compute(
 	return args[0], nil
 }
 
+// Reset implements tree.WindowFunc interface.
+func (w *leadLagWindow) Reset(context.Context) {}
+
 func (w *leadLagWindow) Close(context.Context, *tree.EvalContext) {}
 
 // firstValueWindow returns value evaluated at the row that is the first row of the window frame.
@@ -601,6 +646,9 @@ func (firstValueWindow) Compute(
 	}
 	return row.GetDatum(int(wfr.ArgsIdxs[0]))
 }
+
+// Reset implements tree.WindowFunc interface.
+func (firstValueWindow) Reset(context.Context) {}
 
 func (firstValueWindow) Close(context.Context, *tree.EvalContext) {}
 
@@ -625,6 +673,9 @@ func (lastValueWindow) Compute(
 	return row.GetDatum(int(wfr.ArgsIdxs[0]))
 }
 
+// Reset implements tree.WindowFunc interface.
+func (lastValueWindow) Reset(context.Context) {}
+
 func (lastValueWindow) Close(context.Context, *tree.EvalContext) {}
 
 // nthValueWindow returns value evaluated at the row that is the nth row of the window frame
@@ -636,7 +687,7 @@ func newNthValueWindow([]*types.T, *tree.EvalContext) tree.WindowFunc {
 }
 
 var errInvalidArgumentForNthValue = pgerror.Newf(
-	pgerror.CodeInvalidParameterValueError, "argument of nth_value() must be greater than zero")
+	pgcode.InvalidParameterValue, "argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
@@ -673,5 +724,8 @@ func (nthValueWindow) Compute(
 	}
 	return row.GetDatum(int(wfr.ArgsIdxs[0]))
 }
+
+// Reset implements tree.WindowFunc interface.
+func (nthValueWindow) Reset(context.Context) {}
 
 func (nthValueWindow) Close(context.Context, *tree.EvalContext) {}

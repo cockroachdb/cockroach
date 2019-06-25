@@ -15,12 +15,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // valueEncodePartitionTuple typechecks the datums in maybeTuple. It returns the
@@ -83,7 +85,7 @@ func valueEncodePartitionTuple(
 			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMaxVal))
 			continue
 		case *tree.Placeholder:
-			return nil, pgerror.UnimplementedWithIssuef(
+			return nil, unimplemented.NewWithIssuef(
 				19464, "placeholders are not supported in PARTITION BY")
 		default:
 			// Fall-through.
@@ -96,12 +98,12 @@ func valueEncodePartitionTuple(
 			return nil, err
 		}
 		if !tree.IsConst(evalCtx, typedExpr) {
-			return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+			return nil, pgerror.Newf(pgcode.Syntax,
 				"%s: partition values must be constant", typedExpr)
 		}
 		datum, err := typedExpr.Eval(evalCtx)
 		if err != nil {
-			return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, typedExpr.String())
+			return nil, errors.Wrap(err, typedExpr.String())
 		}
 		if err := sqlbase.CheckDatumTypeFitsColumnType(&cols[i], datum.ResolvedType()); err != nil {
 			return nil, err
@@ -166,7 +168,7 @@ func createPartitioningImpl(
 	var cols []sqlbase.ColumnDescriptor
 	for i := 0; i < len(partBy.Fields); i++ {
 		if colOffset+i >= len(indexDesc.ColumnNames) {
-			return partDesc, pgerror.Newf(pgerror.CodeSyntaxError,
+			return partDesc, pgerror.Newf(pgcode.Syntax,
 				"declared partition columns (%s) exceed the number of columns in index being partitioned (%s)",
 				partitioningString(), strings.Join(indexDesc.ColumnNames, ", "))
 		}
@@ -181,7 +183,7 @@ func createPartitioningImpl(
 			// This used to print the first `colOffset + len(partBy.Fields)` fields
 			// but there might not be this many columns in the index. See #37682.
 			n := colOffset + i + 1
-			return partDesc, pgerror.Newf(pgerror.CodeSyntaxError,
+			return partDesc, pgerror.Newf(pgcode.Syntax,
 				"declared partition columns (%s) do not match first %d columns in index being partitioned (%s)",
 				partitioningString(), n, strings.Join(indexDesc.ColumnNames[:n], ", "))
 		}
@@ -195,8 +197,7 @@ func createPartitioningImpl(
 			encodedTuple, err := valueEncodePartitionTuple(
 				tree.PartitionByList, evalCtx, expr, cols)
 			if err != nil {
-				return partDesc, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-					"PARTITION %s", p.Name)
+				return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
 			p.Values = append(p.Values, encodedTuple)
 		}
@@ -220,18 +221,15 @@ func createPartitioningImpl(
 		p.FromInclusive, err = valueEncodePartitionTuple(
 			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.From}, cols)
 		if err != nil {
-			return partDesc, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"PARTITION %s", p.Name)
+			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		p.ToExclusive, err = valueEncodePartitionTuple(
 			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.To}, cols)
 		if err != nil {
-			return partDesc, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"PARTITION %s", p.Name)
+			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		if r.Subpartition != nil {
-			return partDesc, pgerror.Newf(pgerror.CodeDataExceptionError,
-				"PARTITION %s: cannot subpartition a range partition", p.Name)
+			return partDesc, errors.Newf("PARTITION %s: cannot subpartition a range partition", p.Name)
 		}
 		partDesc.Range = append(partDesc.Range, p)
 	}
@@ -249,11 +247,6 @@ func createPartitioning(
 	indexDesc *sqlbase.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (sqlbase.PartitioningDescriptor, error) {
-	if !st.Version.IsActive(cluster.VersionPartitioning) {
-		return sqlbase.PartitioningDescriptor{},
-			errors.New("cluster version does not support partitioning")
-	}
-
 	org := sql.ClusterOrganization.Get(&st.SV)
 	if err := utilccl.CheckEnterpriseEnabled(st, evalCtx.ClusterID, org, "partitions"); err != nil {
 		return sqlbase.PartitioningDescriptor{}, err

@@ -1,26 +1,25 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package movr
 
 import (
 	gosql "database/sql"
-	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/faker"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
@@ -128,6 +127,9 @@ type movr struct {
 	numPromoCodes                     int
 
 	creationTime time.Time
+
+	fakerOnce sync.Once
+	faker     faker.Faker
 }
 
 func init() {
@@ -215,6 +217,9 @@ func (g *movr) Hooks() workload.Hooks {
 
 // Tables implements the Generator interface.
 func (g *movr) Tables() []workload.Table {
+	g.fakerOnce.Do(func() {
+		g.faker = faker.NewFaker()
+	})
 	tables := make([]workload.Table, 6)
 	tables[TablesUsersIdx] = workload.Table{
 		Name:   `users`,
@@ -315,11 +320,11 @@ func (g *movr) movrUsersInitialRow(rowIdx int) []interface{} {
 	id.DeterministicV4(uint64(rowIdx), uint64(g.users.numRows))
 
 	return []interface{}{
-		id.String(),         // id
-		city.city,           // city
-		randName(rng),       // name
-		randAddress(rng),    // address
-		randCreditCard(rng), // credit_card
+		id.String(),                // id
+		city.city,                  // city
+		g.faker.Name(rng),          // name
+		g.faker.StreetAddress(rng), // address
+		randCreditCard(rng),        // credit_card
 	}
 }
 
@@ -343,7 +348,7 @@ func (g *movr) movrVehiclesInitialRow(rowIdx int) []interface{} {
 		ownerID,                                // owner_id
 		g.creationTime.Format(timestampFormat), // creation_time
 		randVehicleStatus(rng),                 // status
-		randAddress(rng),                       // current_location
+		g.faker.StreetAddress(rng),             // current_location
 		randVehicleMetadata(rng, vehicleType),  // ext
 	}
 }
@@ -361,8 +366,8 @@ func (g *movr) movrRidesInitialRow(rowIdx int) []interface{} {
 	riderID := g.movrUsersInitialRow(riderRowIdx)[0]
 	vehicleRowIdx := g.vehicles.randRowInCity(rng, cityIdx)
 	vehicleID := g.movrVehiclesInitialRow(vehicleRowIdx)[0]
-	startTime := g.creationTime.Add(time.Duration(rng.Intn(30)) * time.Hour)
-	endTime := startTime.Add(time.Duration(rng.Intn(30)) * time.Hour)
+	startTime := g.creationTime.Add(-time.Duration(rng.Intn(30)) * 24 * time.Hour)
+	endTime := startTime.Add(time.Duration(rng.Intn(60)) * time.Hour)
 
 	return []interface{}{
 		id.String(),                       // id
@@ -370,8 +375,8 @@ func (g *movr) movrRidesInitialRow(rowIdx int) []interface{} {
 		city.city,                         // vehicle_city
 		riderID,                           // rider_id
 		vehicleID,                         // vehicle_id
-		randAddress(rng),                  // start_address
-		randAddress(rng),                  // end_address
+		g.faker.StreetAddress(rng),        // start_address
+		g.faker.StreetAddress(rng),        // end_address
 		startTime.Format(timestampFormat), // start_time
 		endTime.Format(timestampFormat),   // end_time
 		rng.Intn(100),                     // revenue
@@ -399,13 +404,9 @@ func (g *movr) movrVehicleLocationHistoriesInitialRow(rowIdx int) []interface{} 
 
 func (g *movr) movrPromoCodesInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
-	codeParts := make([]string, 3)
-	for i := range codeParts {
-		codeParts[i] = randWord(rng)
-	}
-	code := fmt.Sprintf(`%s_%d`, strings.Join(codeParts, `_`), rowIdx)
-	description := randParagraph(rng)
-	expirationTime := g.creationTime.Add(-time.Duration(rng.Intn(30)) * 24 * time.Hour)
+	code := strings.ToLower(strings.Join(g.faker.Words(rng, 3), `_`))
+	description := g.faker.Paragraph(rng)
+	expirationTime := g.creationTime.Add(time.Duration(rng.Intn(30)) * 24 * time.Hour)
 	// TODO(dan): This is nil in the reference impl, is that intentional?
 	creationTime := expirationTime.Add(-time.Duration(rng.Intn(30)) * 24 * time.Hour)
 	const rulesJSON = `{"type": "percent_discount", "value": "10%"}`

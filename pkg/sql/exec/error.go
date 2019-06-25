@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package exec
 
@@ -20,8 +18,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const panicLineSubstring = "runtime/panic.go"
@@ -49,11 +48,17 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 				if isPanicFromVectorizedEngine(panicEmittedFrom) {
 					// We only want to catch runtime errors coming from the vectorized
 					// engine.
-					switch t := err.(type) {
-					case *pgerror.Error:
-						retErr = t
-					default:
-						retErr = pgerror.AssertionFailedf("unexpected error from the vectorized runtime: %v", t)
+					if e, ok := err.(error); ok {
+						// Any error without a code already is "surprising" and
+						// needs to be annotated to indicate that it was
+						// unexpected.
+						if code := pgerror.GetPGCode(e); code == pgcode.Uncategorized {
+							e = errors.Wrap(e, "unexpected error from the vectorized runtime")
+						}
+						retErr = e
+					} else {
+						// Not an error object. Definitely unexpected.
+						retErr = errors.AssertionFailedf("unexpected error from the vectorized runtime: %v", err)
 					}
 				} else {
 					// Do not recover from the panic not related to the vectorized

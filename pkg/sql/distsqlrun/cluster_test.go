@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -248,7 +246,7 @@ func TestClusterFlow(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		err = decoder.AddMessage(msg)
+		err = decoder.AddMessage(ctx, msg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -256,6 +254,7 @@ func TestClusterFlow(t *testing.T) {
 	}
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreTxnCoordMeta(metas)
+	metas = ignoreMetricsMeta(metas)
 	if len(metas) != 0 {
 		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -294,6 +293,18 @@ func ignoreTxnCoordMeta(metas []distsqlpb.ProducerMetadata) []distsqlpb.Producer
 	res := make([]distsqlpb.ProducerMetadata, 0)
 	for _, m := range metas {
 		if m.TxnCoordMeta == nil {
+			res = append(res, m)
+		}
+	}
+	return res
+}
+
+// ignoreMetricsMeta takes a slice of metadata and returns the entries
+// excluding the metrics about node's goodput.
+func ignoreMetricsMeta(metas []distsqlpb.ProducerMetadata) []distsqlpb.ProducerMetadata {
+	res := make([]distsqlpb.ProducerMetadata, 0)
+	for _, m := range metas {
+		if m.Metrics == nil {
 			res = append(res, m)
 		}
 	}
@@ -500,7 +511,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		err = decoder.AddMessage(msg)
+		err = decoder.AddMessage(context.TODO(), msg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -508,6 +519,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	}
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreTxnCoordMeta(metas)
+	metas = ignoreMetricsMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -744,7 +756,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 								}
 								b.Fatal(err)
 							}
-							err = decoder.AddMessage(msg)
+							err = decoder.AddMessage(context.TODO(), msg)
 							if err != nil {
 								b.Fatal(err)
 							}
@@ -752,6 +764,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						}
 						metas = ignoreMisplannedRanges(metas)
 						metas = ignoreTxnCoordMeta(metas)
+						metas = ignoreMetricsMeta(metas)
 						if len(metas) != 0 {
 							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 						}

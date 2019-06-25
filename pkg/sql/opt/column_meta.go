@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package opt
 
@@ -27,9 +25,6 @@ type ColumnID int32
 func (c ColumnID) index() int {
 	return int(c - 1)
 }
-
-// ColSet efficiently stores an unordered set of column ids.
-type ColSet = util.FastIntSet
 
 // ColList is a list of column ids.
 //
@@ -62,7 +57,7 @@ type ColumnMeta struct {
 func (cl ColList) ToSet() ColSet {
 	var r ColSet
 	for _, col := range cl {
-		r.Add(int(col))
+		r.Add(col)
 	}
 	return r
 }
@@ -95,8 +90,8 @@ func (cl ColList) Equals(other ColList) bool {
 // ColSetToList converts a column id set to a list, in column id order.
 func ColSetToList(set ColSet) ColList {
 	res := make(ColList, 0, set.Len())
-	set.ForEach(func(x int) {
-		res = append(res, ColumnID(x))
+	set.ForEach(func(x ColumnID) {
+		res = append(res, x)
 	})
 	return res
 }

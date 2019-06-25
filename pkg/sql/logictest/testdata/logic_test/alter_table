@@ -12,7 +12,7 @@ CREATE TABLE t (a INT PRIMARY KEY CHECK(a > 0), f INT REFERENCES other, INDEX (f
 statement ok
 INSERT INTO t VALUES (1, 9)
 
-statement error syntax error at or near "*"
+statement error at or near "\*": syntax error
 ALTER TABLE t RENAME TO t.*
 
 statement ok
@@ -90,11 +90,11 @@ a f b    c
 query TTTTB colnames
 SHOW CONSTRAINTS FROM t
 ----
-table_name  constraint_name  constraint_type  details                               validated
-t           check_a          CHECK            CHECK (a > 0)                         true
-t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other (b)  true
-t           foo              UNIQUE           UNIQUE (b ASC)                        true
-t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                   true
+table_name  constraint_name  constraint_type  details                              validated
+t           check_a          CHECK            CHECK ((a > 0))                      true
+t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
+t           foo              UNIQUE           UNIQUE (b ASC)                       true
+t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                  true
 
 statement error CHECK
 INSERT INTO t (a, f) VALUES (-2, 9)
@@ -120,10 +120,10 @@ INSERT INTO t (a) VALUES (-3)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK (a > 0)                         true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                        true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
+t  check_a         CHECK        CHECK ((a > 0))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                       true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
@@ -138,11 +138,11 @@ ALTER TABLE t ADD CHECK (a > 0)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK (a > 0)                         true
-t  check_a1        CHECK        CHECK (a > 0)                         true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                        true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
+t  check_a         CHECK        CHECK ((a > 0))                      true
+t  check_a1        CHECK        CHECK ((a > 0))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                       true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error constraint "typo" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
@@ -160,11 +160,11 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK (a > 0)                         true
-t  check_a1        CHECK        CHECK (a > 0)                         true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                        true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
+t  check_a         CHECK        CHECK ((a > 0))                      true
+t  check_a1        CHECK        CHECK ((a > 0))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                       true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
@@ -387,10 +387,10 @@ ALTER TABLE t ADD f INT UNIQUE REFERENCES other
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_f   CHECK        CHECK (f > 1)        true
-t  check_g   CHECK        CHECK (g > 0)        true
-t  check_h   CHECK        CHECK (h > 0)        true
-t  check_h1  CHECK        CHECK (h < 10)       true
+t  check_f   CHECK        CHECK ((f > 1))      true
+t  check_g   CHECK        CHECK ((g > 0))      true
+t  check_h   CHECK        CHECK ((h > 0))      true
+t  check_h1  CHECK        CHECK ((h < 10))     true
 t  primary   PRIMARY KEY  PRIMARY KEY (a ASC)  true
 t  t_h_key   UNIQUE       UNIQUE (h ASC)       true
 
@@ -425,8 +425,8 @@ ALTER TABLE t ADD COLUMN u INT UNIQUE, ADD COLUMN v INT UNIQUE, ADD CONSTRAINT c
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_c_b  CHECK        CHECK (c > b)        true
-t  ck         CHECK        CHECK (a > 0)        true
+t  check_c_b  CHECK        CHECK ((c > b))      true
+t  ck         CHECK        CHECK ((a > 0))      true
 t  primary    PRIMARY KEY  PRIMARY KEY (a ASC)  true
 t  t_d_key    UNIQUE       UNIQUE (d ASC)       true
 t  t_e_key    UNIQUE       UNIQUE (e ASC)       true
@@ -683,6 +683,12 @@ ALTER TABLE nonexistent UNSPLIT AT VALUES (42)
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER INDEX nonexistent@noindex UNSPLIT AT VALUES (42)
 
+statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER TABLE nonexistent UNSPLIT ALL
+
+statement error pgcode 42P01 relation "nonexistent" does not exist
+ALTER INDEX nonexistent@noindex UNSPLIT ALL
+
 user root
 
 statement ok
@@ -696,6 +702,9 @@ ALTER TABLE privsview SPLIT AT VALUES (42)
 
 statement error pgcode 42809 "privsview" is not a table
 ALTER TABLE privsview UNSPLIT AT VALUES (42)
+
+statement error pgcode 42809 "privsview" is not a table
+ALTER TABLE privsview UNSPLIT ALL
 
 # Verify that impure defaults are evaluated separately on each row
 # (#14352)
@@ -905,3 +914,61 @@ ALTER TABLE t32917_2 ADD CONSTRAINT fk_c_a FOREIGN KEY (c) references t32917 (a)
 
 statement ok
 ROLLBACK
+
+# Test SET NOT NULL
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (1), (NULL)
+
+statement error validation of NOT NULL constraint failed: validation of CHECK "a IS NOT NULL" failed
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement ok
+DELETE FROM t WHERE a IS NULL
+
+statement ok
+ALTER TABLE t ALTER COLUMN a SET NOT NULL
+
+statement error null value in column "a" violates not-null constraint
+INSERT INTO t VALUES (NULL)
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+
+statement ok
+ALTER TABLE t ALTER COLUMN a DROP NOT NULL
+
+statement ok
+INSERT INTO t VALUES (NULL)
+
+statement ok
+DROP TABLE t
+
+# Test interaction of SET NOT NULL with other constraints
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+# Check for name collisions with the auto-generated NOT NULL check constraint name
+statement ok
+ALTER TABLE t ADD CONSTRAINT a_auto_not_null CHECK (a IS NOT NULL)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT a_auto_not_null1 CHECK (a IS NOT NULL), ALTER COLUMN a SET NOT NULL
+
+statement error null value in column "a" violates not-null constraint
+INSERT INTO t VALUES (NULL)
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+t  a_auto_not_null   CHECK  CHECK ((a IS NOT NULL))  true
+t  a_auto_not_null1  CHECK  CHECK ((a IS NOT NULL))  true
+
+statement ok
+DROP TABLE t

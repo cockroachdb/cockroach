@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -18,15 +16,13 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // sorter sorts the input rows according to the specified ordering.
@@ -207,8 +203,9 @@ func newSorter(
 		// LIMIT and OFFSET should each never be greater than math.MaxInt64, the
 		// parser ensures this.
 		if post.Limit > math.MaxInt64 || post.Offset > math.MaxInt64 {
-			return nil, pgerror.AssertionFailedf(
-				"error creating sorter: limit %d offset %d too large", log.Safe(post.Limit), log.Safe(post.Offset))
+			return nil, errors.AssertionFailedf(
+				"error creating sorter: limit %d offset %d too large",
+				errors.Safe(post.Limit), errors.Safe(post.Offset))
 		}
 		count = post.Limit + post.Offset
 	}
@@ -376,7 +373,7 @@ func newSortTopKProcessor(
 	k uint64,
 ) (Processor, error) {
 	if k == 0 {
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(errSortTopKZeroK,
+		return nil, errors.NewAssertionErrorWithWrappedErrf(errSortTopKZeroK,
 			"error creating top k sorter")
 	}
 	ordering := distsqlpb.ConvertToColumnOrdering(spec.OutputOrdering)

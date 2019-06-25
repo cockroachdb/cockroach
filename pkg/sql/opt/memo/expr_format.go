@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
@@ -21,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 // ExprFmtInterceptor is a callback that can be set to a custom formatting
@@ -218,8 +216,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 		// Add pass-through columns.
-		t.Passthrough.ForEach(func(i int) {
-			colList = append(colList, opt.ColumnID(i))
+		t.Passthrough.ForEach(func(i opt.ColumnID) {
+			colList = append(colList, i)
 		})
 
 	case *ValuesExpr:
@@ -548,6 +546,12 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		f.formatExpr(scalar.Child(1), tp.Child("filter"))
 
 		return
+
+	case opt.FKChecksOp:
+		if scalar.ChildCount() == 0 {
+			// Hide the FK checks field when there are no checks.
+			return
+		}
 	}
 
 	// Don't show scalar-list, as it's redundant with its parent.
@@ -562,8 +566,9 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		case opt.WindowsItemOp:
 			// Only show this if the frame differs from the default.
 			frame := scalar.Private().(*WindowsItemPrivate).Frame
-			if frame.Bounds.StartBound.BoundType == tree.UnboundedPreceding &&
-				frame.Bounds.EndBound.BoundType == tree.CurrentRow {
+			if frame.Mode == tree.RANGE &&
+				frame.StartBoundType == tree.UnboundedPreceding &&
+				frame.EndBoundType == tree.CurrentRow {
 				scalar = scalar.Child(0).(opt.ScalarExpr)
 			}
 		}
@@ -587,7 +592,9 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 	// expression.
 	typ := scalar.DataType()
 	if typ == nil {
-		f.Buffer.WriteString(" [type=undefined]")
+		if scalar.Op() != opt.FKChecksItemOp {
+			f.Buffer.WriteString(" [type=undefined]")
+		}
 	} else {
 		first := true
 		writeProp := func(format string, args ...interface{}) {
@@ -699,13 +706,13 @@ func (f *ExprFmtCtx) formatColumns(
 	f.Buffer.Reset()
 	f.Buffer.WriteString("columns:")
 	for _, col := range presentation {
-		hidden.Remove(int(col.ID))
+		hidden.Remove(col.ID)
 		formatCol(f, col.Alias, col.ID, notNullCols, false /* omitType */)
 	}
 	if !hidden.Empty() {
 		f.Buffer.WriteString("  [hidden:")
 		for _, col := range cols {
-			if hidden.Contains(int(col)) {
+			if hidden.Contains(col) {
 				formatCol(f, "" /* label */, col, notNullCols, false /* omitType */)
 			}
 		}
@@ -793,7 +800,7 @@ func formatCol(
 		f.Buffer.WriteByte('(')
 		f.Buffer.WriteString(colMeta.Type.String())
 
-		if notNullCols.Contains(int(id)) {
+		if notNullCols.Contains(id) {
 			f.Buffer.WriteString("!null")
 		}
 		f.Buffer.WriteByte(')')
@@ -809,7 +816,7 @@ func frameBoundName(b tree.WindowFrameBoundType) string {
 	case tree.OffsetFollowing, tree.OffsetPreceding:
 		return "offset"
 	}
-	panic(pgerror.AssertionFailedf("unexpected bound"))
+	panic(errors.AssertionFailedf("unexpected bound"))
 }
 
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to
@@ -900,13 +907,18 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s", t.Name)
 
 	case *WindowsItemPrivate:
-		if t.Frame.Bounds.StartBound.BoundType != tree.UnboundedPreceding ||
-			t.Frame.Bounds.EndBound.BoundType != tree.CurrentRow {
-			fmt.Fprintf(f.Buffer, " from %s to %s",
-				frameBoundName(t.Frame.Bounds.StartBound.BoundType),
-				frameBoundName(t.Frame.Bounds.EndBound.BoundType),
-			)
+		switch t.Frame.Mode {
+		case tree.GROUPS:
+			fmt.Fprintf(f.Buffer, " groups")
+		case tree.ROWS:
+			fmt.Fprintf(f.Buffer, " rows")
+		case tree.RANGE:
+			fmt.Fprintf(f.Buffer, " range")
 		}
+		fmt.Fprintf(f.Buffer, " from %s to %s",
+			frameBoundName(t.Frame.StartBoundType),
+			frameBoundName(t.Frame.EndBoundType),
+		)
 
 	case *WindowPrivate:
 		fmt.Fprintf(f.Buffer, " partition=%s", t.Partition)

@@ -8,18 +8,6 @@ CREATE TABLE abcde (
     UNIQUE INDEX bc (b, c)
 )
 ----
-TABLE abcde
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── e int
- ├── INDEX primary
- │    └── a int not null
- └── INDEX bc
-      ├── b int
-      ├── c int
-      └── a int not null (storing)
 
 # --------------------------------------------------
 # SimplifyRootOrdering

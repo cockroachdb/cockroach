@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package norm
 
@@ -17,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // CanReduceGroupingCols is true if the given GroupBy operator has one or more
@@ -125,7 +123,7 @@ func (c *CustomFuncs) makeAggCols(
 			outAgg = c.f.ConstructFirstAgg(varExpr)
 
 		default:
-			panic(pgerror.AssertionFailedf("unrecognized aggregate operator type: %v", log.Safe(aggOp)))
+			panic(errors.AssertionFailedf("unrecognized aggregate operator type: %v", log.Safe(aggOp)))
 		}
 
 		outAggs[i].Agg = outAgg
@@ -190,7 +188,7 @@ func (c *CustomFuncs) replaceAggInputVar(agg opt.ScalarExpr, v opt.ScalarExpr) o
 	case 2:
 		return c.f.DynamicConstruct(agg.Op(), v, agg.Child(1)).(opt.ScalarExpr)
 	default:
-		panic(pgerror.AssertionFailedf("unhandled number of aggregate children"))
+		panic(errors.AssertionFailedf("unhandled number of aggregate children"))
 	}
 }
 
@@ -217,7 +215,7 @@ func (c *CustomFuncs) hasRemovableAggDistinct(
 	}
 
 	cols := groupingCols.Copy()
-	cols.Add(int(v.Col))
+	cols.Add(v.Col)
 	if !inputFDs.ColsAreStrictKey(cols) {
 		return false, nil
 	}
@@ -248,7 +246,7 @@ func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
 		inputCol := varExpr.Col
 		outputCol := aggs[i].Col
 		if inputCol == outputCol {
-			passthrough.Add(int(inputCol))
+			passthrough.Add(inputCol)
 		} else {
 			projections = append(projections, memo.ProjectionsItem{
 				Element:    varExpr,

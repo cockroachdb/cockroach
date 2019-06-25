@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package kv
 
@@ -19,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -228,7 +227,7 @@ func (tc *txnCommitter) SendLocked(
 	// we transition to an explicitly committed transaction as soon as possible.
 	// This also has the side-effect of kicking off intent resolution.
 	mergedIntentSpans, _ := mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
-	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedIntentSpans)
+	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedIntentSpans, et.NoRefreshSpans)
 
 	// Switch the status on the batch response's transaction to COMMITTED. No
 	// interceptor above this one in the stack should ever need to deal with
@@ -371,7 +370,7 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 // written) to explicitly committed (COMMITTED status). It does so by sending a
 // second EndTransactionRequest, this time with no InFlightWrites attached.
 func (tc *txnCommitter) makeTxnCommitExplicitAsync(
-	ctx context.Context, txn *roachpb.Transaction, intentSpans []roachpb.Span,
+	ctx context.Context, txn *roachpb.Transaction, intentSpans []roachpb.Span, noRefreshSpans bool,
 ) {
 	// TODO(nvanbenschoten): consider adding tracing for this request.
 	// TODO(nvanbenschoten): add a timeout to this request.
@@ -383,8 +382,8 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 		context.Background(), "txnCommitter: making txn commit explicit", func(ctx context.Context) {
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
-			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, intentSpans); err != nil {
-				log.VErrEventf(ctx, 1, "making txn commit explicit failed for %s: %v", txn, err)
+			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, intentSpans, noRefreshSpans); err != nil {
+				log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
 			}
 		},
 	); err != nil {
@@ -393,7 +392,11 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 }
 
 func makeTxnCommitExplicitLocked(
-	ctx context.Context, s lockedSender, txn *roachpb.Transaction, intentSpans []roachpb.Span,
+	ctx context.Context,
+	s lockedSender,
+	txn *roachpb.Transaction,
+	intentSpans []roachpb.Span,
+	noRefreshSpans bool,
 ) error {
 	// Clone the txn to prevent data races.
 	txn = txn.Clone()
@@ -404,15 +407,24 @@ func makeTxnCommitExplicitLocked(
 	et := roachpb.EndTransactionRequest{Commit: true}
 	et.Key = txn.Key
 	et.IntentSpans = intentSpans
+	et.NoRefreshSpans = noRefreshSpans
 	ba.Add(&et)
 
 	_, pErr := s.SendLocked(ctx, ba)
 	if pErr != nil {
-		// Detect whether the error indicates that someone else beat
-		// us to explicitly committing the transaction record.
-		tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError)
-		if ok && tse.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
-			return nil
+		switch t := pErr.GetDetail().(type) {
+		case *roachpb.TransactionStatusError:
+			// Detect whether the error indicates that someone else beat
+			// us to explicitly committing the transaction record.
+			if t.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+				return nil
+			}
+		case *roachpb.TransactionRetryError:
+			logFunc := log.Errorf
+			if util.RaceEnabled {
+				logFunc = log.Fatalf
+			}
+			logFunc(ctx, "unexpected retry error when making commit explicit for %s: %v", txn, t)
 		}
 		return pErr.GoError()
 	}

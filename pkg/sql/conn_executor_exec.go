@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -23,24 +21,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // RestartSavepointName is the only savepoint ident that we accept.
 const RestartSavepointName string = "cockroach_restart"
 
 var errSavepointNotUsed = pgerror.Newf(
-	pgerror.CodeSavepointExceptionError,
+	pgcode.SavepointException,
 	"savepoint %s has not been used", RestartSavepointName)
 
 // execStmt executes one statement by dispatching according to the current
@@ -251,7 +252,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	case *tree.Savepoint:
 		// Ensure that the user isn't trying to run BEGIN; SAVEPOINT; SAVEPOINT;
 		if ex.state.activeSavepointName != "" {
-			err := pgerror.UnimplementedWithIssueDetail(10735, "nested", "SAVEPOINT may not be nested")
+			err := unimplemented.NewWithIssueDetail(10735, "nested", "SAVEPOINT may not be nested")
 			return makeErrEvent(err)
 		}
 		if err := ex.validateSavepointName(s.Name); err != nil {
@@ -266,7 +267,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// https://github.com/cockroachdb/cockroach/issues/15012
 		meta := ex.state.mu.txn.GetTxnCoordMeta(ctx)
 		if meta.CommandCount > 0 {
-			err := pgerror.Newf(pgerror.CodeSyntaxError,
+			err := pgerror.Newf(pgcode.Syntax,
 				"SAVEPOINT %s needs to be the first statement in a "+
 					"transaction", RestartSavepointName)
 			return makeErrEvent(err)
@@ -294,7 +295,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		name := s.Name.String()
 		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
 			err := pgerror.Newf(
-				pgerror.CodeDuplicatePreparedStatementError,
+				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", name,
 			)
 			return makeErrEvent(err)
@@ -302,7 +303,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		var typeHints tree.PlaceholderTypes
 		if len(s.Types) > 0 {
 			if len(s.Types) > stmt.NumPlaceholders {
-				err := pgerror.Newf(pgerror.CodeSyntaxError, "too many types provided")
+				err := pgerror.Newf(pgcode.Syntax, "too many types provided")
 				return makeErrEvent(err)
 			}
 			typeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
@@ -337,7 +338,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 		if !ok {
 			err := pgerror.Newf(
-				pgerror.CodeInvalidSQLStatementNameError,
+				pgcode.InvalidSQLStatementName,
 				"prepared statement %q does not exist", name,
 			)
 			return makeErrEvent(err)
@@ -385,12 +386,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		if ts != nil {
 			if origTs := ex.state.getOrigTimestamp(); *ts != origTs {
-				return makeErrEvent(
-					pgerror.Newf(pgerror.CodeSyntaxError,
-						"inconsistent AS OF SYSTEM TIME timestamp; expected: %s",
-						origTs).SetHintf(
-						"Generally AS OF SYSTEM TIME cannot be used inside a transaction."),
-				)
+				err = pgerror.Newf(pgcode.Syntax,
+					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", origTs)
+				err = errors.WithHint(err,
+					"Generally AS OF SYSTEM TIME cannot be used inside a transaction.")
+				return makeErrEvent(err)
 			}
 			p.semaCtx.AsOfTimestamp = ts
 		}
@@ -619,17 +619,9 @@ func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
 	// not supported") because perhaps there was an actual mistake in
 	// the query in addition to the unsupported correlation, and we also
 	// want to give a chance to the user to fix mistakes.
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		if pgErr.Code == pgerror.CodeUndefinedColumnError ||
-			pgErr.Code == pgerror.CodeUndefinedTableError {
-			// Be careful to not modify the error in-place (via SetHintf) as
-			// the error object may be globally instantiated.
-			newErr := *pgErr
-			pgErr = &newErr
-			_ = pgErr.SetHintf("some correlated subqueries are not supported yet - see %s",
-				"https://github.com/cockroachdb/cockroach/issues/3288")
-			return pgErr
-		}
+	if code := pgerror.GetPGCode(err); code == pgcode.UndefinedColumn || code == pgcode.UndefinedTable {
+		err = errors.WithHintf(err, "some correlated subqueries are not supported yet - see %s",
+			"https://github.com/cockroachdb/cockroach/issues/3288")
 	}
 	return err
 }
@@ -655,6 +647,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// defer is a catch-all in case some other return path is taken.
 	defer planner.curPlan.close(ctx)
 
+	if planner.autoCommit {
+		planner.curPlan.flags.Set(planFlagImplicitTxn)
+	}
+
 	// Certain statements want their results to go to the client
 	// directly. Configure this here.
 	if planner.curPlan.avoidBuffering {
@@ -668,7 +664,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 	}
 
-	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
+	defer func() {
+		planner.maybeLogStatement(ctx, "exec", ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err())
+	}()
 
 	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
 	ex.sessionTracing.TracePlanEnd(ctx, err)
@@ -733,7 +731,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagDistSQLLocal)
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
-	err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
+	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
@@ -741,7 +739,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// plan has not been closed earlier.
 	ex.recordStatementSummary(
 		ctx, planner,
-		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(),
+		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(), bytesRead, rowsRead,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -798,10 +796,10 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 // for its corresponding fingerprint. We use `logicalPlanCollectionPeriod`
 // to assess how frequently to sample logical plans.
 func (ex *connExecutor) saveLogicalPlanDescription(
-	stmt *Statement, useDistSQL bool, optimizerUsed bool, err error,
+	stmt *Statement, useDistSQL bool, optimizerUsed bool, implicitTxn bool, err error,
 ) bool {
 	stats := ex.appStats.getStatsForStmt(
-		stmt, useDistSQL, optimizerUsed, err, false /* createIfNonexistent */)
+		stmt, useDistSQL, optimizerUsed, implicitTxn, err, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
@@ -817,8 +815,7 @@ func (ex *connExecutor) saveLogicalPlanDescription(
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner
 // when the optimizer hits an error.
 func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Statement) bool {
-	pgerr, ok := pgerror.GetPGCause(err)
-	if !ok || pgerr.Code != pgerror.CodeFeatureNotSupportedError {
+	if !errors.HasUnimplementedError(err) {
 		// We only fallback on "feature not supported" errors.
 		return false
 	}
@@ -857,7 +854,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	stmtType tree.StatementType,
 	res RestrictedCommandResult,
 	distribute bool,
-) error {
+) (bytesRead, rowsRead int64, _ error) {
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache, ex.server.cfg.LeaseHolderCache,
@@ -880,19 +877,23 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.planner = planner
 	planCtx.stmtType = recv.stmtType
 
-	if len(planner.curPlan.subqueryPlans) != 0 {
+	var evalCtxFactory func() *extendedEvalContext
+	if len(planner.curPlan.subqueryPlans) != 0 || len(planner.curPlan.postqueryPlans) != 0 {
 		var evalCtx extendedEvalContext
 		ex.initEvalCtx(ctx, &evalCtx, planner)
-		evalCtxFactory := func() *extendedEvalContext {
+		evalCtxFactory = func() *extendedEvalContext {
 			ex.resetEvalCtx(&evalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			evalCtx.Placeholders = &planner.semaCtx.Placeholders
 			evalCtx.Annotations = &planner.semaCtx.Annotations
 			return &evalCtx
 		}
+	}
+
+	if len(planner.curPlan.subqueryPlans) != 0 {
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute,
 		) {
-			return recv.commErr
+			return recv.bytesRead, recv.rowsRead, recv.commErr
 		}
 	}
 	recv.discardRows = planner.discardRows
@@ -900,7 +901,17 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// the planner whether or not to plan remote table readers.
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
 		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv)
-	return recv.commErr
+	if recv.commErr != nil {
+		return recv.bytesRead, recv.rowsRead, recv.commErr
+	}
+
+	if len(planner.curPlan.postqueryPlans) != 0 {
+		ex.server.cfg.DistSQLPlanner.PlanAndRunPostqueries(
+			ctx, planner, evalCtxFactory, planner.curPlan.postqueryPlans, recv, distribute,
+		)
+	}
+
+	return recv.bytesRead, recv.rowsRead, recv.commErr
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and
@@ -1144,7 +1155,7 @@ func (ex *connExecutor) runObserverStatement(
 		ex.runSetTracing(ctx, sqlStmt, res)
 		return nil
 	default:
-		res.SetError(pgerror.AssertionFailedf("unrecognized observer statement type %T", stmt.AST))
+		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", stmt.AST))
 		return nil
 	}
 }
@@ -1185,7 +1196,7 @@ func (ex *connExecutor) runSetTracing(
 	ctx context.Context, n *tree.SetTracing, res RestrictedCommandResult,
 ) {
 	if len(n.Values) == 0 {
-		res.SetError(pgerror.AssertionFailedf("set tracing missing argument"))
+		res.SetError(errors.AssertionFailedf("set tracing missing argument"))
 		return
 	}
 
@@ -1194,7 +1205,7 @@ func (ex *connExecutor) runSetTracing(
 		v = unresolvedNameToStrVal(v)
 		strVal, ok := v.(*tree.StrVal)
 		if !ok {
-			res.SetError(pgerror.AssertionFailedf(
+			res.SetError(errors.AssertionFailedf(
 				"expected string for set tracing argument, not %T", v))
 			return
 		}
@@ -1227,7 +1238,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 		case "cluster":
 			recordingType = tracing.SnowballRecording
 		default:
-			return pgerror.Newf(pgerror.CodeSyntaxError,
+			return pgerror.Newf(pgcode.Syntax,
 				"set tracing: unknown mode %q", s)
 		}
 	}
@@ -1336,11 +1347,11 @@ func (ex *connExecutor) validateSavepointName(savepoint tree.Name) error {
 		if savepoint == ex.state.activeSavepointName {
 			return nil
 		}
-		return pgerror.Newf(pgerror.CodeInvalidSavepointSpecificationError,
+		return pgerror.Newf(pgcode.InvalidSavepointSpecification,
 			`SAVEPOINT %q is in use`, tree.ErrString(&ex.state.activeSavepointName))
 	}
 	if !ex.sessionData.ForceSavepointRestart && !strings.HasPrefix(string(savepoint), RestartSavepointName) {
-		return pgerror.UnimplementedWithIssueHint(10735,
+		return unimplemented.NewWithIssueHint(10735,
 			"SAVEPOINT not supported except for "+RestartSavepointName,
 			"Retryable transactions with arbitrary SAVEPOINT names can be enabled "+
 				"with SET force_savepoint_restart=true")

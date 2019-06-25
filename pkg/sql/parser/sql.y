@@ -498,7 +498,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> EXISTS EXECUTE EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
-%token <str> EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
+%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
 
 %token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
@@ -1108,8 +1108,9 @@ alter_ddl_stmt:
 //   ALTER TABLE ... RENAME TO <newname>
 //   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
 //   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
-//   ALTER TABLE ... SPLIT AT <selectclause>
+//   ALTER TABLE ... SPLIT AT <selectclause> [WITH EXPIRATION <expr>]
 //   ALTER TABLE ... UNSPLIT AT <selectclause>
+//   ALTER TABLE ... UNSPLIT ALL
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER TABLE ... INJECT STATISTICS ...  (experimental)
 //   ALTER TABLE ... PARTITION BY RANGE ( <name...> ) ( <rangespec> )
@@ -1228,8 +1229,9 @@ alter_range_stmt:
 //
 // Commands:
 //   ALTER INDEX ... RENAME TO <newname>
-//   ALTER INDEX ... SPLIT AT <selectclause>
+//   ALTER INDEX ... SPLIT AT <selectclause> [WITH EXPIRATION <expr>]
 //   ALTER INDEX ... UNSPLIT AT <selectclause>
+//   ALTER INDEX ... UNSPLIT ALL
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER PARTITION ... OF INDEX ... CONFIGURE ZONE <zoneconfig>
 //
@@ -1280,13 +1282,27 @@ alter_split_stmt:
     $$.val = &tree.Split{
       TableOrIndex: tree.TableIndexName{Table: name},
       Rows: $6.slct(),
+      ExpireExpr: tree.Expr(nil),
+    }
+  }
+| ALTER TABLE table_name SPLIT AT select_stmt WITH EXPIRATION a_expr
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Split{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $6.slct(),
+      ExpireExpr: $9.expr(),
     }
   }
 
 alter_split_index_stmt:
   ALTER INDEX table_index_name SPLIT AT select_stmt
   {
-    $$.val = &tree.Split{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
+    $$.val = &tree.Split{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), ExpireExpr: tree.Expr(nil)}
+  }
+| ALTER INDEX table_index_name SPLIT AT select_stmt WITH EXPIRATION a_expr
+  {
+    $$.val = &tree.Split{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), ExpireExpr: $9.expr()}
   }
 
 alter_unsplit_stmt:
@@ -1298,11 +1314,23 @@ alter_unsplit_stmt:
       Rows: $6.slct(),
     }
   }
+| ALTER TABLE table_name UNSPLIT ALL
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Unsplit {
+      TableOrIndex: tree.TableIndexName{Table: name},
+      All: true,
+    }
+  }
 
 alter_unsplit_index_stmt:
   ALTER INDEX table_index_name UNSPLIT AT select_stmt
   {
     $$.val = &tree.Unsplit{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
+  }
+| ALTER INDEX table_index_name UNSPLIT ALL
+  {
+    $$.val = &tree.Unsplit{TableOrIndex: $3.tableIndexName(), All: true}
   }
 
 relocate_kw:
@@ -1523,7 +1551,10 @@ alter_table_cmd:
     $$.val = &tree.AlterTableDropStored{Column: tree.Name($3)}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
-| ALTER opt_column column_name SET NOT NULL { return unimplementedWithIssue(sqllex, 28751) }
+| ALTER opt_column column_name SET NOT NULL
+  {
+    $$.val = &tree.AlterTableSetNotNull{Column: tree.Name($3)}
+  }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS column_name opt_drop_behavior
   {
@@ -4295,7 +4326,7 @@ col_qualification_elem:
  }
 | AS error
  {
-    sqllex.Error("syntax error: use AS ( <expr> ) STORED")
+    sqllex.Error("use AS ( <expr> ) STORED")
     return 1
  }
 
@@ -5747,10 +5778,6 @@ opt_all_clause:
   ALL {}
 | /* EMPTY */ {}
 
-opt_sort_clause_err:
-  sort_clause { return unimplementedWithIssue(sqllex, 23620) }
-| /* EMPTY */ {}
-
 opt_sort_clause:
   sort_clause
   {
@@ -6868,8 +6895,8 @@ const_datetime:
 | TIMESTAMP '(' iconst32 ')' opt_timezone
   {
     prec := $3.int32()
-    if prec != 6 {
-         return unimplementedWithIssue(sqllex, 32098)
+    if !(prec == 6 || prec == 0) {
+        return unimplementedWithIssue(sqllex, 32098)
     }
     if $5.bool() {
       $$.val = types.MakeTimestampTZ(prec)
@@ -6884,7 +6911,7 @@ const_datetime:
 | TIMESTAMPTZ '(' iconst32 ')'
   {
     prec := $3.int32()
-    if prec != 6 {
+    if !(prec == 6 || prec == 0) {
          return unimplementedWithIssue(sqllex, 32098)
     }
     $$.val = types.MakeTimestampTZ(prec)
@@ -7544,7 +7571,7 @@ d_expr:
     if err != nil { return setErr(sqllex, err) }
     $$.val = d
   }
-| func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, $1.unresolvedName().String() + "(...) SCONST") }
+| func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, $1.unresolvedName().String() + "(...) SCONST") }
 | const_typename SCONST
   {
     $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
@@ -7626,17 +7653,19 @@ func_application:
   {
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName()}
   }
-| func_name '(' expr_list opt_sort_clause_err ')'
+| func_name '(' expr_list opt_sort_clause ')'
   {
-    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: $3.exprs()}
+    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: $3.exprs(), OrderBy: $4.orderBy()}
   }
-| func_name '(' VARIADIC a_expr opt_sort_clause_err ')' { return unimplemented(sqllex, "variadic") }
-| func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause_err ')' { return unimplemented(sqllex, "variadic") }
-| func_name '(' ALL expr_list opt_sort_clause_err ')'
+| func_name '(' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
+| func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
+| func_name '(' ALL expr_list opt_sort_clause ')'
   {
-    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Type: tree.AllFuncType, Exprs: $4.exprs()}
+    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Type: tree.AllFuncType, Exprs: $4.exprs(), OrderBy: $5.orderBy()}
   }
-| func_name '(' DISTINCT expr_list opt_sort_clause_err ')'
+// TODO(ridwanmsharif): Once DISTINCT is supported by window aggregates,
+// allow ordering to be specified below.
+| func_name '(' DISTINCT expr_list ')'
   {
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Type: tree.DistinctFuncType, Exprs: $4.exprs()}
   }
@@ -8920,6 +8949,7 @@ unreserved_keyword:
 | EXPERIMENTAL_RANGES
 | EXPERIMENTAL_RELOCATE
 | EXPERIMENTAL_REPLICA
+| EXPIRATION
 | EXPLAIN
 | EXPORT
 | EXTENSION

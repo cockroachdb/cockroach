@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -69,7 +67,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 				}
 				numRows++
 			} else {
-				se.AddMetadata(records[rowIdx].meta)
+				se.AddMetadata(context.TODO(), records[rowIdx].meta)
 				numMeta++
 			}
 		}
@@ -79,7 +77,7 @@ func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []row
 			msg := se.FormMessage(context.TODO())
 			// Make a copy of the data buffer.
 			msg.Data.RawBytes = append([]byte(nil), msg.Data.RawBytes...)
-			err := sd.AddMessage(msg)
+			err := sd.AddMessage(context.TODO(), msg)
 			if err != nil {
 				tb.Fatal(err)
 			}
@@ -134,7 +132,7 @@ func TestEmptyStreamEncodeDecode(t *testing.T) {
 	var se StreamEncoder
 	var sd StreamDecoder
 	msg := se.FormMessage(context.TODO())
-	if err := sd.AddMessage(msg); err != nil {
+	if err := sd.AddMessage(context.TODO(), msg); err != nil {
 		t.Fatal(err)
 	}
 	if msg.Header == nil {
@@ -213,7 +211,7 @@ func BenchmarkStreamDecoder(b *testing.B) {
 
 			for i := 0; i < b.N; i++ {
 				var sd StreamDecoder
-				if err := sd.AddMessage(msg); err != nil {
+				if err := sd.AddMessage(ctx, msg); err != nil {
 					b.Fatal(err)
 				}
 				for j := 0; j < outboxBufRows; j++ {

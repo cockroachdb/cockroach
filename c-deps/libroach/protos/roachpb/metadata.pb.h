@@ -29,6 +29,7 @@
 #include <google/protobuf/message_lite.h>
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
+#include <google/protobuf/generated_enum_util.h>
 #include "util/unresolved_addr.pb.h"
 #include "util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
@@ -111,6 +112,15 @@ template<> ::cockroach::roachpb::Version* Arena::CreateMaybeMessage<::cockroach:
 }  // namespace google
 namespace cockroach {
 namespace roachpb {
+
+enum ReplicaType {
+  VOTER = 0,
+  LEARNER = 1
+};
+bool ReplicaType_IsValid(int value);
+const ReplicaType ReplicaType_MIN = VOTER;
+const ReplicaType ReplicaType_MAX = LEARNER;
+const int ReplicaType_ARRAYSIZE = ReplicaType_MAX + 1;
 
 // ===================================================================
 
@@ -468,6 +478,12 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::int32 replica_id() const;
   void set_replica_id(::google::protobuf::int32 value);
 
+  bool has_type() const;
+  void clear_type();
+  static const int kTypeFieldNumber = 4;
+  ::cockroach::roachpb::ReplicaType type() const;
+  void set_type(::cockroach::roachpb::ReplicaType value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ReplicaDescriptor)
  private:
   void set_has_node_id();
@@ -476,6 +492,8 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_ins
   void clear_has_store_id();
   void set_has_replica_id();
   void clear_has_replica_id();
+  void set_has_type();
+  void clear_has_type();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -483,6 +501,7 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
   ::google::protobuf::int32 replica_id_;
+  int type_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -743,7 +762,6 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
-  // optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
   bool has_sticky_bit() const;
   void clear_sticky_bit();
   static const int kStickyBitFieldNumber = 7;
@@ -2360,6 +2378,30 @@ inline void ReplicaDescriptor::set_replica_id(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicaDescriptor.replica_id)
 }
 
+inline bool ReplicaDescriptor::has_type() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void ReplicaDescriptor::set_has_type() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void ReplicaDescriptor::clear_has_type() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void ReplicaDescriptor::clear_type() {
+  type_ = 0;
+  clear_has_type();
+}
+inline ::cockroach::roachpb::ReplicaType ReplicaDescriptor::type() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReplicaDescriptor.type)
+  return static_cast< ::cockroach::roachpb::ReplicaType >(type_);
+}
+inline void ReplicaDescriptor::set_type(::cockroach::roachpb::ReplicaType value) {
+  assert(::cockroach::roachpb::ReplicaType_IsValid(value));
+  set_has_type();
+  type_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicaDescriptor.type)
+}
+
 // -------------------------------------------------------------------
 
 // ReplicaIdent
@@ -2677,7 +2719,6 @@ inline void RangeDescriptor::set_generation(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.generation)
 }
 
-// optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
 inline bool RangeDescriptor::has_sticky_bit() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
@@ -4208,6 +4249,14 @@ inline void Version::set_unstable(::google::protobuf::int32 value) {
 
 }  // namespace roachpb
 }  // namespace cockroach
+
+namespace google {
+namespace protobuf {
+
+template <> struct is_proto_enum< ::cockroach::roachpb::ReplicaType> : ::std::true_type {};
+
+}  // namespace protobuf
+}  // namespace google
 
 // @@protoc_insertion_point(global_scope)
 

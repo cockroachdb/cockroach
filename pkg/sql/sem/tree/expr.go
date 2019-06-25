@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -19,9 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // Expr represents an expression.
@@ -143,7 +143,7 @@ func (ta typeAnnotation) ResolvedType() *types.T {
 
 func (ta typeAnnotation) assertTyped() {
 	if ta.typ == nil {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"ReturnType called on TypedExpr with empty typeAnnotation. " +
 				"Was the underlying Expr type-checked before asserting a type of TypedExpr?"))
 	}
@@ -522,7 +522,7 @@ func (node *ComparisonExpr) memoizeFn() {
 
 	fn, ok := CmpOps[fOp].lookupImpl(leftRet, rightRet)
 	if !ok {
-		panic(pgerror.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed",
+		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
 	node.fn = fn
@@ -778,7 +778,7 @@ func NewPlaceholder(name string) (*Placeholder, error) {
 	// etc), while PlaceholderIdx is 0-based.
 	if uval == 0 || uval > MaxPlaceholderIdx+1 {
 		return nil, pgerror.Newf(
-			pgerror.CodeNumericValueOutOfRangeError,
+			pgcode.NumericValueOutOfRange,
 			"placeholder index must be between 1 and %d", MaxPlaceholderIdx+1,
 		)
 	}
@@ -898,6 +898,14 @@ func (node *Array) Format(ctx *FmtCtx) {
 	ctx.WriteString("ARRAY[")
 	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(']')
+	// If the array has a type, add an annotation. Don't add it if the type is
+	// UNKNOWN[], since that's not a valid annotation.
+	if ctx.HasFlags(FmtParsable) && node.typ != nil {
+		if node.typ.ArrayContents().Family() != types.UnknownFamily {
+			ctx.WriteString(":::")
+			ctx.Buffer.WriteString(node.typ.SQLString())
+		}
+	}
 }
 
 // ArrayFlatten represents a subquery array constructor.
@@ -1120,7 +1128,7 @@ func (node *BinaryExpr) memoizeFn() {
 	leftRet, rightRet := node.Left.(TypedExpr).ResolvedType(), node.Right.(TypedExpr).ResolvedType()
 	fn, ok := BinOps[node.Operator].lookupImpl(leftRet, rightRet)
 	if !ok {
-		panic(pgerror.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed",
+		panic(errors.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
 	node.fn = fn
@@ -1221,7 +1229,7 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ *types.T) *UnaryExp
 			return node
 		}
 	}
-	panic(pgerror.AssertionFailedf("invalid TypedExpr with unary op %d: %s", op, expr))
+	panic(errors.AssertionFailedf("invalid TypedExpr with unary op %d: %s", op, expr))
 }
 
 // FuncExpr represents a function call.
@@ -1233,6 +1241,9 @@ type FuncExpr struct {
 	Filter    Expr
 	WindowDef *WindowDef
 
+	// OrderBy is used for aggregations that specify an order:
+	// array_agg(col1 ORDER BY col2)
+	OrderBy OrderBy
 	typeAnnotation
 	fnProps *FunctionProperties
 	fn      *Overload

@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -18,9 +16,9 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // FmtFlags carries options for the pretty-printer.
@@ -207,7 +205,7 @@ func NewFmtCtx(f FmtFlags) *FmtCtx {
 // NewFmtCtxEx creates a FmtCtx.
 func NewFmtCtxEx(f FmtFlags, ann *Annotations) *FmtCtx {
 	if ann == nil && f&flagsRequiringAnnotations != 0 {
-		panic(pgerror.AssertionFailedf("no Annotations provided"))
+		panic(errors.AssertionFailedf("no Annotations provided"))
 	}
 	ctx := fmtCtxPool.Get().(*FmtCtx)
 	ctx.flags = f
@@ -236,7 +234,7 @@ func (ctx *FmtCtx) WithReformatTableNames(tableNameFmt func(*FmtCtx, *TableName)
 // restores the old flags.
 func (ctx *FmtCtx) WithFlags(flags FmtFlags, fn func()) {
 	if ctx.ann == nil && flags&flagsRequiringAnnotations != 0 {
-		panic(pgerror.AssertionFailedf("no Annotations provided"))
+		panic(errors.AssertionFailedf("no Annotations provided"))
 	}
 	oldFlags := ctx.flags
 	ctx.flags = flags

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
@@ -16,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -29,16 +28,11 @@ import (
 func (b *Builder) buildValuesClause(
 	values *tree.ValuesClause, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
-	var numCols int
-	if len(values.Rows) > 0 {
+	numRows := len(values.Rows)
+	numCols := 0
+	if numRows > 0 {
 		numCols = len(values.Rows[0])
 	}
-
-	colTypes := make([]types.T, numCols)
-	for i := range colTypes {
-		colTypes[i] = *types.Unknown
-	}
-	rows := make(memo.ScalarListExpr, 0, len(values.Rows))
 
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
@@ -49,44 +43,83 @@ func (b *Builder) buildValuesClause(
 	b.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
 	inScope.context = "VALUES"
 
-	for _, tuple := range values.Rows {
-		if numCols != len(tuple) {
-			reportValuesLenError(numCols, len(tuple))
-		}
+	// Typing a VALUES clause is not trivial; consider:
+	//   VALUES (NULL), (1)
+	// We want to type the entire column as INT. For this, we must find the first
+	// expression that resolves to a definite type. Moreover, we want the NULL to
+	// be typed correctly; so once we figure out the type, we must go back and
+	// add casts as necessary. We do this column by column and store the groups in
+	// a linearized matrix.
 
-		elems := make(memo.ScalarListExpr, numCols)
-		for i, expr := range tuple {
-			desired := types.Any
-			if i < len(desiredTypes) {
-				desired = desiredTypes[i]
+	// Bulk allocate ScalarListExpr slices: we need a matrix of size numRows by
+	// numCols and one slice of length numRows for the tuples.
+	elems := make(memo.ScalarListExpr, numRows*numCols+numRows)
+	tuples, elems := elems[:numRows], elems[numRows:]
+
+	colTypes := make([]types.T, numCols)
+	for colIdx := range colTypes {
+		desired := types.Any
+		if colIdx < len(desiredTypes) {
+			desired = desiredTypes[colIdx]
+		}
+		colTypes[colIdx] = *types.Unknown
+
+		elemPos := colIdx
+		for _, tuple := range values.Rows {
+			if numCols != len(tuple) {
+				reportValuesLenError(numCols, len(tuple))
 			}
 
-			texpr := inScope.resolveType(expr, desired)
-			typ := texpr.ResolvedType()
-			elems[i] = b.buildScalar(texpr, inScope, nil, nil, nil)
-
-			// Verify that types of each tuple match one another.
-			if colTypes[i].Family() == types.UnknownFamily {
-				colTypes[i] = *typ
-			} else if typ.Family() != types.UnknownFamily && !typ.Equivalent(&colTypes[i]) {
-				panic(pgerror.Newf(pgerror.CodeDatatypeMismatchError,
-					"VALUES types %s and %s cannot be matched", typ, &colTypes[i]))
+			expr := inScope.walkExprTree(tuple[colIdx])
+			texpr, err := tree.TypeCheck(expr, b.semaCtx, desired)
+			if err != nil {
+				panic(builderError{err})
 			}
+			if typ := texpr.ResolvedType(); typ.Family() != types.UnknownFamily {
+				if colTypes[colIdx].Family() == types.UnknownFamily {
+					colTypes[colIdx] = *typ
+				} else if !typ.Equivalent(&colTypes[colIdx]) {
+					panic(pgerror.Newf(pgcode.DatatypeMismatch,
+						"VALUES types %s and %s cannot be matched", typ, &colTypes[colIdx]))
+				}
+			}
+			elems[elemPos] = b.buildScalar(texpr, inScope, nil, nil, nil)
+			elemPos += numCols
 		}
 
-		tupleTyp := types.MakeTuple(colTypes)
-		rows = append(rows, b.factory.ConstructTuple(elems, tupleTyp))
+		// If we still don't have a type for the column, set it to the desired type.
+		if colTypes[colIdx].Family() == types.UnknownFamily && desired.Family() != types.AnyFamily {
+			colTypes[colIdx] = *desired
+		}
+
+		// Add casts to NULL values if necessary.
+		if colTypes[colIdx].Family() != types.UnknownFamily {
+			elemPos := colIdx
+			for range values.Rows {
+				if elems[elemPos].DataType().Family() == types.UnknownFamily {
+					elems[elemPos] = b.factory.ConstructCast(elems[elemPos], &colTypes[colIdx])
+				}
+				elemPos += numCols
+			}
+		}
+	}
+
+	// Build the tuples.
+	tupleTyp := types.MakeTuple(colTypes)
+	for rowIdx := range tuples {
+		tuples[rowIdx] = b.factory.ConstructTuple(elems[:numCols], tupleTyp)
+		elems = elems[numCols:]
 	}
 
 	outScope = inScope.push()
-	for i := 0; i < numCols; i++ {
+	for colIdx := 0; colIdx < numCols; colIdx++ {
 		// The column names for VALUES are column1, column2, etc.
-		alias := fmt.Sprintf("column%d", i+1)
-		b.synthesizeColumn(outScope, alias, &colTypes[i], nil, nil /* scalar */)
+		alias := fmt.Sprintf("column%d", colIdx+1)
+		b.synthesizeColumn(outScope, alias, &colTypes[colIdx], nil, nil /* scalar */)
 	}
 
 	colList := colsToColList(outScope.cols)
-	outScope.expr = b.factory.ConstructValues(rows, &memo.ValuesPrivate{
+	outScope.expr = b.factory.ConstructValues(tuples, &memo.ValuesPrivate{
 		Cols: colList,
 		ID:   b.factory.Metadata().NextValuesID(),
 	})
@@ -95,7 +128,7 @@ func (b *Builder) buildValuesClause(
 
 func reportValuesLenError(expected, actual int) {
 	panic(pgerror.Newf(
-		pgerror.CodeSyntaxError,
+		pgcode.Syntax,
 		"VALUES lists must all be the same length, expected %d columns, found %d",
 		expected, actual))
 }

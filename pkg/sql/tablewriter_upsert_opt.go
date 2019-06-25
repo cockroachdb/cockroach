@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -16,10 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // optTableUpserter implements the upsert operation when it is planned by the
@@ -41,6 +39,9 @@ import (
 // The other non-CBO upserters perform custom left lookup joins. However, that
 // doesn't allow sharing of optimization rules and doesn't work with correlated
 // SET expressions.
+//
+// For more details on how the CBO compiles UPSERT statements, see the block
+// comment on Builder.buildInsert in opt/optbuilder/insert.go.
 type optTableUpserter struct {
 	tableUpserterBase
 
@@ -100,7 +101,9 @@ func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bo
 	tu.batchSize++
 	tu.resultCount++
 
-	// Consult the canary column to determine whether to insert or update.
+	// Consult the canary column to determine whether to insert or update. For
+	// more details on how canary columns work, see the block comment on
+	// Builder.buildInsert in opt/optbuilder/insert.go.
 	insertEnd := len(tu.ri.InsertCols)
 	if tu.canaryOrdinal == -1 {
 		// No canary column means that existing row should be overwritten (i.e.
@@ -215,7 +218,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 		} else {
 			rowIndex, ok = tu.ru.FetchColIDtoRowIndex[colID]
 			if !ok {
-				return pgerror.AssertionFailedf("no existing value is available for column")
+				return errors.AssertionFailedf("no existing value is available for column")
 			}
 			tu.resultRow[returnIndex] = fetchRow[rowIndex]
 		}

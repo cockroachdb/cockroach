@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -36,11 +34,9 @@ type indexJoiner struct {
 	input RowSource
 	desc  sqlbase.TableDescriptor
 
-	// fetcherInput wraps fetcher in a RowSource implementation and should be used
-	// to get rows from the fetcher. This enables the indexJoiner to wrap the
-	// fetcherInput with a stat collector when necessary.
-	fetcherInput RowSource
-	fetcher      row.Fetcher
+	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
+	// indexJoiner to wrap the fetcher with a stat collector when necessary.
+	fetcher rowFetcher
 	// fetcherReady indicates that we have started an index scan and there are
 	// potentially more rows to retrieve.
 	fetcherReady bool
@@ -97,8 +93,9 @@ func newIndexJoiner(
 	); err != nil {
 		return nil, err
 	}
+	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
-		&ij.fetcher,
+		&fetcher,
 		&ij.desc,
 		0, /* primary index */
 		ij.desc.ColumnIdxMapWithMutations(needMutations),
@@ -110,13 +107,14 @@ func newIndexJoiner(
 	); err != nil {
 		return nil, err
 	}
-	ij.fetcherInput = &rowFetcherWrapper{Fetcher: &ij.fetcher}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		// Enable stats collection.
 		ij.input = NewInputStatCollector(ij.input)
-		ij.fetcherInput = NewInputStatCollector(ij.fetcherInput)
+		ij.fetcher = newRowFetcherStatCollector(&fetcher)
 		ij.finishTrace = ij.outputStatsToTrace
+	} else {
+		ij.fetcher = &rowFetcherWrapper{Fetcher: &fetcher}
 	}
 
 	return ij, nil
@@ -125,7 +123,7 @@ func newIndexJoiner(
 // Start is part of the RowSource interface.
 func (ij *indexJoiner) Start(ctx context.Context) context.Context {
 	ij.input.Start(ctx)
-	ij.fetcherInput.Start(ctx)
+	ij.fetcher.Start(ctx)
 	return ij.StartInternal(ctx, indexJoinerProcName)
 }
 
@@ -168,7 +166,7 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 			ij.fetcherReady = true
 			ij.spans = ij.spans[:0]
 		}
-		row, meta := ij.fetcherInput.Next()
+		row, meta := ij.fetcher.Next()
 		if meta != nil {
 			ij.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
 			return nil, ij.DrainHelper()
@@ -212,7 +210,7 @@ func (ij *indexJoiner) outputStatsToTrace() {
 	if !ok {
 		return
 	}
-	ils, ok := getInputStats(ij.flowCtx, ij.fetcherInput)
+	ils, ok := getFetcherInputStats(ij.flowCtx, ij.fetcher)
 	if !ok {
 		return
 	}

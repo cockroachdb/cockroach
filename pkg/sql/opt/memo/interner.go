@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
@@ -21,11 +19,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -231,7 +230,7 @@ func (c *internCache) Next() bool {
 // checked that the item is not yet in the cache.
 func (c *internCache) Add(item interface{}) {
 	if item == nil {
-		panic(pgerror.AssertionFailedf("cannot add the nil value to the cache"))
+		panic(errors.AssertionFailedf("cannot add the nil value to the cache"))
 	}
 
 	if c.prev.item == nil {
@@ -399,6 +398,15 @@ func (h *hasher) HashColumnID(val opt.ColumnID) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashFastIntSet(val util.FastIntSet) {
+	hash := h.hash
+	for c, ok := val.Next(0); ok; c, ok = val.Next(c + 1) {
+		hash ^= internHash(c)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
 func (h *hasher) HashColSet(val opt.ColSet) {
 	hash := h.hash
 	for c, ok := val.Next(0); ok; c, ok = val.Next(c + 1) {
@@ -469,7 +477,7 @@ func (h *hasher) HashJoinFlags(val JoinFlags) {
 }
 
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
-	h.HashColSet(val.Flags)
+	h.HashFastIntSet(val.Flags)
 	h.HashUint64(uint64(val.Mode))
 }
 
@@ -481,15 +489,9 @@ func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
 	h.HashString(string(val))
 }
 
-func (h *hasher) HashWindowFrame(val *tree.WindowFrame) {
-	// TODO(justin): remove when we support OFFSET.
-	if val.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
-		val.Bounds.EndBound.BoundType == tree.OffsetFollowing {
-		panic(pgerror.AssertionFailedf("expected to have rejected offset"))
-	}
-
-	h.HashInt(int(val.Bounds.StartBound.BoundType))
-	h.HashInt(int(val.Bounds.EndBound.BoundType))
+func (h *hasher) HashWindowFrame(val WindowFrame) {
+	h.HashInt(int(val.StartBoundType))
+	h.HashInt(int(val.EndBoundType))
 	h.HashInt(int(val.Mode))
 }
 
@@ -547,6 +549,7 @@ func (h *hasher) HashWindowsExpr(val WindowsExpr) {
 		item := &val[i]
 		h.HashColumnID(item.Col)
 		h.HashScalarExpr(item.Function)
+		h.HashWindowFrame(item.Frame)
 	}
 }
 
@@ -555,6 +558,12 @@ func (h *hasher) HashZipExpr(val ZipExpr) {
 		item := &val[i]
 		h.HashColList(item.Cols)
 		h.HashScalarExpr(item.Func)
+	}
+}
+
+func (h *hasher) HashFKChecksExpr(val FKChecksExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].Check)
 	}
 }
 
@@ -763,17 +772,9 @@ func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
 	return l == r
 }
 
-func (h *hasher) IsWindowFrameEqual(l, r *tree.WindowFrame) bool {
-	// TODO(justin): remove when we support OFFSET.
-	if l.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
-		l.Bounds.EndBound.BoundType == tree.OffsetFollowing ||
-		r.Bounds.StartBound.BoundType == tree.OffsetPreceding ||
-		r.Bounds.EndBound.BoundType == tree.OffsetFollowing {
-		panic(pgerror.AssertionFailedf("expected to have rejected offset"))
-	}
-
-	return l.Bounds.StartBound.BoundType == r.Bounds.StartBound.BoundType &&
-		l.Bounds.EndBound.BoundType == r.Bounds.EndBound.BoundType &&
+func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {
+	return l.StartBoundType == r.StartBoundType &&
+		l.EndBoundType == r.EndBoundType &&
 		l.Mode == r.Mode
 }
 
@@ -850,7 +851,9 @@ func (h *hasher) IsWindowsExprEqual(l, r WindowsExpr) bool {
 		return false
 	}
 	for i := range l {
-		if l[i].Col != r[i].Col || l[i].Function != r[i].Function {
+		if l[i].Col != r[i].Col ||
+			l[i].Function != r[i].Function ||
+			l[i].Frame != r[i].Frame {
 			return false
 		}
 	}
@@ -863,6 +866,18 @@ func (h *hasher) IsZipExprEqual(l, r ZipExpr) bool {
 	}
 	for i := range l {
 		if !l[i].Cols.Equals(r[i].Cols) || l[i].Func != r[i].Func {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsFKChecksExprEqual(l, r FKChecksExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Check != r[i].Check {
 			return false
 		}
 	}

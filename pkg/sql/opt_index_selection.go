@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -27,11 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 const nonCoveringIndexPenalty = 10
@@ -99,8 +97,8 @@ func (p *planner) selectIndex(
 		var err error
 		s.spans, err = unconstrainedSpans(s.desc, s.index, s.isDeleteSource)
 		if err != nil {
-			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-				"table ID = %d, index ID = %d", log.Safe(s.desc.ID), log.Safe(s.index.ID))
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+				"table ID = %d, index ID = %d", errors.Safe(s.desc.ID), errors.Safe(s.index.ID))
 		}
 		return s, nil
 	}
@@ -235,9 +233,9 @@ func (p *planner) selectIndex(
 	s.spans, err = spansFromConstraint(
 		s.desc, c.index, constraint, s.valNeededForCol, s.isDeleteSource)
 	if err != nil {
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(
+		return nil, errors.NewAssertionErrorWithWrappedErrf(
 			err, "constraint = %s, table ID = %d, index ID = %d",
-			constraint, log.Safe(s.desc.ID), log.Safe(s.index.ID),
+			constraint, errors.Safe(s.desc.ID), errors.Safe(s.index.ID),
 		)
 	}
 
@@ -320,10 +318,10 @@ func calculateMaxResults(
 		if col, err := t.FindColumnByID(id); err != nil {
 			return 0
 		} else if !col.IsNullable() {
-			notNullCols.Add(int(id))
+			notNullCols.Add(opt.ColumnID(id))
 		}
 
-		indexCols.Add(int(id))
+		indexCols.Add(opt.ColumnID(id))
 	}
 
 	return c.CalculateMaxResults(evalCtx, indexCols, notNullCols)
@@ -504,7 +502,7 @@ func (v *indexInfo) makeIndexConstraints(
 		col := opt.MakeOrderingColumn(opt.ColumnID(idx+1), dir == encoding.Descending)
 		columns = append(columns, col)
 		if !v.desc.Columns[idx].Nullable {
-			notNullCols.Add(idx + 1)
+			notNullCols.Add(opt.ColumnID(idx + 1))
 		}
 	}
 	v.ic.Init(filters, columns, notNullCols, isInverted, evalCtx, optimizer.Factory())
@@ -626,7 +624,7 @@ func encodeConstraintKey(
 				return nil, err
 			}
 			if len(keys) > 1 {
-				err := pgerror.AssertionFailedf("trying to use multiple keys in index lookup")
+				err := errors.AssertionFailedf("trying to use multiple keys in index lookup")
 				return nil, err
 			}
 			key = keys[0]

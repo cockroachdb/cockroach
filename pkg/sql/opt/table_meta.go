@@ -1,22 +1,20 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package opt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // TableID uniquely identifies the usage of a table within the scope of a
@@ -54,7 +52,7 @@ func (t TableID) ColumnID(ord int) ColumnID {
 func (t TableID) ColumnOrdinal(id ColumnID) int {
 	if util.RaceEnabled {
 		if id < t.firstColID() {
-			panic(pgerror.AssertionFailedf("ordinal cannot be negative"))
+			panic(errors.AssertionFailedf("ordinal cannot be negative"))
 		}
 	}
 	return int(id - t.firstColID())
@@ -161,7 +159,7 @@ func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 	var indexCols ColSet
 	for i, n := 0, index.ColumnCount(); i < n; i++ {
 		ord := index.Column(i).Ordinal
-		indexCols.Add(int(tm.MetaID.ColumnID(ord)))
+		indexCols.Add(tm.MetaID.ColumnID(ord))
 	}
 	return indexCols
 }
@@ -174,7 +172,7 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 	var indexCols ColSet
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
 		ord := index.Column(i).Ordinal
-		indexCols.Add(int(tm.MetaID.ColumnID(ord)))
+		indexCols.Add(tm.MetaID.ColumnID(ord))
 	}
 	return indexCols
 }
@@ -225,7 +223,7 @@ func (md *Metadata) SetTableAnnotation(tabID TableID, tabAnnID TableAnnID, ann i
 // See the TableAnnID comment for more details and a usage example.
 func NewTableAnnID() TableAnnID {
 	if tableAnnIDCount == maxTableAnnIDCount {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"can't allocate table annotation id; increase maxTableAnnIDCount to allow"))
 	}
 	cnt := tableAnnIDCount

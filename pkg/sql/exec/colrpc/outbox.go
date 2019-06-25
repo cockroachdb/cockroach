@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package colrpc
 
@@ -26,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/logtags"
 )
 
 // flowStreamClient is a utility interface used to mock out the RPC layer.
@@ -235,12 +233,14 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 	msg := &distsqlpb.ProducerMessage{}
 	if errToSend != nil {
 		msg.Data.Metadata = append(
-			msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(distsqlpb.ProducerMetadata{Err: errToSend}),
+			msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, distsqlpb.ProducerMetadata{Err: errToSend}),
+			// TODO(yuzefovich): obtain and release producer metadata from the pool.
 		)
 	}
 	for _, src := range o.metadataSources {
 		for _, meta := range src.DrainMeta(ctx) {
-			msg.Data.Metadata = append(msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(meta))
+			msg.Data.Metadata = append(msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta))
+			// TODO(yuzefovich): release meta object to the pool.
 		}
 	}
 	if len(msg.Data.Metadata) == 0 {

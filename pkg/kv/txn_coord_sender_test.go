@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package kv
 
@@ -72,24 +70,6 @@ func (tc *TxnCoordSender) isTracking() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.interceptorAlloc.txnHeartbeater.mu.txnEnd != nil
-}
-
-// Test that the Transaction.DeprecatedWriting flag is set after performing any
-// writes.
-// TODO(nvanbenschoten): Remove this in 19.2.
-func TestTxnCoordSenderSetWritingFlag(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
-	defer s.Stop()
-	ctx := context.Background()
-
-	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	if err := txn.Put(ctx, roachpb.Key("a"), []byte("value")); err != nil {
-		t.Fatal(err)
-	}
-	if !txn.Serialize().DeprecatedWriting {
-		t.Fatal("txn is not marked as writing")
-	}
 }
 
 // TestTxnCoordSenderBeginTransaction verifies that a command sent with a
@@ -317,7 +297,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyC := roachpb.Key("c")
 	splitKey := roachpb.Key("b")
-	if err := s.DB.AdminSplit(ctx, splitKey /* spanKey */, splitKey /* splitKey */, true /* manual */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey /* spanKey */, splitKey /* splitKey */, hlc.MaxTimestamp /* expirationTimestamp */); err != nil {
 		t.Fatal(err)
 	}
 

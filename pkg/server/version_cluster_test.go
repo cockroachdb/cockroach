@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package server_test
 
@@ -207,6 +205,7 @@ func TestClusterVersionUnreplicatedRaftTruncatedState(t *testing.T) {
 	dir, finish := testutils.TempDir(t)
 	defer finish()
 
+	// NB: this test can be removed when that version is always-on.
 	oldVersion := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState - 1)
 	oldVersionS := oldVersion.String()
 	newVersionS := cluster.VersionByKey(cluster.VersionUnreplicatedRaftTruncatedState).String()
@@ -335,8 +334,12 @@ ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i);
 							var ba roachpb.BatchRequest
 							ba.RangeID = r.RangeID
 							ba.Add(truncate)
-							if _, err := s.DB().NonTransactionalSender().Send(ctx, ba); err != nil {
-								t.Fatal(err)
+							if _, pErr := s.DB().NonTransactionalSender().Send(ctx, ba); pErr != nil {
+								// The index may no longer be around if the system decided to truncate the
+								// logs after we read it. Don't fail the test when that happens.
+								if !testutils.IsPError(pErr, "requested entry at index is unavailable") {
+									t.Fatal(err)
+								}
 							}
 						}
 						return true // want more
@@ -470,7 +473,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// Since the wrapped version setting exposes the new versions, it must
 	// definitely be present on all stores on the first try.
 	if err := tc.Servers[1].GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
-		cv, err := storage.ReadVersionFromEngineOrDefault(ctx, s.Engine())
+		cv, err := storage.ReadVersionFromEngineOrZero(ctx, s.Engine())
 		if err != nil {
 			return err
 		}
@@ -517,6 +520,20 @@ func TestAllVersionsAgree(t *testing.T) {
 	})
 }
 
+// Returns two versions v0 and v1 which correspond to adjacent releases. v1 will
+// equal the MinSupportedVersion to avoid rot in tests using this (as we retire
+// old versions).
+func v0v1() (roachpb.Version, roachpb.Version) {
+	v1 := cluster.BinaryMinimumSupportedVersion
+	v0 := cluster.BinaryMinimumSupportedVersion
+	if v0.Minor > 0 {
+		v0.Minor--
+	} else {
+		v0.Major--
+	}
+	return v0, v1
+}
+
 func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -530,100 +547,40 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
 	defer log.ResetExitFunc()
 
-	// Three nodes at v1.1 and a fourth one at 1.0, but all operating at v1.0.
-	versions := [][2]string{{"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.0"}}
+	v0, v1 := v0v1()
+	v0s := v0.String()
+	v1s := v1.String()
 
-	// Start by running 1.0.
+	// Three nodes at v1.1 and a fourth one at 1.0, but all operating at v1.0.
+	versions := [][2]string{{v0s, v1s}, {v0s, v1s}, {v0s, v1s}, {v0s, v0s}}
+
+	// Start by running v1.
 	bootstrapVersion := cluster.ClusterVersion{
-		Version: cluster.VersionByKey(cluster.VersionBase),
+		Version: v0,
 	}
 
 	knobs := base.TestingKnobs{
 		Store: &storage.StoreTestingKnobs{
 			BootstrapVersion: &bootstrapVersion,
 		},
+		Server: &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: 1,
+		},
 	}
 	tc := setupMixedCluster(t, knobs, versions, "")
 	defer tc.Stopper().Stop(ctx)
 
-	exp := "1.1"
+	exp := v1s
 
 	// The last node refuses to perform an upgrade that would risk its own life.
-	if err := tc.setVersion(len(versions)-1, exp); !testutils.IsError(err, "cannot upgrade to 1.1: node running 1.0") {
+	if err := tc.setVersion(len(versions)-1, exp); !testutils.IsError(err,
+		fmt.Sprintf("cannot upgrade to %s: node running %s", v1s, v0s),
+	) {
 		t.Fatal(err)
 	}
 
 	// The other nodes are less careful.
 	tc.mustSetVersion(0, exp)
-
-	<-exits // wait for fourth node to die
-
-	// Check that we can still talk to the first three nodes.
-	for i := 0; i < tc.NumServers()-1; i++ {
-		testutils.SucceedsSoon(tc, func() error {
-			if version := tc.getVersionFromSetting(i).Version().Version.String(); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			if version := tc.getVersionFromShow(i); version != exp {
-				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-			return nil
-		})
-	}
-}
-
-func TestClusterVersionMixedVersionTooNew(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	// Prevent node crashes from generating several megabytes of stacks when
-	// GOTRACEBACK=all, as it is on CI.
-	defer log.DisableTracebacks()()
-
-	exits := make(chan int, 100)
-
-	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
-	defer log.ResetExitFunc()
-
-	// Three nodes at v1.1 and a fourth one (started later) at 1.1-2 (and
-	// incompatible with anything earlier).
-	versions := [][2]string{{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}}
-
-	// Try running 1.1.
-	bootstrapVersion := cluster.ClusterVersion{
-		Version: roachpb.Version{Major: 1, Minor: 1},
-	}
-
-	knobs := base.TestingKnobs{
-		Store: &storage.StoreTestingKnobs{
-			BootstrapVersion: &bootstrapVersion,
-		},
-	}
-	tc := setupMixedCluster(t, knobs, versions, "")
-	defer tc.Stopper().Stop(ctx)
-
-	tc.AddServer(t, base.TestServerArgs{
-		Settings: cluster.MakeClusterSettings(
-			roachpb.Version{Major: 1, Minor: 1, Unstable: 2},
-			roachpb.Version{Major: 1, Minor: 1, Unstable: 2}),
-	})
-
-	// TODO(tschottdorf): the cluster remains running even though we're running
-	// an illegal combination of versions. The root cause is that nothing
-	// populates the version setting table entry, and so each node implicitly
-	// assumes its own version. We also use versions prior to 1.1-5 to avoid
-	// the version compatibility check in the RPC heartbeat.
-	//
-	// TODO(tschottdorf): validate something about the on-disk contents of the
-	// nodes at this point.
-	exp := "1.1"
-
-	// Write the de facto cluster version (v1.1) into the table. Note that we
-	// can do this from the node running 1.1-2 (it could be prevented, but doesn't
-	// seem too interesting).
-	if err := tc.setVersion(3, exp); err != nil {
-		t.Fatal(err)
-	}
 
 	<-exits // wait for fourth node to die
 

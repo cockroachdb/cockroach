@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql_test
 
@@ -188,9 +186,9 @@ func TestShowCreateTable(t *testing.T) {
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b),
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b),
 	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c),
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items(c),
 	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
@@ -208,9 +206,9 @@ func TestShowCreateTable(t *testing.T) {
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b) MATCH FULL,
 	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c) MATCH FULL,
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items(c) MATCH FULL,
 	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
@@ -224,7 +222,7 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 			expect: `CREATE TABLE %s (
 	x INT8 NULL,
-	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo (x),
+	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo(x),
 	INDEX %[1]s_auto_index_fk_ref (x ASC),
 	FAMILY "primary" (x, rowid)
 )`,
@@ -242,9 +240,9 @@ func TestShowCreateTable(t *testing.T) {
 	i INT8 NULL DEFAULT 123:::INT8,
 	j INT8 NULL DEFAULT 123:::INT8,
 	k INT8 NULL,
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b) ON DELETE SET DEFAULT,
 	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items (c) ON DELETE SET NULL,
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items(c) ON DELETE SET NULL,
 	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
@@ -292,9 +290,9 @@ func TestShowCreateTable(t *testing.T) {
 	j INT8 NULL DEFAULT 2:::INT8,
 	k INT8 NULL DEFAULT 3:::INT8,
 	l INT8 NULL DEFAULT 4:::INT8,
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b) ON DELETE SET DEFAULT,
 	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE,
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k, l) REFERENCES items(a, b) MATCH FULL ON UPDATE CASCADE,
 	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC, l ASC),
 	FAMILY "primary" (i, j, k, l, rowid)
 )`,

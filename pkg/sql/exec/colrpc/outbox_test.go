@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package colrpc
 
@@ -66,7 +64,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	meta := inbox.DrainMeta(ctx)
 
 	require.True(t, len(meta) == 1)
-	require.True(t, testutils.IsError(meta[0].Err, "panic"), meta[0])
+	require.True(t, testutils.IsError(meta[0].Err, "runtime error: index out of range"), meta[0])
 
 	require.NoError(t, <-streamHandlerErrCh)
 	wg.Wait()

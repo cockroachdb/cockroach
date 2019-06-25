@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package norm
 
@@ -16,10 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // ----------------------------------------------------------------------
@@ -50,7 +48,7 @@ func (c *CustomFuncs) ConstructNonLeftJoin(
 	case opt.FullJoinApplyOp:
 		return c.f.ConstructRightJoinApply(left, right, on, private)
 	}
-	panic(pgerror.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
 
 // ConstructNonRightJoin maps a right join to an inner join and a full join to a
@@ -69,7 +67,7 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 	case opt.FullJoinApplyOp:
 		return c.f.ConstructLeftJoinApply(left, right, on, private)
 	}
-	panic(pgerror.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
 
 // SimplifyNotNullEquality simplifies an expression of the following form:
@@ -103,7 +101,7 @@ func (c *CustomFuncs) SimplifyNotNullEquality(
 			return c.f.ConstructTrue()
 		}
 	}
-	panic(pgerror.AssertionFailedf("invalid ops: %v, %v", testOp, constOp))
+	panic(errors.AssertionFailedf("invalid ops: %v, %v", testOp, constOp))
 }
 
 // CanMapJoinOpFilter returns true if it is possible to map a boolean expression
@@ -191,16 +189,16 @@ func (c *CustomFuncs) MapJoinOpFilter(
 		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(srcCol), filters)
 		eqCols.IntersectionWith(c.OutputCols(dst))
 		if eqCols.Contains(srcCol) {
-			colMap.Set(srcCol, srcCol)
+			colMap.Set(int(srcCol), int(srcCol))
 		} else {
 			dstCol, ok := eqCols.Next(0)
 			if !ok {
-				panic(pgerror.AssertionFailedf(
+				panic(errors.AssertionFailedf(
 					"Map called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
 					src, dst,
 				))
 			}
-			colMap.Set(srcCol, dstCol)
+			colMap.Set(int(srcCol), int(dstCol))
 		}
 	}
 
@@ -264,19 +262,19 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 	// Don't bother looking for equivalent columns if colType has a composite
 	// key encoding.
 	if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
-		res.Add(int(col))
+		res.Add(col)
 		return res
 	}
 
 	// Compute all equivalent columns.
-	eqCols := util.MakeFastIntSet(int(col))
+	eqCols := opt.MakeColSet(col)
 	for i := range filters {
 		eqCols = filters[i].ScalarProps(c.mem).FuncDeps.ComputeEquivClosure(eqCols)
 	}
 
-	eqCols.ForEach(func(i int) {
+	eqCols.ForEach(func(i opt.ColumnID) {
 		// Only include columns that have the same type as col.
-		eqColType := c.f.Metadata().ColumnMeta(opt.ColumnID(i)).Type
+		eqColType := c.f.Metadata().ColumnMeta(i).Type
 		if colType.Equivalent(eqColType) {
 			res.Add(i)
 		}
@@ -305,7 +303,7 @@ func (c *CustomFuncs) eqConditionsToColMap(
 			continue
 		}
 
-		if leftCols.Contains(int(leftVarExpr.Col)) {
+		if leftCols.Contains(leftVarExpr.Col) {
 			eqColMap[leftVarExpr.Col] = rightVarExpr.Col
 		} else {
 			eqColMap[rightVarExpr.Col] = leftVarExpr.Col
@@ -373,16 +371,16 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		rightColID := rightVar.Col
 
 		// Normalize leftColID to come from leftColIDs.
-		if !leftColIDs.Contains(int(leftColID)) {
+		if !leftColIDs.Contains(leftColID) {
 			leftColID, rightColID = rightColID, leftColID
 		}
-		if !leftColIDs.Contains(int(leftColID)) || !rightColIDs.Contains(int(rightColID)) {
+		if !leftColIDs.Contains(leftColID) || !rightColIDs.Contains(rightColID) {
 			// Condition #1: columns don't come from both sides of join, or
 			// columns are nullable.
 			return false
 		}
 
-		if !unfilteredCols.Contains(int(rightColID)) {
+		if !unfilteredCols.Contains(rightColID) {
 			// Condition #3: right column doesn't contain values from every row.
 			return false
 		}
@@ -412,7 +410,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 			}
 		} else {
 			// Column could be a potential foreign key match so save it.
-			remainingLeftColIDs.Add(int(leftColID))
+			remainingLeftColIDs.Add(leftColID)
 		}
 	}
 
@@ -446,7 +444,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		numCols := fkRef.ColumnCount()
 		for j := 0; j < numCols; j++ {
 			ord := fkRef.OriginColumnOrdinal(leftTabMeta.Table, j)
-			leftIndexCols.Add(int(leftTab.ColumnID(ord)))
+			leftIndexCols.Add(leftTab.ColumnID(ord))
 		}
 
 		if !remainingLeftColIDs.SubsetOf(leftIndexCols) {
@@ -471,7 +469,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 			indexLeftCol := leftTab.ColumnID(fkRef.OriginColumnOrdinal(leftTabMeta.Table, j))
 
 			// Not every fk column needs to be in the equality conditions.
-			if !remainingLeftColIDs.Contains(int(indexLeftCol)) {
+			if !remainingLeftColIDs.Contains(indexLeftCol) {
 				continue
 			}
 
@@ -620,7 +618,7 @@ func (c *CustomFuncs) ExtractJoinEquality(
 		}
 	}
 	if leftProj.empty() && rightProj.empty() {
-		panic(pgerror.AssertionFailedf("no equalities to extract"))
+		panic(errors.AssertionFailedf("no equalities to extract"))
 	}
 
 	join := c.f.ConstructJoin(

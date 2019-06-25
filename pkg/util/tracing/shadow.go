@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 //
 // A "shadow" tracer can be any opentracing.Tracer implementation that is used
 // in addition to the normal functionality of our tracer. It works by attaching
@@ -89,6 +87,15 @@ func linkShadowSpan(
 	var opts []opentracing.StartSpanOption
 	// Replicate the options, using the lightstep context in the reference.
 	opts = append(opts, opentracing.StartTime(s.startTime))
+	if s.startTags != nil {
+		startTags := make(opentracing.Tags)
+		tags := s.startTags.Get()
+		for i := range tags {
+			tag := &tags[i]
+			startTags[tag.Key()] = tag.Value()
+		}
+		opts = append(opts, startTags)
+	}
 	if s.mu.tags != nil {
 		opts = append(opts, s.mu.tags)
 	}

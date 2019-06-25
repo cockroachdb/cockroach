@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package kv
 
@@ -587,20 +585,6 @@ func (ds *DistSender) initAndVerifyBatch(
 			ba.Header.MaxSpanRequestKeys < ba.Header.ScanOptions.MinResults {
 			return roachpb.NewErrorf("MaxSpanRequestKeys (%d) < MinResults (%d): %s",
 				ba.Header.MaxSpanRequestKeys, ba.Header.ScanOptions.MinResults, ba)
-		}
-	}
-
-	// Make sure that MVCCScan requests aren't in batch form if our cluster
-	// version is too old.
-	// TODO(jordan): delete this stanza after 2.1 is released.
-	if !ds.st.Version.IsActive(cluster.VersionBatchResponse) {
-		for i := range ba.Requests {
-			switch req := ba.Requests[i].GetInner().(type) {
-			case *roachpb.ScanRequest:
-				req.ScanFormat = roachpb.KEY_VALUES
-			case *roachpb.ReverseScanRequest:
-				req.ScanFormat = roachpb.KEY_VALUES
-			}
 		}
 	}
 	return nil

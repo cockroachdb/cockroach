@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
@@ -18,11 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 var fdAnnID = opt.NewTableAnnID()
@@ -245,7 +242,7 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 	// --------------
 	// Output columns are the union of synthesized columns and passthrough columns.
 	for i := range prj.Projections {
-		rel.OutputCols.Add(int(prj.Projections[i].Col))
+		rel.OutputCols.Add(prj.Projections[i].Col)
 	}
 	rel.OutputCols.UnionWith(prj.Passthrough)
 
@@ -262,7 +259,7 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 		item := &prj.Projections[i]
 		if opt.IsConstValueOp(item.Element) {
 			if ExtractConstDatum(item.Element) != tree.DNull {
-				rel.NotNullCols.Add(int(item.Col))
+				rel.NotNullCols.Add(item.Col)
 			}
 		}
 	}
@@ -503,7 +500,7 @@ func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *pro
 	// aggregate projection list.
 	rel.OutputCols = groupPrivate.GroupingCols.Copy()
 	for i := range aggs {
-		rel.OutputCols.Add(int(aggs[i].Col))
+		rel.OutputCols.Add(aggs[i].Col)
 	}
 
 	// Not Null Columns
@@ -586,7 +583,7 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 	setPrivate := setNode.Private().(*SetPrivate)
 	if len(setPrivate.OutCols) != len(setPrivate.LeftCols) ||
 		len(setPrivate.OutCols) != len(setPrivate.RightCols) {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"lists in SetPrivate are not all the same length. new:%d, left:%d, right:%d",
 			log.Safe(len(setPrivate.OutCols)), log.Safe(len(setPrivate.LeftCols)), log.Safe(len(setPrivate.RightCols)),
 		))
@@ -604,9 +601,9 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 	// with the output columns, since OutputCols are not ordered and may
 	// not correspond to each other.
 	for i := range setPrivate.OutCols {
-		if leftProps.NotNullCols.Contains(int((setPrivate.LeftCols)[i])) &&
-			rightProps.NotNullCols.Contains(int((setPrivate.RightCols)[i])) {
-			rel.NotNullCols.Add(int((setPrivate.OutCols)[i]))
+		if leftProps.NotNullCols.Contains((setPrivate.LeftCols)[i]) &&
+			rightProps.NotNullCols.Contains((setPrivate.RightCols)[i]) {
+			rel.NotNullCols.Add((setPrivate.OutCols)[i])
 		}
 	}
 
@@ -647,7 +644,23 @@ func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Re
 
 	// Not Null Columns
 	// ----------------
-	// All columns are assumed to be nullable.
+	// All columns are assumed to be nullable, unless they contain only constant
+	// non-null values.
+
+	for colIdx, col := range values.Cols {
+		notNull := true
+		for rowIdx := range values.Rows {
+			val := values.Rows[rowIdx].(*TupleExpr).Elems[colIdx]
+			if !opt.IsConstValueOp(val) || val.Op() == opt.NullOp {
+				// Null or not a constant.
+				notNull = false
+				break
+			}
+		}
+		if notNull {
+			rel.NotNullCols.Add(col)
+		}
+	}
 
 	// Outer Columns
 	// -------------
@@ -888,14 +901,14 @@ func (b *logicalPropsBuilder) buildOrdinalityProps(ord *OrdinalityExpr, rel *pro
 	// --------------
 	// An extra output column is added to those projected by input operator.
 	rel.OutputCols = inputProps.OutputCols.Copy()
-	rel.OutputCols.Add(int(ord.ColID))
+	rel.OutputCols.Add(ord.ColID)
 
 	// Not Null Columns
 	// ----------------
 	// The new output column is not null, and other columns inherit not null
 	// property from input.
 	rel.NotNullCols = inputProps.NotNullCols.Copy()
-	rel.NotNullCols.Add(int(ord.ColID))
+	rel.NotNullCols.Add(ord.ColID)
 
 	// Outer Columns
 	// -------------
@@ -910,7 +923,7 @@ func (b *logicalPropsBuilder) buildOrdinalityProps(ord *OrdinalityExpr, rel *pro
 		// Any existing keys are still keys.
 		rel.FuncDeps.AddStrictKey(key, rel.OutputCols)
 	}
-	rel.FuncDeps.AddStrictKey(util.MakeFastIntSet(int(ord.ColID)), rel.OutputCols)
+	rel.FuncDeps.AddStrictKey(opt.MakeColSet(ord.ColID), rel.OutputCols)
 
 	// Cardinality
 	// -----------
@@ -935,7 +948,7 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 	// window function column.
 	rel.OutputCols = inputProps.OutputCols.Copy()
 	for _, w := range window.Windows {
-		rel.OutputCols.Add(int(w.Col))
+		rel.OutputCols.Add(w.Col)
 	}
 
 	// Not Null Columns
@@ -1063,7 +1076,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// --------------
 	// Only non-mutation columns are output columns.
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		colID := int(private.Table.ColumnID(i))
+		colID := private.Table.ColumnID(i)
 		rel.OutputCols.Add(colID)
 	}
 
@@ -1075,19 +1088,19 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// the column must be not null.
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		tabColID := private.Table.ColumnID(i)
-		if !rel.OutputCols.Contains(int(tabColID)) {
+		if !rel.OutputCols.Contains(tabColID) {
 			continue
 		}
 
 		// If the target table column is not null, then mark the column as not null.
 		if !tab.Column(i).IsNullable() {
-			rel.NotNullCols.Add(int(tabColID))
+			rel.NotNullCols.Add(tabColID)
 			continue
 		}
 
 		// If the input column is not null, then the result will be not null.
-		if inputProps.NotNullCols.Contains(int(private.ReturnCols[i])) {
-			rel.NotNullCols.Add(int(private.Table.ColumnID(i)))
+		if inputProps.NotNullCols.Contains(private.ReturnCols[i]) {
+			rel.NotNullCols.Add(private.Table.ColumnID(i))
 		}
 	}
 
@@ -1186,7 +1199,7 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 	switch t := e.(type) {
 	case *VariableExpr:
 		// Variable introduces outer column.
-		shared.OuterCols.Add(int(t.Col))
+		shared.OuterCols.Add(t.Col)
 		return
 
 	case *PlaceholderExpr:
@@ -1290,7 +1303,7 @@ func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	var allCols opt.ColSet
 	tab := md.Table(tabID)
 	for i := 0; i < tab.DeletableColumnCount(); i++ {
-		allCols.Add(int(tabID.ColumnID(i)))
+		allCols.Add(tabID.ColumnID(i))
 	}
 
 	fd = &props.FuncDepSet{}
@@ -1307,7 +1320,7 @@ func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 		// strict key. See the comment for cat.Index.LaxKeyColumnCount.
 		for col := 0; col < index.LaxKeyColumnCount(); col++ {
 			ord := index.Column(col).Ordinal
-			keyCols.Add(int(tabID.ColumnID(ord)))
+			keyCols.Add(tabID.ColumnID(ord))
 		}
 		if index.LaxKeyColumnCount() < index.KeyColumnCount() {
 			// This case only occurs for a UNIQUE index having a NULL-able column.
@@ -1476,7 +1489,7 @@ func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 	for i := 0; i < tab.ColumnCount(); i++ {
 		// Non-null mutation columns can be null during backfill.
 		if !tab.Column(i).IsNullable() {
-			cs.Add(int(tabID.ColumnID(i)))
+			cs.Add(tabID.ColumnID(i))
 		}
 	}
 	return cs
@@ -1525,8 +1538,8 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		index := md.Table(join.Table).Index(join.Index)
 		for i, colID := range join.KeyCols {
 			indexColID := join.Table.ColumnID(index.Column(i).Ordinal)
-			h.filterNotNullCols.Add(int(colID))
-			h.filterNotNullCols.Add(int(indexColID))
+			h.filterNotNullCols.Add(colID)
+			h.filterNotNullCols.Add(indexColID)
 			h.filtersFD.AddEquivalency(colID, indexColID)
 		}
 
@@ -1546,8 +1559,8 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		for i := range join.LeftEq {
 			l := join.LeftEq[i].ID()
 			r := join.RightEq[i].ID()
-			h.filterNotNullCols.Add(int(l))
-			h.filterNotNullCols.Add(int(r))
+			h.filterNotNullCols.Add(l)
+			h.filterNotNullCols.Add(r)
 			h.filtersFD.AddEquivalency(l, r)
 		}
 
@@ -1569,8 +1582,8 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 			leftColID := join.LeftEqCols[i]
 			rightColID := join.RightEqCols[i]
 
-			h.filterNotNullCols.Add(int(leftColID))
-			h.filterNotNullCols.Add(int(rightColID))
+			h.filterNotNullCols.Add(leftColID)
+			h.filterNotNullCols.Add(rightColID)
 			h.filtersFD.AddEquivalency(leftColID, rightColID)
 		}
 

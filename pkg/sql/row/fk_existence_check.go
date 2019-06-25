@@ -1,23 +1,24 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package row
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // queueFkExistenceChecksForRow initiates FK existence checks for a
@@ -44,7 +45,7 @@ outer:
 			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				found, ok := fk.ids[colID]
 				if !ok {
-					return pgerror.AssertionFailedf("fk ids (%v) missing column id %d", fk.ids, colID)
+					return errors.AssertionFailedf("fk ids (%v) missing column id %d", fk.ids, colID)
 				}
 				if mutatedRow[found] == tree.DNull {
 					continue outer
@@ -59,7 +60,7 @@ outer:
 			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				found, ok := fk.ids[colID]
 				if !ok {
-					return pgerror.AssertionFailedf("fk ids (%v) missing column id %d", fk.ids, colID)
+					return errors.AssertionFailedf("fk ids (%v) missing column id %d", fk.ids, colID)
 				}
 				if mutatedRow[found] == tree.DNull {
 					nulls = true
@@ -69,7 +70,7 @@ outer:
 			}
 			if nulls && notNulls {
 				// TODO(bram): expand this error to show more details.
-				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+				return pgerror.Newf(pgcode.ForeignKeyViolation,
 					"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
 					mutatedRow, fk.ref.Name,
 				)
@@ -83,10 +84,10 @@ outer:
 			}
 
 		case sqlbase.ForeignKeyReference_PARTIAL:
-			return pgerror.UnimplementedWithIssue(20305, "MATCH PARTIAL not supported")
+			return unimplemented.NewWithIssue(20305, "MATCH PARTIAL not supported")
 
 		default:
-			return pgerror.AssertionFailedf("unknown composite key match type: %v", fk.ref.Match)
+			return errors.AssertionFailedf("unknown composite key match type: %v", fk.ref.Match)
 		}
 	}
 	return nil

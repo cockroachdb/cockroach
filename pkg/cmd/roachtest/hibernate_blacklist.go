@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -46,6 +44,9 @@ var hibernateBlackList19_2 = blacklist{
 	"org.hibernate.jpa.test.lock.LockTest.testFindWithPessimisticWriteLockTimeoutException":                                                                                          "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testFindWithTimeoutHint":                                                                                                                   "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testLockWriteOnUnversioned":                                                                                                                "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testNamedQueryResultListPessimisticWriteLockTimeoutException":                                                                              "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testQueryResultListPessimisticWriteLockTimeoutException":                                                                                   "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testQuerySingleResultPessimisticWriteLockTimeoutException":                                                                                 "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockSkipLocked":                                                                                               "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockWithoutNoWait":                                                                                            "6583",
 	"org.hibernate.jpa.test.lock.PessimisticWriteWithOptionalOuterJoinBreaksRefreshTest.pessimisticReadWithOptionalOuterJoinBreaksRefreshTest":                                       "6583",
@@ -54,9 +55,6 @@ var hibernateBlackList19_2 = blacklist{
 	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementOverall":                                                                                             "6583",
 	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementSpecific":                                                                                            "6583",
 	"org.hibernate.jpa.test.lock.StatementIsClosedAfterALockExceptionTest.testStatementIsClosed":                                                                                     "6583",
-	"org.hibernate.jpa.test.query.ConstructorResultNativeQueryTest.testConstructorResultNativeQuery":                                                                                 "unknown",
-	"org.hibernate.jpa.test.query.ConstructorResultNativeQueryTest.testConstructorResultNativeQuerySpecifyingType":                                                                   "unknown",
-	"org.hibernate.jpa.test.query.ConstructorResultNativeQueryTest.testMultipleConstructorResultNativeQuery":                                                                         "unknown",
 	"org.hibernate.jpa.test.query.NativeQueryOrdinalParametersTest.testCteNativeQueryOrdinalParameter":                                                                               "21085",
 	"org.hibernate.jpa.test.transaction.FlushAndTransactionTest.testAlwaysTransactionalOperations":                                                                                   "6583",
 	"org.hibernate.jpa.test.transaction.FlushAndTransactionTest.testMergeWhenExtended":                                                                                               "6583",
@@ -363,6 +361,9 @@ var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.jpa.test.lock.LockTest.testFindWithPessimisticWriteLockTimeoutException":                                                                                          "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testFindWithTimeoutHint":                                                                                                                   "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testLockWriteOnUnversioned":                                                                                                                "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testNamedQueryResultListPessimisticWriteLockTimeoutException":                                                                              "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testQueryResultListPessimisticWriteLockTimeoutException":                                                                                   "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testQuerySingleResultPessimisticWriteLockTimeoutException":                                                                                 "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockSkipLocked":                                                                                               "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockWithoutNoWait":                                                                                            "6583",
 	"org.hibernate.jpa.test.lock.PessimisticWriteWithOptionalOuterJoinBreaksRefreshTest.pessimisticReadWithOptionalOuterJoinBreaksRefreshTest":                                       "6583",
@@ -690,6 +691,9 @@ var hibernateBlackList2_1 = blacklist{
 	"org.hibernate.jpa.test.lock.LockTest.testFindWithPessimisticWriteLockTimeoutException":                                                                                          "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testFindWithTimeoutHint":                                                                                                                   "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testLockWriteOnUnversioned":                                                                                                                "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testNamedQueryResultListPessimisticWriteLockTimeoutException":                                                                              "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testQueryResultListPessimisticWriteLockTimeoutException":                                                                                   "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testQuerySingleResultPessimisticWriteLockTimeoutException":                                                                                 "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockSkipLocked":                                                                                               "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockWithoutNoWait":                                                                                            "6583",
 	"org.hibernate.jpa.test.lock.PessimisticWriteWithOptionalOuterJoinBreaksRefreshTest.pessimisticReadWithOptionalOuterJoinBreaksRefreshTest":                                       "unknown",
@@ -1291,6 +1295,9 @@ var hibernateBlackList2_0 = blacklist{
 	"org.hibernate.jpa.test.lock.LockTest.testLockRead":                                                                                                                                          "unknown",
 	"org.hibernate.jpa.test.lock.LockTest.testLockWrite":                                                                                                                                         "unknown",
 	"org.hibernate.jpa.test.lock.LockTest.testLockWriteOnUnversioned":                                                                                                                            "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testNamedQueryResultListPessimisticWriteLockTimeoutException":                                                                                          "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testQueryResultListPessimisticWriteLockTimeoutException":                                                                                               "6583",
+	"org.hibernate.jpa.test.lock.LockTest.testQuerySingleResultPessimisticWriteLockTimeoutException":                                                                                             "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockSkipLocked":                                                                                                           "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockWithoutNoWait":                                                                                                        "6583",
 	"org.hibernate.jpa.test.lock.QueryLockingTest.testEntityLockModeStateAfterQueryLocking":                                                                                                      "6583",

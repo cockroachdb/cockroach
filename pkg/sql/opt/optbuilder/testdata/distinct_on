@@ -10,15 +10,6 @@ CREATE TABLE xyz (
   PRIMARY KEY (pk1, pk2)
 )
 ----
-TABLE xyz
- ├── x int
- ├── y int
- ├── z int
- ├── pk1 int not null
- ├── pk2 int not null
- └── INDEX primary
-      ├── pk1 int not null
-      └── pk2 int not null
 
 exec-ddl
 CREATE TABLE abc (
@@ -28,14 +19,6 @@ CREATE TABLE abc (
   PRIMARY KEY (a, b, c)
 )
 ----
-TABLE abc
- ├── a string not null
- ├── b string not null
- ├── c string not null
- └── INDEX primary
-      ├── a string not null
-      ├── b string not null
-      └── c string not null
 
 ##################
 # Simple queries #
@@ -341,7 +324,7 @@ distinct-on
  │         ├── scan xyz
  │         │    └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
  │         └── windows
- │              └── row-number [type=undefined]
+ │              └── row-number [type=int]
  └── aggregations
       └── first-agg [type=int]
            └── variable: y [type=int]

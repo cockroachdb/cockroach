@@ -7,27 +7,26 @@
 //
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // This code was derived from https://github.com/youtube/vitess.
 
 package tree
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
 )
 
@@ -233,7 +232,7 @@ func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.
 	case types.StringFamily:
 		return types.MakeCollatedString(typ, string(c)), nil
 	case types.CollatedStringFamily:
-		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgcode.Syntax,
 			"multiple COLLATE declarations for column %q", name)
 	case types.ArrayFamily:
 		elemTyp, err := processCollationOnType(name, typ.ArrayContents(), c)
@@ -242,7 +241,7 @@ func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.
 		}
 		return types.MakeArray(elemTyp), nil
 	default:
-		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 			"COLLATE declaration for non-string-typed column %q", name)
 	}
 }
@@ -263,7 +262,7 @@ func NewColumnTableDef(
 			locale := string(t)
 			_, err := language.Parse(locale)
 			if err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid locale %s", locale)
+				return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
 			}
 			d.Type, err = processCollationOnType(name, d.Type, t)
 			if err != nil {
@@ -271,21 +270,21 @@ func NewColumnTableDef(
 			}
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
-				return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+				return nil, pgerror.Newf(pgcode.Syntax,
 					"multiple default values specified for column %q", name)
 			}
 			d.DefaultExpr.Expr = t.Expr
 			d.DefaultExpr.ConstraintName = c.Name
 		case NotNullConstraint:
 			if d.Nullable.Nullability == Null {
-				return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+				return nil, pgerror.Newf(pgcode.Syntax,
 					"conflicting NULL/NOT NULL declarations for column %q", name)
 			}
 			d.Nullable.Nullability = NotNull
 			d.Nullable.ConstraintName = c.Name
 		case NullConstraint:
 			if d.Nullable.Nullability == NotNull {
-				return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+				return nil, pgerror.Newf(pgcode.Syntax,
 					"conflicting NULL/NOT NULL declarations for column %q", name)
 			}
 			d.Nullable.Nullability = Null
@@ -303,7 +302,7 @@ func NewColumnTableDef(
 			})
 		case *ColumnFKConstraint:
 			if d.HasFKConstraint() {
-				return nil, pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
+				return nil, pgerror.Newf(pgcode.InvalidTableDefinition,
 					"multiple foreign key constraints specified for column %q", name)
 			}
 			d.References.Table = &t.Table
@@ -316,14 +315,14 @@ func NewColumnTableDef(
 			d.Computed.Expr = t.Expr
 		case *ColumnFamilyConstraint:
 			if d.HasColumnFamily() {
-				return nil, pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
+				return nil, pgerror.Newf(pgcode.InvalidTableDefinition,
 					"multiple column families specified for column %q", name)
 			}
 			d.Family.Name = t.Family
 			d.Family.Create = t.Create
 			d.Family.IfNotExists = t.IfNotExists
 		default:
-			return nil, pgerror.AssertionFailedf("unexpected column qualification: %T", c)
+			return nil, errors.AssertionFailedf("unexpected column qualification: %T", c)
 		}
 	}
 	return d, nil
@@ -935,9 +934,9 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 	}
 }
 
-// HoistConstraints finds column constraints defined inline with their columns
-// and makes them table-level constraints, stored in n.Defs. For example, the
-// foreign key constraint in
+// HoistConstraints finds column check and foreign key constraints defined
+// inline with their columns and makes them table-level constraints, stored in
+// n.Defs. For example, the foreign key constraint in
 //
 //     CREATE TABLE foo (a INT REFERENCES bar(a))
 //
@@ -960,6 +959,8 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 // CockroachDB and Postgres, but not necessarily other SQL databases:
 //
 //    CREATE TABLE foo (a INT CHECK (a < b), b INT)
+//
+// Unique constraints are not hoisted.
 //
 func (node *CreateTable) HoistConstraints() {
 	for _, d := range node.Defs {
@@ -1050,7 +1051,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 		case SeqOptVirtual:
 			ctx.WriteString(option.Name)
 		default:
-			panic(pgerror.AssertionFailedf("unexpected SequenceOption: %v", option))
+			panic(errors.AssertionFailedf("unexpected SequenceOption: %v", option))
 		}
 	}
 }

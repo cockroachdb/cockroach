@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -18,6 +16,9 @@ type Split struct {
 	// Each row contains values for the columns in the PK or index (or a prefix
 	// of the columns).
 	Rows *Select
+	// Splits can last a specified amount of time before becoming eligible for
+	// automatic merging.
+	ExpireExpr Expr
 }
 
 // Format implements the NodeFormatter interface.
@@ -31,6 +32,10 @@ func (node *Split) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.TableOrIndex)
 	ctx.WriteString(" SPLIT AT ")
 	ctx.FormatNode(node.Rows)
+	if node.ExpireExpr != nil {
+		ctx.WriteString(" WITH EXPIRATION ")
+		ctx.FormatNode(node.ExpireExpr)
+	}
 }
 
 // Unsplit represents an `ALTER TABLE/INDEX .. UNSPLIT AT ..` statement.
@@ -39,6 +44,7 @@ type Unsplit struct {
 	// Each row contains values for the columns in the PK or index (or a prefix
 	// of the columns).
 	Rows *Select
+	All  bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -50,8 +56,12 @@ func (node *Unsplit) Format(ctx *FmtCtx) {
 		ctx.WriteString("TABLE ")
 	}
 	ctx.FormatNode(&node.TableOrIndex)
-	ctx.WriteString(" UNSPLIT AT ")
-	ctx.FormatNode(node.Rows)
+	if node.All {
+		ctx.WriteString(" UNSPLIT ALL")
+	} else {
+		ctx.WriteString(" UNSPLIT AT ")
+		ctx.FormatNode(node.Rows)
+	}
 }
 
 // Relocate represents an `ALTER TABLE/INDEX .. EXPERIMENTAL_RELOCATE ..`

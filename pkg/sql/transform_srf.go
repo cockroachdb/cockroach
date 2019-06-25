@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -16,9 +14,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // srfExtractionVisitor replaces the inner set-returning function(s) in an
@@ -204,7 +202,7 @@ func (v *srfExtractionVisitor) transformSRF(
 	srf *tree.FuncExpr, fd *tree.FunctionDefinition,
 ) (tree.Expr, error) {
 	if v.seenSRF > 1 {
-		return nil, pgerror.UnimplementedWithIssuef(26234, "nested set-returning functions")
+		return nil, unimplemented.NewWithIssuef(26234, "nested set-returning functions")
 	}
 
 	// Create a unique name for this SRF. We need unique names so that

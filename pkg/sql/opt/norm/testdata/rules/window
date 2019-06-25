@@ -1,14 +1,6 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 # --------------------------------------------------
 # ReduceWindowPartitionCols
@@ -26,7 +18,7 @@ project
       │    ├── columns: k:1(int!null)
       │    └── key: (1)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 norm expect=ReduceWindowPartitionCols
 SELECT rank() OVER (PARTITION BY i, i+1) FROM a
@@ -38,7 +30,7 @@ project
       ├── scan a
       │    └── columns: i:2(int)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 # --------------------------------------------------
 # SimplifyWindowOrdering
@@ -56,7 +48,7 @@ project
       │    ├── columns: k:1(int!null)
       │    └── key: (1)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 # We can simplify the ordering with the knowledge that within any partition
 # the set of partition cols is held constant.
@@ -74,7 +66,7 @@ project
       │    ├── columns: k:1(int!null)
       │    └── key: (1)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 norm expect=SimplifyWindowOrdering
 SELECT rank() OVER (PARTITION BY i ORDER BY f, i+1) FROM a
@@ -86,7 +78,7 @@ project
       ├── scan a
       │    └── columns: i:2(int) f:3(float)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 norm expect=SimplifyWindowOrdering
 SELECT rank() OVER (PARTITION BY f ORDER BY i) FROM a
@@ -98,7 +90,7 @@ project
       ├── scan a
       │    └── columns: i:2(int) f:3(float)
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 # PushSelectIntoWindow
 
@@ -114,7 +106,7 @@ window partition=(2)
  │    └── filters
  │         └── i > 4 [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
  └── windows
-      └── rank [type=undefined]
+      └── rank [type=int]
 
 # Only push down filters bound by the partition cols.
 norm expect=PushSelectIntoWindow
@@ -132,7 +124,7 @@ select
  │    │    └── filters
  │    │         └── i > 4 [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
  │    └── windows
- │         └── rank [type=undefined]
+ │         └── rank [type=int]
  └── filters
       └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
@@ -155,7 +147,7 @@ select
  │    │         ├── i > 4 [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
  │    │         └── f = 3.0 [type=bool, outer=(3), constraints=(/3: [/3.0 - /3.0]; tight), fd=()-->(3)]
  │    └── windows
- │         └── rank [type=undefined]
+ │         └── rank [type=int]
  └── filters
       └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
@@ -175,7 +167,7 @@ window partition=(2,3)
  │    └── filters
  │         └── random() < 0.5 [type=bool, side-effects]
  └── windows
-      └── rank [type=undefined]
+      └── rank [type=int]
 
 # Can't push down a filter on an ordering column.
 norm expect-not=PushSelectIntoWindow
@@ -190,7 +182,7 @@ project
       │    ├── scan a
       │    │    └── columns: i:2(int) f:3(float)
       │    └── windows
-      │         └── rank [type=undefined]
+      │         └── rank [type=int]
       └── filters
            └── f > 4.0 [type=bool, outer=(3), constraints=(/3: [/4.000000000000001 - ]; tight)]
 
@@ -209,7 +201,7 @@ project
       │    ├── scan a
       │    │    └── columns: i:2(int) f:3(float) s:4(string)
       │    └── windows
-      │         └── rank [type=undefined]
+      │         └── rank [type=int]
       └── filters
            └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
@@ -235,7 +227,7 @@ project
       │    └── filters
       │         └── i = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 norm expect=PushSelectIntoWindow
 SELECT * FROM (SELECT i, f, rank() OVER (PARTITION BY k ORDER BY f) FROM a) WHERE i*f::int = 3
@@ -257,7 +249,7 @@ project
       │    └── filters
       │         └── (i * f::INT8) = 3 [type=bool, outer=(2,3)]
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]
 
 norm expect-not=PushSelectIntoWindow
 SELECT * FROM (SELECT i, f, rank() OVER (PARTITION BY k ORDER BY f) AS rnk FROM a) WHERE rnk = 3
@@ -278,6 +270,6 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2,3)
       │    └── windows
-      │         └── rank [type=undefined]
+      │         └── rank [type=int]
       └── filters
            └── rank = 3 [type=bool, outer=(6), constraints=(/6: [/3 - /3]; tight), fd=()-->(6)]

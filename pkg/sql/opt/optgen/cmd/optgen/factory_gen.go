@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -40,10 +38,9 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/memo\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")
-	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
-	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/util/log\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/errors\"\n")
 	g.w.unnest(")\n\n")
 
 	g.genConstructFuncs()
@@ -227,7 +224,7 @@ func (g *factoryGen) genReplace() {
 	}
 
 	g.w.writeIndent("}\n")
-	g.w.writeIndent("panic(pgerror.AssertionFailedf(\"unhandled op %%s\", log.Safe(e.Op())))\n")
+	g.w.writeIndent("panic(errors.AssertionFailedf(\"unhandled op %%s\", errors.Safe(e.Op())))\n")
 	g.w.unnest("}\n\n")
 
 	for _, define := range g.compiled.Defines.WithTag("List") {
@@ -243,10 +240,11 @@ func (g *factoryGen) genReplace() {
 		g.w.nestIndent("for i := range list {\n")
 		if itemTyp.isGenerated {
 			g.w.writeIndent("before := list[i].%s\n", g.md.fieldName(itemDefine.Fields[0]))
+			g.w.writeIndent("after := replace(before).(%s)\n", g.md.lookupType(string(itemDefine.Fields[0].Type)).fullName)
 		} else {
 			g.w.writeIndent("before := list[i]\n")
+			g.w.writeIndent("after := replace(before).(%s)\n", itemTyp.fullName)
 		}
-		g.w.writeIndent("after := replace(before).(opt.ScalarExpr)\n")
 		g.w.nestIndent("if before != after {\n")
 		g.w.nestIndent("if newList == nil {\n")
 		g.w.writeIndent("newList = make([]%s, len(list))\n", itemTyp.name)
@@ -338,7 +336,7 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 	}
 
 	g.w.writeIndent("}\n")
-	g.w.writeIndent("panic(pgerror.AssertionFailedf(\"unhandled op %%s\", log.Safe(src.Op())))\n")
+	g.w.writeIndent("panic(errors.AssertionFailedf(\"unhandled op %%s\", errors.Safe(src.Op())))\n")
 	g.w.unnest("}\n\n")
 
 	for _, define := range g.compiled.Defines.WithTag("List") {
@@ -356,8 +354,9 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 			// field (always the first field). Any other fields must be privates.
 			// And placeholders only need to be assigned for input fields.
 			firstFieldName := g.md.fieldName(itemDefine.Fields[0])
-			g.w.writeIndent("dst[i].%s = f.invokeReplace(src[i].%s, replace).(opt.ScalarExpr)\n",
-				firstFieldName, firstFieldName)
+			firstFieldType := g.md.lookupType(string(itemDefine.Fields[0].Type)).fullName
+			g.w.writeIndent("dst[i].%s = f.invokeReplace(src[i].%s, replace).(%s)\n",
+				firstFieldName, firstFieldName, firstFieldType)
 
 			// Now copy additional exported private fields.
 			for _, field := range expandFields(g.compiled, itemDefine)[1:] {
@@ -367,7 +366,7 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 				}
 			}
 		} else {
-			g.w.writeIndent("dst[i] = f.invokeReplace(src[i], replace).(opt.ScalarExpr)\n")
+			g.w.writeIndent("dst[i] = f.invokeReplace(src[i], replace).(%s)\n", itemType.fullName)
 		}
 		g.w.unnest("}\n")
 		g.w.writeIndent("return dst\n")
@@ -430,6 +429,6 @@ func (g *factoryGen) genDynamicConstruct() {
 	}
 
 	g.w.writeIndent("}\n")
-	g.w.writeIndent("panic(pgerror.AssertionFailedf(\"cannot dynamically construct operator %%s\", log.Safe(op)))\n")
+	g.w.writeIndent("panic(errors.AssertionFailedf(\"cannot dynamically construct operator %%s\", errors.Safe(op)))\n")
 	g.w.unnest("}\n")
 }

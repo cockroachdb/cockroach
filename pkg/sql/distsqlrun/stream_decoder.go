@@ -1,18 +1,18 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -59,7 +59,7 @@ type StreamDecoder struct {
 // msg.Data.Metadata until all the rows in the message are retrieved with GetRow.
 //
 // If an error is returned, no records have been buffered in the StreamDecoder.
-func (sd *StreamDecoder) AddMessage(msg *distsqlpb.ProducerMessage) error {
+func (sd *StreamDecoder) AddMessage(ctx context.Context, msg *distsqlpb.ProducerMessage) error {
 	if msg.Header != nil {
 		if sd.headerReceived {
 			return errors.Errorf("received multiple headers")
@@ -100,7 +100,7 @@ func (sd *StreamDecoder) AddMessage(msg *distsqlpb.ProducerMessage) error {
 	}
 	if len(msg.Data.Metadata) > 0 {
 		for _, md := range msg.Data.Metadata {
-			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(md)
+			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, md)
 			if !ok {
 				// Unknown metadata, ignore.
 				continue

@@ -7,25 +7,14 @@ CREATE TABLE abcd (
   INDEX abc (a, b, c)
 )
 ----
-TABLE abcd
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── INDEX primary
- │    └── a int not null
- └── INDEX abc
-      ├── a int not null
-      ├── b int
-      └── c int
 
 build
 SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS X(name, i)
 ----
 ordinality
- ├── columns: name:1(string) i:2(int!null)
+ ├── columns: name:1(string!null) i:2(int!null)
  └── values
-      ├── columns: column1:1(string)
+      ├── columns: column1:1(string!null)
       ├── tuple [type=tuple{string}]
       │    └── const: 'a' [type=string]
       └── tuple [type=tuple{string}]

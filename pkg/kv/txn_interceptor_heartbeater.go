@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package kv
 
@@ -166,14 +164,6 @@ func (h *txnHeartbeater) SendLocked(
 	needBeginTxn := haveTxnWrite && h.mu.needBeginTxn
 	if needBeginTxn {
 		h.mu.needBeginTxn = false
-		// From now on, all requests need to be checked against the AbortCache on
-		// the server side. We also conservatively update the current request,
-		// although I'm not sure if that's necessary.
-		// NOTE: only 2.1 nodes will use this flag to check the transaction against
-		// the abort cache. 19.1 nodes will just look at whether the transaction
-		// key is set.
-		h.mu.txn.DeprecatedWriting = true
-		ba.Txn.DeprecatedWriting = true
 
 		// Set txn key based on the key of the first transactional write if not
 		// already set. If we're in a restart, make sure we keep the anchor key the

@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -18,13 +16,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 type planMaker interface {
@@ -231,7 +232,6 @@ var _ planNode = &zeroNode{}
 var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &alterUserSetPasswordNode{}
-var _ planNodeFastPath = &createTableNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}
@@ -295,6 +295,10 @@ type planTop struct {
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 
+	// postqueryPlans contains all the plans for subqueries that are to be
+	// executed after the main query (for example, foreign key checks).
+	postqueryPlans []postquery
+
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
@@ -318,7 +322,13 @@ type planTop struct {
 	avoidBuffering bool
 }
 
-// makePlan implements the Planner interface. It populates the
+// postquery is a query tree that is executed after the main one. It can only
+// return an error (for example, foreign key violation).
+type postquery struct {
+	plan planNode
+}
+
+// makePlan implements the planMaker interface. It populates the
 // planner's curPlan field.
 //
 // The caller is responsible for populating the placeholders
@@ -341,7 +351,7 @@ func (p *planner) makePlan(ctx context.Context) error {
 	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.New(pgerror.CodeFeatureNotSupportedError,
+			return pgerror.New(pgcode.FeatureNotSupported,
 				"cached plan must not change result type")
 		}
 	}
@@ -587,14 +597,14 @@ func (p *planner) newPlan(
 	canModifySchema := tree.CanModifySchema(stmt)
 	if canModifySchema {
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
-			return nil, pgerror.UnimplementedWithIssuef(26508,
+			return nil, unimplemented.NewWithIssuef(26508,
 				"schema change statement cannot follow a statement that has written in the same transaction: %v", err)
 		}
 	}
 
 	if p.EvalContext().TxnReadOnly {
 		if canModifySchema || tree.CanWriteData(stmt) {
-			return nil, pgerror.Newf(pgerror.CodeReadOnlySQLTransactionError,
+			return nil, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 				"cannot execute %s in a read-only transaction", stmt.StatementTag())
 		}
 	}
@@ -722,7 +732,7 @@ func (p *planner) newPlan(
 	case *tree.ValuesClauseWithNames:
 		return p.Values(ctx, n, desiredTypes)
 	case tree.CCLOnlyStatement:
-		return nil, pgerror.Newf(pgerror.CodeCCLRequired,
+		return nil, pgerror.Newf(pgcode.CCLRequired,
 			"a CCL binary is required to use this statement type: %T", stmt)
 	default:
 		var catalog optCatalog
@@ -735,7 +745,7 @@ func (p *planner) newPlan(
 		if newStmt != nil {
 			return p.newPlan(ctx, newStmt, nil /* desiredTypes */)
 		}
-		return nil, pgerror.AssertionFailedf("unknown statement type: %T", stmt)
+		return nil, errors.AssertionFailedf("unknown statement type: %T", stmt)
 	}
 }
 
@@ -884,6 +894,10 @@ const (
 
 	// planFlagExecDone marks that execution has been completed.
 	planFlagExecDone
+
+	// planFlagImplicitTxn marks that the plan was run inside of an implicit
+	// transaction.
+	planFlagImplicitTxn
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {

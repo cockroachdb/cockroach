@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package row
 
@@ -18,9 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // singleKVFetcher is a kvBatchFetcher that returns a single kv.
@@ -42,7 +42,7 @@ func (f *singleKVFetcher) nextBatch(
 
 // getRangesInfo implements the kvBatchFetcher interface.
 func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
-	panic(pgerror.AssertionFailedf("getRangesInfo() called on singleKVFetcher"))
+	panic(errors.AssertionFailedf("getRangesInfo() called on singleKVFetcher"))
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.
@@ -55,7 +55,7 @@ func ConvertBatchError(
 	}
 	j := origPErr.Index.Index
 	if j >= int32(len(b.Results)) {
-		return pgerror.AssertionFailedf("index %d outside of results: %+v", j, b.Results)
+		return errors.AssertionFailedf("index %d outside of results: %+v", j, b.Results)
 	}
 	result := b.Results[j]
 	if cErr, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
@@ -132,7 +132,7 @@ func NewUniquenessConstraintViolationError(
 		valStrs = append(valStrs, val.String())
 	}
 
-	return pgerror.Newf(pgerror.CodeUniqueViolationError,
+	return pgerror.Newf(pgcode.UniqueViolation,
 		"duplicate key value (%s)=(%s) violates unique constraint %q",
 		strings.Join(index.ColumnNames, ","),
 		strings.Join(valStrs, ","),

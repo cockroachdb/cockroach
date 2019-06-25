@@ -7,7 +7,7 @@ select
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(1,2)
  ├── values
- │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── columns: column1:1(int!null) column2:2(int!null)
  │    ├── cardinality: [4 - 4]
  │    ├── stats: [rows=4, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
  │    ├── (1, 2) [type=tuple{int, int}]
@@ -22,13 +22,13 @@ norm
 SELECT x, y FROM (VALUES (1, 2), (1, 2), (1, 3), (2, 3)) AS q(x, y) GROUP BY x, y
 ----
 distinct-on
- ├── columns: x:1(int) y:2(int)
- ├── grouping columns: column1:1(int) column2:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── grouping columns: column1:1(int!null) column2:2(int!null)
  ├── cardinality: [1 - 4]
  ├── stats: [rows=3, distinct(1,2)=3, null(1,2)=0]
  ├── key: (1,2)
  └── values
-      ├── columns: column1:1(int) column2:2(int)
+      ├── columns: column1:1(int!null) column2:2(int!null)
       ├── cardinality: [4 - 4]
       ├── stats: [rows=4, distinct(1,2)=3, null(1,2)=0]
       ├── (1, 2) [type=tuple{int, int}]
@@ -40,7 +40,7 @@ norm
 SELECT * FROM (VALUES (1), (1), (1), (2))
 ----
 values
- ├── columns: column1:1(int)
+ ├── columns: column1:1(int!null)
  ├── cardinality: [4 - 4]
  ├── stats: [rows=4]
  ├── (1,) [type=tuple{int}]
@@ -57,7 +57,7 @@ select
  ├── stats: [rows=2, distinct(1)=1, null(1)=0]
  ├── fd: ()-->(1)
  ├── values
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── cardinality: [4 - 4]
  │    ├── stats: [rows=4, distinct(1)=2, null(1)=0]
  │    ├── (1,) [type=tuple{int}]
@@ -73,7 +73,7 @@ SELECT * FROM (VALUES (1), (NULL), (NULL), (2))
 values
  ├── columns: column1:1(int)
  ├── cardinality: [4 - 4]
- ├── stats: [rows=4, distinct(1)=2, null(1)=2]
+ ├── stats: [rows=4, distinct(1)=3, null(1)=2]
  ├── (1,) [type=tuple{int}]
  ├── (NULL,) [type=tuple{int}]
  ├── (NULL,) [type=tuple{int}]
@@ -85,7 +85,7 @@ SELECT * FROM (VALUES (NULL), (NULL), (NULL), (NULL))
 values
  ├── columns: column1:1(unknown)
  ├── cardinality: [4 - 4]
- ├── stats: [rows=4, distinct(1)=0, null(1)=4]
+ ├── stats: [rows=4, distinct(1)=1, null(1)=4]
  ├── (NULL,) [type=tuple{unknown}]
  ├── (NULL,) [type=tuple{unknown}]
  ├── (NULL,) [type=tuple{unknown}]
@@ -97,7 +97,7 @@ SELECT * FROM (VALUES (NULL,1), (1,NULL), (NULL,NULL), (1,2))
 values
  ├── columns: column1:1(int) column2:2(int)
  ├── cardinality: [4 - 4]
- ├── stats: [rows=4, distinct(1,2)=1, null(1,2)=3]
+ ├── stats: [rows=4, distinct(1,2)=4, null(1,2)=3]
  ├── (NULL, 1) [type=tuple{int, int}]
  ├── (1, NULL) [type=tuple{int, int}]
  ├── (NULL, NULL) [type=tuple{int, int}]
@@ -108,9 +108,9 @@ norm colstat=1 colstat=2
 SELECT * FROM (VALUES (NULL, 1))
 ----
 values
- ├── columns: column1:1(unknown) column2:2(int)
+ ├── columns: column1:1(unknown) column2:2(int!null)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1, distinct(1)=0, null(1)=1, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=1, distinct(2)=1, null(2)=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
  └── (NULL, 1) [type=tuple{unknown, int}]
@@ -121,6 +121,6 @@ SELECT * FROM (VALUES (NULL, 2), (2, NULL))
 values
  ├── columns: column1:1(int) column2:2(int)
  ├── cardinality: [2 - 2]
- ├── stats: [rows=2, distinct(1)=1, null(1)=1, distinct(2)=1, null(2)=1, distinct(1,2)=0, null(1,2)=2]
+ ├── stats: [rows=2, distinct(1)=2, null(1)=1, distinct(2)=2, null(2)=1, distinct(1,2)=2, null(1,2)=2]
  ├── (NULL, 2) [type=tuple{int, int}]
  └── (2, NULL) [type=tuple{int, int}]

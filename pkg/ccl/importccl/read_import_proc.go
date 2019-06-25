@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -40,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type readFileFunc func(context.Context, io.Reader, int32, string, progressFn) error
@@ -136,7 +138,7 @@ func readInputFiles(
 			}
 
 			if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
-				return pgerror.Wrap(err, pgerror.CodeDataExceptionError, dataFile)
+				return errors.Wrap(err, dataFile)
 			}
 			if updateFromFiles {
 				if err := progressFn(float32(currentFile) / float32(len(dataFiles))); err != nil {
@@ -228,7 +230,7 @@ func newRowConverter(
 	ri, err := row.MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
 		immutDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
-		return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "make row inserter")
+		return nil, errors.Wrap(err, "make row inserter")
 	}
 	c.ri = ri
 
@@ -238,7 +240,7 @@ func newRowConverter(
 	// allows those expressions to run.
 	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(immutDesc.Columns, immutDesc, &txCtx, c.evalCtx)
 	if err != nil {
-		return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "process default columns")
+		return nil, errors.Wrap(err, "process default columns")
 	}
 	c.cols = cols
 	c.defaultExprs = defaultExprs
@@ -302,8 +304,7 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 	insertRow, err := sql.GenerateInsertRow(
 		c.defaultExprs, computeExprs, c.cols, computedCols, c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
 	if err != nil {
-		return pgerror.Wrap(err, pgerror.CodeDataExceptionError,
-			"generate insert row")
+		return errors.Wrap(err, "generate insert row")
 	}
 	if err := c.ri.InsertRow(
 		ctx,
@@ -316,7 +317,7 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 		row.SkipFKs,
 		false, /* traceKV */
 	); err != nil {
-		return pgerror.Wrap(err, pgerror.CodeDataExceptionError, "insert row")
+		return errors.Wrap(err, "insert row")
 	}
 	// If our batch is full, flush it and start a new one.
 	if len(c.kvBatch) >= kvBatchSize {
@@ -484,10 +485,21 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		return conv.readFiles(ctx, cp.spec.Uri, cp.spec.Format, progFn, cp.flowCtx.Settings)
 	})
 
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// If the cluster supports sticky bits, then we should use the sticky bit to
+	// ensure that the splits are not automatically split by the merge queue. If
+	// the cluster does not support sticky bits, we disable the merge queue via
+	// gossip, so we can just set the split to expire immediately.
+	stickyBitEnabled := cp.flowCtx.Settings.Version.IsActive(cluster.VersionStickyBit)
+	expirationTime := hlc.Timestamp{}
+	if stickyBitEnabled {
+		expirationTime = cp.flowCtx.ClientDB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	}
+
 	if cp.spec.IngestDirectly {
 		for _, tbl := range cp.spec.Tables {
 			for _, span := range tbl.AllIndexSpans() {
-				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key, false /* manual */); err != nil {
+				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
 					return err
 				}
 
@@ -630,12 +642,14 @@ func makeRowErr(file string, row int64, code, format string, args ...interface{}
 }
 
 func wrapRowErr(err error, file string, row int64, code, format string, args ...interface{}) error {
-	newFormat := "%q: row %d"
-	if format != "" {
-		newFormat = newFormat + ": " + format
+	if format != "" || len(args) > 0 {
+		err = errors.WrapWithDepthf(1, err, format, args...)
 	}
-	return pgerror.WrapWithDepthf(1, err, code,
-		newFormat, append([]interface{}{file, row}, args...)...)
+	err = errors.WrapWithDepthf(1, err, "%q: row %d", file, row)
+	if code != pgcode.Uncategorized {
+		err = pgerror.WithCandidateCode(err, code)
+	}
+	return err
 }
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
@@ -669,7 +683,7 @@ func ingestKvs(
 		for i := range buf {
 			if err := adder.Add(ctx, buf[i].Key, buf[i].Value.RawBytes); err != nil {
 				if _, ok := err.(storagebase.DuplicateKeyError); ok {
-					return pgerror.Wrap(err, pgerror.CodeDataExceptionError, "")
+					return errors.WithStack(err)
 				}
 				return err
 			}
@@ -711,7 +725,7 @@ func ingestKvs(
 
 	if err := adder.Flush(ctx); err != nil {
 		if err, ok := err.(storagebase.DuplicateKeyError); ok {
-			return pgerror.Wrap(err, pgerror.CodeDataExceptionError, "")
+			return errors.WithStack(err)
 		}
 		return err
 	}

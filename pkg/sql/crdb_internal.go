@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -39,10 +37,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 const crdbInternalName = "crdb_internal"
@@ -589,7 +589,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   service_lat_avg     FLOAT NOT NULL,
   service_lat_var     FLOAT NOT NULL,
   overhead_lat_avg    FLOAT NOT NULL,
-  overhead_lat_var    FLOAT NOT NULL
+  overhead_lat_var    FLOAT NOT NULL,
+  bytes_read          INT NOT NULL,
+  rows_read           INT NOT NULL,
+  implicit_txn        BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireSuperUser(ctx, "access application statistics"); err != nil {
@@ -598,7 +601,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 		sqlStats := p.statsCollector.SQLStats()
 		if sqlStats == nil {
-			return pgerror.AssertionFailedf(
+			return errors.AssertionFailedf(
 				"cannot access sql statistics from this context")
 		}
 
@@ -665,6 +668,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					tree.NewDFloat(tree.DFloat(s.data.ServiceLat.GetVariance(s.data.Count))),
 					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.Mean)),
 					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.GetVariance(s.data.Count))),
+					tree.NewDInt(tree.DInt(s.data.BytesRead)),
+					tree.NewDInt(tree.DInt(s.data.RowsRead)),
+					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),
 				)
 				s.Unlock()
 				if err != nil {
@@ -1673,7 +1679,7 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	table_name,
 	index_name,
 	replicas,
-	manual_split_time,
+	split_enforced_until,
 	crdb_internal.lease_holder(start_key) AS lease_holder
 FROM crdb_internal.ranges_no_leases
 `,
@@ -1687,7 +1693,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "table_name", Typ: types.String},
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
-		{Name: "manual_split_time", Typ: types.Timestamp},
+		{Name: "split_enforced_until", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
 	},
 }
@@ -1700,16 +1706,16 @@ var crdbInternalRangesNoLeasesTable = virtualSchemaTable{
 	comment: `range metadata without leaseholder details (KV join; expensive!)`,
 	schema: `
 CREATE TABLE crdb_internal.ranges_no_leases (
-  range_id          INT NOT NULL,
-  start_key         BYTES NOT NULL,
-  start_pretty      STRING NOT NULL,
-  end_key           BYTES NOT NULL,
-  end_pretty        STRING NOT NULL,
-  database_name     STRING NOT NULL,
-  table_name        STRING NOT NULL,
-  index_name        STRING NOT NULL,
-  replicas          INT[] NOT NULL,
-  manual_split_time TIMESTAMP
+  range_id             INT NOT NULL,
+  start_key            BYTES NOT NULL,
+  start_pretty         STRING NOT NULL,
+  end_key              BYTES NOT NULL,
+  end_pretty           STRING NOT NULL,
+  database_name        STRING NOT NULL,
+  table_name           STRING NOT NULL,
+  index_name           STRING NOT NULL,
+  replicas             INT[] NOT NULL,
+  split_enforced_until TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
@@ -1788,9 +1794,9 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			}
 
-			manualSplitTime := tree.DNull
-			if desc.StickyBit != nil {
-				manualSplitTime = tree.TimestampToInexactDTimestamp(*desc.StickyBit)
+			splitEnforcedUntil := tree.DNull
+			if (desc.StickyBit != hlc.Timestamp{}) {
+				splitEnforcedUntil = tree.TimestampToInexactDTimestamp(desc.StickyBit)
 			}
 
 			return tree.Datums{
@@ -1803,7 +1809,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
 				arr,
-				manualSplitTime,
+				splitEnforcedUntil,
 			}, nil
 		}, nil
 	},
@@ -1865,8 +1871,8 @@ CREATE TABLE crdb_internal.zones (
 			if entry, ok := namespace[sqlbase.ID(id)]; ok {
 				return uint32(entry.parentID), entry.name, nil
 			}
-			return 0, "", pgerror.AssertionFailedf(
-				"object with ID %d does not exist", log.Safe(id))
+			return 0, "", errors.AssertionFailedf(
+				"object with ID %d does not exist", errors.Safe(id))
 		}
 
 		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
@@ -1952,7 +1958,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
   address         		STRING NOT NULL,
   advertise_address   STRING NOT NULL,
   attrs           		JSON NOT NULL,
-  locality        		JSON NOT NULL,
+  locality        		STRING NOT NULL,
   server_version  		STRING NOT NULL,
   build_tag       		STRING NOT NULL,
   started_at     	 		TIMESTAMP NOT NULL,
@@ -1971,13 +1977,13 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to extract bytes for key %q", key)
 			}
 
 			var d roachpb.NodeDescriptor
 			if err := protoutil.Unmarshal(bytes, &d); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
 			}
 
@@ -2011,13 +2017,13 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		if err := g.IterateInfos(gossip.KeyStorePrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to extract bytes for key %q", key)
 			}
 
 			var desc roachpb.StoreDescriptor
 			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
 			}
 
@@ -2036,11 +2042,6 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				attrs.Add(json.FromString(a))
 			}
 
-			locality := json.NewObjectBuilder(len(d.Locality.Tiers))
-			for _, t := range d.Locality.Tiers {
-				locality.Add(t.Key, json.FromString(t.Value))
-			}
-
 			addr, err := g.GetNodeIDAddress(d.NodeID)
 			if err != nil {
 				return err
@@ -2052,7 +2053,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				tree.NewDString(d.Address.AddressField),
 				tree.NewDString(addr.String()),
 				tree.NewDJSON(attrs.Build()),
-				tree.NewDJSON(locality.Build()),
+				tree.NewDString(d.Locality.String()),
 				tree.NewDString(d.ServerVersion.String()),
 				tree.NewDString(d.BuildTag),
 				tree.MakeDTimestamp(timeutil.Unix(0, d.StartedAt), time.Microsecond),
@@ -2102,13 +2103,13 @@ CREATE TABLE crdb_internal.gossip_liveness (
 		if err := g.IterateInfos(gossip.KeyNodeLivenessPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to extract bytes for key %q", key)
 			}
 
 			var l storagepb.Liveness
 			if err := protoutil.Unmarshal(bytes, &l); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
 			}
 			nodes = append(nodes, nodeInfo{
@@ -2169,18 +2170,18 @@ CREATE TABLE crdb_internal.gossip_alerts (
 		if err := g.IterateInfos(gossip.KeyNodeHealthAlertPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to extract bytes for key %q", key)
 			}
 
 			var d statuspb.HealthCheckResult
 			if err := protoutil.Unmarshal(bytes, &d); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
 			}
 			nodeID, err := gossip.NodeIDFromKey(key, gossip.KeyNodeHealthAlertPrefix)
 			if err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse node ID from key %q", key)
 			}
 			results = append(results, resultWithNodeID{nodeID, d})
@@ -2320,7 +2321,7 @@ CREATE TABLE crdb_internal.kv_node_status (
   network        STRING NOT NULL,
   address        STRING NOT NULL,
   attrs          JSON NOT NULL,
-  locality       JSON NOT NULL,
+  locality       STRING NOT NULL,
   server_version STRING NOT NULL,
   go_version     STRING NOT NULL,
   tag            STRING NOT NULL,
@@ -2353,11 +2354,6 @@ CREATE TABLE crdb_internal.kv_node_status (
 			attrs := json.NewArrayBuilder(len(n.Desc.Attrs.Attrs))
 			for _, a := range n.Desc.Attrs.Attrs {
 				attrs.Add(json.FromString(a))
-			}
-
-			locality := json.NewObjectBuilder(len(n.Desc.Locality.Tiers))
-			for _, t := range n.Desc.Locality.Tiers {
-				locality.Add(t.Key, json.FromString(t.Value))
 			}
 
 			var dependencies string
@@ -2400,7 +2396,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 				tree.NewDString(n.Desc.Address.NetworkField),
 				tree.NewDString(n.Desc.Address.AddressField),
 				tree.NewDJSON(attrs.Build()),
-				tree.NewDJSON(locality.Build()),
+				tree.NewDString(n.Desc.Locality.String()),
 				tree.NewDString(n.Desc.ServerVersion.String()),
 				tree.NewDString(n.BuildInfo.GoVersion),
 				tree.NewDString(n.BuildInfo.Tag),

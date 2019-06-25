@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -26,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,7 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 type execFactory struct {
@@ -455,7 +453,7 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 			}
 
 		default:
-			return pgerror.UnimplementedWithIssue(28417,
+			return unimplemented.NewWithIssue(28417,
 				"aggregate functions with multiple non-constant expressions are not supported",
 			)
 		}
@@ -835,7 +833,7 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 			args:           wi.Exprs[i].Exprs,
 			argsIdxs:       argsIdxs,
 			window:         p,
-			filterColIdx:   noFilterIdx,
+			filterColIdx:   wi.FilterIdxs[i],
 			outputColIdx:   wi.OutputIdxs[i],
 			partitionIdxs:  partitionIdxs,
 			columnOrdering: wi.Ordering,
@@ -922,7 +920,7 @@ func (ef *execFactory) environmentQuery(query string) (string, error) {
 	}
 
 	if len(r) != 1 {
-		return "", pgerror.AssertionFailedf(
+		return "", errors.AssertionFailedf(
 			"expected env query %q to return a single column, returned %d",
 			query,
 			len(r),
@@ -931,7 +929,7 @@ func (ef *execFactory) environmentQuery(query string) (string, error) {
 
 	s, ok := r[0].(*tree.DString)
 	if !ok {
-		return "", pgerror.AssertionFailedf(
+		return "", errors.AssertionFailedf(
 			"expected env query %q to return a DString, returned %T",
 			query,
 			r[0],

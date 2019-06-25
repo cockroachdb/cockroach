@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package pgwire
 
@@ -17,11 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/lib/pq/oid"
 )
 
@@ -119,8 +117,7 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.err != nil {
-		// TODO(andrei): I'm not sure this is the best place to do error conversion.
-		r.conn.bufferErr(convertToErrWithPGCode(r.err))
+		r.conn.bufferErr(r.err)
 		return
 	}
 
@@ -130,7 +127,7 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		r.typ == commandComplete &&
 		r.stmtType == tree.Rows {
 
-		r.err = pgerror.UnimplementedWithIssuef(4035,
+		r.err = unimplemented.NewWithIssuef(4035,
 			"execute row count limits not supported: %d of %d",
 			r.limit, r.rowsAffected)
 		r.conn.bufferErr(r.err)
@@ -173,8 +170,7 @@ func (r *commandResult) CloseWithErr(err error) {
 	r.conn.writerState.fi.registerCmd(r.pos)
 
 	r.err = err
-	// TODO(andrei): I'm not sure this is the best place to do error conversion.
-	r.conn.bufferErr(convertToErrWithPGCode(err))
+	r.conn.bufferErr(err)
 }
 
 // Discard is part of the CommandResult interface.

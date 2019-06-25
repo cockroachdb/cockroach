@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tracing
 
@@ -19,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/logtags"
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -107,6 +106,12 @@ type span struct {
 	operation string
 	startTime time.Time
 
+	// startTags are set to the log tags that were available when this span was
+	// created, so that there's no need to eagerly copy all of those log tags
+	// into this span's tags. If the span's tags are actually requested, these
+	// startTags will be copied out at that point.
+	startTags *logtags.Buffer
+
 	// Atomic flag used to avoid taking the mutex in the hot path.
 	recording int32
 
@@ -118,7 +123,10 @@ type span struct {
 		recordingGroup *spanGroup
 		recordingType  RecordingType
 		recordedLogs   []opentracing.LogRecord
-		// tags are only set when recording.
+		// tags are only set when recording. These are tags that have been added to
+		// this span, and will be appended to the tags in startTags when someone
+		// needs to actually observe the total set of tags that is a part of this
+		// span.
 		// TODO(radu): perhaps we want a recording to capture all the tags (even
 		// those that were set before recording started)?
 		tags opentracing.Tags
@@ -217,10 +225,9 @@ func IsRecordable(os opentracing.Span) bool {
 	return isCockroachSpan
 }
 
-// GetRecording retrieves the current recording, if the span has
-// recording enabled. This can be called while spans that are part of the
-// record are still open; it can run concurrently with operations on those
-// spans.
+// GetRecording retrieves the current recording, if the span has recording
+// enabled. This can be called while spans that are part of the record are
+// still open; it can run concurrently with operations on those spans.
 func GetRecording(os opentracing.Span) []RecordedSpan {
 	if _, noop := os.(*noopSpan); noop {
 		return nil
@@ -535,8 +542,18 @@ func (ss *spanGroup) getSpans() []RecordedSpan {
 				rs.Baggage[k] = v
 			}
 		}
-		if len(s.mu.tags) > 0 {
+		if s.startTags != nil {
 			rs.Tags = make(map[string]string)
+			tags := s.startTags.Get()
+			for i := range tags {
+				tag := &tags[i]
+				rs.Tags[tag.Key()] = tag.ValueStr()
+			}
+		}
+		if len(s.mu.tags) > 0 {
+			if rs.Tags == nil {
+				rs.Tags = make(map[string]string)
+			}
 			for k, v := range s.mu.tags {
 				// We encode the tag values as strings.
 				rs.Tags[k] = fmt.Sprint(v)

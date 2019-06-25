@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package xform
 
@@ -20,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 // FmtFlags controls how the memo output is formatted.
@@ -102,7 +100,7 @@ func (mf *memoFormatter) format() string {
 func (mf *memoFormatter) group(expr opt.Expr) int {
 	res, ok := mf.groupIdx[firstExpr(expr)]
 	if !ok {
-		panic(pgerror.AssertionFailedf("unknown group for %s", expr))
+		panic(errors.AssertionFailedf("unknown group for %s", expr))
 	}
 	return res
 }
@@ -300,8 +298,8 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 		}
 
 	case *memo.ProjectExpr:
-		t.Passthrough.ForEach(func(i int) {
-			fmt.Fprintf(mf.buf, " %s", m.Metadata().ColumnMeta(opt.ColumnID(i)).Alias)
+		t.Passthrough.ForEach(func(i opt.ColumnID) {
+			fmt.Fprintf(mf.buf, " %s", m.Metadata().ColumnMeta(i).Alias)
 		})
 	}
 }

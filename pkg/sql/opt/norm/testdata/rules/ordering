@@ -8,18 +8,6 @@ CREATE TABLE abcde (
     UNIQUE INDEX bc (b, c)
 )
 ----
-TABLE abcde
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── e int
- ├── INDEX primary
- │    └── a int not null
- └── INDEX bc
-      ├── b int
-      ├── c int
-      └── a int not null (storing)
 
 exec-ddl
 CREATE TABLE xyz (
@@ -28,12 +16,6 @@ CREATE TABLE xyz (
     z FLOAT8
 )
 ----
-TABLE xyz
- ├── x string not null
- ├── y int
- ├── z float
- └── INDEX primary
-      └── x string not null
 
 # --------------------------------------------------
 # SimplifyLimitOrdering
@@ -230,7 +212,7 @@ project
  └── explain
       ├── columns: tree:2(string) field:3(string) description:4(string)
       └── values
-           ├── columns: k:1(int)
+           ├── columns: k:1(int!null)
            ├── cardinality: [1 - 1]
            ├── key: ()
            ├── fd: ()-->(1)

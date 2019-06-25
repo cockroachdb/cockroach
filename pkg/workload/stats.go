@@ -1,21 +1,19 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package workload
 
 import (
 	"math"
+	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -38,10 +36,8 @@ type JSONStatistic struct {
 // count, and null count.
 func MakeStat(columns []string, rowCount, distinctCount, nullCount uint64) JSONStatistic {
 	return JSONStatistic{
-		Name: AutoStatsName,
-		CreatedAt: tree.AsStringWithFlags(
-			&tree.DTimestamp{Time: timeutil.Now()}, tree.FmtBareStrings,
-		),
+		Name:          AutoStatsName,
+		CreatedAt:     timeutil.Now().Round(time.Microsecond).UTC().Format(timestampOutputFormat),
 		Columns:       columns,
 		RowCount:      rowCount,
 		DistinctCount: distinctCount,

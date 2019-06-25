@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -121,14 +119,14 @@ func (m *outbox) addRow(
 	mustFlush := false
 	var encodingErr error
 	if meta != nil {
-		m.encoder.AddMetadata(*meta)
+		m.encoder.AddMetadata(ctx, *meta)
 		// If we hit an error, let's forward it ASAP. The consumer will probably
 		// close.
 		mustFlush = meta.Err != nil
 	} else {
 		encodingErr = m.encoder.AddRow(row)
 		if encodingErr != nil {
-			m.encoder.AddMetadata(distsqlpb.ProducerMetadata{Err: encodingErr})
+			m.encoder.AddMetadata(ctx, distsqlpb.ProducerMetadata{Err: encodingErr})
 			mustFlush = true
 		}
 	}
@@ -160,6 +158,11 @@ func (m *outbox) flush(ctx context.Context) error {
 		log.Infof(ctx, "flushing outbox")
 	}
 	sendErr := m.stream.Send(msg)
+	for _, rpm := range msg.Data.Metadata {
+		if metricsMeta, ok := rpm.Value.(*distsqlpb.RemoteProducerMetadata_Metrics_); ok {
+			metricsMeta.Metrics.Release()
+		}
+	}
 	if sendErr != nil {
 		// Make sure the stream is not used any more.
 		m.stream = nil
@@ -292,6 +295,11 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				err := m.addRow(ctx, msg.Row, msg.Meta)
 				if err != nil {
 					return err
+				}
+				if msg.Meta != nil {
+					// Now that we have added metadata, it is safe to release it to the
+					// pool.
+					msg.Meta.Release()
 				}
 				// If the message to add was metadata, a flush was already forced. If
 				// this is our first row, restart the flushTimer.

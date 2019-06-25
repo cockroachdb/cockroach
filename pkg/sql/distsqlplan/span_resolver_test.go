@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlplan_test
 
@@ -26,13 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Test that resolving spans uses a node's range cache and lease holder cache.
@@ -171,7 +168,7 @@ func splitRangeAtVal(
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	if len(tableDesc.Indexes) != 0 {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
-			pgerror.AssertionFailedf("expected table with just a PK, got: %+v", tableDesc)
+			errors.AssertionFailedf("expected table with just a PK, got: %+v", tableDesc)
 	}
 	pik, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, pk)
 	if err != nil {
@@ -181,8 +178,7 @@ func splitRangeAtVal(
 	leftRange, rightRange, err := ts.SplitRange(pik)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
-			pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"failed to split at row: %d", pk)
+			errors.Wrapf(err, "failed to split at row: %d", pk)
 	}
 	return leftRange, rightRange, nil
 }

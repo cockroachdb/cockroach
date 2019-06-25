@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -16,12 +14,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // A windowNode implements the planNode interface and handles windowing logic.
@@ -170,6 +170,11 @@ func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 	return nil
 }
 
+var (
+	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
+	errVarOffsetGroups      = pgerror.New(pgcode.Syntax, "GROUPS offset cannot contain variables")
+)
+
 // constructWindowDefinitions creates window definitions for each window
 // function application by combining specific window definition from a
 // given window function application with referenced window specifications
@@ -184,7 +189,7 @@ func (p *planner) constructWindowDefinitions(
 	for _, windowDef := range sc.Window {
 		name := string(windowDef.Name)
 		if _, ok := namedWindowSpecs[name]; ok {
-			return pgerror.Newf(pgerror.CodeWindowingError, "window %q is already defined", name)
+			return pgerror.Newf(pgcode.Windowing, "window %q is already defined", name)
 		}
 		namedWindowSpecs[name] = windowDef
 	}
@@ -215,17 +220,21 @@ func (p *planner) constructWindowDefinitions(
 				return err
 			}
 			if renderExpr.ResolvedType().Family() != types.BoolFamily {
-				return pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+				return pgerror.Newf(pgcode.DatatypeMismatch,
 					"argument of FILTER must be type boolean, not type %s", renderExpr.ResolvedType(),
 				)
 			}
 			windowFn.filterColIdx = s.addOrReuseRender(col, renderExpr, true /* reuse */)
 		}
 
-		// Validate PARTITION BY clause.
-		for _, partition := range windowDef.Partitions {
+		// Perform semantic analysis and validation of PARTITION BY clause.
+		for i, partition := range windowDef.Partitions {
+			windowDef.Partitions[i], err = p.analyzeExpr(ctx, partition, s.sourceInfo, s.ivarHelper, types.Any, true, "WINDOW PARTITION BY")
+			if err != nil {
+				return err
+			}
 			if containsWindowVisitor.ContainsWindowFunc(partition) {
-				return pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
+				return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: partition}, types.Any, s.sourceInfo, s.ivarHelper,
@@ -238,10 +247,17 @@ func (p *planner) constructWindowDefinitions(
 			windowFn.partitionIdxs = append(windowFn.partitionIdxs, colIdxs...)
 		}
 
-		// Validate ORDER BY clause.
-		for _, orderBy := range windowDef.OrderBy {
+		// Perform semantic analysis and validation of ORDER BY clause.
+		for i, orderBy := range windowDef.OrderBy {
+			if orderBy.OrderType != tree.OrderByColumn {
+				return errOrderByIndexInWindow
+			}
+			windowDef.OrderBy[i].Expr, err = p.analyzeExpr(ctx, orderBy.Expr, s.sourceInfo, s.ivarHelper, types.Any, true, "WINDOW ORDER BY")
+			if err != nil {
+				return err
+			}
 			if containsWindowVisitor.ContainsWindowFunc(orderBy.Expr) {
-				return pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
+				return pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: orderBy.Expr}, types.Any, s.sourceInfo, s.ivarHelper,
@@ -267,7 +283,7 @@ func (p *planner) constructWindowDefinitions(
 
 		// Validate frame of the window definition if present.
 		if windowDef.Frame != nil {
-			if err := windowDef.Frame.TypeCheck(&p.semaCtx, &windowDef); err != nil {
+			if err := analyzeWindowFrame(ctx, p, s, &windowDef); err != nil {
 				return err
 			}
 			if windowDef.Frame.Mode == tree.RANGE && windowDef.Frame.Bounds.HasOffset() {
@@ -278,6 +294,76 @@ func (p *planner) constructWindowDefinitions(
 		windowFn.frame = windowDef.Frame
 	}
 
+	return nil
+}
+
+// analyzeWindowFrame performs semantic analysis of offset expressions of
+// the window frame.
+func analyzeWindowFrame(
+	ctx context.Context, p *planner, r *renderNode, windowDef *tree.WindowDef,
+) error {
+	frame := windowDef.Frame
+	bounds := frame.Bounds
+	startBound, endBound := bounds.StartBound, bounds.EndBound
+	var requiredType *types.T
+	switch frame.Mode {
+	case tree.ROWS:
+		// In ROWS mode, offsets must be non-null, non-negative integers. Non-nullity
+		// and non-negativity will be checked later.
+		requiredType = types.Int
+	case tree.RANGE:
+		// In RANGE mode, offsets must be non-null and non-negative datums of a type
+		// dependent on the type of the ordering column. Non-nullity and
+		// non-negativity will be checked later.
+		if bounds.HasOffset() {
+			// At least one of the bounds is of type 'value' PRECEDING or 'value' FOLLOWING.
+			// We require ordering on a single column that supports addition/subtraction.
+			if len(windowDef.OrderBy) != 1 {
+				return pgerror.Newf(pgcode.Windowing, "RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column")
+			}
+			requiredType = windowDef.OrderBy[0].Expr.(tree.TypedExpr).ResolvedType()
+			if !types.IsAdditiveType(requiredType) {
+				return pgerror.Newf(pgcode.Windowing, fmt.Sprintf("RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s", requiredType))
+			}
+			if types.IsDateTimeType(requiredType) {
+				// Spec: for datetime ordering columns, the required type is an 'interval'.
+				requiredType = types.Interval
+			}
+		}
+	case tree.GROUPS:
+		if startBound != nil && startBound.HasOffset() {
+			if tree.ContainsVars(startBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
+		if endBound != nil && endBound.HasOffset() {
+			if tree.ContainsVars(endBound.OffsetExpr) {
+				return errVarOffsetGroups
+			}
+		}
+		if len(windowDef.OrderBy) == 0 {
+			return pgerror.Newf(pgcode.Windowing, "GROUPS mode requires an ORDER BY clause")
+		}
+		// In GROUPS mode, offsets must be non-null, non-negative integers.
+		// Non-nullity and non-negativity will be checked later.
+		requiredType = types.Int
+	default:
+		return errors.AssertionFailedf("unexpected WindowFrameMode: %d", errors.Safe(frame.Mode))
+	}
+	if startBound.HasOffset() {
+		typedStartOffsetExpr, err := p.analyzeExpr(ctx, startBound.OffsetExpr, r.sourceInfo, r.ivarHelper, requiredType, true, "WINDOW FRAME START")
+		if err != nil {
+			return err
+		}
+		startBound.OffsetExpr = typedStartOffsetExpr
+	}
+	if endBound != nil && endBound.HasOffset() {
+		typedEndOffsetExpr, err := p.analyzeExpr(ctx, endBound.OffsetExpr, r.sourceInfo, r.ivarHelper, requiredType, true, "WINDOW FRAME END")
+		if err != nil {
+			return err
+		}
+		endBound.OffsetExpr = typedEndOffsetExpr
+	}
 	return nil
 }
 
@@ -293,12 +379,13 @@ func constructWindowDef(
 	var refName string
 	switch {
 	case def.RefName != "":
-		// SELECT rank() OVER (w) FROM t WINDOW w as (...)
+		// SELECT rank() OVER (w) FROM t WINDOW w AS (...)
 		// We copy the referenced window specification, and modify it if necessary.
 		refName = string(def.RefName)
 		modifyRef = true
 	case def.Name != "":
-		// SELECT rank() OVER w FROM t WINDOW w as (...)
+		// SELECT rank() OVER w FROM t WINDOW w AS (...)
+		// Note the lack of parens around w, compared to the first case.
 		// We use the referenced window specification directly, without modification.
 		refName = string(def.Name)
 	}
@@ -308,31 +395,13 @@ func constructWindowDef(
 
 	referencedSpec, ok := namedWindowSpecs[refName]
 	if !ok {
-		return def, pgerror.Newf(pgerror.CodeUndefinedObjectError, "window %q does not exist", refName)
+		return def, pgerror.Newf(pgcode.UndefinedObject, "window %q does not exist", refName)
 	}
 	if !modifyRef {
 		return *referencedSpec, nil
 	}
 
-	// referencedSpec.Partitions is always used.
-	if len(def.Partitions) > 0 {
-		return def, pgerror.Newf(pgerror.CodeWindowingError, "cannot override PARTITION BY clause of window %q", refName)
-	}
-	def.Partitions = referencedSpec.Partitions
-
-	// referencedSpec.OrderBy is used if set.
-	if len(referencedSpec.OrderBy) > 0 {
-		if len(def.OrderBy) > 0 {
-			return def, pgerror.Newf(pgerror.CodeWindowingError, "cannot override ORDER BY clause of window %q", refName)
-		}
-		def.OrderBy = referencedSpec.OrderBy
-	}
-
-	if referencedSpec.Frame != nil {
-		return def, pgerror.Newf(pgerror.CodeWindowingError, "cannot copy window %q because it has a frame clause", refName)
-	}
-
-	return def, nil
+	return tree.OverrideWindowDef(referencedSpec, def)
 }
 
 // Once the extractWindowFunctions has been run over each render, the remaining
@@ -566,7 +635,7 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			// Make sure this window function does not contain another window function.
 			for _, argExpr := range t.Exprs {
 				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-					v.err = pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
+					v.err = pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
 					return false, expr
 				}
 			}

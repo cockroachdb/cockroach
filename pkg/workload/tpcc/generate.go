@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tpcc
 
@@ -78,6 +76,7 @@ var itemColTypes = []types.T{
 func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
+	l.rng.Seed(w.seed + uint64(rowIdx))
 
 	iID := rowIdx + 1
 
@@ -119,6 +118,7 @@ func (w *tpcc) tpccWarehouseInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
+	l.rng.Seed(w.seed + uint64(rowIdx))
 
 	wID := rowIdx // warehouse ids are 0-indexed. every other table is 1-indexed
 
@@ -174,6 +174,7 @@ var stockColTypes = []types.T{
 func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
+	l.rng.Seed(w.seed + uint64(rowIdx))
 
 	sID := (rowIdx % numStockPerWarehouse) + 1
 	wID := (rowIdx / numStockPerWarehouse)
@@ -244,6 +245,7 @@ func (w *tpcc) tpccDistrictInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
+	l.rng.Seed(w.seed + uint64(rowIdx))
 
 	dID := (rowIdx % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numDistrictsPerWarehouse)
@@ -313,6 +315,7 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
+	l.rng.Seed(w.seed + uint64(rowIdx))
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
@@ -331,7 +334,7 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 	if cID <= 1000 {
 		lastName = randCLastSyllables(cID-1, a)
 	} else {
-		lastName = randCLast(l.rng, a)
+		lastName = w.randCLast(l.rng, a)
 	}
 
 	cb.Reset(customerColTypes, 1)
@@ -407,6 +410,7 @@ var historyColTypes = []types.T{
 func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
+	l.rng.Seed(w.seed + uint64(rowIdx))
 
 	// This used to be a V4 uuid made through the normal `uuid.MakeV4`
 	// constructor, but we 1) want them to be deterministic and 2) want these rows

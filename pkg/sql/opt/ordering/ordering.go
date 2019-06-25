@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package ordering
 
@@ -17,9 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // CanProvide returns true if the given operator returns rows that can
@@ -225,7 +223,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 	closure := fds.ComputeClosure(opt.ColSet{})
 	for i := range provided {
 		col := provided[i].ID()
-		if closure.Contains(int(col)) {
+		if closure.Contains(col) {
 			// At the level of the new operator, this column is redundant.
 			if result == nil {
 				result = make(opt.Ordering, i, len(provided))
@@ -233,15 +231,15 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 			}
 			continue
 		}
-		if outCols.Contains(int(col)) {
+		if outCols.Contains(col) {
 			if result != nil {
 				result = append(result, provided[i])
 			}
 		} else {
-			equivCols := fds.ComputeEquivClosure(util.MakeFastIntSet(int(col)))
+			equivCols := fds.ComputeEquivClosure(opt.MakeColSet(col))
 			remappedCol, ok := equivCols.Intersection(outCols).Next(0)
 			if !ok {
-				panic(pgerror.AssertionFailedf("no output column equivalent to %d", log.Safe(col)))
+				panic(errors.AssertionFailedf("no output column equivalent to %d", log.Safe(col)))
 			}
 			if result == nil {
 				result = make(opt.Ordering, i, len(provided))
@@ -251,7 +249,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 				opt.ColumnID(remappedCol), provided[i].Descending(),
 			))
 		}
-		closure.Add(int(col))
+		closure.Add(col)
 		closure = fds.ComputeClosure(closure)
 	}
 	if result == nil {
@@ -281,7 +279,7 @@ func trimProvided(
 		// Consume columns from the provided ordering until their closure intersects
 		// the required group.
 		for !closure.Intersects(c.Group) {
-			closure.Add(int(provided[provIdx].ID()))
+			closure.Add(provided[provIdx].ID())
 			closure = fds.ComputeClosure(closure)
 			provIdx++
 			if provIdx == len(provided) {
@@ -298,14 +296,14 @@ func checkRequired(expr memo.RelExpr, required *physical.OrderingChoice) {
 
 	// Verify that the ordering only refers to output columns.
 	if !required.SubsetOfCols(rel.OutputCols) {
-		panic(pgerror.AssertionFailedf("required ordering refers to non-output columns (op %s)", log.Safe(expr.Op())))
+		panic(errors.AssertionFailedf("required ordering refers to non-output columns (op %s)", log.Safe(expr.Op())))
 	}
 
 	// Verify that columns in a column group are equivalent.
 	for i := range required.Columns {
 		c := &required.Columns[i]
 		if !c.Group.SubsetOf(rel.FuncDeps.ComputeEquivGroup(c.AnyID())) {
-			panic(pgerror.AssertionFailedf(
+			panic(errors.AssertionFailedf(
 				"ordering column group %s contains non-equivalent columns (op %s)",
 				c.Group, expr.Op(),
 			))
@@ -317,7 +315,7 @@ func checkRequired(expr memo.RelExpr, required *physical.OrderingChoice) {
 func checkProvided(expr memo.RelExpr, required *physical.OrderingChoice, provided opt.Ordering) {
 	// The provided ordering must refer only to output columns.
 	if outCols := expr.Relational().OutputCols; !provided.ColSet().SubsetOf(outCols) {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"provided %s must refer only to output columns %s", provided, outCols,
 		))
 	}
@@ -336,7 +334,7 @@ func checkProvided(expr memo.RelExpr, required *physical.OrderingChoice, provide
 		p.FromOrdering(provided)
 		p.Simplify(fds)
 		if !r.Any() && (p.Any() || !p.Intersects(&r)) {
-			panic(pgerror.AssertionFailedf(
+			panic(errors.AssertionFailedf(
 				"provided %s does not intersect required %s (FDs: %s)", provided, required, fds,
 			))
 		}
@@ -345,7 +343,7 @@ func checkProvided(expr memo.RelExpr, required *physical.OrderingChoice, provide
 	// The provided ordering should not have unnecessary columns.
 	fds := &expr.Relational().FuncDeps
 	if trimmed := trimProvided(provided, required, fds); len(trimmed) != len(provided) {
-		panic(pgerror.AssertionFailedf(
+		panic(errors.AssertionFailedf(
 			"provided %s can be trimmed to %s (FDs: %s)", log.Safe(provided), log.Safe(trimmed), log.Safe(fds),
 		))
 	}

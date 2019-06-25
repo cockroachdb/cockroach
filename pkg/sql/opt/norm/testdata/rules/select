@@ -1,45 +1,18 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
-TABLE uv
- ├── u int not null
- ├── v int
- └── INDEX primary
-      └── u int not null
 
 exec-ddl
 CREATE TABLE c (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
 ----
-TABLE c
- ├── a bool
- ├── b bool
- ├── c bool
- ├── d bool
- ├── e bool
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE e
@@ -51,14 +24,6 @@ CREATE TABLE e
     d DATE
 )
 ----
-TABLE e
- ├── k int not null
- ├── i int
- ├── t timestamp
- ├── tz timestamptz
- ├── d date
- └── INDEX primary
-      └── k int not null
 
 # --------------------------------------------------
 # SimplifyFilters
@@ -67,7 +32,7 @@ opt expect=SimplifySelectFilters
 SELECT * FROM a WHERE Null
 ----
 values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -76,7 +41,7 @@ opt expect=SimplifyJoinFilters
 SELECT * FROM a INNER JOIN xy ON NULL
 ----
 values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null) x:6(int!null) y:7(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-7)
@@ -85,7 +50,7 @@ opt expect=SimplifySelectFilters
 SELECT * FROM a WHERE i=1 AND Null
 ----
 values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -310,7 +275,7 @@ opt expect=MergeSelects
 SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
 ----
 values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -904,7 +869,7 @@ opt expect=MergeSelectInnerJoin
 SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE False
 ----
 values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null) x:6(int!null) y:7(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-7)
@@ -1192,14 +1157,6 @@ select
 exec-ddl
 CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
 ----
-TABLE b
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string not null
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 opt expect=RemoveNotNullCondition
 SELECT k FROM b WHERE k IS NOT NULL AND k > 4
@@ -1294,7 +1251,7 @@ opt expect=DetectSelectContradiction
 SELECT k FROM b WHERE k IN ()
 ----
 values
- ├── columns: k:1(int)
+ ├── columns: k:1(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
@@ -1303,7 +1260,7 @@ opt expect=DetectSelectContradiction
 SELECT k FROM b WHERE i=5 AND k IN () AND s='foo'
 ----
 values
- ├── columns: k:1(int)
+ ├── columns: k:1(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)

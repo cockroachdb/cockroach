@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -793,9 +791,12 @@ func FatalIfErr(t *test, err error) {
 }
 
 func (t *test) printAndFail(skip int, args ...interface{}) {
+	msg := t.decorate(skip+1, fmt.Sprint(args...))
+	t.l.Printf("test failure: " + msg)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.output = append(t.mu.output, t.decorate(skip+1, fmt.Sprint(args...))...)
+	t.mu.output = append(t.mu.output, msg...)
 	t.mu.failed = true
 	if t.mu.cancel != nil {
 		t.mu.cancel()

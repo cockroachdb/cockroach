@@ -12,19 +12,6 @@ CREATE TABLE kv (
   FAMILY (s)
 )
 ----
-TABLE kv
- ├── k int not null
- ├── v int
- ├── w int
- ├── f float
- ├── d decimal
- ├── s string
- ├── b bool
- ├── INDEX primary
- │    └── k int not null
- ├── FAMILY family1 (k, v, w, f, b)
- ├── FAMILY family2 (d)
- └── FAMILY family3 (s)
 
 build colstat=8
 SELECT k, rank() OVER () FROM (SELECT * FROM kv LIMIT 10)
@@ -54,4 +41,4 @@ project
       │    │    └── fd: (1)-->(2-7)
       │    └── const: 10 [type=int]
       └── windows
-           └── rank [type=undefined]
+           └── rank [type=int]

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package histogram
 
@@ -29,28 +27,7 @@ import (
 const (
 	sigFigs    = 1
 	minLatency = 100 * time.Microsecond
-	maxLatency = 100 * time.Second
 )
-
-var (
-	histogramPool = sync.Pool{
-		New: func() interface{} {
-			return hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
-		},
-	}
-	/*
-		namedHistogramPool = sync.Pool{
-			New: func() interface{} {
-				return &NamedHistogram{}
-			},
-		}
-	*/
-)
-
-func newHistogram() *hdrhistogram.Histogram {
-	h := histogramPool.Get().(*hdrhistogram.Histogram)
-	return h
-}
 
 // NamedHistogram is a named histogram for use in Operations. It is threadsafe
 // but intended to be thread-local.
@@ -62,14 +39,15 @@ type NamedHistogram struct {
 	}
 }
 
-func newNamedHistogram(name string) *NamedHistogram {
+func newNamedHistogram(reg *Registry, name string) *NamedHistogram {
 	w := &NamedHistogram{name: name}
-	w.mu.current = newHistogram()
+	w.mu.current = reg.newHistogram()
 	return w
 }
 
 // Record saves a new datapoint and should be called once per logical operation.
 func (w *NamedHistogram) Record(elapsed time.Duration) {
+	maxLatency := time.Duration(w.mu.current.HighestTrackableValue())
 	if elapsed < minLatency {
 		elapsed = minLatency
 	} else if elapsed > maxLatency {
@@ -90,10 +68,12 @@ func (w *NamedHistogram) Record(elapsed time.Duration) {
 
 // tick resets the current histogram to a new "period". The old one's data
 // should be saved via the closure argument.
-func (w *NamedHistogram) tick(fn func(h *hdrhistogram.Histogram)) {
+func (w *NamedHistogram) tick(
+	newHistogram *hdrhistogram.Histogram, fn func(h *hdrhistogram.Histogram),
+) {
 	w.mu.Lock()
 	h := w.mu.current
-	w.mu.current = newHistogram()
+	w.mu.current = newHistogram
 	w.mu.Unlock()
 	fn(h)
 }
@@ -107,20 +87,33 @@ type Registry struct {
 		registered map[string][]*NamedHistogram
 	}
 
-	start      time.Time
-	cumulative map[string]*hdrhistogram.Histogram
-	prevTick   map[string]time.Time
+	start         time.Time
+	cumulative    map[string]*hdrhistogram.Histogram
+	prevTick      map[string]time.Time
+	histogramPool *sync.Pool
 }
 
-// NewRegistry returns an initialized Registry.
-func NewRegistry() *Registry {
+// NewRegistry returns an initialized Registry. maxLat is the maximum time that
+// queries are expected to take to execute which is needed to initialize the
+// pool of histograms.
+func NewRegistry(maxLat time.Duration) *Registry {
 	r := &Registry{
 		start:      timeutil.Now(),
 		cumulative: make(map[string]*hdrhistogram.Histogram),
 		prevTick:   make(map[string]time.Time),
+		histogramPool: &sync.Pool{
+			New: func() interface{} {
+				return hdrhistogram.New(minLatency.Nanoseconds(), maxLat.Nanoseconds(), sigFigs)
+			},
+		},
 	}
 	r.mu.registered = make(map[string][]*NamedHistogram)
 	return r
+}
+
+func (w *Registry) newHistogram() *hdrhistogram.Histogram {
+	h := w.histogramPool.Get().(*hdrhistogram.Histogram)
+	return h
 }
 
 // GetHandle returns a thread-local handle for creating and registering
@@ -142,14 +135,14 @@ func (w *Registry) Tick(fn func(Tick)) {
 	for name, nameRegistered := range w.mu.registered {
 		wg.Add(1)
 		registered := append([]*NamedHistogram(nil), nameRegistered...)
-		merged[name] = newHistogram()
+		merged[name] = w.newHistogram()
 		names = append(names, name)
 		go func(registered []*NamedHistogram, merged *hdrhistogram.Histogram) {
 			for _, hist := range registered {
-				hist.tick(func(h *hdrhistogram.Histogram) {
+				hist.tick(w.newHistogram(), func(h *hdrhistogram.Histogram) {
 					merged.Merge(h)
 					h.Reset()
-					histogramPool.Put(h)
+					w.histogramPool.Put(h)
 				})
 			}
 			wg.Done()
@@ -164,7 +157,7 @@ func (w *Registry) Tick(fn func(Tick)) {
 	for _, name := range names {
 		mergedHist := merged[name]
 		if _, ok := w.cumulative[name]; !ok {
-			w.cumulative[name] = newHistogram()
+			w.cumulative[name] = w.newHistogram()
 		}
 		w.cumulative[name].Merge(mergedHist)
 
@@ -181,7 +174,7 @@ func (w *Registry) Tick(fn func(Tick)) {
 			Now:        now,
 		})
 		mergedHist.Reset()
-		histogramPool.Put(mergedHist)
+		w.histogramPool.Put(mergedHist)
 	}
 }
 
@@ -210,7 +203,7 @@ func (w *Histograms) Get(name string) *NamedHistogram {
 	w.mu.Lock()
 	hist, ok = w.mu.hists[name]
 	if !ok {
-		hist = newNamedHistogram(name)
+		hist = newNamedHistogram(w.reg, name)
 		w.mu.hists[name] = hist
 	}
 	w.mu.Unlock()

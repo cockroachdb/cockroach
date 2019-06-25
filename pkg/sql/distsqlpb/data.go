@@ -1,28 +1,28 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlpb
 
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ConvertToColumnOrdering converts an Ordering type (as defined in data.proto)
@@ -128,7 +128,7 @@ func (e Expression) String() string {
 
 // String implements fmt.Stringer.
 func (e *Error) String() string {
-	if err := e.ErrorDetail(); err != nil {
+	if err := e.ErrorDetail(context.TODO()); err != nil {
 		return err.Error()
 	}
 	return "<nil>"
@@ -137,43 +137,44 @@ func (e *Error) String() string {
 // NewError creates an Error from an error, to be sent on the wire. It will
 // recognize certain errors and marshall them accordingly, and everything
 // unrecognized is turned into a PGError with code "internal".
-func NewError(err error) *Error {
-	// Unwrap the error, to attain the cause.
-	// Otherwise, Wrap() may hide the roachpb error
-	// from the cast attempt below.
-	origErr := err
-	err = errors.Cause(err)
+func NewError(ctx context.Context, err error) *Error {
+	resErr := &Error{}
 
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	}
+	// Encode the full error to the best of our ability.
+	// This field is ignored by 19.1 nodes and prior.
+	fullError := errors.EncodeError(ctx, err)
+	resErr.FullError = &fullError
 
-	switch e := err.(type) {
+	// Now populate compatibility fields for 19.1 nodes.
+	// TODO(knz): Remove this code in the 19.3 release.
+	cause := errors.UnwrapAll(err)
+	switch e := cause.(type) {
 	case *roachpb.UnhandledRetryableError:
-		return &Error{Detail: &Error_RetryableTxnError{RetryableTxnError: e}}
+		resErr.Detail = &Error_RetryableTxnError{RetryableTxnError: e}
 	case *roachpb.NodeUnavailableError:
-		// Node failures are common enough that we shouldn't fail with
-		// assertion errors upon them. Simply signal them in a way that
-		// may make sense to a client.
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.Newf(pgerror.CodeRangeUnavailable, "%v", e),
-			},
-		}
+		err = pgerror.WithCandidateCode(err, pgcode.RangeUnavailable)
+		resErr.Detail = &Error_PGError{PGError: pgerror.Flatten(err)}
 	default:
-		// Anything unrecognized is an "internal error".
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.AssertionFailedf(
-					"uncaught error: %+v", origErr)}}
+		err = errors.NewAssertionErrorWithWrappedErrf(err, "uncaught error")
+		resErr.Detail = &Error_PGError{PGError: pgerror.Flatten(err)}
 	}
+	return resErr
 }
 
 // ErrorDetail returns the payload as a Go error.
-func (e *Error) ErrorDetail() error {
+func (e *Error) ErrorDetail(ctx context.Context) error {
 	if e == nil {
 		return nil
 	}
+
+	if e.FullError != nil {
+		// If there's a 19.2-forward full error, decode and use that.
+		// This will reveal a fully causable detailed error structure.
+		return errors.DecodeError(ctx, *e.FullError)
+	}
+
+	// Fallback to pre-19.2 logic.
+	// TODO(knz): Remove in 19.3.
 	switch t := e.Detail.(type) {
 	case *Error_PGError:
 		return t.PGError
@@ -183,7 +184,7 @@ func (e *Error) ErrorDetail() error {
 		// We're receiving an error we don't know about. It's all right,
 		// it's still an error, just one we didn't expect. Let it go
 		// through. We'll pick it up in reporting.
-		return pgerror.AssertionFailedf("unknown error detail type: %+v", t)
+		return errors.AssertionFailedf("unknown error detail type: %+v", t)
 	}
 }
 
@@ -208,12 +209,59 @@ type ProducerMetadata struct {
 	// SamplerProgress contains incremental progress information from the sampler
 	// processor.
 	SamplerProgress *RemoteProducerMetadata_SamplerProgress
+	// Metrics contains information about goodput of the node.
+	Metrics *RemoteProducerMetadata_Metrics
+}
+
+var (
+	// TODO(yuzefovich): use this pool in other places apart from metrics
+	// collection.
+	// producerMetadataPool is a pool of producer metadata objects.
+	producerMetadataPool = sync.Pool{
+		New: func() interface{} {
+			return &ProducerMetadata{}
+		},
+	}
+
+	// rpmMetricsPool is a pool of metadata used to propagate metrics.
+	rpmMetricsPool = sync.Pool{
+		New: func() interface{} {
+			return &RemoteProducerMetadata_Metrics{}
+		},
+	}
+)
+
+// Release is part of Releasable interface.
+func (meta *ProducerMetadata) Release() {
+	*meta = ProducerMetadata{}
+	producerMetadataPool.Put(meta)
+}
+
+// Release is part of Releasable interface. Note that although this meta is
+// only used together with a ProducerMetadata that comes from another pool, we
+// do not combine two Release methods into one because two objects have a
+// different lifetime.
+func (meta *RemoteProducerMetadata_Metrics) Release() {
+	*meta = RemoteProducerMetadata_Metrics{}
+	rpmMetricsPool.Put(meta)
+}
+
+// GetProducerMeta returns a producer metadata object from the pool.
+func GetProducerMeta() *ProducerMetadata {
+	return producerMetadataPool.Get().(*ProducerMetadata)
+}
+
+// GetMetricsMeta returns a metadata object from the pool of metrics metadata.
+func GetMetricsMeta() *RemoteProducerMetadata_Metrics {
+	return rpmMetricsPool.Get().(*RemoteProducerMetadata_Metrics)
 }
 
 // RemoteProducerMetaToLocalMeta converts a RemoteProducerMetadata struct to
 // ProducerMetadata and returns whether the conversion was successful or not.
-func RemoteProducerMetaToLocalMeta(rpm RemoteProducerMetadata) (ProducerMetadata, bool) {
-	var meta ProducerMetadata
+func RemoteProducerMetaToLocalMeta(
+	ctx context.Context, rpm RemoteProducerMetadata,
+) (ProducerMetadata, bool) {
+	meta := GetProducerMeta()
 	switch v := rpm.Value.(type) {
 	case *RemoteProducerMetadata_RangeInfo:
 		meta.Ranges = v.RangeInfo.RangeInfo
@@ -226,16 +274,20 @@ func RemoteProducerMetaToLocalMeta(rpm RemoteProducerMetadata) (ProducerMetadata
 	case *RemoteProducerMetadata_SamplerProgress_:
 		meta.SamplerProgress = v.SamplerProgress
 	case *RemoteProducerMetadata_Error:
-		meta.Err = v.Error.ErrorDetail()
+		meta.Err = v.Error.ErrorDetail(ctx)
+	case *RemoteProducerMetadata_Metrics_:
+		meta.Metrics = v.Metrics
 	default:
-		return meta, false
+		return *meta, false
 	}
-	return meta, true
+	return *meta, true
 }
 
 // LocalMetaToRemoteProducerMeta converts a ProducerMetadata struct to
 // RemoteProducerMetadata.
-func LocalMetaToRemoteProducerMeta(meta ProducerMetadata) RemoteProducerMetadata {
+func LocalMetaToRemoteProducerMeta(
+	ctx context.Context, meta ProducerMetadata,
+) RemoteProducerMetadata {
 	var rpm RemoteProducerMetadata
 	if meta.Ranges != nil {
 		rpm.Value = &RemoteProducerMetadata_RangeInfo{
@@ -261,9 +313,13 @@ func LocalMetaToRemoteProducerMeta(meta ProducerMetadata) RemoteProducerMetadata
 		rpm.Value = &RemoteProducerMetadata_SamplerProgress_{
 			SamplerProgress: meta.SamplerProgress,
 		}
+	} else if meta.Metrics != nil {
+		rpm.Value = &RemoteProducerMetadata_Metrics_{
+			Metrics: meta.Metrics,
+		}
 	} else {
 		rpm.Value = &RemoteProducerMetadata_Error{
-			Error: NewError(meta.Err),
+			Error: NewError(ctx, meta.Err),
 		}
 	}
 	return rpm

@@ -63,7 +63,7 @@ EXECUTE b
 
 ## Typing tests - no type hints
 #
-query error syntax error at or near \"\)\"
+query error at or near \"\)\": syntax error
 PREPARE a as ()
 
 statement error could not determine data type of placeholder \$1
@@ -388,10 +388,10 @@ PREPARE invalid (int) AS SELECT $1:::float
 statement ok
 PREPARE innerStmt AS SELECT $1:::int i, 'foo' t
 
-statement error syntax error at or near "execute"
+statement error at or near "execute": syntax error
 PREPARE outerStmt AS SELECT * FROM [EXECUTE innerStmt(3)] WHERE t = $1
 
-query error syntax error at or near "execute"
+query error at or near "execute": syntax error
 SELECT * FROM [EXECUTE innerStmt(1)] CROSS JOIN [EXECUTE x]
 
 statement ok

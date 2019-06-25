@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package pgerror_test
 
@@ -19,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
 )
 
 func TestPGError(t *testing.T) {
@@ -33,7 +30,7 @@ func TestPGError(t *testing.T) {
 		if pErr.Message != errMsg {
 			t.Fatalf("got: %q\nwant: %q", pErr.Message, errMsg)
 		}
-		const want = `.*sql/pgwire/pgerror.*`
+		const want = `errors_test.go`
 		match, err := regexp.MatchString(want, pErr.Source.File)
 		if err != nil {
 			t.Fatal(err)
@@ -44,26 +41,16 @@ func TestPGError(t *testing.T) {
 	}
 
 	// Test NewError.
-	pErr := pgerror.New(code, msg)
+	pErr := pgerror.Flatten(pgerror.New(code, msg))
 	checkErr(pErr, msg)
 
-	pErr = pgerror.New(code, "bad%format")
+	pErr = pgerror.Flatten(pgerror.New(code, "bad%format"))
 	checkErr(pErr, "bad%format")
 
 	// Test NewErrorf.
 	const prefix = "prefix"
-	pErr = pgerror.Newf(code, "%s: %s", prefix, msg)
+	pErr = pgerror.Flatten(pgerror.Newf(code, "%s: %s", prefix, msg))
 	expected := fmt.Sprintf("%s: %s", prefix, msg)
-	checkErr(pErr, expected)
-
-	// Test GetPGCause.
-	err := errors.Wrap(pErr, "wrap")
-	err = errors.Wrap(err, "wrap")
-	var ok bool
-	pErr, ok = pgerror.GetPGCause(err)
-	if !ok {
-		t.Fatal("cannot find pgerror")
-	}
 	checkErr(pErr, expected)
 }
 

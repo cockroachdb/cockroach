@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package main
 
@@ -31,7 +29,7 @@ func registerYCSB(r *registry) {
 			ramp := " --ramp=" + ifLocal("0s", "1m")
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
-				"./workload run ycsb --init --initial-rows=1000000 --splits=100"+
+				"./workload run ycsb --init --record-count=1000000 --splits=100"+
 					" --workload=%s --concurrency=64 --histograms=logs/stats.json"+
 					ramp+duration+" {pgurl:1-%d}",
 				wl, nodes)

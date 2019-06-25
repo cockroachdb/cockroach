@@ -1,36 +1,34 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package ordering
 
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testexpr"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestProject(t *testing.T) {
 	var fds props.FuncDepSet
 	fds.AddEquivalency(2, 3)
-	fds.AddConstants(util.MakeFastIntSet(4))
+	fds.AddConstants(opt.MakeColSet(4))
 
 	project := &memo.ProjectExpr{
 		Input: &testexpr.Instance{
 			Rel: &props.Relational{
-				OutputCols: util.MakeFastIntSet(1, 2, 3, 4),
+				OutputCols: opt.MakeColSet(1, 2, 3, 4),
 				FuncDeps:   fds,
 			},
 		},

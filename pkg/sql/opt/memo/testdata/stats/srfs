@@ -1,11 +1,6 @@
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=5
 SELECT a.*, b.*, c.* FROM upper('abc') a
@@ -68,7 +63,7 @@ distinct-on
  ├── columns: a:1(string) b:2(int)
  ├── grouping columns: upper:1(string) generate_series:2(int)
  ├── side-effects
- ├── stats: [rows=7.1, distinct(1,2)=7, null(1,2)=0.1]
+ ├── stats: [rows=7, distinct(1,2)=7, null(1,2)=0.1]
  ├── key: (1,2)
  └── inner-join
       ├── columns: upper:1(string) generate_series:2(int)
@@ -113,7 +108,7 @@ project
       ├── fd: (1)-->(2)
       ├── scan xy
       │    ├── columns: x:1(int!null) y:2(int)
-      │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
+      │    ├── stats: [rows=1000, distinct(1,2)=991, null(1,2)=10]
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── zip
@@ -154,18 +149,6 @@ CREATE TABLE articles (
   updated_at TIMESTAMP
 )
 ----
-TABLE articles
- ├── id int not null
- ├── body string
- ├── description string
- ├── title string
- ├── slug string
- ├── tag_list string[]
- ├── user_id string
- ├── created_at timestamp
- ├── updated_at timestamp
- └── INDEX primary
-      └── id int not null
 
 # The following queries test the statistics for four different types of Zip
 # functions:

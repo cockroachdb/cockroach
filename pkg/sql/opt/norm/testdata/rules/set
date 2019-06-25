@@ -1,26 +1,10 @@
 exec-ddl
 CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
 ----
-TABLE b
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string not null
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE a (v INT PRIMARY KEY, w INT, x FLOAT, y STRING NOT NULL, z JSON)
 ----
-TABLE a
- ├── v int not null
- ├── w int
- ├── x float
- ├── y string not null
- ├── z jsonb
- └── INDEX primary
-      └── v int not null
 
 # --------------------------------------------------
 # EliminateUnionAllLeft
@@ -65,7 +49,7 @@ SELECT k FROM
   (SELECT k FROM b WHERE i IN ())
 ----
 values
- ├── columns: k:11(int)
+ ├── columns: k:11(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(11)
@@ -422,26 +406,26 @@ SELECT * FROM ((values (1,2))
 WHERE 1 / column1 > 0
 ----
 except
- ├── columns: column1:1(int) column2:2(int)
- ├── left columns: column1:1(int) column2:2(int)
+ ├── columns: column1:1(int!null) column2:2(int!null)
+ ├── left columns: column1:1(int!null) column2:2(int!null)
  ├── right columns: column1:3(int) column2:4(int)
  ├── cardinality: [0 - 1]
  ├── side-effects
  ├── key: (1,2)
  ├── values
- │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── columns: column1:1(int!null) column2:2(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1,2)
  │    └── (1, 2) [type=tuple{int, int}]
  └── select
-      ├── columns: column1:3(int) column2:4(int)
+      ├── columns: column1:3(int!null) column2:4(int!null)
       ├── cardinality: [0 - 1]
       ├── side-effects
       ├── key: ()
       ├── fd: ()-->(3,4)
       ├── values
-      │    ├── columns: column1:3(int) column2:4(int)
+      │    ├── columns: column1:3(int!null) column2:4(int!null)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(3,4)
@@ -453,23 +437,23 @@ opt
 SELECT * FROM ((values (1.0::decimal)) EXCEPT (values (1.00::decimal))) WHERE column1::string != '1.00';
 ----
 select
- ├── columns: column1:1(decimal)
+ ├── columns: column1:1(decimal!null)
  ├── cardinality: [0 - 1]
  ├── key: (1)
  ├── except
- │    ├── columns: column1:1(decimal)
- │    ├── left columns: column1:1(decimal)
+ │    ├── columns: column1:1(decimal!null)
+ │    ├── left columns: column1:1(decimal!null)
  │    ├── right columns: column1:2(decimal)
  │    ├── cardinality: [0 - 1]
  │    ├── key: (1)
  │    ├── values
- │    │    ├── columns: column1:1(decimal)
+ │    │    ├── columns: column1:1(decimal!null)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    └── (1.0,) [type=tuple{decimal}]
  │    └── values
- │         ├── columns: column1:2(decimal)
+ │         ├── columns: column1:2(decimal!null)
  │         ├── cardinality: [1 - 1]
  │         ├── key: ()
  │         ├── fd: ()-->(2)

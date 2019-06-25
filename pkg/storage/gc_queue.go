@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage
 
@@ -226,8 +224,8 @@ func makeGCQueueScore(
 // To visualize this, picture a rectangular frame of width `ttl` and height
 // `GCBytes` (i.e. the horizontal dimension is time, the vertical one bytes),
 // where the right boundary of the frame corresponds to age zero. Each non-live
-// key is a domino aligned with the right side of the frame, its width equal to
-// its size, and its height given by the duration (in seconds) it's been
+// key is a domino aligned with the right side of the frame, its height equal to
+// its size, and its width given by the duration (in seconds) it's been
 // non-live.
 //
 // The combined surface of the dominos is then `GCBytesAge`, and the claim is
@@ -465,42 +463,6 @@ func processAbortSpan(
 	return gcKeys
 }
 
-// process iterates through all keys in a replica's range, calling the garbage
-// collector for each key and associated set of values. GC'd keys are batched
-// into GC calls. Extant intents are resolved if intents are older than
-// intentAgeThreshold. The transaction and AbortSpan records are also
-// scanned and old entries evicted. During normal operation, both of these
-// records are cleaned up when their respective transaction finishes, so the
-// amount of work done here is expected to be small.
-//
-// Some care needs to be taken to avoid cyclic recreation of entries during GC:
-// * a Push initiated due to an intent may recreate a transaction entry
-// * resolving an intent may write a new AbortSpan entry
-// * obtaining the transaction for a AbortSpan entry requires a Push
-//
-// The following order is taken below:
-// 1) collect all intents with sufficiently old txn record
-// 2) collect these intents' transactions
-// 3) scan the transaction table, collecting abandoned or completed txns
-// 4) push all of these transactions (possibly recreating entries)
-// 5) resolve all intents (unless the txn is not yet finalized), which
-//    will recreate AbortSpan entries (but with the txn timestamp; i.e.
-//    likely GC'able)
-// 6) scan the AbortSpan table for old entries
-// 7) push these transactions (again, recreating txn entries).
-// 8) send a GCRequest.
-func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
-	now := repl.store.Clock().Now()
-	r := makeGCQueueScore(ctx, repl, now, sysCfg)
-	if !r.ShouldQueue {
-		log.Eventf(ctx, "skipping replica; low score %s", r)
-		return nil
-	}
-
-	log.Eventf(ctx, "processing replica with score %s", r)
-	return gcq.processImpl(ctx, repl, sysCfg, now)
-}
-
 // NoopGCer implements GCer by doing nothing.
 type NoopGCer struct{}
 
@@ -562,9 +524,35 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 	return r.send(ctx, req)
 }
 
-func (gcq *gcQueue) processImpl(
-	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig, now hlc.Timestamp,
-) error {
+// process iterates through all keys in a replica's range, calling the garbage
+// collector for each key and associated set of values. GC'd keys are batched
+// into GC calls. Extant intents are resolved if intents are older than
+// intentAgeThreshold. The transaction and AbortSpan records are also
+// scanned and old entries evicted. During normal operation, both of these
+// records are cleaned up when their respective transaction finishes, so the
+// amount of work done here is expected to be small.
+//
+// Some care needs to be taken to avoid cyclic recreation of entries during GC:
+// * a Push initiated due to an intent may recreate a transaction entry
+// * resolving an intent may write a new AbortSpan entry
+// * obtaining the transaction for a AbortSpan entry requires a Push
+//
+// The following order is taken below:
+// 1) collect all intents with sufficiently old txn record
+// 2) collect these intents' transactions
+// 3) scan the transaction table, collecting abandoned or completed txns
+// 4) push all of these transactions (possibly recreating entries)
+// 5) resolve all intents (unless the txn is not yet finalized), which
+//    will recreate AbortSpan entries (but with the txn timestamp; i.e.
+//    likely GC'able)
+// 6) scan the AbortSpan table for old entries
+// 7) push these transactions (again, recreating txn entries).
+// 8) send a GCRequest.
+func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
+	now := repl.store.Clock().Now()
+	r := makeGCQueueScore(ctx, repl, now, sysCfg)
+	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
+
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
 

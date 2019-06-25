@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
@@ -21,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Most of the functionality in statistics.go is tested by the data-driven
@@ -101,7 +98,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 
 		var cols opt.ColSet
 		for i := 0; i < tab.ColumnCount(); i++ {
-			cols.Add(int(tabID.ColumnID(i)))
+			cols.Add(tabID.ColumnID(i))
 		}
 
 		sb := &statisticsBuilder{}
@@ -258,21 +255,21 @@ func TestTranslateColSet(t *testing.T) {
 		}
 	}
 
-	colSetIn, from, to := util.MakeFastIntSet(1, 2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, util.MakeFastIntSet(4, 5, 6))
+	colSetIn, from, to := opt.MakeColSet(1, 2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 6}
+	test(t, colSetIn, from, to, opt.MakeColSet(4, 5, 6))
 
-	colSetIn, from, to = util.MakeFastIntSet(2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, util.MakeFastIntSet(5, 6))
+	colSetIn, from, to = opt.MakeColSet(2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 6}
+	test(t, colSetIn, from, to, opt.MakeColSet(5, 6))
 
 	// colSetIn and colSetOut might not be the same length.
-	colSetIn, from, to = util.MakeFastIntSet(1, 2), opt.ColList{1, 1, 2}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, util.MakeFastIntSet(4, 5, 6))
+	colSetIn, from, to = opt.MakeColSet(1, 2), opt.ColList{1, 1, 2}, opt.ColList{4, 5, 6}
+	test(t, colSetIn, from, to, opt.MakeColSet(4, 5, 6))
 
-	colSetIn, from, to = util.MakeFastIntSet(1, 2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 4}
-	test(t, colSetIn, from, to, util.MakeFastIntSet(4, 5))
+	colSetIn, from, to = opt.MakeColSet(1, 2, 3), opt.ColList{1, 2, 3}, opt.ColList{4, 5, 4}
+	test(t, colSetIn, from, to, opt.MakeColSet(4, 5))
 
-	colSetIn, from, to = util.MakeFastIntSet(2), opt.ColList{1, 2, 2}, opt.ColList{4, 5, 6}
-	test(t, colSetIn, from, to, util.MakeFastIntSet(5, 6))
+	colSetIn, from, to = opt.MakeColSet(2), opt.ColList{1, 2, 2}, opt.ColList{4, 5, 6}
+	test(t, colSetIn, from, to, opt.MakeColSet(5, 6))
 }
 
 func testStats(

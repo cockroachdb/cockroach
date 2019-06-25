@@ -1,36 +1,14 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE b (x INT PRIMARY KEY, z INT)
 ----
-TABLE b
- ├── x int not null
- ├── z int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE c (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
 ----
-TABLE c
- ├── a bool
- ├── b bool
- ├── c bool
- ├── d bool
- ├── e bool
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 
 # --------------------------------------------------
@@ -226,7 +204,7 @@ opt expect=SimplifyFalseOr
 SELECT * FROM a WHERE false OR false OR false
 ----
 values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -313,7 +291,7 @@ opt expect=(FoldNotTrue,FoldNotFalse)
 SELECT NOT(1=1), NOT(1=2)
 ----
 values
- ├── columns: "?column?":1(bool) "?column?":2(bool)
+ ├── columns: "?column?":1(bool!null) "?column?":2(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)

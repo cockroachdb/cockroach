@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package row
 
@@ -17,9 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // fkExistenceBatchChecker accumulates foreign key existence checks and sends
@@ -70,7 +70,7 @@ func (f *fkExistenceBatchChecker) addCheck(
 // runCheck sends the accumulated batch of foreign key checks to kv, given the
 // old and new values of the row being modified. Either oldRow or newRow can
 // be set to nil in the case of an insert or a delete, respectively.
-// A pgerror.CodeForeignKeyViolationError is returned if a foreign key violation
+// A pgcode.ForeignKeyViolation is returned if a foreign key violation
 // is detected, corresponding to the first foreign key that was violated in
 // order of addition.
 func (f *fkExistenceBatchChecker) runCheck(
@@ -100,41 +100,34 @@ func (f *fkExistenceBatchChecker) runCheck(
 		case CheckInserts:
 			// If we're inserting, then there's a violation if the scan found nothing.
 			if fk.rf.kvEnd {
-				// TODO(knz): re-allocating a datum slice in every check
-				// is super inefficient and expensive. Factor this.
-				fkValues := make(tree.Datums, fk.prefixLen)
-
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
-					fkValues[valueIdx] = newRow[fk.ids[colID]]
+					fk.valuesScratch[valueIdx] = newRow[fk.ids[colID]]
 				}
-				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+				return pgerror.Newf(pgcode.ForeignKeyViolation,
 					"foreign key violation: value %s not found in %s@%s %s (txn=%s)",
-					fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.ID())
+					fk.valuesScratch, fk.searchTable.Name, fk.searchIdx.Name,
+					fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.ID())
 			}
 
 		case CheckDeletes:
 			// If we're deleting, then there's a violation if the scan found something.
 			if !fk.rf.kvEnd {
 				if oldRow == nil {
-					return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+					return pgerror.Newf(pgcode.ForeignKeyViolation,
 						"foreign key violation: non-empty columns %s referenced in table %q",
 						fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 				}
 
-				// TODO(knz): re-allocating a datum slice in every check
-				// is super inefficient and expensive. Factor this.
-				fkValues := make(tree.Datums, fk.prefixLen)
-
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
-					fkValues[valueIdx] = oldRow[fk.ids[colID]]
+					fk.valuesScratch[valueIdx] = oldRow[fk.ids[colID]]
 				}
-				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+				return pgerror.Newf(pgcode.ForeignKeyViolation,
 					"foreign key violation: values %v in columns %s referenced in table %q",
-					fkValues, fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
+					fk.valuesScratch, fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 			}
 
 		default:
-			return pgerror.AssertionFailedf("impossible case: fkExistenceCheckBaseHelper has dir=%v", fk.dir)
+			return errors.AssertionFailedf("impossible case: fkExistenceCheckBaseHelper has dir=%v", fk.dir)
 		}
 	}
 
@@ -160,5 +153,5 @@ func (f *SpanKVFetcher) nextBatch(
 
 // getRangesInfo implements the kvBatchFetcher interface.
 func (f *SpanKVFetcher) getRangesInfo() []roachpb.RangeInfo {
-	panic(pgerror.AssertionFailedf("getRangesInfo() called on SpanKVFetcher"))
+	panic(errors.AssertionFailedf("getRangesInfo() called on SpanKVFetcher"))
 }

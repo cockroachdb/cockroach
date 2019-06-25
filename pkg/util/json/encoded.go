@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package json
 
@@ -19,8 +17,8 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 type jsonEncoded struct {
@@ -116,7 +114,7 @@ func jsonTypeFromRootBuffer(v []byte) ([]byte, Type, error) {
 			return v[containerHeaderLen+jEntryLen:], StringJSONType, nil
 		}
 	}
-	return nil, 0, pgerror.AssertionFailedf("unknown json type %d", typeTag)
+	return nil, 0, errors.AssertionFailedf("unknown json type %d", errors.Safe(typeTag))
 }
 
 func newEncoded(e jEntry, v []byte) (JSON, error) {
@@ -157,7 +155,7 @@ func newEncoded(e jEntry, v []byte) (JSON, error) {
 
 func getUint32At(v []byte, idx int) (uint32, error) {
 	if idx+4 > len(v) {
-		return 0, pgerror.AssertionFailedf(
+		return 0, errors.AssertionFailedf(
 			"insufficient bytes to decode uint32 int value: %+v", v)
 	}
 
@@ -504,14 +502,14 @@ func (j *jsonEncoded) shallowDecode() (JSON, error) {
 		}
 		return result, nil
 	default:
-		return nil, pgerror.AssertionFailedf("unknown json type: %v", j.typ)
+		return nil, errors.AssertionFailedf("unknown json type: %v", errors.Safe(j.typ))
 	}
 }
 
 func (j *jsonEncoded) mustDecode() JSON {
 	decoded, err := j.shallowDecode()
 	if err != nil {
-		panic(fmt.Sprintf("invalid JSON data: %s, %v", err.Error(), j.value))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "invalid JSON data: %v", j.value))
 	}
 	return decoded
 }

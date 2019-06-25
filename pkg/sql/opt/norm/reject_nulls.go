@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package norm
 
@@ -16,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // RejectNullCols returns the set of columns that are candidates for NULL
@@ -55,11 +53,11 @@ func (c *CustomFuncs) NullRejectAggVar(
 	aggs memo.AggregationsExpr, nullRejectCols opt.ColSet,
 ) *memo.VariableExpr {
 	for i := range aggs {
-		if nullRejectCols.Contains(int(aggs[i].Col)) {
+		if nullRejectCols.Contains(aggs[i].Col) {
 			return memo.ExtractVarFromAggInput(aggs[i].Agg.Child(0).(opt.ScalarExpr))
 		}
 	}
-	panic(pgerror.AssertionFailedf("expected aggregation not found"))
+	panic(errors.AssertionFailedf("expected aggregation not found"))
 }
 
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL
@@ -159,7 +157,7 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 		}
 		savedInColID = inColID
 
-		if !DeriveRejectNullCols(input).Contains(int(inColID)) {
+		if !DeriveRejectNullCols(input).Contains(inColID) {
 			// Input has not requested null rejection on the input column.
 			return opt.ColSet{}
 		}
@@ -167,7 +165,7 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 		// Can possibly reject column, but keep searching, since if
 		// multiple columns are used by aggregate functions, then nulls
 		// can't be rejected on any column.
-		rejectNullCols.Add(int(aggs[i].Col))
+		rejectNullCols.Add(aggs[i].Col)
 	}
 	return rejectNullCols
 }

@@ -1,18 +1,17 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sessiondata
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -71,7 +70,7 @@ func (ss *SequenceState) GetLastValue() (int64, error) {
 
 	if !ss.nextValEverCalledLocked() {
 		return 0, pgerror.New(
-			pgerror.CodeObjectNotInPrerequisiteStateError, "lastval is not yet defined in this session")
+			pgcode.ObjectNotInPrerequisiteState, "lastval is not yet defined in this session")
 	}
 
 	return ss.mu.latestValues[ss.mu.lastSequenceIncremented], nil

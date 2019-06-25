@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -17,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -335,7 +334,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *distsqlpb.P
 			h.storedSide = side
 			if sqlbase.IsOutOfMemoryError(err) {
 				if !h.useTempStorage {
-					err = pgerror.Wrapf(err, pgerror.CodeOutOfMemoryError,
+					err = pgerror.Wrapf(err, pgcode.OutOfMemory,
 						"error while attempting hashJoiner disk spill: temp storage disabled")
 				} else {
 					if err := h.initStoredRows(); err != nil {
@@ -346,7 +345,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *distsqlpb.P
 					if addErr == nil {
 						return hjConsumingStoredSide, nil, nil
 					}
-					err = pgerror.Wrapf(addErr, pgerror.CodeOutOfMemoryError, "while spilling: %v", err)
+					err = pgerror.Wrapf(addErr, pgcode.OutOfMemory, "while spilling: %v", err)
 				}
 			}
 			h.MoveToDraining(err)

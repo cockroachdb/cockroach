@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package batcheval
 
@@ -21,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -33,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/logtags"
 	"github.com/pkg/errors"
 )
 
@@ -45,7 +42,7 @@ import (
 var TxnAutoGC = true
 
 func init() {
-	RegisterCommand(roachpb.EndTransaction, declareKeysEndTransaction, evalEndTransaction)
+	RegisterCommand(roachpb.EndTransaction, declareKeysEndTransaction, EndTransaction)
 }
 
 func declareKeysEndTransaction(
@@ -152,10 +149,10 @@ func declareKeysEndTransaction(
 	}
 }
 
-// evalEndTransaction either commits or aborts (rolls back) an extant
+// EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter. Rolling back
 // an already rolled-back txn is ok.
-func evalEndTransaction(
+func EndTransaction(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.EndTransactionRequest)
@@ -219,7 +216,7 @@ func evalEndTransaction(
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, batch, ms, args, reply.Txn, externalIntents,
+					ctx, batch, ms, key, args, reply.Txn, externalIntents,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -267,12 +264,8 @@ func evalEndTransaction(
 
 	// Attempt to commit or abort the transaction per the args.Commit parameter.
 	if args.Commit {
-		// If the transaction is still PENDING, determine whether the commit
-		// should be rejected.
-		if reply.Txn.Status == roachpb.PENDING {
-			if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, args); retry {
-				return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
-			}
+		if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, args); retry {
+			return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
 		}
 
 		// If the transaction needs to be staged as part of an implicit commit
@@ -290,7 +283,7 @@ func evalEndTransaction(
 
 			reply.Txn.Status = roachpb.STAGING
 			reply.StagingTimestamp = reply.Txn.Timestamp
-			if err := updateStagingTxn(ctx, batch, ms, args, reply.Txn); err != nil {
+			if err := updateStagingTxn(ctx, batch, ms, key, args, reply.Txn); err != nil {
 				return result.Result{}, err
 			}
 			return result.Result{}, nil
@@ -333,7 +326,7 @@ func evalEndTransaction(
 	if err != nil {
 		return result.Result{}, err
 	}
-	if err := updateFinalizedTxn(ctx, batch, ms, args, reply.Txn, externalIntents); err != nil {
+	if err := updateFinalizedTxn(ctx, batch, ms, key, args, reply.Txn, externalIntents); err != nil {
 		return result.Result{}, err
 	}
 
@@ -541,10 +534,10 @@ func updateStagingTxn(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
+	key []byte,
 	args *roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
 ) error {
-	key := keys.TransactionKey(txn.Key, txn.ID)
 	txn.IntentSpans = args.IntentSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
@@ -559,11 +552,11 @@ func updateFinalizedTxn(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
+	key []byte,
 	args *roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
 	externalIntents []roachpb.Span,
 ) error {
-	key := keys.TransactionKey(txn.Key, txn.ID)
 	if TxnAutoGC && len(externalIntents) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
@@ -831,20 +824,49 @@ func splitTrigger(
 			split.RightDesc.StartKey, split.RightDesc.EndKey, desc)
 	}
 
-	// Preserve stats for pre-split range, excluding the current batch.
-	origBothMS := rec.GetMVCCStats()
+	// Compute the absolute stats for the (post-split) LHS. No more
+	// modifications to it are allowed after this line.
 
-	// TODO(d4l3k): we should check which side of the split is smaller
-	// and compute stats for it instead of having a constraint that the
-	// left hand side is smaller.
-
-	// Compute (absolute) stats for LHS range. Don't write to the LHS below;
-	// this needs to happen before this step.
 	leftMS, err := rditer.ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to compute stats for LHS range after split")
 	}
 	log.Event(ctx, "computed stats for left hand side range")
+
+	h := splitStatsHelperInput{
+		AbsPreSplitBothEstimated: rec.GetMVCCStats(),
+		DeltaBatchEstimated:      bothDeltaMS,
+		AbsPostSplitLeft:         leftMS,
+		AbsPostSplitRightFn: func() (enginepb.MVCCStats, error) {
+			rightMS, err := rditer.ComputeStatsForRange(
+				&split.RightDesc, batch, ts.WallTime,
+			)
+			return rightMS, errors.Wrap(
+				err,
+				"unable to compute stats for RHS range after split",
+			)
+		},
+	}
+	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
+}
+
+// splitTriggerHelper continues the work begun by splitTrigger, but has a
+// reduced scope that has all stats-related concerns bundled into a
+// splitStatsHelper.
+func splitTriggerHelper(
+	ctx context.Context,
+	rec EvalContext,
+	batch engine.Batch,
+	statsInput splitStatsHelperInput,
+	split *roachpb.SplitTrigger,
+	ts hlc.Timestamp,
+) (enginepb.MVCCStats, result.Result, error) {
+	// TODO(d4l3k): we should check which side of the split is smaller
+	// and compute stats for it instead of having a constraint that the
+	// left hand side is smaller.
+
+	// NB: the replicated post-split left hand keyspace is frozen at this point.
+	// Only the RHS can be mutated (and we do so to seed its state).
 
 	// Copy the last replica GC timestamp. This value is unreplicated,
 	// which is why the MVCC stats are set to nil on calls to
@@ -857,45 +879,16 @@ func splitTrigger(
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
-	// Initialize the RHS range's AbortSpan by copying the LHS's.
-	if err := rec.AbortSpan().CopyTo(
-		ctx, batch, batch, &bothDeltaMS, ts, split.RightDesc.RangeID,
-	); err != nil {
+	h, err := makeSplitStatsHelper(statsInput)
+	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
-	// Compute (absolute) stats for RHS range.
-	var rightMS enginepb.MVCCStats
-	if origBothMS.ContainsEstimates || bothDeltaMS.ContainsEstimates {
-		// Because either the original stats or the delta stats contain
-		// estimate values, we cannot perform arithmetic to determine the
-		// new range's stats. Instead, we must recompute by iterating
-		// over the keys and counting.
-		rightMS, err = rditer.ComputeStatsForRange(&split.RightDesc, batch, ts.WallTime)
-		if err != nil {
-			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to compute stats for RHS range after split")
-		}
-	} else {
-		// Because neither the original stats nor the delta stats contain
-		// estimate values, we can safely perform arithmetic to determine the
-		// new range's stats. The calculation looks like:
-		//   rhs_ms = orig_both_ms - orig_left_ms + right_delta_ms
-		//          = orig_both_ms - left_ms + left_delta_ms + right_delta_ms
-		//          = orig_both_ms - left_ms + delta_ms
-		// where the following extra helper variables are used:
-		// - orig_left_ms: the left-hand side key range, before the split
-		// - (left|right)_delta_ms: the contributions to bothDeltaMS in this batch,
-		//   itemized by the side of the split.
-		//
-		// Note that the result of that computation never has ContainsEstimates
-		// set due to none of the inputs having it.
-
-		// Start with the full stats before the split.
-		rightMS = origBothMS
-		// Remove stats from the left side of the split, at the same time adding
-		// the batch contributions for the right-hand side.
-		rightMS.Subtract(leftMS)
-		rightMS.Add(bothDeltaMS)
+	// Initialize the RHS range's AbortSpan by copying the LHS's.
+	if err := rec.AbortSpan().CopyTo(
+		ctx, batch, batch, h.AbsPostSplitRight(), ts, split.RightDesc.RangeID,
+	); err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
 	// Note: we don't copy the queue last processed times. This means
@@ -909,8 +902,6 @@ func splitTrigger(
 	// initial state. Additionally, since bothDeltaMS is tracking writes to
 	// both sides, we need to update it as well.
 	{
-		preRightMS := rightMS // for bothDeltaMS
-
 		// Various pieces of code rely on a replica's lease never being unitialized,
 		// but it's more than that - it ensures that we properly initialize the
 		// timestamp cache, which is only populated on the lease holder, from that
@@ -1015,8 +1006,9 @@ func splitTrigger(
 		// HardState via a call to synthesizeRaftState. Here, we only call
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
-		rightMS, err = stateloader.WriteInitialReplicaState(
-			ctx, batch, rightMS, split.RightDesc,
+
+		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
+			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc,
 			rightLease, *gcThreshold, *txnSpanGCThreshold,
 			rec.ClusterSettings().Version.Version().Version,
 			truncStateType,
@@ -1024,44 +1016,27 @@ func splitTrigger(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
-
-		if !rec.ClusterSettings().Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
-			// Write an initial state upstream of Raft even though it might
-			// clobber downstream simply because that's what 1.0 does and if we
-			// don't write it here, then a 1.0 version applying it as a follower
-			// won't write a HardState at all and is guaranteed to crash.
-			rsl := stateloader.Make(split.RightDesc.RangeID)
-			if err := rsl.SynthesizeRaftState(ctx, batch); err != nil {
-				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to synthesize initial Raft state")
-			}
-		}
-
-		bothDeltaMS.Subtract(preRightMS)
-		bothDeltaMS.Add(rightMS)
 	}
 
-	// Compute how much data the left-hand side has shed by splitting.
-	// We've already recomputed that in absolute terms, so all we need to do is
-	// to turn it into a delta so the upstream machinery can digest it.
-	leftDeltaMS := leftMS // start with new left-hand side absolute stats
-	recStats := rec.GetMVCCStats()
-	leftDeltaMS.Subtract(recStats)        // subtract pre-split absolute stats
-	leftDeltaMS.ContainsEstimates = false // if there were any, recomputation removed them
-
-	// Perform a similar computation for the right hand side. The difference
-	// is that there isn't yet a Replica which could apply these stats, so
-	// they will go into the trigger to make the Store (which keeps running
-	// counters) aware.
-	rightDeltaMS := bothDeltaMS
-	rightDeltaMS.Subtract(leftDeltaMS)
 	var pd result.Result
 	// This makes sure that no reads are happening in parallel; see #3148.
 	pd.Replicated.BlockReads = true
 	pd.Replicated.Split = &storagepb.Split{
 		SplitTrigger: *split,
-		RHSDelta:     rightDeltaMS,
+		// NB: the RHSDelta is identical to the stats for the newly created right
+		// hand side range (i.e. it goes from zero to its stats).
+		RHSDelta: *h.AbsPostSplitRight(),
 	}
-	return leftDeltaMS, pd, nil
+
+	// HACK(tbg): ContainsEstimates isn't an additive group (there isn't a
+	// -true), and instead of "-true" we'll emit a "true". This will all be
+	// fixed when #37583 lands (and the version is active). For now hard-code
+	// false and there's also code below Raft that interprets this (coming from
+	// a split) as a signal to reset the ContainsEstimates field to false (see
+	// applyRaftCommand).
+	deltaPostSplitLeft := h.DeltaPostSplitLeft()
+	deltaPostSplitLeft.ContainsEstimates = false
+	return deltaPostSplitLeft, pd, nil
 }
 
 // mergeTrigger is called on a successful commit of an AdminMerge transaction.

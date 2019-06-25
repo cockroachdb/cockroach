@@ -1,18 +1,17 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlpb
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -93,18 +92,18 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			return err
 		}
 		if dStartOffset == tree.DNull {
-			return pgerror.Newf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
+			return pgerror.Newf(pgcode.NullValueNotAllowed, "frame starting offset must not be null")
 		}
 		switch m {
 		case tree.ROWS:
 			startOffset := int64(tree.MustBeDInt(dStartOffset))
 			if startOffset < 0 {
-				return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
+				return pgerror.Newf(pgcode.InvalidWindowFrameOffset, "frame starting offset must not be negative")
 			}
 			spec.Start.IntOffset = uint64(startOffset)
 		case tree.RANGE:
 			if isNegative(evalCtx, dStartOffset) {
-				return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+				return pgerror.Newf(pgcode.InvalidWindowFrameOffset, "invalid preceding or following size in window function")
 			}
 			typ := dStartOffset.ResolvedType()
 			spec.Start.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: *typ}
@@ -119,7 +118,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 		case tree.GROUPS:
 			startOffset := int64(tree.MustBeDInt(dStartOffset))
 			if startOffset < 0 {
-				return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
+				return pgerror.Newf(pgcode.InvalidWindowFrameOffset, "frame starting offset must not be negative")
 			}
 			spec.Start.IntOffset = uint64(startOffset)
 		}
@@ -135,18 +134,18 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				return err
 			}
 			if dEndOffset == tree.DNull {
-				return pgerror.Newf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
+				return pgerror.Newf(pgcode.NullValueNotAllowed, "frame ending offset must not be null")
 			}
 			switch m {
 			case tree.ROWS:
 				endOffset := int64(tree.MustBeDInt(dEndOffset))
 				if endOffset < 0 {
-					return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
+					return pgerror.Newf(pgcode.InvalidWindowFrameOffset, "frame ending offset must not be negative")
 				}
 				spec.End.IntOffset = uint64(endOffset)
 			case tree.RANGE:
 				if isNegative(evalCtx, dEndOffset) {
-					return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+					return pgerror.Newf(pgcode.InvalidWindowFrameOffset, "invalid preceding or following size in window function")
 				}
 				typ := dEndOffset.ResolvedType()
 				spec.End.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: *typ}
@@ -161,7 +160,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			case tree.GROUPS:
 				endOffset := int64(tree.MustBeDInt(dEndOffset))
 				if endOffset < 0 {
-					return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
+					return pgerror.Newf(pgcode.InvalidWindowFrameOffset, "frame ending offset must not be negative")
 				}
 				spec.End.IntOffset = uint64(endOffset)
 			}

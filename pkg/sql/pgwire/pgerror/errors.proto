@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto3";
 package cockroach.pgerror;
@@ -38,6 +36,18 @@ message Error {
 
   // a telemetry key, used as telemetry counter name.
   // Typically of the form [<prefix>.]#issuenum[.details]
+  //
+  // Note: this field is obsolete. It is preserved for compatibility
+  // with nodes running 19.1:
+  //
+  // - when an error with this field populated is received on a
+  //   post-19.1 node, the field is replaced by uses of
+  //   errors.WithTelemetryKey. This data is then subsequently used for
+  //   troubleshooting reports and telemetry.
+  // - Conversely, errors sent towards a 19.1 node will get this field
+  //   populated with the first key found in errors.GetTelemetryKeys().
+  //
+  // TODO(knz): Remove in 19.3.
   string telemetry_key = 6;
 
   message SafeDetail {
@@ -47,5 +57,17 @@ message Error {
 
   // complement to the detail field that can be reported
   // in sentry reports. This is scrubbed of PII.
+  //
+  // Note: this field is obsolete. It is preserved for compatibility
+  // with nodes running 19.1:
+  //
+  // - when an error with this field populated is received on a
+  //   post-19.1 node, the field is replaced by uses of
+  //   errors.WithSafeDetail. This data is then subsequently used for
+  //   troubleshooting reports.
+  // - Conversely, errors sent towards a 19.1 node will get this field
+  //   populated with the data from errors.GetSafeDetails().
+  //
+  // TODO(knz): Remove in 19.3.
   repeated SafeDetail safe_detail = 7;
 };

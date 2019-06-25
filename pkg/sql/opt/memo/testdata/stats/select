@@ -1,21 +1,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x INT, z INT NOT NULL)
 ----
-TABLE b
- ├── x int
- ├── z int not null
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
@@ -70,7 +59,7 @@ norm
 SELECT * FROM a WHERE false
 ----
 values
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -181,16 +170,6 @@ project
 exec-ddl
 CREATE TABLE idx (x INT PRIMARY KEY, y INT, z INT, INDEX yz (y DESC, z))
 ----
-TABLE idx
- ├── x int not null
- ├── y int
- ├── z int
- ├── INDEX primary
- │    └── x int not null
- └── INDEX yz
-      ├── y int desc
-      ├── z int
-      └── x int not null
 
 opt
 SELECT y FROM idx WHERE y < 5 AND z < 10
@@ -212,16 +191,6 @@ project
 exec-ddl
 CREATE TABLE tab0(pk INTEGER PRIMARY KEY, col0 INTEGER, col1 FLOAT, col2 TEXT, col3 INTEGER, col4 FLOAT, col5 TEXT)
 ----
-TABLE tab0
- ├── pk int not null
- ├── col0 int
- ├── col1 float
- ├── col2 string
- ├── col3 int
- ├── col4 float
- ├── col5 string
- └── INDEX primary
-      └── pk int not null
 
 # Note: it's not clear that this still tests the above issue, but I have left
 # it here anyway as an interesting test case. I've added another query below
@@ -234,7 +203,7 @@ SELECT pk FROM tab0 WHERE
   (col0 = 1 OR col0 IN (SELECT col3 FROM tab0))
 ----
 values
- ├── columns: pk:1(int)
+ ├── columns: pk:1(int!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── key: ()
@@ -263,11 +232,11 @@ SELECT count(*) FROM (SELECT * FROM tab0 WHERE col3 = 10) GROUP BY col0
 ----
 project
  ├── columns: count:8(int)
- ├── stats: [rows=1.99997344]
+ ├── stats: [rows=0.999973439]
  └── group-by
       ├── columns: col0:2(int) count_rows:8(int)
       ├── grouping columns: col0:2(int)
-      ├── stats: [rows=1.99997344, distinct(2)=0.999973439, null(2)=1.99997344]
+      ├── stats: [rows=0.999973439, distinct(2)=0.999973439, null(2)=0.999973439]
       ├── key: (2)
       ├── fd: (2)-->(8)
       ├── select
@@ -286,35 +255,14 @@ project
 exec-ddl
 CREATE TABLE customers (id INT PRIMARY KEY, name STRING, state STRING)
 ----
-TABLE customers
- ├── id int not null
- ├── name string
- ├── state string
- └── INDEX primary
-      └── id int not null
 
 exec-ddl
 CREATE TABLE order_history (order_id INT, item_id INT, customer_id INT, year INT)
 ----
-TABLE order_history
- ├── order_id int
- ├── item_id int
- ├── customer_id int
- ├── year int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE district (d_id INT, d_w_id INT, d_name STRING, PRIMARY KEY(d_id, d_w_id))
 ----
-TABLE district
- ├── d_id int not null
- ├── d_w_id int not null
- ├── d_name string
- └── INDEX primary
-      ├── d_id int not null
-      └── d_w_id int not null
 
 exec-ddl
 ALTER TABLE district INJECT STATISTICS '[
@@ -599,15 +547,6 @@ select
 exec-ddl
 CREATE TABLE c (x INT, z INT NOT NULL, UNIQUE INDEX x_idx (x))
 ----
-TABLE c
- ├── x int
- ├── z int not null
- ├── rowid int not null (hidden)
- ├── INDEX primary
- │    └── rowid int not null (hidden)
- └── INDEX x_idx
-      ├── x int
-      └── rowid int not null (hidden) (storing)
 
 # Test that the distinct and null counts for x are estimated correctly (since it's a weak
 # key).
@@ -616,12 +555,12 @@ SELECT * FROM c WHERE x >= 0 AND x < 100
 ----
 select
  ├── columns: x:1(int!null) z:2(int!null)
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=65.5215193, null(2)=0]
+ ├── stats: [rows=99.8990918, distinct(1)=99.8990918, null(1)=0, distinct(2)=65.4824076, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan c
  │    ├── columns: x:1(int) z:2(int!null)
- │    ├── stats: [rows=1000, distinct(1)=990, null(1)=10, distinct(2)=100, null(2)=0]
+ │    ├── stats: [rows=1000, distinct(1)=991, null(1)=10, distinct(2)=100, null(2)=0]
  │    ├── lax-key: (1,2)
  │    └── fd: (1)~~>(2)
  └── filters
@@ -630,13 +569,6 @@ select
 exec-ddl
 CREATE TABLE uvw (u INT, v INT, w INT)
 ----
-TABLE uvw
- ├── u int
- ├── v int
- ├── w int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Test selectivity calculations by applying the two constraints in different
 # orders.
@@ -722,62 +654,8 @@ CREATE TABLE lineitem
     INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC)
 );
 ----
-TABLE lineitem
- ├── l_orderkey int not null
- ├── l_partkey int not null
- ├── l_suppkey int not null
- ├── l_linenumber int not null
- ├── l_quantity float not null
- ├── l_extendedprice float not null
- ├── l_discount float not null
- ├── l_tax float not null
- ├── l_returnflag char not null
- ├── l_linestatus char not null
- ├── l_shipdate date not null
- ├── l_commitdate date not null
- ├── l_receiptdate date not null
- ├── l_shipinstruct char not null
- ├── l_shipmode char not null
- ├── l_comment varchar not null
- ├── INDEX primary
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_ok
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_pk
- │    ├── l_partkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_sk
- │    ├── l_suppkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_sd
- │    ├── l_shipdate date not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_cd
- │    ├── l_commitdate date not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_rd
- │    ├── l_receiptdate date not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- ├── INDEX l_pk_sk
- │    ├── l_partkey int not null
- │    ├── l_suppkey int not null
- │    ├── l_orderkey int not null
- │    └── l_linenumber int not null
- └── INDEX l_sk_pk
-      ├── l_suppkey int not null
-      ├── l_partkey int not null
-      ├── l_orderkey int not null
-      └── l_linenumber int not null
 
-# Regression test for #30226. The following two queries should have the same
-# estimate for number of rows.
+# We can determine that there are exactly 30 days for this range.
 opt
 SELECT *
 FROM lineitem
@@ -785,18 +663,21 @@ WHERE
     l_shipdate >= DATE '1995-09-01'
     AND l_shipdate < DATE '1995-10-01';
 ----
-index-join lineitem
+select
  ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
- ├── stats: [rows=111.111111, distinct(1)=69.2053852, null(1)=0, distinct(2)=69.2053852, null(2)=0, distinct(3)=69.2053852, null(3)=0, distinct(4)=69.2053852, null(4)=0, distinct(5)=69.2053852, null(5)=0, distinct(6)=69.2053852, null(6)=0, distinct(7)=69.2053852, null(7)=0, distinct(8)=69.2053852, null(8)=0, distinct(9)=69.2053852, null(9)=0, distinct(10)=69.2053852, null(10)=0, distinct(11)=69.2053852, null(11)=0, distinct(12)=69.2053852, null(12)=0, distinct(13)=69.2053852, null(13)=0, distinct(14)=69.2053852, null(14)=0, distinct(15)=69.2053852, null(15)=0, distinct(16)=69.2053852, null(16)=0]
+ ├── stats: [rows=300, distinct(1)=97.1752475, null(1)=0, distinct(2)=97.1752475, null(2)=0, distinct(3)=97.1752475, null(3)=0, distinct(4)=97.1752475, null(4)=0, distinct(5)=97.1752475, null(5)=0, distinct(6)=97.1752475, null(6)=0, distinct(7)=97.1752475, null(7)=0, distinct(8)=97.1752475, null(8)=0, distinct(9)=97.1752475, null(9)=0, distinct(10)=97.1752475, null(10)=0, distinct(11)=30, null(11)=0, distinct(12)=97.1752475, null(12)=0, distinct(13)=97.1752475, null(13)=0, distinct(14)=97.1752475, null(14)=0, distinct(15)=97.1752475, null(15)=0, distinct(16)=97.1752475, null(16)=0]
  ├── key: (1,4)
  ├── fd: (1,4)-->(2,3,5-16)
- └── scan lineitem@l_sd
-      ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
-      ├── constraint: /11/1/4: [/'1995-09-01' - /'1995-09-30']
-      ├── stats: [rows=111.111111, distinct(1)=69.2053852, null(1)=0, distinct(4)=69.2053852, null(4)=0, distinct(11)=69.2053852, null(11)=0]
-      ├── key: (1,4)
-      └── fd: (1,4)-->(11)
+ ├── scan lineitem
+ │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=100, null(7)=0, distinct(8)=100, null(8)=0, distinct(9)=100, null(9)=0, distinct(10)=100, null(10)=0, distinct(11)=100, null(11)=0, distinct(12)=100, null(12)=0, distinct(13)=100, null(13)=0, distinct(14)=100, null(14)=0, distinct(15)=100, null(15)=0, distinct(16)=100, null(16)=0]
+ │    ├── key: (1,4)
+ │    └── fd: (1,4)-->(2,3,5-16)
+ └── filters
+      └── (l_shipdate >= '1995-09-01') AND (l_shipdate < '1995-10-01') [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-30']; tight)]
 
+# We cannot determine the number of distinct values exactly since the upper
+# bound of the date range is compared to a timestamp rather than a date.
 opt
 SELECT *
 FROM lineitem
@@ -881,7 +762,7 @@ WHERE
 inner-join (lookup lineitem)
  ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null) l_quantity:5(float!null)
  ├── key columns: [1 4] = [1 4]
- ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(5)=0.099955012, null(5)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.00951671064, null(11,12)=0]
+ ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(5)=0.099955012, null(5)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.1, null(11,12)=0]
  ├── key: (1,4)
  ├── fd: ()-->(11,12), (1,4)-->(5)
  ├── inner-join (zigzag lineitem@l_sd lineitem@l_cd)
@@ -889,7 +770,7 @@ inner-join (lookup lineitem)
  │    ├── eq columns: [1 4] = [1 4]
  │    ├── left fixed columns: [11] = ['1995-09-01']
  │    ├── right fixed columns: [12] = ['1995-08-01']
- │    ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.1, null(11,12)=0]
+ │    ├── stats: [rows=0.1, distinct(1)=0.099955012, null(1)=0, distinct(4)=0.099955012, null(4)=0, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0]
  │    ├── fd: ()-->(11,12)
  │    └── filters
  │         ├── l_shipdate = '1995-09-01' [type=bool, outer=(11), constraints=(/11: [/'1995-09-01' - /'1995-09-01']; tight), fd=()-->(11)]
@@ -922,15 +803,6 @@ select
 exec-ddl
 CREATE TABLE tjson (a INT PRIMARY KEY, b JSON, c JSON, INVERTED INDEX b_idx (b))
 ----
-TABLE tjson
- ├── a int not null
- ├── b jsonb
- ├── c jsonb
- ├── INDEX primary
- │    └── a int not null
- └── INVERTED INDEX b_idx
-      ├── b jsonb
-      └── a int not null
 
 exec-ddl
 ALTER TABLE tjson INJECT STATISTICS '[
@@ -1282,12 +1154,6 @@ select
 exec-ddl
 CREATE TABLE nulls (x INT, y INT);
 ----
-TABLE nulls
- ├── x int
- ├── y int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 ALTER TABLE nulls INJECT STATISTICS '[
@@ -1380,25 +1246,25 @@ HAVING
 project
  ├── columns: "?column?":5(int!null)
  ├── cardinality: [0 - 2]
- ├── stats: [rows=1]
+ ├── stats: [rows=0.5]
  ├── fd: ()-->(5)
  ├── select
  │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool!null)
  │    ├── cardinality: [0 - 2]
- │    ├── stats: [rows=1, distinct(4)=1, null(4)=0]
+ │    ├── stats: [rows=0.5, distinct(4)=0.5, null(4)=0]
  │    ├── key: (2,3)
  │    ├── fd: ()-->(4)
  │    ├── group-by
  │    │    ├── columns: column2:2(string) column3:3(varbit) min:4(bool)
  │    │    ├── grouping columns: column2:2(string) column3:3(varbit)
  │    │    ├── cardinality: [1 - 2]
- │    │    ├── stats: [rows=1, distinct(4)=0, null(4)=1, distinct(2,3)=0, null(2,3)=1]
+ │    │    ├── stats: [rows=2, distinct(4)=2, null(4)=2, distinct(2,3)=2, null(2,3)=2]
  │    │    ├── key: (2,3)
  │    │    ├── fd: (2,3)-->(4)
  │    │    ├── values
- │    │    │    ├── columns: column1:1(bool) column2:2(string) column3:3(varbit)
+ │    │    │    ├── columns: column1:1(bool!null) column2:2(string) column3:3(varbit)
  │    │    │    ├── cardinality: [2 - 2]
- │    │    │    ├── stats: [rows=2, distinct(2,3)=0, null(2,3)=2]
+ │    │    │    ├── stats: [rows=2, distinct(2,3)=2, null(2,3)=2]
  │    │    │    ├── (true, NULL, B'001000101101110') [type=tuple{bool, string, varbit}]
  │    │    │    └── (true, e'19\x1e', NULL) [type=tuple{bool, string, varbit}]
  │    │    └── aggregations
@@ -1408,3 +1274,71 @@ project
  │         └── variable: min [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
  └── projections
       └── const: 1 [type=int]
+
+# Test that distinct count estimates are correct for date ranges.
+exec-ddl
+CREATE TABLE date_test (
+    k INT PRIMARY KEY,
+    d1 date NOT NULL,
+    d2 date NOT NULL,
+    d3 date NOT NULL,
+    INDEX d1_idx (d1 ASC),
+    INDEX d2_idx (d2 DESC)
+)
+----
+
+opt
+SELECT d1 FROM date_test WHERE d1 > DATE '1995-10-01' AND d1 < DATE '1995-11-01'
+----
+scan date_test@d1_idx
+ ├── columns: d1:2(date!null)
+ ├── constraint: /2/1: [/'1995-10-02' - /'1995-10-31']
+ └── stats: [rows=300, distinct(2)=30, null(2)=0]
+
+opt
+SELECT d1 FROM date_test WHERE d1 >= DATE '1995-10-01' AND d1 <= DATE '1995-11-01'
+----
+scan date_test@d1_idx
+ ├── columns: d1:2(date!null)
+ ├── constraint: /2/1: [/'1995-10-01' - /'1995-11-01']
+ └── stats: [rows=320, distinct(2)=32, null(2)=0]
+
+opt
+SELECT d2 FROM date_test WHERE d2 > DATE '1903-10-01' AND d2 <= DATE '1903-11-01'
+----
+scan date_test@d2_idx
+ ├── columns: d2:3(date!null)
+ ├── constraint: /-3/1: [/'1903-11-01' - /'1903-10-02']
+ └── stats: [rows=310, distinct(3)=31, null(3)=0]
+
+opt
+SELECT d2 FROM date_test WHERE d2 >= DATE '2003-10-01' AND d2 < DATE '2003-11-01'
+----
+scan date_test@d2_idx
+ ├── columns: d2:3(date!null)
+ ├── constraint: /-3/1: [/'2003-10-31' - /'2003-10-01']
+ └── stats: [rows=310, distinct(3)=31, null(3)=0]
+
+opt
+SELECT d3 FROM date_test WHERE d3 >= DATE '2003-10-01' AND d3 < DATE '2003-11-01'
+----
+select
+ ├── columns: d3:4(date!null)
+ ├── stats: [rows=310, distinct(4)=31, null(4)=0]
+ ├── scan date_test
+ │    ├── columns: d3:4(date!null)
+ │    └── stats: [rows=1000, distinct(4)=100, null(4)=0]
+ └── filters
+      └── (d3 >= '2003-10-01') AND (d3 < '2003-11-01') [type=bool, outer=(4), constraints=(/4: [/'2003-10-01' - /'2003-10-31']; tight)]
+
+opt
+SELECT d3 FROM date_test WHERE d3 >= DATE '1903-10-01' AND d3 < DATE '2003-10-01'
+----
+select
+ ├── columns: d3:4(date!null)
+ ├── stats: [rows=1000, distinct(4)=100, null(4)=0]
+ ├── scan date_test
+ │    ├── columns: d3:4(date!null)
+ │    └── stats: [rows=1000, distinct(4)=100, null(4)=0]
+ └── filters
+      └── (d3 >= '1903-10-01') AND (d3 < '2003-10-01') [type=bool, outer=(4), constraints=(/4: [/'1903-10-01' - /'2003-09-30']; tight)]

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package pgwire
 
@@ -30,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -175,7 +174,7 @@ func TestConn(t *testing.T) {
 	expectSync(ctx, t, &rd)
 
 	// Test that parse error turns into SendError.
-	expectSendError(ctx, t, pgerror.CodeSyntaxError, &rd, conn)
+	expectSendError(ctx, t, pgcode.Syntax, &rd, conn)
 
 	clientWG.Done()
 
@@ -547,12 +546,8 @@ func expectSendError(
 		t.Fatalf("%s: expected command SendError, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
 	}
 
-	pg, ok := se.Err.(*pgerror.Error)
-	if !ok {
-		t.Fatalf("expected pgerror, got %T (%s)", se.Err, se.Err)
-	}
-	if pg.Code != pgErrCode {
-		t.Fatalf("expected code %s, got: %s", pgErrCode, pg.Code)
+	if code := pgerror.GetPGCode(se.Err); code != pgErrCode {
+		t.Fatalf("expected code %s, got: %s", pgErrCode, code)
 	}
 
 	if err := finishQuery(execPortal, c); err != nil {

@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package ipaddr
 
@@ -22,11 +20,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
-var errResultOutOfRange = errors.New("result out of range")
+var errResultOutOfRange = pgerror.WithCandidateCode(errors.New("result out of range"), pgcode.NumericValueOutOfRange)
 
 // Addr is the representation of the IP address. The Uint128 takes 16-bytes for
 // both IPv4 and IPv6.
@@ -94,9 +94,8 @@ func (ipAddr *IPAddr) ToBuffer(appendTo []byte) []byte {
 func (ipAddr *IPAddr) FromBuffer(data []byte) ([]byte, error) {
 	ipAddr.Family = IPFamily(data[0])
 	if ipAddr.Family != IPv4family && ipAddr.Family != IPv6family {
-		// TODO(knz): this wants to become an assertion failure.
-		return nil, errors.Errorf(
-			"IPAddr decoding error: unexpected family, got %d", ipAddr.Family)
+		return nil, errors.AssertionFailedf(
+			"IPAddr decoding error: unexpected family, got %d", errors.Safe(ipAddr.Family))
 	}
 	ipAddr.Mask = data[1]
 
@@ -190,10 +189,9 @@ func ParseINet(s string, dest *IPAddr) error {
 		}
 		ip := net.ParseIP(addr)
 		if ip == nil {
-			// TODO(knz): SQL clients will want to receive pg code
-			// pgerror.CodeInvalidTextRepresentationError. Needs to wait for
-			// followups on #36987 until this can be achieved.
-			return errors.Errorf("could not parse %q as inet. invalid IP", s)
+			return pgerror.WithCandidateCode(
+				errors.Errorf("could not parse %q as inet. invalid IP", s),
+				pgcode.InvalidTextRepresentation)
 		}
 
 		*dest = IPAddr{Family: family,
@@ -210,25 +208,22 @@ func ParseINet(s string, dest *IPAddr) error {
 	}
 	maskOnes, err := strconv.Atoi(maskStr)
 	if err != nil {
-		// TODO(knz): SQL clients will want to receive pg code
-		// pgerror.CodeInvalidTextRepresentationError. Needs to wait for
-		// followups on #36987 until this can be achieved.
-		return errors.Errorf("could not parse %q as inet. invalid mask", s)
+		return pgerror.WithCandidateCode(
+			errors.Errorf("could not parse %q as inet. invalid mask", s),
+			pgcode.InvalidTextRepresentation)
 	} else if maskOnes < 0 || (family == IPv4family && maskOnes > 32) || (family == IPv6family && maskOnes > 128) {
-		// TODO(knz): SQL clients will want to receive pg code
-		// pgerror.CodeInvalidTextRepresentationError. Needs to wait for
-		// followups on #36987 until this can be achieved.
-		return errors.Errorf("could not parse %q as inet. invalid mask", s)
+		return pgerror.WithCandidateCode(
+			errors.Errorf("could not parse %q as inet. invalid mask", s),
+			pgcode.InvalidTextRepresentation)
 	}
 
 	if family == IPv4family {
 		// If the mask is outside the defined octets, postgres will raise an error.
 		octetCount := strings.Count(addr, ".") + 1
 		if (octetCount+1)*8-1 < maskOnes {
-			// TODO(knz): SQL clients will want to receive pg code
-			// pgerror.CodeInvalidTextRepresentationError. Needs to wait for
-			// followups on #36987 until this can be achieved.
-			return errors.Errorf("could not parse %q as inet. mask is larger than provided octets", s)
+			return pgerror.WithCandidateCode(
+				errors.Errorf("could not parse %q as inet. mask is larger than provided octets", s),
+				pgcode.InvalidTextRepresentation)
 		}
 
 		// Append extra ".0" to ensure there are a total of 4 octets.
@@ -243,10 +238,9 @@ func ParseINet(s string, dest *IPAddr) error {
 
 	ip := net.ParseIP(addr)
 	if ip == nil {
-		// TODO(knz): SQL clients will want to receive pg code
-		// pgerror.CodeInvalidTextRepresentationError. Needs to wait for
-		// followups on #36987 until this can be achieved.
-		return errors.Errorf("could not parse %q as inet. invalid IP", s)
+		return pgerror.WithCandidateCode(
+			errors.Errorf("could not parse %q as inet. invalid IP", s),
+			pgcode.InvalidTextRepresentation)
 	}
 
 	*dest = IPAddr{Family: family,
@@ -374,10 +368,9 @@ func (ipAddr *IPAddr) Complement() IPAddr {
 func (ipAddr *IPAddr) And(other *IPAddr) (IPAddr, error) {
 	var newIPAddr IPAddr
 	if ipAddr.Family != other.Family {
-		// TODO(knz): SQL clients will want to receive pg code
-		// pgerror.CodeInvalidParameterValueError. Needs to wait for
-		// followups on #36987 until this can be achieved.
-		return newIPAddr, errors.New("cannot AND inet values of different sizes")
+		return newIPAddr, pgerror.WithCandidateCode(
+			errors.New("cannot AND inet values of different sizes"),
+			pgcode.InvalidParameterValue)
 	}
 	newIPAddr.Family = ipAddr.Family
 
@@ -397,10 +390,9 @@ func (ipAddr *IPAddr) And(other *IPAddr) (IPAddr, error) {
 func (ipAddr *IPAddr) Or(other *IPAddr) (IPAddr, error) {
 	var newIPAddr IPAddr
 	if ipAddr.Family != other.Family {
-		// TODO(knz): SQL clients will want to receive pg code
-		// pgerror.CodeInvalidParameterValueError. Needs to wait for
-		// followups on #36987 until this can be achieved.
-		return newIPAddr, errors.New("cannot OR inet values of different sizes")
+		return newIPAddr, pgerror.WithCandidateCode(
+			errors.New("cannot OR inet values of different sizes"),
+			pgcode.InvalidParameterValue)
 	}
 	newIPAddr.Family = ipAddr.Family
 
@@ -469,10 +461,9 @@ func (ipAddr *IPAddr) Sub(o int64) (IPAddr, error) {
 func (ipAddr *IPAddr) SubIPAddr(other *IPAddr) (int64, error) {
 	var diff int64
 	if ipAddr.Family != other.Family {
-		// TODO(knz): SQL clients will want to receive pg code
-		// pgerror.CodeInvalidParameterValueError. Needs to wait for
-		// followups on #36987 until this can be achieved.
-		return diff, errors.New("cannot subtract inet addresses with different sizes")
+		return diff, pgerror.WithCandidateCode(
+			errors.New("cannot subtract inet addresses with different sizes"),
+			pgcode.InvalidParameterValue)
 	}
 
 	if ipAddr.Family == IPv4family {
@@ -532,8 +523,7 @@ func (ip Addr) WriteIPv4Bytes(writer io.Writer) error {
 func (ip Addr) WriteIPv6Bytes(writer io.Writer) error {
 	err := binary.Write(writer, binary.BigEndian, ip.Hi)
 	if err != nil {
-		// TODO(knz): This wants to become an assertion failure.
-		return errors.Errorf("unable to write to buffer: %v", err)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "unable to write to buffer")
 	}
 	return binary.Write(writer, binary.BigEndian, ip.Lo)
 }

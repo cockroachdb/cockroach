@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tracing
 
@@ -27,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/trace"
@@ -376,6 +374,7 @@ func (t *Tracer) StartRootSpan(
 		tracer:    t,
 		operation: opName,
 		startTime: time.Now(),
+		startTags: logTags,
 	}
 	s.mu.duration = -1
 
@@ -387,15 +386,16 @@ func (t *Tracer) StartRootSpan(
 	}
 
 	if t.useNetTrace() {
+		var tags []logtags.Tag
+		if logTags != nil {
+			tags = logTags.Get()
+		}
+
 		s.netTr = trace.New("tracing", opName)
 		s.netTr.SetMaxEvents(maxLogsPerSpan)
-	}
-
-	if logTags != nil {
-		for _, t := range logTags.Get() {
-			s.setTagInner(
-				tagName(t.Key()), t.ValueStr(),
-				true /* locked - we're lying but we're just creating the span */)
+		for i := range tags {
+			tag := &tags[i]
+			s.netTr.LazyPrintf("%s:%v", tag.Key(), tag.Value())
 		}
 	}
 
@@ -430,6 +430,7 @@ func StartChildSpan(
 		operation:    opName,
 		startTime:    time.Now(),
 		parentSpanID: pSpan.SpanID,
+		startTags:    logTags,
 	}
 
 	// Copy baggage from parent.
@@ -460,17 +461,19 @@ func StartChildSpan(
 	if pSpan.netTr != nil {
 		s.netTr = trace.New("tracing", opName)
 		s.netTr.SetMaxEvents(maxLogsPerSpan)
+		if startTags := s.startTags; startTags != nil {
+			tags := startTags.Get()
+			for i := range tags {
+				tag := &tags[i]
+				s.netTr.LazyPrintf("%s:%v", tag.Key(), tag.Value())
+			}
+		}
 	}
 
 	if pSpan.netTr != nil || pSpan.shadowTr != nil {
 		// Copy baggage items to tags so they show up in the shadow tracer UI or x/net/trace.
 		for k, v := range s.mu.Baggage {
 			s.SetTag(k, v)
-		}
-	}
-	if logTags != nil {
-		for _, t := range logTags.Get() {
-			s.SetTag(tagName(t.Key()), t.ValueStr())
 		}
 	}
 

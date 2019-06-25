@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package row
 
@@ -22,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // debugRowFetch can be used to turn on some low-level debugging logs. We use
@@ -251,7 +248,7 @@ func (rf *Fetcher) Init(
 	tables ...FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
-		return pgerror.AssertionFailedf("no tables to fetch from")
+		return errors.AssertionFailedf("no tables to fetch from")
 	}
 
 	rf.reverse = reverse
@@ -357,7 +354,7 @@ func (rf *Fetcher) Init(
 			} else {
 				table.indexColIdx[i] = -1
 				if table.neededCols.Contains(int(id)) {
-					return pgerror.AssertionFailedf("needed column %d not in colIdxMap", id)
+					return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
 				}
 			}
 		}
@@ -446,7 +443,7 @@ func (rf *Fetcher) StartScan(
 	traceKV bool,
 ) error {
 	if len(spans) == 0 {
-		return pgerror.AssertionFailedf("no spans")
+		return errors.AssertionFailedf("no spans")
 	}
 
 	rf.traceKV = traceKV
@@ -479,7 +476,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	traceKV bool,
 ) error {
 	if len(spans) == 0 {
-		return pgerror.AssertionFailedf("no spans")
+		return errors.AssertionFailedf("no spans")
 	}
 
 	txnTimestamp := initialTimestamp
@@ -1231,7 +1228,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 		familyID := table.desc.Families[i].ID
 		familySortedColumnIDs, ok := rh.sortedColumnFamily(familyID)
 		if !ok {
-			return pgerror.AssertionFailedf("invalid family sorted column id map for family %d", familyID)
+			return errors.AssertionFailedf("invalid family sorted column id map for family %d", familyID)
 		}
 
 		for _, colID := range familySortedColumnIDs {
@@ -1242,25 +1239,25 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 			}
 
 			if skip, err := rh.skipColumnInPK(colID, familyID, rowVal.Datum); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err, "unable to determine skip")
+				return errors.NewAssertionErrorWithWrappedErrf(err, "unable to determine skip")
 			} else if skip {
 				continue
 			}
 
 			col := colIDToColumn[colID]
 			if col == nil {
-				return pgerror.AssertionFailedf("column mapping not found for column %d", colID)
+				return errors.AssertionFailedf("column mapping not found for column %d", colID)
 			}
 
 			if lastColID > col.ID {
-				return pgerror.AssertionFailedf("cannot write column id %d after %d", col.ID, lastColID)
+				return errors.AssertionFailedf("cannot write column id %d after %d", col.ID, lastColID)
 			}
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID
 
 			if result, err := sqlbase.EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
 				scratch); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err, "could not re-encode column %s, value was %#v",
+				return errors.NewAssertionErrorWithWrappedErrf(err, "could not re-encode column %s, value was %#v",
 					col.Name, rowVal.Datum)
 			} else if !rowVal.BytesEqual(result) {
 				return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
@@ -1367,7 +1364,7 @@ func (rf *Fetcher) finalizeRow() error {
 						indexColValues = append(indexColValues, "?")
 					}
 				}
-				err := pgerror.AssertionFailedf(
+				err := errors.AssertionFailedf(
 					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 					table.desc.Name, table.cols[i].Name, table.index.Name,
 					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ","))

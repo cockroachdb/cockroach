@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sqlbase
 
@@ -17,6 +15,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -209,7 +208,7 @@ func (r *ColumnResolver) findColHelper(
 		// column expression from an UPDATE/DELETE.
 		if backfillThreshold := len(src.SourceColumns) - src.NumBackfillColumns; idx >= backfillThreshold && !r.ResolverState.ForUpdateOrDelete {
 			return invalidSrcIdx, invalidColIdx,
-				pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
+				pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is being backfilled", tree.ErrString(src.NodeFormatter(idx)))
 		}
 		if colIdx != invalidColIdx {
@@ -233,7 +232,7 @@ func (r *ColumnResolver) findColHelper(
 					sep = ", "
 				}
 			}
-			return invalidSrcIdx, invalidColIdx, pgerror.Newf(pgerror.CodeAmbiguousColumnError,
+			return invalidSrcIdx, invalidColIdx, pgerror.Newf(pgcode.AmbiguousColumn,
 				"column reference %q is ambiguous (candidates: %s)", colString, msgBuf.String())
 		}
 		srcIdx = iSrc
@@ -244,11 +243,11 @@ func (r *ColumnResolver) findColHelper(
 
 func newAmbiguousSourceError(tn *tree.TableName) error {
 	if tn.Catalog() == "" {
-		return pgerror.Newf(pgerror.CodeAmbiguousAliasError,
+		return pgerror.Newf(pgcode.AmbiguousAlias,
 			"ambiguous source name: %q", tree.ErrString(tn))
 
 	}
-	return pgerror.Newf(pgerror.CodeAmbiguousAliasError,
+	return pgerror.Newf(pgcode.AmbiguousAlias,
 		"ambiguous source name: %q (within database %q)",
 		tree.ErrString(&tn.TableName), tree.ErrString(&tn.CatalogName))
 }

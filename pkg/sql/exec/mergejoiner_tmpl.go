@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // {{/*
 // +build execgen_template
@@ -167,9 +165,9 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 
 					// Last equality column and either group is incomplete. Save state and have it handled in the next iteration.
 					if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
-						o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lGroup, &o.proberState.lGroupEndIdx)
+						o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lBufferedGroup, &o.proberState.lGroupEndIdx, &o.proberState.needToResetLeftBufferedGroup)
 						o.proberState.lIdx = lGroupLength + beginLIdx
-						o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rGroup, &o.proberState.rGroupEndIdx)
+						o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rBufferedGroup, &o.proberState.rGroupEndIdx, &o.proberState.needToResetRightBufferedGroup)
 						o.proberState.rIdx = rGroupLength + beginRIdx
 
 						o.groups.finishedCol()
@@ -276,10 +274,9 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 				// Repeat each row numRepeats times.
 				srcStartIdx = o.builderState.left.curSrcStartIdx
 				// {{ if $.IsSel }}
-				val = srcCol[sel[srcStartIdx]]
-				// {{ else }}
-				val = srcCol[srcStartIdx]
+				srcStartIdx = int(sel[srcStartIdx])
 				// {{ end }}
+				val = srcCol[srcStartIdx]
 
 				repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 				toAppend := repeatsLeft
@@ -406,7 +403,11 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 				}
 
 				// {{ if $.HasNulls }}
+				// {{ if $.IsSel }}
+				out.Nulls().ExtendWithSel(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend), sel)
+				// {{ else }}
 				out.Nulls().Extend(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
+				// {{ end }}
 				// {{ end }}
 
 				// Optimization in the case that group length is 1, use assign instead of copy.

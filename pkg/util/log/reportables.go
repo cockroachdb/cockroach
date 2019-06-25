@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package log
 
@@ -25,26 +23,11 @@ import (
 // objects provided to SendReport().
 type ReportableObject = raven.Interface
 
-// NewReportMessage constructs string objects that can be added to
-// calls to SendReport().
-func NewReportMessage(msg string) ReportableObject {
-	return &raven.Message{Message: msg}
-}
-
-// NewException constructs an exception object that can be added
-// to calls to SendReport().
-// Note that the message string will be reported unedited;
-// use ReportablesToSafeError().Error() or similar to produce a
-// suitable string.
-func NewException(msg string, st *StackTrace) ReportableObject {
-	return raven.NewException(&safeError{message: msg}, st)
-}
-
 // StackTrace is an object suitable for inclusion in errors that can
 // ultimately be reported with ReportInternalError() or similar.
 type StackTrace = raven.Stacktrace
 
-// It also implements the interface ReportableObjet below and is
+// It also implements the interface ReportableObject below and is
 // thus suitable for use with SendReport().
 var _ ReportableObject = &StackTrace{}
 

@@ -23,30 +23,37 @@ import (
 	"github.com/pkg/errors"
 )
 
-// indexSkipTableReader is another start of a computation flow; it performs
-// KV operations to retrieve some distinct rows from a table, using the index
-// to skip reading some rows while scanning. It then runs a filter and passes
-// rows to an output RowReceiver.
+// indexSkipTableReader is a processor that retrieves distinct rows from
+// a table using the prefix of an index to skip reading some rows in the
+// table. Specifically, given a prefix of an index to distinct over,
+// the indexSkipTableReader returns all distinct rows where that prefix
+// of the index is distinct. It uses the index to seek to distinct values
+// of the prefix instead of doing a full table scan.
+// As of now, the indexSkipTableReader does not support use with
+// interleaved tables.
 type indexSkipTableReader struct {
 	ProcessorBase
 
 	spans roachpb.Spans
 
-	reverse bool
-
-	// maintains which span we are currently getting rows from
+	// currentSpan maintains which span we are currently scanning.
 	currentSpan int
 
-	// how much of the primary key prefix we are doing the distinct over
+	// keyPrefixLen holds the length of the prefix of the index
+	// that we are performing a distinct over.
 	keyPrefixLen int
+	// indexLen holds the number of columns in the index that
+	// is being considered.
+	indexLen int
+
+	// reverse holds whether we are reading the table in reverse or not
+	reverse bool
 
 	ignoreMisplannedRanges bool
 	misplannedRanges       []roachpb.RangeInfo
 
 	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
-
-	indexLen int
 }
 
 const indexSkipTableReaderProcName = "index skip table reader"
@@ -70,6 +77,14 @@ func newIndexSkipTableReader(
 ) (*indexSkipTableReader, error) {
 	if flowCtx.nodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
+	}
+
+	// as of now, we don't support interleaved tables, so
+	// error our if there is an index that is interleaved
+	for _, index := range spec.Table.Indexes {
+		if len(index.Interleave.Ancestors) > 0 {
+			return nil, errors.Errorf("Interleaved tables are not supported as of now.")
+		}
 	}
 
 	t := istrPool.Get().(*indexSkipTableReader)

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree_test
 
@@ -34,10 +32,10 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`a`, `a`, `""."".a`, ``},
 		{`a.b`, `a.b`, `"".a.b`, ``},
 		{`a.b.c`, `a.b.c`, `a.b.c`, ``},
-		{`a.b.c.d`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.d`, ``, ``, `at or near "\.": syntax error`},
 		{`a.""`, ``, ``, `invalid table name: a\.""`},
 		{`a.b.""`, ``, ``, `invalid table name: a\.b\.""`},
-		{`a.b.c.""`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.""`, ``, ``, `at or near "\.": syntax error`},
 		{`a."".c`, ``, ``, `invalid table name: a\.""\.c`},
 		// CockroachDB extension: empty catalog name.
 		{`"".b.c`, `"".b.c`, `"".b.c`, ``},
@@ -51,10 +49,10 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`*`, `*`, `""."".*`, ``},
 		{`a.*`, `a.*`, `"".a.*`, ``},
 		{`a.b.*`, `a.b.*`, `a.b.*`, ``},
-		{`a.b.c.*`, ``, ``, `syntax error at or near "\."`},
-		{`a.b.*.c`, ``, ``, `syntax error at or near "\."`},
-		{`a.*.b`, ``, ``, `syntax error at or near "\."`},
-		{`*.b`, ``, ``, `syntax error at or near "\."`},
+		{`a.b.c.*`, ``, ``, `at or near "\.": syntax error`},
+		{`a.b.*.c`, ``, ``, `at or near "\.": syntax error`},
+		{`a.*.b`, ``, ``, `at or near "\.": syntax error`},
+		{`*.b`, ``, ``, `at or near "\.": syntax error`},
 		{`"".*`, ``, ``, `invalid table name: "".\*`},
 		{`a."".*`, ``, ``, `invalid table name: a\.""\.\*`},
 		{`a.b."".*`, ``, ``, `invalid table name: a.b.""`},
@@ -66,7 +64,7 @@ func TestClassifyTablePattern(t *testing.T) {
 		{`"user".x.*`, `"user".x.*`, `"user".x.*`, ``},
 		{`x.user.*`, `x."user".*`, `x."user".*`, ``},
 
-		{`foo@bar`, ``, ``, `syntax error at or near "@"`},
+		{`foo@bar`, ``, ``, `at or near "@": syntax error`},
 	}
 
 	for _, tc := range testCases {
@@ -118,12 +116,12 @@ func TestClassifyColumnName(t *testing.T) {
 		{`a.b`, `a.b`, ``},
 		{`a.b.c`, `a.b.c`, ``},
 		{`a.b.c.d`, `a.b.c.d`, ``},
-		{`a.b.c.d.e`, ``, `syntax error at or near "\."`},
+		{`a.b.c.d.e`, ``, `at or near "\.": syntax error`},
 		{`""`, ``, `invalid column name: ""`},
 		{`a.""`, ``, `invalid column name: a\.""`},
 		{`a.b.""`, ``, `invalid column name: a\.b\.""`},
 		{`a.b.c.""`, ``, `invalid column name: a\.b\.c\.""`},
-		{`a.b.c.d.""`, ``, `syntax error at or near "\."`},
+		{`a.b.c.d.""`, ``, `at or near "\.": syntax error`},
 		{`"".a`, ``, `invalid column name: ""\.a`},
 		{`"".a.b`, ``, `invalid column name: ""\.a\.b`},
 		// CockroachDB extension: empty catalog name.
@@ -142,14 +140,14 @@ func TestClassifyColumnName(t *testing.T) {
 		{`a.*`, `a.*`, ``},
 		{`a.b.*`, `a.b.*`, ``},
 		{`a.b.c.*`, `a.b.c.*`, ``},
-		{`a.b.c.d.*`, ``, `syntax error at or near "\."`},
-		{`a.b.*.c`, ``, `syntax error at or near "\."`},
-		{`a.*.b`, ``, `syntax error at or near "\."`},
-		{`*.b`, ``, `syntax error at or near "\."`},
+		{`a.b.c.d.*`, ``, `at or near "\.": syntax error`},
+		{`a.b.*.c`, ``, `at or near "\.": syntax error`},
+		{`a.*.b`, ``, `at or near "\.": syntax error`},
+		{`*.b`, ``, `at or near "\.": syntax error`},
 		{`"".*`, ``, `invalid column name: "".\*`},
 		{`a."".*`, ``, `invalid column name: a\.""\.\*`},
 		{`a.b."".*`, ``, `invalid column name: a\.b\.""\.\*`},
-		{`a.b.c."".*`, ``, `syntax error at or near "\."`},
+		{`a.b.c."".*`, ``, `at or near "\.": syntax error`},
 
 		{`"".a.*`, ``, `invalid column name: ""\.a.*`},
 		// CockroachDB extension: empty catalog name.
@@ -162,7 +160,7 @@ func TestClassifyColumnName(t *testing.T) {
 		{`"user".x.*`, `"user".x.*`, ``},
 		{`x.user.*`, `x.user.*`, ``},
 
-		{`foo@bar`, ``, `syntax error at or near "@"`},
+		{`foo@bar`, ``, `at or near "@": syntax error`},
 	}
 
 	for _, tc := range testCases {

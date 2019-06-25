@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package opttester
 
@@ -38,12 +36,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/datadriven"
 	"github.com/pkg/errors"
 	"github.com/pmezard/go-difflib/difflib"
 )
@@ -104,6 +103,9 @@ type Flags struct {
 	// an UnsupportedExpr node. This is temporary; it is used for interfacing with
 	// the old planning code.
 	AllowUnsupportedExpr bool
+
+	// BuildFKChecks: if set, the optbuilder builds foreign key checks.
+	BuildFKChecks bool
 
 	// FullyQualifyNames if set: when building a query, the optbuilder fully
 	// qualifies all column names before adding them to the metadata. This flag
@@ -332,8 +334,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "build":
 		e, err := ot.OptBuild()
 		if err != nil {
-			text := strings.TrimSpace(err.Error())
-			if pgerr, ok := pgerror.GetPGCause(err); ok {
+			pgerr := pgerror.Flatten(err)
+			text := strings.TrimSpace(pgerr.Error())
+			if pgerr.Code != pgcode.Uncategorized {
 				// Output Postgres error code if it's available.
 				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
 			}
@@ -345,8 +348,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "norm":
 		e, err := ot.OptNorm()
 		if err != nil {
-			text := strings.TrimSpace(err.Error())
-			if pgerr, ok := pgerror.GetPGCause(err); ok {
+			pgerr := pgerror.Flatten(err)
+			text := strings.TrimSpace(pgerr.Error())
+			if pgerr.Code != pgcode.Uncategorized {
 				// Output Postgres error code if it's available.
 				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
 			}
@@ -586,7 +590,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			if err != nil {
 				return fmt.Errorf("invalid colstat column %v", v)
 			}
-			cols.Add(col)
+			cols.Add(opt.ColumnID(col))
 		}
 		f.ColStats = append(f.ColStats, cols)
 
@@ -1127,7 +1131,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 		}
 
 		// Make sure we have estimated stats for this column.
-		colSet := util.MakeFastIntSet(col)
+		colSet := opt.MakeColSet(col)
 		memo.RequestColStat(&ot.evalCtx, rel, colSet)
 		stat, ok := relProps.Stats.ColStats.Lookup(colSet)
 		if !ok {
@@ -1198,6 +1202,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
 	b.AllowUnsupportedExpr = ot.Flags.AllowUnsupportedExpr
+	b.BuildFKChecks = ot.Flags.BuildFKChecks
 	return b.Build()
 }
 

@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage
 
@@ -400,6 +398,12 @@ var (
 	metaRangeSnapshotsNormalApplied = metric.Metadata{
 		Name:        "range.snapshots.normal-applied",
 		Help:        "Number of applied snapshots",
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotsLearnerApplied = metric.Metadata{
+		Name:        "range.snapshots.learner-applied",
+		Help:        "Number of applied learner snapshots",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1044,6 +1048,7 @@ type StoreMetrics struct {
 	RangeRemoves                    *metric.Counter
 	RangeSnapshotsGenerated         *metric.Counter
 	RangeSnapshotsNormalApplied     *metric.Counter
+	RangeSnapshotsLearnerApplied    *metric.Counter
 	RangeSnapshotsPreemptiveApplied *metric.Counter
 	RangeRaftLeaderTransfers        *metric.Counter
 
@@ -1253,6 +1258,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeRemoves:                    metric.NewCounter(metaRangeRemoves),
 		RangeSnapshotsGenerated:         metric.NewCounter(metaRangeSnapshotsGenerated),
 		RangeSnapshotsNormalApplied:     metric.NewCounter(metaRangeSnapshotsNormalApplied),
+		RangeSnapshotsLearnerApplied:    metric.NewCounter(metaRangeSnapshotsLearnerApplied),
 		RangeSnapshotsPreemptiveApplied: metric.NewCounter(metaRangeSnapshotsPreemptiveApplied),
 		RangeRaftLeaderTransfers:        metric.NewCounter(metaRangeRaftLeaderTransfers),
 

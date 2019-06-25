@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sqltelemetry
 
@@ -16,7 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 )
 
 // CancelRequestCounter is to be incremented every time a pgwire-level
@@ -37,4 +35,4 @@ var BinaryDecimalInfinityCounter = telemetry.GetCounterOnce("pgwire.#32489.binar
 
 // UncategorizedErrorCounter is to be incremented every time an error
 // flows to the client without having been decorated with a pg error.
-var UncategorizedErrorCounter = telemetry.GetCounterOnce("othererror." + pgerror.CodeUncategorizedError)
+var UncategorizedErrorCounter = telemetry.GetCounterOnce("othererror." + pgcode.Uncategorized)

@@ -52,8 +52,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -100,10 +100,10 @@ func backupRestoreTestSetupWithParams(
 	sqlDB.Exec(t, `CREATE DATABASE data`)
 	const insertBatchSize = 1000
 	const concurrency = 4
-	if _, err := workload.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, insertBatchSize, concurrency); err != nil {
+	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, insertBatchSize, concurrency); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if err := workload.Split(ctx, sqlDB.DB.(*gosql.DB), bankData.Tables()[0], 1 /* concurrency */); err != nil {
+	if err := workloadsql.Split(ctx, sqlDB.DB.(*gosql.DB), bankData.Tables()[0], 1 /* concurrency */); err != nil {
 		// This occasionally flakes, so ignore errors.
 		t.Logf("failed to split: %+v", err)
 	}
@@ -846,7 +846,7 @@ func getHighWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 // work as intended on backup and restore jobs.
 func TestBackupRestoreControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#24637")
+	t.Skip("#24136")
 
 	// force every call to update
 	defer jobs.TestingSetProgressThresholds()()

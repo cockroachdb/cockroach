@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage
 
@@ -55,17 +53,6 @@ var MergeQueueInterval = func() *settings.DurationSetting {
 	s.SetSensitive()
 	return s
 }()
-
-// ManualSplitTTL is the amount of time that the merge queue will not consider
-// a manually split range for merging if it is nonzero. If ManualSplitTTL is
-// zero, then no manual splits are considered for automatic merging. If a range
-// is split in a LHS and a RHS, then the merge queue will not consider to merge
-// the RHS with the range to its left until ManualSplitTTL time has passed.
-var ManualSplitTTL = settings.RegisterNonNegativeDurationSetting(
-	"kv.range_merge.manual_split.ttl",
-	"if nonzero, manual splits older than this duration will be considered for automatic range merging",
-	0,
-)
 
 // mergeQueue manages a queue of ranges slated to be merged with their right-
 // hand neighbor.
@@ -301,16 +288,12 @@ func (mq *mergeQueue) process(
 	}
 
 	// Range was manually split and not expired, so skip merging.
-	if rhsDesc.StickyBit != nil {
-		manualSplitTTL := ManualSplitTTL.Get(&mq.store.ClusterSettings().SV)
-		manualSplitExpired := manualSplitTTL != 0 && rhsDesc.StickyBit.GoTime().Add(manualSplitTTL).Before(mq.store.Clock().PhysicalTime())
-		if !manualSplitExpired {
-			log.VEventf(ctx, 2, "skipping merge: ranges were manually split and sticky bit was not expired")
-			// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
-			// repeatedly processing ranges that cannot be merged.
-			return nil
-		}
-		log.VEventf(ctx, 2, "ranges were manually split, but sticky bit was expired")
+	now := mq.store.Clock().Now()
+	if now.Less(rhsDesc.StickyBit) {
+		log.VEventf(ctx, 2, "skipping merge: ranges were manually split and sticky bit was not expired")
+		// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
+		// repeatedly processing ranges that cannot be merged.
+		return nil
 	}
 
 	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)
@@ -332,7 +315,7 @@ func (mq *mergeQueue) process(
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be merged.
 		log.Infof(ctx, "merge saw concurrent descriptor modification; maybe retrying")
-		mq.MaybeAddAsync(ctx, lhsRepl, mq.store.Clock().Now())
+		mq.MaybeAddAsync(ctx, lhsRepl, now)
 	default:
 		// While range merges are unstable, be extra cautious and mark every error
 		// as purgatory-worthy.

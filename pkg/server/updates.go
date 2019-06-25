@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package server
 
@@ -19,6 +17,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -454,7 +453,19 @@ func (s *Server) reportDiagnostics(ctx context.Context) {
 		return
 	}
 	addInfoToURL(ctx, reportingURL, s, report.Node)
-	res, err := http.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
+
+	const timeout = 3 * time.Second
+	client := &http.Client{
+		Transport: &http.Transport{
+			// Don't leak a goroutine on OSX (the TCP level timeout is probably
+			// much higher than on linux) when the connection fails in weird ways.
+			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
+			DisableKeepAlives: true,
+		},
+		Timeout: timeout,
+	}
+
+	res, err := client.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
 	if err != nil {
 		if log.V(2) {
 			// This is probably going to be relatively common in production
@@ -464,9 +475,8 @@ func (s *Server) reportDiagnostics(ctx context.Context) {
 		return
 	}
 	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		b, err := ioutil.ReadAll(res.Body)
+	b, err = ioutil.ReadAll(res.Body)
+	if err != nil || res.StatusCode != http.StatusOK {
 		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s, "+
 			"error: %v", res.Status, b, err)
 	}

@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto3";
 package cockroach.roachpb;
@@ -654,17 +652,18 @@ message EndTransactionResponse {
 // metadata (e.g. abort span and range stats must be copied or
 // recomputed).
 //
-// The manual flag should be set when the split is requested manually
-// from a user operation (I.E. Running ALTER TABLE/INDEX ... SPLIT AT).
-// It should also be set when the split ranges should not be merged back
-// together automatically by the merge queue. Any split requested by the
-// split queue will have the manual flag unset.
+// expiration_time represents the time that this split expires. Any split that
+// is not expired will not be considered for automatic merging by the merge
+// queue. Any split requested by the split queue will have an expiration time
+// of hlc.Timestamp{} (I.E. The zero timestamp so they are always eligible for
+// automatic merging).
 message AdminSplitRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes split_key = 2 [(gogoproto.casttype) = "Key"];
-  bool manual = 3;
+  reserved 3;
+  util.hlc.Timestamp expiration_time = 4 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()

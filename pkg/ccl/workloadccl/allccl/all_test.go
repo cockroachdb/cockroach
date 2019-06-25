@@ -10,16 +10,26 @@ package allccl
 
 import (
 	"context"
+	"encoding/binary"
+	"hash"
+	"hash/fnv"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -118,13 +128,21 @@ func TestAllRegisteredSetup(t *testing.T) {
 			continue
 		}
 
+		gen := meta.New()
 		switch meta.Name {
-		case `roachmart`, `interleavedpartitioned`:
-			// These require a specific node locality setup
+		case `roachmart`:
+			// TODO(dan): It'd be nice to test this with the default flags. For now,
+			// this is better than nothing.
+			if err := gen.(workload.Flagser).Flags().Parse([]string{
+				`--users=10`, `--orders=100`, `--partition=false`,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		case `interleavedpartitioned`:
+			// This require a specific node locality setup
 			continue
 		}
 
-		gen := meta.New()
 		t.Run(meta.Name, func(t *testing.T) {
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -135,7 +153,7 @@ func TestAllRegisteredSetup(t *testing.T) {
 			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
 
 			const batchSize, concurrency = 0, 0
-			if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+			if _, err := workloadsql.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
 				t.Fatalf(`%+v`, err)
 			}
 
@@ -168,6 +186,106 @@ func TestConsistentSchema(t *testing.T) {
 					t.Errorf("schema mismatch for table %s: %s, %s", name, schema1, schema2)
 				}
 			}
+		})
+	}
+}
+
+func hashTableInitialData(
+	h hash.Hash, data workload.BatchedTuples, a *bufalloc.ByteAllocator,
+) error {
+	var scratch [8]byte
+	b := coldata.NewMemBatchWithSize(nil, 0)
+	for batchIdx := 0; batchIdx < data.NumBatches; batchIdx++ {
+		*a = (*a)[:0]
+		data.FillBatch(batchIdx, b, a)
+		for _, col := range b.ColVecs() {
+			switch col.Type() {
+			case types.Bool:
+				for _, x := range col.Bool()[:b.Length()] {
+					if x {
+						scratch[0] = 1
+					} else {
+						scratch[0] = 0
+					}
+					_, _ = h.Write(scratch[:1])
+				}
+			case types.Int64:
+				for _, x := range col.Int64()[:b.Length()] {
+					binary.LittleEndian.PutUint64(scratch[:8], uint64(x))
+					_, _ = h.Write(scratch[:8])
+				}
+			case types.Float64:
+				for _, x := range col.Float64()[:b.Length()] {
+					bits := math.Float64bits(x)
+					binary.LittleEndian.PutUint64(scratch[:8], bits)
+					_, _ = h.Write(scratch[:8])
+				}
+			case types.Bytes:
+				for _, x := range col.Bytes()[:b.Length()] {
+					_, _ = h.Write(x)
+				}
+			default:
+				return errors.Errorf(`unhandled type %s`, col.Type())
+			}
+		}
+	}
+	return nil
+}
+
+func TestDeterministicInitialData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// There are other tests that run initial data generation under race, so we
+	// don't get anything from running this one under race as well.
+	if util.RaceEnabled {
+		t.Skip(`uninteresting under race`)
+	}
+
+	// Hardcode goldens for the fingerprint of the initial data of generators with
+	// default flags. This lets us opt in generators known to be deterministic and
+	// also protects against initialized-once global state (which tpcc did have at
+	// one point).
+	//
+	// TODO(dan): We're starting to accumulate these various lists, bigInitialData
+	// is another. Consider moving them to be properties on the workload.Meta.
+	fingerprintGoldens := map[string]uint64{
+		`bank`:       0x1603d103c14d0364,
+		`bulkingest`: 0xcf3e4028ac084aea,
+		`indexes`:    0xcbf29ce484222325,
+		`intro`:      0x81c6a8cfd9c3452a,
+		`json`:       0xcbf29ce484222325,
+		`ledger`:     0xebe27d872d980271,
+		`movr`:       0x4f19a54c7e779f9c,
+		`queue`:      0xcbf29ce484222325,
+		`rand`:       0xcbf29ce484222325,
+		`roachmart`:  0xda5e73423dbdb2d9,
+		`sqlsmith`:   0xcbf29ce484222325,
+		`startrek`:   0xa0249fbdf612734c,
+		`tpcc`:       0x15c89d37aef774ba,
+		`ycsb`:       0x85dd34d8c07fd808,
+	}
+
+	var a bufalloc.ByteAllocator
+	for _, meta := range workload.Registered() {
+		fingerprintGolden, ok := fingerprintGoldens[meta.Name]
+		if !ok {
+			// TODO(dan): It'd be nice to eventually require that all registered
+			// workloads are deterministic, but given that tpcc was a legitimate
+			// exception for a while (for performance reasons), it's not clear right
+			// now that we should be strict about this.
+			continue
+		}
+		t.Run(meta.Name, func(t *testing.T) {
+			if bigInitialData(meta) && testing.Short() {
+				t.Skipf(`%s involves a lot of data`, meta.Name)
+			}
+
+			h := fnv.New64()
+			tables := meta.New().Tables()
+			for _, table := range tables {
+				require.NoError(t, hashTableInitialData(h, table.InitialRows, &a))
+			}
+			require.Equal(t, fingerprintGolden, h.Sum64())
 		})
 	}
 }

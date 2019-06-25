@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -161,7 +159,7 @@ func TestTableReader(t *testing.T) {
 				var res sqlbase.EncDatumRows
 				for {
 					row, meta := results.Next()
-					if meta != nil && meta.TxnCoordMeta == nil {
+					if meta != nil && meta.TxnCoordMeta == nil && meta.Metrics == nil {
 						t.Fatalf("unexpected metadata: %+v", meta)
 					}
 					if row == nil {
@@ -273,8 +271,8 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		for _, m := range metas {
 			if len(m.Ranges) > 0 {
 				misplannedRanges = m.Ranges
-			} else if m.TxnCoordMeta == nil {
-				t.Fatalf("expected only txn coord meta or misplanned ranges, got: %+v", metas)
+			} else if m.TxnCoordMeta == nil && m.Metrics == nil {
+				t.Fatalf("expected only txn coord meta, metrics, or misplanned ranges, got: %+v", metas)
 			}
 		}
 		if len(misplannedRanges) != 2 {
@@ -446,7 +444,7 @@ func BenchmarkTableReader(b *testing.B) {
 				count := 0
 				for {
 					row, meta := tr.Next()
-					if meta != nil && meta.TxnCoordMeta == nil {
+					if meta != nil && meta.TxnCoordMeta == nil && meta.Metrics == nil {
 						b.Fatalf("unexpected metadata: %+v", meta)
 					}
 					if row == nil {

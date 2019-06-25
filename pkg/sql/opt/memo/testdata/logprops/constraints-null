@@ -1,19 +1,12 @@
 exec-ddl
 CREATE TABLE t (a INT, b BOOL, c STRING)
 ----
-TABLE t
- ├── a int
- ├── b bool
- ├── c string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 opt
 SELECT * FROM t WHERE a = NULL
 ----
 values
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int!null) b:2(bool!null) c:3(string!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  ├── fd: ()-->(1-3)
@@ -23,7 +16,7 @@ opt
 SELECT * FROM t WHERE a < NULL
 ----
 values
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int!null) b:2(bool!null) c:3(string!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  ├── fd: ()-->(1-3)
@@ -99,12 +92,6 @@ CREATE TABLE xy (
   y INT
 )
 ----
-TABLE xy
- ├── x int
- ├── y int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Test that we get a not-NULL constraint on x.
 opt

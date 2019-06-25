@@ -1,18 +1,17 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -218,7 +217,7 @@ func makePredicate(
 			// First, check if the comparison would even be valid.
 			_, found := tree.FindEqualComparisonFunction(uc.leftType, uc.rightType)
 			if !found {
-				return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+				return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 					"JOIN/USING types %s for left and %s for right cannot be matched for column %s",
 					uc.leftType, uc.rightType, uc.name,
 				)
@@ -338,7 +337,7 @@ func makeUsingColumns(
 	for _, syntaxColName := range usingColNames {
 		colName := string(syntaxColName)
 		if _, ok := seenNames[colName]; ok {
-			return nil, pgerror.Newf(pgerror.CodeDuplicateColumnError,
+			return nil, pgerror.Newf(pgcode.DuplicateColumn,
 				"column %q appears more than once in USING clause", colName)
 		}
 		seenNames[colName] = struct{}{}
@@ -380,7 +379,7 @@ func pickUsingColumn(
 		}
 	}
 	if idx == invalidColIdx {
-		return idx, nil, pgerror.Newf(pgerror.CodeUndefinedColumnError,
+		return idx, nil, pgerror.Newf(pgcode.UndefinedColumn,
 			"column \"%s\" specified in USING clause does not exist in %s table", colName, context)
 	}
 	return idx, cols[idx].Typ, nil

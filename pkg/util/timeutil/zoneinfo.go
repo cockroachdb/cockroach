@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package timeutil
 
@@ -33,6 +31,11 @@ var errTZDataNotFound = errors.New("timezone data cannot be found")
 func LoadLocation(name string) (*time.Location, error) {
 	switch strings.ToLower(name) {
 	case "local", "default":
+		name = "UTC"
+	case "utc":
+		// TODO(knz): See #36864. This code is a crutch, and should be
+		// removed in favor of a cache of available locations with
+		// case-insensitive lookup.
 		name = "UTC"
 	}
 	l, err := time.LoadLocation(name)

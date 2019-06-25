@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // Package ycsb is the workload specified by the Yahoo! Cloud Serving Benchmark.
 package ycsb
@@ -85,7 +83,9 @@ type ycsb struct {
 	connFlags *workload.ConnFlags
 
 	seed        int64
-	initialRows int
+	insertStart int
+	insertCount int
+	recordCount int
 	json        bool
 	families    bool
 	splits      int
@@ -113,8 +113,9 @@ var ycsbMeta = workload.Meta{
 			`workload`: {RuntimeOnly: true},
 		}
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
-		g.flags.IntVar(&g.initialRows, `initial-rows`, 10000,
-			`Initial number of rows to sequentially insert before beginning Zipfian workload`)
+		g.flags.IntVar(&g.insertStart, `insert-start`, 0, `Key to start initial sequential insertions from. (default 0)`)
+		g.flags.IntVar(&g.insertCount, `insert-count`, 10000, `Number of rows to sequentially insert before beginning workload.`)
+		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
 		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data`)
 		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
@@ -164,10 +165,18 @@ func (g *ycsb) Hooks() workload.Hooks {
 				g.insertFreq = 0.05
 				g.requestDistribution = "zipfian"
 			case "F", "f":
+				// TODO(jeffreyxiao): This is supposed to be a read-modify-write workload.
 				g.insertFreq = 1.0
 				g.requestDistribution = "zipfian"
 			default:
 				return errors.Errorf("Unknown workload: %q", g.workload)
+			}
+
+			if g.recordCount == 0 {
+				g.recordCount = g.insertStart + g.insertCount
+			}
+			if g.insertStart+g.insertCount > g.recordCount {
+				return errors.Errorf("insertStart + insertCount (%d) must be <= recordCount (%d)", g.insertStart+g.insertCount, g.recordCount)
 			}
 			return nil
 		},
@@ -195,7 +204,7 @@ func (g *ycsb) Tables() []workload.Table {
 	}
 	usertableInitialRowsFn := func(rowIdx int) []interface{} {
 		w := ycsbWorker{config: g, hashFunc: fnv.New64()}
-		key := w.buildKeyName(uint64(rowIdx))
+		key := w.buildKeyName(uint64(g.insertStart + rowIdx))
 		if g.json {
 			return []interface{}{key, "{}"}
 		}
@@ -204,7 +213,7 @@ func (g *ycsb) Tables() []workload.Table {
 	if g.json {
 		usertable.Schema = usertableSchemaJSON
 		usertable.InitialRows = workload.Tuples(
-			g.initialRows,
+			g.insertCount,
 			usertableInitialRowsFn,
 		)
 	} else {
@@ -214,7 +223,7 @@ func (g *ycsb) Tables() []workload.Table {
 			usertable.Schema = usertableSchemaRelational
 		}
 		usertable.InitialRows = workload.TypedTuples(
-			g.initialRows,
+			g.insertCount,
 			usertableColTypes,
 			usertableInitialRowsFn,
 		)
@@ -236,19 +245,19 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
 
-	readStmt, err := db.Prepare(`SELECT * FROM ycsb.usertable WHERE ycsb_key = $1`)
+	readStmt, err := db.Prepare(`SELECT * FROM usertable WHERE ycsb_key = $1`)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
-	scanStmt, err := db.Prepare(`SELECT * FROM ycsb.usertable WHERE ycsb_key >= $1 LIMIT $2`)
+	scanStmt, err := db.Prepare(`SELECT * FROM usertable WHERE ycsb_key >= $1 LIMIT $2`)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
 	var insertStmt *gosql.Stmt
 	if g.json {
-		insertStmt, err = db.Prepare(`INSERT INTO ycsb.usertable VALUES ($1, json_build_object(
+		insertStmt, err = db.Prepare(`INSERT INTO usertable VALUES ($1, json_build_object(
 			'field0',  $2:::text,
 			'field1',  $3:::text,
 			'field2',  $4:::text,
@@ -261,7 +270,7 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 			'field9',  $11:::text
 		))`)
 	} else {
-		insertStmt, err = db.Prepare(`INSERT INTO ycsb.usertable VALUES (
+		insertStmt, err = db.Prepare(`INSERT INTO usertable VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 		)`)
 	}
@@ -271,14 +280,14 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 	updateStmts := make([]*gosql.Stmt, numTableFields)
 	if g.json {
-		stmt, err := db.Prepare(`UPDATE ycsb.usertable SET field = field || $2 WHERE ycsb_key = $1`)
+		stmt, err := db.Prepare(`UPDATE usertable SET field = field || $2 WHERE ycsb_key = $1`)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
 		updateStmts[0] = stmt
 	} else {
 		for i := 0; i < numTableFields; i++ {
-			q := fmt.Sprintf(`UPDATE ycsb.usertable SET field%d = $2 WHERE ycsb_key = $1`, i)
+			q := fmt.Sprintf(`UPDATE usertable SET field%d = $2 WHERE ycsb_key = $1`, i)
 			stmt, err := db.Prepare(q)
 			if err != nil {
 				return workload.QueryLoad{}, err
@@ -291,17 +300,17 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	var requestGen randGenerator
 	var scanLengthGen randGenerator
 	var rowIndex = new(uint64)
-	*rowIndex = uint64(g.initialRows)
+	*rowIndex = uint64(g.recordCount)
 
 	switch strings.ToLower(g.requestDistribution) {
 	case "zipfian":
 		requestGen, err = NewZipfGenerator(
 			zipfRng, zipfIMin, defaultIMax-1, defaultTheta, false /* verbose */)
 	case "uniform":
-		requestGen, err = NewUniformGenerator(zipfRng, 0, uint64(g.initialRows)-1)
+		requestGen, err = NewUniformGenerator(zipfRng, 0, uint64(g.recordCount)-1)
 	case "latest":
 		requestGen, err = NewSkewedLatestGenerator(
-			zipfRng, zipfIMin, uint64(g.initialRows)-1, defaultTheta, false /* verbose */)
+			zipfRng, zipfIMin, uint64(g.recordCount)-1, defaultTheta, false /* verbose */)
 	default:
 		return workload.QueryLoad{}, errors.Errorf("Unknown request distribution: %s", g.requestDistribution)
 	}
@@ -321,7 +330,7 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		return workload.QueryLoad{}, err
 	}
 
-	rowCounter := NewAcknowledgedCounter((uint64)(g.initialRows))
+	rowCounter := NewAcknowledgedCounter((uint64)(g.recordCount))
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))
@@ -433,7 +442,24 @@ func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
 // See YCSB paper section 5.3 for a complete description of how keys are chosen.
 func (yw *ycsbWorker) nextReadKey() string {
 	rowCount := yw.rowCounter.Last()
-	rowIndex := yw.hashKey(yw.requestGen.Uint64()) % rowCount
+	// TODO(jeffreyxiao): The official YCSB implementation creates a very large
+	// key space for the zipfian distribution, hashes, mods it by the number of
+	// expected number of keys at the end of the workload to obtain the key index
+	// to read. The key index is then hashed again to obtain the key. If the
+	// generated key index is greater than the number of acknowledged rows, then
+	// the key is regenerated. Unfortunately, we cannot match this implementation
+	// since we run YCSB for a set amount of time rather than number of
+	// operations, so we don't know the expected number of keys at the end of the
+	// workload. Instead we directly use the zipfian generator to generate our
+	// key indexes by modding it by the actual number of rows. We don't hash so
+	// the hotspot is consistent and randomly distributed in the key space like
+	// with the official implementation. However, unlike the official
+	// implementation, this causes the hotspot to not be random w.r.t the
+	// insertion order of the keys (the hottest key is always the first inserted
+	// key). The distribution is also slightly different than the official YCSB's
+	// distribution, so it might be worthwhile to exactly emulate what they're
+	// doing.
+	rowIndex := yw.requestGen.Uint64() % rowCount
 	return yw.buildKeyName(rowIndex)
 }
 

@@ -1,18 +1,18 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package xform
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // CustomFuncs contains all the custom match and replace functions used by
@@ -170,7 +170,7 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 	var notNullCols opt.ColSet
 	for i := 0; i < tab.ColumnCount(); i++ {
 		if !tab.Column(i).IsNullable() {
-			notNullCols.Add(int(tabID.ColumnID(i)))
+			notNullCols.Add(tabID.ColumnID(i))
 		}
 	}
 
@@ -407,7 +407,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 		colID := tabID.ColumnID(col.Ordinal)
 		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
 		if !col.IsNullable() {
-			notNullCols.Add(int(colID))
+			notNullCols.Add(colID)
 		}
 	}
 
@@ -484,7 +484,7 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 		// If the filter involves the first index column, then the index can
 		// possibly be constrained.
 		firstIndexCol := tabID.ColumnID(index.Column(0).Ordinal)
-		if filterProps.OuterCols.Contains(int(firstIndexCol)) {
+		if filterProps.OuterCols.Contains(firstIndexCol) {
 			return true
 		}
 
@@ -803,33 +803,81 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	var iter scanIndexIter
 	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
+		idxCols := iter.indexCols()
+
+		// Find the longest prefix of index key columns that are constrained by
+		// an equality with another column or a constant.
+		numIndexKeyCols := iter.index.LaxKeyColumnCount()
+		constValMap := memo.ExtractValuesFromFilter(on, idxCols)
+		constFilterMap := memo.ExtractConstantFilter(on, idxCols)
+
+		var projections memo.ProjectionsExpr
+		var constFilters memo.FiltersExpr
+		if len(constValMap) > 0 {
+			projections = make(memo.ProjectionsExpr, 0, numIndexKeyCols)
+			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols)
+		}
+
 		// Check if the first column in the index has an equality constraint.
 		firstIdxCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			continue
+			if _, ok := constValMap[firstIdxCol]; !ok {
+				continue
+			}
 		}
 
-		lookupJoin := memo.LookupJoinExpr{Input: input, On: on}
+		lookupJoin := memo.LookupJoinExpr{Input: input}
 		lookupJoin.JoinPrivate = *joinPrivate
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = iter.indexOrdinal
 
-		// Find the longest prefix of index key columns that are equality columns.
-		numIndexKeyCols := iter.index.LaxKeyColumnCount()
 		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
 		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
+		needProjection := false
+
+		// All the lookup conditions must apply to the prefix of the index and so
+		// the projected columns created must be created in order.
 		for j := 0; j < numIndexKeyCols; j++ {
 			idxCol := scanPrivate.Table.ColumnID(iter.index.Column(j).Ordinal)
-			eqIdx, ok := rightEq.Find(idxCol)
+			if eqIdx, ok := rightEq.Find(idxCol); ok {
+				lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
+				rightSideCols = append(rightSideCols, idxCol)
+				continue
+			}
+
+			// Project a new column with a constant value if that allows the
+			// index column to be constrained and used by the lookup joiner.
+			filter, ok := constFilterMap[idxCol]
 			if !ok {
 				break
 			}
-			lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
+			condition, ok := filter.Condition.(*memo.EqExpr)
+			if !ok {
+				break
+			}
+			constColID := c.e.f.Metadata().AddColumn(
+				fmt.Sprintf("project_const_col_@%d", idxCol),
+				condition.Right.(*memo.ConstExpr).Typ)
+			projections = append(projections, memo.ProjectionsItem{
+				Element:    c.e.f.ConstructConst(constValMap[idxCol]),
+				ColPrivate: memo.ColPrivate{Col: constColID},
+			})
+
+			needProjection = true
+			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
+			constFilters = append(constFilters, filter)
 		}
 
+		// Construct the projections for the constant columns.
+		if needProjection {
+			lookupJoin.Input = c.e.f.ConstructProject(input, projections, input.Relational().OutputCols)
+		}
+
+		// Remove the redundant filters and update the lookup condition.
 		lookupJoin.On = memo.ExtractRemainingJoinFilters(on, lookupJoin.KeyCols, rightSideCols)
+		lookupJoin.On.RemoveCommonFilters(constFilters)
 
 		if iter.isCovering() {
 			// Case 1 (see function comment).
@@ -856,7 +904,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		indexCols := iter.indexCols()
 		lookupJoin.Cols = scanPrivate.Cols.Intersection(indexCols)
 		for i := range pkCols {
-			lookupJoin.Cols.Add(int(pkCols[i]))
+			lookupJoin.Cols.Add(pkCols[i])
 		}
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
@@ -951,13 +999,13 @@ func eqColsForZigzag(
 	j, rightCnt := 0, rightIndex.LaxKeyColumnCount()
 	for ; i < leftCnt; i++ {
 		colID := tabID.ColumnID(leftIndex.Column(i).Ordinal)
-		if !fixedCols.Contains(int(colID)) {
+		if !fixedCols.Contains(colID) {
 			break
 		}
 	}
 	for ; j < rightCnt; j++ {
 		colID := tabID.ColumnID(rightIndex.Column(j).Ordinal)
-		if !fixedCols.Contains(int(colID)) {
+		if !fixedCols.Contains(colID) {
 			break
 		}
 	}
@@ -1077,7 +1125,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		}
 		// Short-circuit quickly if the first column in the index is not a fixed
 		// column.
-		if !fixedCols.Contains(int(scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal))) {
+		if !fixedCols.Contains(scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)) {
 			continue
 		}
 
@@ -1086,7 +1134,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		iter2.indexOrdinal = iter.indexOrdinal
 
 		for iter2.next() {
-			if !fixedCols.Contains(int(scanPrivate.Table.ColumnID(iter2.index.Column(0).Ordinal))) {
+			if !fixedCols.Contains(scanPrivate.Table.ColumnID(iter2.index.Column(0).Ordinal)) {
 				continue
 			}
 			// Columns that are in both indexes are, by definition, equal.
@@ -1164,7 +1212,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 
 			if len(fixedValMap) != fixedCols.Len() {
 				if util.RaceEnabled {
-					panic(pgerror.AssertionFailedf(
+					panic(errors.AssertionFailedf(
 						"we inferred constant columns whose value we couldn't extract",
 					))
 				}
@@ -1215,7 +1263,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			// Ensure the zigzag join returns pk columns.
 			zigzagJoin.Cols = scanPrivate.Cols.Intersection(zigzagCols)
 			for i := range pkCols {
-				zigzagJoin.Cols.Add(int(pkCols[i]))
+				zigzagJoin.Cols.Add(pkCols[i])
 			}
 
 			if c.FiltersBoundBy(zigzagJoin.On, zigzagCols) {
@@ -1356,7 +1404,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		zigzagCols := iter.indexCols()
 		for i, cnt := 0, iter.index.KeyColumnCount(); i < cnt; i++ {
 			colID := scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal)
-			zigzagCols.Remove(int(colID))
+			zigzagCols.Remove(colID)
 		}
 
 		pkIndex := iter.tab.Index(cat.PrimaryIndex)
@@ -1365,7 +1413,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
 			// Ensure primary key columns are always retrieved from the zigzag
 			// join.
-			zigzagCols.Add(int(pkCols[i]))
+			zigzagCols.Add(pkCols[i])
 		}
 
 		// Case 1 (zigzagged indexes contain all requested columns).
@@ -1385,7 +1433,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// Ensure the zigzag join returns pk columns.
 		zigzagJoin.Cols = scanPrivate.Cols.Intersection(zigzagCols)
 		for i := range pkCols {
-			zigzagJoin.Cols.Add(int(pkCols[i]))
+			zigzagJoin.Cols.Add(pkCols[i])
 		}
 
 		if c.FiltersBoundBy(zigzagJoin.On, zigzagCols) {
@@ -1480,13 +1528,13 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 		oIdx, intraIdx := 0, 0
 		for ; oIdx < len(o); oIdx++ {
 			oCol := o[oIdx].ID()
-			if private.GroupingCols.Contains(int(oCol)) || intraOrd.Optional.Contains(int(oCol)) {
+			if private.GroupingCols.Contains(oCol) || intraOrd.Optional.Contains(oCol) {
 				// Grouping or optional column.
 				continue
 			}
 
 			if intraIdx < len(intraOrd.Columns) &&
-				intraOrd.Columns[intraIdx].Group.Contains(int(oCol)) &&
+				intraOrd.Columns[intraIdx].Group.Contains(oCol) &&
 				intraOrd.Columns[intraIdx].Descending == o[oIdx].Descending() {
 				// Column matches the one in the ordering.
 				intraIdx++

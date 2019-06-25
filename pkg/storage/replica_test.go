@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage
 
@@ -35,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -51,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -59,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -348,6 +345,18 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	newDesc.InternalReplicas = append(newDesc.InternalReplicas, secondReplica)
 	newDesc.NextReplicaID = 3
 
+	dbDescKV, err := tc.store.DB().Get(ctx, keys.RangeDescriptorKey(oldDesc.StartKey))
+	if err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+	var dbDesc roachpb.RangeDescriptor
+	if err := dbDescKV.Value.GetProto(&dbDesc); err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
+	if !oldDesc.Equal(&dbDesc) {
+		return roachpb.ReplicaDescriptor{}, errors.Errorf(`descs didn't match: %v vs %v`, oldDesc, dbDesc)
+	}
+
 	// Update the "on-disk" replica state, so that it doesn't diverge from what we
 	// have in memory. At the time of this writing, this is not actually required
 	// by the tests using this functionality, but it seems sane to do.
@@ -355,7 +364,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		Header: roachpb.Header{Timestamp: tc.Clock().Now()},
 	}
 	descKey := keys.RangeDescriptorKey(oldDesc.StartKey)
-	if err := updateRangeDescriptor(&ba, descKey, &oldDesc, &newDesc); err != nil {
+	if err := updateRangeDescriptor(&ba, descKey, dbDescKV.Value, &newDesc); err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
 	if err := tc.store.DB().Run(ctx, &ba); err != nil {
@@ -1194,7 +1203,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	key := keys.MakeTablePrefix(keys.MaxSystemConfigDescID)
 	var val roachpb.Value
 	val.SetInt(42)
-	if err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.MinTimestamp, val, nil); err != nil {
+	if err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, val, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1576,13 +1585,17 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 }
 
 func cPutArgs(key roachpb.Key, value, expValue []byte) roachpb.ConditionalPutRequest {
-	expV := roachpb.MakeValueFromBytes(expValue)
+	var optExpV *roachpb.Value
+	if expValue != nil {
+		expV := roachpb.MakeValueFromBytes(expValue)
+		optExpV = &expV
+	}
 	return roachpb.ConditionalPutRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Value:    roachpb.MakeValueFromBytes(value),
-		ExpValue: &expV,
+		ExpValue: optExpV,
 	}
 }
 
@@ -2795,71 +2808,76 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	// Set clock to time 1s and do the conditional put.
-	t0 := 1 * time.Second
-	tc.manualClock.Set(t0.Nanoseconds())
+	// Set clock to time 2s and do the conditional put.
+	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
+	t2 := makeTS(2*time.Second.Nanoseconds(), 0)
+	t2Next := t2.Next()
+	tc.manualClock.Set(t2.WallTime)
 
 	// CPut args which expect value "1" to write "0".
 	key := []byte("a")
-	cpArgs := cPutArgs(key, []byte("1"), []byte("0"))
-	_, pErr := tc.SendWrapped(&cpArgs)
-	cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError)
-	if !ok {
+	cpArgs1 := cPutArgs(key, []byte("1"), []byte("0"))
+	_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: t2}, &cpArgs1)
+	if cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 		t.Errorf("expected ConditionFailedError; got %v", pErr)
-	}
-	if cfErr.ActualValue != nil {
+	} else if cfErr.ActualValue != nil {
 		t.Errorf("expected empty actual value; got %s", cfErr.ActualValue)
 	}
 
-	// Try a transactional put at a lower timestamp and ensure it is pushed.
-	var ba roachpb.BatchRequest
-	txn := newTransaction("test", key, 1, tc.Clock())
-	txn.OrigTimestamp, txn.Timestamp = makeTS(1, 0), makeTS(1, 0)
-	pArgs := putArgs(key, []byte("value"))
-	ba.Header = roachpb.Header{Txn: txn}
-	ba.Add(&pArgs)
-	assignSeqNumsForReqs(txn, &pArgs)
-	br, pErr := tc.Sender().Send(context.Background(), ba)
+	// Try a transactional conditional put at a lower timestamp and
+	// ensure it is pushed.
+	txnEarly := newTransaction("test", key, 1, tc.Clock())
+	txnEarly.OrigTimestamp, txnEarly.Timestamp = t1, t1
+	cpArgs2 := cPutArgs(key, []byte("value"), nil)
+	resp, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &cpArgs2)
 	if pErr != nil {
 		t.Fatal(pErr)
-	}
-	if br.Txn.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %s", br.Txn.Timestamp)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 
 	// Try a conditional put at a later timestamp which will fail
 	// because there's now a transaction intent. This failure will
 	// not update the timestamp cache.
-	t1 := 2 * time.Second
-	tc.manualClock.Set(t1.Nanoseconds())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	_, pErr = tc.SendWrapped(&cpArgs)
+	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
+	tc.manualClock.Set(t3.WallTime)
+	_, pErr = tc.SendWrapped(&cpArgs1)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected WriteIntentError; got %v", pErr)
 	}
 
-	// Abort the intent and try to write again to ensure the timestamp
-	// cache wasn't updated by the second failed conditional put.
-	rArgs := &roachpb.ResolveIntentRequest{
-		RequestHeader: pArgs.Header(),
-		IntentTxn:     txn.TxnMeta,
-		Status:        roachpb.ABORTED,
+	// Abort the intent and try a transactional conditional put at
+	// a later timestamp. This should succeed and should not update
+	// the timestamp cache.
+	abortIntent := func(s roachpb.Span, abortTxn *roachpb.Transaction) {
+		if _, pErr = tc.SendWrapped(&roachpb.ResolveIntentRequest{
+			RequestHeader: roachpb.RequestHeaderFromSpan(s),
+			IntentTxn:     abortTxn.TxnMeta,
+			Status:        roachpb.ABORTED,
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
-	h := roachpb.Header{Timestamp: txn.Timestamp}
-	if _, pErr = tc.SendWrappedWith(h, rArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	ba = roachpb.BatchRequest{}
-	ba.Header = h
-	ba.Add(&pArgs)
-	br, pErr = tc.Sender().Send(context.Background(), ba)
+	abortIntent(cpArgs2.Span(), txnEarly)
+	txnLater := *txnEarly
+	txnLater.OrigTimestamp, txnLater.Timestamp = t3, t3
+	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &txnLater}, &cpArgs2)
 	if pErr != nil {
 		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t3 {
+		t.Errorf("expected write timestamp to be %s; got %s", t3, respTS)
 	}
-	if br.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to succeed at 1s; got %s", br.Timestamp)
+
+	// Abort the intent again and try to write again to ensure the timestamp
+	// cache wasn't updated by the second (successful), third (unsuccessful),
+	// or fourth (successful) conditional put. Only the conditional put that
+	// hit a ConditionFailedError should update the timestamp cache.
+	abortIntent(cpArgs2.Span(), &txnLater)
+	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &cpArgs2)
+	if pErr != nil {
+		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 }
 
@@ -2870,79 +2888,85 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	// Set clock to time 1s and do the init put.
-	t0 := 1 * time.Second
-	tc.manualClock.Set(t0.Nanoseconds())
-
 	// InitPut args to write "0". Should succeed.
 	key := []byte("a")
-	ipArgs := iPutArgs(key, []byte("0"))
-	_, pErr := tc.SendWrapped(&ipArgs)
+	value := []byte("0")
+	ipArgs1 := iPutArgs(key, value)
+	_, pErr := tc.SendWrapped(&ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
+
+	// Set clock to time 2s and do other init puts.
+	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
+	t2 := makeTS(2*time.Second.Nanoseconds(), 0)
+	t2Next := t2.Next()
+	tc.manualClock.Set(t2.WallTime)
 
 	// InitPut args to write "1" to same key. Should fail.
-	ipArgs = iPutArgs(key, []byte("1"))
-	_, pErr = tc.SendWrapped(&ipArgs)
-	cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError)
-	if !ok {
+	ipArgs2 := iPutArgs(key, []byte("1"))
+	_, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: t2}, &ipArgs2)
+	if cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
 		t.Errorf("expected ConditionFailedError; got %v", pErr)
-	}
-	zeroVal := roachpb.MakeValueFromString("0")
-	if cfErr.ActualValue == nil || !bytes.Equal(cfErr.ActualValue.RawBytes, zeroVal.RawBytes) {
-		t.Errorf("expected value %s; got %s", &zeroVal, cfErr.ActualValue)
+	} else if valueBytes, err := cfErr.ActualValue.GetBytes(); err != nil {
+		t.Fatal(err)
+	} else if cfErr.ActualValue == nil || !bytes.Equal(valueBytes, value) {
+		t.Errorf("expected value %q; got %+v", value, valueBytes)
 	}
 
-	// Try a transactional put at a lower timestamp and ensure it is pushed.
-	var ba roachpb.BatchRequest
-	txn := newTransaction("test", key, 1, tc.Clock())
-	txn.OrigTimestamp, txn.Timestamp = makeTS(1, 0), makeTS(1, 0)
-	pArgs := putArgs(key, []byte("value"))
-	ba.Header = roachpb.Header{Txn: txn}
-	ba.Add(&pArgs)
-	assignSeqNumsForReqs(txn, &pArgs)
-	br, pErr := tc.Sender().Send(context.Background(), ba)
+	// Try a transactional init put at a lower timestamp and
+	// ensure it is pushed.
+	txnEarly := newTransaction("test", key, 1, tc.Clock())
+	txnEarly.OrigTimestamp, txnEarly.Timestamp = t1, t1
+	resp, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
-	}
-	if br.Txn.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %s", br.Txn.Timestamp)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 
 	// Try an init put at a later timestamp which will fail
 	// because there's now a transaction intent. This failure
 	// will not update the timestamp cache.
-	t1 := 2 * time.Second
-	tc.manualClock.Set(t1.Nanoseconds())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	_, pErr = tc.SendWrapped(&ipArgs)
+	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
+	tc.manualClock.Set(t3.WallTime)
+	_, pErr = tc.SendWrapped(&ipArgs2)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected WriteIntentError; got %v", pErr)
 	}
 
-	// Abort the intent and try to write again to ensure the timestamp
-	// cache wasn't updated by the second failed init put.
-	rArgs := &roachpb.ResolveIntentRequest{
-		RequestHeader: pArgs.Header(),
-		IntentTxn:     txn.TxnMeta,
-		Status:        roachpb.ABORTED,
+	// Abort the intent and try a transactional init put at a later
+	// timestamp. This should succeed and should not update the
+	// timestamp cache.
+	abortIntent := func(s roachpb.Span, abortTxn *roachpb.Transaction) {
+		if _, pErr = tc.SendWrapped(&roachpb.ResolveIntentRequest{
+			RequestHeader: roachpb.RequestHeaderFromSpan(s),
+			IntentTxn:     abortTxn.TxnMeta,
+			Status:        roachpb.ABORTED,
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
-	h := roachpb.Header{Timestamp: txn.Timestamp}
-	if _, pErr = tc.SendWrappedWith(h, rArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	ba = roachpb.BatchRequest{}
-	ba.Header = h
-	ba.Add(&pArgs)
-	br, pErr = tc.Sender().Send(context.Background(), ba)
+	abortIntent(ipArgs1.Span(), txnEarly)
+	txnLater := *txnEarly
+	txnLater.OrigTimestamp, txnLater.Timestamp = t3, t3
+	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &txnLater}, &ipArgs1)
 	if pErr != nil {
 		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t3 {
+		t.Errorf("expected write timestamp to be %s; got %s", t3, respTS)
 	}
-	if br.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to succeed at 1s; got %s", br.Timestamp)
+
+	// Abort the intent again and try to write again to ensure the timestamp
+	// cache wasn't updated by the second (successful), third (unsuccessful),
+	// or fourth (successful) init put. Only the init put that hit a
+	// ConditionFailedError should update the timestamp cache.
+	abortIntent(ipArgs1.Span(), &txnLater)
+	resp, pErr = tc.SendWrappedWith(roachpb.Header{Txn: txnEarly}, &ipArgs1)
+	if pErr != nil {
+		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.Timestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
 	}
 }
 
@@ -5827,29 +5851,18 @@ func TestConditionFailedError(t *testing.T) {
 	key := []byte("k")
 	value := []byte("quack")
 	pArgs := putArgs(key, value)
-
 	if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	val := roachpb.MakeValueFromString("moo")
-	args := roachpb.ConditionalPutRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: key,
-		},
-		Value:    roachpb.MakeValueFromBytes(value),
-		ExpValue: &val,
-	}
 
-	_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: hlc.MinTimestamp}, &args)
-
+	cpArgs := cPutArgs(key, value, []byte("moo"))
+	_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: hlc.MinTimestamp}, &cpArgs)
 	if cErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); pErr == nil || !ok {
-		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
-			pErr, pErr)
+		t.Fatalf("expected ConditionFailedError, got %T with content %+v", pErr, pErr)
 	} else if valueBytes, err := cErr.ActualValue.GetBytes(); err != nil {
 		t.Fatal(err)
 	} else if cErr.ActualValue == nil || !bytes.Equal(valueBytes, value) {
-		t.Errorf("ConditionFailedError with bytes %q expected, but got %+v",
-			value, cErr.ActualValue)
+		t.Errorf("ConditionFailedError with bytes %q expected, but got %+v", value, cErr.ActualValue)
 	}
 }
 
@@ -6397,7 +6410,7 @@ func TestProposalOverhead(t *testing.T) {
 	// changes. Try to make this number go down and not up. It slightly
 	// undercounts because our proposal filter is called before
 	// maxLeaseIndex and a few other fields are filled in.
-	const expectedOverhead = 48
+	const expectedOverhead = 50
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
@@ -8752,7 +8765,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	splitKey := roachpb.Key("b")
-	if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey, true /* manual */); err != nil {
+	if err := kvDB.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -9376,11 +9389,10 @@ func TestReplicaLocalRetries(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name             string
-		setupFn          func() (hlc.Timestamp, error) // returns expected batch execution timestamp
-		batchFn          func(hlc.Timestamp) (roachpb.BatchRequest, hlc.Timestamp)
-		expErr           string
-		expTSCUpdateKeys []string
+		name    string
+		setupFn func() (hlc.Timestamp, error) // returns expected batch execution timestamp
+		batchFn func(hlc.Timestamp) (roachpb.BatchRequest, hlc.Timestamp)
+		expErr  string
 	}{
 		{
 			name: "local retry of write too old on put",
@@ -9411,7 +9423,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				ba.Add(&cput)
 				return
 			},
-			expTSCUpdateKeys: []string{"b"},
 		},
 		{
 			name: "local retry of write too old on initput",
@@ -9429,7 +9440,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				ba.Add(&iput)
 				return
 			},
-			expTSCUpdateKeys: []string{"b-iput"},
 		},
 		{
 			name: "serializable push without retry",
@@ -9512,7 +9522,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &bt, &cput, &et)
 				return
 			},
-			expTSCUpdateKeys: []string{"e"},
 		},
 		// Handle multiple write too old errors.
 		{
@@ -9535,11 +9544,10 @@ func TestReplicaLocalRetries(t *testing.T) {
 				}
 				return
 			},
-			expTSCUpdateKeys: []string{"f1", "f2", "f3"},
 		},
 		// Handle multiple write too old errors in 1PC transaction.
 		{
-			name: "local retry with multiple write too old errors",
+			name: "local retry with multiple write too old errors on 1PC txn",
 			setupFn: func() (hlc.Timestamp, error) {
 				if _, err := put("g1", "put"); err != nil {
 					return hlc.Timestamp{}, err
@@ -9566,7 +9574,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &et)
 				return
 			},
-			expTSCUpdateKeys: []string{"g1", "g2", "g3"},
 		},
 		// Serializable transaction will commit with forwarded timestamp if no refresh spans.
 		{
@@ -9599,7 +9606,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
 			},
-			expTSCUpdateKeys: []string{"h"},
 		},
 		// Serializable 1PC transaction will commit with forwarded timestamp
 		// using the 1PC path if no refresh spans.
@@ -9665,12 +9671,6 @@ func TestReplicaLocalRetries(t *testing.T) {
 			}
 			if actualTS != expTS {
 				t.Fatalf("expected ts=%s; got %s", expTS, actualTS)
-			}
-			for _, k := range test.expTSCUpdateKeys {
-				rTS, _ := tc.repl.store.tsCache.GetMaxRead(roachpb.Key(k), nil)
-				if rTS != expTS {
-					t.Fatalf("expected timestamp cache update for %s to %s; got %s", k, expTS, rTS)
-				}
 			}
 		})
 	}
@@ -9739,173 +9739,6 @@ func TestReplicaPushed1PC(t *testing.T) {
 		t.Errorf("expected TransactionRetryError, got %s", pErr)
 	} else if trErr.Reason != roachpb.RETRY_WRITE_TOO_OLD {
 		t.Errorf("expected RETRY_WRITE_TOO_OLD, got %s", trErr)
-	}
-}
-
-// assertUsingRangeAppliedState asserts that the value of
-// ReplicaState.UsingAppliedStateKey is equal to the expected value.
-func assertUsingRangeAppliedState(t *testing.T, repl *Replica, expSet bool) {
-	t.Helper()
-	repl.raftMu.Lock()
-	defer repl.raftMu.Unlock()
-	repl.mu.Lock()
-	defer repl.mu.Unlock()
-
-	usingAppliedStateKey := repl.mu.state.UsingAppliedStateKey
-	if usingAppliedStateKey != expSet {
-		t.Errorf("expected ReplicaState.UsingAppliedStateKey=%t, found %t",
-			expSet, usingAppliedStateKey)
-	}
-}
-
-// assertRangeAppliedStateRelatedKeysExist performs a series of assertions
-// that each key related to the RangeAppliedState key migration is either
-// present or missing, depending on the expRASK flag.
-func assertRangeAppliedStateRelatedKeysExist(
-	ctx context.Context, t *testing.T, repl *Replica, expRASK bool,
-) {
-	t.Helper()
-	repl.raftMu.Lock()
-	defer repl.raftMu.Unlock()
-	repl.mu.Lock()
-	defer repl.mu.Unlock()
-
-	assertHasKey := func(key roachpb.Key, expect bool) {
-		t.Helper()
-		val, _, err := engine.MVCCGet(ctx, repl.store.Engine(), key, hlc.Timestamp{},
-			engine.MVCCGetOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		exists := val != nil
-		if exists != expect {
-			t.Errorf("expected key %s to exist=%t, found %t", key, expect, exists)
-		}
-	}
-
-	rsl := repl.mu.stateLoader
-	assertHasKey(rsl.RangeAppliedStateKey(), expRASK)
-	assertHasKey(rsl.RaftAppliedIndexLegacyKey(), !expRASK)
-	assertHasKey(rsl.LeaseAppliedIndexLegacyKey(), !expRASK)
-	assertHasKey(rsl.RangeStatsLegacyKey(), !expRASK)
-}
-
-// TestReplicaBootstrapRangeAppliedStateKey verifies that a bootstrapped range
-// is only created with a RangeAppliedStateKey if the cluster version is high
-// enough to permit it.
-func TestReplicaBootstrapRangeAppliedStateKey(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		version                 roachpb.Version
-		expRangeAppliedStateKey bool
-	}{
-		{
-			version:                 cluster.VersionByKey(cluster.Version2_0),
-			expRangeAppliedStateKey: false,
-		},
-		{
-			version:                 cluster.VersionByKey(cluster.VersionRangeAppliedStateKey),
-			expRangeAppliedStateKey: true,
-		},
-		{
-			version:                 cluster.BinaryServerVersion,
-			expRangeAppliedStateKey: true,
-		},
-	}
-	for _, c := range testCases {
-		t.Run(fmt.Sprintf("version=%s", c.version), func(t *testing.T) {
-			ctx := context.Background()
-			stopper := stop.NewStopper()
-			defer stopper.Stop(ctx)
-
-			cfg := TestStoreConfig(nil)
-			cfg.Settings = cluster.MakeTestingClusterSettingsWithVersion(
-				c.version /* minVersion */, c.version /* serverVersion */)
-			tc := testContext{}
-			tc.StartWithStoreConfig(t, stopper, cfg)
-			repl := tc.repl
-
-			// Check that that UsingAppliedStateKey flag in ReplicaState is set
-			// as expected.
-			assertInMemState := func(t *testing.T) {
-				t.Helper()
-				assertUsingRangeAppliedState(t, repl, c.expRangeAppliedStateKey)
-			}
-
-			// Check that persisted keys agree with the UsingAppliedStateKey flag.
-			assertPersistentState := func(t *testing.T) {
-				t.Helper()
-				assertRangeAppliedStateRelatedKeysExist(ctx, t, repl, c.expRangeAppliedStateKey)
-			}
-
-			// Check that in-mem and persistent state agree.
-			assertInMemAndPersistentStateAgree := func(t *testing.T) {
-				t.Helper()
-				repl.AssertState(ctx, tc.engine)
-			}
-
-			// Check that the MVCCStats are correct.
-			computeStatsDelta := func(db *client.DB) (enginepb.MVCCStats, error) {
-				var b client.Batch
-				b.AddRawRequest(&roachpb.RecomputeStatsRequest{
-					RequestHeader: roachpb.RequestHeader{Key: roachpb.KeyMin},
-					DryRun:        true,
-				})
-				if err := db.Run(ctx, &b); err != nil {
-					return enginepb.MVCCStats{}, err
-				}
-				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RecomputeStatsResponse)
-				delta := enginepb.MVCCStats(resp.AddedDelta)
-				delta.AgeTo(0)
-				return delta, nil
-			}
-			assertEmptyStatsDelta := func(t *testing.T) {
-				t.Helper()
-				delta, err := computeStatsDelta(repl.DB())
-				if err != nil {
-					t.Fatal(err)
-				}
-				if delta != (enginepb.MVCCStats{}) {
-					t.Errorf("unexpected stats adjustment of %+v", delta)
-				}
-			}
-
-			// Perform initial series of assertions.
-			assertInMemState(t)
-			assertPersistentState(t)
-			assertInMemAndPersistentStateAgree(t)
-			assertEmptyStatsDelta(t)
-
-			// Save the ReplicaState and perform persistent assertions again.
-			repl.raftMu.Lock()
-			repl.mu.Lock()
-			if _, err := repl.mu.stateLoader.Save(
-				ctx, tc.engine, repl.mu.state,
-				stateloader.TruncatedStateUnreplicated,
-			); err != nil {
-				t.Fatalf("could not save ReplicaState: %v", err)
-			}
-			repl.mu.Unlock()
-			repl.raftMu.Unlock()
-			assertPersistentState(t)
-			assertInMemAndPersistentStateAgree(t)
-			assertEmptyStatsDelta(t)
-
-			// Load the ReplicaState and perform in-memory assertions again.
-			repl.raftMu.Lock()
-			repl.mu.Lock()
-			state, err := repl.mu.stateLoader.Load(ctx, tc.engine, repl.DescLocked())
-			if err != nil {
-				t.Fatalf("could not load ReplicaState: %v", err)
-			}
-			repl.mu.state = state
-			repl.mu.Unlock()
-			repl.raftMu.Unlock()
-			assertInMemState(t)
-			assertInMemAndPersistentStateAgree(t)
-		})
 	}
 }
 
@@ -10594,6 +10427,106 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			expError: "found txn in indeterminate STAGING state",
 			expTxn:   txnWithStagingStatusAndInFlightWrites,
+		},
+		{
+			// The pushee attempted a parallel commit that failed, so it is now
+			// re-writing new intents at higher timestamps. The push should not
+			// consider the pushee to be staging.
+			name: "push transaction (timestamp) after end transaction (stage) with outdated timestamp",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.InFlightWrites = inFlightWrites
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Timestamp = clone.Timestamp.Add(0, 1)
+				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.Timestamp.Forward(pushTs)
+				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
+		},
+		{
+			// The pushee attempted a parallel commit that failed, so it is now
+			// re-writing new intents at higher timestamps. The push should not
+			// consider the pushee to be staging.
+			name: "push transaction (abort) after end transaction (stage) with outdated timestamp",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.InFlightWrites = inFlightWrites
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Timestamp.Forward(now)
+				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
+				record.Timestamp.Forward(pushTs)
+				record.LastHeartbeat.Forward(pushTs)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
+		},
+		{
+			// The pushee attempted a parallel commit that failed, so it is now
+			// writing new intents in a new epoch. The push should not consider
+			// the pushee to be staging.
+			name: "push transaction (timestamp) after end transaction (stage) with outdated epoch",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.InFlightWrites = inFlightWrites
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Restart(-1, 0, clone.Timestamp.Add(0, 1))
+				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.Epoch = txn.Epoch + 1
+				record.Timestamp.Forward(pushTs)
+				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
+		},
+		{
+			// The pushee attempted a parallel commit that failed, so it is now
+			// writing new intents in a new epoch. The push should not consider
+			// the pushee to be staging.
+			name: "push transaction (abort) after end transaction (stage) with outdated epoch",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.InFlightWrites = inFlightWrites
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Restart(-1, 0, clone.Timestamp.Add(0, 1))
+				pt := pushTxnArgs(pusher, clone, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
+				record.Epoch = txn.Epoch + 1
+				record.Timestamp.Forward(pushTs)
+				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
 		},
 		{
 			name: "begin transaction after end transaction (abort)",

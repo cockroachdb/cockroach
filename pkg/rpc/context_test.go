@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package rpc
 
@@ -17,7 +15,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -32,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -40,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/logtags"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -439,10 +436,6 @@ func (ln *interceptingListener) Accept() (net.Conn, error) {
 // heartbeats succeed or fail due to transport failures.
 func TestHeartbeatHealthTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	if runtime.GOOS == "windows" {
-		t.Skip("TODO(tamird): remove in Go 1.9; https://github.com/golang/go/commit/03d1aa6")
-	}
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -1283,8 +1276,8 @@ func setVersion(c *Context, v roachpb.Version) error {
 func TestVersionCheckBidirectional(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v1 := cluster.VersionByKey(cluster.VersionRPCNetworkStats)
-	v2 := cluster.VersionByKey(cluster.VersionRPCVersionCheck)
+	v1 := roachpb.Version{Major: 1}
+	v2 := cluster.BinaryServerVersion
 
 	testData := []struct {
 		name          string

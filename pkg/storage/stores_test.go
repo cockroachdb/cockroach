@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage
 
@@ -333,22 +331,24 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
+	v1_0 := roachpb.Version{Major: 1}
 	makeStores := func() *Stores {
 		// Hard-code ServerVersion of 1.1 for this test.
 		// Hard-code MinSupportedVersion of 1.0 for this test.
-		ls := NewStores(log.AmbientContext{}, stores[0].Clock(), cluster.VersionByKey(cluster.VersionBase), roachpb.Version{Major: 1, Minor: 1})
+		ls := NewStores(log.AmbientContext{}, stores[0].Clock(),
+			v1_0, roachpb.Version{Major: 1, Minor: 1})
 		return ls
 	}
 
 	ls0 := makeStores()
 
 	// If there are no stores, default to minSupportedVersion
-	// (VersionBase in this test)
+	// (v1_0 in this test)
 	if initialCV, err := ls0.SynthesizeClusterVersion(ctx); err != nil {
 		t.Fatal(err)
 	} else {
 		expCV := cluster.ClusterVersion{
-			Version: cluster.VersionByKey(cluster.VersionBase),
+			Version: v1_0,
 		}
 		if !reflect.DeepEqual(initialCV, expCV) {
 			t.Fatalf("expected %+v; got %+v", expCV, initialCV)
@@ -372,7 +372,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			expCV := cluster.ClusterVersion{
-				Version: cluster.VersionByKey(cluster.VersionBase),
+				Version: v1_0,
 			}
 			if !reflect.DeepEqual(initialCV, expCV) {
 				t.Fatalf("expected %+v; got %+v", expCV, initialCV)
@@ -409,7 +409,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 		ls01.AddStore(stores[1])
 
 		expCV := cluster.ClusterVersion{
-			Version: cluster.VersionByKey(cluster.VersionBase),
+			Version: v1_0,
 		}
 		if cv, err := ls01.SynthesizeClusterVersion(ctx); err != nil {
 			t.Fatal(err)

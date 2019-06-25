@@ -1,20 +1,18 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package props
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -98,6 +96,10 @@ func (m *ColStatsMap) Count() int {
 
 // Get returns the nth statistic in the map, by its ordinal position. This
 // position is stable across calls to Get or Add (but not RemoveIntersecting).
+// NOTE: The returned *ColumnStatistic is only valid until this ColStatsMap is
+//       updated via a call to Add() or RemoveIntersecting(). At that point,
+//       the address of the statistic may have changed, so it must be fetched
+//       again using another call to Get() or Lookup().
 func (m *ColStatsMap) Get(nth int) *ColumnStatistic {
 	if nth < initialColStatsCap {
 		return &m.initial[nth]
@@ -107,6 +109,10 @@ func (m *ColStatsMap) Get(nth int) *ColumnStatistic {
 
 // Lookup returns the column statistic indexed by the given column set. If no
 // such statistic exists in the map, then ok=false.
+// NOTE: The returned *ColumnStatistic is only valid until this ColStatsMap is
+//       updated via a call to Add() or RemoveIntersecting(). At that point,
+//       the address of the statistic may have changed, so it must be fetched
+//       again using another call to Lookup() or Get().
 func (m *ColStatsMap) Lookup(cols opt.ColSet) (colStat *ColumnStatistic, ok bool) {
 	// Scan the inlined statistics if there are only a few statistics in the map.
 	if m.count <= initialColStatsCap {
@@ -121,7 +127,7 @@ func (m *ColStatsMap) Lookup(cols opt.ColSet) (colStat *ColumnStatistic, ok bool
 
 	// Use the prefix tree index to look up the column statistic.
 	val := colStatVal{prefix: 0, pos: -1}
-	curr := 0
+	curr := opt.ColumnID(0)
 	for {
 		curr, ok = cols.Next(curr + 1)
 		if !ok {
@@ -150,6 +156,10 @@ func (m *ColStatsMap) Lookup(cols opt.ColSet) (colStat *ColumnStatistic, ok bool
 // it does not yet exist in the map, then Add adds a new blank ColumnStatistic
 // and returns it, along with added=true. Otherwise, Add returns the existing
 // ColumnStatistic with added=false.
+// NOTE: The returned *ColumnStatistic is only valid until this ColStatsMap is
+//       updated via another call to Add() or RemoveIntersecting(). At that
+//       point, the address of the statistic may have changed, so it must be
+//       fetched again using Lookup() or Get().
 func (m *ColStatsMap) Add(cols opt.ColSet) (_ *ColumnStatistic, added bool) {
 	// Only add column set if it is not already present in the map.
 	colStat, ok := m.Lookup(cols)
@@ -158,7 +168,7 @@ func (m *ColStatsMap) Add(cols opt.ColSet) (_ *ColumnStatistic, added bool) {
 	}
 
 	if cols.Empty() {
-		panic(pgerror.AssertionFailedf("stats cols should never be empty"))
+		panic(errors.AssertionFailedf("stats cols should never be empty"))
 	}
 
 	// Fast path for case where there are only a few stats in the map.
@@ -234,7 +244,7 @@ func (m *ColStatsMap) addToIndex(cols opt.ColSet, pos int) {
 	}
 
 	prefix := prefixID(0)
-	prev := 0
+	prev := opt.ColumnID(0)
 	curr, _ := cols.Next(prev)
 	for {
 		key := colStatKey{prefix: prefix, id: opt.ColumnID(curr)}

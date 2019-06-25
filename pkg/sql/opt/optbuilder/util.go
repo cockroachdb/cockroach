@@ -1,32 +1,51 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 func checkFrom(expr tree.Expr, inScope *scope) {
 	if len(inScope.cols) == 0 {
-		panic(pgerror.Newf(pgerror.CodeInvalidNameError,
+		panic(pgerror.Newf(pgcode.InvalidName,
 			"cannot use %q without a FROM clause", tree.ErrString(expr)))
 	}
+}
+
+// windowAggregateFrame() returns a frame that any aggregate built as a window
+// can use.
+func windowAggregateFrame() memo.WindowFrame {
+	return memo.WindowFrame{
+		StartBoundType: unboundedStartBound.BoundType,
+		EndBoundType:   unboundedEndBound.BoundType,
+	}
+}
+
+// getTypedExprs casts the exprs into TypedExps and returns them.
+func getTypedExprs(exprs []tree.Expr) []tree.TypedExpr {
+	argExprs := make([]tree.TypedExpr, len(exprs))
+	for i, expr := range exprs {
+		argExprs[i] = expr.(tree.TypedExpr)
+	}
+	return argExprs
 }
 
 // expandStar expands expr into a list of columns if expr
@@ -104,7 +123,7 @@ func (b *Builder) expandStar(
 		}
 
 	default:
-		panic(pgerror.AssertionFailedf("unhandled type: %T", expr))
+		panic(errors.AssertionFailedf("unhandled type: %T", expr))
 	}
 
 	return aliases, exprs
@@ -233,7 +252,7 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 			ord = val
 		} else {
 			panic(pgerror.Newf(
-				pgerror.CodeSyntaxError,
+				pgcode.Syntax,
 				"non-integer constant in %s: %s", context, expr,
 			))
 		}
@@ -243,17 +262,17 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 		}
 	case *tree.StrVal:
 		panic(pgerror.Newf(
-			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
+			pgcode.Syntax, "non-integer constant in %s: %s", context, expr,
 		))
 	case tree.Datum:
 		panic(pgerror.Newf(
-			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
+			pgcode.Syntax, "non-integer constant in %s: %s", context, expr,
 		))
 	}
 	if ord != -1 {
 		if ord < 1 || ord > int64(numOriginalCols) {
 			panic(pgerror.Newf(
-				pgerror.CodeInvalidColumnReferenceError,
+				pgcode.InvalidColumnReference,
 				"%s position %s is not in select list", context, expr,
 			))
 		}
@@ -301,7 +320,7 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 					// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
 					// ambiguity error.
 					if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
-						panic(pgerror.Newf(pgerror.CodeAmbiguousAliasError,
+						panic(pgerror.Newf(pgcode.AmbiguousAlias,
 							"%s \"%s\" is ambiguous", op, target))
 					}
 					// Use the index of the first matching column.
@@ -318,7 +337,7 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 // makeBackfillError returns an error indicating that the column of the given
 // name is currently being backfilled and cannot be referenced.
 func makeBackfillError(name tree.Name) error {
-	return pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
+	return pgerror.Newf(pgcode.InvalidColumnReference,
 		"column %q is being backfilled", tree.ErrString(&name))
 }
 
@@ -377,12 +396,12 @@ func colsToColList(cols []scopeColumn) opt.ColList {
 func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 	if b.exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
 		panic(builderError{
-			pgerror.Newf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op),
+			pgerror.Newf(pgcode.Grouping, "aggregate functions are not allowed in %s", op),
 		})
 	}
 	if b.exprTransformCtx.WindowFuncInExpr(expr) {
 		panic(builderError{
-			pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op),
+			pgerror.Newf(pgcode.Windowing, "window functions are not allowed in %s", op),
 		})
 	}
 }
@@ -396,18 +415,21 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	if err != nil {
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
-		if pgerr, ok := pgerror.GetPGCause(err); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
-			panic(pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
+		if code := pgerror.GetPGCode(err); code == pgcode.InvalidSchemaName {
+			var newErr error
+			newErr = pgerror.Newf(pgcode.InvalidSchemaName,
 				"cannot create %q because the target database or schema does not exist",
-				tree.ErrString(name)).
-				SetHintf("verify that the current database and search_path are valid and/or the target database exists"))
+				tree.ErrString(name))
+			newErr = errors.WithSecondaryError(newErr, err)
+			newErr = errors.WithHint(newErr, "verify that the current database and search_path are valid and/or the target database exists")
+			panic(newErr)
 		}
 		panic(builderError{err})
 	}
 
 	// Only allow creation of objects in the public schema.
 	if resName.Schema() != tree.PublicSchema {
-		panic(pgerror.Newf(pgerror.CodeInvalidNameError,
+		panic(pgerror.Newf(pgcode.InvalidName,
 			"schema cannot be modified: %q", tree.ErrString(&resName)))
 	}
 
@@ -456,7 +478,7 @@ func (b *Builder) resolveDataSource(
 func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
 	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.StableID(ref.TableID))
 	if err != nil {
-		panic(builderError{pgerror.Wrapf(err, pgerror.CodeUndefinedObjectError,
+		panic(builderError{pgerror.Wrapf(err, pgcode.UndefinedObject,
 			"%s", tree.ErrString(ref))})
 	}
 	b.checkPrivilege(ds.Name(), ds, priv)

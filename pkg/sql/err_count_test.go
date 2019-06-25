@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql_test
 
@@ -18,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,14 +32,14 @@ func TestErrorCounts(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	count1 := telemetry.GetRawFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
+	count1 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax]
 
 	_, err := db.Query("SELECT 1+")
 	if err == nil {
 		t.Fatal("expected error, got no error")
 	}
 
-	count2 := telemetry.GetRawFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
+	count2 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax]
 
 	if count2-count1 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count2-count1)
@@ -57,7 +55,7 @@ func TestErrorCounts(t *testing.T) {
 	}
 	rows.Close()
 
-	count3 := telemetry.GetRawFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
+	count3 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax]
 
 	if count3-count2 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count3-count2)

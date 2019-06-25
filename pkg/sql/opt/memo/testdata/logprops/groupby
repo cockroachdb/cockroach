@@ -1,27 +1,10 @@
 exec-ddl
 CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z))
 ----
-TABLE xyzs
- ├── x int not null
- ├── y int
- ├── z float not null
- ├── s string
- ├── INDEX primary
- │    └── x int not null
- └── INDEX secondary
-      ├── s string desc
-      ├── z float not null
-      └── x int not null (storing)
 
 exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
 ----
-TABLE kuv
- ├── k int not null
- ├── u float
- ├── v string
- └── INDEX primary
-      └── k int not null
 
 build
 SELECT y, sum(z), x, False FROM xyzs GROUP BY x, y
@@ -267,7 +250,8 @@ group-by
       ├── tuple [type=tuple{int}]
       │    └── const: 1 [type=int]
       └── tuple [type=tuple{int}]
-           └── null [type=unknown]
+           └── cast: INT8 [type=int]
+                └── null [type=unknown]
 
 # GroupBy with empty grouping columns.
 opt

@@ -7,15 +7,6 @@ CREATE TABLE abcde (
     "e:write-only" INT
 )
 ----
-TABLE abcde
- ├── a int not null
- ├── b int
- ├── c int not null
- ├── d int
- ├── rowid int not null (hidden)
- ├── e int (mutation)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE xyz (
@@ -24,12 +15,6 @@ CREATE TABLE xyz (
     z FLOAT8
 )
 ----
-TABLE xyz
- ├── x string not null
- ├── y int not null
- ├── z float
- └── INDEX primary
-      └── x string not null
 
 # Properties with no RETURNING clause.
 build
@@ -214,7 +199,7 @@ build
 INSERT INTO abcde (a, b) (VALUES (1, 2)) RETURNING *, rowid;
 ----
 insert abcde
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
  ├── insert-mapping:
  │    ├──  column1:7 => a:1
  │    ├──  column2:8 => b:2
@@ -227,21 +212,21 @@ insert abcde
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── project
-      ├── columns: column12:12(int) column1:7(int) column2:8(int) column9:9(int!null) column10:10(int) column11:11(int)
+      ├── columns: column12:12(int) column1:7(int!null) column2:8(int!null) column9:9(int!null) column10:10(int) column11:11(int)
       ├── cardinality: [1 - 1]
       ├── side-effects
       ├── key: ()
       ├── fd: ()-->(7-12)
       ├── prune: (7-12)
       ├── project
-      │    ├── columns: column9:9(int!null) column10:10(int) column11:11(int) column1:7(int) column2:8(int)
+      │    ├── columns: column9:9(int!null) column10:10(int) column11:11(int) column1:7(int!null) column2:8(int!null)
       │    ├── cardinality: [1 - 1]
       │    ├── side-effects
       │    ├── key: ()
       │    ├── fd: ()-->(7-11)
       │    ├── prune: (7-11)
       │    ├── values
-      │    │    ├── columns: column1:7(int) column2:8(int)
+      │    │    ├── columns: column1:7(int!null) column2:8(int!null)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(7,8)

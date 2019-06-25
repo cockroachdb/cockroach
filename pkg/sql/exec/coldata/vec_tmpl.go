@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // {{/*
 // +build execgen_template
@@ -39,88 +37,32 @@ const _TYPES_T = types.Unhandled
 
 // */}}
 
-func (m *memColumn) Append(vec Vec, colType types.T, toLength uint64, fromLength uint16) {
-	switch colType {
+func (m *memColumn) Append(args AppendArgs) {
+	switch args.ColType {
 	// {{range .}}
 	case _TYPES_T:
-		m.col = append(m._TemplateType()[:toLength], vec._TemplateType()[:fromLength]...)
-		// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-
-	if fromLength > 0 {
-		m.nulls.Extend(vec.Nulls(), toLength, 0 /* srcStartIdx */, fromLength)
-	}
-}
-
-func (m *memColumn) AppendSlice(
-	vec Vec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16,
-) {
-	batchSize := srcEndIdx - srcStartIdx
-	outputLen := destStartIdx + uint64(batchSize)
-
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		if outputLen > uint64(len(m._TemplateType())) {
-			m.col = append(m._TemplateType()[:destStartIdx], vec._TemplateType()[srcStartIdx:srcEndIdx]...)
+		fromCol := args.Src._TemplateType()
+		toCol := m._TemplateType()
+		numToAppend := args.SrcEndIdx - args.SrcStartIdx
+		if args.Sel == nil {
+			toCol = append(toCol[:args.DestIdx], fromCol[args.SrcStartIdx:args.SrcEndIdx]...)
+			m.nulls.Extend(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend)
 		} else {
-			copy(m._TemplateType()[destStartIdx:], vec._TemplateType()[srcStartIdx:srcEndIdx])
+			sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
+			appendVals := make([]_GOTYPE, len(sel))
+			for i, selIdx := range sel {
+				appendVals[i] = fromCol[selIdx]
+			}
+			toCol = append(toCol[:args.DestIdx], appendVals...)
+			// TODO(asubiotto): Change Extend* signatures to allow callers to pass in
+			// SrcEndIdx instead of numToAppend.
+			m.nulls.ExtendWithSel(args.Src.Nulls(), args.DestIdx, args.SrcStartIdx, numToAppend, args.Sel)
 		}
-	// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-
-	m.nulls.Extend(vec.Nulls(), destStartIdx, srcStartIdx, batchSize)
-}
-
-func (m *memColumn) AppendWithSel(
-	vec Vec, sel []uint16, batchSize uint16, colType types.T, toLength uint64,
-) {
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		toCol := append(m._TemplateType()[:toLength], make([]_GOTYPE, batchSize)...)
-		fromCol := vec._TemplateType()
-
-		for i := uint16(0); i < batchSize; i++ {
-			toCol[uint64(i)+toLength] = fromCol[sel[i]]
-		}
-
-		m.col = toCol
-		// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-
-	if batchSize > 0 {
-		m.nulls.ExtendWithSel(vec.Nulls(), toLength, 0 /* srcStartIdx */, batchSize, sel)
-	}
-}
-
-func (m *memColumn) AppendSliceWithSel(
-	vec Vec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16, sel []uint16,
-) {
-	batchSize := srcEndIdx - srcStartIdx
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		toCol := append(m._TemplateType()[:destStartIdx], make([]_GOTYPE, batchSize)...)
-		fromCol := vec._TemplateType()
-
-		for i := 0; i < int(batchSize); i++ {
-			toCol[uint64(i)+destStartIdx] = fromCol[sel[i+int(srcStartIdx)]]
-		}
-
 		m.col = toCol
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		panic(fmt.Sprintf("unhandled type %s", args.ColType))
 	}
-
-	m.nulls.ExtendWithSel(vec.Nulls(), destStartIdx, srcStartIdx, batchSize, sel)
 }
 
 func (m *memColumn) Copy(src Vec, srcStartIdx, srcEndIdx uint64, typ types.T) {
@@ -136,11 +78,22 @@ func (m *memColumn) CopyAt(src Vec, destStartIdx, srcStartIdx, srcEndIdx uint64,
 		// allocate a new bitmap.
 		srcBitmap := src.Nulls().NullBitmap()
 		m.nulls.nulls = make([]byte, len(srcBitmap))
-		if src.HasNulls() {
+		m.nulls.UnsetNulls()
+		if !src.HasNulls() {
+			return
+		}
+		if destStartIdx == 0 {
 			m.nulls.hasNulls = true
 			copy(m.nulls.nulls, srcBitmap)
 		} else {
-			m.nulls.UnsetNulls()
+			// The above strategy to just copy will not work. Fall back to a loop.
+			// TODO(asubiotto): This can be improved as well.
+			srcNulls := src.Nulls()
+			for curDestIdx, curSrcIdx := destStartIdx, srcStartIdx; curSrcIdx < srcEndIdx; curDestIdx, curSrcIdx = curDestIdx+1, curSrcIdx+1 {
+				if srcNulls.NullAt64(curSrcIdx) {
+					m.nulls.SetNull64(curDestIdx)
+				}
+			}
 		}
 	// {{end}}
 	default:

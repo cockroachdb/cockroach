@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package cli
 
@@ -20,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	// Register the relevant examples
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/spf13/cobra"
 )
 
@@ -61,7 +60,7 @@ func runGenExamplesCmd(gen workload.Generator) {
 		fmt.Fprintf(w, "CREATE TABLE \"%s\" %s;\n", table.Name, table.Schema)
 		for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; rowIdx++ {
 			for _, row := range table.InitialRows.BatchRows(rowIdx) {
-				rowTuple := strings.Join(workload.StringTuple(row), `,`)
+				rowTuple := strings.Join(workloadsql.StringTuple(row), `,`)
 				fmt.Fprintf(w, "INSERT INTO \"%s\" VALUES (%s);\n", table.Name, rowTuple)
 			}
 		}

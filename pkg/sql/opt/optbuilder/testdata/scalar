@@ -793,18 +793,10 @@ project
 exec-ddl
 CREATE TABLE x (a INT PRIMARY KEY)
 ----
-TABLE x
- ├── a int not null
- └── INDEX primary
-      └── a int not null
 
 exec-ddl
 CREATE TABLE y (b INT PRIMARY KEY)
 ----
-TABLE y
- ├── b int not null
- └── INDEX primary
-      └── b int not null
 
 build
 SELECT b, ARRAY(SELECT a FROM x WHERE x.a = y.b) FROM y
@@ -847,7 +839,7 @@ project
  └── projections
       └── array-flatten [type=string[]]
            └── values
-                ├── columns: column1:1(string)
+                ├── columns: column1:1(string!null)
                 ├── tuple [type=tuple{string}]
                 │    └── const: 'foo' [type=string]
                 ├── tuple [type=tuple{string}]
@@ -1061,20 +1053,10 @@ collate [type=collatedstring{en}]
 exec-ddl
 CREATE TABLE u (x INT)
 ----
-TABLE u
- ├── x int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE v (y INT[])
 ----
-TABLE v
- ├── y int[]
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT ARRAY(SELECT x FROM u ORDER BY x)

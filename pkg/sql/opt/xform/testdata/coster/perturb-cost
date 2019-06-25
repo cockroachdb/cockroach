@@ -11,19 +11,10 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT)
 ----
-TABLE a
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x INT PRIMARY KEY)
 ----
-TABLE b
- ├── x int not null
- └── INDEX primary
-      └── x int not null
 
 norm perturb-cost=(0.5)
 SELECT * FROM a JOIN b ON a.x=b.x ORDER BY a.y
@@ -59,7 +50,7 @@ opt perturb-cost=(0.9)
 SELECT 1
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.02
@@ -71,7 +62,7 @@ opt perturb-cost=(2.5)
 SELECT 1
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.02

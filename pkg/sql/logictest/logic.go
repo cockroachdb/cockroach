@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package logictest
 
@@ -43,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -417,7 +416,7 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
 		overrideDistSQLMode: "off", overrideOptimizerMode: "off",
 		bootstrapVersion: cluster.ClusterVersion{
-			Version: cluster.VersionByKey(cluster.VersionBase),
+			Version: roachpb.Version{Major: 1},
 		},
 		serverVersion:  roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: true,
@@ -1694,7 +1693,7 @@ func (t *logicTest) verifyError(
 		pqErr, ok := err.(*pq.Error)
 		if ok &&
 			strings.HasPrefix(string(pqErr.Code), "XX" /* internal error, corruption, etc */) &&
-			string(pqErr.Code) != pgerror.CodeUncategorizedError /* this is also XX but innocuous */ {
+			string(pqErr.Code) != pgcode.Uncategorized /* this is also XX but innocuous */ {
 			if expectErrCode != string(pqErr.Code) {
 				return false, errors.Errorf(
 					"%s: %s: serious error with code %q occurred; if expected, must use 'error pgcode %s ...' in test:\n%s",
@@ -1735,7 +1734,7 @@ func formatErr(err error) string {
 		if pqErr.Detail != "" {
 			fmt.Fprintf(&buf, "\nDETAIL: %s", pqErr.Detail)
 		}
-		if pqErr.Code == pgerror.CodeInternalError {
+		if pqErr.Code == pgcode.Internal {
 			fmt.Fprintln(&buf, "\nNOTE: internal errors may have more details in logs. Use -show-logs.")
 		}
 		return buf.String()

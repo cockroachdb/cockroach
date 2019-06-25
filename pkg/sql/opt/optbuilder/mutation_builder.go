@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
@@ -19,12 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // mutationBuilder is a helper struct that supports building Insert, Update,
@@ -120,6 +121,9 @@ type mutationBuilder struct {
 	// parsedExprs is a cached set of parsed default and computed expressions
 	// from the table schema. These are parsed once and cached for reuse.
 	parsedExprs []tree.Expr
+
+	// checks contains foreign key check queries; see buildFKChecks.
+	checks memo.FKChecksExpr
 }
 
 func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alias tree.TableName) {
@@ -247,11 +251,11 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 
 	// Ensure that the name list does not contain duplicates.
 	colID := mb.tabID.ColumnID(ord)
-	if mb.targetColSet.Contains(int(colID)) {
-		panic(pgerror.Newf(pgerror.CodeSyntaxError,
+	if mb.targetColSet.Contains(colID) {
+		panic(pgerror.Newf(pgcode.Syntax,
 			"multiple assignments to the same column %q", tabCol.ColName()))
 	}
-	mb.targetColSet.Add(int(colID))
+	mb.targetColSet.Add(colID)
 
 	mb.targetColList = append(mb.targetColList, colID)
 }
@@ -393,7 +397,7 @@ func (mb *mutationBuilder) addSynthesizedCols(
 
 		// Add corresponding target column.
 		mb.targetColList = append(mb.targetColList, tabColID)
-		mb.targetColSet.Add(int(tabColID))
+		mb.targetColSet.Add(tabColID)
 	}
 
 	if projectionsScope != nil {
@@ -595,7 +599,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			scopeOrd := mb.mapToReturnScopeOrd(i)
 			if scopeOrd == -1 {
-				panic(pgerror.AssertionFailedf("column %d is not available in the mutation input", i))
+				panic(errors.AssertionFailedf("column %d is not available in the mutation input", i))
 			}
 			private.ReturnCols[i] = mb.outScope.cols[scopeOrd].id
 		}
@@ -696,7 +700,7 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 		} else {
 			kw = "UPSERT"
 		}
-		panic(pgerror.Newf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgcode.Syntax,
 			"%s has more %s than %s, %d expressions for %d targets",
 			kw, more, less, actual, expected))
 	}
@@ -736,6 +740,147 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 	return expr
 }
 
+// buildFKChecks populates mb.checks with queries that check the integrity of
+// foreign key relations that involve modified rows.
+func (mb *mutationBuilder) buildFKChecks() {
+	if !mb.b.BuildFKChecks {
+		return
+	}
+
+	// TODO(radu): only insert supported for now.
+	if mb.op != opt.InsertOp {
+		return
+	}
+
+	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
+		fk := mb.tab.OutboundForeignKey(i)
+		numCols := fk.ColumnCount()
+
+		// Build an anti-join, with the origin FK columns on the left and the
+		// referenced columns on the right.
+
+		refTab, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, fk.ReferencedTableID())
+		if err != nil {
+			panic(builderError{err})
+		}
+		refOrdinals := make([]int, numCols)
+		for j := range refOrdinals {
+			refOrdinals[j] = fk.ReferencedColumnOrdinal(refTab.(cat.Table), j)
+		}
+
+		scanScope := mb.b.buildScan(
+			refTab.(cat.Table),
+			refTab.Name(),
+			refOrdinals,
+			&tree.IndexFlags{IgnoreForeignKeys: true},
+			includeMutations,
+			mb.b.allocScope(),
+		)
+
+		antiJoinFilters := make(memo.FiltersExpr, numCols)
+
+		var originCols opt.ColSet
+		var nullableOriginCols opt.ColSet
+		for j := 0; j < numCols; j++ {
+			ord := fk.OriginColumnOrdinal(mb.tab, j)
+			inputColID := mb.insertColID(ord)
+			if inputColID == 0 {
+				// There shouldn't be any FK relations involving delete-only mutation
+				// columns.
+				panic(errors.AssertionFailedf("no value for FK column %d", ord))
+			}
+			originCols.Add(inputColID)
+
+			// If a table column is not nullable, NULLs cannot be inserted (the
+			// mutation will fail).
+			if mb.tab.Column(ord).IsNullable() &&
+				!mb.outScope.expr.Relational().NotNullCols.Contains(inputColID) {
+				nullableOriginCols.Add(inputColID)
+			}
+
+			antiJoinFilters[j].Condition = mb.b.factory.ConstructEq(
+				mb.b.factory.ConstructVariable(inputColID),
+				mb.b.factory.ConstructVariable(scanScope.cols[j].id),
+			)
+		}
+
+		// TODO(radu): this is a major hack; we should be using a reference to a
+		// buffer instead of reusing the expression directly. This is for
+		// prototyping purposes (should work ok with constant inputs). Note that
+		// the column IDs in the FK check query aren't exposed by the ForeignKeys
+		// operator so using the same column IDs shouldn't cause issues.
+		left := mb.b.factory.ConstructProject(mb.outScope.expr,
+			memo.EmptyProjectionsExpr, originCols)
+
+		if !nullableOriginCols.Empty() {
+			// The columns we are inserting might have NULLs. These require special
+			// handling, depending on the match method:
+			//  - MATCH SIMPLE: allows any column(s) to be NULL and the row doesn't
+			//                  need to have a match in the referenced table.
+			//  - MATCH FULL: only the case where *all* the columns are NULL is
+			//                allowed, and the row doesn't need to have a match in the
+			//                referenced table.
+			//
+			// Note that rows that have NULLs will never have a match in the anti
+			// join and will generate errors. To handle these cases, we filter the
+			// mutated rows (before the anti join) to remove those which don't need a
+			// match.
+			//
+			// For SIMPLE, we filter out any rows which have a NULL. For FULL, we
+			// filter out any rows where all the columns are NULL (rows which have
+			// NULLs a subset of columns are let through and will generate FK errors
+			// because they will never have a match in the anti join).
+			switch m := fk.MatchMethod(); m {
+			case tree.MatchSimple:
+				// Filter out any rows which have a NULL; build filters of the form
+				//   (a IS NOT NULL) AND (b IS NOT NULL) ...
+				filters := make(memo.FiltersExpr, 0, nullableOriginCols.Len())
+				for col, ok := nullableOriginCols.Next(0); ok; col, ok = nullableOriginCols.Next(col + 1) {
+					filters = append(filters, memo.FiltersItem{
+						Condition: mb.b.factory.ConstructIsNot(
+							mb.b.factory.ConstructVariable(col),
+							memo.NullSingleton,
+						),
+					})
+				}
+				left = mb.b.factory.ConstructSelect(left, filters)
+
+			case tree.MatchFull:
+				// Filter out any rows which have NULLs on all referencing columns.
+				if !nullableOriginCols.Equals(originCols) {
+					// We statically know that some of the referencing columns can't be
+					// NULL. In this case, we don't need to filter anything.
+					break
+				}
+				// Build a filter of the form
+				//   (a IS NOT NULL) OR (b IS NOT NULL) ...
+				var condition opt.ScalarExpr
+				for col, ok := originCols.Next(0); ok; col, ok = originCols.Next(col + 1) {
+					is := mb.b.factory.ConstructIsNot(
+						mb.b.factory.ConstructVariable(col),
+						memo.NullSingleton,
+					)
+					if condition == nil {
+						condition = is
+					} else {
+						condition = mb.b.factory.ConstructOr(condition, is)
+					}
+				}
+				left = mb.b.factory.ConstructSelect(left, memo.FiltersExpr{{Condition: condition}})
+
+			default:
+				panic(errors.AssertionFailedf("match method %s not supported", m))
+			}
+		}
+
+		expr := mb.b.factory.ConstructAntiJoin(
+			left, scanScope.expr, antiJoinFilters, &memo.JoinPrivate{},
+		)
+
+		mb.checks = append(mb.checks, memo.FKChecksItem{Check: expr})
+	}
+}
+
 // findNotNullIndexCol finds the first not-null column in the given index and
 // returns its ordinal position in the owner table. There must always be such a
 // column, even if it turns out to be an implicit primary key column.
@@ -746,7 +891,7 @@ func findNotNullIndexCol(index cat.Index) int {
 			return indexCol.Ordinal
 		}
 	}
-	panic(pgerror.AssertionFailedf("should have found not null column in index"))
+	panic(errors.AssertionFailedf("should have found not null column in index"))
 }
 
 // resultsNeeded determines whether a statement that might have a RETURNING
@@ -758,7 +903,7 @@ func resultsNeeded(r tree.ReturningClause) bool {
 	case *tree.ReturningNothing, *tree.NoReturningClause:
 		return false
 	default:
-		panic(pgerror.AssertionFailedf("unexpected ReturningClause type: %T", t))
+		panic(errors.AssertionFailedf("unexpected ReturningClause type: %T", t))
 	}
 }
 
@@ -781,7 +926,7 @@ func getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName) {
 	}
 	tn, ok := n.(*tree.TableName)
 	if !ok {
-		panic(pgerror.Unimplemented(
+		panic(unimplemented.New(
 			"complex table expression in UPDATE/DELETE",
 			"cannot use a complex table name with DELETE/UPDATE"))
 	}
@@ -801,7 +946,7 @@ func checkDatumTypeFitsColumnType(col cat.Column, typ *types.T) {
 	}
 
 	colName := string(col.ColName())
-	panic(pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+	panic(pgerror.Newf(pgcode.DatatypeMismatch,
 		"value type %s doesn't match type %s of column %q",
 		typ, col.DatumType(), tree.ErrNameString(colName)))
 }

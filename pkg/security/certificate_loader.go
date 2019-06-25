@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package security
 
@@ -414,11 +412,13 @@ func parseCertificate(ci *CertInfo) error {
 			return makeErrorf(err, "failed to parse certificate %d in file %s", i, ci.Filename)
 		}
 
-		if err := validateCockroachCertificate(ci, x509Cert); err != nil {
-			return makeErrorf(err, "failed to validate certificate %d in file %s", i, ci.Filename)
-		}
 		if i == 0 {
-			// The first certificate is the effective one; use its expiration time.
+			// Only check details of the first certificate.
+			if err := validateCockroachCertificate(ci, x509Cert); err != nil {
+				return makeErrorf(err, "failed to validate certificate %d in file %s", i, ci.Filename)
+			}
+
+			// Expiration from the first certificate.
 			expires = x509Cert.NotAfter
 		}
 		certs[i] = x509Cert

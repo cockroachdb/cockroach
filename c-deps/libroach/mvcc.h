@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 #pragma once
 
@@ -255,6 +253,14 @@ template <bool reverse> class mvccScanner {
 
     const bool own_intent = (meta_.txn().id() == txn_id_);
     const DBTimestamp meta_timestamp = ToDBTimestamp(meta_.timestamp());
+    // meta_timestamp is the timestamp of an intent value, which we may or may
+    // not end up ignoring, depending on factors codified below. If we do ignore
+    // the intent then we want to read at a lower timestamp that's strictly
+    // below the intent timestamp (to skip the intent), but also does not exceed
+    // our read timestamp (to avoid erroneously picking up future committed
+    // values); this timestamp is prev_timestamp.
+    const DBTimestamp prev_timestamp =
+        timestamp_ < meta_timestamp ? timestamp_ : PrevTimestamp(meta_timestamp);
     if (timestamp_ < meta_timestamp && !own_intent) {
       // 5. The key contains an intent, but we're reading before the
       // intent. Seek to the desired version. Note that if we own the
@@ -279,7 +285,7 @@ template <bool reverse> class mvccScanner {
         return false;
       }
       intents_->Put(cur_raw_key_, cur_value_);
-      return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
+      return seekVersion(prev_timestamp, false);
     }
 
     if (!own_intent) {
@@ -316,7 +322,7 @@ template <bool reverse> class mvccScanner {
         // transaction all together. We ignore the intent by insisting that the
         // timestamp we're reading at is a historical timestamp < the intent
         // timestamp.
-        return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
+        return seekVersion(prev_timestamp, false);
       }
     }
 
@@ -334,7 +340,7 @@ template <bool reverse> class mvccScanner {
     // restarted and an earlier iteration wrote the value we're now
     // reading. In this case, we ignore the intent and read the
     // previous value as if the transaction were starting fresh.
-    return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
+    return seekVersion(prev_timestamp, false);
   }
 
   // nextKey advances the iterator to point to the next MVCC key

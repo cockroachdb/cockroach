@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage_test
 
@@ -3283,15 +3281,13 @@ func TestMergeQueue(t *testing.T) {
 	sv := &storeCfg.Settings.SV
 	storagebase.MergeQueueEnabled.Override(sv, true)
 	storage.MergeQueueInterval.Override(sv, 0) // process greedily
-	manualSplitTTL := time.Millisecond * 200
-	storage.ManualSplitTTL.Override(sv, manualSplitTTL)
 	var mtc multiTestContext
 	// This test was written before the multiTestContext started creating many
 	// system ranges at startup, and hasn't been update to take that into account.
 	mtc.startWithSingleRange = true
 
 	mtc.storeConfig = &storeCfg
-	// Inject clock for manipulation in tests
+	// Inject clock for manipulation in tests.
 	mtc.clock = clock
 	mtc.Start(t, 2)
 	defer mtc.Stop()
@@ -3299,10 +3295,10 @@ func TestMergeQueue(t *testing.T) {
 	store := mtc.Store(0)
 	store.SetMergeQueueActive(true)
 
-	split := func(t *testing.T, key roachpb.Key, manual bool) {
+	split := func(t *testing.T, key roachpb.Key, expirationTime hlc.Timestamp) {
 		t.Helper()
 		args := adminSplitArgs(key)
-		args.Manual = manual
+		args.ExpirationTime = expirationTime
 		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), args); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -3321,7 +3317,7 @@ func TestMergeQueue(t *testing.T) {
 	rhsStartKey := roachpb.RKey("b")
 	rhsEndKey := roachpb.RKey("c")
 	for _, k := range []roachpb.RKey{lhsStartKey, rhsStartKey, rhsEndKey} {
-		split(t, k.AsRawKey(), false /* manual */)
+		split(t, k.AsRawKey(), hlc.Timestamp{} /* expirationTime */)
 	}
 	lhs := func() *storage.Replica { return store.LookupReplica(lhsStartKey) }
 	rhs := func() *storage.Replica { return store.LookupReplica(rhsStartKey) }
@@ -3346,7 +3342,7 @@ func TestMergeQueue(t *testing.T) {
 		}
 		setZones(*storeCfg.DefaultZoneConfig)
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
-		split(t, roachpb.Key("b"), false /* manual */)
+		split(t, roachpb.Key("b"), hlc.Timestamp{} /* expirationTime */)
 	}
 
 	verifyMerged := func(t *testing.T) {
@@ -3424,13 +3420,13 @@ func TestMergeQueue(t *testing.T) {
 	// TODO(jeffreyxiao): Add subtest to consider load when making merging
 	// decisions.
 
-	t.Run("sticky bit", func(t *testing.T) {
+	t.Run("sticky-bit", func(t *testing.T) {
 		reset(t)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
 		// Perform manual merge and verify that no merge occurred.
-		split(t, rhsStartKey.AsRawKey(), true /* manual */)
+		split(t, rhsStartKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */)
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
@@ -3448,13 +3444,14 @@ func TestMergeQueue(t *testing.T) {
 		verifyMerged(t)
 	})
 
-	t.Run("sticky bit ttl", func(t *testing.T) {
+	t.Run("sticky-bit-expiration", func(t *testing.T) {
+		manualSplitTTL := time.Millisecond * 200
 		reset(t)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
 		// Perform manual merge and verify that no merge occurred.
-		split(t, rhsStartKey.AsRawKey(), true /* manual */)
+		split(t, rhsStartKey.AsRawKey(), clock.Now().Add(manualSplitTTL.Nanoseconds(), 0) /* expirationTime */)
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t)

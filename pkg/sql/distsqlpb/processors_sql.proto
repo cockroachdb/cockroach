@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 //
 // Processor definitions for distributed SQL APIs. See
 // docs/RFCS/distributed_sql.md.
@@ -120,11 +118,11 @@ message TableReaderSpec {
   optional uint64 max_timestamp_age_nanos = 9 [(gogoproto.nullable) = false];
 }
 
-// IndexSkipTableReaderSpec is the specification for table reader that
+// IndexSkipTableReaderSpec is the specification for a table reader that
 // is performing a loose index scan over rows in the table. This means that
 // this reader will return distinct rows from the table while using the index
 // to skip unnecessary rows. This reader is used for different optimizations
-// when operating on a prefix of a compound key
+// when operating on a prefix of a compound key.
 message IndexSkipTableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
@@ -231,6 +229,13 @@ message DistinctSpec {
   // considered, so rows A1,B1,C1,D1 and A1,B1,C1,D2 are considered equal and
   // only one of them (the first) is output.
   repeated uint32 distinct_columns = 2;
+}
+
+// The specification for a WITH ORDINALITY processor. It adds a new column to
+// each resulting row that contains the ordinal number of the row. Since there
+// are no arguments for this operator, the spec is empty.
+message OrdinalitySpec {
+  // Currently empty
 }
 
 // ZigzagJoinerSpec is the specification for a zigzag join processor. The

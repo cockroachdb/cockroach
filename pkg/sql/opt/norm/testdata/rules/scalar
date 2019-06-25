@@ -1,15 +1,6 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- ├── arr int[]
- └── INDEX primary
-      └── k int not null
 
 # --------------------------------------------------
 # CommuteVar
@@ -300,7 +291,7 @@ select
                 ├── key: ()
                 ├── fd: ()-->(13)
                 ├── values
-                │    ├── columns: s:10(string)
+                │    ├── columns: s:10(string!null)
                 │    ├── cardinality: [0 - 0]
                 │    ├── key: ()
                 │    └── fd: ()-->(10)
@@ -468,7 +459,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE 1 WHEN 1 THEN 'one' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -478,7 +469,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE WHEN 1 = 1 THEN 'one' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -488,7 +479,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE false WHEN 0 = 1 THEN 'one' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -582,7 +573,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE 1 WHEN 2 THEN 'one' ELSE 'three' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -617,7 +608,7 @@ SELECT
     END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -633,7 +624,7 @@ SELECT
     END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -643,7 +634,7 @@ opt expect=SimplifyCaseWhenConstValue
 SELECT CASE WHEN false THEN 'one' WHEN true THEN 'two' END
 ----
 values
- ├── columns: case:1(string)
+ ├── columns: case:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -667,26 +658,6 @@ CREATE TABLE e
     INDEX (d)
 )
 ----
-TABLE e
- ├── k int not null
- ├── i int
- ├── t timestamp
- ├── tz timestamptz
- ├── d date
- ├── INDEX primary
- │    └── k int not null
- ├── INDEX secondary
- │    ├── i int
- │    └── k int not null
- ├── INDEX secondary
- │    ├── t timestamp
- │    └── k int not null
- ├── INDEX secondary
- │    ├── tz timestamptz
- │    └── k int not null
- └── INDEX secondary
-      ├── d date
-      └── k int not null
 
 ## --------------------------------------------------
 ## INT / FLOAT / DECIMAL
@@ -904,7 +875,7 @@ opt
 SELECT k FROM e WHERE tz > NULL::TIMESTAMP
 ----
 values
- ├── columns: k:1(int)
+ ├── columns: k:1(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
@@ -938,7 +909,7 @@ opt expect=SimplifyEqualsAnyTuple
 SELECT k FROM a WHERE k = ANY ()
 ----
 values
- ├── columns: k:1(int)
+ ├── columns: k:1(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
@@ -1004,7 +975,7 @@ opt expect=(SimplifyAnyScalarArray,SimplifyEqualsAnyTuple)
 SELECT k FROM a WHERE k = ANY ARRAY[]:::INT[]
 ----
 values
- ├── columns: k:1(int)
+ ├── columns: k:1(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
@@ -1026,7 +997,7 @@ norm expect=FoldCollate
 SELECT 'hello' COLLATE en_u_ks_level1
 ----
 values
- ├── columns: "?column?":1(collatedstring{en_u_ks_level1})
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -1036,7 +1007,7 @@ norm expect=FoldCollate
 SELECT ('hello' COLLATE en_u_ks_level1) COLLATE en_u_ks_level1
 ----
 values
- ├── columns: "?column?":1(collatedstring{en_u_ks_level1})
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -1046,7 +1017,7 @@ norm expect=FoldCollate
 SELECT ('hello' COLLATE en) COLLATE en_u_ks_level1
 ----
 values
- ├── columns: "?column?":1(collatedstring{en_u_ks_level1})
+ ├── columns: "?column?":1(collatedstring{en_u_ks_level1}!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)

@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -24,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -31,9 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 type createTableNode struct {
@@ -92,8 +92,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 // createTableRun contains the run-time state of createTableNode
 // during local execution.
 type createTableRun struct {
-	autoCommit   autoCommitOpt
-	rowsAffected int
+	autoCommit autoCommitOpt
 
 	// synthRowID indicates whether an input column needs to be synthesized to
 	// provide the default value for the hidden rowid column. The optimizer's
@@ -131,6 +130,14 @@ func (n *createTableNode) startExec(params runParams) error {
 	var affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor
 	creationTime := params.p.txn.CommitTimestamp()
 	if n.n.As() {
+		// TODO(adityamaru): This planning step is only to populate db/schema
+		// details in the table names in-place, to later store in the table
+		// descriptor. Figure out a cleaner way to do this.
+		_, err = params.p.Select(params.ctx, n.n.AsSource, []*types.T{})
+		if err != nil {
+			return err
+		}
+
 		asCols = planColumns(n.sourcePlan)
 		if !n.run.synthRowID {
 			// rowID column is already present in the input as the last column, so
@@ -140,31 +147,40 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 		desc, err = makeTableDescIfAs(
 			n.n, n.dbDesc.ID, id, creationTime, asCols,
-			privs, &params.p.semaCtx)
-	} else {
-		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
-		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
-	}
-	if err != nil {
-		return err
-	}
-
-	if desc.Adding() {
-		// if this table and all its references are created in the same
-		// transaction it can be made PUBLIC.
-		refs, err := desc.FindAllReferences()
+			privs, &params.p.semaCtx, params.p.EvalContext())
 		if err != nil {
 			return err
 		}
-		var foundExternalReference bool
-		for id := range refs {
-			if t := params.p.Tables().getUncommittedTableByID(id).MutableTableDescriptor; t == nil || !t.IsNewTable() {
-				foundExternalReference = true
-				break
-			}
+
+		// If we have an implicit txn we want to run CTAS async, and consequently
+		// ensure it gets queued as a SchemaChange.
+		if params.p.ExtendedEvalContext().TxnImplicit {
+			desc.State = sqlbase.TableDescriptor_ADD
 		}
-		if !foundExternalReference {
-			desc.State = sqlbase.TableDescriptor_PUBLIC
+	} else {
+		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
+		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
+		if err != nil {
+			return err
+		}
+
+		if desc.Adding() {
+			// if this table and all its references are created in the same
+			// transaction it can be made PUBLIC.
+			refs, err := desc.FindAllReferences()
+			if err != nil {
+				return err
+			}
+			var foundExternalReference bool
+			for id := range refs {
+				if t := params.p.Tables().getUncommittedTableByID(id).MutableTableDescriptor; t == nil || !t.IsNewTable() {
+					foundExternalReference = true
+					break
+				}
+			}
+			if !foundExternalReference {
+				desc.State = sqlbase.TableDescriptor_PUBLIC
+			}
 		}
 	}
 
@@ -209,7 +225,9 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	if n.n.As() {
+	// If we are in an explicit txn or the source has placeholders, we execute the
+	// CTAS query synchronously.
+	if n.n.As() && !params.p.ExtendedEvalContext().TxnImplicit {
 		// This is a very simplified version of the INSERT logic: no CHECK
 		// expressions, no FK checks, no arbitrary insertion order, no
 		// RETURNING, etc.
@@ -300,8 +318,13 @@ func (n *createTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			n.run.rowsAffected++
 		}
+	}
+
+	// The CREATE STATISTICS run for an async CTAS query is initiated by the
+	// SchemaChanger.
+	if n.n.As() && params.p.autoCommit {
+		return nil
 	}
 
 	// Initiate a run of CREATE STATISTICS. We use a large number
@@ -324,13 +347,6 @@ func (n *createTableNode) Close(ctx context.Context) {
 		n.sourcePlan.Close(ctx)
 		n.sourcePlan = nil
 	}
-}
-
-func (n *createTableNode) FastPathResults() (int, bool) {
-	if n.n.As() {
-		return n.run.rowsAffected, true
-	}
-	return 0, false
 }
 
 type indexMatch bool
@@ -486,14 +502,14 @@ func ResolveFK(
 	}
 
 	if len(targetCols) != len(srcCols) {
-		return pgerror.Newf(pgerror.CodeSyntaxError,
+		return pgerror.Newf(pgcode.Syntax,
 			"%d columns must reference exactly %d columns in referenced table (found %d)",
 			len(srcCols), len(srcCols), len(targetCols))
 	}
 
 	for i := range srcCols {
 		if s, t := srcCols[i], targetCols[i]; !s.Type.Equivalent(&t.Type) {
-			return pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+			return pgerror.Newf(pgcode.DatatypeMismatch,
 				"type of %q (%s) does not match foreign key %q.%q (%s)",
 				s.Name, s.Type.String(), target.Name, t.Name, t.Type.String())
 		}
@@ -526,7 +542,7 @@ func ResolveFK(
 		}
 		if !found {
 			return pgerror.Newf(
-				pgerror.CodeInvalidForeignKeyError,
+				pgcode.InvalidForeignKey,
 				"there is no unique constraint matching given keys for referenced table %s",
 				target.Name,
 			)
@@ -539,7 +555,7 @@ func ResolveFK(
 		for _, sourceColumn := range srcCols {
 			if !sourceColumn.Nullable {
 				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDesc(), sourceColumn.Name)
-				return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
+				return pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", col,
 				)
 			}
@@ -552,7 +568,7 @@ func ResolveFK(
 		for _, sourceColumn := range srcCols {
 			if sourceColumn.DefaultExpr == nil {
 				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDesc(), sourceColumn.Name)
-				return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
+				return pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression", col,
 				)
 			}
@@ -578,7 +594,7 @@ func ResolveFK(
 	found := false
 	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
 		if tbl.PrimaryIndex.ForeignKey.IsSet() {
-			return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
+			return pgerror.Newf(pgcode.InvalidForeignKey,
 				"columns cannot be used by multiple foreign key constraints")
 		}
 		idx = &tbl.PrimaryIndex
@@ -587,7 +603,7 @@ func ResolveFK(
 		for i := range tbl.Indexes {
 			if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
 				if tbl.Indexes[i].ForeignKey.IsSet() {
-					return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
+					return pgerror.Newf(pgcode.InvalidForeignKey,
 						"columns cannot be used by multiple foreign key constraints")
 				}
 				idx = &tbl.Indexes[i]
@@ -606,7 +622,7 @@ func ResolveFK(
 	} else {
 		// Avoid unexpected index builds from ALTER TABLE ADD CONSTRAINT.
 		if ts == NonEmptyTable {
-			return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
+			return pgerror.Newf(pgcode.InvalidForeignKey,
 				"foreign key requires an existing index on columns %s", colNames(srcCols))
 		}
 		added, err := addIndexForFK(tbl, srcCols, constraintName, ref, ts)
@@ -616,10 +632,13 @@ func ResolveFK(
 		backref.Index = added
 	}
 
-	if targetIdxIndex > -1 {
-		target.Indexes[targetIdxIndex].ReferencedBy = append(target.Indexes[targetIdxIndex].ReferencedBy, backref)
-	} else {
-		target.PrimaryIndex.ReferencedBy = append(target.PrimaryIndex.ReferencedBy, backref)
+	// TODO (lucy): Should the IsNewTable() case be handled in runSchemaChangesInTxn instead?
+	if ts == NewTable || tbl.IsNewTable() {
+		if targetIdxIndex > -1 {
+			target.Indexes[targetIdxIndex].ReferencedBy = append(target.Indexes[targetIdxIndex].ReferencedBy, backref)
+		} else {
+			target.PrimaryIndex.ReferencedBy = append(target.PrimaryIndex.ReferencedBy, backref)
+		}
 	}
 
 	// Multiple FKs from the same column would potentially result in ambiguous or
@@ -641,7 +660,7 @@ func ResolveFK(
 		}
 		for i := 0; i < numCols; i++ {
 			if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
-				return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
+				return pgerror.Newf(pgcode.InvalidForeignKey,
 					"column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
 			}
 			colsInFKs[idx.ColumnIDs[i]] = struct{}{}
@@ -739,7 +758,7 @@ func addInterleave(
 	interleave *tree.InterleaveDef,
 ) error {
 	if interleave.DropBehavior != tree.DropDefault {
-		return pgerror.UnimplementedWithIssuef(
+		return unimplemented.NewWithIssuef(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
@@ -761,7 +780,7 @@ func addInterleave(
 
 	if len(interleave.Fields) != len(parentIndex.ColumnIDs) {
 		return pgerror.Newf(
-			pgerror.CodeInvalidSchemaDefinitionError,
+			pgcode.InvalidSchemaDefinition,
 			"declared interleaved columns (%s) must match the parent's primary index (%s)",
 			&interleave.Fields,
 			strings.Join(parentIndex.ColumnNames, ", "),
@@ -769,7 +788,7 @@ func addInterleave(
 	}
 	if len(interleave.Fields) > len(index.ColumnIDs) {
 		return pgerror.Newf(
-			pgerror.CodeInvalidSchemaDefinitionError,
+			pgcode.InvalidSchemaDefinition,
 			"declared interleaved columns (%s) must be a prefix of the %s columns being interleaved (%s)",
 			&interleave.Fields,
 			typeOfIndex,
@@ -788,7 +807,7 @@ func addInterleave(
 		}
 		if string(interleave.Fields[i]) != col.Name {
 			return pgerror.Newf(
-				pgerror.CodeInvalidSchemaDefinitionError,
+				pgcode.InvalidSchemaDefinition,
 				"declared interleaved columns (%s) must refer to a prefix of the %s column names being interleaved (%s)",
 				&interleave.Fields,
 				typeOfIndex,
@@ -797,7 +816,7 @@ func addInterleave(
 		}
 		if !col.Type.Identical(&targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
 			return pgerror.Newf(
-				pgerror.CodeInvalidSchemaDefinitionError,
+				pgcode.InvalidSchemaDefinition,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
 				&interleave.Fields,
 				strings.Join(parentIndex.ColumnNames, ", "),
@@ -910,7 +929,47 @@ func InitTableDescriptor(
 		Version:          1,
 		ModificationTime: creationTime,
 		Privileges:       privileges,
+		CreateAsOfTime:   creationTime,
 	})
+}
+
+func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string {
+	// Ensure that all the table names pretty-print as fully qualified, so we
+	// store that in the table descriptor.
+	//
+	// The traversal will update the TableNames in-place, so the changes are
+	// persisted in n.n.AsSource. We exploit the fact that planning step above
+	// has populated any missing db/schema details in the table names in-place.
+	// We use tree.FormatNode merely as a traversal method; its output buffer is
+	// discarded immediately after the traversal because it is not needed
+	// further.
+	f := tree.NewFmtCtx(tree.FmtParsable)
+	f.SetReformatTableNames(
+		func(_ *tree.FmtCtx, tn *tree.TableName) {
+			// Persist the database prefix expansion.
+			if tn.SchemaName != "" {
+				// All CTE or table aliases have no schema
+				// information. Those do not turn into explicit.
+				tn.ExplicitSchema = true
+				tn.ExplicitCatalog = true
+			}
+		},
+	)
+	f.FormatNode(source)
+	f.Close()
+
+	// Substitute placeholders with their values.
+	ctx := tree.NewFmtCtx(tree.FmtParsable)
+	ctx.SetPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
+		d, err := placeholder.Eval(evalCtx)
+		if err != nil {
+			panic(fmt.Sprintf("failed to serialize placeholder: %s", err))
+		}
+		d.Format(ctx)
+	})
+	ctx.FormatNode(source)
+
+	return ctx.CloseAndGetString()
 }
 
 // makeTableDescIfAs is the MakeTableDesc method for when we have a table
@@ -922,8 +981,11 @@ func makeTableDescIfAs(
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
+	evalContext *tree.EvalContext,
 ) (desc sqlbase.MutableTableDescriptor, err error) {
 	desc = InitTableDescriptor(id, parentID, p.Table.Table(), creationTime, privileges)
+	desc.CreateQuery = getFinalSourceQuery(p.AsSource, evalContext)
+
 	for i, colRes := range resultColumns {
 		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
 		columnTableDef.Nullable.Nullability = tree.SilentNull
@@ -1018,7 +1080,7 @@ func MakeTableDesc(
 				switch d.Type.Oid() {
 				case oid.T_int2vector, oid.T_oidvector:
 					return desc, pgerror.Newf(
-						pgerror.CodeFeatureNotSupportedError,
+						pgcode.FeatureNotSupported,
 						"VECTOR column types are unsupported",
 					)
 				}
@@ -1108,7 +1170,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.Interleave != nil {
-				return desc, pgerror.UnimplementedWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
+				return desc, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *tree.UniqueConstraintTableDef:
 			idx := sqlbase.IndexDescriptor{
@@ -1136,7 +1198,7 @@ func MakeTableDesc(
 				}
 			}
 			if d.Interleave != nil {
-				return desc, pgerror.UnimplementedWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
+				return desc, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
@@ -1406,7 +1468,7 @@ func iterColDescriptorsInExpr(
 
 		col, dropped, err := desc.FindColumnByName(c.ColumnName)
 		if err != nil || dropped {
-			return false, nil, pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
+			return false, nil, pgerror.Newf(pgcode.InvalidTableDefinition,
 				"column %q not found, referenced in %q",
 				c.ColumnName, rootExpr)
 		}
@@ -1427,7 +1489,7 @@ func validateComputedColumn(
 ) error {
 	if d.HasDefaultExpr() {
 		return pgerror.New(
-			pgerror.CodeInvalidTableDefinitionError,
+			pgcode.InvalidTableDefinition,
 			"computed columns cannot have default values",
 		)
 	}
@@ -1436,7 +1498,7 @@ func validateComputedColumn(
 	// First, check that no column in the expression is a computed column.
 	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c *sqlbase.ColumnDescriptor) error {
 		if c.IsComputed() {
-			return pgerror.New(pgerror.CodeInvalidTableDefinitionError,
+			return pgerror.New(pgcode.InvalidTableDefinition,
 				"computed columns cannot reference other computed columns")
 		}
 		dependencies[c.Name] = struct{}{}
@@ -1463,7 +1525,7 @@ func validateComputedColumn(
 				case sqlbase.ForeignKeyReference_CASCADE,
 					sqlbase.ForeignKeyReference_SET_NULL,
 					sqlbase.ForeignKeyReference_SET_DEFAULT:
-					return pgerror.New(pgerror.CodeInvalidTableDefinitionError,
+					return pgerror.New(pgcode.InvalidTableDefinition,
 						"computed columns cannot reference non-restricted FK columns")
 				}
 			}

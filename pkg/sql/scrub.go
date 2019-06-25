@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -18,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type scrubNode struct {
@@ -116,7 +115,7 @@ func (n *scrubNode) startExec(params runParams) error {
 			return err
 		}
 	default:
-		return pgerror.AssertionFailedf("unexpected SCRUB type received, got: %v", n.n.Typ)
+		return errors.AssertionFailedf("unexpected SCRUB type received, got: %v", n.n.Typ)
 	}
 	return nil
 }
@@ -213,7 +212,7 @@ func (n *scrubNode) startScrubTable(
 		switch v := option.(type) {
 		case *tree.ScrubOptionIndex:
 			if indexesSet {
-				return pgerror.Newf(pgerror.CodeSyntaxError,
+				return pgerror.Newf(pgcode.Syntax,
 					"cannot specify INDEX option more than once")
 			}
 			indexesSet = true
@@ -224,11 +223,11 @@ func (n *scrubNode) startScrubTable(
 			n.run.checkQueue = append(n.run.checkQueue, checks...)
 		case *tree.ScrubOptionPhysical:
 			if physicalCheckSet {
-				return pgerror.Newf(pgerror.CodeSyntaxError,
+				return pgerror.Newf(pgcode.Syntax,
 					"cannot specify PHYSICAL option more than once")
 			}
 			if hasTS {
-				return pgerror.Newf(pgerror.CodeSyntaxError,
+				return pgerror.Newf(pgcode.Syntax,
 					"cannot use AS OF SYSTEM TIME with PHYSICAL option")
 			}
 			physicalCheckSet = true
@@ -236,7 +235,7 @@ func (n *scrubNode) startScrubTable(
 			n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
 		case *tree.ScrubOptionConstraint:
 			if constraintsSet {
-				return pgerror.Newf(pgerror.CodeSyntaxError,
+				return pgerror.Newf(pgcode.Syntax,
 					"cannot specify CONSTRAINT option more than once")
 			}
 			constraintsSet = true
@@ -350,7 +349,7 @@ func tableColumnsIsNullPredicate(
 			buf.WriteString(conjunction)
 			buf.WriteByte(' ')
 		}
-		fmt.Fprintf(&buf, "%[1]s.%[2]s IS %[3]s", tableName, col, nullCheck)
+		fmt.Fprintf(&buf, "%[1]q.%[2]q IS %[3]s", tableName, col, nullCheck)
 	}
 	return buf.String()
 }
@@ -377,7 +376,7 @@ func tableColumnsEQ(
 		if i > 0 {
 			buf.WriteString(" AND ")
 		}
-		fmt.Fprintf(&buf, `%[1]s.%[3]s = %[2]s.%[4]s`,
+		fmt.Fprintf(&buf, `%[1]q.%[3]q = %[2]q.%[4]q`,
 			tableName, otherTableName, columns[i], otherColumns[i])
 	}
 	return buf.String()
@@ -395,7 +394,7 @@ func tableColumnsProjection(tableName string, columns []string) string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%[1]s.%[2]s", tableName, col)
+		fmt.Fprintf(&buf, "%[1]q.%[2]q", tableName, col)
 	}
 	return buf.String()
 }
@@ -462,7 +461,7 @@ func createIndexCheckOperations(
 				missingIndexNames = append(missingIndexNames, idxName.String())
 			}
 		}
-		return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
+		return nil, pgerror.Newf(pgcode.UndefinedObject,
 			"specified indexes to check that do not exist on table %q: %v",
 			tableDesc.Name, strings.Join(missingIndexNames, ", "))
 	}
@@ -495,7 +494,7 @@ func createConstraintCheckOperations(
 			if v, ok := constraints[string(constraintName)]; ok {
 				wantedConstraints[string(constraintName)] = v
 			} else {
-				return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
+				return nil, pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", constraintName, tableDesc.Name)
 			}
 		}

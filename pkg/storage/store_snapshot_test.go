@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package storage
 
@@ -57,9 +55,9 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 		bytesWritten += int64(len(blob))
 	}
 
-	for _, snapType := range []string{snapTypePreemptive, snapTypeRaft} {
-		t.Run(snapType, func(t *testing.T) {
-			lastIndex, err := (*replicaRaftStorage)(repl).LastIndex()
+	for _, snapType := range []SnapshotRequest_Type{SnapshotRequest_PREEMPTIVE, SnapshotRequest_RAFT} {
+		t.Run(snapType.String(), func(t *testing.T) {
+			lastIndex, err := repl.GetLastIndex()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -91,7 +89,7 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 			}
 
 			err = ss.Send(ctx, stream, header, outSnap)
-			if snapType == snapTypePreemptive {
+			if snapType == SnapshotRequest_PREEMPTIVE {
 				if !testutils.IsError(err, "aborting snapshot because raft log is too large") {
 					t.Fatalf("unexpected error: %v", err)
 				}

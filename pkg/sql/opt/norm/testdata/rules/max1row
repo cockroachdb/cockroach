@@ -1,23 +1,10 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
 ----
-TABLE b
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 # --------------------------------------------------
 # EliminateMax1Row
@@ -73,7 +60,7 @@ values
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── values
-           │         ├── columns: i:2(int)
+           │         ├── columns: i:2(int!null)
            │         ├── cardinality: [0 - 0]
            │         ├── key: ()
            │         └── fd: ()-->(2)

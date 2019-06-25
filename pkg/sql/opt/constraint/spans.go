@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package constraint
 
@@ -16,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // Spans is a collection of spans. There are no general requirements on the
@@ -67,7 +65,7 @@ func (s *Spans) Get(nth int) *Span {
 // Append adds another span (at the end).
 func (s *Spans) Append(sp *Span) {
 	if s.immutable {
-		panic(pgerror.AssertionFailedf("mutation disallowed"))
+		panic(errors.AssertionFailedf("mutation disallowed"))
 	}
 	if s.numSpans == 0 {
 		s.firstSpan = *sp
@@ -80,10 +78,10 @@ func (s *Spans) Append(sp *Span) {
 // Truncate removes all but the first newLength spans.
 func (s *Spans) Truncate(newLength int) {
 	if s.immutable {
-		panic(pgerror.AssertionFailedf("mutation disallowed"))
+		panic(errors.AssertionFailedf("mutation disallowed"))
 	}
 	if int32(newLength) > s.numSpans {
-		panic(pgerror.AssertionFailedf("can't truncate to longer length"))
+		panic(errors.AssertionFailedf("can't truncate to longer length"))
 	}
 	if newLength == 0 {
 		s.otherSpans = s.otherSpans[:0]

@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package kv
 
@@ -110,7 +108,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	for _, splitRKey := range splitKeys {
 		splitKey := roachpb.Key(splitRKey)
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if err := s.DB.AdminSplit(ctx, splitKey, splitKey, true /* manual */); err != nil {
+		if err := s.DB.AdminSplit(ctx, splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -156,7 +154,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 			<-txnChannel
 		}
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if pErr := s.DB.AdminSplit(context.TODO(), splitKey, splitKey, true /* manual */); pErr != nil {
+		if pErr := s.DB.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); pErr != nil {
 			t.Error(pErr)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -249,19 +247,19 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 
 	splitKey := roachpb.Key("aa")
 	log.Infof(ctx, "starting split at key %q...", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey, splitKey, true /* manual */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "split at key %q first time complete", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey, splitKey, true /* manual */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 }
 
 // TestSplitStickyBit checks that the sticky bit is set when performing a manual
 // split. There are two cases to consider:
-// 1. Range is split so sticky bit is set on RHS.
-// 2. Range is already split and split key is the start key of a range, so set
+// 1. Range is split so sticky bit is updated on RHS.
+// 2. Range is already split and split key is the start key of a range, so update
 //    the sticky bit of that range, but no range is split.
 func TestRangeSplitsStickyBit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -277,7 +275,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	descKey := keys.RangeDescriptorKey(splitKey)
 
 	// Splitting range.
-	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey(), true /* manual */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -287,7 +285,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if desc.StickyBit == nil {
+	if (desc.StickyBit == hlc.Timestamp{}) {
 		t.Fatal("Sticky bit not set after splitting")
 	}
 
@@ -297,7 +295,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	}
 
 	// Splitting range.
-	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey(), true /* manual */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -306,7 +304,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if desc.StickyBit == nil {
+	if (desc.StickyBit == hlc.Timestamp{}) {
 		t.Fatal("Sticky bit not set after splitting")
 	}
 }

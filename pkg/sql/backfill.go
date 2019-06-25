@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -24,8 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -159,7 +159,7 @@ func (sc *SchemaChanger) runBackfill(
 				constraintsToAdd = append(constraintsToAdd, *t.Constraint)
 				constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 			default:
-				return pgerror.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)
 			}
 
@@ -174,12 +174,12 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Constraint:
 				// Only possible during a rollback
 				if !m.Rollback {
-					return pgerror.AssertionFailedf(
+					return errors.AssertionFailedf(
 						"trying to drop constraint through schema changer outside of a rollback: %+v", t)
 				}
 				// no-op
 			default:
-				return pgerror.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)
 			}
 		}
@@ -239,52 +239,90 @@ func (sc *SchemaChanger) runBackfill(
 func (sc *SchemaChanger) AddConstraints(
 	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
 ) error {
-	_, err := sc.leaseMgr.Publish(ctx, sc.tableID,
-		func(desc *sqlbase.MutableTableDescriptor) error {
-			for i, added := range constraints {
-				switch added.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK:
-					found := false
-					for _, c := range desc.Checks {
-						if c.Name == added.Name {
-							log.VEventf(
-								ctx, 2,
-								"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
-								added, c,
-							)
-							found = true
-							break
+	fksByBackrefTable := make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
+	for i := range constraints {
+		c := &constraints[i]
+		if c.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY && c.ForeignKey.Table != sc.tableID {
+			fksByBackrefTable[c.ForeignKey.Table] = append(fksByBackrefTable[c.ForeignKey.Table], c)
+		}
+	}
+
+	// Create map of update closures for the table and all other tables with backreferences
+	updates := make(map[sqlbase.ID]func(descriptor *sqlbase.MutableTableDescriptor) error)
+	updates[sc.tableID] = func(desc *sqlbase.MutableTableDescriptor) error {
+		for i := range constraints {
+			added := &constraints[i]
+			switch added.ConstraintType {
+			case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
+				found := false
+				for _, c := range desc.Checks {
+					if c.Name == added.Name {
+						log.VEventf(
+							ctx, 2,
+							"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
+							added, c,
+						)
+						found = true
+						break
+					}
+				}
+				if !found {
+					desc.Checks = append(desc.Checks, &constraints[i].Check)
+				}
+			case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+				idx, err := desc.FindIndexByID(added.ForeignKeyIndex)
+				if err != nil {
+					return err
+				}
+				if idx.ForeignKey.IsSet() {
+					if log.V(2) {
+						log.VEventf(
+							ctx, 2,
+							"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
+							added, idx.ForeignKey,
+						)
+					}
+				} else {
+					idx.ForeignKey = added.ForeignKey
+					// If there are any backreferences to be added to the same table, add them here
+					if added.ForeignKey.Table == sc.tableID {
+						backref := sqlbase.ForeignKeyReference{Table: sc.tableID, Index: added.ForeignKeyIndex}
+						idx, err := desc.FindIndexByID(added.ForeignKey.Index)
+						if err != nil {
+							return err
 						}
-					}
-					if !found {
-						desc.Checks = append(desc.Checks, &constraints[i].Check)
-					}
-				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
-					idx, err := desc.FindIndexByID(added.ForeignKeyIndex)
-					if err != nil {
-						return err
-					}
-					if idx.ForeignKey.IsSet() {
-						if log.V(2) {
-							log.VEventf(
-								ctx, 2,
-								"backfiller tried to add constraint %+v but found existing constraint %+v, presumably due to a retry",
-								added, idx.ForeignKey,
-							)
-						}
-					} else {
-						idx.ForeignKey = added.ForeignKey
+						idx.ReferencedBy = append(idx.ReferencedBy, backref)
 					}
 				}
 			}
+		}
+		return nil
+	}
+	for id := range fksByBackrefTable {
+		updates[id] = func(desc *sqlbase.MutableTableDescriptor) error {
+			for _, c := range fksByBackrefTable[id] {
+				backref := sqlbase.ForeignKeyReference{Table: sc.tableID, Index: c.ForeignKeyIndex}
+				idx, err := desc.FindIndexByID(c.ForeignKey.Index)
+				if err != nil {
+					return err
+				}
+				idx.ReferencedBy = append(idx.ReferencedBy, backref)
+			}
 			return nil
-		},
-		nil,
-	)
-	if err != nil {
+		}
+	}
+	if _, err := sc.leaseMgr.PublishMultiple(ctx, updates, nil); err != nil {
 		return err
 	}
-	return sc.waitToUpdateLeases(ctx, sc.tableID)
+	if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+		return err
+	}
+	for id := range fksByBackrefTable {
+		if err := sc.waitToUpdateLeases(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (sc *SchemaChanger) validateConstraints(
@@ -338,7 +376,7 @@ func (sc *SchemaChanger) validateConstraints(
 				// (the validation can take many minutes). So we pretend that the schema
 				// has been updated and actually update it in a separate transaction that
 				// follows this one.
-				desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic()
+				desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
 				if err != nil {
 					return err
 				}
@@ -347,12 +385,19 @@ func (sc *SchemaChanger) validateConstraints(
 				newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.ieFactory)
 				switch c.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Name); err != nil {
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
 						return err
 					}
 				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
 					if err := validateFkInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Name); err != nil {
 						return err
+					}
+				case sqlbase.ConstraintToUpdate_NOT_NULL:
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+						// TODO (lucy): This should distinguish between constraint
+						// validation errors and other types of unexpected errors, and
+						// return a different error code in the former case
+						return errors.Wrap(err, "validation of NOT NULL constraint failed")
 					}
 				default:
 					return errors.Errorf("unsupported constraint type: %d", c.ConstraintType)
@@ -501,7 +546,7 @@ func getJobIDForMutationWithDescriptor(
 		}
 	}
 
-	return 0, pgerror.AssertionFailedf(
+	return 0, errors.AssertionFailedf(
 		"job not found for table id %d, mutation %d", tableDesc.ID, mutationID)
 }
 
@@ -760,8 +805,8 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 				ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return status, nil
 			}); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
+				return errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
 			}
 		}
 		return nil
@@ -925,9 +970,9 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 					// JSON columns cannot have unique indexes, so if the expected and
 					// actual counts do not match, it's always a bug rather than a
 					// uniqueness violation.
-					return pgerror.AssertionFailedf(
+					return errors.AssertionFailedf(
 						"validation of index %s failed: expected %d rows, found %d",
-						idx.Name, log.Safe(expectedCount[i]), log.Safe(idxLen))
+						idx.Name, errors.Safe(expectedCount[i]), errors.Safe(idxLen))
 				}
 			case <-ctx.Done():
 				return ctx.Err()
@@ -989,7 +1034,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			// (the validation can take many minutes). So we pretend that the schema
 			// has been updated and actually update it in a separate transaction that
 			// follows this one.
-			desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic()
+			desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
 			if err != nil {
 				return err
 			}
@@ -1025,7 +1070,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 				if idxLen != tableRowCount {
 					// TODO(vivek): find the offending row and include it in the error.
 					return pgerror.Newf(
-						pgerror.CodeUniqueViolationError,
+						pgcode.UniqueViolation,
 						"%d entries, expected %d violates unique constraint %q",
 						idxLen, tableRowCount, idx.Name,
 					)
@@ -1071,12 +1116,23 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
-	disableCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	sc.execCfg.Gossip.DisableMerges(disableCtx, []uint32{uint32(sc.tableID)})
+	// TODO(jeffreyxiao): Remove check in 20.1.
+	// If the cluster supports sticky bits, then we should use the sticky bit to
+	// ensure that the splits are not automatically split by the merge queue. If
+	// the cluster does not support sticky bits, we disable the merge queue via
+	// gossip, so we can just set the split to expire immediately.
+	stickyBitEnabled := sc.execCfg.Settings.Version.IsActive(cluster.VersionStickyBit)
+	expirationTime := hlc.Timestamp{}
+	if !stickyBitEnabled {
+		disableCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		sc.execCfg.Gossip.DisableMerges(disableCtx, []uint32{uint32(sc.tableID)})
+	} else {
+		expirationTime = sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	}
 
 	for _, span := range addingSpans {
-		if err := sc.db.AdminSplit(ctx, span.Key, span.Key, false /* manual */); err != nil {
+		if err := sc.db.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
 			return err
 		}
 	}
@@ -1161,7 +1217,7 @@ func runSchemaChangesInTxn(
 
 			case *sqlbase.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK:
+				case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
 					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
 					idx, err := tableDesc.FindIndexByID(t.Constraint.ForeignKeyIndex)
@@ -1170,13 +1226,13 @@ func runSchemaChangesInTxn(
 					}
 					idx.ForeignKey = t.Constraint.ForeignKey
 				default:
-					return pgerror.AssertionFailedf(
-						"unsupported constraint type: %d", log.Safe(t.Constraint.ConstraintType))
+					return errors.AssertionFailedf(
+						"unsupported constraint type: %d", errors.Safe(t.Constraint.ConstraintType))
 				}
 				constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 
 			default:
-				return pgerror.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)
 			}
 
@@ -1198,11 +1254,11 @@ func runSchemaChangesInTxn(
 				}
 
 			case *sqlbase.DescriptorMutation_Constraint:
-				return pgerror.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"constraint validation mutation cannot be in the DROP state within the same transaction: %+v", m)
 
 			default:
-				return pgerror.AssertionFailedf("unsupported mutation: %+v", m)
+				return errors.AssertionFailedf("unsupported mutation: %+v", m)
 			}
 
 		}
@@ -1216,8 +1272,8 @@ func runSchemaChangesInTxn(
 	// mutations applied, it can be used for validating check constraints
 	for _, c := range constraintsToValidate {
 		switch c.ConstraintType {
-		case sqlbase.ConstraintToUpdate_CHECK:
-			if err := validateCheckInTxn(ctx, tc.leaseMgr, evalCtx, tableDesc, txn, c.Name); err != nil {
+		case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
+			if err := validateCheckInTxn(ctx, tc.leaseMgr, evalCtx, tableDesc, txn, c.Check.Name); err != nil {
 				return err
 			}
 		case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
@@ -1239,8 +1295,8 @@ func runSchemaChangesInTxn(
 			}
 			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
 		default:
-			return pgerror.AssertionFailedf(
-				"unsupported constraint type: %d", log.Safe(c.ConstraintType))
+			return errors.AssertionFailedf(
+				"unsupported constraint type: %d", errors.Safe(c.ConstraintType))
 		}
 	}
 	return nil
@@ -1372,7 +1428,7 @@ func columnBackfillInTxn(
 	for k := range fkTables {
 		t := tc.getUncommittedTableByID(k)
 		if (uncommittedTable{}) == t || !t.IsNewTable() {
-			return pgerror.AssertionFailedf(
+			return errors.AssertionFailedf(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}
 		otherTableDescs = append(otherTableDescs, t.ImmutableTableDescriptor)

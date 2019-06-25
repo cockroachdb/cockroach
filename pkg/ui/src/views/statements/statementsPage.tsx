@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 import _ from "lodash";
 import React from "react";
@@ -27,12 +25,22 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { refreshStatements } from "src/redux/apiReducers";
 import { StatementsResponseMessage } from "src/util/api";
-import { aggregateStatementStats, flattenStatementStats, combineStatementStats, StatementStatistics, ExecutionStatistics } from "src/util/appStats";
+import {
+  aggregateStatementStats,
+  flattenStatementStats,
+  combineStatementStats,
+  ExecutionStatistics,
+  StatementStatistics,
+} from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
 import { Pick } from "src/util/pick";
 
-import { AggregateStatistics, StatementsSortedTable, makeStatementsColumns } from "./statementsTable";
+import {
+  AggregateStatistics,
+  StatementsSortedTable,
+  makeStatementsColumns,
+} from "./statementsTable";
 
 import * as protos from "src/js/protos";
 import "./statements.styl";
@@ -59,7 +67,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     super(props);
     this.state = {
       sortSetting: {
-        sortKey: 1,
+        sortKey: 6,  // Latency
         ascending: false,
       },
     };
@@ -166,6 +174,16 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
 
 type StatementsState = Pick<AdminUIState, "cachedData", "statements">;
 
+interface StatementsSummaryData {
+  statement: string;
+  implicitTxn: boolean;
+  stats: StatementStatistics[];
+}
+
+function keyByStatementAndImplicitTxn(stmt: ExecutionStatistics): string {
+  return stmt.statement + stmt.implicit_txn;
+}
+
 // selectStatements returns the array of AggregateStatistics to show on the
 // StatementsPage, based on if the appAttr route parameter is set.
 export const selectStatements = createSelector(
@@ -191,17 +209,25 @@ export const selectStatements = createSelector(
       );
     }
 
-    const statementsMap: { [statement: string]: StatementStatistics[] } = {};
+    const statsByStatementAndImplicitTxn: { [statement: string]: StatementsSummaryData } = {};
     statements.forEach(stmt => {
-      const matches = statementsMap[stmt.statement] || (statementsMap[stmt.statement] = []);
-      matches.push(stmt.stats);
+      const key = keyByStatementAndImplicitTxn(stmt);
+      if (!(key in statsByStatementAndImplicitTxn)) {
+        statsByStatementAndImplicitTxn[key] = {
+          statement: stmt.statement,
+          implicitTxn: stmt.implicit_txn,
+          stats: [],
+        };
+      }
+      statsByStatementAndImplicitTxn[key].stats.push(stmt.stats);
     });
 
-    return Object.keys(statementsMap).map(stmt => {
-      const stats = statementsMap[stmt];
+    return Object.keys(statsByStatementAndImplicitTxn).map(key => {
+      const stmt = statsByStatementAndImplicitTxn[key];
       return {
-        label: stmt,
-        stats: combineStatementStats(stats),
+        label: stmt.statement,
+        implicitTxn: stmt.implicitTxn,
+        stats: combineStatementStats(stmt.stats),
       };
     });
   },

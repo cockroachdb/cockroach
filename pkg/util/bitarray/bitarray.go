@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package bitarray
 
@@ -17,6 +15,10 @@ import (
 	"fmt"
 	"math/rand"
 	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // BitArray implements a bit string of arbitrary length.
@@ -334,7 +336,8 @@ func Parse(s string) (res BitArray, err error) {
 		if bitVal != val {
 			// Note: the prefix "could not parse" is important as it is used
 			// to detect parsing errors in tests.
-			return res, fmt.Errorf(`could not parse string as bit array: "%c" is not a valid binary digit`, c)
+			err := fmt.Errorf(`could not parse string as bit array: "%c" is not a valid binary digit`, c)
+			return res, pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
 		}
 		curWord |= bitVal << (63 - bitIdx)
 		bitIdx = (bitIdx + 1) % numBitsPerWord
@@ -486,8 +489,9 @@ func (d BitArray) EncodingParts() ([]uint64, uint64) {
 // FromEncodingParts creates a bit array from the encoding parts.
 func FromEncodingParts(words []uint64, lastBitsUsed uint64) (BitArray, error) {
 	if lastBitsUsed > numBitsPerWord {
-		return BitArray{}, fmt.Errorf("FromEncodingParts: lastBitsUsed must not exceed %d, got %d",
-			numBitsPerWord, lastBitsUsed)
+		err := fmt.Errorf("FromEncodingParts: lastBitsUsed must not exceed %d, got %d",
+			errors.Safe(numBitsPerWord), errors.Safe(lastBitsUsed))
+		return BitArray{}, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
 	return BitArray{
 		words:        words,

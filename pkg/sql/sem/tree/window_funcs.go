@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -16,10 +14,10 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // IndexedRows are rows with the corresponding indices.
@@ -186,7 +184,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 				return valueAt.Compare(evalCtx, value) >= 0
 			}), wfr.err
 		default:
-			return 0, pgerror.AssertionFailedf(
+			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in RANGE mode: %d",
 				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
@@ -211,7 +209,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 			}
 			return idx, nil
 		default:
-			return 0, pgerror.AssertionFailedf(
+			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in ROWS mode: %d",
 				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
@@ -240,12 +238,12 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 			}
 			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum), nil
 		default:
-			return 0, pgerror.AssertionFailedf(
+			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in GROUPS mode: %d",
 				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
 	default:
-		return 0, pgerror.AssertionFailedf("unexpected WindowFrameMode: %d", wfr.Frame.Mode)
+		return 0, errors.AssertionFailedf("unexpected WindowFrameMode: %d", wfr.Frame.Mode)
 	}
 }
 
@@ -348,7 +346,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		case UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
 		default:
-			return 0, pgerror.AssertionFailedf(
+			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in RANGE mode: %d",
 				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
@@ -377,7 +375,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		case UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
 		default:
-			return 0, pgerror.AssertionFailedf(
+			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in ROWS mode: %d",
 				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
@@ -411,12 +409,12 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		case UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
 		default:
-			return 0, pgerror.AssertionFailedf(
+			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in GROUPS mode: %d",
 				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
 	default:
-		return 0, pgerror.AssertionFailedf(
+		return 0, errors.AssertionFailedf(
 			"unexpected WindowFrameMode: %d", log.Safe(wfr.Frame.Mode))
 	}
 }
@@ -518,6 +516,10 @@ type WindowFunc interface {
 	// that have come before it (like in an AggregateFunc). As such, this approach does
 	// not present any exploitable associativity/commutativity for optimization.
 	Compute(context.Context, *EvalContext, *WindowFrameRun) (Datum, error)
+
+	// Reset resets the window function which allows for reusing it when
+	// computing over different partitions.
+	Reset(context.Context)
 
 	// Close allows the window function to free any memory it requested during execution,
 	// such as during the execution of an aggregation like CONCAT_AGG or ARRAY_AGG.

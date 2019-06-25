@@ -8,14 +8,6 @@ CREATE TABLE t.a
     PRIMARY KEY (k, f DESC)
 )
 ----
-TABLE a
- ├── k int not null
- ├── f float not null
- ├── z decimal
- ├── s string not null
- └── INDEX primary
-      ├── k int not null
-      └── f float not null desc
 
 opt
 SELECT f FROM a ORDER BY f DESC
@@ -35,7 +27,7 @@ opt
 SELECT f FROM a WHERE k IN () ORDER BY f DESC
 ----
 values
- ├── columns: f:2(float)
+ ├── columns: f:2(float!null)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── cost: 0.01

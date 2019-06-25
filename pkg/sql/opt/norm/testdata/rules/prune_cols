@@ -1,22 +1,10 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE abcde (
@@ -28,18 +16,6 @@ CREATE TABLE abcde (
     UNIQUE INDEX bc (b, c)
 )
 ----
-TABLE abcde
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── e int
- ├── INDEX primary
- │    └── a int not null
- └── INDEX bc
-      ├── b int
-      ├── c int
-      └── a int not null (storing)
 
 exec-ddl
 CREATE TABLE mutation (
@@ -52,21 +28,6 @@ CREATE TABLE mutation (
     INDEX "idx2:delete-only" (e)
 )
 ----
-TABLE mutation
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int (mutation)
- ├── e int (mutation)
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX idx1 (mutation)
- │    ├── b int
- │    ├── d int
- │    └── a int not null (storing)
- └── INDEX idx2 (mutation)
-      ├── e int
-      └── a int not null
 
 exec-ddl
 CREATE TABLE family (
@@ -81,20 +42,6 @@ CREATE TABLE family (
     INDEX (d)
 )
 ----
-TABLE family
- ├── a int not null
- ├── b int
- ├── c int
- ├── d int
- ├── e int
- ├── INDEX primary
- │    └── a int not null
- ├── INDEX secondary
- │    ├── d int
- │    └── a int not null
- ├── FAMILY family1 (a, b)
- ├── FAMILY family2 (c, d)
- └── FAMILY family3 (e)
 
 # --------------------------------------------------
 # PruneProjectCols
@@ -1461,7 +1408,7 @@ opt expect=PruneValuesCols
 SELECT column1 FROM (VALUES (1, 2), (3, 4)) a
 ----
 values
- ├── columns: column1:1(int)
+ ├── columns: column1:1(int!null)
  ├── cardinality: [2 - 2]
  ├── (1,) [type=tuple{int}]
  └── (3,) [type=tuple{int}]
@@ -1471,7 +1418,7 @@ opt expect=PruneValuesCols
 SELECT column2 FROM (VALUES (1, 2, 3), (4, 5, 6)) a
 ----
 values
- ├── columns: column2:2(int)
+ ├── columns: column2:2(int!null)
  ├── cardinality: [2 - 2]
  ├── (2,) [type=tuple{int}]
  └── (5,) [type=tuple{int}]
@@ -1481,7 +1428,7 @@ opt expect=PruneValuesCols
 SELECT column3 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
 ----
 values
- ├── columns: column3:3(string)
+ ├── columns: column3:3(string!null)
  ├── cardinality: [2 - 2]
  ├── ('baz',) [type=tuple{string}]
  └── ('cherry',) [type=tuple{string}]
@@ -1672,7 +1619,7 @@ window partition=()
  ├── columns: rank:5(int)
  ├── scan a
  └── windows
-      └── rank [type=undefined]
+      └── rank [type=int]
 
 norm expect=PruneWindowInputCols
 SELECT ntile(1) OVER () FROM a
@@ -1713,6 +1660,53 @@ project
       └── windows
            └── ntile [type=int, outer=(2)]
                 └── variable: t.public.a.i [type=int]
+
+# Ensure OFFSET expressions don't get pruned.
+norm
+SELECT ntile(i) OVER (ORDER BY i RANGE BETWEEN f::INT PRECEDING AND CURRENT ROW) FROM a
+----
+project
+ ├── columns: ntile:5(int)
+ └── window partition=() ordering=+2
+      ├── columns: i:2(int) f:3(float) ntile:5(int)
+      ├── scan a
+      │    └── columns: i:2(int) f:3(float)
+      └── windows
+           └── windows-item: range from offset to current-row [type=int, outer=(2,3)]
+                └── window-from-offset [type=int]
+                     ├── ntile [type=int]
+                     │    └── variable: i [type=int]
+                     └── f::INT8 [type=int]
+
+# Ensure filter cols don't get pruned.
+norm
+SELECT
+    avg(i) FILTER (WHERE true) OVER (),
+    avg(i) FILTER (WHERE false) OVER ()
+FROM a
+----
+project
+ ├── columns: avg:5(decimal) avg:6(decimal)
+ └── window partition=()
+      ├── columns: i:2(int) avg:5(decimal) avg:6(decimal) avg_1_filter:7(bool!null) avg_2_filter:8(bool!null)
+      ├── fd: ()-->(7,8)
+      ├── project
+      │    ├── columns: avg_1_filter:7(bool!null) avg_2_filter:8(bool!null) i:2(int)
+      │    ├── fd: ()-->(7,8)
+      │    ├── scan a
+      │    │    └── columns: i:2(int)
+      │    └── projections
+      │         ├── true [type=bool]
+      │         └── false [type=bool]
+      └── windows
+           ├── agg-filter [type=decimal, outer=(2,7)]
+           │    ├── avg [type=decimal]
+           │    │    └── variable: i [type=int]
+           │    └── variable: avg_1_filter [type=bool]
+           └── agg-filter [type=decimal, outer=(2,8)]
+                ├── avg [type=decimal]
+                │    └── variable: i [type=int]
+                └── variable: avg_2_filter [type=bool]
 
 # --------------------------------------------------
 # PruneWindowOutputCols
@@ -1991,17 +1985,17 @@ upsert a
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_i:15(int) column1:5(int) column2:6(string) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
+      ├── columns: upsert_i:15(int) column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(5-12,15)
       ├── left-join
-      │    ├── columns: column1:5(int) column2:6(string) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
+      │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(5-12)
       │    ├── values
-      │    │    ├── columns: column1:5(int) column2:6(string) column7:7(int) column8:8(float)
+      │    │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(5-8)
@@ -2042,17 +2036,17 @@ upsert a
  ├── key: ()
  ├── fd: ()-->(1-4)
  └── project
-      ├── columns: upsert_k:14(int) upsert_i:15(int) upsert_f:16(float) upsert_s:17(string) column1:5(int) column2:6(string) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
+      ├── columns: upsert_k:14(int) upsert_i:15(int) upsert_f:16(float) upsert_s:17(string) column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(5-12,14-17)
       ├── left-join
-      │    ├── columns: column1:5(int) column2:6(string) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
+      │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(5-12)
       │    ├── values
-      │    │    ├── columns: column1:5(int) column2:6(string) column7:7(int) column8:8(float)
+      │    │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(5-8)
@@ -2089,12 +2083,12 @@ upsert "family"
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── left-join
-      ├── columns: column1:6(int) column2:7(int) column8:8(int) a:9(int) b:10(int)
+      ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int) a:9(int) b:10(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-10)
       ├── values
-      │    ├── columns: column1:6(int) column2:7(int) column8:8(int)
+      │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6-8)
@@ -2139,17 +2133,17 @@ project
       ├── key: ()
       ├── fd: ()-->(1-5)
       └── project
-           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_d:20(int) upsert_e:21(int) column1:6(int) column2:7(int) column3:8(int) column4:9(int) column5:10(int) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
+           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_d:20(int) upsert_e:21(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column5:10(int!null) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
            ├── cardinality: [1 - 1]
            ├── key: ()
            ├── fd: ()-->(6-15,17-21)
            ├── left-join
-           │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column5:10(int) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
+           │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column5:10(int!null) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
            │    ├── cardinality: [1 - 1]
            │    ├── key: ()
            │    ├── fd: ()-->(6-15)
            │    ├── values
-           │    │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column5:10(int)
+           │    │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column5:10(int!null)
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(6-10)
@@ -2189,17 +2183,17 @@ upsert "family"
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_d:20(int) column1:6(int) column2:7(int) column3:8(int) column4:9(int) column10:10(int) a:11(int) c:13(int) d:14(int)
+      ├── columns: upsert_d:20(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column10:10(int) a:11(int) c:13(int) d:14(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-11,13,14,20)
       ├── left-join
-      │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column10:10(int) a:11(int) c:13(int) d:14(int)
+      │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column10:10(int) a:11(int) c:13(int) d:14(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6-11,13,14)
       │    ├── values
-      │    │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column10:10(int)
+      │    │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column10:10(int)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(6-10)
@@ -2232,17 +2226,17 @@ upsert mutation
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_b:17(int) column1:6(int) column2:7(int) column3:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
+      ├── columns: upsert_b:17(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-14,17)
       ├── left-join
-      │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
+      │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6-14)
       │    ├── values
-      │    │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column9:9(int)
+      │    │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column9:9(int)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(6-9)

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sqlbase
 
@@ -17,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -27,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 // This file contains facilities to encode values of specific SQL
@@ -669,7 +666,7 @@ func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, e
 			// We can't fail here with a locale mismatch, this is a sign
 			// that the proper validation has not been performed upstream in
 			// the mutation planning code.
-			return r, pgerror.AssertionFailedf(
+			return r, errors.AssertionFailedf(
 				"locale mismatch %q vs %q for column %q",
 				v.Locale, col.Type.Locale(), tree.ErrNameString(col.Name))
 		}
@@ -679,9 +676,9 @@ func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, e
 			return r, nil
 		}
 	default:
-		return r, pgerror.AssertionFailedf("unsupported column type: %s", col.Type.Family())
+		return r, errors.AssertionFailedf("unsupported column type: %s", col.Type.Family())
 	}
-	return r, pgerror.AssertionFailedf("mismatched type %q vs %q for column %q",
+	return r, errors.AssertionFailedf("mismatched type %q vs %q for column %q",
 		val.ResolvedType(), col.Type.Family(), tree.ErrNameString(col.Name))
 }
 

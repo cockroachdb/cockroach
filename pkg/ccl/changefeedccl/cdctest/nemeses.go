@@ -75,11 +75,11 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 
 			// eventAbort aborts every open transaction by running a high priority
 			// DELETE.
-			// TODO(dan): This deadlocks eventAbort{}: 5,
+			eventAbort{}: 5,
 
 			// eventSplit splits between two random rows (the split is a no-op if it
 			// already exists).
-			// TODO(dan): This deadlocks eventSplit{}: 5,
+			eventSplit{}: 5,
 		},
 	}
 

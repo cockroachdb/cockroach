@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package builtins
 
@@ -20,6 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 func initAggregateBuiltins() {
@@ -357,16 +357,16 @@ func makeAggOverloadWithReturnType(
 				})
 				return max
 			case *intSumAggregate:
-				return &slidingWindowSumFunc{agg: aggWindowFunc}
+				return newSlidingWindowSumFunc(aggWindowFunc)
 			case *decimalSumAggregate:
-				return &slidingWindowSumFunc{agg: aggWindowFunc}
+				return newSlidingWindowSumFunc(aggWindowFunc)
 			case *floatSumAggregate:
-				return &slidingWindowSumFunc{agg: aggWindowFunc}
+				return newSlidingWindowSumFunc(aggWindowFunc)
 			case *intervalSumAggregate:
-				return &slidingWindowSumFunc{agg: aggWindowFunc}
+				return newSlidingWindowSumFunc(aggWindowFunc)
 			case *avgAggregate:
 				// w.agg is a sum aggregate.
-				return &avgWindowFunc{sum: slidingWindowSumFunc{agg: w.agg}}
+				return &avgWindowFunc{sum: newSlidingWindowSumFunc(w.agg)}
 			}
 
 			return newFramableAggregateWindow(
@@ -478,6 +478,9 @@ func (a *anyNotNullAggregate) Result() (tree.Datum, error) {
 	return a.val, nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *anyNotNullAggregate) Reset(context.Context) {}
+
 // Close is no-op in aggregates using constant space.
 func (a *anyNotNullAggregate) Close(context.Context) {}
 
@@ -515,6 +518,12 @@ func (a *arrayAggregate) Result() (tree.Datum, error) {
 		return &arrCopy, nil
 	}
 	return tree.DNull, nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *arrayAggregate) Reset(ctx context.Context) {
+	a.arr = tree.NewDArray(a.arr.ParamTyp)
+	a.acc.Empty(ctx)
 }
 
 // Close allows the aggregate to release the memory it requested during
@@ -578,8 +587,14 @@ func (a *avgAggregate) Result() (tree.Datum, error) {
 		_, err := tree.DecimalCtx.Quo(&t.Decimal, &t.Decimal, count)
 		return t, err
 	default:
-		return nil, pgerror.AssertionFailedf("unexpected SUM result type: %s", t)
+		return nil, errors.AssertionFailedf("unexpected SUM result type: %s", t)
 	}
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *avgAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
+	a.count = 0
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -680,6 +695,12 @@ func (a *concatAggregate) Result() (tree.Datum, error) {
 	return &res, nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *concatAggregate) Reset(context.Context) {
+	a.sawNonNull = false
+	a.result.Reset()
+}
+
 // Close allows the aggregate to release the memory it requested during
 // operation.
 func (a *concatAggregate) Close(ctx context.Context) {
@@ -719,6 +740,12 @@ func (a *boolAndAggregate) Result() (tree.Datum, error) {
 	return tree.MakeDBool(tree.DBool(a.result)), nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *boolAndAggregate) Reset(context.Context) {
+	a.sawNonNull = false
+	a.result = false
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *boolAndAggregate) Close(context.Context) {}
 
@@ -752,6 +779,12 @@ func (a *boolOrAggregate) Result() (tree.Datum, error) {
 	return tree.MakeDBool(tree.DBool(a.result)), nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *boolOrAggregate) Reset(context.Context) {
+	a.sawNonNull = false
+	a.result = false
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *boolOrAggregate) Close(context.Context) {}
 
@@ -780,6 +813,11 @@ func (a *countAggregate) Result() (tree.Datum, error) {
 	return tree.NewDInt(tree.DInt(a.count)), nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *countAggregate) Reset(context.Context) {
+	a.count = 0
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *countAggregate) Close(context.Context) {}
 
@@ -803,6 +841,11 @@ func (a *countRowsAggregate) Add(_ context.Context, _ tree.Datum, _ ...tree.Datu
 
 func (a *countRowsAggregate) Result() (tree.Datum, error) {
 	return tree.NewDInt(tree.DInt(a.count)), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *countRowsAggregate) Reset(context.Context) {
+	a.count = 0
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -847,6 +890,9 @@ func (a *MaxAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datu
 		return nil
 	}
 	if a.max == nil {
+		if err := a.acc.ResizeTo(ctx, int64(datum.Size())); err != nil {
+			return err
+		}
 		a.max = datum
 		return nil
 	}
@@ -868,6 +914,11 @@ func (a *MaxAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	return a.max, nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *MaxAggregate) Reset(ctx context.Context) {
+	a.max = nil
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -915,6 +966,9 @@ func (a *MinAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datu
 		return nil
 	}
 	if a.min == nil {
+		if err := a.acc.ResizeTo(ctx, int64(datum.Size())); err != nil {
+			return err
+		}
 		a.min = datum
 		return nil
 	}
@@ -936,6 +990,11 @@ func (a *MinAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	return a.min, nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *MinAggregate) Reset(context.Context) {
+	a.min = nil
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -974,6 +1033,12 @@ func (a *smallIntSumAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	return tree.NewDInt(tree.DInt(a.sum)), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *smallIntSumAggregate) Reset(context.Context) {
+	a.sum = 0
+	a.seenNonNull = false
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1053,6 +1118,16 @@ func (a *intSumAggregate) Result() (tree.Datum, error) {
 	return dd, nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *intSumAggregate) Reset(context.Context) {
+	// We choose not to reset apd.Decimal's since they will be set to appropriate
+	// values when overflow occurs - we simply force the aggregate to use Go
+	// types (at least, at first).
+	a.seenNonNull = false
+	a.intSum = 0
+	a.large = false
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *intSumAggregate) Close(ctx context.Context) {
 	a.acc.Close(ctx)
@@ -1104,6 +1179,13 @@ func (a *decimalSumAggregate) Result() (tree.Datum, error) {
 	return dd, nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *decimalSumAggregate) Reset(ctx context.Context) {
+	a.sum.SetFinite(0, 0)
+	a.sawNonNull = false
+	a.acc.Empty(ctx)
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSumAggregate) Close(ctx context.Context) {
 	a.acc.Close(ctx)
@@ -1142,6 +1224,12 @@ func (a *floatSumAggregate) Result() (tree.Datum, error) {
 	return tree.NewDFloat(tree.DFloat(a.sum)), nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *floatSumAggregate) Reset(context.Context) {
+	a.sawNonNull = false
+	a.sum = 0
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatSumAggregate) Close(context.Context) {}
 
@@ -1176,6 +1264,12 @@ func (a *intervalSumAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	return &tree.DInterval{Duration: a.sum}, nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *intervalSumAggregate) Reset(context.Context) {
+	a.sum = a.sum.Sub(a.sum)
+	a.sawNonNull = false
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1229,6 +1323,11 @@ func (a *intSqrDiffAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tr
 
 func (a *intSqrDiffAggregate) Result() (tree.Datum, error) {
 	return a.agg.Result()
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *intSqrDiffAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1288,6 +1387,13 @@ func (a *floatSqrDiffAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	return tree.NewDFloat(tree.DFloat(a.sqrDiff)), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *floatSqrDiffAggregate) Reset(context.Context) {
+	a.count = 0
+	a.mean = 0
+	a.sqrDiff = 0
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1379,6 +1485,13 @@ func (a *decimalSqrDiffAggregate) Result() (tree.Datum, error) {
 	return dd, nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *decimalSqrDiffAggregate) Reset(context.Context) {
+	a.count.SetFinite(0, 0)
+	a.mean.SetFinite(0, 0)
+	a.sqrDiff.SetFinite(0, 0)
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSqrDiffAggregate) Close(ctx context.Context) {
 	a.acc.Close(ctx)
@@ -1428,7 +1541,7 @@ func (a *floatSumSqrDiffsAggregate) Add(
 	// https://github.com/cockroachdb/cockroach/pull/17728.
 	totalCount, ok := arith.AddWithOverflow(a.count, count)
 	if !ok {
-		return pgerror.Newf(pgerror.CodeNumericValueOutOfRangeError,
+		return pgerror.Newf(pgcode.NumericValueOutOfRange,
 			"number of values in aggregate exceed max count of %d", math.MaxInt64,
 		)
 	}
@@ -1449,6 +1562,13 @@ func (a *floatSumSqrDiffsAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	return tree.NewDFloat(tree.DFloat(a.sqrDiff)), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *floatSumSqrDiffsAggregate) Reset(context.Context) {
+	a.count = 0
+	a.mean = 0
+	a.sqrDiff = 0
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1558,6 +1678,13 @@ func (a *decimalSumSqrDiffsAggregate) Result() (tree.Datum, error) {
 	}
 	dd := &tree.DDecimal{Decimal: a.sqrDiff}
 	return dd, nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *decimalSumSqrDiffsAggregate) Reset(context.Context) {
+	a.count.SetFinite(0, 0)
+	a.mean.SetFinite(0, 0)
+	a.sqrDiff.SetFinite(0, 0)
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1679,6 +1806,11 @@ func (a *decimalVarianceAggregate) Result() (tree.Datum, error) {
 	return dd, nil
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *floatVarianceAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatVarianceAggregate) Close(ctx context.Context) {
 	a.agg.Close(ctx)
@@ -1687,6 +1819,11 @@ func (a *floatVarianceAggregate) Close(ctx context.Context) {
 // Size is part of the tree.AggregateFunc interface.
 func (a *floatVarianceAggregate) Size() int64 {
 	return sizeOfFloatVarianceAggregate
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *decimalVarianceAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1795,6 +1932,11 @@ func (a *decimalStdDevAggregate) Result() (tree.Datum, error) {
 	return varianceDec, err
 }
 
+// Reset implements tree.AggregateFunc interface.
+func (a *floatStdDevAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
+}
+
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatStdDevAggregate) Close(ctx context.Context) {
 	a.agg.Close(ctx)
@@ -1803,6 +1945,11 @@ func (a *floatStdDevAggregate) Close(ctx context.Context) {
 // Size is part of the tree.AggregateFunc interface.
 func (a *floatStdDevAggregate) Size() int64 {
 	return sizeOfFloatStdDevAggregate
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *decimalStdDevAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1833,7 +1980,7 @@ func (a *bytesXorAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.D
 	if !a.sawNonNull {
 		a.sum = append([]byte(nil), t...)
 	} else if len(a.sum) != len(t) {
-		return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+		return pgerror.Newf(pgcode.InvalidParameterValue,
 			"arguments to xor must all be the same length %d vs %d", len(a.sum), len(t),
 		)
 	} else {
@@ -1851,6 +1998,12 @@ func (a *bytesXorAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	return tree.NewDBytes(tree.DBytes(a.sum)), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *bytesXorAggregate) Reset(context.Context) {
+	a.sum = nil
+	a.sawNonNull = false
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1887,6 +2040,12 @@ func (a *intXorAggregate) Result() (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	return tree.NewDInt(tree.DInt(a.sum)), nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *intXorAggregate) Reset(context.Context) {
+	a.sum = 0
+	a.sawNonNull = false
 }
 
 // Close is part of the tree.AggregateFunc interface.
@@ -1932,6 +2091,13 @@ func (a *jsonAggregate) Result() (tree.Datum, error) {
 		return tree.NewDJSON(a.builder.Build()), nil
 	}
 	return tree.DNull, nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *jsonAggregate) Reset(ctx context.Context) {
+	a.builder = json.NewArrayBuilderWithCounter()
+	a.acc.Empty(ctx)
+	a.sawNonNull = false
 }
 
 // Close allows the aggregate to release the memory it requested during

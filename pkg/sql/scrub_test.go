@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql_test
 
@@ -43,18 +41,19 @@ func TestScrubIndexMissingIndexEntry(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	// Create the table and the row entry.
+	// We use a table with mixed as a regression case for #38184.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-CREATE INDEX secondary ON t.test (v);
-INSERT INTO t.test VALUES (10, 20);
+CREATE TABLE t."tEst" ("K" INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t."tEst" (v);
+INSERT INTO t."tEst" VALUES (10, 20);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "tEst")
 	secondaryIndex := &tableDesc.Indexes[0]
 
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
@@ -79,7 +78,7 @@ INSERT INTO t.test VALUES (10, 20);
 	}
 
 	// Run SCRUB and find the index errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t."tEst" WITH OPTIONS INDEX ALL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -97,8 +96,8 @@ INSERT INTO t.test VALUES (10, 20);
 			scrub.MissingIndexEntryError, result.ErrorType)
 	} else if result.Database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.Database)
-	} else if result.Table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.Table != "tEst" {
+		t.Fatalf("expected table %q, got %q", "tEst", result.Table)
 	} else if result.PrimaryKey != "(10)" {
 		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
 	} else if result.Repaired {

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
@@ -18,10 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // Memo is a data structure for efficiently storing a forest of query plans.
@@ -220,7 +218,7 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 // SetScalarRoot stores the root memo expression when it is a scalar expression.
 func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
 	if m.rootExpr != nil {
-		panic(pgerror.AssertionFailedf("cannot set scalar root multiple times"))
+		panic(errors.AssertionFailedf("cannot set scalar root multiple times"))
 	}
 	m.rootExpr = scalar
 }
@@ -230,7 +228,7 @@ func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
 func (m *Memo) HasPlaceholders() bool {
 	rel, ok := m.rootExpr.(RelExpr)
 	if !ok {
-		panic(pgerror.AssertionFailedf("placeholders only supported when memo root is relational"))
+		panic(errors.AssertionFailedf("placeholders only supported when memo root is relational"))
 	}
 
 	return rel.Relational().HasPlaceholder
@@ -301,7 +299,7 @@ func (m *Memo) SetBestProps(
 		if e.RequiredPhysical() != required ||
 			!e.ProvidedPhysical().Equals(provided) ||
 			e.Cost() != cost {
-			panic(pgerror.AssertionFailedf(
+			panic(errors.AssertionFailedf(
 				"cannot overwrite %s / %s (%.9g) with %s / %s (%.9g)",
 				e.RequiredPhysical(),
 				e.ProvidedPhysical(),

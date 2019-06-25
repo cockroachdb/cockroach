@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sqlbase
 
@@ -17,12 +15,11 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // EncodingDirToDatumEncoding returns an equivalent DatumEncoding for the given
@@ -101,7 +98,7 @@ func (ed EncDatum) Size() uintptr {
 // EncDatumFromEncoded initializes an EncDatum with the given encoded
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.
-// SetEncoded wipes the underlying Datum.
+// The underlying Datum is nil.
 func EncDatumFromEncoded(enc DatumEncoding, encoded []byte) EncDatum {
 	if len(encoded) == 0 {
 		panic(fmt.Sprintf("empty encoded value"))
@@ -179,7 +176,7 @@ func (ed *EncDatum) UnsetDatum() {
 	ed.encoding = 0
 }
 
-// IsUnset returns true if SetEncoded or SetDatum were not called.
+// IsUnset returns true if EncDatumFromEncoded or DatumToEncDatum were not called.
 func (ed *EncDatum) IsUnset() bool {
 	return ed.encoded == nil && ed.Datum == nil
 }
@@ -216,7 +213,7 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *DatumAlloc) error {
 		return nil
 	}
 	if ed.encoded == nil {
-		return pgerror.AssertionFailedf("decoding unset EncDatum")
+		return errors.AssertionFailedf("decoding unset EncDatum")
 	}
 	var err error
 	var rem []byte
@@ -228,15 +225,14 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *DatumAlloc) error {
 	case DatumEncoding_VALUE:
 		ed.Datum, rem, err = DecodeTableValue(a, typ, ed.encoded)
 	default:
-		return pgerror.AssertionFailedf("unknown encoding %d", log.Safe(ed.encoding))
+		return errors.AssertionFailedf("unknown encoding %d", log.Safe(ed.encoding))
 	}
 	if err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"error decoding %d bytes", log.Safe(len(ed.encoded)))
+		return errors.Wrapf(err, "error decoding %d bytes", log.Safe(len(ed.encoded)))
 	}
 	if len(rem) != 0 {
 		ed.Datum = nil
-		return pgerror.AssertionFailedf(
+		return errors.AssertionFailedf(
 			"%d trailing bytes in encoded value: %+v", log.Safe(len(rem)), rem)
 	}
 	return nil

@@ -1,14 +1,12 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package rpc
 
@@ -22,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -265,73 +262,6 @@ func TestNodeIDCompare(t *testing.T) {
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {
 				t.Error("expected node ID mismatch error")
-			}
-			if !td.expectError && err != nil {
-				t.Errorf("unexpected error: %s", err)
-			}
-		})
-	}
-}
-
-// Test version compatibility check in Ping handler. Note that version
-// compatibility is also checked on the ping request side. This is tested in
-// context_test.TestVersionCheckBidirectional.
-func TestVersionCheck(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	empty := roachpb.Version{}
-
-	// Version before the version check was implemented
-	v0 := cluster.VersionByKey(cluster.VersionRPCNetworkStats)
-
-	// Version where the check was implemented
-	v1 := cluster.VersionByKey(cluster.VersionRPCVersionCheck)
-
-	// Next version after
-	v2 := cluster.VersionByKey(cluster.VersionRPCVersionCheck)
-	v2.Unstable++
-
-	testData := []struct {
-		name           string
-		clusterVersion roachpb.Version
-		clientVersion  roachpb.Version
-		expectError    bool
-	}{
-		{"clientVersion == clusterVersion", v1, v1, false},
-		{"clientVersion > clusterVersion", v1, v2, false},
-		{"clientVersion < clusterVersion", v2, v1, true},
-		{"clusterVersion missing success", v0, empty, false},
-		{"clientVersion missing fail", v1, empty, true},
-	}
-
-	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	heartbeat := &HeartbeatService{
-		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
-		clusterID:          &base.ClusterIDContainer{},
-		nodeID:             &base.NodeIDContainer{},
-	}
-
-	for _, td := range testData {
-		t.Run(td.name, func(t *testing.T) {
-			settings := cluster.MakeClusterSettings(td.clusterVersion, td.clusterVersion)
-			cv := cluster.ClusterVersion{Version: td.clusterVersion}
-			if err := settings.InitializeVersion(cv); err != nil {
-				t.Fatal(err)
-			}
-			heartbeat.version = &settings.Version
-
-			request := &PingRequest{
-				Ping:          "testPing",
-				ServerVersion: td.clientVersion,
-			}
-			_, err := heartbeat.Ping(context.Background(), request)
-			if td.expectError {
-				expected := "version compatibility check failed"
-				if !testutils.IsError(err, expected) {
-					t.Errorf("expected %s error, got %v", expected, err)
-				}
 			}
 			if !td.expectError && err != nil {
 				t.Errorf("unexpected error: %s", err)

@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package cli
 
@@ -64,7 +62,13 @@ func TestNoLinkForbidden(t *testing.T) {
 		},
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
-		})
+		},
+		// Raven (Sentry) and the errors library use go/build to determine
+		// the list of source directories (used to strip the source prefix
+		// in stack trace reports).
+		"github.com/cockroachdb/cockroach/vendor/github.com/getsentry/raven-go",
+		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/errors/withstack",
+	)
 }
 
 func TestCacheFlagValue(t *testing.T) {

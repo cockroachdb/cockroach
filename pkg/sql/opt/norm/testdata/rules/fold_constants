@@ -1,25 +1,12 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- ├── arr int[]
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE t (
   x INT PRIMARY KEY
 )
 ----
-TABLE t
- ├── x int not null
- └── INDEX primary
-      └── x int not null
 
 # --------------------------------------------------
 # FoldNullCast
@@ -173,7 +160,7 @@ opt expect=FoldArray
 SELECT ARRAY['foo', 'bar']
 ----
 values
- ├── columns: array:1(string[])
+ ├── columns: array:1(string[]!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -187,7 +174,7 @@ opt expect=FoldBinary
 SELECT 1::INT + 2::DECIMAL
 ----
 values
- ├── columns: "?column?":1(decimal)
+ ├── columns: "?column?":1(decimal!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -209,7 +196,7 @@ opt expect=FoldBinary
 SELECT 1::INT - 2::INT
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -231,7 +218,7 @@ opt expect=FoldBinary
 SELECT 4::INT * 2::INT
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -253,7 +240,7 @@ opt expect=FoldBinary
 SELECT 1::FLOAT / 2::FLOAT
 ----
 values
- ├── columns: "?column?":1(float)
+ ├── columns: "?column?":1(float!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -276,7 +263,7 @@ opt expect=FoldBinary
 SELECT B'01' # B'11'
 ----
 values
- ├── columns: "?column?":1(varbit)
+ ├── columns: "?column?":1(varbit!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -298,7 +285,7 @@ opt expect=FoldBinary
 SELECT B'01' | B'11'
 ----
 values
- ├── columns: "?column?":1(varbit)
+ ├── columns: "?column?":1(varbit!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -320,7 +307,7 @@ opt expect=FoldBinary
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMP
 ----
 values
- ├── columns: "?column?":1(interval)
+ ├── columns: "?column?":1(interval!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -331,7 +318,7 @@ opt expect=FoldBinary
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMPTZ
 ----
 values
- ├── columns: "?column?":1(interval)
+ ├── columns: "?column?":1(interval!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -342,7 +329,7 @@ opt expect=FoldBinary
 SELECT ARRAY['a','b','c'] || 'd'
 ----
 values
- ├── columns: "?column?":1(string[])
+ ├── columns: "?column?":1(string[]!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -353,7 +340,7 @@ opt expect=FoldBinary
 SELECT ARRAY['a','b','c'] || ARRAY['d','e','f']
 ----
 values
- ├── columns: "?column?":1(string[])
+ ├── columns: "?column?":1(string[]!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -364,7 +351,7 @@ opt expect=FoldBinary
 SELECT ARRAY[1,2,3] || NULL
 ----
 values
- ├── columns: "?column?":1(int[])
+ ├── columns: "?column?":1(int[]!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -388,7 +375,7 @@ opt expect=FoldUnary
 SELECT -(1:::int)
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -398,7 +385,7 @@ opt expect=FoldUnary
 SELECT -(1:::float)
 ----
 values
- ├── columns: "?column?":1(float)
+ ├── columns: "?column?":1(float!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -425,7 +412,7 @@ opt expect=FoldUnary format=show-all
 SELECT -(1:::decimal)
 ----
 values
- ├── columns: "?column?":1(decimal)
+ ├── columns: "?column?":1(decimal!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.02
@@ -439,7 +426,7 @@ opt expect=FoldUnary format=show-all
 SELECT -('-1d'::interval);
 ----
 values
- ├── columns: "?column?":1(interval)
+ ├── columns: "?column?":1(interval!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.02
@@ -455,7 +442,7 @@ opt expect=FoldUnary
 SELECT -('-9223372036854775808d'::interval);
 ----
 values
- ├── columns: "?column?":1(interval)
+ ├── columns: "?column?":1(interval!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -466,7 +453,7 @@ opt expect=FoldUnary
 SELECT ~(500::INT)
 ----
 values
- ├── columns: "?column?":1(int)
+ ├── columns: "?column?":1(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -477,7 +464,7 @@ opt expect=FoldUnary
 SELECT ~('35.231.178.195'::INET)
 ----
 values
- ├── columns: "?column?":1(inet)
+ ├── columns: "?column?":1(inet!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -490,7 +477,7 @@ opt expect=FoldComparison
 SELECT 1::INT < 2::INT
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -500,7 +487,7 @@ opt expect=FoldComparison
 SELECT 1::INT > 2::INT
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -510,7 +497,7 @@ opt expect=FoldComparison
 SELECT 10.0::FLOAT <= 20.0::FLOAT
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -520,7 +507,7 @@ opt expect=FoldComparison
 SELECT 10.0::FLOAT >= 20.0::FLOAT
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -530,7 +517,7 @@ opt expect=FoldComparison
 SELECT 2.0::DECIMAL = 2::INT
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -540,7 +527,7 @@ opt expect=FoldComparison
 SELECT 2.0::DECIMAL != 2::INT
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -550,7 +537,7 @@ opt expect=FoldComparison
 SELECT 100 IS NOT DISTINCT FROM 200
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -560,7 +547,7 @@ opt expect=FoldComparison
 SELECT 100 IS DISTINCT FROM 200
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -570,7 +557,7 @@ opt expect=FoldComparison
 SELECT 'foo' IN ('a', 'b', 'c')
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -580,7 +567,7 @@ opt expect=FoldComparison
 SELECT 'foo' NOT IN ('a', 'b', 'c')
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -590,7 +577,7 @@ opt expect=FoldComparison
 SELECT 'foo' LIKE 'foobar'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -600,7 +587,7 @@ opt expect=FoldComparison
 SELECT 'foo' NOT LIKE 'foobar'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -610,7 +597,7 @@ opt expect=FoldComparison
 SELECT 'foo' ILIKE 'FOO%'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -620,7 +607,7 @@ opt expect=FoldComparison
 SELECT 'foo' NOT ILIKE 'FOO%'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -630,7 +617,7 @@ opt expect=FoldComparison
 SELECT 'monday' SIMILAR TO '_onday'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -640,7 +627,7 @@ opt expect=FoldComparison
 SELECT 'monday' NOT SIMILAR TO '_onday'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -650,7 +637,7 @@ opt expect=FoldComparison
 SELECT 'tuEsday' ~ 't[uU][eE]sday'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -660,7 +647,7 @@ opt expect=FoldComparison
 SELECT 'tuEsday' !~ 't[uU][eE]sday'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -670,7 +657,7 @@ opt expect=FoldComparison
 SELECT 'wednesday' ~* 'W.*y'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -680,7 +667,7 @@ opt expect=FoldComparison
 SELECT 'wednesday' !~* 'W.*y'
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -690,7 +677,7 @@ opt expect=FoldComparison
 SELECT '[1, 2]'::JSONB <@ '[1, 2, 3]'::JSONB
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -700,7 +687,7 @@ opt expect=FoldComparison
 SELECT ('a', 'b', 'c') = ('d', 'e', 'f')
 ----
 values
- ├── columns: "?column?":1(bool)
+ ├── columns: "?column?":1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -713,7 +700,7 @@ opt expect=FoldCast
 SELECT 1::int/1
 ----
 values
- ├── columns: "?column?":1(decimal)
+ ├── columns: "?column?":1(decimal!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -726,7 +713,7 @@ opt expect=FoldFunction
 SELECT length('abc'), upper('xyz'), lower('DEF')
 ----
 values
- ├── columns: length:1(int) upper:2(string) lower:3(string)
+ ├── columns: length:1(int!null) upper:2(string!null) lower:3(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-3)
@@ -736,7 +723,7 @@ opt expect=FoldFunction
 SELECT encode('abc', 'hex'), decode('616263', 'hex')
 ----
 values
- ├── columns: encode:1(string) decode:2(bytes)
+ ├── columns: encode:1(string!null) decode:2(bytes!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)
@@ -746,7 +733,7 @@ opt expect=FoldFunction locality=(region=east,dc=east1-b)
 SELECT crdb_internal.locality_value('dc')
 ----
 values
- ├── columns: crdb_internal.locality_value:1(string)
+ ├── columns: crdb_internal.locality_value:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -881,7 +868,7 @@ opt expect=FoldColumnAccess
 SELECT (ARRAY[(('foo', 'bar') AS foo, bar)][1]).foo
 ----
 values
- ├── columns: foo:1(string)
+ ├── columns: foo:1(string!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)

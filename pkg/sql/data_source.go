@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -16,11 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // For more detailed documentation on DataSourceInfos, see
@@ -148,7 +148,7 @@ func (p *planner) getDataSource(
 		}
 		cols := planColumns(plan)
 		if len(cols) == 0 {
-			return planDataSource{}, pgerror.Newf(pgerror.CodeUndefinedColumnError,
+			return planDataSource{}, pgerror.Newf(pgcode.UndefinedColumn,
 				"statement source \"%v\" does not return any columns", t.Statement)
 		}
 		return planDataSource{
@@ -165,7 +165,7 @@ func (p *planner) getDataSource(
 	case *tree.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
 		if t.Lateral {
-			return planDataSource{}, pgerror.Newf(pgerror.CodeFeatureNotSupportedError, "LATERAL is not supported")
+			return planDataSource{}, pgerror.Newf(pgcode.FeatureNotSupported, "LATERAL is not supported")
 		}
 
 		if t.IndexFlags != nil {
@@ -203,12 +203,12 @@ func (p *planner) getTableScanByRef(
 	}}
 	desc, err := p.Tables().getTableVersionByID(ctx, p.txn, sqlbase.ID(tref.TableID), flags)
 	if err != nil {
-		return planDataSource{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+		return planDataSource{}, pgerror.Wrapf(err, pgcode.Syntax,
 			"%s", tree.ErrString(tref))
 	}
 
 	if tref.Columns != nil && len(tref.Columns) == 0 {
-		return planDataSource{}, pgerror.Newf(pgerror.CodeSyntaxError,
+		return planDataSource{}, pgerror.Newf(pgcode.Syntax,
 			"an explicit list of column IDs must include at least one column")
 	}
 
@@ -288,7 +288,7 @@ func renameSource(
 			if colIdx >= len(src.info.SourceColumns) {
 				srcName := tree.ErrString(&tableAlias)
 				return planDataSource{}, pgerror.Newf(
-					pgerror.CodeInvalidColumnReferenceError,
+					pgcode.InvalidColumnReference,
 					"source %q has %d columns available but %d columns specified",
 					srcName, aliasIdx, len(colAlias))
 			}
@@ -346,7 +346,7 @@ func (p *planner) getViewPlan(
 ) (planDataSource, error) {
 	stmt, err := parser.ParseOne(desc.ViewQuery)
 	if err != nil {
-		return planDataSource{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+		return planDataSource{}, pgerror.Wrapf(err, pgcode.Syntax,
 			"failed to parse underlying query from view %q", tn)
 	}
 	sel, ok := stmt.AST.(*tree.Select)
@@ -460,7 +460,7 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 	}
 	tn, ok := n.(*tree.TableName)
 	if !ok {
-		return nil, nil, pgerror.Unimplemented(
+		return nil, nil, unimplemented.New(
 			"complex table expression in UPDATE/DELETE",
 			"cannot use a complex table name with DELETE/UPDATE",
 		)

@@ -19,14 +19,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 type postgreStream struct {
@@ -287,9 +288,6 @@ func readPostgresCreateTable(
 			return ret, nil
 		}
 		if err != nil {
-			if pg, ok := pgerror.GetPGCause(err); ok {
-				return nil, errors.Errorf("%s\n%s", pg.Message, pg.Detail)
-			}
 			return nil, errors.Wrap(err, "postgres parse error")
 		}
 		switch stmt := stmt.(type) {
@@ -373,7 +371,7 @@ func readPostgresCreateTable(
 
 func getTableName(tn *tree.TableName) (string, error) {
 	if sc := tn.Schema(); sc != "" && sc != "public" {
-		return "", pgerror.Unimplementedf(
+		return "", unimplemented.Newf(
 			"import non-public schema",
 			"non-public schemas unsupported: %s", sc,
 		)
@@ -384,7 +382,7 @@ func getTableName(tn *tree.TableName) (string, error) {
 // getTableName variant for UnresolvedObjectName.
 func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 	if u.NumParts >= 2 && u.Parts[1] != "public" {
-		return "", pgerror.Unimplementedf(
+		return "", unimplemented.Newf(
 			"import non-public schema",
 			"non-public schemas unsupported: %s", u.Parts[1],
 		)
@@ -529,7 +527,7 @@ func (m *pgDumpReader) readFile(
 				row, err := ps.Next()
 				// We expect an explicit copyDone here. io.EOF is unexpected.
 				if err == io.EOF {
-					return makeRowErr(inputName, count, pgerror.CodeProtocolViolationError,
+					return makeRowErr(inputName, count, pgcode.ProtocolViolation,
 						"unexpected EOF")
 				}
 				if row == errCopyDone {
@@ -537,7 +535,7 @@ func (m *pgDumpReader) readFile(
 				}
 				count++
 				if err != nil {
-					return wrapRowErr(err, inputName, count, pgerror.CodeDataExceptionError, "")
+					return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 				}
 				if !importing {
 					continue
@@ -545,7 +543,7 @@ func (m *pgDumpReader) readFile(
 				switch row := row.(type) {
 				case copyData:
 					if expected, got := len(conv.visibleCols), len(row); expected != got {
-						return makeRowErr(inputName, count, pgerror.CodeSyntaxError,
+						return makeRowErr(inputName, count, pgcode.Syntax,
 							"expected %d values, got %d", expected, got)
 					}
 					for i, s := range row {
@@ -555,7 +553,7 @@ func (m *pgDumpReader) readFile(
 							conv.datums[i], err = tree.ParseDatumStringAs(conv.visibleColTypes[i], *s, conv.evalCtx)
 							if err != nil {
 								col := conv.visibleCols[i]
-								return wrapRowErr(err, inputName, count, pgerror.CodeSyntaxError,
+								return wrapRowErr(err, inputName, count, pgcode.Syntax,
 									"parse %q as %s", col.Name, col.Type.SQLString())
 							}
 						}
@@ -564,7 +562,7 @@ func (m *pgDumpReader) readFile(
 						return err
 					}
 				default:
-					return makeRowErr(inputName, count, pgerror.CodeDataExceptionError,
+					return makeRowErr(inputName, count, pgcode.Uncategorized,
 						"unexpected: %v", row)
 				}
 			}
@@ -617,7 +615,7 @@ func (m *pgDumpReader) readFile(
 			}
 			key, val, err := sql.MakeSequenceKeyVal(seq, val, isCalled)
 			if err != nil {
-				return wrapRowErr(err, inputName, count, pgerror.CodeDataExceptionError, "")
+				return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 			}
 			kv := roachpb.KeyValue{Key: key}
 			kv.Value.SetInt(val)

@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package physical_test
 
@@ -18,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestOrderingChoice_FromOrdering(t *testing.T) {
@@ -28,7 +25,7 @@ func TestOrderingChoice_FromOrdering(t *testing.T) {
 		t.Errorf("expected %s, got %s", exp, actual)
 	}
 
-	oc.FromOrderingWithOptCols(opt.Ordering{1, -2, 3, 4, -5}, util.MakeFastIntSet(1, 3, 5))
+	oc.FromOrderingWithOptCols(opt.Ordering{1, -2, 3, 4, -5}, opt.MakeColSet(1, 3, 5))
 	if exp, actual := "-2,+4 opt(1,3,5)", oc.String(); exp != actual {
 		t.Errorf("expected %s, got %s", exp, actual)
 	}
@@ -65,10 +62,10 @@ func TestOrderingChoice_ColSet(t *testing.T) {
 		s  string
 		cs opt.ColSet
 	}{
-		{s: "", cs: util.MakeFastIntSet()},
-		{s: "+1", cs: util.MakeFastIntSet(1)},
-		{s: "-1,+(2|3) opt(4,5)", cs: util.MakeFastIntSet(1, 2, 3)},
-		{s: "+(1|2),-(3|4),+5", cs: util.MakeFastIntSet(1, 2, 3, 4, 5)},
+		{s: "", cs: opt.MakeColSet()},
+		{s: "+1", cs: opt.MakeColSet(1)},
+		{s: "-1,+(2|3) opt(4,5)", cs: opt.MakeColSet(1, 2, 3)},
+		{s: "+(1|2),-(3|4),+5", cs: opt.MakeColSet(1, 2, 3, 4, 5)},
 	}
 
 	for _, tc := range testcases {
@@ -233,17 +230,17 @@ func TestOrderingChoice_SubsetOfCols(t *testing.T) {
 		cs       opt.ColSet
 		expected bool
 	}{
-		{s: "", cs: util.MakeFastIntSet(), expected: true},
-		{s: "", cs: util.MakeFastIntSet(1), expected: true},
-		{s: "+1", cs: util.MakeFastIntSet(1), expected: true},
-		{s: "-1", cs: util.MakeFastIntSet(1, 2), expected: true},
-		{s: "+1 opt(2)", cs: util.MakeFastIntSet(1), expected: false},
-		{s: "+1 opt(2)", cs: util.MakeFastIntSet(1, 2), expected: true},
-		{s: "+(1|2)", cs: util.MakeFastIntSet(1, 2, 3), expected: true},
-		{s: "+(1|2)", cs: util.MakeFastIntSet(2), expected: false},
-		{s: "+1,-(2|3),-4 opt(4,5)", cs: util.MakeFastIntSet(1, 3, 4), expected: false},
-		{s: "+1,-(2|3),-4 opt(4,5)", cs: util.MakeFastIntSet(1, 2, 3, 4), expected: false},
-		{s: "+1,-(2|3),-4 opt(4,5)", cs: util.MakeFastIntSet(1, 2, 3, 4, 5), expected: true},
+		{s: "", cs: opt.MakeColSet(), expected: true},
+		{s: "", cs: opt.MakeColSet(1), expected: true},
+		{s: "+1", cs: opt.MakeColSet(1), expected: true},
+		{s: "-1", cs: opt.MakeColSet(1, 2), expected: true},
+		{s: "+1 opt(2)", cs: opt.MakeColSet(1), expected: false},
+		{s: "+1 opt(2)", cs: opt.MakeColSet(1, 2), expected: true},
+		{s: "+(1|2)", cs: opt.MakeColSet(1, 2, 3), expected: true},
+		{s: "+(1|2)", cs: opt.MakeColSet(2), expected: false},
+		{s: "+1,-(2|3),-4 opt(4,5)", cs: opt.MakeColSet(1, 3, 4), expected: false},
+		{s: "+1,-(2|3),-4 opt(4,5)", cs: opt.MakeColSet(1, 2, 3, 4), expected: false},
+		{s: "+1,-(2|3),-4 opt(4,5)", cs: opt.MakeColSet(1, 2, 3, 4, 5), expected: true},
 	}
 
 	for _, tc := range testcases {
@@ -264,18 +261,18 @@ func TestOrderingChoice_CanProjectCols(t *testing.T) {
 		cs       opt.ColSet
 		expected bool
 	}{
-		{s: "", cs: util.MakeFastIntSet(), expected: true},
-		{s: "", cs: util.MakeFastIntSet(1), expected: true},
-		{s: "+1", cs: util.MakeFastIntSet(1), expected: true},
-		{s: "-1", cs: util.MakeFastIntSet(1, 2), expected: true},
-		{s: "+1 opt(2)", cs: util.MakeFastIntSet(1), expected: true},
-		{s: "+(1|2)", cs: util.MakeFastIntSet(1), expected: true},
-		{s: "+(1|2)", cs: util.MakeFastIntSet(2), expected: true},
-		{s: "+1,-(2|3),-4 opt(4,5)", cs: util.MakeFastIntSet(1, 3, 4), expected: true},
+		{s: "", cs: opt.MakeColSet(), expected: true},
+		{s: "", cs: opt.MakeColSet(1), expected: true},
+		{s: "+1", cs: opt.MakeColSet(1), expected: true},
+		{s: "-1", cs: opt.MakeColSet(1, 2), expected: true},
+		{s: "+1 opt(2)", cs: opt.MakeColSet(1), expected: true},
+		{s: "+(1|2)", cs: opt.MakeColSet(1), expected: true},
+		{s: "+(1|2)", cs: opt.MakeColSet(2), expected: true},
+		{s: "+1,-(2|3),-4 opt(4,5)", cs: opt.MakeColSet(1, 3, 4), expected: true},
 
-		{s: "+1", cs: util.MakeFastIntSet(), expected: false},
-		{s: "+1,+2", cs: util.MakeFastIntSet(1), expected: false},
-		{s: "+(1|2)", cs: util.MakeFastIntSet(3), expected: false},
+		{s: "+1", cs: opt.MakeColSet(), expected: false},
+		{s: "+1,+2", cs: opt.MakeColSet(1), expected: false},
+		{s: "+(1|2)", cs: opt.MakeColSet(3), expected: false},
 	}
 
 	for _, tc := range testcases {
@@ -340,14 +337,14 @@ func TestOrderingChoice_MatchesAt(t *testing.T) {
 func TestOrderingChoice_Copy(t *testing.T) {
 	ordering := physical.ParseOrderingChoice("+1,-(2|3) opt(4,5)")
 	copied := ordering.Copy()
-	col := physical.OrderingColumnChoice{Group: util.MakeFastIntSet(6, 7), Descending: true}
+	col := physical.OrderingColumnChoice{Group: opt.MakeColSet(6, 7), Descending: true}
 	copied.Columns = append(copied.Columns, col)
 
 	// ()-->(8)
 	// (3)==(9)
 	// (9)==(3)
 	var fd props.FuncDepSet
-	fd.AddConstants(util.MakeFastIntSet(8))
+	fd.AddConstants(opt.MakeColSet(8))
 	fd.AddEquivalency(3, 9)
 	copied.Simplify(&fd)
 
@@ -366,7 +363,7 @@ func TestOrderingChoice_Simplify(t *testing.T) {
 	// (2)==(1)
 	// (3)==(1)
 	var fd1 props.FuncDepSet
-	fd1.AddConstants(util.MakeFastIntSet(4, 5))
+	fd1.AddConstants(opt.MakeColSet(4, 5))
 	fd1.AddEquivalency(1, 2)
 	fd1.AddEquivalency(1, 3)
 
@@ -376,9 +373,9 @@ func TestOrderingChoice_Simplify(t *testing.T) {
 	// (2)==(3)
 	// (3)==(2)
 	var fd2 props.FuncDepSet
-	fd2.AddStrictKey(util.MakeFastIntSet(1), util.MakeFastIntSet(1, 2, 3, 4, 5))
-	fd2.AddSynthesizedCol(util.MakeFastIntSet(2), 4)
-	fd2.AddSynthesizedCol(util.MakeFastIntSet(4), 5)
+	fd2.AddStrictKey(opt.MakeColSet(1), opt.MakeColSet(1, 2, 3, 4, 5))
+	fd2.AddSynthesizedCol(opt.MakeColSet(2), 4)
+	fd2.AddSynthesizedCol(opt.MakeColSet(4), 5)
 	fd2.AddEquivalency(2, 3)
 
 	testcases := []struct {
@@ -453,20 +450,20 @@ func TestOrderingChoice_Truncate(t *testing.T) {
 func TestOrderingChoice_ProjectCols(t *testing.T) {
 	testcases := []struct {
 		s        string
-		cols     []int
+		cols     []opt.ColumnID
 		expected string
 	}{
-		{s: "", cols: []int{}, expected: ""},
-		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 2, 3, 4, 5, 6}, expected: "+1,+(2|3),-4 opt(5,6)"},
-		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 2, 4, 5, 6}, expected: "+1,+2,-4 opt(5,6)"},
-		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 3, 4, 5, 6}, expected: "+1,+3,-4 opt(5,6)"},
-		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 2, 4, 5}, expected: "+1,+2,-4 opt(5)"},
-		{s: "+1,+(2|3),-4 opt(5,6)", cols: []int{1, 2, 4}, expected: "+1,+2,-4"},
+		{s: "", cols: []opt.ColumnID{}, expected: ""},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 2, 3, 4, 5, 6}, expected: "+1,+(2|3),-4 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 2, 4, 5, 6}, expected: "+1,+2,-4 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 3, 4, 5, 6}, expected: "+1,+3,-4 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 2, 4, 5}, expected: "+1,+2,-4 opt(5)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 2, 4}, expected: "+1,+2,-4"},
 	}
 
 	for _, tc := range testcases {
 		choice := physical.ParseOrderingChoice(tc.s)
-		choice.ProjectCols(util.MakeFastIntSet(tc.cols...))
+		choice.ProjectCols(opt.MakeColSet(tc.cols...))
 		if choice.String() != tc.expected {
 			t.Errorf("%s: cols=%v, expected: %s, actual: %s", tc.s, tc.cols, tc.expected, choice.String())
 		}

@@ -1,20 +1,19 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -50,7 +49,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 			telemetry.Inc(sqltelemetry.ExplainDistSQLUseCounter)
 		}
 		if analyze && tree.IsStmtParallelized(explain.Statement) {
-			panic(pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
+			panic(pgerror.Newf(pgcode.FeatureNotSupported,
 				"EXPLAIN ANALYZE does not support RETURNING NOTHING statements"))
 		}
 		cols = sqlbase.ExplainDistSQLColumns
@@ -64,7 +63,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		cols = sqlbase.ExplainOptColumns
 
 	default:
-		panic(pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
 			"EXPLAIN ANALYZE does not support RETURNING NOTHING statements"))
 	}
 	b.synthesizeResultColumns(outScope, cols)

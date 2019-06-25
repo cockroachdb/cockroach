@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -19,13 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type relocateNode struct {
@@ -179,8 +176,8 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 				if err := params.extendedEvalCtx.ExecCfg.Gossip.GetInfoProto(
 					gossipStoreKey, &storeDesc,
 				); err != nil {
-					return false, pgerror.NewAssertionErrorWithWrappedErrf(err,
-						"error looking up store %d", log.Safe(storeID))
+					return false, errors.NewAssertionErrorWithWrappedErrf(err,
+						"error looking up store %d", errors.Safe(storeID))
 				}
 				nodeID = storeDesc.Node.NodeID
 				n.run.storeMap[storeID] = nodeID
@@ -203,8 +200,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 
 	rangeDesc, err := lookupRangeDescriptor(params.ctx, params.extendedEvalCtx.ExecCfg.DB, rowKey)
 	if err != nil {
-		return false, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"error looking up range descriptor")
+		return false, errors.Wrapf(err, "error looking up range descriptor")
 	}
 	n.run.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 

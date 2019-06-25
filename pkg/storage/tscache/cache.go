@@ -1,15 +1,15 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
+// Package tscache provides a timestamp cache structure that records the maximum
+// timestamp that key ranges were read from and written to.
 package tscache
 
 import (
@@ -28,13 +28,13 @@ import (
 // will necessarily have to advance their commit timestamp.
 const MinRetentionWindow = 10 * time.Second
 
-// Cache is a bounded in-memory cache that records key ranges and the
-// timestamps at which they were most recently read and written. The structure
-// serves to protect against violations of Snapshot Isolation, which requires
-// that the outcome of reads must be preserved even in the presence of
-// read-write conflicts (i.e. a write to a key at a lower timestamp than a
-// previous read must not succeed). Cache corresponds to the "status oracle"
-// discussed in Yabandeh's A Critique of Snapshot Isolation.
+// Cache is a bounded in-memory cache that records the maximum timestamp that
+// key ranges were read from and written to. The structure serves to protect
+// against violations of Snapshot Isolation, which requires that the outcome of
+// reads must be preserved even in the presence of read-write conflicts (i.e. a
+// write to a key at a lower timestamp than a previous read must not succeed).
+// Cache corresponds to the "status oracle" discussed in Yabandeh's A Critique
+// of Snapshot Isolation.
 //
 // The cache is updated after the completion of each read operation with the
 // range of all keys that the request was predicated upon. It is then consulted

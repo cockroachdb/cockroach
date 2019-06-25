@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -42,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -59,8 +59,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // ClusterOrganization is the organization name.
@@ -138,7 +138,7 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	opt.DefaultJoinOrderLimit,
 	func(v int64) error {
 		if v < 0 {
-			return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
+			return pgerror.Newf(pgcode.InvalidParameterValue,
 				"cannot set sql.defaults.reorder_joins_limit to a negative value: %d", v)
 		}
 		return nil
@@ -792,7 +792,7 @@ func checkResultType(typ *types.T) error {
 			// mixed signals -- that nested arrays appear to be supported
 			// in this case, and not in other cases (eg. CREATE). So we
 			// reject them in every case instead.
-			return pgerror.UnimplementedWithIssueDetail(32552,
+			return unimplemented.NewWithIssueDetail(32552,
 				"result", "arrays cannot have arrays as element type")
 		}
 	case types.AnyFamily:
@@ -1267,8 +1267,9 @@ func (st *SessionTracing) StartTracing(
 			}
 			fmt.Fprintf(&desiredOptions, "%s%s", comma, recOption)
 
-			return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
-				"tracing is already started with different options").SetHintf(
+			err := pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"tracing is already started with different options")
+			return errors.WithHintf(err,
 				"reset with SET tracing = off; SET tracing = %s", desiredOptions.String())
 		}
 
@@ -1885,14 +1886,16 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
 	optUsed bool,
+	implicitTxn bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
+	bytesRead, rowsRead int64,
 ) {
 	s.appStats.recordStatement(
-		stmt, samplePlanDescription, distSQLUsed, optUsed, automaticRetryCount, numRows, err,
-		parseLat, planLat, runLat, svcLat, ovhLat)
+		stmt, samplePlanDescription, distSQLUsed, optUsed, implicitTxn, automaticRetryCount, numRows, err,
+		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
 }
 
 // SQLStats is part of the sqlStatsCollector interface.

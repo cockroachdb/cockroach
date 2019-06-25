@@ -1,15 +1,6 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, d DATE)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float
- ├── s string
- ├── j jsonb
- ├── d date
- └── INDEX primary
-      └── k int not null
 
 # --------------------------------------------------
 # CommuteVarInequality
@@ -302,7 +293,7 @@ WHERE
     null::jsonb ?& ARRAY['foo'] OR '{}' ?& null::string[]
 ----
 values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null) d:6(date!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-6)
@@ -314,7 +305,7 @@ opt expect=FoldIsNull
 SELECT NULL IS NULL AS r
 ----
 values
- ├── columns: r:1(bool)
+ ├── columns: r:1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -327,7 +318,7 @@ opt expect=FoldNonNullIsNull
 SELECT 1 IS NULL AS r
 ----
 values
- ├── columns: r:1(bool)
+ ├── columns: r:1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -337,7 +328,7 @@ opt expect=FoldNonNullIsNull
 SELECT (1, 2, 3) IS NULL AS r
 ----
 values
- ├── columns: r:1(bool)
+ ├── columns: r:1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -350,7 +341,7 @@ opt expect=FoldIsNotNull
 SELECT NULL IS NOT NULL AS r, NULL IS NOT TRUE AS s
 ----
 values
- ├── columns: r:1(bool) s:2(bool)
+ ├── columns: r:1(bool!null) s:2(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)
@@ -381,7 +372,7 @@ opt expect=FoldNonNullIsNotNull
 SELECT (1, 2, 3) IS NOT NULL AS r
 ----
 values
- ├── columns: r:1(bool)
+ ├── columns: r:1(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -394,7 +385,7 @@ opt expect=CommuteNullIs
 SELECT NULL IS NOT TRUE AS r, NULL IS TRUE AS s
 ----
 values
- ├── columns: r:1(bool) s:2(bool)
+ ├── columns: r:1(bool!null) s:2(bool!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)

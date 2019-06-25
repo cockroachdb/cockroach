@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package server
 
@@ -35,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -225,6 +223,7 @@ func TestCBOReportUsage(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	// Stopper will wait for the update/report loop to finish too.
 	defer s.Stopper().Stop(context.TODO())
+	defer db.Close()
 	ts := s.(*TestServer)
 
 	// make sure the test's generated activity is the only activity we measure.
@@ -396,11 +395,15 @@ func TestReportUsage(t *testing.T) {
 		{"DATABASE system", fmt.Sprintf(`constraints: {"+zone=%[1]s,+%[1]s": 2, +%[1]s: 1}`, elemName)},
 		{"DATABASE system", fmt.Sprintf(`experimental_lease_preferences: [[+zone=%[1]s,+%[1]s], [+%[1]s]]`, elemName)},
 	} {
-		if _, err := db.Exec(
-			fmt.Sprintf(`ALTER %s CONFIGURE ZONE = '%s'`, cmd.resource, cmd.config),
-		); err != nil {
-			t.Fatalf("error applying zone config %q to %q: %v", cmd.config, cmd.resource, err)
-		}
+		testutils.SucceedsSoon(t, func() error {
+			if _, err := db.Exec(
+				fmt.Sprintf(`ALTER %s CONFIGURE ZONE = '%s'`, cmd.resource, cmd.config),
+			); err != nil {
+				// Work around gossip asynchronicity.
+				return errors.Errorf("error applying zone config %q to %q: %v", cmd.config, cmd.resource, err)
+			}
+			return nil
+		})
 	}
 	if _, err := db.Exec(`INSERT INTO system.zones (id, config) VALUES (10000, null)`); err != nil {
 		t.Fatal(err)
@@ -470,11 +473,6 @@ func TestReportUsage(t *testing.T) {
 		// pass args to force a prepare/exec path as that may differ.
 		if _, err := db.Exec(`SELECT 2/$1`, 0); !testutils.IsError(
 			err, "division by zero",
-		) {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`ALTER TABLE foo ALTER COLUMN x SET NOT NULL`); !testutils.IsError(
-			err, "unimplemented",
 		) {
 			t.Fatal(err)
 		}
@@ -708,24 +706,22 @@ func TestReportUsage(t *testing.T) {
 
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
-		"unimplemented.syntax.#28751":                   10,
 		"unimplemented.syntax.#32564":                   10,
 		"unimplemented.#9148":                           10,
-		"othererror.builtins.go":                        10,
 		"othererror." +
-			pgerror.CodeDataExceptionError +
+			pgcode.Uncategorized +
 			".crdb_internal.set_vmodule()": 10,
-		"errorcodes.blah": 10,
-		"errorcodes." + pgerror.CodeDataExceptionError:       10,
-		"errorcodes." + pgerror.CodeInternalError:            10,
-		"errorcodes." + pgerror.CodeSyntaxError:              10,
-		"errorcodes." + pgerror.CodeFeatureNotSupportedError: 10,
-		"errorcodes." + pgerror.CodeDivisionByZeroError:      10,
+		"errorcodes.blah":                          10,
+		"errorcodes." + pgcode.Internal:            10,
+		"errorcodes." + pgcode.Syntax:              10,
+		"errorcodes." + pgcode.FeatureNotSupported: 10,
+		"errorcodes." + pgcode.DivisionByZero:      10,
 	}
 
 	if expected, actual := len(expectedFeatureUsage), len(r.last.FeatureUsage); actual < expected {
 		t.Fatalf("expected at least %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
 	}
+	t.Logf("%# v", pretty.Formatter(r.last.FeatureUsage))
 	for key, expected := range expectedFeatureUsage {
 		if got, ok := r.last.FeatureUsage[key]; !ok {
 			t.Fatalf("expected report of feature %q", key)

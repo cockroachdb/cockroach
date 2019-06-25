@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree_test
 
@@ -29,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
+	"github.com/cockroachdb/datadriven"
 )
 
 func TestEval(t *testing.T) {
@@ -266,7 +264,7 @@ func TestEvalError(t *testing.T) {
 		{`'baz'::decimal`,
 			`could not parse "baz" as type decimal`},
 		{`'2010-09-28 12:00:00.1q'::date`,
-			`could not parse "2010-09-28 12:00:00.1q" as type date`},
+			`parsing as type date: could not parse "2010-09-28 12:00:00.1q"`},
 		{`'12:00:00q'::time`, `could not parse "12:00:00q" as type time`},
 		{`'2010-09-28 12:00.1 MST'::timestamp`,
 			`unimplemented: timestamp abbreviations not supported`},

@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package distsqlrun
 
@@ -265,6 +263,134 @@ func TestJoinReader(t *testing.T) {
 			inputTypes:  []types.T{*types.Int, *types.Int, *types.String},
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
+		},
+		{
+			description: "Test left semi lookup join",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(1)), sqlutils.RowEnglishFn(2)},
+				{tree.NewDInt(tree.DInt(1)), sqlutils.RowEnglishFn(2)},
+				{tree.NewDInt(tree.DInt(1234)), sqlutils.RowEnglishFn(2)},
+				{tree.NewDInt(tree.DInt(6)), sqlutils.RowEnglishFn(2)},
+				{tree.NewDInt(tree.DInt(7)), sqlutils.RowEnglishFn(2)},
+				{tree.NewDInt(tree.DInt(1)), sqlutils.RowEnglishFn(2)},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftSemiJoin,
+			inputTypes:  []types.T{*types.Int, *types.String},
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[1 'two'] [1 'two'] [6 'two'] [7 'two'] [1 'two']]",
+		},
+		{
+			description: "Test left semi lookup join on secondary index with NULL lookup value",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(0), tree.DNull},
+			},
+			lookupCols:  []uint32{0, 1},
+			joinType:    sqlbase.LeftSemiJoin,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.OneIntCol,
+			expected:    "[]",
+		},
+		{
+			description: "Test left semi lookup join with onExpr",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(1)), bFn(3)},
+				{tree.NewDInt(tree.DInt(1)), bFn(2)},
+				{tree.NewDInt(tree.DInt(1234)), bFn(2)},
+				{tree.NewDInt(tree.DInt(6)), bFn(2)},
+				{tree.NewDInt(tree.DInt(7)), bFn(3)},
+				{tree.NewDInt(tree.DInt(1)), bFn(2)},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftSemiJoin,
+			onExpr:      "@2 > 2",
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[1 3] [7 3]]",
+		},
+		{
+			description: "Test left anti lookup join",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(1234)), tree.NewDInt(tree.DInt(1234))},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftAntiJoin,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[1234 1234]]",
+		},
+		{
+			description: "Test left anti lookup join with onExpr",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(1)), bFn(3)},
+				{tree.NewDInt(tree.DInt(1)), bFn(2)},
+				{tree.NewDInt(tree.DInt(6)), bFn(2)},
+				{tree.NewDInt(tree.DInt(7)), bFn(3)},
+				{tree.NewDInt(tree.DInt(1)), bFn(2)},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftAntiJoin,
+			onExpr:      "@2 > 2",
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[1 2] [6 2] [1 2]]",
+		},
+		{
+			description: "Test left anti lookup join with match",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{aFn(10), tree.NewDInt(tree.DInt(1234))},
+			},
+			lookupCols:  []uint32{0},
+			joinType:    sqlbase.LeftAntiJoin,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.OneIntCol,
+			expected:    "[]",
+		},
+		{
+			description: "Test left anti lookup join on secondary index with NULL lookup value",
+			indexIdx:    1,
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1},
+			},
+			input: [][]tree.Datum{
+				{tree.NewDInt(0), tree.DNull},
+			},
+			lookupCols:  []uint32{0, 1},
+			joinType:    sqlbase.LeftAntiJoin,
+			inputTypes:  sqlbase.TwoIntCols,
+			outputTypes: sqlbase.TwoIntCols,
+			expected:    "[[0 NULL]]",
 		},
 	}
 	for i, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {

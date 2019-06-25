@@ -1,22 +1,20 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package props
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // AvailableRuleProps is a bit set that indicates when lazily-populated Rule
@@ -424,7 +422,7 @@ func (s *Scalar) SetAvailable(p AvailableRuleProps) {
 //
 func (s *Shared) Verify() {
 	if s.HasCorrelatedSubquery && !s.HasSubquery {
-		panic(pgerror.AssertionFailedf("HasSubquery cannot be false if HasCorrelatedSubquery is true"))
+		panic(errors.AssertionFailedf("HasSubquery cannot be false if HasCorrelatedSubquery is true"))
 	}
 }
 
@@ -442,16 +440,16 @@ func (r *Relational) Verify() {
 	r.FuncDeps.Verify()
 
 	if !r.NotNullCols.SubsetOf(r.OutputCols) {
-		panic(pgerror.AssertionFailedf("not null cols %s not a subset of output cols %s",
+		panic(errors.AssertionFailedf("not null cols %s not a subset of output cols %s",
 			log.Safe(r.NotNullCols), log.Safe(r.OutputCols)))
 	}
 	if r.OuterCols.Intersects(r.OutputCols) {
-		panic(pgerror.AssertionFailedf("outer cols %s intersect output cols %s",
+		panic(errors.AssertionFailedf("outer cols %s intersect output cols %s",
 			log.Safe(r.OuterCols), log.Safe(r.OutputCols)))
 	}
 	if r.FuncDeps.HasMax1Row() {
 		if r.Cardinality.Max > 1 {
-			panic(pgerror.AssertionFailedf(
+			panic(errors.AssertionFailedf(
 				"max cardinality must be <= 1 if FDs have max 1 row: %s", r.Cardinality))
 		}
 	}
@@ -462,12 +460,12 @@ func (r *Relational) Verify() {
 // the same group).
 func (r *Relational) VerifyAgainst(other *Relational) {
 	if !r.OutputCols.Equals(other.OutputCols) {
-		panic(pgerror.AssertionFailedf("output cols mismatch: %s vs %s", log.Safe(r.OutputCols), log.Safe(other.OutputCols)))
+		panic(errors.AssertionFailedf("output cols mismatch: %s vs %s", log.Safe(r.OutputCols), log.Safe(other.OutputCols)))
 	}
 
 	if r.Cardinality.Max < other.Cardinality.Min ||
 		r.Cardinality.Min > other.Cardinality.Max {
-		panic(pgerror.AssertionFailedf("cardinality mismatch: %s vs %s", log.Safe(r.Cardinality), log.Safe(other.Cardinality)))
+		panic(errors.AssertionFailedf("cardinality mismatch: %s vs %s", log.Safe(r.Cardinality), log.Safe(other.Cardinality)))
 	}
 
 	// NotNullCols, FuncDeps are best effort, so they might differ.

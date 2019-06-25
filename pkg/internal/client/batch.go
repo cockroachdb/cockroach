@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package client
 
@@ -16,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
 
@@ -586,7 +585,7 @@ func (b *Batch) adminMerge(key interface{}) {
 
 // adminSplit is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, manual bool) {
+func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, expirationTime hlc.Timestamp) {
 	spanKey, err := marshalKey(spanKeyIn)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -601,8 +600,8 @@ func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, manual bool) {
 		RequestHeader: roachpb.RequestHeader{
 			Key: spanKey,
 		},
-		SplitKey: splitKey,
-		Manual:   manual,
+		SplitKey:       splitKey,
+		ExpirationTime: expirationTime,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

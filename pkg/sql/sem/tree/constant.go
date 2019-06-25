@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -19,8 +17,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -78,7 +78,7 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired *types.T) (ret Type
 				return nil, err
 			case errConstNotInt:
 			default:
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "unexpected error")
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error")
 			}
 		}
 	}
@@ -153,9 +153,9 @@ func (expr *NumVal) ShouldBeInt64() bool {
 
 // These errors are statically allocated, because they are returned in the
 // common path of AsInt64.
-var errConstNotInt = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "cannot represent numeric constant as an int")
-var errConstOutOfRange64 = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int64 range")
-var errConstOutOfRange32 = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int32 range")
+var errConstNotInt = pgerror.New(pgcode.NumericValueOutOfRange, "cannot represent numeric constant as an int")
+var errConstOutOfRange64 = pgerror.New(pgcode.NumericValueOutOfRange, "numeric constant out of int64 range")
+var errConstOutOfRange32 = pgerror.New(pgcode.NumericValueOutOfRange, "numeric constant out of int32 range")
 
 // AsInt64 returns the value as a 64-bit integer if possible, or returns an
 // error if not possible. The method will set expr.resInt to the value of
@@ -272,14 +272,14 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 			// like 6/7. If only we could call big.Rat.FloatString() on it...
 			num, den := s[:idx], s[idx+1:]
 			if err := dd.SetString(num); err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+				return nil, pgerror.Wrapf(err, pgcode.Syntax,
 					"could not evaluate numerator of %v as Datum type DDecimal from string %q",
 					expr, num)
 			}
 			// TODO(nvanbenschoten): Should we try to avoid this allocation?
 			denDec, err := ParseDDecimal(den)
 			if err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+				return nil, pgerror.Wrapf(err, pgcode.Syntax,
 					"could not evaluate denominator %v as Datum type DDecimal from string %q",
 					expr, den)
 			}
@@ -291,7 +291,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 			}
 		} else {
 			if err := dd.SetString(s); err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+				return nil, pgerror.Wrapf(err, pgcode.Syntax,
 					"could not evaluate %v as Datum type DDecimal from string %q", expr, s)
 			}
 		}
@@ -310,7 +310,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 		oid.semanticType = typ
 		return oid, nil
 	default:
-		return nil, pgerror.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
 }
 
@@ -473,7 +473,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
-		return nil, pgerror.AssertionFailedf("attempt to type byte array literal to %T", typ)
+		return nil, errors.AssertionFailedf("attempt to type byte array literal to %T", typ)
 	}
 
 	// Typing a string literal constant into some value type.
@@ -491,7 +491,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 
 	datum, err := parseStringAs(typ, expr.s, ctx)
 	if datum == nil && err == nil {
-		return nil, pgerror.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
 	return datum, err
 }

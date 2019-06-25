@@ -1,27 +1,27 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package duration
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math"
 	"math/big"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -42,9 +42,9 @@ var (
 	bigNanosInMonth = big.NewInt(nanosInMonth)
 )
 
-// ErrEncodeOverflow is returned by Encode when the sortNanos returned would
+// errEncodeOverflow is returned by Encode when the sortNanos returned would
 // have overflowed or underflowed.
-var ErrEncodeOverflow = errors.New("overflow during Encode")
+var errEncodeOverflow = pgerror.WithCandidateCode(errors.New("overflow during Encode"), pgcode.IntervalFieldOverflow)
 
 // A Duration represents a length of time.
 //
@@ -340,7 +340,7 @@ func (d Duration) Encode() (sortNanos int64, months int64, days int64, err error
 	// used in overflow cases.
 	years := d.Months/12 + d.Days/daysInMonth/12 + d.nanos/nanosInMonth/12
 	if years > maxYearsInDuration || years < minYearsInDuration {
-		return 0, 0, 0, ErrEncodeOverflow
+		return 0, 0, 0, errEncodeOverflow
 	}
 
 	totalNanos := d.Months*nanosInMonth + d.Days*nanosInDay + d.nanos
@@ -662,7 +662,7 @@ func AddMicros(t time.Time, d int64) time.Time {
 // Example: Truncate(time.Second+1, time.Second) == time.Second.
 func Truncate(d time.Duration, r time.Duration) time.Duration {
 	if r == 0 {
-		panic("zero passed as resolution")
+		panic(errors.AssertionFailedf("zero passed as resolution"))
 	}
 	return d - (d % r)
 }

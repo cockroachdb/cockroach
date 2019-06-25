@@ -3,11 +3,6 @@
 exec-ddl
 CREATE TABLE onecolumn (x INT)
 ----
-TABLE onecolumn
- ├── x int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM onecolumn AS a(x) CROSS JOIN onecolumn AS b(y)
@@ -237,11 +232,6 @@ project
 exec-ddl
 CREATE TABLE onecolumn_w(w INT)
 ----
-TABLE onecolumn_w
- ├── w int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn_w as b
@@ -259,11 +249,6 @@ project
 exec-ddl
 CREATE TABLE othercolumn (x INT)
 ----
-TABLE othercolumn
- ├── x int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b ON a.x = b.x ORDER BY a.x,b.x
@@ -377,7 +362,7 @@ limit
  │         │    └── scan onecolumn
  │         │         └── columns: x:1(int) rowid:2(int!null)
  │         ├── values
- │         │    ├── columns: column1:3(int)
+ │         │    ├── columns: column1:3(int!null)
  │         │    └── tuple [type=tuple{int}]
  │         │         └── const: 42 [type=int]
  │         └── filters
@@ -389,11 +374,6 @@ limit
 exec-ddl
 CREATE TABLE empty (x INT)
 ----
-TABLE empty
- ├── x int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM onecolumn AS a(x) CROSS JOIN empty AS b(y)
@@ -678,12 +658,6 @@ sort
 exec-ddl
 CREATE TABLE twocolumn (x INT, y INT)
 ----
-TABLE twocolumn
- ├── x int
- ├── y int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Natural joins with partial match
 build
@@ -896,21 +870,10 @@ error (42P01): no data source matches prefix: a
 exec-ddl
 CREATE TABLE a (i int)
 ----
-TABLE a
- ├── i int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE b (i int, b bool)
 ----
-TABLE b
- ├── i int
- ├── b bool
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM a INNER JOIN b ON a.i = b.i
@@ -1089,7 +1052,7 @@ project
       ├── scan onecolumn
       │    └── columns: x:1(int) rowid:2(int!null)
       ├── values
-      │    ├── columns: column1:3(int)
+      │    ├── columns: column1:3(int!null)
       │    ├── tuple [type=tuple{int}]
       │    │    └── const: 41 [type=int]
       │    ├── tuple [type=tuple{int}]
@@ -1196,11 +1159,6 @@ error (42701): column "x" appears more than once in USING clause
 exec-ddl
 CREATE TABLE othertype (x TEXT)
 ----
-TABLE othertype
- ├── x string
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
@@ -1349,14 +1307,14 @@ SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
 sort
- ├── columns: k:2(int!null) u:1(int) w:4(int)
+ ├── columns: k:2(int!null) u:1(int!null) w:4(int!null)
  ├── ordering: +1
  └── project
-      ├── columns: column1:1(int) column2:2(int!null) column2:4(int)
+      ├── columns: column1:1(int!null) column2:2(int!null) column2:4(int!null)
       └── inner-join
-           ├── columns: column1:1(int) column2:2(int!null) column1:3(int!null) column2:4(int)
+           ├── columns: column1:1(int!null) column2:2(int!null) column1:3(int!null) column2:4(int!null)
            ├── values
-           │    ├── columns: column1:1(int) column2:2(int)
+           │    ├── columns: column1:1(int!null) column2:2(int!null)
            │    ├── tuple [type=tuple{int, int}]
            │    │    ├── const: 9 [type=int]
            │    │    └── const: 1 [type=int]
@@ -1364,7 +1322,7 @@ sort
            │         ├── const: 8 [type=int]
            │         └── const: 2 [type=int]
            ├── values
-           │    ├── columns: column1:3(int) column2:4(int)
+           │    ├── columns: column1:3(int!null) column2:4(int!null)
            │    ├── tuple [type=tuple{int, int}]
            │    │    ├── const: 1 [type=int]
            │    │    └── const: 1 [type=int]
@@ -1381,21 +1339,10 @@ sort
 exec-ddl
 CREATE TABLE square (n INT PRIMARY KEY, sq INT)
 ----
-TABLE square
- ├── n int not null
- ├── sq int
- └── INDEX primary
-      └── n int not null
 
 exec-ddl
 CREATE TABLE pairs (a INT, b INT)
 ----
-TABLE pairs
- ├── a int
- ├── b int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # The filter expression becomes an equality constraint.
 build
@@ -1665,26 +1612,10 @@ select
 exec-ddl
 CREATE TABLE t1 (col1 INT, x INT, col2 INT, y INT)
 ----
-TABLE t1
- ├── col1 int
- ├── x int
- ├── col2 int
- ├── y int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE t2 (col3 INT, y INT, x INT, col4 INT)
 ----
-TABLE t2
- ├── col3 int
- ├── y int
- ├── x int
- ├── col4 int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 build
 SELECT * FROM t1 JOIN t2 USING(x)
@@ -1938,52 +1869,18 @@ project
 exec-ddl
 CREATE TABLE pkBA (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a))
 ----
-TABLE pkba
- ├── a int not null
- ├── b int not null
- ├── c int
- ├── d int
- └── INDEX primary
-      ├── b int not null
-      └── a int not null
 
 exec-ddl
 CREATE TABLE pkBC (a INT, b INT, c INT, d INT, PRIMARY KEY(b,c))
 ----
-TABLE pkbc
- ├── a int
- ├── b int not null
- ├── c int not null
- ├── d int
- └── INDEX primary
-      ├── b int not null
-      └── c int not null
 
 exec-ddl
 CREATE TABLE pkBAC (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,c))
 ----
-TABLE pkbac
- ├── a int not null
- ├── b int not null
- ├── c int not null
- ├── d int
- └── INDEX primary
-      ├── b int not null
-      ├── a int not null
-      └── c int not null
 
 exec-ddl
 CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
 ----
-TABLE pkbad
- ├── a int not null
- ├── b int not null
- ├── c int
- ├── d int not null
- └── INDEX primary
-      ├── b int not null
-      ├── a int not null
-      └── d int not null
 
 build
 SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
@@ -2080,20 +1977,10 @@ inner-join
 exec-ddl
 CREATE TABLE str1 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
 ----
-TABLE str1
- ├── a int not null
- ├── s collatedstring{en_u_ks_level1}
- └── INDEX primary
-      └── a int not null
 
 exec-ddl
 CREATE TABLE str2 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
 ----
-TABLE str2
- ├── a int not null
- ├── s collatedstring{en_u_ks_level1}
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
@@ -2202,26 +2089,10 @@ project
 exec-ddl
 CREATE TABLE xyu (x INT, y INT, u INT, PRIMARY KEY(x,y,u))
 ----
-TABLE xyu
- ├── x int not null
- ├── y int not null
- ├── u int not null
- └── INDEX primary
-      ├── x int not null
-      ├── y int not null
-      └── u int not null
 
 exec-ddl
 CREATE TABLE xyv (x INT, y INT, v INT, PRIMARY KEY(x,y,v))
 ----
-TABLE xyv
- ├── x int not null
- ├── y int not null
- ├── v int not null
- └── INDEX primary
-      ├── x int not null
-      ├── y int not null
-      └── v int not null
 
 build
 SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
@@ -2616,18 +2487,10 @@ project
 exec-ddl
 CREATE TABLE l (a INT PRIMARY KEY)
 ----
-TABLE l
- ├── a int not null
- └── INDEX primary
-      └── a int not null
 
 exec-ddl
 CREATE TABLE r (a INT PRIMARY KEY)
 ----
-TABLE r
- ├── a int not null
- └── INDEX primary
-      └── a int not null
 
 build
 SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
@@ -2725,18 +2588,6 @@ CREATE TABLE abcdef (
   PRIMARY KEY (a ASC, b ASC, c DESC, d ASC)
 )
 ----
-TABLE abcdef
- ├── a int not null
- ├── b int not null
- ├── c int not null
- ├── d int not null
- ├── e int
- ├── f int
- └── INDEX primary
-      ├── a int not null
-      ├── b int not null
-      ├── c int not null desc
-      └── d int not null
 
 exec-ddl
 CREATE TABLE abg (
@@ -2746,13 +2597,6 @@ CREATE TABLE abg (
   PRIMARY KEY (a ASC, b ASC)
 );
 ----
-TABLE abg
- ├── a int not null
- ├── b int not null
- ├── g int
- └── INDEX primary
-      ├── a int not null
-      └── b int not null
 
 build
 SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
@@ -2818,14 +2662,6 @@ CREATE TABLE foo (
   d FLOAT
 )
 ----
-TABLE foo
- ├── a int
- ├── b int
- ├── c float
- ├── d float
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE bar (
@@ -2835,14 +2671,6 @@ CREATE TABLE bar (
   d INT
 )
 ----
-TABLE bar
- ├── a int
- ├── b float
- ├── c float
- ├── d int
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Only a and c can be equality columns.
 build
@@ -3049,13 +2877,6 @@ CREATE TABLE t.kv (
   s STRING
 )
 ----
-TABLE kv
- ├── k int not null
- ├── v int
- ├── w int
- ├── s string
- └── INDEX primary
-      └── k int not null
 
 build
 SELECT k FROM kv, (SELECT 1 AS k)
@@ -3118,7 +2939,7 @@ project
       │    │         ├── null [type=unknown]
       │    │         └── null [type=unknown]
       │    ├── values
-      │    │    ├── columns: column1:3(int) column2:4(int)
+      │    │    ├── columns: column1:3(int!null) column2:4(int!null)
       │    │    └── tuple [type=tuple{int, int}]
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 1 [type=int]
@@ -3161,7 +2982,7 @@ project
  │         │    │         ├── null [type=unknown]
  │         │    │         └── null [type=unknown]
  │         │    ├── values
- │         │    │    ├── columns: column1:3(int) column2:4(int)
+ │         │    │    ├── columns: column1:3(int!null) column2:4(int!null)
  │         │    │    └── tuple [type=tuple{int, int}]
  │         │    │         ├── const: 1 [type=int]
  │         │    │         └── const: 1 [type=int]
@@ -3222,7 +3043,7 @@ project
 build
 SELECT * FROM onecolumn AS a NATURAL LEFT LOOKUP JOIN onecolumn as b USING(x)
 ----
-error (42601): syntax error at or near "using"
+error (42601): at or near "using": syntax error
 
 build
 SELECT * FROM onecolumn AS a(x) FULL OUTER HASH JOIN onecolumn AS b(y) ON a.x = b.y

@@ -1,24 +1,22 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // InferType derives the type of the given scalar expression and stores it in
@@ -32,7 +30,7 @@ func InferType(mem *Memo, e opt.ScalarExpr) *types.T {
 
 	fn := typingFuncMap[e.Op()]
 	if fn == nil {
-		panic(pgerror.AssertionFailedf("type inference for %v is not yet implemented", log.Safe(e.Op())))
+		panic(errors.AssertionFailedf("type inference for %v is not yet implemented", log.Safe(e.Op())))
 	}
 	return fn(e)
 }
@@ -49,7 +47,7 @@ func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 			return o.ReturnType
 		}
 	}
-	panic(pgerror.AssertionFailedf("could not find type for unary expression %s", log.Safe(op)))
+	panic(errors.AssertionFailedf("could not find type for unary expression %s", log.Safe(op)))
 }
 
 // InferBinaryType infers the return type of a binary expression, given the type
@@ -57,7 +55,7 @@ func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
-		panic(pgerror.AssertionFailedf("could not find type for binary expression %s", log.Safe(op)))
+		panic(errors.AssertionFailedf("could not find type for binary expression %s", log.Safe(op)))
 	}
 	return o.ReturnType
 }
@@ -93,7 +91,7 @@ func BinaryOverloadExists(op opt.Operator, leftType, rightType *types.T) bool {
 func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType *types.T) bool {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
-		panic(pgerror.AssertionFailedf("could not find overload for binary expression %s", log.Safe(op)))
+		panic(errors.AssertionFailedf("could not find overload for binary expression %s", log.Safe(op)))
 	}
 	return o.NullableArgs
 }
@@ -150,7 +148,7 @@ func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overlo
 	if ok {
 		return name, overload
 	}
-	panic(pgerror.AssertionFailedf("could not find overload for %s aggregate", name))
+	panic(errors.AssertionFailedf("could not find overload for %s aggregate", name))
 }
 
 type typingFunc func(e opt.ScalarExpr) *types.T
@@ -193,6 +191,8 @@ func init() {
 	// Modifiers for aggregations pass through their argument.
 	typingFuncMap[opt.AggDistinctOp] = typeAsFirstArg
 	typingFuncMap[opt.AggFilterOp] = typeAsFirstArg
+	typingFuncMap[opt.WindowFromOffsetOp] = typeAsFirstArg
+	typingFuncMap[opt.WindowToOffsetOp] = typeAsFirstArg
 
 	for _, op := range opt.BinaryOperators {
 		typingFuncMap[op] = typeAsBinary
@@ -222,7 +222,7 @@ func typeVariable(mem *Memo, e opt.ScalarExpr) *types.T {
 	variable := e.(*VariableExpr)
 	typ := mem.Metadata().ColumnMeta(variable.Col).Type
 	if typ == nil {
-		panic(pgerror.AssertionFailedf("column %d does not have type", log.Safe(variable.Col)))
+		panic(errors.AssertionFailedf("column %d does not have type", log.Safe(variable.Col)))
 	}
 	return typ
 }
@@ -296,7 +296,7 @@ func typeAsAggregate(e opt.ScalarExpr) *types.T {
 	_, overload := FindAggregateOverload(e)
 	t := overload.ReturnType(nil)
 	if t == tree.UnknownReturnType {
-		panic(pgerror.AssertionFailedf("unknown aggregate return type. e:\n%s", e))
+		panic(errors.AssertionFailedf("unknown aggregate return type. e:\n%s", e))
 	}
 	return t
 }
@@ -307,7 +307,7 @@ func typeAsWindow(e opt.ScalarExpr) *types.T {
 	_, overload := FindWindowOverload(e)
 	t := overload.ReturnType(nil)
 	if t == tree.UnknownReturnType {
-		panic(pgerror.AssertionFailedf("unknown window return type. e:\n%s", e))
+		panic(errors.AssertionFailedf("unknown window return type. e:\n%s", e))
 	}
 
 	return t

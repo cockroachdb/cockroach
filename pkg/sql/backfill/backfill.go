@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 // The Column and Index backfill primitives.
 
@@ -19,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.
@@ -161,7 +159,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	for id, table := range fkTables {
 		if table.Desc == nil {
 			// We weren't passed all of the tables that we need by the coordinator.
-			return roachpb.Key{}, pgerror.AssertionFailedf("table %v not sent by coordinator", id)
+			return roachpb.Key{}, errors.AssertionFailedf("table %v not sent by coordinator", id)
 		}
 	}
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to
@@ -277,7 +275,7 @@ func ConvertBackfillError(
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
 	// are "live" in the tableDesc.
-	desc, err := tableDesc.MakeFirstMutationPublic()
+	desc, err := tableDesc.MakeFirstMutationPublic(sqlbase.IncludeConstraints)
 	if err != nil {
 		return err
 	}

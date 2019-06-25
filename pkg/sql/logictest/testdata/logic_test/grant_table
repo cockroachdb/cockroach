@@ -699,7 +699,7 @@ a              public              root       ALL
 statement ok
 SET DATABASE = ""
 
-statement error pq: syntax error at or near "@"
+statement error at or near "@": syntax error
 GRANT ALL ON a.t@xyz TO readwrite
 
 statement error no database specified
@@ -709,7 +709,7 @@ statement error pgcode 42P01 relation "a.tt" does not exist
 GRANT ALL ON a.t, a.tt TO readwrite
 
 # '*' doesn't work for databases.
-statement error pq: syntax error at or near "*"
+statement error at or near "\*": syntax error
 GRANT ALL ON DATABASE * TO readwrite
 
 statement ok

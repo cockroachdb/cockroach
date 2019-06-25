@@ -368,6 +368,41 @@
   revision = "3c56c65c97a11c610354ce15b9939c0d0aff5d7a"
 
 [[projects]]
+  branch = "master"
+  digest = "1:85071046e2bc80625cbd99ee5584a675f2dd8a4c56872f04a5d8b913e1c11d0d"
+  name = "github.com/cockroachdb/datadriven"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "edce558372380347c6fef147e62f5559a9f8413d"
+
+[[projects]]
+  digest = "1:6b5e345345b4cf676295f7ab95b5f024ad24deac577882012abef561ae150daa"
+  name = "github.com/cockroachdb/errors"
+  packages = [
+    ".",
+    "assert",
+    "barriers",
+    "contexttags",
+    "domains",
+    "errbase",
+    "errorspb",
+    "errutil",
+    "hintdetail",
+    "issuelink",
+    "markers",
+    "report",
+    "safedetails",
+    "secondary",
+    "stdstrings",
+    "telemetrykeys",
+    "testutils",
+    "withstack",
+  ]
+  pruneopts = "UT"
+  revision = "27e2233ae32c6bd067736ebb257682451b89cd76"
+  version = "v1.1.1"
+
+[[projects]]
   digest = "1:cd936a7edd1897083994b6d397f9c975a5a8dc58e845f0cf3d1e5cf4717b918b"
   name = "github.com/cockroachdb/gostdlib"
   packages = [
@@ -381,6 +416,14 @@
   pruneopts = "UT"
   revision = "5ba2d4bf557f3a3d4518deb271dcf93244b39363"
   version = "v1.11.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:0f1b41c35d031b62b1882c85325cb6516f1768b6cd5545dab29d0fe43e2106c9"
+  name = "github.com/cockroachdb/logtags"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "eb05cc24525fa45bcdbaaeec3e431a82099f9ad4"
 
 [[projects]]
   branch = "master"
@@ -790,6 +833,21 @@
   version = "v1.10.0"
 
 [[projects]]
+  digest = "1:010d46ea3c1e730897e53058d1013a963f3f987675dda87df64f891b945281db"
+  name = "github.com/google/go-cmp"
+  packages = [
+    "cmp",
+    "cmp/cmpopts",
+    "cmp/internal/diff",
+    "cmp/internal/flags",
+    "cmp/internal/function",
+    "cmp/internal/value",
+  ]
+  pruneopts = "UT"
+  revision = "6f77996f0c42f7b84e5a2b252227263f93432e9b"
+  version = "v0.3.0"
+
+[[projects]]
   digest = "1:63ede27834b468648817fb80cfb95d40abfc61341f89cb7a0d6779b6aa955425"
   name = "github.com/google/go-github"
   packages = ["github"]
@@ -962,18 +1020,17 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:9c0eed728d7c6c3232a7b90505855517daa4a81697529bc509c3c10bea5d3ef1"
+  digest = "1:71425d83ffb201ca42fd0046860b2cae872c85e4c087c40271c04dea8c755434"
   name = "github.com/knz/go-libedit"
   packages = [
     ".",
     "common",
     "other",
     "unix",
-    "unix/sigtramp",
   ]
   pruneopts = "T"
-  revision = "0af72fd06d6f44cdb9666279d9b9a4d29cfa2da0"
-  version = "v1.9.1"
+  revision = "802af8e4ca87d39065a7df261d9f359ed7cf7b34"
+  version = "v1.10.1"
 
 [[projects]]
   branch = "master"
@@ -1027,15 +1084,16 @@
   revision = "634a59d12406abc51545000deab7cf43ebc32378"
 
 [[projects]]
-  digest = "1:8ef506fc2bb9ced9b151dafa592d4046063d744c646c1bbe801982ce87e4bc24"
+  digest = "1:bdd53b87de8185da386bae179c84d4848854c6870bacacf6a154fe63e2e750f7"
   name = "github.com/lib/pq"
   packages = [
     ".",
     "oid",
+    "scram",
   ]
   pruneopts = "UT"
-  revision = "4ded0e9383f75c197b3a2aaa6d590ac52df6fd79"
-  version = "v1.0.0"
+  revision = "bc6a3c0594130b1e34005880bc600b6d3f49fa7f"
+  version = "v1.1.1"
 
 [[projects]]
   digest = "1:078d0b47a888546a9f8810d64f76792f70b2fa564ad2bbe6dddd002c032ce7cf"
@@ -1780,7 +1838,7 @@
     "version",
   ]
   pruneopts = "UT"
-  revision = "4187a5ff696fcfe80ef2204f78a3ae8262b2d54d"
+  revision = "1f0868a609b73436e79b066f93c7f1a28c5dbae2"
 
 [[projects]]
   branch = "no-flag-names-parens"
@@ -1807,6 +1865,7 @@
   input-imports = [
     "cloud.google.com/go/storage",
     "github.com/Azure/azure-storage-blob-go/azblob",
+    "github.com/BurntSushi/toml",
     "github.com/MichaelTJones/walk",
     "github.com/PuerkitoBio/goquery",
     "github.com/Shopify/sarama",
@@ -1835,8 +1894,17 @@
     "github.com/cockroachdb/cmux",
     "github.com/cockroachdb/cockroach-go/crdb",
     "github.com/cockroachdb/crlfmt",
+    "github.com/cockroachdb/datadriven",
+    "github.com/cockroachdb/errors",
+    "github.com/cockroachdb/errors/assert",
+    "github.com/cockroachdb/errors/errbase",
+    "github.com/cockroachdb/errors/errorspb",
+    "github.com/cockroachdb/errors/issuelink",
+    "github.com/cockroachdb/errors/markers",
+    "github.com/cockroachdb/errors/testutils",
     "github.com/cockroachdb/gostdlib/cmd/gofmt",
     "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
+    "github.com/cockroachdb/logtags",
     "github.com/cockroachdb/returncheck",
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
@@ -1874,6 +1942,8 @@
     "github.com/golang/snappy",
     "github.com/google/btree",
     "github.com/google/flatbuffers/go",
+    "github.com/google/go-cmp/cmp",
+    "github.com/google/go-cmp/cmp/cmpopts",
     "github.com/google/go-github/github",
     "github.com/google/pprof/driver",
     "github.com/google/pprof/profile",

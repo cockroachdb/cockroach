@@ -1,14 +1,12 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package colrpc
 
@@ -219,7 +217,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		}
 		if len(m.Data.Metadata) != 0 {
 			for _, rpm := range m.Data.Metadata {
-				meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(rpm)
+				meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, rpm)
 				if !ok {
 					continue
 				}
@@ -275,7 +273,7 @@ func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 			return allMeta
 		}
 		for _, remoteMeta := range msg.Data.Metadata {
-			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(remoteMeta)
+			meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, remoteMeta)
 			if !ok {
 				continue
 			}

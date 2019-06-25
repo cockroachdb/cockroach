@@ -1,14 +1,12 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -19,9 +17,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // PlaceholderIdx is the 0-based index of a placeholder. Placeholder "$1"
@@ -65,7 +65,7 @@ func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
 func (pt PlaceholderTypes) AssertAllSet() error {
 	for i := range pt {
 		if pt[i] == nil {
-			return placeholderTypeAmbiguityError{PlaceholderIdx(i)}
+			return placeholderTypeAmbiguityError(PlaceholderIdx(i))
 		}
 	}
 	return nil
@@ -132,7 +132,7 @@ func (p *PlaceholderTypesInfo) SetType(idx PlaceholderIdx, typ *types.T) error {
 	if t := p.Types[idx]; t != nil {
 		if !typ.Equivalent(t) {
 			return pgerror.Newf(
-				pgerror.CodeDatatypeMismatchError,
+				pgcode.DatatypeMismatch,
 				"placeholder %s already has type %s, cannot assign %s", idx, t, typ)
 		}
 		return nil
@@ -184,11 +184,11 @@ func (p *PlaceholderInfo) Assign(src *PlaceholderInfo, numPlaceholders int) erro
 
 func checkPlaceholderArity(numTypes, numPlaceholders int) error {
 	if numTypes > numPlaceholders {
-		return pgerror.AssertionFailedf(
+		return errors.AssertionFailedf(
 			"unexpected placeholder types: got %d, expected %d",
 			numTypes, numPlaceholders)
 	} else if numTypes < numPlaceholders {
-		return pgerror.Newf(pgerror.CodeUndefinedParameterError,
+		return pgerror.Newf(pgcode.UndefinedParameter,
 			"could not find types for all placeholders: got %d, expected %d",
 			numTypes, numPlaceholders)
 	}
@@ -216,7 +216,7 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		return pgerror.Newf(pgerror.CodeUndefinedParameterError,
+		return pgerror.Newf(pgcode.UndefinedParameter,
 			"no value provided for placeholder%s: %s",
 			util.Pluralize(int64(len(missing))),
 			strings.Join(missing, ", "),

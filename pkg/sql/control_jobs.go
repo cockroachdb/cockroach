@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -16,9 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 type controlJobsNode struct {
@@ -40,12 +40,12 @@ func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNod
 	}
 	cols := planColumns(rows)
 	if len(cols) != 1 {
-		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgcode.Syntax,
 			"%s JOBS expects a single column source, got %d columns",
 			tree.JobCommandToStatement[n.Command], len(cols))
 	}
 	if cols[0].Typ.Family() != types.IntFamily {
-		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 			"%s JOBS requires int values, not type %s",
 			tree.JobCommandToStatement[n.Command], cols[0].Typ)
 	}
@@ -79,7 +79,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 
 		jobID, ok := tree.AsDInt(jobIDDatum)
 		if !ok {
-			return pgerror.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
+			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
 		switch n.desiredStatus {
@@ -90,7 +90,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		case jobs.StatusCanceled:
 			err = reg.Cancel(params.ctx, params.p.txn, int64(jobID))
 		default:
-			err = pgerror.AssertionFailedf("unhandled status %v", n.desiredStatus)
+			err = errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
 		}
 		if err != nil {
 			return err

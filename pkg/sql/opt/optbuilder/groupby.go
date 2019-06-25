@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package optbuilder
 
@@ -40,9 +38,11 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // groupby information stored in scopes.
@@ -77,6 +77,17 @@ type groupby struct {
 	buildingGroupingCols bool
 }
 
+// hasNonCommutativeAggregates checks whether any of the aggregates are
+// non-commutative or ordering sensitive.
+func (g groupby) hasNonCommutativeAggregates() bool {
+	for i := range g.aggs {
+		if !g.aggs[i].isCommutative() {
+			return true
+		}
+	}
+	return false
+}
+
 // aggregateInfo stores information about an aggregation function call.
 type aggregateInfo struct {
 	*tree.FuncExpr
@@ -108,9 +119,27 @@ func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree
 	return a, nil
 }
 
+// isOrderingSensitive returns true if the given aggregate operator is
+// ordering sensitive. That is, it can give different results based on the order
+// values are fed to it.
+func (a aggregateInfo) isOrderingSensitive() bool {
+	switch a.def.Name {
+	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg":
+		return true
+	default:
+		return false
+	}
+}
+
+// isCommutative checks whether the aggregate is commutative. That is, if it is
+// ordering insensitive or if no ordering is specified.
+func (a aggregateInfo) isCommutative() bool {
+	return a.OrderBy == nil || !a.isOrderingSensitive()
+}
+
 // Eval is part of the tree.TypedExpr interface.
 func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.AssertionFailedf("aggregateInfo must be replaced before evaluation"))
+	panic(errors.AssertionFailedf("aggregateInfo must be replaced before evaluation"))
 }
 
 var _ tree.Expr = &aggregateInfo{}
@@ -137,17 +166,17 @@ func (b *Builder) constructGroupBy(
 	// multiple times.
 	colSet := opt.ColSet{}
 	for i := range aggCols {
-		if id, scalar := aggCols[i].id, aggCols[i].scalar; !colSet.Contains(int(id)) {
+		if id, scalar := aggCols[i].id, aggCols[i].scalar; !colSet.Contains(id) {
 			if scalar == nil {
 				// A "pass through" column (i.e. a VariableOp) is not legal as an
 				// aggregation.
-				panic(pgerror.AssertionFailedf("variable as aggregation"))
+				panic(errors.AssertionFailedf("variable as aggregation"))
 			}
 			aggs = append(aggs, memo.AggregationsItem{
 				Agg:        scalar,
 				ColPrivate: memo.ColPrivate{Col: id},
 			})
-			colSet.Add(int(id))
+			colSet.Add(id)
 		}
 	}
 
@@ -224,6 +253,18 @@ func (b *Builder) buildAggregation(
 	aggInScope := fromScope.groupby.aggInScope
 	aggOutScope := fromScope.groupby.aggOutScope
 
+	// Build ColSet of grouping columns.
+	var groupingColSet opt.ColSet
+	for i := range groupingCols {
+		groupingColSet.Add(groupingCols[i].id)
+	}
+
+	// If there are any aggregates that are ordering sensitive, build the aggregations
+	// as window functions over each group.
+	if aggOutScope.groupby.hasNonCommutativeAggregates() {
+		return b.buildAggregationAsWindow(groupingColSet, having, fromScope)
+	}
+
 	aggInfos := aggOutScope.groupby.aggs
 
 	// Construct the aggregation operators.
@@ -264,7 +305,7 @@ func (b *Builder) buildAggregation(
 
 		aggCols[i].scalar = b.constructAggregate(agg.def.Name, args).(opt.ScalarExpr)
 
-		if opt.AggregateIsOrderingSensitive(aggCols[i].scalar.Op()) {
+		if agg.isOrderingSensitive() {
 			haveOrderingSensitiveAgg = true
 		}
 
@@ -287,11 +328,6 @@ func (b *Builder) buildAggregation(
 	// Construct the pre-projection, which renders the grouping columns and the
 	// aggregate arguments, as well as any additional order by columns.
 	b.constructProjectForScope(fromScope, aggInScope)
-
-	var groupingColSet opt.ColSet
-	for i := range groupingCols {
-		groupingColSet.Add(int(groupingCols[i].id))
-	}
 
 	aggOutScope.expr = b.constructGroupBy(
 		aggInScope.expr.(memo.RelExpr),
@@ -584,7 +620,7 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		}
 		return b.factory.ConstructStringAgg(args[0], args[1])
 	}
-	panic(pgerror.AssertionFailedf("unhandled aggregate: %s", name))
+	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {
@@ -600,7 +636,7 @@ func isGenerator(def *tree.FunctionDefinition) bool {
 }
 
 func newGroupingError(name *tree.Name) error {
-	return pgerror.Newf(pgerror.CodeGroupingError,
+	return pgerror.Newf(pgcode.Grouping,
 		"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
 		tree.ErrString(name),
 	)

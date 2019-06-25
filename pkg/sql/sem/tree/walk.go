@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
@@ -18,7 +16,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // Visitor defines methods that are called for nodes during an expression or statement walk.
@@ -304,15 +302,6 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 			ret = expr.copyNode()
 		}
 		ret.Exprs = exprs
-	}
-	if expr.WindowDef != nil {
-		windowDef, changed := walkWindowDef(v, expr.WindowDef)
-		if changed {
-			if ret == expr {
-				ret = expr.copyNode()
-			}
-			ret.WindowDef = windowDef
-		}
 	}
 	if expr.Filter != nil {
 		e, changed := WalkExpr(v, expr.Filter)
@@ -719,7 +708,7 @@ func walkReturningClause(v Visitor, clause ReturningClause) (ReturningClause, bo
 	case *ReturningNothing, *NoReturningClause:
 		return t, false
 	default:
-		panic(pgerror.AssertionFailedf("unexpected ReturningClause type: %T", t))
+		panic(errors.AssertionFailedf("unexpected ReturningClause type: %T", t))
 	}
 }
 

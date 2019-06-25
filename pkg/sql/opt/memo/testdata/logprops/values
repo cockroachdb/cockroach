@@ -1,17 +1,12 @@
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 build
 SELECT * FROM (VALUES (1, 2), (3, 4), (NULL, 5))
 ----
 values
- ├── columns: column1:1(int) column2:2(int)
+ ├── columns: column1:1(int) column2:2(int!null)
  ├── cardinality: [3 - 3]
  ├── prune: (1,2)
  ├── tuple [type=tuple{int, int}]
@@ -21,8 +16,45 @@ values
  │    ├── const: 3 [type=int]
  │    └── const: 4 [type=int]
  └── tuple [type=tuple{int, int}]
-      ├── null [type=unknown]
+      ├── cast: INT8 [type=int]
+      │    └── null [type=unknown]
       └── const: 5 [type=int]
+
+build
+SELECT * FROM (VALUES (1, 2), (3, 4), (5, 6))
+----
+values
+ ├── columns: column1:1(int!null) column2:2(int!null)
+ ├── cardinality: [3 - 3]
+ ├── prune: (1,2)
+ ├── tuple [type=tuple{int, int}]
+ │    ├── const: 1 [type=int]
+ │    └── const: 2 [type=int]
+ ├── tuple [type=tuple{int, int}]
+ │    ├── const: 3 [type=int]
+ │    └── const: 4 [type=int]
+ └── tuple [type=tuple{int, int}]
+      ├── const: 5 [type=int]
+      └── const: 6 [type=int]
+
+build
+SELECT * FROM (VALUES (NULL, 2), (3, NULL), (5, 6))
+----
+values
+ ├── columns: column1:1(int) column2:2(int)
+ ├── cardinality: [3 - 3]
+ ├── prune: (1,2)
+ ├── tuple [type=tuple{int, int}]
+ │    ├── cast: INT8 [type=int]
+ │    │    └── null [type=unknown]
+ │    └── const: 2 [type=int]
+ ├── tuple [type=tuple{int, int}]
+ │    ├── const: 3 [type=int]
+ │    └── cast: INT8 [type=int]
+ │         └── null [type=unknown]
+ └── tuple [type=tuple{int, int}]
+      ├── const: 5 [type=int]
+      └── const: 6 [type=int]
 
 # Propagate outer columns.
 build
@@ -62,7 +94,7 @@ build
 SELECT * FROM (VALUES (1, 2))
 ----
 values
- ├── columns: column1:1(int) column2:2(int)
+ ├── columns: column1:1(int!null) column2:2(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1,2)

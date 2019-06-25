@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 syntax = "proto2";
 package cockroach.storage;
@@ -120,6 +118,12 @@ message SnapshotRequest {
     KV_BATCH = 0;
   }
 
+  enum Type {
+    RAFT = 0;
+    LEARNER = 1;
+    PREEMPTIVE = 2;
+  }
+
   message Header {
     reserved 1;
 
@@ -146,6 +150,9 @@ message SnapshotRequest {
 
     // The strategy of the snapshot.
     optional Strategy strategy = 7 [(gogoproto.nullable) = false];
+
+    // The type of the snapshot.
+    optional Type type = 9 [(gogoproto.nullable) = false];
 
     // Whether the snapshot uses the unreplicated RaftTruncatedState or not.
     // This is generally always true at 2.2 and above outside of the migration

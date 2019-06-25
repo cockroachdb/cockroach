@@ -1,14 +1,12 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sql
 
@@ -20,13 +18,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -398,7 +396,7 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	if buf.mu.closed {
-		return pgerror.AssertionFailedf("buffer is closed")
+		return errors.AssertionFailedf("buffer is closed")
 	}
 	buf.mu.data = append(buf.mu.data, cmd)
 	buf.mu.lastPos++
@@ -432,8 +430,8 @@ func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
 			return buf.mu.data[cmdIdx], curPos, nil
 		}
 		if cmdIdx != len(buf.mu.data) {
-			return nil, 0, pgerror.AssertionFailedf(
-				"can only wait for next command; corrupt cursor: %d", log.Safe(curPos))
+			return nil, 0, errors.AssertionFailedf(
+				"can only wait for next command; corrupt cursor: %d", errors.Safe(curPos))
 		}
 		// Wait for the next Command to arrive to the buffer.
 		buf.mu.cond.Wait()
@@ -448,9 +446,9 @@ func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
 // error.
 func (buf *StmtBuf) translatePosLocked(pos CmdPos) (int, error) {
 	if pos < buf.mu.startPos {
-		return 0, pgerror.AssertionFailedf(
+		return 0, errors.AssertionFailedf(
 			"position %d no longer in buffer (buffer starting at %d)",
-			log.Safe(pos), log.Safe(buf.mu.startPos))
+			errors.Safe(pos), errors.Safe(buf.mu.startPos))
 	}
 	return int(pos - buf.mu.startPos), nil
 }
@@ -510,7 +508,7 @@ func (buf *StmtBuf) seekToNextBatch() error {
 	}
 	if cmdIdx == len(buf.mu.data) {
 		buf.mu.Unlock()
-		return pgerror.AssertionFailedf("invalid seek start point")
+		return errors.AssertionFailedf("invalid seek start point")
 	}
 	buf.mu.Unlock()
 

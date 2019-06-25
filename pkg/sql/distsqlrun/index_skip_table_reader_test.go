@@ -138,12 +138,6 @@ func TestIndexSkipTableReaderCorrectness(t *testing.T) {
 		return distsqlpb.TableReaderSpan{Span: span}
 	}
 
-	_ = td1
-	_ = td2
-	_ = td3
-	_ = td4
-	_ = makeIndexSpan
-
 	testCases := []struct {
 		desc      string
 		tableDesc *sqlbase.TableDescriptor

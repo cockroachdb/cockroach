@@ -276,18 +276,18 @@ FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-oid         relname       relnamespace  reltype  relowner  relam  relfilenode  reltablespace
-55          t1            2332901747    0        NULL      NULL   0            0
-450499963   primary       2332901747    0        NULL      NULL   0            0
-450499960   t1_a_key      2332901747    0        NULL      NULL   0            0
-450499961   index_key     2332901747    0        NULL      NULL   0            0
-56          t2            2332901747    0        NULL      NULL   0            0
-2315049508  primary       2332901747    0        NULL      NULL   0            0
-2315049511  t2_t1_id_idx  2332901747    0        NULL      NULL   0            0
-57          t3            2332901747    0        NULL      NULL   0            0
-969972501   primary       2332901747    0        NULL      NULL   0            0
-969972502   t3_a_b_idx    2332901747    0        NULL      NULL   0            0
-58          v1            2332901747    0        NULL      NULL   0            0
+oid         relname       relnamespace  reltype  relowner  relam       relfilenode  reltablespace
+55          t1            2332901747    0        NULL      2631952481  0            0
+450499963   primary       2332901747    0        NULL      2631952481  0            0
+450499960   t1_a_key      2332901747    0        NULL      2631952481  0            0
+450499961   index_key     2332901747    0        NULL      2631952481  0            0
+56          t2            2332901747    0        NULL      2631952481  0            0
+2315049508  primary       2332901747    0        NULL      2631952481  0            0
+2315049511  t2_t1_id_idx  2332901747    0        NULL      2631952481  0            0
+57          t3            2332901747    0        NULL      2631952481  0            0
+969972501   primary       2332901747    0        NULL      2631952481  0            0
+969972502   t3_a_b_idx    2332901747    0        NULL      2631952481  0            0
+58          v1            2332901747    0        NULL      2631952481  0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -762,11 +762,11 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
 ORDER BY con.oid
 ----
-conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
-check_b    NULL     NULL       NULL       NULL       NULL       b > 11  b > 11
-primary    NULL     NULL       NULL       NULL       NULL       NULL    NULL
-t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL    NULL
-index_key  NULL     NULL       NULL       NULL       NULL       NULL    NULL
+conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin    consrc
+check_b    NULL     NULL       NULL       NULL       NULL       (b > 11)  (b > 11)
+primary    NULL     NULL       NULL       NULL       NULL       NULL      NULL
+t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL      NULL
+index_key  NULL     NULL       NULL       NULL       NULL       NULL      NULL
 
 query TTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc

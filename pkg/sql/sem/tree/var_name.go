@@ -1,20 +1,18 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package tree
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // VarName occurs inside scalar expressions.
@@ -66,7 +64,7 @@ func StarExpr() VarName { return singletonStarName }
 
 // ResolvedType implements the TypedExpr interface.
 func (UnqualifiedStar) ResolvedType() *types.T {
-	panic(pgerror.AssertionFailedf("unqualified stars ought to be replaced before this point"))
+	panic(errors.AssertionFailedf("unqualified stars ought to be replaced before this point"))
 }
 
 // Variable implements the VariableExpr interface.
@@ -77,7 +75,7 @@ func (UnqualifiedStar) Variable() {}
 
 // ResolvedType implements the TypedExpr interface.
 func (*UnresolvedName) ResolvedType() *types.T {
-	panic(pgerror.AssertionFailedf("unresolved names ought to be replaced before this point"))
+	panic(errors.AssertionFailedf("unresolved names ought to be replaced before this point"))
 }
 
 // Variable implements the VariableExpr interface.  Although, the
@@ -115,7 +113,7 @@ func (a *AllColumnsSelector) Variable() {}
 
 // ResolvedType implements the TypedExpr interface.
 func (*AllColumnsSelector) ResolvedType() *types.T {
-	panic(pgerror.AssertionFailedf("all-columns selectors ought to be replaced before this point"))
+	panic(errors.AssertionFailedf("all-columns selectors ought to be replaced before this point"))
 }
 
 // ColumnItem corresponds to the name of a column in an expression.

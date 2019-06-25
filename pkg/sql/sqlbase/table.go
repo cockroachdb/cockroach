@@ -1,14 +1,12 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package sqlbase
 
@@ -17,11 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
 )
 
@@ -36,7 +35,7 @@ func SanitizeVarFreeExpr(
 	allowImpure bool,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
-		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgcode.Syntax,
 			"variable sub-expressions are not allowed in %s", context)
 	}
 
@@ -74,7 +73,7 @@ func ValidateColumnDefType(t *types.T) error {
 	case types.StringFamily, types.CollatedStringFamily:
 		if t.Family() == types.CollatedStringFamily {
 			if _, err := language.Parse(t.Locale()); err != nil {
-				return pgerror.Newf(pgerror.CodeSyntaxError, `invalid locale %s`, t.Locale())
+				return pgerror.Newf(pgcode.Syntax, `invalid locale %s`, t.Locale())
 			}
 		}
 
@@ -104,7 +103,7 @@ func ValidateColumnDefType(t *types.T) error {
 		// These types are OK.
 
 	default:
-		return pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
+		return pgerror.Newf(pgcode.InvalidTableDefinition,
 			"value type %s cannot be used for table columns", t.String())
 	}
 
@@ -134,7 +133,7 @@ func MakeColumnDefDescs(
 		// prior to calling MakeColumnDefDescs. The dependent sequences
 		// must be created, and the SERIAL type eliminated, prior to this
 		// point.
-		return nil, nil, nil, pgerror.New(pgerror.CodeFeatureNotSupportedError,
+		return nil, nil, nil, pgerror.New(pgcode.FeatureNotSupported,
 			"SERIAL cannot be used in this context")
 	}
 
@@ -314,7 +313,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 	for _, index := range indexes {
 		if index.ID == desc.PrimaryIndex.ID {
 			if _, ok := info[index.Name]; ok {
-				return nil, pgerror.Newf(pgerror.CodeDuplicateObjectError,
+				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
 			}
 			colHiddenMap := make(map[ColumnID]bool, len(desc.Columns))
@@ -341,7 +340,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 			info[index.Name] = detail
 		} else if index.Unique {
 			if _, ok := info[index.Name]; ok {
-				return nil, pgerror.Newf(pgerror.CodeDuplicateObjectError,
+				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
 			}
 			detail := ConstraintDetail{Kind: ConstraintTypeUnique}
@@ -361,7 +360,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 			return nil, err
 		}
 		if _, ok := info[fk.Name]; ok {
-			return nil, pgerror.Newf(pgerror.CodeDuplicateObjectError,
+			return nil, pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate constraint name: %q", fk.Name)
 		}
 		detail := ConstraintDetail{Kind: ConstraintTypeFK}
@@ -378,13 +377,13 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		if tableLookup != nil {
 			other, err := tableLookup(fk.Table)
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"error resolving table %d referenced in foreign key",
 					log.Safe(fk.Table))
 			}
 			otherIdx, err := other.FindIndexByID(fk.Index)
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"error resolving index %d in table %s referenced in foreign key",
 					log.Safe(fk.Index), other.Name)
 			}
@@ -407,13 +406,13 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		if tableLookup != nil {
 			colsUsed, err := c.ColumnsUsed(desc)
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"error computing columns used in check constraint %q", c.Name)
 			}
 			for _, colID := range colsUsed {
 				col, err := desc.FindColumnByID(colID)
 				if err != nil {
-					return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 						"error finding column %d in table %s", log.Safe(colID), desc.Name)
 				}
 				detail.Columns = append(detail.Columns, col.Name)

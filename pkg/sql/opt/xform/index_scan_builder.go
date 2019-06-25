@@ -1,14 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package xform
 
@@ -17,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 )
 
 // indexScanBuilder composes a constrained, limited scan over a table index.
@@ -63,7 +61,7 @@ func (b *indexScanBuilder) primaryKeyCols() opt.ColSet {
 	if b.pkCols.Empty() {
 		primaryIndex := b.c.e.mem.Metadata().Table(b.tabID).Index(cat.PrimaryIndex)
 		for i, cnt := 0, primaryIndex.KeyColumnCount(); i < cnt; i++ {
-			b.pkCols.Add(int(b.tabID.ColumnID(primaryIndex.Column(i).Ordinal)))
+			b.pkCols.Add(b.tabID.ColumnID(primaryIndex.Column(i).Ordinal))
 		}
 	}
 	return b.pkCols
@@ -85,12 +83,12 @@ func (b *indexScanBuilder) addSelect(filters memo.FiltersExpr) {
 	if len(filters) != 0 {
 		if b.indexJoinPrivate.Table == 0 {
 			if b.innerFilters != nil {
-				panic(pgerror.AssertionFailedf("cannot call addSelect methods twice before index join is added"))
+				panic(errors.AssertionFailedf("cannot call addSelect methods twice before index join is added"))
 			}
 			b.innerFilters = filters
 		} else {
 			if b.outerFilters != nil {
-				panic(pgerror.AssertionFailedf("cannot call addSelect methods twice after index join is added"))
+				panic(errors.AssertionFailedf("cannot call addSelect methods twice after index join is added"))
 			}
 			b.outerFilters = filters
 		}
@@ -132,10 +130,10 @@ func (b *indexScanBuilder) addSelectAfterSplit(
 // produces the given set of columns by lookup in the primary index.
 func (b *indexScanBuilder) addIndexJoin(cols opt.ColSet) {
 	if b.indexJoinPrivate.Table != 0 {
-		panic(pgerror.AssertionFailedf("cannot call addIndexJoin twice"))
+		panic(errors.AssertionFailedf("cannot call addIndexJoin twice"))
 	}
 	if b.outerFilters != nil {
-		panic(pgerror.AssertionFailedf("cannot add index join after an outer filter has been added"))
+		panic(errors.AssertionFailedf("cannot add index join after an outer filter has been added"))
 	}
 	b.indexJoinPrivate = memo.IndexJoinPrivate{
 		Table: b.tabID,
@@ -178,7 +176,7 @@ func (b *indexScanBuilder) build(grp memo.RelExpr) {
 	if len(b.outerFilters) == 0 {
 		// indexJoinDef == 0: outerFilters == 0 handled by #1 and #2 above.
 		// indexJoinDef != 0: outerFilters == 0 handled by #3 above.
-		panic(pgerror.AssertionFailedf("outer filter cannot be 0 at this point"))
+		panic(errors.AssertionFailedf("outer filter cannot be 0 at this point"))
 	}
 	b.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: b.outerFilters}, grp)
 }

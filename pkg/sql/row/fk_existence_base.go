@@ -1,24 +1,25 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License included
-// in the file licenses/BSL.txt and at www.mariadb.com/bsl11.
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-// Change Date: 2022-10-01
-//
-// On the date above, in accordance with the Business Source License, use
-// of this software will be governed by the Apache License, Version 2.0,
-// included in the file licenses/APL.txt and at
-// https://www.apache.org/licenses/LICENSE-2.0
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
 package row
 
 import (
-	"errors"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // fkExistenceCheckBaseHelper is an auxiliary struct that facilitates FK existence
@@ -80,6 +81,10 @@ type fkExistenceCheckBaseHelper struct {
 	// mutatedIdx is the descriptor for the target index being mutated.
 	// Stored only for error messages.
 	mutatedIdx *sqlbase.IndexDescriptor
+
+	// valuesScratch is memory used to populate an error message when the check
+	// fails.
+	valuesScratch tree.Datums
 }
 
 // makeFkExistenceCheckBaseHelper instantiates a FK helper.
@@ -121,7 +126,7 @@ func makeFkExistenceCheckBaseHelper(
 	// Look up the searched table.
 	searchTable := otherTables[ref.Table].Desc
 	if searchTable == nil {
-		return ret, pgerror.AssertionFailedf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
+		return ret, errors.AssertionFailedf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	// Look up the searched index.
 	searchIdx, err := searchTable.FindIndexByID(ref.Index)
@@ -159,16 +164,17 @@ func makeFkExistenceCheckBaseHelper(
 	}
 
 	return fkExistenceCheckBaseHelper{
-		txn:          txn,
-		dir:          dir,
-		rf:           rf,
-		ref:          ref,
-		searchTable:  searchTable,
-		searchIdx:    searchIdx,
-		ids:          ids,
-		prefixLen:    prefixLen,
-		searchPrefix: searchPrefix,
-		mutatedIdx:   mutatedIdx,
+		txn:           txn,
+		dir:           dir,
+		rf:            rf,
+		ref:           ref,
+		searchTable:   searchTable,
+		searchIdx:     searchIdx,
+		ids:           ids,
+		prefixLen:     prefixLen,
+		searchPrefix:  searchPrefix,
+		mutatedIdx:    mutatedIdx,
+		valuesScratch: make(tree.Datums, prefixLen),
 	}, nil
 }
 
@@ -213,7 +219,7 @@ func computeFkCheckColumnIDs(
 			return ids, nil
 
 		case 1:
-			return nil, pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			return nil, pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing value for column %q in multi-part foreign key", missingColumns[0])
 
 		case prefixLen:
@@ -222,15 +228,15 @@ func computeFkCheckColumnIDs(
 
 		default:
 			sort.Strings(missingColumns)
-			return nil, pgerror.Newf(pgerror.CodeForeignKeyViolationError,
+			return nil, pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing values for columns %q in multi-part foreign key", missingColumns)
 		}
 
 	case sqlbase.ForeignKeyReference_PARTIAL:
-		return nil, pgerror.UnimplementedWithIssue(20305, "MATCH PARTIAL not supported")
+		return nil, unimplemented.NewWithIssue(20305, "MATCH PARTIAL not supported")
 
 	default:
-		return nil, pgerror.AssertionFailedf("unknown composite key match type: %v", match)
+		return nil, errors.AssertionFailedf("unknown composite key match type: %v", match)
 	}
 }
 

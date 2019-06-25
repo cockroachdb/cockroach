@@ -1,73 +1,26 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT NOT NULL, s STRING, j JSON)
 ----
-TABLE a
- ├── k int not null
- ├── i int
- ├── f float not null
- ├── s string
- ├── j jsonb
- └── INDEX primary
-      └── k int not null
 
 exec-ddl
 CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
 ----
-TABLE b
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE c (x INT PRIMARY KEY, y INT NOT NULL REFERENCES a(k), z INT NOT NULL, UNIQUE (x,z))
 ----
-TABLE c
- ├── x int not null
- ├── y int not null
- ├── z int not null
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX secondary
- │    ├── x int not null
- │    └── z int not null
- ├── INDEX c_auto_index_fk_y_ref_a
- │    ├── y int not null
- │    └── x int not null
- └── CONSTRAINT fk_y_ref_a FOREIGN KEY (y) REFERENCES t.public.a (k)
 
 exec-ddl
 CREATE TABLE d (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FOREIGN KEY (y,z) REFERENCES c(x,z))
 ----
-TABLE d
- ├── x int not null
- ├── y int not null
- ├── z int not null
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX d_auto_index_fk_y_ref_c
- │    ├── y int not null
- │    ├── z int not null
- │    └── x int not null
- └── CONSTRAINT fk_y_ref_c FOREIGN KEY (y, z) REFERENCES t.public.c (x, z)
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE xy
- ├── x int not null
- ├── y int
- └── INDEX primary
-      └── x int not null
 
 exec-ddl
 CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
-TABLE uv
- ├── u int not null
- ├── v int
- └── INDEX primary
-      └── u int not null
 
 opt
 SELECT * FROM a INNER JOIN b ON a.s='foo' OR b.y<10
@@ -95,7 +48,7 @@ opt expect=DetectJoinContradiction
 SELECT * FROM a INNER JOIN b ON k IN ()
 ----
 values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null) x:6(int!null) y:7(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-7)
@@ -112,7 +65,7 @@ left-join
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  ├── values
- │    ├── columns: x:6(int) y:7(int)
+ │    ├── columns: x:6(int!null) y:7(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
  │    └── fd: ()-->(6,7)
@@ -830,15 +783,15 @@ inner-join
  ├── cardinality: [0 - 4]
  ├── fd: (1)==(2), (2)==(1)
  ├── values
- │    ├── columns: column1:2(decimal)
+ │    ├── columns: column1:2(decimal!null)
  │    ├── cardinality: [2 - 2]
  │    ├── (1.00,) [type=tuple{decimal}]
  │    └── (2.00,) [type=tuple{decimal}]
  ├── select
- │    ├── columns: column1:1(decimal)
+ │    ├── columns: column1:1(decimal!null)
  │    ├── cardinality: [0 - 2]
  │    ├── values
- │    │    ├── columns: column1:1(decimal)
+ │    │    ├── columns: column1:1(decimal!null)
  │    │    ├── cardinality: [2 - 2]
  │    │    ├── (1.0,) [type=tuple{decimal}]
  │    │    └── (2.0,) [type=tuple{decimal}]
@@ -991,20 +944,10 @@ project
 exec-ddl
 CREATE TABLE t1 (a DATE)
 ----
-TABLE t1
- ├── a date
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE t2 (b TIMESTAMPTZ)
 ----
-TABLE t2
- ├── b timestamptz
- ├── rowid int not null (hidden)
- └── INDEX primary
-      └── rowid int not null (hidden)
 
 # Make sure that we do not create invalid filters due to substituting columns
 # with different types.
@@ -2106,7 +2049,7 @@ norm expect=SimplifyJoinNotNullEquality
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS Null
 ----
 values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb!null) x:6(int!null) y:7(int!null)
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-7)
