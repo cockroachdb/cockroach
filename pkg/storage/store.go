@@ -3610,8 +3610,8 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	// processing time means we'll have starved local replicas of ticks and
 	// remote replicas will likely start campaigning.
 	if elapsed >= defaultReplicaRaftMuWarnThreshold {
-		log.Warningf(ctx, "handle raft ready: %.1fs [processed=%d]",
-			elapsed.Seconds(), stats.processed)
+		log.Warningf(ctx, "handle raft ready: %.1fs [applied=%d, batches=%d, state_assertions=%d]",
+			elapsed.Seconds(), stats.entriesProcessed, stats.batchesProcessed, stats.stateAssertions)
 	}
 	if !r.IsInitialized() {
 		// Only an uninitialized replica can have a placeholder since, by
