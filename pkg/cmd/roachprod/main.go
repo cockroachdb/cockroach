@@ -1253,6 +1253,25 @@ Some examples of usage:
 	}),
 }
 
+var distributeCertsCmd = &cobra.Command{
+	Use:   "distribute-certs <cluster>",
+	Short: "distribute certificates to the nodes in a cluster",
+	Long: `Distribute certificates to the nodes in a cluster.
+If the certificates already exist, no action is taken. Note that this command is
+invoked automatically when a secure cluster is bootstrapped by "roachprod
+start."
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		c, err := newCluster(args[0], false /* reserveLoadGen */)
+		if err != nil {
+			return err
+		}
+		c.DistributeCerts()
+		return nil
+	}),
+}
+
 var putCmd = &cobra.Command{
 	Use:   "put <cluster> <src> [<dest>]",
 	Short: "copy a local file to the nodes in a cluster",
@@ -1482,6 +1501,7 @@ func main() {
 		reformatCmd,
 		testCmd,
 		installCmd,
+		distributeCertsCmd,
 		putCmd,
 		getCmd,
 		stageCmd,
