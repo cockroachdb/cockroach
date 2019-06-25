@@ -162,16 +162,13 @@ message ChangeReplicasTrigger {
 
   option (gogoproto.goproto_stringer) = false;
 
-  // TODO(benesch): this trigger should just specify the updated descriptor,
-  // like the split and merge triggers, so that the receiver doesn't need to
-  // reconstruct the range descriptor update.
-
   ReplicaChangeType change_type = 1;
   // The replica being modified.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
-  // The new replica list with this change applied.
-  repeated ReplicaDescriptor updated_replicas = 3 [(gogoproto.nullable) = false];
-  int32 next_replica_id = 4 [(gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
+  // The updated range descriptor.
+  RangeDescriptor desc = 5 [(gogoproto.nullable) = false];
+
+  reserved 3, 4;
 }
 
 // ModifiedSpanTrigger indicates that a specific span has been modified.
