@@ -355,16 +355,16 @@ func makeAggOverloadWithReturnType(
 				})
 				return max
 			case *intSumAggregate:
-				return &slidingWindowSumFunc{agg: aggWindowFunc}
+				return newSlidingWindowSumFunc(aggWindowFunc)
 			case *decimalSumAggregate:
-				return &slidingWindowSumFunc{agg: aggWindowFunc}
+				return newSlidingWindowSumFunc(aggWindowFunc)
 			case *floatSumAggregate:
-				return &slidingWindowSumFunc{agg: aggWindowFunc}
+				return newSlidingWindowSumFunc(aggWindowFunc)
 			case *intervalSumAggregate:
-				return &slidingWindowSumFunc{agg: aggWindowFunc}
+				return newSlidingWindowSumFunc(aggWindowFunc)
 			case *avgAggregate:
 				// w.agg is a sum aggregate.
-				return &avgWindowFunc{sum: slidingWindowSumFunc{agg: w.agg}}
+				return &avgWindowFunc{sum: newSlidingWindowSumFunc(w.agg)}
 			}
 
 			return newFramableAggregateWindow(

@@ -109,7 +109,15 @@ func (w *slidingWindowFunc) Compute(
 		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
 			continue
 		}
-		w.sw.add(&indexedValue{value: wfr.ArgsByRowIdx(idx)[0], idx: idx})
+		args := wfr.ArgsByRowIdx(idx)
+		value := args[0]
+		if value == tree.DNull {
+			// Null value can neither be minimum nor maximum over a window frame with
+			// non-null values, so we're not adding them to the sliding window. The
+			// case of a window frame with no non-null values is handled below.
+			continue
+		}
+		w.sw.add(&indexedValue{value: value, idx: idx})
 	}
 	w.prevEnd = end
 
@@ -141,6 +149,20 @@ func (w *slidingWindowFunc) Close(context.Context, *tree.EvalContext) {
 type slidingWindowSumFunc struct {
 	agg                tree.AggregateFunc // one of the four SumAggregates
 	prevStart, prevEnd int
+
+	// lastNonNullIdx is the index of the latest non-null value seen in the
+	// sliding window so far. noNonNullSeen indicates non-null values are yet to
+	// be seen.
+	lastNonNullIdx int
+}
+
+const noNonNullSeen = -1
+
+func newSlidingWindowSumFunc(agg tree.AggregateFunc) *slidingWindowSumFunc {
+	return &slidingWindowSumFunc{
+		agg:            agg,
+		lastNonNullIdx: noNonNullSeen,
+	}
 }
 
 // removeAllBefore subtracts the values from all the rows that are no longer in
@@ -154,6 +176,11 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 			continue
 		}
 		value := wfr.ArgsByRowIdx(idx)[0]
+		if value == tree.DNull {
+			// Null values do not contribute to the running sum, so there is nothing
+			// to subtract once they leave the window frame.
+			continue
+		}
 		switch v := value.(type) {
 		case *tree.DInt:
 			err = w.agg.Add(ctx, tree.NewDInt(-*v))
@@ -193,16 +220,25 @@ func (w *slidingWindowSumFunc) Compute(
 		if wfr.FilterColIdx != noFilterIdx && wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
 			continue
 		}
-		err = w.agg.Add(ctx, wfr.ArgsByRowIdx(idx)[0])
-		if err != nil {
-			return tree.DNull, err
+		value := wfr.ArgsByRowIdx(idx)[0]
+		if value != tree.DNull {
+			w.lastNonNullIdx = idx
+			err = w.agg.Add(ctx, value)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	w.prevStart = start
 	w.prevEnd = end
-	if start == end {
-		// Spec: the frame is empty, so we return NULL.
+	// If last non-null value has index smaller than the start of the window
+	// frame, then only nulls can be in the frame. This holds true as well for
+	// the special noNonNullsSeen index.
+	onlyNulls := w.lastNonNullIdx < start
+	if start == end || onlyNulls {
+		// Either the window frame is empty or only null values are in the frame,
+		// so we return NULL as per spec.
 		return tree.DNull, nil
 	}
 	return w.agg.Result()
@@ -215,16 +251,14 @@ func (w *slidingWindowSumFunc) Close(ctx context.Context, _ *tree.EvalContext) {
 
 // avgWindowFunc uses slidingWindowSumFunc to compute average over a frame.
 type avgWindowFunc struct {
-	sum slidingWindowSumFunc
+	sum *slidingWindowSumFunc
 }
 
 // Compute implements WindowFunc interface.
 func (w *avgWindowFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	var sum tree.Datum
-	var err error
-	sum, err = w.sum.Compute(ctx, evalCtx, wfr)
+	sum, err := w.sum.Compute(ctx, evalCtx, wfr)
 	if err != nil {
 		return nil, err
 	}
@@ -233,16 +267,25 @@ func (w *avgWindowFunc) Compute(
 		return tree.DNull, nil
 	}
 
-	var frameSize int
-	if wfr.FilterColIdx != noFilterIdx {
-		for idx := wfr.FrameStartIdx(evalCtx); idx < wfr.FrameEndIdx(evalCtx); idx++ {
-			if wfr.Rows.GetRow(idx).GetDatum(wfr.FilterColIdx) != tree.DBoolTrue {
+	frameSize := 0
+	frameStartIdx := wfr.FrameStartIdx(evalCtx)
+	frameEndIdx := wfr.FrameEndIdx(evalCtx)
+	for idx := frameStartIdx; idx < frameEndIdx; idx++ {
+		if wfr.FilterColIdx != noFilterIdx {
+			row := wfr.Rows.GetRow(idx)
+			datum := row.GetDatum(wfr.FilterColIdx)
+			if datum != tree.DBoolTrue {
 				continue
 			}
-			frameSize++
 		}
-	} else {
-		frameSize = wfr.FrameSize(evalCtx)
+
+		value := wfr.ArgsByRowIdx(idx)[0]
+		if value == tree.DNull {
+			// Null values do not count towards the number of rows that contribute
+			// to the sum, so we're omitting them from the frame.
+			continue
+		}
+		frameSize++
 	}
 
 	switch t := sum.(type) {
