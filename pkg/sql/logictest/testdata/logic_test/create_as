@@ -1,21 +1,33 @@
 # LogicTest: local local-opt
 
-statement count 3
+statement ok
 CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 15), ('forks', 30)
 
-statement count 1
+statement count 3
+SELECT * FROM stock
+
+statement ok
 CREATE TABLE runningOut AS SELECT * FROM stock WHERE quantity < 12
+
+statement count 1
+SELECT * FROM runningOut
 
 query TI
 SELECT * FROM runningOut
 ----
 cups 10
 
-statement count 3
+statement ok
 CREATE TABLE itemColors (color) AS VALUES ('blue'), ('red'), ('green')
 
-statement count 9
+statement count 3
+SELECT * FROM  itemColors
+
+statement ok
 CREATE TABLE itemTypes AS (SELECT item, color FROM stock, itemColors)
+
+statement count 9
+SELECT * FROM itemTypes
 
 query TT rowsort
 SELECT * FROM itemTypes
@@ -39,8 +51,11 @@ CREATE TABLE t2 (col1, col2, col3) AS SELECT * FROM stock
 statement error pgcode 42601 CREATE TABLE specifies 1 column name, but data source has 2 columns
 CREATE TABLE t2 (col1) AS SELECT * FROM stock
 
-statement count 5
+statement ok
 CREATE TABLE unionstock AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50)
+
+statement count 5
+SELECT * FROM unionstock
 
 query TI
 SELECT * FROM unionstock ORDER BY quantity
@@ -51,7 +66,7 @@ spoons 25
 forks 30
 knives 50
 
-statement count 0
+statement ok
 CREATE TABLE IF NOT EXISTS unionstock AS VALUES ('foo', 'bar')
 
 query TI
@@ -62,10 +77,13 @@ cups 10
 statement ok
 CREATE DATABASE smtng
 
-statement count 3
+statement ok
 CREATE TABLE smtng.something AS SELECT * FROM stock
 
-statement count 0
+statement count 3
+SELECT * FROM smtng.something;
+
+statement ok
 CREATE TABLE IF NOT EXISTS smtng.something AS SELECT * FROM stock
 
 query TI
