@@ -1078,3 +1078,21 @@ SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
 
 query error aggregate functions are not allowed in ON
 SELECT * FROM foo JOIN bar ON max(foo.c) < 2
+
+# The following test checks that if the joiner can separate a row request
+# into separate families that it does, and generates spans for each family
+# instead of reading the entire row when it doesn't need to.
+
+statement ok
+CREATE TABLE familySplit1 (x INT, PRIMARY KEY (x)); INSERT INTO familySplit1 VALUES (1);
+
+statement ok
+CREATE TABLE familySplit2 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z)); INSERT INTO familySplit2 VALUES (1, 2, 3);
+
+statement ok
+SET optimizer = on; SET tracing = on; SELECT familySplit2.x, familySplit2.z FROM familySplit1 INNER LOOKUP JOIN familySplit2 ON (familySplit1.x = familySplit2.x); SET tracing = off; set optimizer = off; 
+
+query T
+select message from [SHOW TRACE FOR SESSION] where message in ('Scan /Table/81/1/1/{0-1}, /Table/81/1/1/2/{1-2}');
+----
+Scan /Table/81/1/1/{0-1}, /Table/81/1/1/2/{1-2}
