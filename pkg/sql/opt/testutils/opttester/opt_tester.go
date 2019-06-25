@@ -104,9 +104,6 @@ type Flags struct {
 	// the old planning code.
 	AllowUnsupportedExpr bool
 
-	// BuildFKChecks: if set, the optbuilder builds foreign key checks.
-	BuildFKChecks bool
-
 	// FullyQualifyNames if set: when building a query, the optbuilder fully
 	// qualifies all column names before adding them to the metadata. This flag
 	// allows us to test that name resolution works correctly, and avoids
@@ -180,9 +177,8 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 
 	// Set any OptTester-wide session flags here.
 
-	// Enable zigzag joins for all opt tests. Execbuilder tests exercise
-	// cases where this flag is false.
 	ot.evalCtx.SessionData.ZigzagJoinEnabled = true
+	ot.evalCtx.SessionData.OptimizerFKs = true
 	ot.evalCtx.SessionData.ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 
 	return ot
@@ -1202,7 +1198,6 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
 	b.AllowUnsupportedExpr = ot.Flags.AllowUnsupportedExpr
-	b.BuildFKChecks = ot.Flags.BuildFKChecks
 	return b.Build()
 }
 

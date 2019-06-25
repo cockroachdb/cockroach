@@ -743,7 +743,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 // buildFKChecks populates mb.checks with queries that check the integrity of
 // foreign key relations that involve modified rows.
 func (mb *mutationBuilder) buildFKChecks() {
-	if !mb.b.BuildFKChecks {
+	if !mb.b.evalCtx.SessionData.OptimizerFKs {
 		return
 	}
 

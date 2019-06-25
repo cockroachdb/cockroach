@@ -66,10 +66,6 @@ type Builder struct {
 	// This is used when re-preparing invalidated queries.
 	KeepPlaceholders bool
 
-	// BuildFKChecks is a control knob: if set, we build foreign key checks (see
-	// the ForeignKeys operator).
-	BuildFKChecks bool
-
 	// -- Results --
 	//
 	// These fields are set during the building process and can be used after

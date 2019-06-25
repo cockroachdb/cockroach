@@ -39,22 +39,29 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	tab := b.mem.Metadata().Table(ins.Table)
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
 	checkOrds := ordinalSetFromColList(ins.CheckCols)
+	// If we planned FK checks, disable the execution code for FK checks.
+	disableExecFKs := len(ins.Checks) > 0
 	node, err := b.factory.ConstructInsert(
 		input.root,
 		tab,
 		insertOrds,
 		checkOrds,
 		ins.NeedResults(),
+		disableExecFKs,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
-
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if ins.NeedResults() {
 		ep.outputCols = mutationOutputColMap(ins)
 	}
+
+	if err := b.buildFKChecks(ins.Checks); err != nil {
+		return execPlan{}, err
+	}
+
 	return ep, nil
 }
 
@@ -321,4 +328,21 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 		}
 	}
 	return colMap
+}
+
+func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
+	for i := range checks {
+		// Construct the query that returns FK violations.
+		query, err := b.buildRelational(checks[i].Check)
+		if err != nil {
+			return err
+		}
+		// Wrap the query in an error node.
+		node, err := b.factory.ConstructErrorIfRows(query.root)
+		if err != nil {
+			return err
+		}
+		b.postqueries = append(b.postqueries, node)
+	}
+	return nil
 }

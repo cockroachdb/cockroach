@@ -63,7 +63,6 @@ func TestBuilder(t *testing.T) {
 			var err error
 
 			tester := opttester.New(catalog, d.Input)
-			tester.Flags.BuildFKChecks = true
 			tester.Flags.ExprFormat = memo.ExprFmtHideMiscProps |
 				memo.ExprFmtHideConstraints |
 				memo.ExprFmtHideFuncDeps |
@@ -100,6 +99,7 @@ func TestBuilder(t *testing.T) {
 				ctx := context.Background()
 				semaCtx := tree.MakeSemaContext()
 				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+				evalCtx.SessionData.OptimizerFKs = true
 
 				var o xform.Optimizer
 				o.Init(&evalCtx)

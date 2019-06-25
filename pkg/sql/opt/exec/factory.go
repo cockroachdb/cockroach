@@ -262,8 +262,14 @@ type Factory interface {
 	RenameColumns(input Node, colNames []string) (Node, error)
 
 	// ConstructPlan creates a plan enclosing the given plan and (optionally)
-	// subqueries.
-	ConstructPlan(root Node, subqueries []Subquery) (Plan, error)
+	// subqueries and postqueries.
+	//
+	// Subqueries are executed before the root tree, which can refer to subquery
+	// results using tree.Subquery nodes.
+	//
+	// Postqueries are executed after the root tree. They don't return results but
+	// can generate errors (e.g. foreign key check failures).
+	ConstructPlan(root Node, subqueries []Subquery, postqueries []Node) (Plan, error)
 
 	// ConstructExplain returns a node that implements EXPLAIN (OPT), showing
 	// information about the given plan.
@@ -284,15 +290,21 @@ type Factory interface {
 	// same order they're defined. The insertCols set contains the ordinal
 	// positions of columns in the table into which values are inserted. All
 	// columns are expected to be present except delete-only mutation columns,
-	// since those do not need to participate in an insert operation. The
-	// rowsNeeded parameter is true if a RETURNING clause needs the inserted
+	// since those do not need to participate in an insert operation.
+	//
+	// The rowsNeeded parameter is true if a RETURNING clause needs the inserted
 	// row(s) as output.
+	//
+	// If skipFKChecks is set, foreign keys are not checked as part of the
+	// execution of the insertion. This is used when the FK checks are planned by
+	// the optimizer and are run separately as plan postqueries.
 	ConstructInsert(
 		input Node,
 		table cat.Table,
 		insertCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
 		rowsNeeded bool,
+		skipFKChecks bool,
 	) (Node, error)
 
 	// ConstructUpdate creates a node that implements an UPDATE statement. The
@@ -384,6 +396,11 @@ type Factory interface {
 	// ConstructSaveTable wraps the input into a node that passes through all the
 	// rows, but also creates a table and inserts all the rows into it.
 	ConstructSaveTable(input Node, table *cat.DataSourceName, colNames []string) (Node, error)
+
+	// ConstructErrorIfRows wraps the input into a node which itself returns no
+	// results, but errors out if the input returns any rows.
+	// TODO(radu): add a way to control the error message.
+	ConstructErrorIfRows(input Node) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

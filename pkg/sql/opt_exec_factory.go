@@ -848,10 +848,11 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 
 // ConstructPlan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructPlan(
-	root exec.Node, subqueries []exec.Subquery,
+	root exec.Node, subqueries []exec.Subquery, postqueries []exec.Node,
 ) (exec.Plan, error) {
-	// Enable auto-commit if the planner setting allows it.
-	if ef.planner.autoCommit {
+	// Enable auto-commit if the planner setting allows it, and there are no
+	// postqueries.
+	if ef.planner.autoCommit && len(postqueries) == 0 {
 		if ac, ok := root.(autoCommitNode); ok {
 			ac.enableAutoCommit()
 		}
@@ -886,6 +887,13 @@ func (ef *execFactory) ConstructPlan(
 			out.plan = in.Root.(planNode)
 		}
 	}
+	if len(postqueries) > 0 {
+		res.postqueryPlans = make([]postquery, len(postqueries))
+		for i := range res.postqueryPlans {
+			res.postqueryPlans[i].plan = postqueries[i].(planNode)
+		}
+	}
+
 	return res, nil
 }
 
@@ -1145,6 +1153,7 @@ func (ef *execFactory) ConstructInsert(
 	insertCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	rowsNeeded bool,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
 	tabDesc := table.(*optTable).desc
@@ -1160,8 +1169,12 @@ func (ef *execFactory) ConstructInsert(
 	}
 
 	// Create the table insert, which does the bulk of the work.
+	checkFKs := row.CheckFKs
+	if skipFKChecks {
+		checkFKs = row.SkipFKs
+	}
 	ri, err := row.MakeInserter(ef.planner.txn, tabDesc, fkTables, colDescs,
-		row.CheckFKs, &ef.planner.alloc)
+		checkFKs, &ef.planner.alloc)
 	if err != nil {
 		return nil, err
 	}
@@ -1558,6 +1571,11 @@ func (ef *execFactory) ConstructSaveTable(
 	input exec.Node, table *cat.DataSourceName, colNames []string,
 ) (exec.Node, error) {
 	return ef.planner.makeSaveTable(input.(planNode), table, colNames), nil
+}
+
+// ConstructErrorIfRows is part of the exec.Factory interface.
+func (ef *execFactory) ConstructErrorIfRows(input exec.Node) (exec.Node, error) {
+	return &errorIfRowsNode{plan: input.(planNode)}, nil
 }
 
 // renderBuilder encapsulates the code to build a renderNode.
