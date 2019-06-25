@@ -196,8 +196,11 @@ COMMIT
 
 subtest create_with_other_commands_in_txn
 
-statement count 3
+statement ok
 CREATE TABLE kv (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement count 3
+SELECT * FROM kv
 
 statement ok
 BEGIN
@@ -313,8 +316,11 @@ subtest create_as_with_add_column_index_in_txn
 statement ok
 BEGIN
 
-statement count 3
+statement ok
 CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement count 3
+SELECT * FROM stock
 
 # index is only over data added in the transaction so the backfill occurs
 # within the trasaction.
@@ -395,14 +401,20 @@ subtest create_as_drop_and_create_in_txn
 statement ok
 BEGIN
 
-statement count 3
+statement ok
 CREATE TABLE hood (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement count 3
+SELECT * FROM hood
 
 statement ok
 DROP TABLE hood
 
-statement count 3
+statement ok
 CREATE TABLE hood (item, quantity) AS VALUES ('plates', 10), ('knives', 30), ('spoons', 12)
+
+statement count 3
+SELECT * FROM hood
 
 query TI rowsort
 SELECT * FROM hood
@@ -419,14 +431,20 @@ subtest create_as_rename_and_create_in_txn
 statement ok
 BEGIN
 
-statement count 3
+statement ok
 CREATE TABLE shop (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement count 3
+SELECT * FROM shop
 
 statement ok
 ALTER TABLE shop RENAME TO ship
 
-statement count 3
+statement ok
 CREATE TABLE shop (item, quantity) AS VALUES ('spoons', 11), ('plates', 34), ('knives', 22)
+
+statement count 3
+SELECT * FROM shop
 
 query TI rowsort
 SELECT * FROM shop
@@ -450,8 +468,11 @@ subtest create_as_fail_unique_index
 statement ok
 BEGIN
 
-statement count 3
+statement ok
 CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
+
+statement count 3
+SELECT * FROM shopping
 
 statement error pgcode 23505 violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON shopping (quantity)
@@ -468,8 +489,11 @@ subtest add_column_not_null_violation
 statement ok
 BEGIN
 
-statement count 3
+statement ok
 CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
+
+statement count 3
+SELECT * FROM shopping
 
 statement error pgcode 23502 null value in column \"q\" violates not-null constraint
 ALTER TABLE shopping ADD COLUMN q DECIMAL NOT NULL
@@ -486,8 +510,11 @@ subtest add_column_computed_column_failure
 statement ok
 BEGIN
 
-statement count 3
+statement ok
 CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
+
+statement count 3
+SELECT * FROM shopping
 
 statement error pgcode 42P15 division by zero
 ALTER TABLE shopping ADD COLUMN c int AS (quantity::int // 0) STORED
@@ -500,8 +527,11 @@ subtest create_as_add_multiple_columns
 statement ok
 BEGIN
 
-statement count 3
+statement ok
 CREATE TABLE cutlery (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement count 3
+SELECT * FROM cutlery
 
 # Add two columns, one with a computed and the other without any default.
 statement ok

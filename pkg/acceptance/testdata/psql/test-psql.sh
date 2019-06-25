@@ -85,5 +85,5 @@ echo 'Testing copy error'
 output="$(psql -d testdb -c 'copy missing from stdin' 2>&1 || true)"
 echo $output | grep 'relation "missing" does not exist'
 
-# Test that CREATE TABLE AS returns tag SELECT, not CREATE (#20227).
-psql -d testdb -c "CREATE TABLE ctas AS SELECT 1" | grep "SELECT"
+# Test that CREATE TABLE AS returns tag CREATE TABLE AS, not CREATE (#20227).
+psql -d testdb -c "CREATE TABLE ctas AS SELECT 1" | grep "CREATE TABLE AS"
