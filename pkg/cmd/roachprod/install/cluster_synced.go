@@ -806,6 +806,12 @@ func (c *SyncedCluster) DistributeCerts() {
 			nodeNames = append(nodeNames, c.VMs...)
 			for i := range c.VMs {
 				nodeNames = append(nodeNames, fmt.Sprintf("%s-%04d", c.Name, i+1))
+				// On AWS nodes internally have a DNS name in the form ip-<ip address>
+				// where dots have been replaces with dashes.
+				// See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-dns-hostnames
+				if strings.Contains(c.Localities[i], "cloud=aws") {
+					nodeNames = append(nodeNames, "ip-"+strings.ReplaceAll(ips[i], ".", "-"))
+				}
 			}
 		}
 
