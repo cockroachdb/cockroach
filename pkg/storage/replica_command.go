@@ -531,8 +531,10 @@ func (r *Replica) AdminMerge(
 		if err != nil {
 			return err
 		}
-		if err := dbRightDescKV.Value.GetProto(&rightDesc); err != nil {
-			return err
+		if dbRightDescKV.Value != nil {
+			if err := dbRightDescKV.Value.GetProto(&rightDesc); err != nil {
+				return err
+			}
 		}
 
 		// Verify that the two ranges are mergeable.
