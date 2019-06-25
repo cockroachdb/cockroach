@@ -712,7 +712,7 @@ func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildExplain(rel)
+		b.sb.buildUnknown(rel)
 	}
 }
 
@@ -746,7 +746,7 @@ func (b *logicalPropsBuilder) buildShowTraceForSessionProps(
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildShowTrace(rel)
+		b.sb.buildUnknown(rel)
 	}
 
 }
@@ -1782,6 +1782,39 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 
 	default:
 		return innerJoinCard
+	}
+}
+
+func (b *logicalPropsBuilder) buildOpaqueRelProps(op *OpaqueRelExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, op, &rel.Shared)
+	rel.CanHaveSideEffects = true
+	rel.CanMutate = true
+
+	// Output Columns
+	// --------------
+	rel.OutputCols = op.Columns.ToSet()
+
+	// Not Null Columns
+	// ----------------
+	// All columns are assumed to be nullable.
+
+	// Outer Columns
+	// -------------
+	// No outer columns.
+
+	// Functional Dependencies
+	// -----------------------
+	// None.
+
+	// Cardinality
+	// -----------
+	// Any.
+	rel.Cardinality = props.AnyCardinality
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildUnknown(rel)
 	}
 }
 

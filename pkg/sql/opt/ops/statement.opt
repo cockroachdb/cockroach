@@ -69,3 +69,24 @@ define ShowTracePrivate {
     # ColList stores the column IDs for the SHOW TRACE columns.
     ColList ColList
 }
+
+# OpaqueRel is an opaque relational operator which is planned outside of the
+# optimizer. The operator contains an opaque metadata which is passed to the
+# exec factory.
+#
+# This is used for statements that are not directly supported by the optimizer,
+# and which don't use the result of other relational expressions (in other
+# words, they are a "leaf" operator).
+#
+# OpaqueRel can produce data and can be used as a data source as part of a
+# larger enclosing query.
+[Relational, DDL, Mutation]
+define OpaqueRel {
+    _ OpaqueRelPrivate
+}
+
+[Private]
+define OpaqueRelPrivate {
+    Columns ColList
+    Metadata OpaqueMetadata 
+}

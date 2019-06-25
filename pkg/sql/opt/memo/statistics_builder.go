@@ -342,11 +342,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.SequenceSelectOp:
 		return sb.colStatSequenceSelect(colSet, e.(*SequenceSelectExpr))
 
-	case opt.ExplainOp:
-		return sb.colStatExplain(colSet, e.(*ExplainExpr))
-
-	case opt.ShowTraceForSessionOp:
-		return sb.colStatShowTrace(colSet, e.(*ShowTraceForSessionExpr))
+	case opt.ExplainOp, opt.ShowTraceForSessionOp, opt.OpaqueRelOp:
+		return sb.colStatUnknown(colSet, e.Relational())
 
 	case opt.FakeRelOp:
 		panic(errors.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
@@ -2048,41 +2045,19 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 }
 
 // +---------+
-// | Explain |
+// | Unknown |
 // +---------+
 
-func (sb *statisticsBuilder) buildExplain(relProps *props.Relational) {
+func (sb *statisticsBuilder) buildUnknown(relProps *props.Relational) {
 	s := &relProps.Stats
 	s.RowCount = unknownGeneratorRowCount
 	sb.finalizeFromCardinality(relProps)
 }
 
-func (sb *statisticsBuilder) colStatExplain(
-	colSet opt.ColSet, explain *ExplainExpr,
+func (sb *statisticsBuilder) colStatUnknown(
+	colSet opt.ColSet, relProps *props.Relational,
 ) *props.ColumnStatistic {
-	s := &explain.Relational().Stats
-
-	colStat, _ := s.ColStats.Add(colSet)
-	colStat.DistinctCount = s.RowCount
-	colStat.NullCount = 0
-	sb.finalizeFromRowCount(colStat, s.RowCount)
-	return colStat
-}
-
-// +------------+
-// | Show Trace |
-// +------------+
-
-func (sb *statisticsBuilder) buildShowTrace(relProps *props.Relational) {
-	s := &relProps.Stats
-	s.RowCount = unknownGeneratorRowCount
-	sb.finalizeFromCardinality(relProps)
-}
-
-func (sb *statisticsBuilder) colStatShowTrace(
-	colSet opt.ColSet, showTrace *ShowTraceForSessionExpr,
-) *props.ColumnStatistic {
-	s := &showTrace.Relational().Stats
+	s := relProps.Stats
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = s.RowCount
