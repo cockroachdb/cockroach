@@ -431,7 +431,6 @@ func (ir *IntentResolver) MaybePushTransactions(
 			PusheeTxn:       pushTxn,
 			PushTo:          h.Timestamp.Next(),
 			InclusivePushTo: true,
-			DeprecatedNow:   b.Header.Timestamp,
 			PushType:        pushType,
 		})
 	}
@@ -693,7 +692,6 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 						TxnMeta: enginepb.TxnMeta{Priority: enginepb.MaxTxnPriority},
 					},
 					PusheeTxn:       txn.TxnMeta,
-					DeprecatedNow:   b.Header.Timestamp,
 					PushType:        roachpb.PUSH_ABORT,
 					InclusivePushTo: true,
 				})

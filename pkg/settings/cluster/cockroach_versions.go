@@ -34,7 +34,6 @@ const (
 	Version2_1
 	VersionUnreplicatedRaftTruncatedState // see versionsSingleton for details
 	VersionSideloadedStorageNoReplicaID   // see versionsSingleton for details
-	VersionPushTxnToInclusive
 	VersionSnapshotsWithoutLog
 	Version19_1
 	VersionStart19_2
@@ -442,11 +441,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionSideloadedStorageNoReplicaID,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 9},
 	},
-	{
-		// VersionPushTxnToInclusive is https://github.com/cockroachdb/cockroach/pull/35297.
-		Key:     VersionPushTxnToInclusive,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 10},
-	},
+	// Removed.
+	// {
+	// 	// VersionPushTxnToInclusive is https://github.com/cockroachdb/cockroach/pull/35297.
+	// 	Key:     VersionPushTxnToInclusive,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 10},
+	// },
 	{
 		// VersionSnapshotsWithoutLog is https://github.com/cockroachdb/cockroach/pull/36714.
 		Key:     VersionSnapshotsWithoutLog,
