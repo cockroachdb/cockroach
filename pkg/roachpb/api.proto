@@ -286,6 +286,13 @@ message ClearRangeRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // StartTime specifies a lower-bound timestamp, which, if non-zero, causes
+  // only keys with timestamps equal or greater to be cleared. This can have the
+  // effect of "reverting" the range's content to some earlier time via MVCC
+  // (though it is only true revert if cleared keys had not caused GC of earlier
+  // revisions in the meantime).
+  util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
 }
 
 // A ClearRangeResponse is the return value from the ClearRange() method.

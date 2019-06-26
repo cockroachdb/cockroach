@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
 )
@@ -45,6 +46,19 @@ func declareKeysClearRange(
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
+func isEmptyKeyTimeRange(
+	batch engine.ReadWriter, from, to engine.MVCCKey, since hlc.Timestamp,
+) (bool, error) {
+	// Use a TBI to check if there is anyting to delete.
+	iter := batch.NewIterator(engine.IterOptions{
+		LowerBound: from.Key, UpperBound: to.Key, MinTimestampHint: since,
+	})
+	defer iter.Close()
+	iter.Seek(from)
+	ok, err := iter.Valid()
+	return !ok, err
+}
+
 // ClearRange wipes all MVCC versions of keys covered by the specified
 // span, adjusting the MVCC stats accordingly.
 //
@@ -65,6 +79,34 @@ func ClearRange(
 	from := engine.MVCCKey{Key: args.Key}
 	to := engine.MVCCKey{Key: args.EndKey}
 	var pd result.Result
+
+	if !args.StartTime.IsEmpty() {
+		if empty, err := isEmptyKeyTimeRange(batch, from, to, args.StartTime); err != nil || empty {
+			return result.Result{}, err
+		}
+		log.VEventf(ctx, 2, "clearing keys with timestamp >= %v", args.StartTime)
+		statsBefore, err := computeStatsDelta(ctx, batch, cArgs, from, to)
+		if err != nil {
+			return result.Result{}, err
+		}
+
+		err = engine.MVCCClearTimeRange(ctx, batch, from, to, args.StartTime)
+		if err != nil {
+			return result.Result{}, err
+		}
+
+		iter := batch.NewIterator(engine.IterOptions{UpperBound: to.Key})
+		statsAfter, err := iter.ComputeStats(from, to, cArgs.Header.Timestamp.WallTime)
+		iter.Close()
+		if err != nil {
+			return result.Result{}, err
+		}
+		statsAfter.Subtract(statsBefore)
+
+		*cArgs.Stats = statsAfter
+
+		return pd, nil
+	}
 
 	// Before clearing, compute the delta in MVCCStats.
 	statsDelta, err := computeStatsDelta(ctx, batch, cArgs, from, to)

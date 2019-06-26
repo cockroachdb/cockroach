@@ -1844,6 +1844,59 @@ func MVCCMerge(
 	return err
 }
 
+// MVCCClearTimeRange ...
+func MVCCClearTimeRange(
+	ctx context.Context, batch ReadWriter, key, endKey MVCCKey, startTime hlc.Timestamp,
+) error {
+	var cleared int64
+
+	// TODO(dt): time-bound iter could potentially be a big win here -- the
+	// expected use-case for this is to run over an entire table's span with a
+	// very recent timestamp, rolling back just the writes of some failed IMPORT
+	// and that could very likely only have hit some small subset of the table's
+	// keyspace. However to get the stats right we need a non-time-bound iter
+	// e.g. we need to know if there is an older key under the one we are
+	// clearing to know if we're changing the number of live keys. An approach
+	// that seems promising might be to use time-bound iter to find candidates
+	// for deletion, allowing us to quickly skip over swaths of uninteresting
+	// keys, but then use a normal iteration to actually do the delete including
+	// updating the live key stats correctly.
+	if err := batch.Iterate(
+		key, endKey,
+		func(kv MVCCKeyValue) (bool, error) {
+			var meta enginepb.MVCCMetadata
+			if !kv.Key.IsValue() {
+				if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+					return false, err
+				}
+				if meta.Txn != nil && !hlc.Timestamp(meta.Timestamp).Less(startTime) {
+					err := &roachpb.WriteIntentError{
+						Intents: []roachpb.Intent{{Span: roachpb.Span{Key: append([]byte{}, kv.Key.Key...)},
+							Status: roachpb.PENDING, Txn: *meta.Txn,
+						}}}
+					return false, err
+				}
+			}
+			// TODO(dt): in many workloads, it is likely that large blocks of keys are
+			// written at similar times, so as an optimization we could potentially
+			// save a lot by detecting a when long run of contiguous keys are all
+			// above the startTime and emitting a single ClearRange for the run. For
+			// example some ingestions may ingest entire ranges of new data, were that
+			// optimization could yield a single ClearRange vs millions of Clears.
+			if !kv.Key.Timestamp.Less(startTime) {
+				if err := batch.Clear(kv.Key); err != nil {
+					return false, err
+				}
+				cleared++
+			}
+			return false, nil
+		},
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
 // MVCCDeleteRange deletes the range of key/value pairs specified by start and
 // end keys. It returns the range of keys deleted when returnedKeys is set,
 // the next span to resume from, and the number of keys deleted.
