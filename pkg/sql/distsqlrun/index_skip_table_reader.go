@@ -77,7 +77,7 @@ func newIndexSkipTableReader(
 	// as of now, we don't support interleaved tables, so
 	// error our if there is an index that is interleaved
 	for _, idx := range spec.Table.AllNonDropIndexes() {
-		if len(idx.InterleavedBy) > 0 {
+		if idx.IsInterleaved() {
 			return nil, errors.Errorf("Interleaved tables are not supported as of now.")
 		}
 	}
