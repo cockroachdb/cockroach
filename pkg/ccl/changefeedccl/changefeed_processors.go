@@ -190,12 +190,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ca.pollerDoneCh = make(chan struct{})
 	if err := ca.flowCtx.Stopper().RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
 		defer close(ca.pollerDoneCh)
-		var err error
-		if PushEnabled.Get(&ca.flowCtx.Settings.SV) {
-			err = ca.poller.RunUsingRangefeeds(ctx)
-		} else {
-			err = ca.poller.Run(ctx)
-		}
+		err := ca.poller.RunUsingRangefeeds(ctx)
 
 		// Trying to call MoveToDraining here is racy (`MoveToDraining called in
 		// state stateTrailingMeta`), so return the error via a channel.
