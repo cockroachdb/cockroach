@@ -32,7 +32,6 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version2_1
-	VersionCascadingZoneConfigs
 	VersionLoadSplits
 	VersionExportStorageWorkload
 	VersionLazyTxnRecord
@@ -297,11 +296,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     Version2_1,
 		Version: roachpb.Version{Major: 2, Minor: 1},
 	},
-	{
-		// VersionCascadingZoneConfigs is https://github.com/cockroachdb/cockroach/pull/30611.
-		Key:     VersionCascadingZoneConfigs,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 1},
-	},
+	// Removed.
+	// {
+	// 	// VersionCascadingZoneConfigs is https://github.com/cockroachdb/cockroach/pull/30611.
+	// 	Key:     VersionCascadingZoneConfigs,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 1},
+	// },
 	{
 		// VersionLoadSplits is https://github.com/cockroachdb/cockroach/pull/31413.
 		Key:     VersionLoadSplits,

@@ -9,27 +9,26 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[Version2_1-0]
-	_ = x[VersionCascadingZoneConfigs-1]
-	_ = x[VersionLoadSplits-2]
-	_ = x[VersionExportStorageWorkload-3]
-	_ = x[VersionLazyTxnRecord-4]
-	_ = x[VersionSequencedReads-5]
-	_ = x[VersionUnreplicatedRaftTruncatedState-6]
-	_ = x[VersionCreateStats-7]
-	_ = x[VersionDirectImport-8]
-	_ = x[VersionSideloadedStorageNoReplicaID-9]
-	_ = x[VersionPushTxnToInclusive-10]
-	_ = x[VersionSnapshotsWithoutLog-11]
-	_ = x[Version19_1-12]
-	_ = x[VersionStart19_2-13]
-	_ = x[VersionQueryTxnTimestamp-14]
-	_ = x[VersionStickyBit-15]
-	_ = x[VersionParallelCommits-16]
+	_ = x[VersionLoadSplits-1]
+	_ = x[VersionExportStorageWorkload-2]
+	_ = x[VersionLazyTxnRecord-3]
+	_ = x[VersionSequencedReads-4]
+	_ = x[VersionUnreplicatedRaftTruncatedState-5]
+	_ = x[VersionCreateStats-6]
+	_ = x[VersionDirectImport-7]
+	_ = x[VersionSideloadedStorageNoReplicaID-8]
+	_ = x[VersionPushTxnToInclusive-9]
+	_ = x[VersionSnapshotsWithoutLog-10]
+	_ = x[Version19_1-11]
+	_ = x[VersionStart19_2-12]
+	_ = x[VersionQueryTxnTimestamp-13]
+	_ = x[VersionStickyBit-14]
+	_ = x[VersionParallelCommits-15]
 }
 
-const _VersionKey_name = "Version2_1VersionCascadingZoneConfigsVersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
+const _VersionKey_name = "Version2_1VersionLoadSplitsVersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
 
-var _VersionKey_index = [...]uint16{0, 10, 37, 54, 82, 102, 123, 160, 178, 197, 232, 257, 283, 294, 310, 334, 350, 372}
+var _VersionKey_index = [...]uint16{0, 10, 27, 55, 75, 96, 133, 151, 170, 205, 230, 256, 267, 283, 307, 323, 345}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
