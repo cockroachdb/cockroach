@@ -124,9 +124,9 @@ func TestIndexSkipTableReader(t *testing.T) {
 
 	// create some interleaved tables
 	sqlutils.CreateTable(t, sqlDB, "t5",
-		"x INT, y INT, PRIMARY KEY (x, y)",
-		99,
-		sqlutils.ToRowFn(xFnt1, yFnt1))
+		"x INT PRIMARY KEY",
+		10,
+		sqlutils.ToRowFn(yFnt1))
 
 	xFnt6 := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row/10) + 1)
@@ -137,7 +137,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 	// interleave a table now
 	sqlutils.CreateTableInterleaved(t, sqlDB, "t6",
 		"x INT, y INT, PRIMARY KEY(x, y)",
-		"t5 (x, y)",
+		"t5 (x)",
 		99,
 		sqlutils.ToRowFn(xFnt6, yFnt6))
 
