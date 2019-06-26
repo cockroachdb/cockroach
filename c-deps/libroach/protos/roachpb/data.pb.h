@@ -1028,6 +1028,18 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc
   ::cockroach::roachpb::ReplicaDescriptor* mutable_replica();
   void set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica);
 
+  // .cockroach.roachpb.RangeDescriptor desc = 5;
+  bool has_desc() const;
+  void clear_desc();
+  static const int kDescFieldNumber = 5;
+  private:
+  const ::cockroach::roachpb::RangeDescriptor& _internal_desc() const;
+  public:
+  const ::cockroach::roachpb::RangeDescriptor& desc() const;
+  ::cockroach::roachpb::RangeDescriptor* release_desc();
+  ::cockroach::roachpb::RangeDescriptor* mutable_desc();
+  void set_allocated_desc(::cockroach::roachpb::RangeDescriptor* desc);
+
   // .cockroach.roachpb.ReplicaChangeType change_type = 1;
   void clear_change_type();
   static const int kChangeTypeFieldNumber = 1;
@@ -1045,6 +1057,7 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > updated_replicas_;
   ::cockroach::roachpb::ReplicaDescriptor* replica_;
+  ::cockroach::roachpb::RangeDescriptor* desc_;
   int change_type_;
   ::google::protobuf::int32 next_replica_id_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
@@ -3430,6 +3443,54 @@ inline void ChangeReplicasTrigger::set_next_replica_id(::google::protobuf::int32
   
   next_replica_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ChangeReplicasTrigger.next_replica_id)
+}
+
+// .cockroach.roachpb.RangeDescriptor desc = 5;
+inline bool ChangeReplicasTrigger::has_desc() const {
+  return this != internal_default_instance() && desc_ != NULL;
+}
+inline const ::cockroach::roachpb::RangeDescriptor& ChangeReplicasTrigger::_internal_desc() const {
+  return *desc_;
+}
+inline const ::cockroach::roachpb::RangeDescriptor& ChangeReplicasTrigger::desc() const {
+  const ::cockroach::roachpb::RangeDescriptor* p = desc_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.desc)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::RangeDescriptor*>(
+      &::cockroach::roachpb::_RangeDescriptor_default_instance_);
+}
+inline ::cockroach::roachpb::RangeDescriptor* ChangeReplicasTrigger::release_desc() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ChangeReplicasTrigger.desc)
+  
+  ::cockroach::roachpb::RangeDescriptor* temp = desc_;
+  desc_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::RangeDescriptor* ChangeReplicasTrigger::mutable_desc() {
+  
+  if (desc_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::RangeDescriptor>(GetArenaNoVirtual());
+    desc_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ChangeReplicasTrigger.desc)
+  return desc_;
+}
+inline void ChangeReplicasTrigger::set_allocated_desc(::cockroach::roachpb::RangeDescriptor* desc) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(desc_);
+  }
+  if (desc) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      desc = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, desc, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  desc_ = desc;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ChangeReplicasTrigger.desc)
 }
 
 // -------------------------------------------------------------------
