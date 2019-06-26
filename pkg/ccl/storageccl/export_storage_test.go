@@ -591,10 +591,4 @@ func TestWorkloadStorage(t *testing.T) {
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
 	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank?version=nope`, settings)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
-
-	tooOldSettings := cluster.MakeTestingClusterSettingsWithVersion(
-		cluster.VersionByKey(cluster.Version2_1), cluster.VersionByKey(cluster.Version2_1))
-	_, err = ExportStorageFromURI(ctx, bankURL().String(), tooOldSettings)
-	require.EqualError(t, err,
-		`cluster version does not support experimental-workload (>= 2.1-3 required)`)
 }

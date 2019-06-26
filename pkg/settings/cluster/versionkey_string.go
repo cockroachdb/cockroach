@@ -9,25 +9,24 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[Version2_1-0]
-	_ = x[VersionExportStorageWorkload-1]
-	_ = x[VersionLazyTxnRecord-2]
-	_ = x[VersionSequencedReads-3]
-	_ = x[VersionUnreplicatedRaftTruncatedState-4]
-	_ = x[VersionCreateStats-5]
-	_ = x[VersionDirectImport-6]
-	_ = x[VersionSideloadedStorageNoReplicaID-7]
-	_ = x[VersionPushTxnToInclusive-8]
-	_ = x[VersionSnapshotsWithoutLog-9]
-	_ = x[Version19_1-10]
-	_ = x[VersionStart19_2-11]
-	_ = x[VersionQueryTxnTimestamp-12]
-	_ = x[VersionStickyBit-13]
-	_ = x[VersionParallelCommits-14]
+	_ = x[VersionLazyTxnRecord-1]
+	_ = x[VersionSequencedReads-2]
+	_ = x[VersionUnreplicatedRaftTruncatedState-3]
+	_ = x[VersionCreateStats-4]
+	_ = x[VersionDirectImport-5]
+	_ = x[VersionSideloadedStorageNoReplicaID-6]
+	_ = x[VersionPushTxnToInclusive-7]
+	_ = x[VersionSnapshotsWithoutLog-8]
+	_ = x[Version19_1-9]
+	_ = x[VersionStart19_2-10]
+	_ = x[VersionQueryTxnTimestamp-11]
+	_ = x[VersionStickyBit-12]
+	_ = x[VersionParallelCommits-13]
 }
 
-const _VersionKey_name = "Version2_1VersionExportStorageWorkloadVersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
+const _VersionKey_name = "Version2_1VersionLazyTxnRecordVersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
 
-var _VersionKey_index = [...]uint16{0, 10, 38, 58, 79, 116, 134, 153, 188, 213, 239, 250, 266, 290, 306, 328}
+var _VersionKey_index = [...]uint16{0, 10, 30, 51, 88, 106, 125, 160, 185, 211, 222, 238, 262, 278, 300}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
