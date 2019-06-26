@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -872,6 +873,32 @@ func (ts *TableStat) DistinctCount() uint64 {
 // NullCount is part of the cat.TableStatistic interface.
 func (ts *TableStat) NullCount() uint64 {
 	return ts.js.NullCount
+}
+
+// Histogram is part of the cat.TableStatistic interface.
+func (ts *TableStat) Histogram() []cat.HistogramBucket {
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	if ts.js.HistogramColumnType == "" {
+		return nil
+	}
+	colType, err := parser.ParseType(ts.js.HistogramColumnType)
+	if err != nil {
+		panic(err)
+	}
+	histogram := make([]cat.HistogramBucket, len(ts.js.HistogramBuckets))
+	for i := range histogram {
+		bucket := &ts.js.HistogramBuckets[i]
+		datum, err := tree.ParseStringAs(colType, bucket.UpperBound, &evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		histogram[i] = cat.HistogramBucket{
+			NumEq:      uint64(bucket.NumEq),
+			NumRange:   uint64(bucket.NumRange),
+			UpperBound: datum,
+		}
+	}
+	return histogram
 }
 
 // TableStats is a slice of TableStat pointers.
