@@ -33,6 +33,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+// The call stack here is usually:
+// - ReportPanic
+// - RecoverAndReport
+// - panic()
+// so ReportPanic should pop three frames.
+const depthForRecoverAndReportPanic = 3
+
 var (
 	// crashReportEnv controls the version reported in crash reports
 	crashReportEnv = "development"
