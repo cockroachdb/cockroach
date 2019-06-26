@@ -10,10 +10,7 @@
 
 package storage
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-)
+import "github.com/cockroachdb/cockroach/pkg/settings"
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
 var SplitByLoadEnabled = settings.RegisterBoolSetting(
@@ -39,6 +36,5 @@ func (r *Replica) SplitByLoadQPSThreshold() float64 {
 // shared across all stores.
 func (r *Replica) SplitByLoadEnabled() bool {
 	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
-		r.store.ClusterSettings().Version.IsActive(cluster.VersionLoadSplits) &&
 		!r.store.TestingKnobs().DisableLoadBasedSplitting
 }
