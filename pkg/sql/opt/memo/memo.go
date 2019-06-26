@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -338,4 +339,17 @@ func (m *Memo) IsOptimized() bool {
 func (m *Memo) NextID() opt.ScalarID {
 	m.curID++
 	return m.curID
+}
+
+// RequestColStat calculates and returns the column statistic calculated on the
+// relational expression.
+func (m *Memo) RequestColStat(
+	expr RelExpr, cols opt.ColSet,
+) (colStat *props.ColumnStatistic, ok bool) {
+	// When SetRoot is called, the statistics builder may have been cleared.
+	// If this happens, we can't serve the request anymore.
+	if m.logPropsBuilder.mem != nil {
+		return m.logPropsBuilder.sb.colStat(cols, expr), true
+	}
+	return nil, false
 }

@@ -176,7 +176,7 @@ render               ·            ·            (a, c)     +a
       │              order key    a            ·          ·
       └── sort       ·            ·            (a, b, c)  +a,-c,+b
            │         order        +a,-c,+b     ·          ·
-           └── scan  ·            ·            (a, b, c)  ·
+           └── scan  ·            ·            (a, b, c)  +a
 ·                    table        abc@primary  ·          ·
 ·                    spans        ALL          ·          ·
 
