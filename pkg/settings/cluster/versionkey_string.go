@@ -9,23 +9,22 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[Version2_1-0]
-	_ = x[VersionSequencedReads-1]
-	_ = x[VersionUnreplicatedRaftTruncatedState-2]
-	_ = x[VersionCreateStats-3]
-	_ = x[VersionDirectImport-4]
-	_ = x[VersionSideloadedStorageNoReplicaID-5]
-	_ = x[VersionPushTxnToInclusive-6]
-	_ = x[VersionSnapshotsWithoutLog-7]
-	_ = x[Version19_1-8]
-	_ = x[VersionStart19_2-9]
-	_ = x[VersionQueryTxnTimestamp-10]
-	_ = x[VersionStickyBit-11]
-	_ = x[VersionParallelCommits-12]
+	_ = x[VersionUnreplicatedRaftTruncatedState-1]
+	_ = x[VersionCreateStats-2]
+	_ = x[VersionDirectImport-3]
+	_ = x[VersionSideloadedStorageNoReplicaID-4]
+	_ = x[VersionPushTxnToInclusive-5]
+	_ = x[VersionSnapshotsWithoutLog-6]
+	_ = x[Version19_1-7]
+	_ = x[VersionStart19_2-8]
+	_ = x[VersionQueryTxnTimestamp-9]
+	_ = x[VersionStickyBit-10]
+	_ = x[VersionParallelCommits-11]
 }
 
-const _VersionKey_name = "Version2_1VersionSequencedReadsVersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
+const _VersionKey_name = "Version2_1VersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
 
-var _VersionKey_index = [...]uint16{0, 10, 31, 68, 86, 105, 140, 165, 191, 202, 218, 242, 258, 280}
+var _VersionKey_index = [...]uint16{0, 10, 47, 65, 84, 119, 144, 170, 181, 197, 221, 237, 259}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
