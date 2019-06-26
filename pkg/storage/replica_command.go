@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -1130,8 +1129,7 @@ func (r *Replica) sendSnapshot(
 	}
 
 	canAvoidSendingLog := !usesReplicatedTruncatedState &&
-		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex &&
-		r.store.ClusterSettings().Version.IsActive(cluster.VersionSnapshotsWithoutLog)
+		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex
 
 	if canAvoidSendingLog {
 		// If we're not using a legacy (replicated) truncated state, we avoid
