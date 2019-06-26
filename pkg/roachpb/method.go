@@ -42,6 +42,10 @@ const (
 	// for keys which fall between args.RequestHeader.Key and
 	// args.RequestHeader.EndKey, with the latter endpoint excluded.
 	ClearRange
+	// RevertRange removes all versions of values more recent than the
+	// TargetTime for keys which fall between args.RequestHeader.Key and
+	// args.RequestHeader.EndKey, with the latter endpoint excluded.
+	RevertRange
 	// Scan fetches the values for all keys which fall between
 	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
 	// the latter endpoint excluded.
