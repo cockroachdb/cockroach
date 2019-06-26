@@ -101,8 +101,10 @@ var (
 		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
 
 	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
-	// Range's Raft log can grow to before log truncations are triggered, even
-	// if that means a snapshot will be required for a straggling follower.
+	// Range's Raft log can grow to before log truncations are triggered while at
+	// least one follower is missing. If all followers are active, the quota pool
+	// is responsible for ensuring the raft log doesn't grow without bound by
+	// making sure the leader doesn't get too far ahead.
 	defaultRaftLogTruncationThreshold = envutil.EnvOrDefaultInt64(
 		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 4<<20 /* 4 MB */)
 

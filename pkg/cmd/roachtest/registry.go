@@ -57,6 +57,7 @@ func registerTests(r *registry) {
 	registerQueue(r)
 	registerRebalanceLoad(r)
 	registerReplicaGC(r)
+	registerRestart(r)
 	registerRestore(r)
 	registerRoachmart(r)
 	registerScaleData(r)
