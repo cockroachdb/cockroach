@@ -195,7 +195,7 @@ SELECT 1 AS a, 1+z AS b, left(x, 10)::TIMESTAMP AS c, left(x, 10)::TIMESTAMPTZ A
 FROM b
 WHERE z=1 AND concat(x, 'foo', x)=concat(x, 'foo', x)
 ----
-memo (optimized, ~3KB, required=[presentation: a:3,b:4,c:5,d:6])
+memo (optimized, ~4KB, required=[presentation: a:3,b:4,c:5,d:6])
  ├── G1: (project G2 G3)
  │    └── [presentation: a:3,b:4,c:5,d:6]
  │         ├── best: (project G2 G3)
@@ -365,7 +365,7 @@ memo (optimized, ~5KB, required=[presentation: field:3])
 memo
 SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]
 ----
-memo (optimized, ~2KB, required=[presentation: tag:4])
+memo (optimized, ~3KB, required=[presentation: tag:4])
  ├── G1: (distinct-on G2 G3 cols=(4))
  │    └── [presentation: tag:4]
  │         ├── best: (distinct-on G2 G3 cols=(4))
