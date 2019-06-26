@@ -266,7 +266,7 @@ func (r ReplicaDescriptor) String() string {
 	} else {
 		fmt.Fprintf(&buf, "%d", r.ReplicaID)
 	}
-	if r.Type == ReplicaType_LEARNER {
+	if r.GetType() == ReplicaType_LEARNER {
 		buf.WriteString("LEARNER")
 	}
 	return buf.String()
@@ -284,6 +284,14 @@ func (r ReplicaDescriptor) Validate() error {
 		return errors.Errorf("ReplicaID must not be zero")
 	}
 	return nil
+}
+
+// GetType returns the type of this ReplicaDescriptor.
+func (r ReplicaDescriptor) GetType() ReplicaType {
+	if r.Type == nil {
+		return ReplicaType_VOTER
+	}
+	return *r.Type
 }
 
 // PercentilesFromData derives percentiles from a slice of data points.

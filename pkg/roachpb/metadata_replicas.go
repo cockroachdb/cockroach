@@ -46,7 +46,7 @@ func (d ReplicaDescriptors) All() []ReplicaDescriptor {
 func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 	// Note that the wrapped replicas are sorted first by type.
 	for i := range d.wrapped {
-		if d.wrapped[i].Type == ReplicaType_LEARNER {
+		if d.wrapped[i].GetType() == ReplicaType_LEARNER {
 			return d.wrapped[:i]
 		}
 	}
@@ -57,7 +57,7 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 func (d ReplicaDescriptors) Learners() []ReplicaDescriptor {
 	// Note that the wrapped replicas are sorted first by type.
 	for i := range d.wrapped {
-		if d.wrapped[i].Type == ReplicaType_LEARNER {
+		if d.wrapped[i].GetType() == ReplicaType_LEARNER {
 			return d.wrapped[i:]
 		}
 	}
@@ -122,8 +122,8 @@ type byTypeThenReplicaID []ReplicaDescriptor
 func (x byTypeThenReplicaID) Len() int      { return len(x) }
 func (x byTypeThenReplicaID) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
 func (x byTypeThenReplicaID) Less(i, j int) bool {
-	if x[i].Type == x[j].Type {
+	if x[i].GetType() == x[j].GetType() {
 		return x[i].ReplicaID < x[j].ReplicaID
 	}
-	return x[i].Type < x[j].Type
+	return x[i].GetType() < x[j].GetType()
 }

@@ -478,6 +478,7 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::int32 replica_id() const;
   void set_replica_id(::google::protobuf::int32 value);
 
+  // optional .cockroach.roachpb.ReplicaType type = 4;
   bool has_type() const;
   void clear_type();
   static const int kTypeFieldNumber = 4;
@@ -2379,6 +2380,7 @@ inline void ReplicaDescriptor::set_replica_id(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicaDescriptor.replica_id)
 }
 
+// optional .cockroach.roachpb.ReplicaType type = 4;
 inline bool ReplicaDescriptor::has_type() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }

@@ -27,7 +27,7 @@ import (
 // writeInitialState().
 func initialStats() enginepb.MVCCStats {
 	return enginepb.MVCCStats{
-		SysBytes: 100,
+		SysBytes: 98,
 		SysCount: 3,
 	}
 }
