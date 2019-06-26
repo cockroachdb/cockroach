@@ -878,6 +878,7 @@ bool ReplicaDescriptor::MergePartialFromCodedStream(
         break;
       }
 
+      // optional .cockroach.roachpb.ReplicaType type = 4;
       case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
@@ -937,6 +938,7 @@ void ReplicaDescriptor::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->replica_id(), output);
   }
 
+  // optional .cockroach.roachpb.ReplicaType type = 4;
   if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteEnum(
       4, this->type(), output);
@@ -972,6 +974,7 @@ size_t ReplicaDescriptor::ByteSizeLong() const {
           this->replica_id());
     }
 
+    // optional .cockroach.roachpb.ReplicaType type = 4;
     if (has_type()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::EnumSize(this->type());

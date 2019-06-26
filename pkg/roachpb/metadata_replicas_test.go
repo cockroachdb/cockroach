@@ -16,21 +16,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func newReplicaType(t ReplicaType) *ReplicaType {
+	return &t
+}
+
 func TestVotersLearnersAll(t *testing.T) {
 	tests := [][]ReplicaDescriptor{
 		{},
-		{{Type: ReplicaType_VOTER}},
-		{{Type: ReplicaType_LEARNER}},
-		{{Type: ReplicaType_VOTER}, {Type: ReplicaType_LEARNER}, {Type: ReplicaType_VOTER}},
-		{{Type: ReplicaType_LEARNER}, {Type: ReplicaType_VOTER}, {Type: ReplicaType_LEARNER}},
+		{{Type: newReplicaType(ReplicaType_VOTER)}},
+		{{Type: nil}},
+		{{Type: newReplicaType(ReplicaType_LEARNER)}},
+		{{Type: newReplicaType(ReplicaType_VOTER)}, {Type: newReplicaType(ReplicaType_LEARNER)}, {Type: newReplicaType(ReplicaType_VOTER)}},
+		{{Type: nil}, {Type: newReplicaType(ReplicaType_LEARNER)}, {Type: nil}},
+		{{Type: newReplicaType(ReplicaType_LEARNER)}, {Type: newReplicaType(ReplicaType_VOTER)}, {Type: newReplicaType(ReplicaType_LEARNER)}},
+		{{Type: newReplicaType(ReplicaType_LEARNER)}, {Type: nil}, {Type: newReplicaType(ReplicaType_LEARNER)}},
 	}
 	for i, test := range tests {
 		r := MakeReplicaDescriptors(test)
 		for _, voter := range r.Voters() {
-			assert.Equal(t, ReplicaType_VOTER, voter.Type, "testcase %d", i)
+			assert.True(t, voter.Type == nil || *voter.Type == ReplicaType_VOTER, "testcase %d", i)
 		}
 		for _, learner := range r.Learners() {
-			assert.Equal(t, ReplicaType_LEARNER, learner.Type, "testcase %d", i)
+			assert.True(t, learner.Type != nil && *learner.Type == ReplicaType_LEARNER, "testcase %d", i)
 		}
 		assert.Equal(t, len(test), len(r.All()), "testcase %d", i)
 	}
@@ -62,7 +69,7 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 				{NodeID: 1, StoreID: 1},
 				{NodeID: 2, StoreID: 2},
 				{NodeID: 3, StoreID: 3},
-				{NodeID: 4, StoreID: 4, Type: ReplicaType_LEARNER},
+				{NodeID: 4, StoreID: 4, Type: newReplicaType(ReplicaType_LEARNER)},
 			},
 			remove:   ReplicationTarget{NodeID: 2, StoreID: 2},
 			expected: true,
