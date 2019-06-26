@@ -1276,7 +1276,8 @@ update mutation
       │    │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
       │    │    │    │    ├── ordering: +6,+7
       │    │    │    │    └── scan mutation
-      │    │    │    │         └── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    │         ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    │         └── ordering: +6
       │    │    │    └── const: 10 [type=int]
       │    │    └── projections
       │    │         └── const: 1 [type=int]
