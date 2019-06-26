@@ -1781,7 +1781,7 @@ func (d *DDate) Max(_ *EvalContext) (Datum, bool) {
 
 // Min implements the Datum interface.
 func (d *DDate) Min(_ *EvalContext) (Datum, bool) {
-	return dMinDate, false
+	return dMinDate, true
 }
 
 // AmbiguousFormat implements the Datum interface.
