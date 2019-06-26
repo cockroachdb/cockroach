@@ -267,7 +267,6 @@ func (cq *contentionQueue) add(
 					PusheeTxn:       *pusheeTxn,
 					PushTo:          h.Timestamp.Next(),
 					InclusivePushTo: true,
-					DeprecatedNow:   b.Header.Timestamp,
 					PushType:        roachpb.PUSH_ABORT,
 				})
 				log.VEventf(ctx, 3, "%s pushing %s to detect dependency cycles", txnID(curPusher.txn), pusheeTxn.ID.Short())
