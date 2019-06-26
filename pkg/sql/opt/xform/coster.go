@@ -238,19 +238,34 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 }
 
 func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Required) memo.Cost {
-	// We calculate a per-row cost and multiply by (1 + log2(rowCount)).
+	// We calculate the cost of a segmented sort. We assume each segment
+	// is of the same size of (rowCount / numSegments). We also calculate the
+	// per-row cost. The cost of the sort is:
+	//
+	// perRowCost * (rowCount + (segmentSize * log2(segmentSize) * numOrderedSegments))
+	//
 	// The constant term is necessary for cases where the estimated row count is
 	// very small.
 	// TODO(rytaft): This is the cost of a local, in-memory sort. When a
 	// certain amount of memory is used, distsql switches to a disk-based sort
 	// with a temp RocksDB store.
-	rowCount := sort.Relational().Stats.RowCount
-	perRowCost := c.rowSortCost(len(required.Ordering.Columns))
-	cost := memo.Cost(rowCount) * perRowCost
-	if rowCount > 1 {
-		cost *= (1 + memo.Cost(math.Log2(rowCount)))
+
+	numSegments := c.countSegments(sort)
+	cost := memo.Cost(0)
+	stats := sort.Relational().Stats
+	rowCount := stats.RowCount
+	perRowCost := c.rowSortCost(len(required.Ordering.Columns) - len(sort.InputOrdering.Columns))
+
+	if !sort.InputOrdering.Any() {
+		// Add the cost for finding the segments.
+		cost += memo.Cost(float64(len(sort.InputOrdering.Columns))*rowCount) * cpuCostFactor
 	}
 
+	segmentSize := rowCount / numSegments
+	if segmentSize > 1 {
+		cost += memo.Cost(segmentSize) * (memo.Cost(math.Log2(segmentSize)) * memo.Cost(numSegments))
+	}
+	cost = perRowCost * (memo.Cost(rowCount) + cost)
 	return cost
 }
 
@@ -499,6 +514,28 @@ func (c *coster) computeProjectSetCost(projectSet *memo.ProjectSetExpr) memo.Cos
 	// Add the CPU cost of emitting the rows.
 	cost := memo.Cost(projectSet.Relational().Stats.RowCount) * cpuCostFactor
 	return cost
+}
+
+// countSegments calculates the number of segments that will be used to execute
+// the sort. If no input ordering is provided, there's only one segment.
+func (c *coster) countSegments(sort *memo.SortExpr) float64 {
+	if sort.InputOrdering.Any() {
+		return 1
+	}
+	stats := sort.Relational().Stats
+	orderedCols := sort.InputOrdering.ColSet()
+	orderedStats, ok := stats.ColStats.Lookup(orderedCols)
+	if !ok {
+		orderedStats, ok = c.mem.RequestColStat(sort, orderedCols)
+		if !ok {
+			// I don't think we can ever get here. iSince we don't allow the memo
+			// to be optimized twice, the coster should never be used after
+			// logPropsBuilder.clear() is called.
+			panic(errors.AssertionFailedf("could not request the stats for ColSet %v", orderedCols))
+		}
+	}
+
+	return orderedStats.DistinctCount
 }
 
 // rowSortCost is the CPU cost to sort one row, which depends on the number of
