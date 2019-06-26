@@ -33,8 +33,7 @@ const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version2_1
 	VersionUnreplicatedRaftTruncatedState // see versionsSingleton for details
-	VersionDirectImport
-	VersionSideloadedStorageNoReplicaID // see versionsSingleton for details
+	VersionSideloadedStorageNoReplicaID   // see versionsSingleton for details
 	VersionPushTxnToInclusive
 	VersionSnapshotsWithoutLog
 	Version19_1
@@ -419,11 +418,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	// 	Key:     VersionCreateStats,
 	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 7},
 	// },
-	{
-		// VersionDirectImport is https://github.com/cockroachdb/cockroach/pull/34751.
-		Key:     VersionDirectImport,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 8},
-	},
+	// Removed.
+	// {
+	// 	// VersionDirectImport is https://github.com/cockroachdb/cockroach/pull/34751.
+	// 	Key:     VersionDirectImport,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 8},
+	// },
 	{
 		// VersionSideloadedStorageNoReplicaID is https://github.com/cockroachdb/cockroach/pull/35035.
 		//
