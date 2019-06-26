@@ -148,9 +148,6 @@ func TestIndexSkipTableReader(t *testing.T) {
 	td5 := sqlbase.GetTableDescriptor(kvDB, "test", "t5")
 	td6 := sqlbase.GetTableDescriptor(kvDB, "test", "t6")
 
-	_ = td5
-	_ = td6
-
 	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) distsqlpb.TableReaderSpan {
 		var span roachpb.Span
 		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td, td.PrimaryIndex.ID))
