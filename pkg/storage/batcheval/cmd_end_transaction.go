@@ -639,7 +639,7 @@ func RunCommitTrigger(
 	}
 	if sbt := ct.GetStickyBitTrigger(); sbt != nil {
 		newDesc := *rec.Desc()
-		newDesc.StickyBit = sbt.StickyBit
+		newDesc.StickyBit = &sbt.StickyBit
 		var res result.Result
 		res.Replicated.State = &storagepb.ReplicaState{
 			Desc: &newDesc,

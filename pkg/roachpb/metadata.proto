@@ -86,6 +86,8 @@ message ReplicaIdent {
 //
 // NOTE: Care must be taken when changing the encoding of this proto
 // because it is used as part of conditional put operations.
+// TODO(jeffreyxiao): All nullable fields in RangeDescriptor can be made
+// non-nullable if #38302 is guaranteed to be on all nodes (I.E. 20.1).
 message RangeDescriptor {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.equal) = true;
@@ -193,7 +195,8 @@ message RangeDescriptor {
   // that the unsplit operation is a different operation from the merge
   // operation. Unsplit only unsets sticky_bit. It is represented by a
   // timestamp that indicates when it expires. After the expiration time has
-  // passed, the split is eligible for automatic merging.
+  // passed, the split is eligible for automatic merging. A nil sticky bit is
+  // equivalent to hlc.Timestamp{}.
   //
   // The reason the sticky_bit exists is because when the merge queue is
   // enabled and a manual split happens, the split ranges would immediately be
@@ -201,7 +204,7 @@ message RangeDescriptor {
   // attempted to execute ALTER TABLE/INDEX ... SPLIT AT ... when the merge
   // queue is enabled. With sticky_bit, users can manually split ranges without
   // diabling the merge queue.
-  optional util.hlc.Timestamp sticky_bit = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp sticky_bit = 7;
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize

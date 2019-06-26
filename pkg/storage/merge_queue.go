@@ -289,7 +289,7 @@ func (mq *mergeQueue) process(
 
 	// Range was manually split and not expired, so skip merging.
 	now := mq.store.Clock().Now()
-	if now.Less(rhsDesc.StickyBit) {
+	if now.Less(rhsDesc.GetStickyBit()) {
 		log.VEventf(ctx, 2, "skipping merge: ranges were manually split and sticky bit was not expired")
 		// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
 		// repeatedly processing ranges that cannot be merged.
