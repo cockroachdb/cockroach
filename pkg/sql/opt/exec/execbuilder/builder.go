@@ -47,6 +47,22 @@ type Builder struct {
 	// each relational subexpression when evalCtx.SessionData.SaveTablesPrefix is
 	// non-empty.
 	nameGen *memo.ExprNameGenerator
+
+	// letExprs is the set of Let expressions which may be referenced elsewhere
+	// in the query.
+	// TODO(justin): set this up so that we can look them up by index lookups
+	// rather than scans.
+	letExprs []builtLetExpr
+}
+
+// builtLetExpr is metadata regarding a Let expression which has already been
+// added to the set of subqueries for the query.
+type builtLetExpr struct {
+	id opt.LetID
+	// outputCols maps the output ColumnIDs of the let expression to the ordinal
+	// positions they are output to. See execPlan.outputCols for more details.
+	outputCols opt.ColMap
+	bufferNode exec.Node
 }
 
 // New constructs an instance of the execution node builder using the

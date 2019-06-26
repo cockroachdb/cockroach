@@ -1,0 +1,87 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+# Side effects should not be propagated up to the top-level from the Value
+# side of a WITH.
+build
+WITH foo AS (SELECT 1/0) SELECT * FROM foo
+----
+let &1
+ ├── columns: "?column?":2(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── project
+ │    ├── columns: "?column?":1(decimal)
+ │    ├── cardinality: [1 - 1]
+ │    ├── side-effects
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    └── project
+ │         ├── columns: "?column?":1(decimal)
+ │         ├── cardinality: [1 - 1]
+ │         ├── side-effects
+ │         ├── key: ()
+ │         ├── fd: ()-->(1)
+ │         ├── prune: (1)
+ │         ├── values
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── key: ()
+ │         │    └── tuple [type=tuple]
+ │         └── projections
+ │              └── div [type=decimal, side-effects]
+ │                   ├── const: 1 [type=int]
+ │                   └── const: 0 [type=int]
+ └── let-ref &1
+      ├── columns: "?column?":2(decimal)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      └── fd: ()-->(1)
+
+# Side effects should be propagated up to the top-level from the Input side of
+# a With.
+build
+WITH foo AS (SELECT 1) SELECT 1/0 FROM foo
+----
+let &1
+ ├── columns: "?column?":3(decimal)
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    └── project
+ │         ├── columns: "?column?":1(int!null)
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(1)
+ │         ├── prune: (1)
+ │         ├── values
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── key: ()
+ │         │    └── tuple [type=tuple]
+ │         └── projections
+ │              └── const: 1 [type=int]
+ └── project
+      ├── columns: "?column?":3(decimal)
+      ├── cardinality: [1 - 1]
+      ├── side-effects
+      ├── key: ()
+      ├── fd: ()-->(3)
+      ├── prune: (3)
+      ├── let-ref &1
+      │    ├── columns: "?column?":2(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(1)
+      └── projections
+           └── div [type=decimal, side-effects]
+                ├── const: 1 [type=int]
+                └── const: 0 [type=int]

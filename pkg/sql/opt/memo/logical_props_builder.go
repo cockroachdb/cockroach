@@ -715,6 +715,54 @@ func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel 
 	}
 }
 
+func (b *logicalPropsBuilder) buildLetProps(let *LetExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, let, &rel.Shared)
+
+	b.buildProps(let.Input, rel)
+
+	// Output Columns
+	// --------------
+	// Passed through from the call above to b.buildProps.
+
+	// Not Null Columns
+	// ----------------
+	// Passed through from the call above to b.buildProps.
+
+	// Outer Columns
+	// -------------
+	// Passed through from the call above to b.buildProps.
+
+	// Functional Dependencies
+	// -----------------------
+	// Passed through from the call above to b.buildProps.
+
+	// Cardinality
+	// -----------
+	// Passed through from the call above to b.buildProps.
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.statsFromChild(let, 1)
+	}
+}
+
+func (b *logicalPropsBuilder) buildLetRefProps(ref *LetRefExpr, rel *props.Relational) {
+	e := b.mem.GetLetExpr(ref.ID)
+
+	// WithRef inherits most of the logical properties of the expression it
+	// references.
+	b.buildProps(e, rel)
+
+	// The exception is that any side effects are lifted out of this into the
+	// pre-execution.
+	rel.CanHaveSideEffects = false
+
+	rel.OutputCols = ref.OutCols.ToSet()
+
+	// Statistics are built by the call above to buildProps.
+}
+
 func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props.Relational) {
 	b.buildBasicProps(explain, explain.ColList, rel)
 }

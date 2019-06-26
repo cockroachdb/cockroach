@@ -1229,4 +1229,29 @@ project
 build
 WITH cte AS (SELECT b FROM [INSERT INTO abc VALUES (1) RETURNING *] LIMIT 1) SELECT * FROM abc
 ----
-error (0A000): unimplemented: common table expression "cte" with side effects was not used in query
+let &1
+ ├── columns: a:6(int!null) b:7(int) c:8(int)
+ ├── project
+ │    ├── columns: b:2(int)
+ │    └── limit
+ │         ├── columns: b:2(int)
+ │         ├── project
+ │         │    ├── columns: b:2(int)
+ │         │    └── insert abc
+ │         │         ├── columns: a:1(int!null) b:2(int) c:3(int)
+ │         │         ├── insert-mapping:
+ │         │         │    ├──  column1:4 => a:1
+ │         │         │    ├──  column5:5 => b:2
+ │         │         │    └──  column5:5 => c:3
+ │         │         └── project
+ │         │              ├── columns: column5:5(int) column1:4(int!null)
+ │         │              ├── values
+ │         │              │    ├── columns: column1:4(int!null)
+ │         │              │    └── tuple [type=tuple{int}]
+ │         │              │         └── const: 1 [type=int]
+ │         │              └── projections
+ │         │                   └── cast: INT8 [type=int]
+ │         │                        └── null [type=unknown]
+ │         └── const: 1 [type=int]
+ └── scan abc
+      └── columns: a:6(int!null) b:7(int) c:8(int)

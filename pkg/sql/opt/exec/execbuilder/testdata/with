@@ -1,0 +1,63 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE x(a INT)
+
+statement ok
+CREATE TABLE y(a INT)
+
+query TTTTT
+EXPLAIN (VERBOSE)
+  WITH t AS (SELECT a FROM y) SELECT * FROM t JOIN t AS q ON true
+----
+root                        ·             ·                (a, a)  ·
+ ├── hash-join              ·             ·                (a, a)  ·
+ │    │                     type          cross            ·       ·
+ │    ├── scan buffer node  ·             ·                (a)     ·
+ │    └── scan buffer node  ·             ·                (a)     ·
+ └── subquery               ·             ·                (a, a)  ·
+      │                     id            @S1              ·       ·
+      │                     original sql  SELECT a FROM y  ·       ·
+      │                     exec mode     all rows         ·       ·
+      └── buffer node       ·             ·                (a)     ·
+           └── scan         ·             ·                (a)     ·
+·                           table         y@primary        ·       ·
+·                           spans         ALL              ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+  WITH t AS (SELECT a FROM y) SELECT * FROM t
+----
+root                   ·             ·                (a)  ·
+ ├── scan buffer node  ·             ·                (a)  ·
+ └── subquery          ·             ·                (a)  ·
+      │                id            @S1              ·    ·
+      │                original sql  SELECT a FROM y  ·    ·
+      │                exec mode     all rows         ·    ·
+      └── buffer node  ·             ·                (a)  ·
+           └── scan    ·             ·                (a)  ·
+·                      table         y@primary        ·    ·
+·                      spans         ALL              ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+  WITH t AS (INSERT INTO x VALUES (1) RETURNING a) SELECT * FROM t
+----
+root                                       ·              ·                 (a)                 ·
+ ├── scan buffer node                      ·              ·                 (a)                 ·
+ └── subquery                              ·              ·                 (a)                 ·
+      │                                    id             @S1               ·                   ·
+      │                                    original sql   <unknown>         ·                   ·
+      │                                    exec mode      all rows          ·                   ·
+      └── buffer node                      ·              ·                 (a)                 ·
+           └── spool                       ·              ·                 (a)                 ·
+                └── render                 ·              ·                 (a)                 ·
+                     │                     render 0       a                 ·                   ·
+                     └── run               ·              ·                 (a, rowid[hidden])  ·
+                          └── insert       ·              ·                 (a, rowid[hidden])  ·
+                               │           into           x(a, rowid)       ·                   ·
+                               │           strategy       inserter          ·                   ·
+                               └── values  ·              ·                 (column1, column4)  ·
+·                                          size           2 columns, 1 row  ·                   ·
+·                                          row 0, expr 0  1                 ·                   ·
+·                                          row 0, expr 1  unique_rowid()    ·                   ·

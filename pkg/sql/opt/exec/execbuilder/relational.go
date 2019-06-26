@@ -235,6 +235,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
+	case *memo.LetExpr:
+		ep, err = b.buildLet(t)
+
+	case *memo.LetRefExpr:
+		ep, err = b.buildLetRef(t)
+
 	case *memo.ExplainExpr:
 		ep, err = b.buildExplain(t)
 
@@ -1299,6 +1305,78 @@ func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
 
+}
+
+func (b *Builder) buildLet(let *memo.LetExpr) (execPlan, error) {
+	value, err := b.buildRelational(let.Binding)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	buffer, err := b.factory.ConstructBuffer(value.root)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// TODO(justin): if the binding here has a spoolNode at its root, we can
+	// remove it, since subquery execution also guarantees complete execution.
+
+	// Add the buffer as a subquery so it gets executed ahead of time, and is
+	// available to be referenced by other queries.
+	b.subqueries = append(b.subqueries, exec.Subquery{
+		ExprNode: &tree.Subquery{
+			Select: let.OriginalExpr.Select,
+		},
+		// TODO(justin): this is wasteful: both the subquery and the bufferNode
+		// will buffer up all the results.  This should be fixed by either making
+		// the buffer point directly to the subquery results or adding a new
+		// subquery mode that reads and discards all rows. This could possibly also
+		// be fixed by ensuring that bufferNode exhausts its input (and forcing it
+		// to behave like a spoolNode) and using the EXISTS mode.
+		Mode: exec.SubqueryAllRows,
+		Root: buffer,
+	})
+
+	b.letExprs = append(b.letExprs, builtLetExpr{
+		id:         let.ID,
+		outputCols: value.outputCols,
+		bufferNode: buffer,
+	})
+
+	return b.buildRelational(let.Input)
+}
+
+func (b *Builder) buildLetRef(letRef *memo.LetRefExpr) (execPlan, error) {
+	id := letRef.ID
+	var e *builtLetExpr
+	for _, w := range b.letExprs {
+		if w.id == id {
+			e = &w
+			break
+		}
+	}
+	if e == nil {
+		panic(errors.AssertionFailedf("couldn't find Let expression with ID %d", id))
+	}
+
+	node, err := b.factory.ConstructLetRef(e.bufferNode)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// The ColumnIDs from the Let expression need to get remapped according to
+	// the mapping in the letRef to get the actual colMap for this expression.
+	var outputCols opt.ColMap
+
+	for i := range letRef.InCols {
+		idx, _ := e.outputCols.Get(int(letRef.InCols[i]))
+		outputCols.Set(int(letRef.OutCols[i]), idx)
+	}
+
+	return execPlan{
+		root:       node,
+		outputCols: outputCols,
+	}, nil
 }
 
 func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {

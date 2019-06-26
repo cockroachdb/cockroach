@@ -64,7 +64,11 @@ func (n *bufferNode) Values() tree.Datums {
 
 func (n *bufferNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
-	n.bufferedRows.Close(ctx)
+	// It's valid to be Closed without startExec having been called, in which
+	// case n.bufferedRows will be nil.
+	if n.bufferedRows != nil {
+		n.bufferedRows.Close(ctx)
+	}
 }
 
 // scanBufferNode behaves like an iterator into the bufferNode it is

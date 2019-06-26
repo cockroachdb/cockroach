@@ -823,6 +823,45 @@ define WindowPrivate {
     Ordering OrderingChoice
 }
 
+# Let executes Binding, making its results available to Input. Within Input,
+# Value may be referenced by a LetRef expression containing the ID of this
+# Let.
+[Relational]
+define Let {
+    Binding RelExpr
+    Input   RelExpr
+
+    _ LetPrivate
+}
+
+[Private]
+define LetPrivate {
+    ID LetID
+
+    OriginalExpr Subquery
+}
+
+# LetRef returns the results present in the Let expression referenced
+# by ID.
+[Relational]
+define LetRef {
+    _ LetRefPrivate
+}
+
+[Private]
+define LetRefPrivate {
+    ID LetID
+
+    InCols  ColList
+    # OutCols contains a list of columns which correspond elementwise to the
+    # columns output by the Let expression referenced by this expression.
+    # LetRef cannot reuse the column IDs used in the original Let expression,
+    # since multiple LetRefs referencing the same Let can occur in the same
+    # tree, so we maintain a mapping from the columns returned from the
+    # referenced expression to the referencing expression.
+    OutCols ColList
+}
+
 # FakeRel is a mock relational operator used for testing; its logical properties
 # are pre-determined and stored in the private. It can be used as the child of
 # an operator for which we are calculating properties or statistics.

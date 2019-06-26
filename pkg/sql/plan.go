@@ -144,7 +144,7 @@ type planNode interface {
 	// Close terminates the planNode execution and releases its resources.
 	// This method should be called if the node has been used in any way (any
 	// methods on it have been called) after it was constructed. Note that this
-	// doesn't imply that startPlan() has been necessarily called.
+	// doesn't imply that startExec() has been necessarily called.
 	//
 	// This method must not be called during execution - the planNode
 	// tree must remain "live" and readable via walk() even after

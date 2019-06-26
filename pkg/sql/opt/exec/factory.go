@@ -408,6 +408,14 @@ type Factory interface {
 	// ConstructAlterTableSplit creates a node that implements ALTER TABLE/INDEX
 	// SPLIT AT.
 	ConstructAlterTableSplit(index cat.Index, input Node, expiration tree.TypedExpr) (Node, error)
+
+	// ConstructBuffer constructs a node whose input can be referenced from
+	// elsewhere in the query.
+	ConstructBuffer(value Node) (Node, error)
+
+	// ConstructLetRef constructs a node which refers to a node constructed by
+	// ConstructBuffer.
+	ConstructLetRef(ref Node) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

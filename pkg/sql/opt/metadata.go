@@ -486,3 +486,7 @@ func (md *Metadata) AddView(v cat.View) {
 func (md *Metadata) AllViews() []cat.View {
 	return md.views
 }
+
+// LetID uniquely identifies a Let expression within the scope of a query.
+// See the comment for Metadata for more details on identifiers.
+type LetID uint64

@@ -345,6 +345,12 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ExplainOp, opt.ShowTraceForSessionOp, opt.OpaqueRelOp:
 		return sb.colStatUnknown(colSet, e.Relational())
 
+	case opt.LetOp:
+		return sb.colStat(colSet, e.Child(1).(RelExpr))
+
+	case opt.LetRefOp:
+		return sb.colStatLetRef(colSet, e.(*LetRefExpr))
+
 	case opt.FakeRelOp:
 		panic(errors.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
 	}
@@ -2042,6 +2048,31 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 	colStat.NullCount = 0
 	sb.finalizeFromRowCount(colStat, s.RowCount)
 	return colStat
+}
+
+// +---------+
+// | Let Ref |
+// +---------+
+
+func (sb *statisticsBuilder) colStatLetRef(
+	colSet opt.ColSet, lr *LetRefExpr,
+) *props.ColumnStatistic {
+	relProps := lr.Relational()
+	s := &relProps.Stats
+
+	letExpr := lr.Memo().GetLetExpr(lr.ID)
+
+	// We need to pass on the colStat request to the referenced expression, but
+	// we need to translate the columns to the ones returned by the original
+	// expression, rather than the reference.
+	cols := translateColSet(colSet, lr.OutCols, lr.InCols)
+
+	cs := *sb.colStat(cols, letExpr)
+	cs.Cols = colSet
+
+	colstat, _ := s.ColStats.Add(colSet)
+	*colstat = cs
+	return &cs
 }
 
 // +---------+
