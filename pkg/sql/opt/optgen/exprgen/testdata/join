@@ -47,11 +47,11 @@ expr
 left-join (lookup abc@ab)
  ├── columns: t.public.abc.a:5(int) t.public.abc.b:6(int)
  ├── key columns: [5] = [5]
- ├── stats: [rows=333333.333]
+ ├── stats: [rows=333333.333, distinct(5)=100, null(5)=3333.33333]
  ├── cost: 691726.697
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
  │    ├── cost: 1060.02
  │    └── prune: (1,2)
  └── filters
@@ -127,7 +127,7 @@ inner-join-apply
  ├── select
  │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  │    ├── outer: (1)
- │    ├── stats: [rows=333.333333]
+ │    ├── stats: [rows=333.333333, distinct(1)=1, null(1)=0]
  │    ├── cost: 1080.03
  │    ├── prune: (7)
  │    ├── scan t.public.def

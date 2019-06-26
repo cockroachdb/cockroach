@@ -128,9 +128,7 @@ type ColumnStatistic struct {
 	Cols opt.ColSet
 
 	// DistinctCount is the estimated number of distinct values of this
-	// set of columns for this expression. Excludes values containing
-	// a null in one of the cols - those are counted in NullCount.
-	// TODO(itsbilal): Count null values as a distinct value as well.
+	// set of columns for this expression. Includes null values.
 	DistinctCount float64
 
 	// NullCount is the estimated number of null values of this set of

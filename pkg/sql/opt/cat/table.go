@@ -167,8 +167,7 @@ type TableStatistic interface {
 
 	// DistinctCount returns the estimated number of distinct values on the
 	// columns of the statistic. If there are multiple columns, each "value" is a
-	// tuple with the values on each column. Rows where any statistic column have
-	// a NULL don't contribute to this count.
+	// tuple with the values on each column.
 	DistinctCount() uint64
 
 	// NullCount returns the estimated number of rows which have a NULL value on
