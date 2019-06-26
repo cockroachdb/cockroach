@@ -76,11 +76,6 @@ func newIndexSkipTableReader(
 
 	// as of now, we don't support interleaved tables, so
 	// error our if there is an index that is interleaved
-	for _, idx := range spec.Table.AllNonDropIndexes() {
-		if len(idx.InterleavedBy) > 0 {
-			return nil, errors.Errorf("Interleaved tables are not supported as of now.")
-		}
-	}
 
 	t := istrPool.Get().(*indexSkipTableReader)
 
@@ -151,17 +146,6 @@ func newIndexSkipTableReader(
 	}
 
 	return t, nil
-}
-
-func (t *indexSkipTableReader) computeIndexInterleaveLen(table *sqlbase.TableDescriptor) int {
-	totalLen := 0
-	for _, index := range table.AllNonDropIndexes() {
-		for _, fr := range index.InterleavedBy {
-			_ = fr
-		}
-	}
-
-	return totalLen
 }
 
 func (t *indexSkipTableReader) Start(ctx context.Context) context.Context {
