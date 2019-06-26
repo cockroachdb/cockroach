@@ -531,7 +531,7 @@ func (r *Replica) AdminMerge(
 		if err != nil {
 			return err
 		}
-		if err := dbRightDescKV.Value.GetProto(&rightDesc); err != nil {
+		if err := dbRightDescKV.ValueProto(&rightDesc); err != nil {
 			return err
 		}
 
