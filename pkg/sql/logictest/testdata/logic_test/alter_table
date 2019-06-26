@@ -972,3 +972,43 @@ t  a_auto_not_null1  CHECK  CHECK ((a IS NOT NULL))  true
 
 statement ok
 DROP TABLE t
+
+# Check for adding constraints NOT VALID
+statement ok
+CREATE TABLE t (a int);
+
+statement ok
+INSERT INTO t VALUES (10), (15), (17)
+
+statement error pq: validation of CHECK "a < 16" failed on row: a=17
+ALTER TABLE t ADD CHECK (a < 16)
+
+statement ok
+ALTER TABLE t ADD CHECK (a < 100)
+
+statement ok
+ALTER TABLE t ADD CHECK (a < 16) NOT VALID
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+t  check_a   CHECK  CHECK  ((a < 100))  true
+t  check_a1  CHECK  CHECK  ((a < 16))  false
+
+query error pq: failed to satisfy CHECK constraint \(a < 16\)
+INSERT INTO t VALUES (20)
+
+statement error pq: validation of CHECK "a < 16" failed on row: a=17
+ALTER TABLE t VALIDATE CONSTRAINT check_a1
+
+statement ok
+DELETE FROM t WHERE a = 17
+
+statement ok
+ALTER TABLE t VALIDATE CONSTRAINT check_a1
+
+query TTTTB
+SHOW CONSTRAINTS FROM t
+----
+t  check_a   CHECK  CHECK  ((a < 100))  true
+t  check_a1  CHECK  CHECK  ((a < 16))   true

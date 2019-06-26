@@ -254,10 +254,8 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory))
 		})
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		// TODO(dan): Switch this to RangeFeed, too. It seems wasteful right now
-		// because the RangeFeed version of the tests take longer due to
-		// closed_timestamp.target_duration's interaction with schema changes.
-		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.push.enabled = false`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
@@ -265,20 +263,6 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory))
 		f := cdctest.MakeTableFeedFactory(s, db, flushCh, sink)
 
 		testFn(t, db, f)
-	}
-}
-
-func pollerTest(
-	metaTestFn func(func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T),
-	testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory),
-) func(*testing.T) {
-	return func(t *testing.T) {
-		metaTestFn(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-			sqlDB := sqlutils.MakeSQLRunner(db)
-			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.push.enabled = false`)
-			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
-			testFn(t, db, f)
-		})(t)
 	}
 }
 
@@ -312,6 +296,7 @@ func cloudStorageTest(
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 
 		f := cdctest.MakeCloudFeedFactory(s, db, dir, flushCh)

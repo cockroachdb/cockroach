@@ -37,13 +37,14 @@ var retiredSettings = map[string]struct{}{
 	// removed as of 2.1.
 	"kv.allocator.stat_based_rebalancing.enabled": {},
 	"kv.allocator.stat_rebalance_threshold":       {},
-	// removed as of 2.2.
+	// removed as of 19.1.
 	"kv.raft_log.synchronize": {},
 	// removed as of 19.2.
 	"schemachanger.bulk_index_backfill.enabled":            {},
 	"rocksdb.ingest_backpressure.delay_l0_file":            {}, // never used
 	"server.heap_profile.system_memory_threshold_fraction": {},
 	"timeseries.storage.10s_resolution_ttl":                {},
+	"changefeed.push.enabled":                              {},
 }
 
 // Register adds a setting to the registry.

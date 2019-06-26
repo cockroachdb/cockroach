@@ -27,8 +27,6 @@ import (
 // the indexSkipTableReader returns all distinct rows where that prefix
 // of the index is distinct. It uses the index to seek to distinct values
 // of the prefix instead of doing a full table scan.
-// As of now, the indexSkipTableReader does not support use with
-// interleaved tables.
 type indexSkipTableReader struct {
 	ProcessorBase
 
@@ -73,9 +71,6 @@ func newIndexSkipTableReader(
 	if flowCtx.nodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
-
-	// as of now, we don't support interleaved tables, so
-	// error our if there is an index that is interleaved
 
 	t := istrPool.Get().(*indexSkipTableReader)
 

@@ -34,6 +34,9 @@ type Builder struct {
 	// expression node.
 	subqueries []exec.Subquery
 
+	// postqueries accumulates check queries that are run after the main query.
+	postqueries []exec.Node
+
 	// nullifyMissingVarExprs, if greater than 0, tells the builder to replace
 	// VariableExprs that have no bindings with DNull. This is useful for apply
 	// join, which needs to be able to create a plan that has outer columns.
@@ -85,7 +88,7 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.factory.ConstructPlan(root, b.subqueries)
+	return b.factory.ConstructPlan(root, b.subqueries, b.postqueries)
 }
 
 func (b *Builder) build(e opt.Expr) (exec.Node, error) {
