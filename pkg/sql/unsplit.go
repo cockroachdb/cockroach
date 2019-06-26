@@ -135,7 +135,7 @@ func (n *unsplitNode) startExec(params runParams) error {
 	if !stickyBitEnabled {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			`UNSPLIT AT requires all nodes to be upgraded to %s`,
-			cluster.VersionByKey(cluster.VersionCreateStats),
+			cluster.VersionByKey(cluster.VersionStickyBit),
 		)
 	}
 	return nil
