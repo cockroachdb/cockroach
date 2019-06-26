@@ -27,6 +27,13 @@ export function MilliToNano(milli: number): number {
 }
 
 /**
+ * SecondsToNano converts a second value into nanoseconds.
+ */
+export function SecondsToNano(sec: number): number {
+  return sec * 1.0e9;
+}
+
+/**
  * TimestampToMoment converts a Timestamp$Properties object, as seen in wire.proto, to
  * a Moment object. If timestamp is null, it returns the current time.
  */

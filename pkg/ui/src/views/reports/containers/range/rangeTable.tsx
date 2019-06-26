@@ -16,11 +16,12 @@ import React from "react";
 
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
-import { LongToMoment, NanoToMilli } from "src/util/convert";
+import {LongToMoment, NanoToMilli, SecondsToNano} from "src/util/convert";
 import { Bytes } from "src/util/format";
 import Lease from "src/views/reports/containers/range/lease";
 import Print from "src/views/reports/containers/range/print";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
+import {cockroach} from "src/js/protos";
 
 interface RangeTableProps {
   infos: protos.cockroach.server.serverpb.IRangeInfo[];
@@ -75,8 +76,11 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "truncatedIndex", display: "Truncated Index", compareToLeader: true },
   { variable: "truncatedTerm", display: "Truncated Term", compareToLeader: true },
   { variable: "mvccLastUpdate", display: "MVCC Last Update", compareToLeader: true },
-  { variable: "mvccIntentAge", display: "MVCC Intent Age", compareToLeader: true },
-  { variable: "mvccGGBytesAge", display: "MVCC GG Bytes Age", compareToLeader: true },
+  { variable: "GCAvgAge", display: "Dead Value average age", compareToLeader: true},
+  { variable: "GCBytesAge", display: "GC Bytes Age (score)", compareToLeader: true},
+  { variable: "NumIntents", display: "Intents", compareToLeader: true},
+  { variable: "IntentAvgAge", display: "Intent Average Age", compareToLeader: true},
+  { variable: "IntentAge", display: "Intent Age (score)", compareToLeader: true },
   { variable: "mvccLiveBytesCount", display: "MVCC Live Bytes/Count", compareToLeader: true },
   { variable: "mvccKeyBytesCount", display: "MVCC Key Bytes/Count", compareToLeader: true },
   { variable: "mvccValueBytesCount", display: "MVCC Value Bytes/Count", compareToLeader: true },
@@ -156,6 +160,31 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       value: [humanized],
       title: [humanized, bytes.toString()],
     };
+  }
+
+  contentGCAvgAge(mvcc: cockroach.storage.engine.enginepb.IMVCCStats): RangeTableCellContent {
+    if (mvcc === null) {
+      return this.contentDuration(Long.fromNumber(0));
+    }
+    const deadBytes = mvcc.key_bytes.add(mvcc.val_bytes).sub(mvcc.live_bytes);
+    if (!deadBytes.eq(0)) {
+      const avgDeadByteAgeSec = mvcc.gc_bytes_age.div(deadBytes);
+      return this.contentDuration(Long.fromNumber(SecondsToNano(avgDeadByteAgeSec.toNumber())));
+    } else {
+      return this.contentDuration(Long.fromNumber(0));
+    }
+  }
+
+  createContentIntentAvgAge(mvcc: cockroach.storage.engine.enginepb.IMVCCStats): RangeTableCellContent {
+    if (mvcc === null) {
+      return this.contentDuration(Long.fromNumber(0));
+    }
+    if (!mvcc.intent_count.eq(0)) {
+      const avgIntentAgeSec = mvcc.intent_age.div(mvcc.intent_count);
+      return this.contentDuration(Long.fromNumber(SecondsToNano(avgIntentAgeSec.toNumber())));
+    } else {
+      return this.contentDuration(Long.fromNumber(0));
+    }
   }
 
   createContent(value: string | Long | number, className: string = null): RangeTableCellContent {
@@ -483,14 +512,21 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         truncatedIndex: this.createContent(FixLong(info.state.state.truncated_state.index)),
         truncatedTerm: this.createContent(FixLong(info.state.state.truncated_state.term)),
         mvccLastUpdate: this.contentNanos(FixLong(mvcc.last_update_nanos)),
-        mvccIntentAge: this.contentDuration(FixLong(mvcc.intent_age)),
-        mvccGGBytesAge: this.contentDuration(FixLong(mvcc.gc_bytes_age)),
         mvccLiveBytesCount: this.contentMVCC(FixLong(mvcc.live_bytes), FixLong(mvcc.live_count)),
         mvccKeyBytesCount: this.contentMVCC(FixLong(mvcc.key_bytes), FixLong(mvcc.key_count)),
         mvccValueBytesCount: this.contentMVCC(FixLong(mvcc.val_bytes), FixLong(mvcc.val_count)),
         mvccIntentBytesCount: this.contentMVCC(FixLong(mvcc.intent_bytes), FixLong(mvcc.intent_count)),
         mvccSystemBytesCount: this.contentMVCC(FixLong(mvcc.sys_bytes), FixLong(mvcc.sys_count)),
         rangeMaxBytes: this.contentBytes(FixLong(info.state.range_max_bytes)),
+        mvccIntentAge: this.contentDuration(FixLong(mvcc.intent_age)),
+
+        GCAvgAge: this.contentGCAvgAge(mvcc),
+        GCBytesAge: this.createContent(FixLong(mvcc.gc_bytes_age)),
+
+        NumIntents: this.createContent(FixLong(mvcc.intent_count)),
+        IntentAvgAge: this.createContentIntentAvgAge(mvcc),
+        IntentAge: this.createContent(FixLong(mvcc.intent_age)),
+
         writeLatches: this.contentLatchInfo(
           FixLong(info.latches_local.write_count),
           FixLong(info.latches_global.write_count),
