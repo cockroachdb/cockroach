@@ -1795,8 +1795,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			splitEnforcedUntil := tree.DNull
-			if (desc.StickyBit != hlc.Timestamp{}) {
-				splitEnforcedUntil = tree.TimestampToInexactDTimestamp(desc.StickyBit)
+			if (desc.GetStickyBit() != hlc.Timestamp{}) {
+				splitEnforcedUntil = tree.TimestampToInexactDTimestamp(*desc.StickyBit)
 			}
 
 			return tree.Datums{
