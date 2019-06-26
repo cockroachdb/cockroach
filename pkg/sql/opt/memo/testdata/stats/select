@@ -179,11 +179,11 @@ project
  ├── stats: [rows=108.9]
  └── select
       ├── columns: y:2(int!null) z:3(int!null)
-      ├── stats: [rows=108.9, distinct(2)=69.2053852, null(2)=0, distinct(3)=69.2053852, null(3)=0]
+      ├── stats: [rows=108.9, distinct(2)=33.3333333, null(2)=0, distinct(3)=33.3333333, null(3)=0]
       ├── scan idx@yz
       │    ├── columns: y:2(int!null) z:3(int)
       │    ├── constraint: /-2/3/1: (/4/NULL - /NULL)
-      │    └── stats: [rows=330, distinct(2)=98.265847, null(2)=0]
+      │    └── stats: [rows=330, distinct(2)=33.3333333, null(2)=0, distinct(3)=100, null(3)=10]
       └── filters
            └── z < 10 [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
 
@@ -687,18 +687,18 @@ WHERE
 ----
 index-join lineitem
  ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
- ├── stats: [rows=111.111111, distinct(1)=69.2053852, null(1)=0, distinct(2)=69.2053852, null(2)=0, distinct(3)=69.2053852, null(3)=0, distinct(4)=69.2053852, null(4)=0, distinct(5)=69.2053852, null(5)=0, distinct(6)=69.2053852, null(6)=0, distinct(7)=69.2053852, null(7)=0, distinct(8)=69.2053852, null(8)=0, distinct(9)=69.2053852, null(9)=0, distinct(10)=69.2053852, null(10)=0, distinct(11)=69.2053852, null(11)=0, distinct(12)=69.2053852, null(12)=0, distinct(13)=69.2053852, null(13)=0, distinct(14)=69.2053852, null(14)=0, distinct(15)=69.2053852, null(15)=0, distinct(16)=69.2053852, null(16)=0]
+ ├── stats: [rows=111.111111, distinct(1)=69.2053852, null(1)=0, distinct(2)=69.2053852, null(2)=0, distinct(3)=69.2053852, null(3)=0, distinct(4)=69.2053852, null(4)=0, distinct(5)=69.2053852, null(5)=0, distinct(6)=69.2053852, null(6)=0, distinct(7)=69.2053852, null(7)=0, distinct(8)=69.2053852, null(8)=0, distinct(9)=69.2053852, null(9)=0, distinct(10)=69.2053852, null(10)=0, distinct(11)=33.3333333, null(11)=0, distinct(12)=69.2053852, null(12)=0, distinct(13)=69.2053852, null(13)=0, distinct(14)=69.2053852, null(14)=0, distinct(15)=69.2053852, null(15)=0, distinct(16)=69.2053852, null(16)=0]
  ├── key: (1,4)
  ├── fd: (1,4)-->(2,3,5-16)
  └── select
       ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
-      ├── stats: [rows=111.111111, distinct(1)=73.4303342, null(1)=0, distinct(4)=73.4303342, null(4)=0, distinct(11)=73.4303342, null(11)=0]
+      ├── stats: [rows=111.111111, distinct(1)=73.4303342, null(1)=0, distinct(4)=73.4303342, null(4)=0, distinct(11)=32.7552823, null(11)=0]
       ├── key: (1,4)
       ├── fd: (1,4)-->(11)
       ├── scan lineitem@l_sd
       │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
       │    ├── constraint: /11/1/4: [/'1995-09-01' - ]
-      │    ├── stats: [rows=333.333333, distinct(1)=98.265847, null(1)=0, distinct(4)=98.265847, null(4)=0, distinct(11)=98.265847, null(11)=0]
+      │    ├── stats: [rows=333.333333, distinct(1)=98.265847, null(1)=0, distinct(4)=98.265847, null(4)=0, distinct(11)=33.3333333, null(11)=0]
       │    ├── key: (1,4)
       │    └── fd: (1,4)-->(11)
       └── filters

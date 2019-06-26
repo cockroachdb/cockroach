@@ -516,10 +516,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 				numUnappliedConjuncts += sb.numConjunctsInConstraint(scan.Constraint, i)
 			}
 		} else {
-			numUnappliedConjuncts = sb.applyIndexConstraint(scan.Constraint, scan, relProps)
-			for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
-				cols.Add(scan.Constraint.Columns.Get(i).ID())
-			}
+			cols = sb.applyIndexConstraint(scan.Constraint, scan, relProps)
 		}
 
 		// Calculate row count and selectivity
@@ -2344,11 +2341,9 @@ func (sb *statisticsBuilder) applyFilter(
 		scalarProps := conjunct.ScalarProps(e.Memo())
 		constrainedCols.UnionWith(scalarProps.OuterCols)
 		if scalarProps.Constraints != nil {
-			n := sb.applyConstraintSet(scalarProps.Constraints, e, relProps)
-			if !scalarProps.TightConstraints && n < 1 {
+			sb.applyConstraintSet(scalarProps.Constraints, e, relProps)
+			if !scalarProps.TightConstraints {
 				numUnappliedConjuncts++
-			} else {
-				numUnappliedConjuncts += n
 			}
 		} else {
 			numUnappliedConjuncts++
@@ -2364,51 +2359,68 @@ func (sb *statisticsBuilder) applyFilter(
 
 func (sb *statisticsBuilder) applyIndexConstraint(
 	c *constraint.Constraint, e RelExpr, relProps *props.Relational,
-) (numUnappliedConjuncts float64) {
+) (constrainedCols opt.ColSet) {
 	// If unconstrained, then no constraint could be derived from the expression,
 	// so fall back to estimate.
 	// If a contradiction, then optimizations must not be enabled (say for
 	// testing), or else this would have been reduced.
 	if c.IsUnconstrained() || c.IsContradiction() {
-		return 0 /* numUnappliedConjuncts */
+		return
 	}
 
 	applied := sb.updateDistinctCountsFromConstraint(c, e, relProps)
-	for i, n := applied, c.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+	for i, n := 0, c.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+		col := c.Columns.Get(i).ID()
+		constrainedCols.Add(col)
+		if i < applied {
+			continue
+		}
+
 		// Unlike the constraints found in Select and Join filters, an index
 		// constraint may represent multiple conjuncts. Therefore, we need to
 		// calculate the number of unapplied conjuncts for each constrained column.
-		numUnappliedConjuncts += sb.numConjunctsInConstraint(c, i)
+		numConjuncts := sb.numConjunctsInConstraint(c, i)
+
+		// Set the distinct count for the current column of the constraint
+		// according to unknownDistinctCountRatio.
+		sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts)
 	}
 
-	return numUnappliedConjuncts
+	return constrainedCols
 }
 
 func (sb *statisticsBuilder) applyConstraintSet(
 	cs *constraint.Set, e RelExpr, relProps *props.Relational,
-) (numUnappliedConjuncts float64) {
+) {
 	// If unconstrained, then no constraint could be derived from the expression,
 	// so fall back to estimate.
 	// If a contradiction, then optimizations must not be enabled (say for
 	// testing), or else this would have been reduced.
 	if cs.IsUnconstrained() || cs == constraint.Contradiction {
-		return 0 /* numUnappliedConjuncts */
+		return
 	}
 
-	numUnappliedConjuncts = 0
 	for i := 0; i < cs.Length(); i++ {
-		applied := sb.updateDistinctCountsFromConstraint(cs.Constraint(i), e, relProps)
+		c := cs.Constraint(i)
+		col := c.Columns.Get(0).ID()
+
+		// Calculate distinct counts.
+		applied := sb.updateDistinctCountsFromConstraint(c, e, relProps)
 		if applied == 0 {
 			// If a constraint cannot be applied, it may represent an
 			// inequality like x < 1. As a result, distinctCounts does not fully
 			// represent the selectivity of the constraint set.
 			// We return an estimate of the number of unapplied conjuncts to the
 			// caller function to be used for selectivity calculation.
-			numUnappliedConjuncts += sb.numConjunctsInConstraint(cs.Constraint(i), 0 /* nth */)
+			numConjuncts := sb.numConjunctsInConstraint(c, 0 /* nth */)
+
+			// Set the distinct count for the first column of the constraint
+			// according to unknownDistinctCountRatio.
+			sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts)
 		}
 	}
 
-	return numUnappliedConjuncts
+	return
 }
 
 // updateNullCountsFromProps zeroes null counts for columns that cannot
@@ -2563,6 +2575,17 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 	}
 
 	return applied
+}
+
+// updateDistinctCountFromUnappliedConjuncts is used to update the distinct
+// count for a constrained column when the exact count cannot be determined.
+func (sb *statisticsBuilder) updateDistinctCountFromUnappliedConjuncts(
+	colID opt.ColumnID, e RelExpr, relProps *props.Relational, numConjuncts float64,
+) {
+	colSet := opt.MakeColSet(colID)
+	inputStat := sb.colStatFromInput(colSet, e)
+	distinctCount := inputStat.DistinctCount * math.Pow(unknownFilterSelectivity, numConjuncts)
+	sb.ensureColStat(colSet, distinctCount, e, relProps)
 }
 
 func (sb *statisticsBuilder) applyEquivalencies(
