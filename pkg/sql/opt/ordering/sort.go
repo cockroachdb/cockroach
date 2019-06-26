@@ -24,3 +24,13 @@ func sortBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	// rules are off) so we may need to trim.
 	return trimProvided(provided, required, &expr.Relational().FuncDeps)
 }
+
+func sortBuildChildReqOrdering(
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
+	sort := parent.(*memo.SortExpr)
+	if sort.InputOrdering.Any() {
+		return physical.OrderingChoice{}
+	}
+	return sort.InputOrdering
+}

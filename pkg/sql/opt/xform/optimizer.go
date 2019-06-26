@@ -556,21 +556,45 @@ func (o *Optimizer) enforceProps(
 	// operator can provide it.
 	inner.Presentation = nil
 
-	// Strip off one property that can be enforced. Other properties will be
-	// stripped by recursively optimizing the group with successively fewer
-	// properties. The properties are stripped off in a heuristic order, from
-	// least likely to be expensive to enforce to most likely.
-	var enforcer memo.RelExpr
-	if !inner.Ordering.Any() {
-		inner.Ordering = physical.OrderingChoice{}
-		enforcer = &memo.SortExpr{Input: member}
-	} else {
+	if inner.Ordering.Any() {
 		// No remaining properties, so no more enforcers.
 		if inner.Defined() {
 			panic(errors.AssertionFailedf("unhandled physical property: %v", inner))
 		}
 		return true
 	}
+
+	// We enforce the required props by applying a sort on the member.
+	// Furthermore, if the member can provide a prefix of the ordering
+	// we can enforce a segmented sort over it as well.
+	fullyOptimized = o.enforceSortProps(state, member, required) &&
+		o.enforceSegmentedSortProps(state, member, required)
+
+	// Enforcer expression is fully optimized if its input expression is fully
+	// optimized.
+	return fullyOptimized
+}
+
+// enforceSortProps applies a sort over the expression to provide the
+// required physical properties. See comment over enforceProps for why
+// this is necessary.
+func (o *Optimizer) enforceSortProps(
+	state *groupState, member memo.RelExpr, required *physical.Required,
+) (fullyOptimized bool) {
+	inner := *required
+
+	// Ignore the Presentation property, since any relational or enforcer
+	// operator can provide it.
+	inner.Presentation = nil
+
+	// Strip off one property that can be enforced. Other properties will be
+	// stripped by recursively optimizing the group with successively fewer
+	// properties. The properties are stripped off in a heuristic order, from
+	// least likely to be expensive to enforce to most likely.
+	inner.Ordering = physical.OrderingChoice{}
+
+	// Create the enforcer.
+	enforcer := &memo.SortExpr{Input: member}
 
 	// Recursively optimize the same group, but now with respect to the "inner"
 	// properties (which are a subset of the required properties).
@@ -582,8 +606,62 @@ func (o *Optimizer) enforceProps(
 	cost := innerState.cost + o.coster.ComputeCost(enforcer, required)
 	o.ratchetCost(state, enforcer, cost)
 
-	// Enforcer expression is fully optimized if its input expression is fully
-	// optimized.
+	return fullyOptimized
+}
+
+// enforceSegmentedSortProps applies a segmented sort over the expression to
+// provide the required physical properties when the member group can provide
+// an ordering on some non-empty set of prefix columns of the sort.
+// See comment over enforceProps for why this is necessary.
+func (o *Optimizer) enforceSegmentedSortProps(
+	state *groupState, member memo.RelExpr, required *physical.Required,
+) (fullyOptimized bool) {
+	inner := *required
+
+	// Ignore the Presentation property, since any relational or enforcer
+	// operator can provide it.
+	inner.Presentation = nil
+
+	// Strip off one property that can be enforced. Other properties will be
+	// stripped by recursively optimizing the group with successively fewer
+	// properties. The properties are stripped off in a heuristic order, from
+	// least likely to be expensive to enforce to most likely.
+	inner.Ordering = physical.OrderingChoice{}
+
+	// Find the interesting orderings of the member state.
+	interestingOrderings := DeriveInterestingOrderings(member).Copy()
+
+	// Find the longest interesting ordering that is a prefix of the required ordering.
+	var longestCommonPrefix opt.Ordering
+	requiredOrdering := required.Ordering.ToOrdering()
+	for _, ordering := range interestingOrderings {
+		common := ordering.CommonPrefix(requiredOrdering)
+		if len(common) > len(longestCommonPrefix) {
+			longestCommonPrefix = common
+		}
+	}
+
+	// If the member can provide the entire ordering, it wouldn't require a sort.
+	// If the member can provide no prefix ordering, we don't enforce a segmented sorter.
+	if len(longestCommonPrefix) == 0 || len(longestCommonPrefix) == len(requiredOrdering) {
+		return true
+	}
+	// Set the ordering of the inner state.
+	inner.Ordering.FromOrdering(longestCommonPrefix)
+
+	// Recursively optimize the same group, but now with respect to the "inner"
+	// properties (which are a subset of the required properties).
+	innerState := o.optimizeGroup(member, o.mem.InternPhysicalProps(&inner))
+	fullyOptimized = innerState.fullyOptimized
+
+	// Create the enforcer.
+	enforcer := &memo.SortExpr{Input: innerState.best, InputOrdering: inner.Ordering}
+
+	// Check whether this is the new lowest cost expression with the enforcer
+	// added.
+	cost := innerState.cost + o.coster.ComputeCost(enforcer, required)
+	o.ratchetCost(state, enforcer, cost)
+
 	return fullyOptimized
 }
 

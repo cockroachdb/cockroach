@@ -240,6 +240,13 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 }
 
 func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Required) memo.Cost {
+	if sort.InputOrdering.Any() {
+		return c.computeSortAllCost(sort, required)
+	}
+	return c.computeSegmentedSortCost(sort, required)
+}
+
+func (c *coster) computeSortAllCost(sort *memo.SortExpr, required *physical.Required) memo.Cost {
 	// We calculate a per-row cost and multiply by (1 + log2(rowCount)).
 	// The constant term is necessary for cases where the estimated row count is
 	// very small.
@@ -247,12 +254,43 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 	// certain amount of memory is used, distsql switches to a disk-based sort
 	// with a temp RocksDB store.
 	rowCount := sort.Relational().Stats.RowCount
-	perRowCost := c.rowSortCost(len(required.Ordering.Columns))
+	perRowCost := c.rowSortCost(len(required.Ordering.Columns), 0)
 	cost := memo.Cost(rowCount) * perRowCost
 	if rowCount > 1 {
 		cost *= (1 + memo.Cost(math.Log2(rowCount)))
 	}
 
+	return cost
+}
+
+func (c *coster) computeSegmentedSortCost(
+	sort *memo.SortExpr, required *physical.Required,
+) memo.Cost {
+	// We calculate the cost of a segmented sort. We assume each segment
+	// is of the same size of (rowCount / numOrderedSegments). We also calculate the
+	// per-row cost. The cost of the sort is:
+	//
+	// perRowCost * (rowCount + rowCount * log2(segmentSize))
+	//
+	// Or equivalently:
+	//
+	// perRowCost * (rowCount + ((segmentSize * log2(segmentSize)) * numOrderedSegments))
+	stats := sort.Relational().Stats
+	rowCount := stats.RowCount
+	perRowCost := c.rowSortCost(len(required.Ordering.Columns), len(sort.InputOrdering.Columns))
+	orderedCols := sort.InputOrdering.ColSet()
+	orderedStats, ok := stats.ColStats.Lookup(orderedCols)
+	if !ok {
+		orderedStats = memo.RequestColStat(c.mem.EvalCtx(), sort, orderedCols)
+	}
+
+	numOrderedSegments := orderedStats.DistinctCount
+	segmentSize := rowCount / numOrderedSegments
+	var cost memo.Cost
+	if segmentSize > 1 {
+		cost = memo.Cost(segmentSize) * (memo.Cost(math.Log2(segmentSize)) * memo.Cost(numOrderedSegments))
+	}
+	cost = perRowCost * (memo.Cost(rowCount) + cost)
 	return cost
 }
 
@@ -504,8 +542,9 @@ func (c *coster) computeProjectSetCost(projectSet *memo.ProjectSetExpr) memo.Cos
 }
 
 // rowSortCost is the CPU cost to sort one row, which depends on the number of
-// columns in the sort key.
-func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
+// columns in the sort key and how many columns in the prefix the rows are
+// pre-sorted by.
+func (c *coster) rowSortCost(numKeyCols int, orderedPrefixColumns int) memo.Cost {
 	// Sorting involves comparisons on the key columns, but the cost isn't
 	// directly proportional: we only compare the second column if the rows are
 	// equal on the first column; and so on. We also account for a fixed
@@ -514,11 +553,26 @@ func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
 	//
 	//   cpuCostFactor * [ 1 + Sum eqProb^(i-1) with i=1 to numKeyCols ]
 	//
-	const eqProb = 0.1
+	const eqProbOnSuffix = 0.1
+	const eqProbOnPrefix = 1.0
+
+	// We are guaranteed that the rows will be equal on the orderedPrefixColumms
+	// when we're doing a segmented/chunk sort.
+	eqProb := eqProbOnSuffix
+	if orderedPrefixColumns > 0 {
+		eqProb = eqProbOnPrefix
+	}
+
 	cost := cpuCostFactor
 	for i, c := 0, cpuCostFactor; i < numKeyCols; i, c = i+1, c*eqProb {
 		// c is cpuCostFactor * eqProb^i.
 		cost += c
+
+		// The probability of rows having an equal value for a column for columns
+		// that aren't part of the common ordered prefix is a constant.
+		if i == (orderedPrefixColumns - 1) {
+			eqProb = eqProbOnSuffix
+		}
 	}
 
 	// There is a fixed "non-comparison" cost and a comparison cost proportional

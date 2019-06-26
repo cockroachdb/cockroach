@@ -338,3 +338,8 @@ func (m *Memo) NextID() opt.ScalarID {
 	m.curID++
 	return m.curID
 }
+
+// EvalCtx returns the evalCtx of the logPropsBuilder.
+func (m *Memo) EvalCtx() *tree.EvalContext {
+	return m.logPropsBuilder.evalCtx
+}

@@ -2903,10 +2903,9 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 	return numConjuncts
 }
 
-// RequestColStat causes a column statistic to be calculated on the relational
-// expression. This is used for testing.
-func RequestColStat(evalCtx *tree.EvalContext, e RelExpr, cols opt.ColSet) {
+// RequestColStat returns the column statistic calculated on the relational expression.
+func RequestColStat(evalCtx *tree.EvalContext, e RelExpr, cols opt.ColSet) *props.ColumnStatistic {
 	var sb statisticsBuilder
 	sb.init(evalCtx, e.Memo().Metadata())
-	sb.colStat(cols, e)
+	return sb.colStat(cols, e)
 }

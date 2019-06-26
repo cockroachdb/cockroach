@@ -33,3 +33,132 @@ values
  ├── cost: 0.01
  ├── key: ()
  └── fd: ()-->(2)
+
+# Testing costing for segmented sort.
+exec-ddl
+CREATE TABLE abc (
+  a INT,
+  b INT,
+  c INT,
+  INDEX cb (c, b) STORING (a),
+  INDEX ab (a, b) STORING (c)
+)
+----
+
+opt
+SELECT * FROM abc ORDER BY b, c, a
+----
+sort
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── stats: [rows=1000]
+ ├── cost: 1301.40805
+ ├── ordering: +2,+3,+1
+ └── scan abc
+      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── stats: [rows=1000]
+      └── cost: 1070.02
+
+opt
+SELECT * FROM abc ORDER BY a, b, c
+----
+sort
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
+ ├── cost: 1101.03
+ ├── ordering: +1,+2,+3
+ └── scan abc@ab
+      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=19.9]
+      ├── cost: 1070.02
+      └── ordering: +1,+2
+
+opt
+SELECT * FROM abc ORDER BY c, b, a
+----
+sort
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=19.9]
+ ├── cost: 1101.03
+ ├── ordering: +3,+2,+1
+ └── scan abc@cb
+      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=19.9]
+      ├── cost: 1070.02
+      └── ordering: +3,+2
+
+# Testing segmented sort cost with only one common prefix column.
+opt
+SELECT * FROM abc ORDER BY c, a, b
+----
+sort
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
+ ├── cost: 1161.22268
+ ├── ordering: +3,+1,+2
+ └── scan abc@cb
+      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
+      ├── cost: 1070.02
+      └── ordering: +3
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10
+  }
+]'
+----
+
+# Per-row cost is higher with segmented sort and it may not always be worth it.
+opt
+SELECT * FROM abc ORDER BY a, b, c
+----
+sort
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0]
+ ├── cost: 13714.7373
+ ├── ordering: +1,+2,+3
+ └── scan abc
+      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0]
+      └── cost: 10700.02
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 100
+  }
+]'
+----
+
+opt
+SELECT * FROM abc ORDER BY a, b, c
+----
+sort
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ ├── stats: [rows=10000, distinct(1,2)=1000, null(1,2)=0]
+ ├── cost: 12039.8277
+ ├── ordering: +1,+2,+3
+ └── scan abc@ab
+      ├── columns: a:1(int) b:2(int) c:3(int)
+      ├── stats: [rows=10000, distinct(1,2)=1000, null(1,2)=0]
+      ├── cost: 10700.02
+      └── ordering: +1,+2

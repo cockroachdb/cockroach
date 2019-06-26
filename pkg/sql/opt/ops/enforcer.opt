@@ -17,4 +17,8 @@
 # PhysicalProps struct.
 [Enforcer]
 define Sort {
+    # InputOrdering specifies the ordering that the sort requires
+    # from its input. It allows the optimizer and DistSQL to plan
+    # the sort using the segmented/chunk sort strategy.
+    InputOrdering OrderingChoice
 }
