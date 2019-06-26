@@ -144,7 +144,7 @@ func TestUnsplitAt(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if (rng.StickyBit != hlc.Timestamp{}) {
+			if rng.StickyBit != nil && (*rng.StickyBit != hlc.Timestamp{}) {
 				t.Fatalf("%s: expected range sticky bit to be hlc.MinTimestamp, got %s", tt.in, pretty)
 			}
 		}
