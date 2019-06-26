@@ -149,6 +149,11 @@ type sortedDistinct_TYPEOp struct {
 	// outputs the first row that it sees.
 	foundFirstRow bool
 
+	// foundFirstNonNullRow is set to true at runtime when we encounter the first
+	// non-null row. This row will also always be outputted. (If there are no
+	// nulls then this is the same row as above.)
+	foundFirstNonNullRow bool
+
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
 	lastVal _GOTYPE
@@ -162,6 +167,7 @@ func (p *sortedDistinct_TYPEOp) Init() {
 
 func (p *sortedDistinct_TYPEOp) reset() {
 	p.foundFirstRow = false
+	p.foundFirstNonNullRow = false
 	if resetter, ok := p.input.(resetter); ok {
 		resetter.reset()
 	}
@@ -173,29 +179,63 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 	outputCol := p.outputCol
-	col := batch.ColVec(p.sortedDistinctCol)._TemplateType()
+	vec := batch.ColVec(p.sortedDistinctCol)
+	var nulls *coldata.Nulls
+	if vec.HasNulls() {
+		nulls = vec.Nulls()
+	}
+	col := vec._TemplateType()
 
 	// We always output the first row.
-	lastVal := p.lastVal
 	sel := batch.Selection()
-	startIdx := uint16(0)
 	if !p.foundFirstRow {
 		if sel != nil {
-			lastVal = col[sel[0]]
 			outputCol[sel[0]] = true
 		} else {
-			lastVal = col[0]
 			outputCol[0] = true
 		}
-		startIdx = 1
 		p.foundFirstRow = true
-		if batch.Length() == 1 {
-			p.lastVal = lastVal
-			return batch
-		}
 	}
 
 	n := batch.Length()
+	startIdx := uint16(0)
+	lastVal := p.lastVal
+	if !p.foundFirstNonNullRow {
+		// Nulls sort first, so advance startIdx until we find the first non-null
+		// row. That row will always be outputted, and then we don't need to do any
+		// more null checks since all values can be assumed non-null.
+		if sel != nil {
+			for _, i := range sel[:n] {
+				if nulls == nil || !nulls.NullAt(i) {
+					p.foundFirstNonNullRow = true
+					lastVal = col[i]
+					outputCol[i] = true
+					startIdx++
+					break
+				}
+				startIdx++
+			}
+		} else {
+			for startIdx < n {
+				if nulls == nil || !nulls.NullAt(startIdx) {
+					p.foundFirstNonNullRow = true
+					lastVal = col[startIdx]
+					outputCol[startIdx] = true
+					startIdx++
+					break
+				}
+				startIdx++
+			}
+		}
+	}
+
+	// We may have reached the end of the batch while looking for the first
+	// non-null row.
+	if startIdx == n {
+		p.lastVal = lastVal
+		return batch
+	}
+
 	if sel != nil {
 		// Bounds check elimination.
 		sel = sel[startIdx:n]

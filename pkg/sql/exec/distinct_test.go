@@ -32,6 +32,9 @@ func TestSortedDistinct(t *testing.T) {
 			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
 			numCols:      4,
 			tuples: tuples{
+				{nil, nil, nil, nil},
+				{nil, nil, nil, nil},
+				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
 				{1.0, 2, "30", 5},
 				{2.0, 2, "30", 4},
@@ -40,6 +43,8 @@ func TestSortedDistinct(t *testing.T) {
 				{2.0, 3, "40", 4},
 			},
 			expected: tuples{
+				{nil, nil, nil, nil},
+				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
 				{2.0, 2, "30", 4},
 				{2.0, 3, "30", 4},
@@ -51,6 +56,9 @@ func TestSortedDistinct(t *testing.T) {
 			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
 			numCols:      4,
 			tuples: tuples{
+				{nil, nil, nil, nil},
+				{nil, nil, nil, nil},
+				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
 				{1.0, 2, "30", 5},
 				{2.0, 2, "30", 4},
@@ -59,6 +67,8 @@ func TestSortedDistinct(t *testing.T) {
 				{2.0, 3, "40", 4},
 			},
 			expected: tuples{
+				{nil, nil, nil, nil},
+				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
 				{2.0, 2, "30", 4},
 				{2.0, 3, "30", 4},
