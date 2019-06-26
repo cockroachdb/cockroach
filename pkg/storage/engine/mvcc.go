@@ -1844,6 +1844,68 @@ func MVCCMerge(
 	return err
 }
 
+// MVCCClearTimeRange clears all MVCC versions within the span [key, endKey)
+// which have timestamps in the span (startTime, endTime]. This can have the
+// apparent effect of "reverting" the range to startTime if all of the older
+// revisions of cleared keys are still available (i.e. have not been GC'ed).
+//
+// This function does not handle the stats computations to determine the correct
+// incremental deltas of clearing these keys (and correctly determining if it
+// does or not not change the live and gc keys) so the caller is responsible for
+// recomputing stats over the resulting span if needed.
+func MVCCClearTimeRange(
+	ctx context.Context, batch ReadWriter, key, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
+) error {
+	// TODO(dt): time-bound iter could potentially be a big win here -- the
+	// expected use-case for this is to run over an entire table's span with a
+	// very recent timestamp, rolling back just the writes of some failed IMPORT
+	// and that could very likely only have hit some small subset of the table's
+	// keyspace. However to get the stats right we need a non-time-bound iter
+	// e.g. we need to know if there is an older key under the one we are
+	// clearing to know if we're changing the number of live keys. An approach
+	// that seems promising might be to use time-bound iter to find candidates
+	// for deletion, allowing us to quickly skip over swaths of uninteresting
+	// keys, but then use a normal iteration to actually do the delete including
+	// updating the live key stats correctly.
+	// TODO(dt): use our own iterator since we don't need to allocate safe keys
+	// for every key we're skipping over.
+	if err := batch.Iterate(
+		MVCCKey{Key: key}, MVCCKey{Key: endKey},
+		func(kv MVCCKeyValue) (bool, error) {
+			var meta enginepb.MVCCMetadata
+			if !kv.Key.IsValue() {
+				if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+					return false, err
+				}
+				if meta.Txn != nil && startTime.Less(hlc.Timestamp(meta.Timestamp)) {
+					err := &roachpb.WriteIntentError{
+						Intents: []roachpb.Intent{{Span: roachpb.Span{Key: append([]byte{}, kv.Key.Key...)},
+							Status: roachpb.PENDING, Txn: *meta.Txn,
+						}}}
+					return false, err
+				}
+			}
+			// TODO(dt): buffer keys and flush large runs a single ClearRange. In many
+			// workloads, it is likely that large blocks of keys are written at
+			// similar times, e.g. bulk ingestions may ingest entire ranges of new
+			// data all at the same time. In this case a single ClearRange could take
+			// the place of hundreds of thousands of individual Clears. We should
+			// buffer up to some number of keys to clear before flushing individual
+			// Clears so that if we exceed the run threshold we instead just scan
+			// until we end the run and flush the ClearRange instead.
+			if startTime.Less(kv.Key.Timestamp) {
+				if err := batch.Clear(kv.Key); err != nil {
+					return false, err
+				}
+			}
+			return false, nil
+		},
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
 // MVCCDeleteRange deletes the range of key/value pairs specified by start and
 // end keys. It returns the range of keys deleted when returnedKeys is set,
 // the next span to resume from, and the number of keys deleted.

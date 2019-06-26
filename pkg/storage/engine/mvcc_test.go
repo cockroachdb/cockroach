@@ -2365,6 +2365,106 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 	}
 }
 
+func TestMVCCClearTimeRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	ts0 := hlc.Timestamp{WallTime: 0}
+	ts0Content := []roachpb.KeyValue{}
+
+	ts1 := hlc.Timestamp{WallTime: 10}
+	require.NoError(t, MVCCPut(ctx, engine, nil, testKey2, ts1, value1, nil))
+	v1 := value1
+	v1.Timestamp = ts1
+	ts1Content := []roachpb.KeyValue{{Key: testKey2, Value: v1}}
+
+	ts2 := hlc.Timestamp{WallTime: 20}
+	require.NoError(t, MVCCPut(ctx, engine, nil, testKey2, ts2, value2, nil))
+	require.NoError(t, MVCCPut(ctx, engine, nil, testKey5, ts2, value2, nil))
+	v2 := value2
+	v2.Timestamp = ts2
+	ts2Content := []roachpb.KeyValue{{Key: testKey2, Value: v2}, {Key: testKey5, Value: v2}}
+
+	ts3 := hlc.Timestamp{WallTime: 30}
+	require.NoError(t, MVCCPut(ctx, engine, nil, testKey1, ts3, value3, nil))
+	v3 := value3
+	v3.Timestamp = ts3
+	ts3Content := []roachpb.KeyValue{
+		{Key: testKey1, Value: v3}, {Key: testKey2, Value: v2}, {Key: testKey5, Value: v2},
+	}
+
+	ts4 := hlc.Timestamp{WallTime: 40}
+	require.NoError(t, MVCCPut(ctx, engine, nil, testKey5, ts4, value4, nil))
+	require.NoError(t, MVCCPut(ctx, engine, nil, testKey2, ts4, value4, nil))
+	v4 := value4
+	v4.Timestamp = ts4
+	ts4Content := []roachpb.KeyValue{
+		{Key: testKey1, Value: v3}, {Key: testKey2, Value: v4}, {Key: testKey5, Value: v4},
+	}
+
+	ts5 := hlc.Timestamp{WallTime: 50}
+
+	assertKVs := func(t *testing.T, e Reader, at hlc.Timestamp, expected []roachpb.KeyValue) {
+		t.Helper()
+		actual, _, _, err := MVCCScan(ctx, e, keyMin, keyMax, 100, at, MVCCScanOptions{})
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
+	}
+
+	t.Run("clear > ts0", func(t *testing.T) {
+		e := engine.NewBatch()
+		defer e.Close()
+		require.NoError(t, MVCCClearTimeRange(ctx, e, keyMin, keyMax, ts0, ts5))
+		assertKVs(t, e, ts0, ts0Content)
+		assertKVs(t, e, ts1, ts0Content)
+		assertKVs(t, e, ts5, ts0Content)
+	})
+
+	t.Run("clear > ts1 ", func(t *testing.T) {
+		e := engine.NewBatch()
+		defer e.Close()
+		require.NoError(t, MVCCClearTimeRange(ctx, e, keyMin, keyMax, ts1, ts5))
+		assertKVs(t, e, ts1, ts1Content)
+		assertKVs(t, e, ts2, ts1Content)
+		assertKVs(t, e, ts5, ts1Content)
+	})
+
+	t.Run("clear > ts2", func(t *testing.T) {
+		e := engine.NewBatch()
+		defer e.Close()
+		require.NoError(t, MVCCClearTimeRange(ctx, e, keyMin, keyMax, ts2, ts5))
+		assertKVs(t, e, ts2, ts2Content)
+		assertKVs(t, e, ts5, ts2Content)
+	})
+
+	t.Run("clear > ts3", func(t *testing.T) {
+		e := engine.NewBatch()
+		defer e.Close()
+		require.NoError(t, MVCCClearTimeRange(ctx, e, keyMin, keyMax, ts3, ts5))
+		assertKVs(t, e, ts3, ts3Content)
+		assertKVs(t, e, ts5, ts3Content)
+	})
+
+	t.Run("clear > ts4 (nothing) ", func(t *testing.T) {
+		e := engine.NewBatch()
+		defer e.Close()
+		require.NoError(t, MVCCClearTimeRange(ctx, e, keyMin, keyMax, ts4, ts5))
+		assertKVs(t, e, ts4, ts4Content)
+		assertKVs(t, e, ts5, ts4Content)
+	})
+
+	t.Run("clear > ts5 (nothing)", func(t *testing.T) {
+		e := engine.NewBatch()
+		defer e.Close()
+		require.NoError(t, MVCCClearTimeRange(ctx, e, keyMin, keyMax, ts5, ts5))
+		assertKVs(t, e, ts4, ts4Content)
+		assertKVs(t, e, ts5, ts4Content)
+	})
+}
+
 func TestMVCCConditionalPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
