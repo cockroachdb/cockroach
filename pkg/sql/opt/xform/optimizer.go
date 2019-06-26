@@ -560,24 +560,67 @@ func (o *Optimizer) enforceProps(
 	// least likely to be expensive to enforce to most likely.
 	var enforcer memo.RelExpr
 	if !inner.Ordering.Any() {
+		// Try Sort enforcer that requires no ordering from its input.
 		inner.Ordering = physical.OrderingChoice{}
+		interned := o.mem.InternPhysicalProps(&inner)
 		enforcer = &memo.SortExpr{Input: member}
-	} else {
-		// No remaining properties, so no more enforcers.
-		if inner.Defined() {
-			panic(errors.AssertionFailedf("unhandled physical property: %v", inner))
+		fullyOptimized = o.optimizeEnforcer(state, enforcer, required, member, interned)
+
+		// Try Sort enforcer that requires a partial ordering from its input.
+		requiredOrdering := required.Ordering.ToOrdering()
+		longestCommonPrefix := deriveLongestCommonPrefix(member, requiredOrdering)
+		if len(longestCommonPrefix) > 0 && len(longestCommonPrefix) < len(requiredOrdering) {
+			inner.Ordering.FromOrdering(longestCommonPrefix)
+			interned = o.mem.InternPhysicalProps(&inner)
+			enforcer := &memo.SortExpr{Input: state.best, InputOrdering: inner.Ordering}
+			if o.optimizeEnforcer(state, enforcer, required, member, interned) {
+				fullyOptimized = true
+			}
 		}
-		return true
+
+		return fullyOptimized
 	}
 
-	// Recursively optimize the same group, but now with respect to the "inner"
-	// properties (which are a subset of the required properties).
-	innerState := o.optimizeGroup(member, o.mem.InternPhysicalProps(&inner))
+	// No remaining properties, so no more enforcers.
+	if inner.Defined() {
+		panic(errors.AssertionFailedf("unhandled physical property: %v", inner))
+	}
+	return true
+}
+
+// deriveLongestCommonPrefix finds the largest ordering the memo group can provide
+// that is a prefix of the required ordering.
+func deriveLongestCommonPrefix(member memo.RelExpr, requiredOrdering opt.Ordering) opt.Ordering {
+	// Find the interesting orderings of the member state.
+	interestingOrderings := DeriveInterestingOrderings(member).Copy()
+
+	// Find the longest interesting ordering that is a prefix of the required ordering.
+	var longestCommonPrefix opt.Ordering
+	for _, ordering := range interestingOrderings {
+		common := ordering.CommonPrefix(requiredOrdering)
+		if len(common) > len(longestCommonPrefix) {
+			longestCommonPrefix = common
+		}
+	}
+	return longestCommonPrefix
+}
+
+// optimizeEnforcer optimizes and costs the enforcer.
+func (o *Optimizer) optimizeEnforcer(
+	state *groupState,
+	enforcer memo.RelExpr,
+	enforcerProps *physical.Required,
+	member memo.RelExpr,
+	memberProps *physical.Required,
+) (fullyOptimized bool) {
+	// Recursively optimize the member group with respect to a subset of the
+	// enforcer properties.
+	innerState := o.optimizeGroup(member, memberProps)
 	fullyOptimized = innerState.fullyOptimized
 
 	// Check whether this is the new lowest cost expression with the enforcer
 	// added.
-	cost := innerState.cost + o.coster.ComputeCost(enforcer, required)
+	cost := innerState.cost + o.coster.ComputeCost(enforcer, enforcerProps)
 	o.ratchetCost(state, enforcer, cost)
 
 	// Enforcer expression is fully optimized if its input expression is fully
