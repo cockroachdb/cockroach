@@ -671,9 +671,6 @@ func doDistributedCSVTransform(
 		walltime,
 		sstSize,
 		oversample,
-		func(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (sql.KeyRewriter, error) {
-			return storageccl.MakeKeyRewriter(descs)
-		},
 	); err != nil {
 
 		// Check if this was a context canceled error and restart if it was.

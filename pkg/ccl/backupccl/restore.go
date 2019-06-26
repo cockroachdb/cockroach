@@ -1001,7 +1001,7 @@ func restoreJobDescription(
 // same interleave parent row) we'll generate some no-op splits and route the
 // work to the same range, but the actual imported data is unaffected.
 func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.Key, error) {
-	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
+	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...), true /* isFromSpan */)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
