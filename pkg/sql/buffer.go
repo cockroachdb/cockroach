@@ -29,6 +29,9 @@ type bufferNode struct {
 	// processors, but this node is local.
 	bufferedRows       *rowcontainer.RowContainer
 	passThruNextRowIdx int
+
+	// label is a string used to describe the node in an EXPLAIN plan.
+	label string
 }
 
 func (n *bufferNode) startExec(params runParams) error {
@@ -64,7 +67,11 @@ func (n *bufferNode) Values() tree.Datums {
 
 func (n *bufferNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
-	n.bufferedRows.Close(ctx)
+	// It's valid to be Closed without startExec having been called, in which
+	// case n.bufferedRows will be nil.
+	if n.bufferedRows != nil {
+		n.bufferedRows.Close(ctx)
+	}
 }
 
 // scanBufferNode behaves like an iterator into the bufferNode it is
@@ -74,6 +81,9 @@ type scanBufferNode struct {
 	buffer *bufferNode
 
 	nextRowIdx int
+
+	// label is a string used to describe the node in an EXPLAIN plan.
+	label string
 }
 
 func (n *scanBufferNode) startExec(runParams) error {
