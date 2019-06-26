@@ -113,6 +113,11 @@ func (s *Statistics) String() string {
 		fmt.Fprintf(&buf, ", null%s=%.9g", col.Cols.String(), col.NullCount)
 	}
 	buf.WriteString("]")
+	for _, col := range colStats {
+		if col.Histogram != nil {
+			fmt.Fprintf(&buf, "\nhistogram%s=\n%s", col.Cols.String(), col.Histogram.String())
+		}
+	}
 
 	return buf.String()
 }
@@ -136,14 +141,23 @@ type ColumnStatistic struct {
 	// count tracks all instances of at least one null value in the
 	// column set.
 	NullCount float64
+
+	// Histogram is only used when the size of Cols is one. It contains
+	// the approximate distribution of values for that column, represented
+	// by a slice of histogram buckets.
+	Histogram *Histogram
 }
 
-// ApplySelectivity updates the distinct count and null count according to a
-// given selectivity.
+// ApplySelectivity updates the distinct count, null count, and histogram
+// according to a given selectivity.
 func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
 	// Since the null count is a simple count of all null rows, we can
 	// just multiply the selectivity with it.
 	c.NullCount *= selectivity
+
+	if c.Histogram != nil {
+		c.Histogram.ApplySelectivity(selectivity)
+	}
 
 	if selectivity == 1 || c.DistinctCount == 0 {
 		return
