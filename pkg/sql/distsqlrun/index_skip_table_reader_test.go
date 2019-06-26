@@ -128,12 +128,18 @@ func TestIndexSkipTableReader(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(xFnt1, yFnt1))
 
+	xFnt6 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row/10) + 1)
+	}
+	yFnt6 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row%10) + 1)
+	}
 	// interleave a table now
 	sqlutils.CreateTableInterleaved(t, sqlDB, "t6",
 		"x INT, y INT, PRIMARY KEY(x, y)",
 		"t5 (x, y)",
 		99,
-		sqlutils.ToRowFn(xFnt1, yFnt1))
+		sqlutils.ToRowFn(xFnt6, yFnt6))
 
 	td1 := sqlbase.GetTableDescriptor(kvDB, "test", "t1")
 	td2 := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
@@ -195,7 +201,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0},
 			},
-			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
+			expected: "[[1] [2] [3] [4] [5] [6] [7] [8] [9] [10]]",
 		},
 		{
 			desc:      "Distinct scan with multiple spans",
