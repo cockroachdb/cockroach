@@ -47,6 +47,20 @@ type Builder struct {
 	// each relational subexpression when evalCtx.SessionData.SaveTablesPrefix is
 	// non-empty.
 	nameGen *memo.ExprNameGenerator
+
+	// withExprs is the set of WITH expressions which may be referenced elsewhere
+	// in the query.
+	// TODO(justin): set this up so that we can look them up by index lookups
+	// rather than scans.
+	withExprs []builtWithExpr
+}
+
+// builtWithExpr is metadata regarding a WITH expression which has already been
+// added to the set of subqueries for the query.
+type builtWithExpr struct {
+	id         opt.WithID
+	colmap     opt.ColMap
+	bufferNode exec.Node
 }
 
 // New constructs an instance of the execution node builder using the

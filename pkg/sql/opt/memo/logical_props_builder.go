@@ -715,6 +715,39 @@ func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel 
 	}
 }
 
+func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, with, &rel.Shared)
+
+	// If Value had side effects, those side effects are not propagated to the
+	// actual With expression.
+	rel.CanHaveSideEffects = false
+
+	// The input can still have side effects, though.
+	b.buildProps(with.Input, rel)
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.statsFromChild(with, 1)
+	}
+}
+
+func (b *logicalPropsBuilder) buildWithRefProps(ref *WithRefExpr, rel *props.Relational) {
+	e := b.mem.GetWithExpr(ref.ID)
+
+	// WithRef inherits most of the logical properties of the expression it
+	// references.
+	b.buildProps(e, rel)
+
+	// The exception is that any side effects are lifted out of this into the
+	// pre-execution.
+	rel.CanHaveSideEffects = false
+
+	rel.OutputCols = ref.OutCols.ToSet()
+
+	// Statistics are built by the call above to buildProps.
+}
+
 func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props.Relational) {
 	b.buildBasicProps(explain, explain.ColList, rel)
 }

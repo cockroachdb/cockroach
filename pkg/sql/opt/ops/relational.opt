@@ -823,6 +823,36 @@ define WindowPrivate {
     Ordering OrderingChoice
 }
 
+# With executes Value, making its results available to Input. Within Input,
+# Value may be referenced by a WithRef expression containing the ID of this
+# With.
+[Relational]
+define With {
+    Value RelExpr
+    Input RelExpr
+
+    ID WithID
+}
+
+[Private]
+define WithRefPrivate {
+    ID      WithID
+
+    # WithRef cannot reuse the column IDs used in the original With expression,
+    # since multiple WithRefs referencing the same With can occur in the same
+    # tree, so we maintain a mapping from the columns returned from the
+    # referenced expression to the referencing expression.
+    InCols  ColList
+    OutCols ColList
+}
+
+# WithRefPrivate returns the results present in the With expression referenced
+# by ID.
+[Relational]
+define WithRef {
+    _ WithRefPrivate
+}
+
 # FakeRel is a mock relational operator used for testing; its logical properties
 # are pre-determined and stored in the private. It can be used as the child of
 # an operator for which we are calculating properties or statistics.

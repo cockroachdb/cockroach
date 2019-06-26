@@ -345,6 +345,26 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ExplainOp, opt.ShowTraceForSessionOp, opt.OpaqueRelOp:
 		return sb.colStatUnknown(colSet, e.Relational())
 
+	case opt.WithOp:
+		return sb.colStat(colSet, e.Child(1).(RelExpr))
+
+	case opt.WithRefOp:
+		wr := e.(*WithRefExpr)
+
+		// We need to pass on the colStat request to the referenced expression, but
+		// we need to translate the columns to the ones returned by the original
+		// expression, rather than the reference.
+		var cols opt.ColSet
+		for i := range wr.OutCols {
+			if colSet.Contains(wr.OutCols[i]) {
+				cols.Add(wr.InCols[i])
+			}
+		}
+
+		cs := *sb.colStat(cols, e.Memo().GetWithExpr(e.(*WithRefExpr).ID))
+		cs.Cols = colSet
+		return &cs
+
 	case opt.FakeRelOp:
 		panic(errors.AssertionFailedf("FakeRelOp does not contain col stat for %v", colSet))
 	}

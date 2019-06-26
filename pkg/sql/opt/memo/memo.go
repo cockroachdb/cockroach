@@ -141,6 +141,10 @@ type Memo struct {
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
 
+	// withExprs is the set of WITH expressions that have been constructed thus
+	// far.
+	withExprs []RelExpr
+
 	// WARNING: if you add more members, add initialization code in Init.
 }
 
@@ -157,6 +161,7 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.rootExpr = nil
 	m.rootProps = nil
 	m.memEstimate = 0
+	m.withExprs = nil
 
 	m.dataConversion = evalCtx.SessionData.DataConversion
 	m.reorderJoinsLimit = evalCtx.SessionData.ReorderJoinsLimit
@@ -338,4 +343,16 @@ func (m *Memo) IsOptimized() bool {
 func (m *Memo) NextID() opt.ScalarID {
 	m.curID++
 	return m.curID
+}
+
+// AddWithExpr adds a new expression to the set of referencable With
+// expressions, returning its associated ID that can be used to retrieve it.
+func (m *Memo) AddWithExpr(e RelExpr) opt.WithID {
+	m.withExprs = append(m.withExprs, e)
+	return opt.WithID(len(m.withExprs))
+}
+
+// GetWithExpr returns the expression associated with the given WithID.
+func (m *Memo) GetWithExpr(id opt.WithID) RelExpr {
+	return m.withExprs[id-1]
 }

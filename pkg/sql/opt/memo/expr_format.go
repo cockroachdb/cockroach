@@ -191,6 +191,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
+	case *WithExpr:
+		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), e.(*WithExpr).ID)
+
+	case *WithRefExpr:
+		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), e.(*WithRefExpr).ID)
+
 	default:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 	}

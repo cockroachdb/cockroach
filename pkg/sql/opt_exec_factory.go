@@ -777,6 +777,18 @@ func (ef *execFactory) ConstructMax1Row(input exec.Node) (exec.Node, error) {
 	}, nil
 }
 
+// ConstructBuffer is part of the exec.Factory interface.
+func (ef *execFactory) ConstructBuffer(input exec.Node) (exec.Node, error) {
+	return &bufferNode{
+		plan: input.(planNode),
+	}, nil
+}
+
+// ConstructWithRef is part of the exec.Factory interface.
+func (ef *execFactory) ConstructWithRef(ref exec.Node) (exec.Node, error) {
+	return &scanBufferNode{buffer: ref.(*bufferNode)}, nil
+}
+
 // ConstructProjectSet is part of the exec.Factory interface.
 func (ef *execFactory) ConstructProjectSet(
 	n exec.Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,

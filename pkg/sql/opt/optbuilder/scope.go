@@ -97,11 +97,7 @@ type cteSource struct {
 	name tree.AliasClause
 	cols []scopeColumn
 	expr memo.RelExpr
-
-	// used tracks if this CTE has been referenced.  We are currently limited
-	// to only having a single reference to a given CTE, so if this is set then
-	// this CTE has already been referenced and may not be referenced again.
-	used bool
+	id   opt.WithID
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the

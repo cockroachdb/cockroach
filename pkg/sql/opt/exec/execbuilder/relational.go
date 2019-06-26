@@ -235,6 +235,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
+	case *memo.WithExpr:
+		ep, err = b.buildWith(t)
+
+	case *memo.WithRefExpr:
+		ep, err = b.buildWithRef(t)
+
 	case *memo.ExplainExpr:
 		ep, err = b.buildExplain(t)
 
@@ -1299,6 +1305,73 @@ func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
 
+}
+
+func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
+	value, err := b.buildRelational(with.Value)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	buffer, err := b.factory.ConstructBuffer(value.root)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Add the buffer as a subquery so it gets executed ahead of time, and is
+	// available to be referenced by other queries.
+	b.subqueries = append(b.subqueries, exec.Subquery{
+		ExprNode: &tree.Subquery{},
+		// TODO(justin): this is wasteful: both the subquery and the bufferNode
+		// will buffer up all the results.  This should be fixed by either making
+		// the buffer point directly to the subquery results or adding a new
+		// subquery mode that reads and discards all rows. This could possibly also
+		// be fixed by ensuring that bufferNode exhausts its input (and forcing it
+		// to behave like a spoolNode) and using the EXISTS mode.
+		Mode: exec.SubqueryAllRows,
+		Root: buffer,
+	})
+
+	b.withExprs = append(b.withExprs, builtWithExpr{
+		id:         with.ID,
+		colmap:     value.outputCols,
+		bufferNode: buffer,
+	})
+
+	return b.buildRelational(with.Input)
+}
+
+func (b *Builder) buildWithRef(withRef *memo.WithRefExpr) (execPlan, error) {
+	id := withRef.ID
+	var e *builtWithExpr
+	for _, w := range b.withExprs {
+		if w.id == id {
+			e = &w
+			break
+		}
+	}
+	if e == nil {
+		panic(errors.AssertionFailedf("couldn't find WITH expression with ID %d", id))
+	}
+
+	node, err := b.factory.ConstructWithRef(e.bufferNode)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// The ColumnIDs from the with expression need to get remapped according to
+	// the mapping in the withRef to get the actual colMap for this expression.
+	var outputCols opt.ColMap
+
+	for i := range withRef.InCols {
+		idx, _ := e.colmap.Get(int(withRef.InCols[i]))
+		outputCols.Set(int(withRef.OutCols[i]), idx)
+	}
+
+	return execPlan{
+		root:       node,
+		outputCols: outputCols,
+	}, nil
 }
 
 func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {
