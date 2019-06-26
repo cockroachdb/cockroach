@@ -160,7 +160,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 
 		// Only consider followers that are active.
-		if !r.mu.lastUpdateTimes.isFollowerActive(ctx, rep.ReplicaID, now) {
+		if !r.mu.lastUpdateTimes.isFollowerActive(ctx, rep.ReplicaID, now, MaxQuotaReplicaLivenessDuration) {
 			return
 		}
 

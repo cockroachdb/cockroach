@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -201,7 +202,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
 	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
 	updateRaftProgressFromActivity(
-		ctx, raftStatus.Progress, r.descRLocked().Replicas().Unwrap(), r.mu.lastUpdateTimes, now,
+		ctx, r.ClusterSettings(), raftStatus.Progress, r.descRLocked().Replicas().Unwrap(),
+		r.mu.lastUpdateTimes, now,
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
 	r.mu.RUnlock()
@@ -229,18 +231,25 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 func updateRaftProgressFromActivity(
 	ctx context.Context,
+	settings *cluster.Settings,
 	prs map[uint64]raft.Progress,
 	replicas []roachpb.ReplicaDescriptor,
 	lastUpdate lastUpdateTimesMap,
 	now time.Time,
 ) {
+	// TimeUntilStoreDead is the amount of time before we consider a store dead
+	// and start moving away its replicas. Don't truncate the raft log before then
+	// either, otherwise it may need a potentially huge number of snapshots if it
+	// comes back up. See #37906.
+	recentActiveThreshold := TimeUntilStoreDead.Get(&settings.SV)
+
 	for _, replDesc := range replicas {
 		replicaID := replDesc.ReplicaID
 		pr, ok := prs[uint64(replicaID)]
 		if !ok {
 			continue
 		}
-		pr.RecentActive = lastUpdate.isFollowerActive(ctx, replicaID, now)
+		pr.RecentActive = lastUpdate.isFollowerActive(ctx, replicaID, now, recentActiveThreshold)
 		// Override this field for safety since we don't use it. Instead, we use
 		// pendingSnapshotIndex from above which is also populated for
 		// preemptive snapshots.
@@ -493,7 +502,7 @@ func (rlq *raftLogQueue) shouldQueue(
 }
 
 // shouldQueueImpl returns whether the given truncate decision should lead to
-// a log truncation. This is either the case if the decision says so or of
+// a log truncation. This is either the case if the decision says so or if
 // we want to recompute the log size (in which case `recomputeRaftLogSize` and
 // `shouldQ` are both true and a reasonable priority is returned).
 func (rlq *raftLogQueue) shouldQueueImpl(

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -373,6 +374,9 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 func TestUpdateRaftStatusActivity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	settings := cluster.MakeTestingClusterSettings()
+	recentActiveThreshold := TimeUntilStoreDead.Get(&settings.SV)
+
 	type testCase struct {
 		prs        []raft.Progress
 		replicas   []roachpb.ReplicaDescriptor
@@ -403,8 +407,8 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 			replicas: []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}},
 			prs:      []raft.Progress{{RecentActive: false}, {RecentActive: true}},
 			lastUpdate: map[roachpb.ReplicaID]time.Time{
-				1: now.Add(-1 * MaxQuotaReplicaLivenessDuration / 2),
-				2: now.Add(-1 - MaxQuotaReplicaLivenessDuration),
+				1: now.Add(-1 * recentActiveThreshold / 2),
+				2: now.Add(-1 - recentActiveThreshold),
 				3: now,
 			},
 			now: now,
@@ -425,7 +429,7 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 			for i, pr := range tc.exp {
 				expPRs[uint64(i+1)] = pr
 			}
-			updateRaftProgressFromActivity(ctx, prs, tc.replicas, tc.lastUpdate, tc.now)
+			updateRaftProgressFromActivity(ctx, settings, prs, tc.replicas, tc.lastUpdate, tc.now)
 			assert.Equal(t, expPRs, prs)
 		})
 	}

@@ -293,7 +293,7 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 func (r *Replica) IsFollowerActive(ctx context.Context, followerID roachpb.ReplicaID) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastUpdateTimes.isFollowerActive(ctx, followerID, timeutil.Now())
+	return r.mu.lastUpdateTimes.isFollowerActive(ctx, followerID, timeutil.Now(), MaxQuotaReplicaLivenessDuration)
 }
 
 func (r *Replica) CommandSizesLen() int {
