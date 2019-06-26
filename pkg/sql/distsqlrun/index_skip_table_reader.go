@@ -153,17 +153,15 @@ func newIndexSkipTableReader(
 	return t, nil
 }
 
-func (t *indexSkipTableReader) computeMaxIndexInterleaveLen(index *sqlbase.IndexDescriptor) int {
-	// no one interleaves into this index, so there is nothing else needed
-	if len(index.InterleavedBy) == 0 {
-		return 0
+func (t *indexSkipTableReader) computeIndexInterleaveLen(table *sqlbase.TableDescriptor) int {
+	totalLen := 0
+	for _, index := range table.AllNonDropIndexes() {
+		for _, fr := range index.InterleavedBy {
+			_ = fr
+		}
 	}
 
-	// else, we want to know the length of the largest index
-	// that is interleaved into this index
-	// for _,
-
-	return 0
+	return totalLen
 }
 
 func (t *indexSkipTableReader) Start(ctx context.Context) context.Context {
