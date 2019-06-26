@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -161,11 +162,11 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 	// Create a new evalCtx per converter so each go routine gets its own
 	// collationenv, which can't be accessed in parallel.
 	evalCtx := c.evalCtx.Copy()
-	conv, err := newRowConverter(c.tableDesc, evalCtx, c.kvCh)
+	conv, err := sql.NewRowConverter(c.tableDesc, evalCtx, c.kvCh)
 	if err != nil {
 		return err
 	}
-	if conv.evalCtx.SessionData == nil {
+	if conv.EvalCtx.SessionData == nil {
 		panic("uninitialized session data")
 	}
 
@@ -173,22 +174,22 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 		for batchIdx, record := range batch.r {
 			rowNum := int64(batch.rowOffset + batchIdx)
 			for i, v := range record {
-				col := conv.visibleCols[i]
+				col := conv.VisibleCols[i]
 				if c.opts.NullEncoding != nil && v == *c.opts.NullEncoding {
-					conv.datums[i] = tree.DNull
+					conv.Datums[i] = tree.DNull
 				} else {
 					var err error
-					conv.datums[i], err = tree.ParseDatumStringAs(conv.visibleColTypes[i], v, conv.evalCtx)
+					conv.Datums[i], err = tree.ParseDatumStringAs(conv.VisibleColTypes[i], v, conv.EvalCtx)
 					if err != nil {
 						return wrapRowErr(err, batch.file, rowNum, pgcode.Syntax,
 							"parse %q as %s", col.Name, col.Type.SQLString())
 					}
 				}
 			}
-			if err := conv.row(ctx, batch.fileIndex, rowNum); err != nil {
+			if err := conv.Row(ctx, batch.fileIndex, rowNum); err != nil {
 				return wrapRowErr(err, batch.file, rowNum, pgcode.Uncategorized, "")
 			}
 		}
 	}
-	return conv.sendBatch(ctx)
+	return conv.SendBatch(ctx)
 }
