@@ -116,13 +116,12 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		s.Init(relProps)
 
 		// Calculate distinct counts.
-		numUnappliedConjuncts := sb.applyConstraintSet(cs, sel, relProps)
+		sb.applyConstraintSet(cs, sel, relProps)
 
 		// Calculate row count and selectivity.
 		s.RowCount = scan.Relational().Stats.RowCount
 		savedRowCount := s.RowCount
 		s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, sel, s))
-		s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 
 		// Update null counts.
 		sb.updateNullCountsFromProps(sel, relProps, savedRowCount)
@@ -163,7 +162,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs2 := constraint.SingleConstraint(&c2)
 	statsFunc(
 		cs2,
-		"[rows=3.33333333e+09, distinct(2)=500, null(2)=0]",
+		"[rows=3.33333333e+09, distinct(2)=166.666667, null(2)=0]",
 		1.0/3,
 	)
 
