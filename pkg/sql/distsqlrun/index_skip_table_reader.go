@@ -74,12 +74,6 @@ func newIndexSkipTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
-	// as of now, we don't support interleaved tables, so
-	// error our if there is an index that is interleaved
-	if spec.Table.IsInterleaved() {
-		return nil, errors.Errorf("Interleaved tables are not supported as of now.")
-	}
-
 	t := istrPool.Get().(*indexSkipTableReader)
 
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
