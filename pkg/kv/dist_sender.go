@@ -908,12 +908,11 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		if !ignoreMissing {
 			// Wrap this in a MixedSuccessError, as we know that the EndTransaction
 			// batch succeeded. It is not possible for qiPErr to be a MixedSuccessError
-			// itself, so we don't need to handle that case like we do down below.
+			// itself.
 			qiPErr.UpdateTxn(br.Txn)
+			qiPErr.SetDetail(roachpb.WrapWithMixedSuccessError(qiPErr.GetDetail()))
 			maybeSwapErrorIndex(qiPErr, swapIdx, lastIdx)
-			pErr := roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: qiPErr})
-			pErr.Index = qiPErr.Index
-			return nil, pErr
+			return nil, qiPErr
 		}
 		// Populate the pre-commit QueryIntent batch response. If we made it
 		// here then we know we can ignore intent missing errors.
@@ -1126,6 +1125,15 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			if resp.pErr != nil {
 				if pErr == nil {
 					pErr = resp.pErr
+					// Update the error's transaction with any new information from
+					// the batch response. This may contain interesting updates if
+					// the batch was parallelized and part of it succeeded.
+					pErr.UpdateTxn(br.Txn)
+				} else {
+					// Even though we ignore the second error, update the first
+					// error's transaction with any new information from the
+					// second error. This may contain interesting updates.
+					pErr.UpdateTxn(resp.pErr.GetTxn())
 				}
 				continue
 			}
@@ -1140,21 +1148,22 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			}
 
 			// Combine the new response with the existing one (including updating
-			// the headers).
+			// the headers) if we haven't yet seen an error.
 			if pErr == nil {
 				if err := br.Combine(resp.reply, resp.positions); err != nil {
 					pErr = roachpb.NewError(err)
 				}
+			} else {
+				// Update the error's transaction with any new information from
+				// the batch response. This may contain interesting updates if
+				// the batch was parallelized and part of it succeeded.
+				pErr.UpdateTxn(resp.reply.Txn)
 			}
 		}
 
 		// If we experienced an error, don't neglect to update the error's
 		// attached transaction with any responses which were received.
 		if pErr != nil {
-			// Update the error's transaction with any new information from
-			// the batch response. This may contain interesting updates if
-			// the batch was parallelized and part of it succeeded.
-			pErr.UpdateTxn(br.Txn)
 			// If this is a write batch with any successful responses, but
 			// we're ultimately returning an error, wrap the error with a
 			// MixedSuccessError.
@@ -1162,16 +1171,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				// divideAndSendBatchToRanges can call sendPartialBatch, which in
 				// turn can call divideAndSendBatchToRanges recursively. Therefore,
 				// pErr can already be a MixedSuccessError returned from the
-				// recursive call; do not wrap it in another MixedSuccessError.
-				if _, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); !ok {
-					index := pErr.Index
-					pErr = roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: pErr})
-					// Propagate the index to the MixedSuccessError. Note that the index
-					// is shared by pointer, and when the index is modified as part of
-					// the MixedSuccessError and the MixedSuccessError gets
-					// unwrapped, the original error will contain the modified index.
-					pErr.Index = index
-				}
+				// recursive call. WrapWithMixedSuccessError handles this case.
+				pErr.SetDetail(roachpb.WrapWithMixedSuccessError(pErr.GetDetail()))
 			}
 		} else if couldHaveSkippedResponses {
 			fillSkippedResponses(ba, br, seekKey, resumeReason)

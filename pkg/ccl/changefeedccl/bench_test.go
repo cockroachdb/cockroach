@@ -42,6 +42,15 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
+	// In PR #38211, we removed the polling based data watcher in changefeeds in
+	// favor of RangeFeed. This benchmark worked by writing a bunch of data at
+	// certain timestamps and manipulating clocks at runtime so the polling
+	// grabbed a little of it at a time. There's fundamentally no way for this to
+	// work with RangeFeed without a rewrite, but it's not being used for anything
+	// right now, so the rewrite isn't worth it. We should fix this if we need to
+	// start doing changefeed perf work at some point.
+	b.Skip(`broken in #38211`)
+
 	ctx := context.Background()
 	s, sqlDBRaw, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "d"})
 	defer s.Stopper().Stop(ctx)
@@ -212,7 +221,7 @@ func createBenchmarkChangefeed(
 		s.ClusterSettings(), details, spans, encoder, sink, rowsFn, TestingKnobs{}, metrics)
 
 	ctx, cancel := context.WithCancel(ctx)
-	go func() { _ = poller.Run(ctx) }()
+	go func() { _ = poller.RunUsingRangefeeds(ctx) }()
 	go func() { _ = thUpdater.PollTableDescs(ctx) }()
 
 	errCh := make(chan error, 1)

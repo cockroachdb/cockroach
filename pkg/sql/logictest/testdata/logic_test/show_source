@@ -39,6 +39,7 @@ default_transaction_read_only        off
 distsql                              off
 experimental_enable_zigzag_join      on
 experimental_force_split_at          off
+experimental_optimizer_foreign_keys  off
 experimental_serial_normalization    rowid
 experimental_vectorize               off
 extra_float_digits                   0

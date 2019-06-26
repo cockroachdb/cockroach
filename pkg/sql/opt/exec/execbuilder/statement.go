@@ -83,7 +83,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 			return execPlan{}, err
 		}
 
-		plan, err := b.factory.ConstructPlan(input.root, b.subqueries)
+		plan, err := b.factory.ConstructPlan(input.root, b.subqueries, b.postqueries)
 		if err != nil {
 			return execPlan{}, err
 		}
