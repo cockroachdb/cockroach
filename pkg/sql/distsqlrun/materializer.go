@@ -132,9 +132,13 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		typs := m.OutputTypes()
 		for outIdx, cIdx := range m.outputToInputColIdx {
 			col := m.batch.ColVec(cIdx)
-			if col.Nulls().NullAt(rowIdx) {
-				m.row[outIdx].Datum = tree.DNull
-				continue
+			// TODO(asubiotto): we shouldn't have to do this check. Figure out who's
+			// not setting nulls.
+			if col.HasNulls() {
+				if col.Nulls().NullAt(rowIdx) {
+					m.row[outIdx].Datum = tree.DNull
+					continue
+				}
 			}
 
 			ct := typs[outIdx]

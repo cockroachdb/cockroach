@@ -54,7 +54,7 @@ func TestOutbox(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
+			clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -363,12 +363,12 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 					}
 				}()
 				// Wait for the consumer to connect.
-				call := <-mockServer.runSyncFlowCalls
-				outbox = newOutboxSyncFlowStream(call.stream)
+				call := <-mockServer.RunSyncFlowCalls
+				outbox = newOutboxSyncFlowStream(call.Stream)
 				outbox.setFlowCtx(&FlowCtx{Settings: cluster.MakeTestingClusterSettings(), stopper: stopper})
 				outbox.init(sqlbase.OneIntCol)
 				// In a RunSyncFlow call, the outbox runs under the call's context.
-				outbox.start(call.stream.Context(), &wg, cancel)
+				outbox.start(call.Stream.Context(), &wg, cancel)
 				// Wait for the consumer to receive the header message that the outbox
 				// sends on start. If we don't wait, the context cancellation races with
 				// the outbox sending the header msg; if the cancellation makes it to
@@ -381,7 +381,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				cancel()
 				defer func() {
 					// Allow the RunSyncFlow RPC to finish.
-					call.donec <- nil
+					call.Donec <- nil
 				}()
 			}
 
@@ -408,7 +408,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,7 +521,7 @@ func BenchmarkOutbox(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	clusterID, mockServer, addr, err := StartMockDistSQLServer(clock, stopper, staticNodeID)
+	clusterID, mockServer, addr, err := distsqlpb.StartMockDistSQLServer(clock, stopper, staticNodeID)
 	if err != nil {
 		b.Fatal(err)
 	}
