@@ -41,7 +41,7 @@ WHERE z > 1.0
 select
  ├── columns: x:1(string!null) y:2(int!null) z:3(float!null)
  ├── side-effects, mutations
- ├── stats: [rows=66, distinct(1)=1, null(1)=0, distinct(2)=66, null(2)=0, distinct(3)=60.3661899, null(3)=0]
+ ├── stats: [rows=66, distinct(1)=1, null(1)=0, distinct(2)=66, null(2)=0, distinct(3)=43.4214373, null(3)=0]
  ├── fd: ()-->(1)
  ├── insert xyz
  │    ├── columns: x:1(string!null) y:2(int!null) z:3(float)
