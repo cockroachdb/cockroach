@@ -187,9 +187,9 @@ func (r *Replica) adminSplitWithDescriptor(
 		log.Event(ctx, "range already split")
 		// Even if the range is already split, we should still update the sticky
 		// bit if it has a later expiration time.
-		if desc.StickyBit.Less(args.ExpirationTime) {
+		if desc.GetStickyBit().Less(args.ExpirationTime) {
 			newDesc := *desc
-			newDesc.StickyBit = args.ExpirationTime
+			newDesc.StickyBit = &args.ExpirationTime
 			err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				dbDescValue, err := conditionalGetDescValueFromDB(ctx, txn, desc)
 				if err != nil {
@@ -237,8 +237,17 @@ func (r *Replica) adminSplitWithDescriptor(
 		return reply, errors.Errorf("unable to allocate right hand side range descriptor: %s", err)
 	}
 
-	// Set the range descriptor's sticky bit.
-	rightDesc.StickyBit = args.ExpirationTime
+	// TODO(jeffreyxiao): Remove this check in 20.1.
+	// Note that the client API for splitting has expiration time as
+	// non-nullable, but the internal representation of a sticky bit is nullable
+	// for backwards compatibility. If expiration time is the zero timestamp, we
+	// must be sure not to set the sticky bit to the zero timestamp because the
+	// byte representation of setting the stickyBit to nil is different than
+	// setting it to hlc.Timestamp{}. This check ensures that CPuts would not
+	// fail on older versions.
+	if (args.ExpirationTime != hlc.Timestamp{}) {
+		rightDesc.StickyBit = &args.ExpirationTime
+	}
 
 	// Init updated version of existing range descriptor.
 	leftDesc := *desc
@@ -374,10 +383,12 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		return reply, errors.Errorf("key %s is not the start of a range", args.Header().Key)
 	}
 
-	// If the range's sticky bit is already hlc.Timestamp{}, we treat the
-	// unsplit command as a no-op and return success instead of throwing an
-	// error.
-	if (desc.StickyBit == hlc.Timestamp{}) {
+	// If the range's sticky bit is already hlc.Timestamp{}, we treat the unsplit
+	// command as a no-op and return success instead of throwing an error. On
+	// mixed version clusters that don't support StickyBit, all range descriptor
+	// sticky bits are guaranteed to be nil, so we can skip checking the cluster
+	// version.
+	if (desc.GetStickyBit() == hlc.Timestamp{}) {
 		return reply, nil
 	}
 
@@ -389,7 +400,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 
 		b := txn.NewBatch()
 		newDesc := *desc
-		newDesc.StickyBit = hlc.Timestamp{}
+		newDesc.StickyBit = &hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
 		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
 			return err

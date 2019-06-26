@@ -13,12 +13,15 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -222,6 +225,31 @@ func (p *planner) dropIndexByName(
 	found := false
 	for i, idxEntry := range tableDesc.Indexes {
 		if idxEntry.ID == idx.ID {
+			// Unsplit all manually split ranges in the index so they can be
+			// automatically merged by the merge queue.
+			span := tableDesc.IndexSpan(idxEntry.ID)
+			ranges, err := ScanMetaKVs(ctx, p.txn, span)
+			if err != nil {
+				return err
+			}
+			for _, r := range ranges {
+				var desc roachpb.RangeDescriptor
+				if err := r.ValueProto(&desc); err != nil {
+					return err
+				}
+				// We have to explicitly check that the range descriptor's start key
+				// lies within the span of the index since ScanMetaKVs returns all
+				// intersecting spans.
+				if (desc.GetStickyBit() != hlc.Timestamp{}) && span.Key.Compare(desc.StartKey.AsRawKey()) <= 0 {
+					// Swallow "key is not the start of a range" errors because it would
+					// mean that the sticky bit was removed and merged concurrently. DROP
+					// INDEX should not fail because of this.
+					if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil && !strings.Contains(err.Error(), "is not the start of a range") {
+						return err
+					}
+				}
+			}
+
 			// the idx we picked up with FindIndexByID at the top may not
 			// contain the same field any more due to other schema changes
 			// intervening since the initial lookup. So we send the recent
