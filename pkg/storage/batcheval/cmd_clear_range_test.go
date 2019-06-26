@@ -11,7 +11,9 @@
 package batcheval
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -149,4 +151,176 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			}
 		})
 	}
+}
+
+func hashRange(t *testing.T, eng engine.Reader, start, end roachpb.Key) []byte {
+	t.Helper()
+	h := sha256.New()
+	if err := eng.Iterate(
+		engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end},
+		func(kv engine.MVCCKeyValue) (bool, error) {
+			// t.Logf("%v -> %s", kv.Key, kv.Value)
+			h.Write(kv.Key.Key)
+			h.Write(kv.Value)
+			return false, nil
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	return h.Sum([]byte{})
+}
+
+func TestCmdClearRangeTimeBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	startKey := roachpb.Key("0000")
+	endKey := roachpb.Key("9999")
+	const keyCount = 10
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:  99,
+		StartKey: roachpb.RKey(startKey),
+		EndKey:   roachpb.RKey(endKey),
+	}
+
+	ctx := context.Background()
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer eng.Close()
+
+	before := hlc.Timestamp{WallTime: 1000}
+
+	// lay down some keys to be the starting point to which we'll return later.
+	var stats enginepb.MVCCStats
+	for i := 0; i < keyCount; i++ {
+		key := roachpb.Key(fmt.Sprintf("%04d", i))
+		var value roachpb.Value
+		value.SetString(fmt.Sprintf("%d", i))
+
+		if err := engine.MVCCPut(ctx, eng, &stats, key, before.Add(int64(i%10), 0), value, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Log("initial values")
+	beforeSum := hashRange(t, eng, startKey, endKey)
+
+	// cutoff time has to be after every existing key's time, which are all
+	// in the range [before, before+10), so before+100 is fine.
+	cutoff := before.Add(100, 0)
+
+	// lay down some keys that we'll later revert, with some shadowing existing
+	// keys and some as new keys.
+	for i := 5; i < keyCount+5; i++ {
+		key := roachpb.Key(fmt.Sprintf("%04d", i))
+		var value roachpb.Value
+		value.SetString(fmt.Sprintf("%d-rev-a", i))
+		if err := engine.MVCCPut(ctx, eng, &stats, key, cutoff, value, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Log("rev a values")
+	revASum := hashRange(t, eng, startKey, endKey)
+	if bytes.Equal(revASum, beforeSum) {
+		t.Fatal("expected (over)writing some keys to change checksum")
+	}
+
+	afterCutoff := cutoff.Add(0, 1)
+
+	// ...and again, this time shadowing some of our shadows, plus some new keys.
+	for i := 7; i < keyCount+7; i++ {
+		key := roachpb.Key(fmt.Sprintf("%04d", i))
+		var value roachpb.Value
+		value.SetString(fmt.Sprintf("%d-rev-b", i))
+		if err := engine.MVCCPut(ctx, eng, &stats, key, afterCutoff, value, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Log("rev b values")
+	revBSum := hashRange(t, eng, startKey, endKey)
+	if bytes.Equal(revBSum, revASum) {
+		t.Fatal("expected (over)writing some keys to change checksum")
+	}
+
+	t.Run("revert to before", func(t *testing.T) {
+		batch := &wrappedBatch{Batch: eng.NewBatch()}
+		defer batch.Close()
+
+		var h roachpb.Header
+		h.RangeID = desc.RangeID
+
+		cArgs := CommandArgs{Header: h}
+		cArgs.EvalCtx = &mockEvalCtx{desc: &desc, clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), stats: stats}
+		cArgs.Args = &roachpb.ClearRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    startKey,
+				EndKey: endKey,
+			},
+			StartTime: cutoff,
+		}
+		cArgs.Stats = &enginepb.MVCCStats{}
+
+		if _, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{}); err != nil {
+			t.Fatal(err)
+		}
+		t.Log("reverted to a values")
+		if reverted := hashRange(t, batch, startKey, endKey); !bytes.Equal(reverted, beforeSum) {
+			t.Error("expected reverted keys to match checksum")
+		}
+	})
+
+	t.Run("revert to a", func(t *testing.T) {
+		batch := &wrappedBatch{Batch: eng.NewBatch()}
+		defer batch.Close()
+
+		var h roachpb.Header
+		h.RangeID = desc.RangeID
+
+		cArgs := CommandArgs{Header: h}
+		cArgs.EvalCtx = &mockEvalCtx{desc: &desc, clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), stats: stats}
+		cArgs.Args = &roachpb.ClearRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    startKey,
+				EndKey: endKey,
+			},
+			StartTime: afterCutoff,
+		}
+		cArgs.Stats = &enginepb.MVCCStats{}
+
+		if _, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{}); err != nil {
+			t.Fatal(err)
+		}
+		t.Log("reverted to a values")
+		if reverted := hashRange(t, batch, startKey, endKey); !bytes.Equal(reverted, revASum) {
+			t.Error("expected reverted keys to match checksum")
+		}
+	})
+
+	t.Run("revert nothing", func(t *testing.T) {
+		batch := &wrappedBatch{Batch: eng.NewBatch()}
+		defer batch.Close()
+
+		var h roachpb.Header
+		h.RangeID = desc.RangeID
+
+		cArgs := CommandArgs{Header: h}
+		cArgs.EvalCtx = &mockEvalCtx{desc: &desc, clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), stats: stats}
+		cArgs.Args = &roachpb.ClearRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    startKey,
+				EndKey: endKey,
+			},
+			StartTime: cutoff.Add(1, 0),
+		}
+		cArgs.Stats = &enginepb.MVCCStats{}
+
+		if _, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{}); err != nil {
+			t.Fatal(err)
+		}
+		t.Log("reverted no values")
+		if reverted := hashRange(t, batch, startKey, endKey); !bytes.Equal(reverted, revBSum) {
+			t.Error("expected reverted keys to match checksum")
+		}
+	})
 }

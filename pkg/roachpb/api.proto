@@ -286,6 +286,8 @@ message ClearRangeRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
 }
 
 // A ClearRangeResponse is the return value from the ClearRange() method.

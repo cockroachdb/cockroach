@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -65,6 +66,44 @@ func ClearRange(
 	from := engine.MVCCKey{Key: args.Key}
 	to := engine.MVCCKey{Key: args.EndKey}
 	var pd result.Result
+
+	if !args.StartTime.IsEmpty() {
+		madeChanges := false
+		log.VEventf(ctx, 2, "clearing keys with timestamp >= %v", args.StartTime)
+		// TODO(dt): time-bound iter could potentially be a big win here -- the
+		// expected use-case for this is to run over an entire table's span with a
+		// very recent timestamp, rolling back just the writes of some failed IMPORT
+		// and that could very likely only have hit some small subset of the table's
+		// keyspace. However to get the stats right we need a non-time-bound iter
+		// e.g. we need to know if there is an older key under the one we are
+		// clearing to know if we're changing the number of live keys. An approach
+		// that seems promising might be to use time-bound iter to find candidates
+		// for deletion, allowing us to quickly skip over swaths of uninteresting
+		// keys, but then use a normal iteration to actually do the delete including
+		// updating the live key stats correctly.
+		if err := batch.Iterate(
+			from, to,
+			func(kv engine.MVCCKeyValue) (bool, error) {
+				if !kv.Key.Timestamp.Less(args.StartTime) {
+					madeChanges = true
+					return false, batch.Clear(kv.Key)
+				}
+				return false, nil
+			},
+		); err != nil {
+			return result.Result{}, err
+		}
+		if madeChanges {
+			// TODO(dt): can we update stats deltas during the interation above instead
+			// of doing this extra iteration?
+			stats, err := rditer.ComputeStatsForRange(cArgs.EvalCtx.Desc(), batch, cArgs.Header.Timestamp.WallTime)
+			if err != nil {
+				return result.Result{}, err
+			}
+			*cArgs.Stats = stats
+		}
+		return pd, nil
+	}
 
 	// Before clearing, compute the delta in MVCCStats.
 	statsDelta, err := computeStatsDelta(ctx, batch, cArgs, from, to)
