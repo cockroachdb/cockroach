@@ -32,7 +32,6 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version2_1
-	VersionLazyTxnRecord
 	VersionSequencedReads
 	VersionUnreplicatedRaftTruncatedState // see versionsSingleton for details
 	VersionCreateStats
@@ -312,11 +311,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	// 	Key:     VersionExportStorageWorkload,
 	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 3},
 	// },
-	{
-		// VersionLazyTxnRecord is https://github.com/cockroachdb/cockroach/pull/33566.
-		Key:     VersionLazyTxnRecord,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 4},
-	},
+	// Removed.
+	// {
+	// 	// VersionLazyTxnRecord is https://github.com/cockroachdb/cockroach/pull/33566.
+	// 	Key:     VersionLazyTxnRecord,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 4},
+	// },
 	{
 		// VersionSequencedReads is https://github.com/cockroachdb/cockroach/pull/33244.
 		Key:     VersionSequencedReads,

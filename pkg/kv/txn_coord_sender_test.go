@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -1641,127 +1640,6 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestTxnInsertBeginTransaction verifies that a begin transaction
-// request is inserted just before the first mutating command.
-// TODO(nvanbenschoten): Remove in 2.3.
-func TestTxnInsertBeginTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	sender := &mockSender{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	var calls []roachpb.Method
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		br := ba.CreateReply()
-		br.Txn = ba.Txn.Clone()
-
-		calls = append(calls, ba.Methods()...)
-		if bt, ok := ba.GetArg(roachpb.BeginTransaction); ok && !bt.Header().Key.Equal(roachpb.Key("a")) {
-			t.Errorf("expected begin transaction key to be \"a\"; got %s", bt.Header().Key)
-		}
-		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
-			if !et.(*roachpb.EndTransactionRequest).Commit {
-				t.Errorf("expected commit to be true")
-			}
-			br.Txn.Status = roachpb.COMMITTED
-		}
-		return br, nil
-	})
-
-	v := cluster.VersionByKey(cluster.Version2_1)
-	st := cluster.MakeTestingClusterSettingsWithVersion(v, v)
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Settings:   st,
-			Clock:      clock,
-			Stopper:    stopper,
-		},
-		sender,
-	)
-
-	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		if _, err := txn.Get(ctx, "foo"); err != nil {
-			return err
-		}
-		return txn.Put(ctx, "a", "b")
-	}); err != nil {
-		t.Fatalf("unexpected error on commit: %s", err)
-	}
-	expectedCalls := []roachpb.Method{
-		roachpb.Get,
-		roachpb.BeginTransaction,
-		roachpb.Put,
-		roachpb.QueryIntent,
-		roachpb.EndTransaction}
-	if !reflect.DeepEqual(expectedCalls, calls) {
-		t.Fatalf("expected %s, got %s", expectedCalls, calls)
-	}
-}
-
-// TestBeginTransactionErrorIndex verifies that the error index is cleared
-// when a BeginTransaction command causes an error.
-// TODO(nvanbenschoten): Remove in 2.3.
-func TestBeginTransactionErrorIndex(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	sender := &mockSender{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		pErr := roachpb.NewError(&roachpb.WriteIntentError{})
-		pErr.SetErrorIndex(0)
-		return nil, pErr
-	})
-
-	v := cluster.VersionByKey(cluster.Version2_1)
-	st := cluster.MakeTestingClusterSettingsWithVersion(v, v)
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Settings:   st,
-			Clock:      clock,
-			Stopper:    stopper,
-		},
-		sender,
-	)
-
-	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
-	_ = db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		b := txn.NewBatch()
-		b.Put("a", "b")
-		err := getOneErr(txn.Run(ctx, b), b)
-		if err == nil {
-			t.Fatal("missing err")
-		}
-		pErr := b.MustPErr()
-		// Verify that the original error type is preserved, but the error index is unset.
-		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
-			t.Fatalf("unexpected error %s", pErr)
-		}
-		if pErr.Index != nil {
-			t.Errorf("error index must not be set, but got %d", pErr.Index)
-		}
-		return err
-	})
-}
-
-// getOneErr returns the error for a single-request Batch that was run.
-// runErr is the error returned by Run, b is the Batch that was passed to Run.
-func getOneErr(runErr error, b *client.Batch) error {
-	if runErr != nil && len(b.Results) > 0 {
-		return b.Results[0].Err
-	}
-	return runErr
 }
 
 // TestAbortReadOnlyTransaction verifies that aborting a read-only
