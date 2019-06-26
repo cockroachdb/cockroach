@@ -50,7 +50,7 @@ const (
 
 	// Thresholds used to decide whether to queue for GC based
 	// on keys and intents.
-	gcKeyScoreThreshold    = 2
+	gcKeyScoreThreshold    = 2 // FIX(tbg): change to 1
 	gcIntentScoreThreshold = 10
 
 	// gcKeyVersionChunkBytes is the threshold size for splitting
@@ -174,69 +174,74 @@ func makeGCQueueScore(
 	return r
 }
 
-// makeGCQueueScoreImpl is used to compute when to trigger the GC Queue. It's
-// important that we don't queue a replica before a relevant amount of data is
-// actually deletable, or the queue might run in a tight loop. To this end, we
-// use a base score with the right interplay between GCByteAge and TTL and
-// additionally weigh it so that GC is delayed when a large proportion of the
-// data in the replica is live. Additionally, returned scores are slightly
-// perturbed to avoid groups of replicas becoming eligible for GC at the same
-// time repeatedly.
+// makeGCQueueScoreImpl is used to compute when to trigger the GC Queue.
 //
-// More details below.
+// This necessarily involves trade-offs: a GC run requires scanning all of the
+// data in the range, which is not economical if the result is that nothing or
+// very little can be GC'ed. On the other hand, users interface with the GC queue
+// via a TTL, and there is a reasonable expectation that disk space will be
+// released not too long after deleted/shadowed data leaves the TTL window.
 //
-// When a key of size `B` is deleted at timestamp `T` or superseded by a newer
-// version, it henceforth is accounted for in the range's `GCBytesAge`. At time
-// `S`, its contribution to age will be `B*seconds(S-T)`. The aggregate
-// `GCBytesAge` of all deleted versions in the cluster is what the GC queue at
-// the time of writing bases its `shouldQueue` method on.
+// To decide whether to run GC, this code can only rely on readily available
+// metrics about potentially gc'able data in the range (we can't scan the range
+// to determine whether it's worth scanning the range).
 //
-// If a replica is queued to have its old values garbage collected, its contents
-// are scanned. However, the values which are deleted follow a criterion that
-// isn't immediately connected to `GCBytesAge`: We (basically) delete everything
-// that's older than the Replica's `TTLSeconds`.
+// The quantity used to that end is the GCBytesAge, which is maintained as part
+// of MVCCStats. This "bytes age" is essentially the bytes in non-live keys and
+// values shadowed by a newer version (incl. a deletion tombstone) times the
+// duration for which they've been shadowed.
 //
-// Thus, it's not obvious that garbage collection has the effect of reducing the
-// metric that we use to consider the replica for the next GC cycle, and it
-// seems that we messed it up.
+// For example, a 1mb write to a table which was deleted 1 hour ago contributes
+// 1mb*1h to GCBytesAge. A 12kb write which was overwritten 12 hours ago
+// contributes 12kb*12h.
 //
-// The previous metric used for queueing: `GCBytesAge/(1<<20 * ttl)` does not
-// have the right scaling. For example, consider that a value of size `1mb` is
-// overwritten with a newer version. After `ttl` seconds, it contributes `1mb`
-// to `GCBytesAge`, and so the replica has a score of `1`, i.e. (roughly) the
-// range becomes interesting to the GC queue. When GC runs, it will delete value
-// that are `ttl` old, which our value is. But a Replica is ~64mb, so picture
-// that you have 64mb of key-value data all at the same timestamp, and they
-// become superseded. Already after `ttl/64`, the metric becomes 1, but they
-// keys won't be GC'able for another (63*ttl)/64. Thus, GC will run "all the
-// time" long before it can actually have an effect.
+// Regardless of its contribution to GCBytesAge, a version of a key is only
+// gc'able if it isn't "discoverable" by a read at now()-TTLSeconds. This is
+// because if a user configures a TTL of, say, 24h, we want historical reads to
+// work for up to 24h in the past (and generally err on the side of allowing
+// them for a little longer, i.e. GC a little later).
 //
-// The metric with correct scaling must thus take into account the size of the
+// On the other hand, there are many ways to set up writes that end up at the
+// same GCBytesAge. For example, a GCBytesAge of 1mb*1h can be achieved by
+// - a 1mb write that was deleted 1h ago, or
+// - a 250kb write that was deleted 4h ago, or
+// - a 2mb write that was deleted 30 minutes ago, or many others.
+//
+// This shows that we can't just apply some cutoff to GCBytesAge and use that to
+// call GC. For example, with a TTL of 2h, we would only be able to GC anything
+// in the second case.
+//
+// The criterion with correct scaling must thus take into account the size of the
 // range. What size exactly? Any data that isn't live (i.e. isn't readable by a
 // scan from the far future). That's `KeyBytes + ms.ValBytes - ms.LiveBytes`,
-// which is also known as `GCBytes` in the code. Hence, the better metric is
+// which is also known as `GCBytes` in the code. Hence, the better score is
 // `GCBytesAge/(ttl*GCBytes)`.
 //
-// Using this metric guarantees that after truncation, `GCBytesAge` is at most
+// Using this score guarantees that after truncation, `GCBytesAge` is at most
 // `ttl*GCBytes` (where `GCBytes` has been updated), i.e. the new metric is at
-// most 1.
+// most 1; that is, we can use the expression GCBytesAge/(ttl*GCBytes) > 1 to
+// trigger GCo. Going back to the examples above, we can see that their scores
+// are 0.5, 2, and 0.25, respectively, correctly identifying the middle case as
+// the only one worth carrying out.
 //
 // To visualize this, picture a rectangular frame of width `ttl` and height
 // `GCBytes` (i.e. the horizontal dimension is time, the vertical one bytes),
-// where the right boundary of the frame corresponds to age zero. Each non-live
-// key is a domino aligned with the right side of the frame, its height equal to
-// its size, and its width given by the duration (in seconds) it's been
-// non-live.
+// where the right boundary of the frame corresponds to age zero (i.e. now).
+// Each non-live key is a domino aligned with the right side of the frame, its
+// height equal to its size, and its width given by the duration (in seconds)
+// it's been non-live.
 //
-// The combined surface of the dominos is then `GCBytesAge`, and the claim is
-// that if the total sum of domino heights (i.e. sizes) is `GCBytes`, and the
-// surface is larger than `ttl*GCBytes` by some positive `X`, then after
-// removing the dominos that cross the line `x=-ttl` (i.e. `ttl` to the left
-// from the right side of the frame), at least a surface area of `X` has been
-// removed.
+// The combined surface of the dominoes is then `GCBytesAge`. GC can remove any
+// dominoes that cross the line age=ttl. If the score is > 1, then at least one
+// domino must cross that line and is removable. When it (and any others) have
+// been removed, the remaining dominoes have an area corresponding to a score
+// strictly less than one; the closer to one it gets the closer the its shape
+// approximates the full rectangle ttl x GCBytes which becomes fully gc'able
+// when the ttl has passed once more. In effect, if the range is considered for
+// GC roughly every TTL (which is true for any reasonable TTL due to the cadence
+// of the replica scanner), and is what users expect of a TTL.
 //
-//               x=-ttl                 GCBytes=1+4
-//                 |           3 (age)
+//                 |
 //                 |          +-------+
 //                 |          | keep  | 1 (bytes)
 //                 |          +-------+
@@ -245,23 +250,60 @@ func makeGCQueueScore(
 //            |        remove         | 3 (bytes)
 //            |                       |
 //            +-----------------------+
-//                 |   7 (age)
+//                 |                  |
+//                 |                  |
+//              age=ttl              age=0
 //
-// This is true because
 //
-// deletable area  = total area       - nondeletable area
-//                 = X + ttl*GCBytes  - nondeletable area
-//                >= X + ttl*GCBytes  - ttl*(bytes in nondeletable area)
-//                 = X + ttl*(GCBytes - bytes in nondeletable area)
-//                >= X.
+// A useful intuition to keep in mind is that "deleting all data at once" is
+// sort of the "worst case" for the score in that in this case, nothing is
+// GC'able until the score reaches one (in terms of the picture above, the
+// resulting dominoes cover the whole possible area right of age=ttl). On the
+// other end, a workload in which versions become non-live more or less
+// continuously (say, every second the same key is replaced by a new version),
+// the score roughly reaches 0.5 by the time the first values become gc'able;
+// this is because the "average age" of all non-live versions in this workload
+// is 0.5*duration. Consequently GC will "run late" by a factor of two, i.e.
+// typically after 2*ttl instead of 1*ttl.
 //
-// Or, in other words, you can only hope to put `ttl*GCBytes` of area in the
-// "safe" rectangle. Once you've done that, everything else you put is going to
-// be deleted.
+// All of this works well when the majority of data in the range is non-live.
+// But since the score does not take into account the size of live bytes, it can
+// be overly aggressive. As an example, consider a range that has 64mb of live
+// data and a single key that is overwritten with a 1kb value ever hour, with a
+// 24h TTL. The GC score would indicate a GC run every ~2*24h (because the
+// average age of the overwritten values is ~0.5*24h), but each such run GCs
+// only ~12kb whereas it has to scan the whole 64mb of data; this isn't
+// economical. We want to delay the GC until the GCBytesAge surpasses that which
+// would result from deleting 10% (arbitrary choice) of the live data in the
+// range deleted one TTL period ago. This means that instead of
 //
-// This means that running GC will always result in a `GCBytesAge` of `<=
-// ttl*GCBytes`, and that a decent trigger for GC is a multiple of
-// `ttl*GCBytes`.
+//     score = GCBytesAge/(ttl*GCBytes) > 1
+//
+// we want in addition
+//
+//     GCBytesAge > 10%*LiveBytes*ttl
+//
+// which we can combine as
+//
+//     score > max(1, 10% * LiveBytes/GCBytes)
+//
+// or, defining a new score via
+//
+//     score := GCBytesAge/(ttl*GCBytes*max(1, 10% * LiveBytes/GCBytes))
+//            = (GCBytesAge/(ttl*GCBytes)) * min(1, GCBytes/(10% * LiveBytes))
+//
+// as score > 1.
+//
+// For the example above,
+//
+// - after 24h, score = 24kb*12h/(24h*24kb) * 0.0375 ~ 1/533
+// - after 533*24h, score ~ 1.
+//
+// This reflects the fact that 533 * 12kb ~ 10% * 64mb, i.e., when we finally run
+// GC, we collect around 10% of the data in the replica. In practice, we clamp the
+// multiplier to something smaller (single-digit or low double digits instead) to
+// avoid the essentially infinite time horizons that can be produced with small
+// fractions of non-live data as seen in this example.
 func makeGCQueueScoreImpl(
 	ctx context.Context, fuzzSeed int64, now hlc.Timestamp, ms enginepb.MVCCStats, ttlSeconds int32,
 ) gcQueueScore {
@@ -299,6 +341,7 @@ func makeGCQueueScoreImpl(
 		}
 		return float64(n)
 	}
+	// FIX(tbg): rename this to DeadLiveFraction and change to GCBytes/LiveBytes
 	r.DeadFraction = math.Max(1-clamp(ms.LiveBytes)/(1+clamp(ms.ValBytes)+clamp(ms.KeyBytes)), 0)
 
 	// The "raw" GC score is the total GC'able bytes age normalized by (non-live
@@ -312,7 +355,7 @@ func makeGCQueueScoreImpl(
 	// However, it doesn't take into account the size of the live data, which
 	// also needs to be scanned in order to GC. We don't want to run this costly
 	// scan unless we get a corresponding expected reduction in GCByteAge, so we
-	// weighs by fraction of non-live data below.
+	// weigh by DeadLiveFraction below.
 
 	// Intent score. This computes the average age of outstanding intents and
 	// normalizes. Note that at the time of writing this criterion hasn't
@@ -325,6 +368,8 @@ func makeGCQueueScoreImpl(
 	r.FuzzFactor = 0.95 + 0.05*rand.New(rand.NewSource(fuzzSeed)).Float64()
 
 	// Compute priority.
+	//
+	// FIX(tbg): adjust the factor.
 	valScore := r.DeadFraction * r.ValuesScalableScore
 	r.ShouldQueue = r.FuzzFactor*valScore > gcKeyScoreThreshold || r.FuzzFactor*r.IntentScore > gcIntentScoreThreshold
 	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
