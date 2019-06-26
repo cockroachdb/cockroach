@@ -31,9 +31,9 @@ func (r *Replica) quiesce() bool {
 
 func (r *Replica) quiesceLocked() bool {
 	ctx := r.AnnotateCtx(context.TODO())
-	if len(r.mu.proposals) != 0 {
+	if r.hasPendingProposalsRLocked() {
 		if log.V(3) {
-			log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
+			log.Infof(ctx, "not quiescing: pending commands")
 		}
 		return false
 	}
@@ -156,7 +156,7 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
 func (r *Replica) maybeQuiesceLocked(ctx context.Context, livenessMap IsLiveMap) bool {
-	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.proposals), livenessMap)
+	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), livenessMap)
 	if !ok {
 		return false
 	}
@@ -168,6 +168,7 @@ type quiescer interface {
 	raftStatusRLocked() *raft.Status
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
+	hasPendingProposalsRLocked() bool
 	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
@@ -178,14 +179,14 @@ type quiescer interface {
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
 // false) on failure.
 func shouldReplicaQuiesce(
-	ctx context.Context, q quiescer, now hlc.Timestamp, numProposals int, livenessMap IsLiveMap,
+	ctx context.Context, q quiescer, now hlc.Timestamp, livenessMap IsLiveMap,
 ) (*raft.Status, bool) {
 	if testingDisableQuiescence {
 		return nil, false
 	}
-	if numProposals != 0 {
+	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
-			log.Infof(ctx, "not quiescing: %d pending commands", numProposals)
+			log.Infof(ctx, "not quiescing: proposals pending")
 		}
 		return nil, false
 	}

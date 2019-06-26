@@ -206,6 +206,23 @@ func (s *raftScheduler) worker(ctx context.Context) {
 				state |= stateRaftReady
 			}
 		}
+		// TODO(nvanbenschoten): Consider removing the call to handleRaftReady
+		// from processRequestQueue. If we did this then processReady would be
+		// the only place where we call into handleRaftReady. This would
+		// eliminate superfluous calls into the function and would improve
+		// batching. It would also simplify the code in processRequestQueue.
+		//
+		// The code change here would likely look something like:
+		//
+		//  if state&stateRaftRequest != 0 {
+		//  	if s.processor.processRequestQueue(ctx, id) {
+		//  		state |= stateRaftReady
+		//  	}
+		//  }
+		//
+		// Initial experimentation with this approach indicated that it reduced
+		// throughput for single-Range write-heavy workloads. More investigation
+		// is needed to determine whether that should be expected.
 		if state&stateRaftReady != 0 {
 			s.processor.processReady(ctx, id)
 		}

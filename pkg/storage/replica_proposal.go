@@ -71,6 +71,18 @@ type ProposalData struct {
 	// reproposals its MaxLeaseIndex field is mutated.
 	command *storagepb.RaftCommand
 
+	// encodedCommand is the encoded Raft command, with an optional prefix
+	// containing the command ID.
+	encodedCommand []byte
+
+	// quotaSize is the encoded size of command that was used to acquire
+	// proposal quota. command.Size can change slightly as the object is
+	// mutated, so it's safer to record the exact value used here.
+	quotaSize int64
+
+	// tmpFooter is used to avoid an allocation.
+	tmpFooter storagepb.RaftCommandFooter
+
 	// endCmds.finish is called after command execution to update the
 	// timestamp cache & release latches.
 	endCmds *endCmds
