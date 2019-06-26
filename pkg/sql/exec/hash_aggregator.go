@@ -285,7 +285,15 @@ func (op *hashAggregatorBatchOp) Next(context.Context) coldata.Batch {
 	for i, colIdx := range op.ht.outCols {
 		toCol := op.batch.ColVec(i)
 		fromCol := op.ht.vals[colIdx]
-		toCol.CopyWithSelInt64(fromCol, op.sel[op.batchStart:batchEnd], nSelected, op.ht.valTypes[op.ht.outCols[i]])
+		toCol.Copy(
+			coldata.CopyArgs{
+				ColType:     op.ht.valTypes[op.ht.outCols[i]],
+				Src:         fromCol,
+				Sel64:       op.sel,
+				SrcStartIdx: op.batchStart,
+				SrcEndIdx:   batchEnd,
+			},
+		)
 	}
 
 	op.batchStart = batchEnd

@@ -53,7 +53,13 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	expectedColVecs := make([]coldata.Vec, len(b.ColVecs()))
 	for i := range typs {
 		expectedColVecs[i] = coldata.NewMemColumn(typs[i], int(b.Length()))
-		expectedColVecs[i].Copy(b.ColVec(i), 0, uint64(b.Length()), typs[i])
+		expectedColVecs[i].Copy(
+			coldata.CopyArgs{
+				ColType:   typs[i],
+				Src:       b.ColVec(i),
+				SrcEndIdx: uint64(b.Length()),
+			},
+		)
 	}
 
 	arrowData, err := c.BatchToArrow(b)
