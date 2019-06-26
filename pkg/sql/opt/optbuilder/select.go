@@ -73,17 +73,28 @@ func (b *Builder) buildDataSource(
 
 		// CTEs take precedence over other data sources.
 		if cte := inScope.resolveCTE(tn); cte != nil {
-			if cte.used {
-				panic(unimplementedWithIssueDetailf(21084, "", "unsupported multiple use of CTE clause %q", tn))
-			}
-			cte.used = true
-
 			outScope = inScope.push()
 
-			// TODO(justin): once we support mutations here, we will want to include a
-			// spool operation.
-			outScope.expr = cte.expr
-			outScope.cols = cte.cols
+			inCols := make(opt.ColList, len(cte.cols))
+			outCols := make(opt.ColList, len(cte.cols))
+			outScope.cols = nil
+			i := 0
+			for _, col := range cte.cols {
+				id := col.id
+				c := b.factory.Metadata().ColumnMeta(id)
+				newCol := b.synthesizeColumn(outScope, string(col.name), c.Type, nil, nil)
+				newCol.table = *tn
+				inCols[i] = id
+				outCols[i] = newCol.id
+				i++
+			}
+
+			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
+				ID:      cte.id,
+				Name:    string(cte.name.Alias),
+				InCols:  inCols,
+				OutCols: outCols,
+			})
 			return outScope
 		}
 
@@ -476,14 +487,23 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	return inScope
 }
 
-func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
+func (b *Builder) buildCTE(
+	ctes []*tree.CTE, inScope *scope,
+) (outScope *scope, addedCTEs []cteSource) {
 	outScope = inScope.push()
+
+	start := len(b.ctes)
 
 	outScope.ctes = make(map[string]*cteSource)
 	for i := range ctes {
 		cteScope := b.buildStmt(ctes[i].Stmt, nil /* desiredTypes */, outScope)
 		cols := cteScope.cols
 		name := ctes[i].Name.Alias
+
+		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
+		if b.subquery != nil && !b.subquery.outerCols.Empty() {
+			panic(builderError{pgerror.Newf(pgcode.FeatureNotSupported, "CTEs may not be correlated")})
+		}
 
 		if _, ok := outScope.ctes[name.String()]; ok {
 			panic(pgerror.Newf(
@@ -516,27 +536,52 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 				"WITH clause %q does not have a RETURNING clause", tree.ErrString(&name)))
 		}
 
-		outScope.ctes[ctes[i].Name.Alias.String()] = &cteSource{
-			name: ctes[i].Name,
-			cols: cols,
-			expr: cteScope.expr,
+		projectionsScope := cteScope.replace()
+		projectionsScope.appendColumnsFromScope(cteScope)
+		b.constructProjectForScope(cteScope, projectionsScope)
+
+		cteScope = projectionsScope
+
+		id := b.factory.Memo().AddWithBinding(cteScope.expr)
+
+		// No good way to show non-select expressions, like INSERT, here.
+		var stmt tree.SelectStatement
+		if sel, ok := ctes[i].Stmt.(*tree.Select); ok {
+			stmt = sel.Select
 		}
+
+		b.ctes = append(b.ctes, cteSource{
+			name:         ctes[i].Name,
+			cols:         cols,
+			originalExpr: stmt,
+			expr:         cteScope.expr,
+			id:           id,
+		})
+		cte := &b.ctes[len(b.ctes)-1]
+		outScope.ctes[ctes[i].Name.Alias.String()] = cte
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
 
-	return outScope
+	return outScope, b.ctes[start:]
 }
 
-// checkCTEUsage ensures that a CTE that contains a mutation (like INSERT) is
-// used at least once by the query. Otherwise, it might not be executed.
-func (b *Builder) checkCTEUsage(inScope *scope) {
-	for alias, source := range inScope.ctes {
-		if !source.used && source.expr.Relational().CanMutate {
-			panic(unimplemented.NewWithIssuef(24307,
-				"common table expression %q with side effects was not used in query", alias))
-		}
+// wrapWithCTEs adds With expressions on top of an expression.
+func (b *Builder) wrapWithCTEs(expr memo.RelExpr, ctes []cteSource) memo.RelExpr {
+	// Since later CTEs can refer to earlier ones, we want to add these in
+	// reverse order.
+	for i := len(ctes) - 1; i >= 0; i-- {
+		expr = b.factory.ConstructWith(
+			ctes[i].expr,
+			expr,
+			&memo.WithPrivate{
+				ID:           ctes[i].id,
+				Name:         string(ctes[i].name.Alias),
+				OriginalExpr: &tree.Subquery{Select: ctes[i].originalExpr},
+			},
+		)
 	}
+	return expr
 }
 
 // buildSelectStmt builds a set of memo groups that represent the given select
@@ -609,9 +654,9 @@ func (b *Builder) buildSelect(
 		}
 	}
 
+	var ctes []cteSource
 	if with != nil {
-		inScope = b.buildCTE(with.CTEList, inScope)
-		defer b.checkCTEUsage(inScope)
+		inScope, ctes = b.buildCTE(with.CTEList, inScope)
 	}
 
 	// NB: The case statements are sorted lexicographically.
@@ -647,6 +692,8 @@ func (b *Builder) buildSelect(
 	if limit != nil {
 		b.buildLimit(limit, inScope, outScope)
 	}
+
+	outScope.expr = b.wrapWithCTEs(outScope.expr, ctes)
 
 	// TODO(rytaft): Support FILTER expression.
 	return outScope

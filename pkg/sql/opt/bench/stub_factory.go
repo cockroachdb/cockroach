@@ -295,3 +295,11 @@ func (f *stubFactory) ConstructAlterTableSplit(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructBuffer(value exec.Node, label string) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
+	return struct{}{}, nil
+}
