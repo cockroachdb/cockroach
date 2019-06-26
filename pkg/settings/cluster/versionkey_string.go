@@ -10,21 +10,20 @@ func _() {
 	var x [1]struct{}
 	_ = x[Version2_1-0]
 	_ = x[VersionUnreplicatedRaftTruncatedState-1]
-	_ = x[VersionCreateStats-2]
-	_ = x[VersionDirectImport-3]
-	_ = x[VersionSideloadedStorageNoReplicaID-4]
-	_ = x[VersionPushTxnToInclusive-5]
-	_ = x[VersionSnapshotsWithoutLog-6]
-	_ = x[Version19_1-7]
-	_ = x[VersionStart19_2-8]
-	_ = x[VersionQueryTxnTimestamp-9]
-	_ = x[VersionStickyBit-10]
-	_ = x[VersionParallelCommits-11]
+	_ = x[VersionDirectImport-2]
+	_ = x[VersionSideloadedStorageNoReplicaID-3]
+	_ = x[VersionPushTxnToInclusive-4]
+	_ = x[VersionSnapshotsWithoutLog-5]
+	_ = x[Version19_1-6]
+	_ = x[VersionStart19_2-7]
+	_ = x[VersionQueryTxnTimestamp-8]
+	_ = x[VersionStickyBit-9]
+	_ = x[VersionParallelCommits-10]
 }
 
-const _VersionKey_name = "Version2_1VersionUnreplicatedRaftTruncatedStateVersionCreateStatsVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
+const _VersionKey_name = "Version2_1VersionUnreplicatedRaftTruncatedStateVersionDirectImportVersionSideloadedStorageNoReplicaIDVersionPushTxnToInclusiveVersionSnapshotsWithoutLogVersion19_1VersionStart19_2VersionQueryTxnTimestampVersionStickyBitVersionParallelCommits"
 
-var _VersionKey_index = [...]uint16{0, 10, 47, 65, 84, 119, 144, 170, 181, 197, 221, 237, 259}
+var _VersionKey_index = [...]uint8{0, 10, 47, 66, 101, 126, 152, 163, 179, 203, 219, 241}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
