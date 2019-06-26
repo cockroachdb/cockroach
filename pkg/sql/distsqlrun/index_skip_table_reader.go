@@ -153,7 +153,7 @@ func newIndexSkipTableReader(
 	return t, nil
 }
 
-func (t *indexSkipTableReader) computeMaxIndexInterleaveLen(index *distsqlpb.IndexDescriptor) int {
+func (t *indexSkipTableReader) computeMaxIndexInterleaveLen(index *sqlbase.IndexDescriptor) int {
 	// no one interleaves into this index, so there is nothing else needed
 	if len(index.InterleavedBy) == 0 {
 		return 0
