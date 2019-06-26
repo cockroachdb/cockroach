@@ -42,7 +42,7 @@ import (
 // KVs using the mapped converter and sent to kvCh.
 type mysqldumpReader struct {
 	evalCtx  *tree.EvalContext
-	tables   map[string]*rowConverter
+	tables   map[string]*sql.RowConverter
 	kvCh     chan []roachpb.KeyValue
 	debugRow func(tree.Datums)
 }
@@ -56,13 +56,13 @@ func newMysqldumpReader(
 ) (*mysqldumpReader, error) {
 	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh}
 
-	converters := make(map[string]*rowConverter, len(tables))
+	converters := make(map[string]*sql.RowConverter, len(tables))
 	for name, table := range tables {
 		if table == nil {
 			converters[name] = nil
 			continue
 		}
-		conv, err := newRowConverter(table, evalCtx, kvCh)
+		conv, err := sql.NewRowConverter(table, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
 		}
@@ -129,22 +129,22 @@ func (m *mysqldumpReader) readFile(
 			startingCount := count
 			for _, inputRow := range rows {
 				count++
-				if expected, got := len(conv.visibleCols), len(inputRow); expected != got {
+				if expected, got := len(conv.VisibleCols), len(inputRow); expected != got {
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, inputRow)
 				}
 				for i, raw := range inputRow {
-					converted, err := mysqlValueToDatum(raw, conv.visibleColTypes[i], conv.evalCtx)
+					converted, err := mysqlValueToDatum(raw, conv.VisibleColTypes[i], conv.EvalCtx)
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
 					}
-					conv.datums[i] = converted
+					conv.Datums[i] = converted
 				}
-				if err := conv.row(ctx, inputIdx, count); err != nil {
+				if err := conv.Row(ctx, inputIdx, count); err != nil {
 					return err
 				}
 				if m.debugRow != nil {
-					m.debugRow(conv.datums)
+					m.debugRow(conv.Datums)
 				}
 			}
 		default:
@@ -155,7 +155,7 @@ func (m *mysqldumpReader) readFile(
 		}
 	}
 	for _, conv := range m.tables {
-		if err := conv.sendBatch(ctx); err != nil {
+		if err := conv.SendBatch(ctx); err != nil {
 			return err
 		}
 	}
