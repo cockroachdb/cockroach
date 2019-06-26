@@ -19,12 +19,12 @@
 namespace protobuf_roachpb_2fdata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_SequencedWrite;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Span;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ChangeReplicasTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ModifiedSpanTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ObservedTimestamp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_SplitTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_StickyBitTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ChangeReplicasTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_MergeTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
@@ -237,9 +237,10 @@ static void InitDefaultsChangeReplicasTrigger() {
   ::cockroach::roachpb::ChangeReplicasTrigger::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_ChangeReplicasTrigger =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsChangeReplicasTrigger}, {
-      &protobuf_roachpb_2fmetadata_2eproto::scc_info_ReplicaDescriptor.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_ChangeReplicasTrigger =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsChangeReplicasTrigger}, {
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_ReplicaDescriptor.base,
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,}};
 
 static void InitDefaultsModifiedSpanTrigger() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1984,6 +1985,8 @@ void MergeTrigger::InternalSwap(MergeTrigger* other) {
 void ChangeReplicasTrigger::InitAsDefaultInstance() {
   ::cockroach::roachpb::_ChangeReplicasTrigger_default_instance_._instance.get_mutable()->replica_ = const_cast< ::cockroach::roachpb::ReplicaDescriptor*>(
       ::cockroach::roachpb::ReplicaDescriptor::internal_default_instance());
+  ::cockroach::roachpb::_ChangeReplicasTrigger_default_instance_._instance.get_mutable()->desc_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
+      ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
 }
 void ChangeReplicasTrigger::clear_replica() {
   if (GetArenaNoVirtual() == NULL && replica_ != NULL) {
@@ -1994,11 +1997,18 @@ void ChangeReplicasTrigger::clear_replica() {
 void ChangeReplicasTrigger::clear_updated_replicas() {
   updated_replicas_.Clear();
 }
+void ChangeReplicasTrigger::clear_desc() {
+  if (GetArenaNoVirtual() == NULL && desc_ != NULL) {
+    delete desc_;
+  }
+  desc_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ChangeReplicasTrigger::kChangeTypeFieldNumber;
 const int ChangeReplicasTrigger::kReplicaFieldNumber;
 const int ChangeReplicasTrigger::kUpdatedReplicasFieldNumber;
 const int ChangeReplicasTrigger::kNextReplicaIdFieldNumber;
+const int ChangeReplicasTrigger::kDescFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ChangeReplicasTrigger::ChangeReplicasTrigger()
@@ -2017,6 +2027,11 @@ ChangeReplicasTrigger::ChangeReplicasTrigger(const ChangeReplicasTrigger& from)
     replica_ = new ::cockroach::roachpb::ReplicaDescriptor(*from.replica_);
   } else {
     replica_ = NULL;
+  }
+  if (from.has_desc()) {
+    desc_ = new ::cockroach::roachpb::RangeDescriptor(*from.desc_);
+  } else {
+    desc_ = NULL;
   }
   ::memcpy(&change_type_, &from.change_type_,
     static_cast<size_t>(reinterpret_cast<char*>(&next_replica_id_) -
@@ -2037,6 +2052,7 @@ ChangeReplicasTrigger::~ChangeReplicasTrigger() {
 
 void ChangeReplicasTrigger::SharedDtor() {
   if (this != internal_default_instance()) delete replica_;
+  if (this != internal_default_instance()) delete desc_;
 }
 
 void ChangeReplicasTrigger::SetCachedSize(int size) const {
@@ -2059,6 +2075,10 @@ void ChangeReplicasTrigger::Clear() {
     delete replica_;
   }
   replica_ = NULL;
+  if (GetArenaNoVirtual() == NULL && desc_ != NULL) {
+    delete desc_;
+  }
+  desc_ = NULL;
   ::memset(&change_type_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&next_replica_id_) -
       reinterpret_cast<char*>(&change_type_)) + sizeof(next_replica_id_));
@@ -2131,6 +2151,18 @@ bool ChangeReplicasTrigger::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.RangeDescriptor desc = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_desc()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -2180,6 +2212,12 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(4, this->next_replica_id(), output);
   }
 
+  // .cockroach.roachpb.RangeDescriptor desc = 5;
+  if (this->has_desc()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5, this->_internal_desc(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ChangeReplicasTrigger)
@@ -2205,6 +2243,13 @@ size_t ChangeReplicasTrigger::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *replica_);
+  }
+
+  // .cockroach.roachpb.RangeDescriptor desc = 5;
+  if (this->has_desc()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *desc_);
   }
 
   // .cockroach.roachpb.ReplicaChangeType change_type = 1;
@@ -2240,6 +2285,9 @@ void ChangeReplicasTrigger::MergeFrom(const ChangeReplicasTrigger& from) {
   if (from.has_replica()) {
     mutable_replica()->::cockroach::roachpb::ReplicaDescriptor::MergeFrom(from.replica());
   }
+  if (from.has_desc()) {
+    mutable_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.desc());
+  }
   if (from.change_type() != 0) {
     set_change_type(from.change_type());
   }
@@ -2267,6 +2315,7 @@ void ChangeReplicasTrigger::InternalSwap(ChangeReplicasTrigger* other) {
   using std::swap;
   CastToBase(&updated_replicas_)->InternalSwap(CastToBase(&other->updated_replicas_));
   swap(replica_, other->replica_);
+  swap(desc_, other->desc_);
   swap(change_type_, other->change_type_);
   swap(next_replica_id_, other->next_replica_id_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
