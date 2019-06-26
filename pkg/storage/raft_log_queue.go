@@ -355,6 +355,16 @@ func (td *truncateDecision) ShouldTruncate() bool {
 		(n > 0 && td.Input.LogSize >= RaftLogQueueStaleSize)
 }
 
+// EnsureNotPastIndex lowers the truncation point to the given index if it would
+// be truncating at a point past it. If a change is made, the ChosenVia is
+// updated with the given one.
+func (td *truncateDecision) EnsureNotPastIndex(index uint64, chosenVia string) {
+	if td.NewFirstIndex > index {
+		td.NewFirstIndex = index
+		td.ChosenVia = chosenVia
+	}
+}
+
 // computeTruncateDecision returns the oldest index that cannot be
 // truncated. If there is a behind node, we want to keep old raft logs so it
 // can catch up without having to send a full snapshot. However, if a node down
@@ -380,50 +390,54 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision.ChosenVia = truncatableIndexChosenViaQuorumIndex
 
 	for _, progress := range input.RaftStatus.Progress {
-		if !progress.RecentActive {
-			// If a follower isn't recently active, don't lower the truncation
-			// index for it as the follower is likely not online at all and would
-			// block log truncation forever.
+		// Snapshots are expensive, so we try our best to avoid truncating past
+		// where a follower is.
+
+		// First, we never truncate off a recently active follower, no matter how
+		// large the log gets. Recently active shares the (currently 10s) constant
+		// as the quota pool, so the quota pool should put a bound on how much the
+		// raft log can grow due to this.
+		//
+		// For live followers which are being probed (i.e. the leader doesn't know
+		// how far they've caught up), the Match index is too large, and so the
+		// quorum index can be, too. We don't want these followers to require a
+		// snapshot since they are most likely going to be caught up very soon (they
+		// respond with the "right index" to the first probe or don't respond, in
+		// which case they should end up as not recently active). But we also don't
+		// know their index, so we can't possible make a truncation decision that
+		// avoids that at this point and make the truncation a no-op.
+		//
+		// The scenario in which this is most relevant is during restores, where we
+		// split off new ranges that rapidly receive very large log entries while
+		// the Raft group is still in a state of discovery (a new leader starts
+		// probing followers at its own last index). Additionally, these ranges will
+		// be split many times over, resulting in a flurry of snapshots with
+		// overlapping bounds that put significant stress on the Raft snapshot
+		// queue.
+		if progress.RecentActive {
+			if progress.State == raft.ProgressStateProbe {
+				decision.EnsureNotPastIndex(decision.Input.FirstIndex, truncatableIndexChosenViaProbingFollower)
+			} else {
+				decision.EnsureNotPastIndex(progress.Match, truncatableIndexChosenViaFollowers)
+			}
 			continue
 		}
 
-		// Generally we truncate to the quorum commit index when the log becomes
-		// too large, but we make an exception for live followers which are
-		// being probed (i.e. the leader doesn't know how far they've caught
-		// up). In that case the Match index is too large, and so the quorum
-		// index can be, too. We don't want these followers to require a
-		// snapshot since they are most likely going to be caught up very soon
-		// (they respond with the "right index" to the first probe or don't
-		// respond, in which case they should end up as not recently active).
-		// But we also don't know their index, so we can't possible make a
-		// truncation decision that avoids that at this point and make the
-		// truncation a no-op.
-		//
-		// The scenario in which this is most relevant is during restores, where
-		// we split off new ranges that rapidly receive very large log entries
-		// while the Raft group is still in a state of discovery (a new leader
-		// starts probing followers at its own last index). Additionally, these
-		// ranges will be split many times over, resulting in a flurry of
-		// snapshots with overlapping bounds that put significant stress on the
-		// Raft snapshot queue.
-		if progress.State == raft.ProgressStateProbe {
-			if decision.NewFirstIndex > decision.Input.FirstIndex {
-				decision.NewFirstIndex = decision.Input.FirstIndex
-				decision.ChosenVia = truncatableIndexChosenViaProbingFollower
-			}
-		} else if !input.LogTooLarge() && decision.NewFirstIndex > progress.Match {
-			decision.NewFirstIndex = progress.Match
-			decision.ChosenVia = truncatableIndexChosenViaFollowers
+		// Second, if the follower has not been recently active, we don't
+		// truncate it off as long as the raft log is not too large.
+		if !input.LogTooLarge() {
+			decision.EnsureNotPastIndex(progress.Match, truncatableIndexChosenViaFollowers)
 		}
+
+		// Otherwise, we let it truncate to the quorum index.
 	}
 
 	// The pending snapshot index acts as a placeholder for a replica that is
 	// about to be added to the range (or is in Raft recovery). We don't want to
 	// truncate the log in a way that will require that new replica to be caught
 	// up via yet another Raft snapshot.
-	if input.PendingPreemptiveSnapshotIndex > 0 && decision.NewFirstIndex > input.PendingPreemptiveSnapshotIndex {
-		decision.NewFirstIndex = input.PendingPreemptiveSnapshotIndex
-		decision.ChosenVia = truncatableIndexChosenViaPendingSnap
+	if input.PendingPreemptiveSnapshotIndex > 0 {
+		decision.EnsureNotPastIndex(input.PendingPreemptiveSnapshotIndex, truncatableIndexChosenViaPendingSnap)
 	}
 
 	// Advance to the first index, but never truncate past the quorum commit
@@ -437,10 +451,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// updated on the leader when a command is proposed and in a single replica
 	// Raft group this also means that RaftStatus.Commit is updated at propose
 	// time.
-	if decision.NewFirstIndex > input.LastIndex {
-		decision.NewFirstIndex = input.LastIndex
-		decision.ChosenVia = truncatableIndexChosenViaLastIndex
-	}
+	decision.EnsureNotPastIndex(input.LastIndex, truncatableIndexChosenViaLastIndex)
 
 	// If new first index dropped below first index, make them equal (resulting
 	// in a no-op).
@@ -493,7 +504,7 @@ func (rlq *raftLogQueue) shouldQueue(
 }
 
 // shouldQueueImpl returns whether the given truncate decision should lead to
-// a log truncation. This is either the case if the decision says so or of
+// a log truncation. This is either the case if the decision says so or if
 // we want to recompute the log size (in which case `recomputeRaftLogSize` and
 // `shouldQ` are both true and a reasonable priority is returned).
 func (rlq *raftLogQueue) shouldQueueImpl(

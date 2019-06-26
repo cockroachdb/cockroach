@@ -170,10 +170,10 @@ func TestComputeTruncateDecision(t *testing.T) {
 			[]uint64{1, 2, 3, 4}, 100, 2, 2, 0,
 			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		},
-		// If over targetSize, should truncate to quorum committed index. Minority will need snapshots.
+		// Don't truncate off active followers, even if over targetSize.
 		{
 			[]uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
-			"should truncate: false [truncate 2 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B); implies 1 Raft snapshot]",
+			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Don't truncate away pending snapshot, even when log too large.
 		{
@@ -182,11 +182,11 @@ func TestComputeTruncateDecision(t *testing.T) {
 		},
 		{
 			[]uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
-			"should truncate: false [truncate 1 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
 			[]uint64{1, 3, 3, 4}, 2000, 3, 3, 0,
-			"should truncate: false [truncate 0 entries to first index 3 (chosen via: quorum); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 0 entries to first index 3 (chosen via: first index); log too large (2.0 KiB > 1000 B)]",
 		},
 		// The pending snapshot index affects the quorum commit index.
 		{
@@ -209,7 +209,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		}}
 	for i, c := range testCases {
-		t.Run(fmt.Sprintf("%+v", c), func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			status := raft.Status{
 				Progress: make(map[uint64]raft.Progress),
 			}
@@ -227,7 +227,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 			}
 			decision := computeTruncateDecision(input)
 			if act, exp := decision.String(), c.exp; act != exp {
-				t.Errorf("%d: got:\n%s\nwanted:\n%s", i, act, exp)
+				t.Errorf("%d:\ngot:\n%s\nwanted:\n%s", i, act, exp)
 			}
 
 			// Verify the triggers that queue a range for recomputation. In
@@ -266,11 +266,11 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 	exp := map[bool]map[bool]string{ // (tooLarge, active)
 		false: {
 			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower)]",
-			false: "should truncate: true [truncate 190 entries to first index 200 (chosen via: followers)]",
+			false: "should truncate: false [truncate 0 entries to first index 10 (chosen via: first index)]",
 		},
 		true: {
 			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)]",
-			false: "should truncate: true [truncate 290 entries to first index 300 (chosen via: quorum); log too large (2.0 KiB > 1.0 KiB); implies 1 Raft snapshot]",
+			false: "should truncate: true [truncate 190 entries to first index 200 (chosen via: followers); log too large (2.0 KiB > 1.0 KiB)]",
 		},
 	}
 
