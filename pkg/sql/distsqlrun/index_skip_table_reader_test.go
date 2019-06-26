@@ -122,10 +122,31 @@ func TestIndexSkipTableReader(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	runner.Exec(t, "CREATE INDEX t4_test_index ON test.t4 (y, x)")
 
+	// create some interleaved tables
+	sqlutils.CreateTable(t, sqlDB, "t5",
+		"x INT PRIMARY KEY",
+		10,
+		sqlutils.ToRowFn(yFnt1))
+
+	xFnt6 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row/10) + 1)
+	}
+	yFnt6 := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row%10) + 1)
+	}
+	// interleave a table now
+	sqlutils.CreateTableInterleaved(t, sqlDB, "t6",
+		"x INT, y INT, PRIMARY KEY(x, y)",
+		"t5 (x)",
+		99,
+		sqlutils.ToRowFn(xFnt6, yFnt6))
+
 	td1 := sqlbase.GetTableDescriptor(kvDB, "test", "t1")
 	td2 := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
 	td3 := sqlbase.GetTableDescriptor(kvDB, "test", "t3")
 	td4 := sqlbase.GetTableDescriptor(kvDB, "test", "t4")
+	td5 := sqlbase.GetTableDescriptor(kvDB, "test", "t5")
+	td6 := sqlbase.GetTableDescriptor(kvDB, "test", "t6")
 
 	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) distsqlpb.TableReaderSpan {
 		var span roachpb.Span
@@ -154,6 +175,30 @@ func TestIndexSkipTableReader(t *testing.T) {
 				OutputColumns: []uint32{0},
 			},
 			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
+		},
+		{
+			desc:      "Distinct scan on interleaved table parent",
+			tableDesc: td5,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[0] [1] [2] [3] [4] [5] [6] [7] [8] [9]]",
+		},
+		{
+			desc:      "Distinct scan on interleaved table child",
+			tableDesc: td6,
+			spec: distsqlpb.IndexSkipTableReaderSpec{
+				Spans: []distsqlpb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
+			},
+			post: distsqlpb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0},
+			},
+			expected: "[[1] [2] [3] [4] [5] [6] [7] [8] [9] [10]]",
 		},
 		{
 			desc:      "Distinct scan with multiple spans",

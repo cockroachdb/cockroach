@@ -156,7 +156,7 @@ func (b *Backup) NextKeyValues(
 			b.iterIdx = iterIdx
 
 			key := it.Key()
-			key.Key, ok, err = kr.RewriteKey(key.Key)
+			key.Key, ok, err = kr.RewriteKey(key.Key, false /* isFromSpan */)
 			if err != nil {
 				return nil, roachpb.Span{}, err
 			}
