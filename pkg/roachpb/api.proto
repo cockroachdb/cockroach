@@ -286,12 +286,53 @@ message ClearRangeRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // StartTime specifies a lower-bound timestamp, which, if non-zero, causes
+  // only keys with timestamps equal or greater to be cleared. This can have the
+  // effect of "reverting" the range's content to some earlier time via MVCC
+  // (though it is only true revert if cleared keys had not caused GC of earlier
+  // revisions in the meantime).
+  util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
 }
 
 // A ClearRangeResponse is the return value from the ClearRange() method.
 message ClearRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
+
+
+// A RevertRangeRequest specifies a range of keys in which to clear all MVCC
+// revisions more recent than some TargetTime from the underlying engine. This
+// directly clears any more recent MVCC revisions, so it can have the effect of
+// "reverting" what the range since by clearing more recently written keys, it
+// returns the MVCC-scanned values to TargetTime.
+//
+// Note: if a more recent MVCC revision of a key has caused an earlier revision
+// to be GC'ed it is not possible to revert to that earlier revision since it is
+// gone. Reverting such a range with this mechanism would instead simply cause
+// the key to appear to be gone. It is up to the caller to consider if this is
+// applicable to their usage and if so, take steps to avoid it. Some future work
+// could add the concept of a gc.revert_ttl which would prevent GC of a key that
+// otherwise meets the GC TTL if the key "shadowing" it is younger then the
+// revert TTL -- i.e. ensuring keys remain revertable via this mechanism (by not
+// clearing their earlier revisions) for that duraton. When such a mechanism is
+// built, this command should check that the TargetTime falls within that window
+// and return an error if it does not.
+message RevertRangeRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // TargetTime specifies a the time to which to "revert" the range by clearing any
+  // MVCC key with a strictly higher timestamp.
+  util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
+}
+
+// A RevertRangeResponse is the return value from the RevertRange() method.
+message RevertRangeResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 
 // ScanOptions is a collection of options for a batch of scans. The options
 // apply to all the scans in the batch.
@@ -1549,6 +1590,7 @@ message RequestUnion {
     DeleteRequest delete = 5;
     DeleteRangeRequest delete_range = 6;
     ClearRangeRequest clear_range = 38;
+    RevertRangeRequest revert_range = 48;
     ScanRequest scan = 7;
     BeginTransactionRequest begin_transaction = 8;
     EndTransactionRequest end_transaction = 9;
@@ -1600,6 +1642,7 @@ message ResponseUnion {
     DeleteResponse delete = 5;
     DeleteRangeResponse delete_range = 6;
     ClearRangeResponse clear_range = 38;
+    RevertRangeResponse revert_range = 48;
     ScanResponse scan = 7;
     BeginTransactionResponse begin_transaction = 8;
     EndTransactionResponse end_transaction = 9;
