@@ -87,11 +87,15 @@ func (p *coalescerOp) Next(ctx context.Context) coldata.Batch {
 						SrcEndIdx: leftover,
 					},
 				)
-				if sel != nil {
-					bufferCol.CopyWithSelInt16(fromCol, sel[leftover:batchSize], batchSize-leftover, t)
-				} else {
-					bufferCol.Copy(fromCol, uint64(leftover), uint64(batchSize), t)
-				}
+				bufferCol.Copy(
+					coldata.CopyArgs{
+						ColType:     t,
+						Src:         fromCol,
+						Sel:         sel,
+						SrcStartIdx: uint64(leftover),
+						SrcEndIdx:   uint64(batchSize),
+					},
+				)
 			}
 		}
 

@@ -164,7 +164,15 @@ func (t *topKSorter) spool(ctx context.Context) {
 					// TODO(solon): Make this copy more efficient, perhaps by adding a
 					// copy method to the vecComparator interface. This would avoid
 					// needing to switch on the column type every time.
-					t.topK.ColVec(j).CopyAt(inputBatch.ColVec(j), uint64(maxIdx), uint64(idx), uint64(idx+1), t.inputTypes[j])
+					t.topK.ColVec(j).Copy(
+						coldata.CopyArgs{
+							ColType:     t.inputTypes[j],
+							Src:         inputBatch.ColVec(j),
+							DestIdx:     uint64(maxIdx),
+							SrcStartIdx: uint64(idx),
+							SrcEndIdx:   uint64(idx + 1),
+						},
+					)
 				}
 				heap.Fix(t, 0)
 			}
@@ -195,7 +203,14 @@ func (t *topKSorter) emit() coldata.Batch {
 	}
 	for i := range t.inputTypes {
 		vec := t.output.ColVec(i)
-		vec.CopyWithSelInt16(t.topK.ColVec(i), t.sel, toEmit, t.inputTypes[i])
+		vec.Copy(
+			coldata.CopyArgs{
+				ColType:   t.inputTypes[i],
+				Src:       t.topK.ColVec(i),
+				Sel:       t.sel,
+				SrcEndIdx: uint64(toEmit),
+			},
+		)
 	}
 	t.output.SetLength(toEmit)
 	t.emitted += toEmit

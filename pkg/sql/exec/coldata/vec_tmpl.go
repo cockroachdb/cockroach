@@ -65,135 +65,114 @@ func (m *memColumn) Append(args AppendArgs) {
 	}
 }
 
-func (m *memColumn) Copy(src Vec, srcStartIdx, srcEndIdx uint64, typ types.T) {
-	m.CopyAt(src, 0, srcStartIdx, srcEndIdx, typ)
-}
+func (m *memColumn) Copy(args CopyArgs) {
+	if args.DestIdx != 0 && m.HasNulls() {
+		panic("copying to non-zero dest index with nulls is not implemented yet (would overwrite nulls)")
+	}
+	if args.Nils != nil && args.Sel64 == nil {
+		panic("Nils set without Sel64")
+	}
+	// TODO(asubiotto): This is extremely wrong (we might be overwriting nulls
+	// past the end of where we are copying to that should be left alone).
+	// Previous code did this though so we won't be introducing new problems. We
+	// really have to fix and test this.
+	m.Nulls().UnsetNulls()
 
-func (m *memColumn) CopyAt(src Vec, destStartIdx, srcStartIdx, srcEndIdx uint64, typ types.T) {
-	switch typ {
+	switch args.ColType {
 	// {{range .}}
 	case _TYPES_T:
-		copy(m._TemplateType()[destStartIdx:], src._TemplateType()[srcStartIdx:srcEndIdx])
-		// TODO(asubiotto): Improve this, there are cases where we don't need to
-		// allocate a new bitmap.
-		srcBitmap := src.Nulls().NullBitmap()
-		m.nulls.nulls = make([]byte, len(srcBitmap))
-		m.nulls.UnsetNulls()
-		if !src.HasNulls() {
+		fromCol := args.Src._TemplateType()
+		toCol := m._TemplateType()
+		if args.Sel64 != nil {
+			sel := args.Sel64
+			// TODO(asubiotto): Template this and the uint16 case below.
+			if args.Nils != nil {
+				if args.Src.HasNulls() {
+					nulls := args.Src.Nulls()
+					toColSliced := toCol[args.DestIdx:]
+					for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+						if args.Nils[i] || nulls.NullAt64(selIdx) {
+							m.nulls.SetNull64(uint64(i) + args.DestIdx)
+						} else {
+							toColSliced[i] = fromCol[selIdx]
+						}
+					}
+					return
+				}
+				// Nils but no Nulls.
+				toColSliced := toCol[args.DestIdx:]
+				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+					if args.Nils[i] {
+						m.nulls.SetNull64(uint64(i) + args.DestIdx)
+					} else {
+						toColSliced[i] = fromCol[selIdx]
+					}
+				}
+				return
+			}
+			// No Nils.
+			if args.Src.HasNulls() {
+				nulls := args.Src.Nulls()
+				toColSliced := toCol[args.DestIdx:]
+				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+					if nulls.NullAt64(selIdx) {
+						m.nulls.SetNull64(uint64(i) + args.DestIdx)
+					} else {
+						toColSliced[i] = fromCol[selIdx]
+					}
+				}
+				return
+			}
+			// No Nils or Nulls.
+			toColSliced := toCol[args.DestIdx:]
+			for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+				toColSliced[i] = fromCol[selIdx]
+			}
+			return
+		} else if args.Sel != nil {
+			sel := args.Sel
+			if args.Src.HasNulls() {
+				nulls := args.Src.Nulls()
+				toColSliced := toCol[args.DestIdx:]
+				for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+					if nulls.NullAt64(uint64(selIdx)) {
+						m.nulls.SetNull64(uint64(i) + args.DestIdx)
+					} else {
+						toColSliced[i] = fromCol[selIdx]
+					}
+				}
+				return
+			}
+			// No Nulls.
+			toColSliced := toCol[args.DestIdx:]
+			for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
+				toColSliced[i] = fromCol[selIdx]
+			}
 			return
 		}
-		if destStartIdx == 0 {
+		// No Sel or Sel64.
+		copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
+		// We do not check for existence of nulls in m due to forcibly unsetting
+		// the bitmap at the start.
+		if args.Src.HasNulls() {
 			m.nulls.hasNulls = true
-			copy(m.nulls.nulls, srcBitmap)
-		} else {
-			// The above strategy to just copy will not work. Fall back to a loop.
-			// TODO(asubiotto): This can be improved as well.
-			srcNulls := src.Nulls()
-			for curDestIdx, curSrcIdx := destStartIdx, srcStartIdx; curSrcIdx < srcEndIdx; curDestIdx, curSrcIdx = curDestIdx+1, curSrcIdx+1 {
-				if srcNulls.NullAt64(curSrcIdx) {
-					m.nulls.SetNull64(curDestIdx)
-				}
-			}
-		}
-	// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", typ))
-	}
-}
-
-func (m *memColumn) CopyWithSelInt64(vec Vec, sel []uint64, nSel uint16, colType types.T) {
-	m.nulls.UnsetNulls()
-
-	// todo (changangela): handle the case when nSel > BatchSize
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		toCol := m._TemplateType()
-		fromCol := vec._TemplateType()
-
-		if vec.HasNulls() {
-			for i := uint16(0); i < nSel; i++ {
-				if vec.Nulls().NullAt64(sel[i]) {
-					m.nulls.SetNull(i)
-				} else {
-					toCol[i] = fromCol[sel[i]]
-				}
-			}
-		} else {
-			for i := uint16(0); i < nSel; i++ {
-				toCol[i] = fromCol[sel[i]]
-			}
-		}
-		// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-}
-
-func (m *memColumn) CopyWithSelInt16(vec Vec, sel []uint16, nSel uint16, colType types.T) {
-	m.nulls.UnsetNulls()
-
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		toCol := m._TemplateType()
-		fromCol := vec._TemplateType()
-
-		if vec.HasNulls() {
-			for i := uint16(0); i < nSel; i++ {
-				if vec.Nulls().NullAt(sel[i]) {
-					m.nulls.SetNull(i)
-				} else {
-					toCol[i] = fromCol[sel[i]]
-				}
-			}
-		} else {
-			for i := uint16(0); i < nSel; i++ {
-				toCol[i] = fromCol[sel[i]]
-			}
-		}
-		// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-}
-
-func (m *memColumn) CopyWithSelAndNilsInt64(
-	vec Vec, sel []uint64, nSel uint16, nils []bool, colType types.T,
-) {
-	m.nulls.UnsetNulls()
-
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		toCol := m._TemplateType()
-		fromCol := vec._TemplateType()
-
-		if vec.HasNulls() {
-			// TODO(jordan): copy the null arrays in batch.
-			for i := uint16(0); i < nSel; i++ {
-				if nils[i] {
-					m.nulls.SetNull(i)
-				} else {
-					if vec.Nulls().NullAt64(sel[i]) {
-						m.nulls.SetNull(i)
-					} else {
-						toCol[i] = fromCol[sel[i]]
+			if args.DestIdx == 0 && args.SrcStartIdx == 0 {
+				// We can copy this bitmap indiscriminately.
+				copy(m.nulls.nulls, args.Src.Nulls().NullBitmap())
+			} else {
+				// TODO(asubiotto): This should use Extend but Extend only takes uint16
+				// arguments.
+				srcNulls := args.Src.Nulls()
+				for curDestIdx, curSrcIdx := args.DestIdx, args.SrcStartIdx; curSrcIdx < args.SrcEndIdx; curDestIdx, curSrcIdx = curDestIdx+1, curSrcIdx+1 {
+					if srcNulls.NullAt64(curSrcIdx) {
+						m.nulls.SetNull64(curDestIdx)
 					}
 				}
 			}
-		} else {
-			for i := uint16(0); i < nSel; i++ {
-				if nils[i] {
-					m.nulls.SetNull(i)
-				} else {
-					toCol[i] = fromCol[sel[i]]
-				}
-			}
 		}
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		panic(fmt.Sprintf("unhandled type %s", args.ColType))
 	}
 }
 

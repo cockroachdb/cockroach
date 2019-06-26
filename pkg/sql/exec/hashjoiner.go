@@ -291,7 +291,14 @@ func (hj *hashJoinEqOp) emitUnmatched() {
 		valCol := hj.ht.vals[hj.ht.outCols[i]]
 		colType := hj.ht.valTypes[hj.ht.outCols[i]]
 
-		outCol.CopyWithSelInt64(valCol, hj.prober.buildIdx, nResults, colType)
+		outCol.Copy(
+			coldata.CopyArgs{
+				ColType:   colType,
+				Src:       valCol,
+				Sel64:     hj.prober.buildIdx,
+				SrcEndIdx: uint64(nResults),
+			},
+		)
 	}
 
 	hj.prober.batch.SetLength(nResults)
@@ -904,11 +911,20 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		valCol := prober.ht.vals[prober.ht.outCols[i]]
 		colType := prober.ht.valTypes[prober.ht.outCols[i]]
 
+		var nils []bool
 		if prober.spec.outer {
-			outCol.CopyWithSelAndNilsInt64(valCol, prober.buildIdx, nResults, prober.probeRowUnmatched, colType)
-		} else {
-			outCol.CopyWithSelInt64(valCol, prober.buildIdx, nResults, colType)
+			nils = prober.probeRowUnmatched
 		}
+
+		outCol.Copy(
+			coldata.CopyArgs{
+				ColType:   colType,
+				Src:       valCol,
+				Sel64:     prober.buildIdx,
+				SrcEndIdx: uint64(nResults),
+				Nils:      nils,
+			},
+		)
 	}
 
 	for _, colIdx := range prober.spec.outCols {
@@ -916,7 +932,14 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		valCol := batch.ColVec(int(colIdx))
 		colType := prober.spec.sourceTypes[colIdx]
 
-		outCol.CopyWithSelInt16(valCol, prober.probeIdx, nResults, colType)
+		outCol.Copy(
+			coldata.CopyArgs{
+				ColType:   colType,
+				Src:       valCol,
+				Sel:       prober.probeIdx,
+				SrcEndIdx: uint64(nResults),
+			},
+		)
 	}
 
 	if prober.build.outer {
