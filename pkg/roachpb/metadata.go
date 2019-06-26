@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -195,6 +196,14 @@ func (r *RangeDescriptor) IncrementGeneration() {
 	// RangeDescriptors, so we need to be careful not to mutate the
 	// potentially-shared generation counter.
 	r.Generation = proto.Int64(r.GetGeneration() + 1)
+}
+
+// GetStickyBit returns the sticky bit of this RangeDescriptor.
+func (r RangeDescriptor) GetStickyBit() hlc.Timestamp {
+	if r.StickyBit == nil {
+		return hlc.Timestamp{}
+	}
+	return *r.StickyBit
 }
 
 // Validate performs some basic validation of the contents of a range descriptor.
