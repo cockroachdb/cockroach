@@ -262,8 +262,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// resolveSubzone determines the sub-parts of the zone
 	// specifier. This ought to succeed regardless of whether there is
 	// already a zone config.
-	index, partition, err := resolveSubzone(params.ctx, params.p.txn,
-		&n.zoneSpecifier, targetID, table)
+	index, partition, err := resolveSubzone(&n.zoneSpecifier, table)
 	if err != nil {
 		return err
 	}

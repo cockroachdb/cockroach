@@ -331,6 +331,32 @@ func (desc *IndexDescriptor) RunOverAllColumns(fn func(id ColumnID) error) error
 	return nil
 }
 
+// FindPartitionByName searches this partitioning descriptor for a partition
+// whose name is the input and returns it, or nil if no match is found.
+func (desc *PartitioningDescriptor) FindPartitionByName(name string) *PartitioningDescriptor {
+	for _, l := range desc.List {
+		if l.Name == name {
+			return desc
+		}
+		if s := l.Subpartitioning.FindPartitionByName(name); s != nil {
+			return s
+		}
+	}
+	for _, r := range desc.Range {
+		if r.Name == name {
+			return desc
+		}
+	}
+	return nil
+
+}
+
+// FindPartitionByName searches this index descriptor for a partition whose name
+// is the input and returns it, or nil if no match is found.
+func (desc *IndexDescriptor) FindPartitionByName(name string) *PartitioningDescriptor {
+	return desc.Partitioning.FindPartitionByName(name)
+}
+
 // allocateName sets desc.Name to a value that is not EqualName to any
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
@@ -1717,25 +1743,8 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 func (desc *TableDescriptor) FindNonDropPartitionByName(
 	name string,
 ) (*PartitioningDescriptor, *IndexDescriptor, error) {
-	var find func(p PartitioningDescriptor) *PartitioningDescriptor
-	find = func(p PartitioningDescriptor) *PartitioningDescriptor {
-		for _, l := range p.List {
-			if l.Name == name {
-				return &p
-			}
-			if s := find(l.Subpartitioning); s != nil {
-				return s
-			}
-		}
-		for _, r := range p.Range {
-			if r.Name == name {
-				return &p
-			}
-		}
-		return nil
-	}
 	for _, idx := range desc.AllNonDropIndexes() {
-		if p := find(idx.Partitioning); p != nil {
+		if p := idx.FindPartitionByName(name); p != nil {
 			return p, idx, nil
 		}
 	}

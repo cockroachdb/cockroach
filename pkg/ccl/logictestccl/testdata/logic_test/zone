@@ -308,3 +308,33 @@ SHOW ZONE CONFIGURATION FOR PARTITION x1 OF TABLE t35756
           num_replicas = 3,
           constraints = '[]',
           lease_preferences = '[]'
+
+# Regression test for #38391: verify that altering an index's partition really
+# modifies the partition.
+
+statement ok
+CREATE TABLE t38391 (
+  x INT, y INT, z INT,
+  PRIMARY KEY(x, y),
+  INDEX foo (x, z) PARTITION BY LIST (x) (
+    PARTITION x1_idx VALUES IN (1),
+    PARTITION DEFAULT VALUES IN (DEFAULT)
+  ))
+  PARTITION BY LIST (x) (
+    PARTITION x1 VALUES IN (1),
+    PARTITION DEFAULT_idx VALUES IN (DEFAULT)
+  )
+
+statement ok
+ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE USING gc.ttlseconds = 31337
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION x1_idx OF TABLE t38391
+----
+test.t38391.x1_idx  ALTER PARTITION x1_idx OF INDEX t38391@foo CONFIGURE ZONE USING
+                    range_min_bytes = 16777216,
+                    range_max_bytes = 67108864,
+                    gc.ttlseconds = 31337,
+                    num_replicas = 3,
+                    constraints = '[]',
+                    lease_preferences = '[]'

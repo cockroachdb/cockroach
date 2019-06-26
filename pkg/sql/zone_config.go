@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -302,22 +303,25 @@ func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (
 }
 
 func resolveSubzone(
-	ctx context.Context,
-	txn *client.Txn,
-	zs *tree.ZoneSpecifier,
-	targetID sqlbase.ID,
-	table *sqlbase.TableDescriptor,
+	zs *tree.ZoneSpecifier, table *sqlbase.TableDescriptor,
 ) (*sqlbase.IndexDescriptor, string, error) {
 	if !zs.TargetsTable() {
 		return nil, "", nil
 	}
+	partitionName := string(zs.Partition)
 	if indexName := string(zs.TableOrIndex.Index); indexName != "" {
 		index, _, err := table.FindIndexByName(indexName)
 		if err != nil {
 			return nil, "", err
 		}
-		return index, "", nil
-	} else if partitionName := string(zs.Partition); partitionName != "" {
+		if partitionName == "" {
+			return index, "", nil
+		}
+		if partitioning := index.FindPartitionByName(partitionName); partitioning == nil {
+			return nil, "", fmt.Errorf("partition %q does not exist on index %q", partitionName, indexName)
+		}
+		return index, partitionName, nil
+	} else if partitionName != "" {
 		_, index, err := table.FindNonDropPartitionByName(partitionName)
 		if err != nil {
 			return nil, "", err
