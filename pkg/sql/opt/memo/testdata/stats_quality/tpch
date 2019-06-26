@@ -3579,7 +3579,7 @@ sort
       │    │    │    │    │    │    │    ├── scan partsupp
       │    │    │    │    │    │    │    │    ├── save-table-name: q9_scan_10
       │    │    │    │    │    │    │    │    ├── columns: ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float!null)
-      │    │    │    │    │    │    │    │    ├── stats: [rows=800000, distinct(33)=199241, null(33)=0, distinct(34)=9920, null(34)=0, distinct(36)=100379, null(36)=0]
+      │    │    │    │    │    │    │    │    ├── stats: [rows=800000, distinct(33)=199241, null(33)=0, distinct(34)=9920, null(34)=0, distinct(36)=100379, null(36)=0, distinct(33,34)=800000, null(33,34)=0]
       │    │    │    │    │    │    │    │    ├── key: (33,34)
       │    │    │    │    │    │    │    │    └── fd: (33,34)-->(36)
       │    │    │    │    │    │    │    └── filters (true)

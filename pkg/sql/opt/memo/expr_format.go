@@ -191,6 +191,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
+	case *SortExpr:
+		if t.InputOrdering.Any() {
+			fmt.Fprintf(f.Buffer, "%v", e.Op())
+		} else {
+			fmt.Fprintf(f.Buffer, "%v (segmented)", e.Op())
+		}
 	default:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 	}
