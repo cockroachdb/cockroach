@@ -174,7 +174,29 @@ type TableStatistic interface {
 	// any column in the statistic.
 	NullCount() uint64
 
-	// TODO(radu): add Histogram().
+	// Histogram returns a slice of histogram buckets, sorted by UpperBound.
+	// It is only used for single-column stats (i.e., when ColumnCount() = 1),
+	// and it represents the distribution of values for that column.
+	// See HistogramBucket for more details.
+	Histogram() []HistogramBucket
+}
+
+// HistogramBucket contains the data for a single histogram bucket.
+type HistogramBucket struct {
+	// NumEq is the estimated number of values equal to UpperBound.
+	NumEq uint64
+
+	// NumRange is the estimated number of values between the lower bound of the
+	// bucket and UpperBound (both boundaries are exclusive).
+	//
+	// The lower bound is inferred based on the location of this bucket in a
+	// slice of buckets. If it is the first bucket, the lower bound is the minimum
+	// possible value for the given data type. Otherwise, the lower bound is equal
+	// to the upper bound of the previous bucket.
+	NumRange uint64
+
+	// UpperBound is the upper bound of the bucket.
+	UpperBound tree.Datum
 }
 
 // ForeignKeyConstraint represents a foreign key constraint. A foreign key
