@@ -823,6 +823,57 @@ define WindowPrivate {
     Ordering OrderingChoice
 }
 
+# With executes Binding, making its results available to Input. Within Input,
+# Binding may be referenced by a WithScan expression containing the ID of this
+# With.
+[Relational]
+define With {
+    Binding RelExpr
+    Input   RelExpr
+
+    _ WithPrivate
+}
+
+[Private]
+define WithPrivate {
+    ID WithID
+
+    # OriginalExpr contains the original Subquery expression if it's a SELECT
+    # so that we can display it in the EXPLAIN plan.
+    OriginalExpr Subquery
+
+    # Name is used to identify the with for debugging purposes.
+    Name string
+}
+
+# WithScan returns the results present in the With expression referenced
+# by ID.
+[Relational]
+define WithScan {
+    _ WithScanPrivate
+}
+
+[Private]
+define WithScanPrivate {
+    ID WithID
+
+    # Name is used to identify the with being referenced for debugging purposes.
+    Name string
+
+    # InCols are the columns output by the expression referenced by this
+    # expression. They correspond elementwise to the columns listed in OutCols.
+    # Every WithScanPrivate should have the same set of InCols.
+    InCols ColList
+
+    # OutCols contains a list of columns which correspond elementwise to the
+    # columns in InCols, which are the IDs output by the referenced With
+    # expression. WithScan cannot reuse the column IDs used in the original With
+    # expression, since multiple WithScans referencing the same With can occur in
+    # the same tree, so we maintain a mapping from the columns returned from
+    # the referenced expression to the referencing expression.
+    OutCols ColList
+}
+
 # FakeRel is a mock relational operator used for testing; its logical properties
 # are pre-determined and stored in the private. It can be used as the child of
 # an operator for which we are calculating properties or statistics.

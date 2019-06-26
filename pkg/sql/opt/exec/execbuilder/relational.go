@@ -11,6 +11,7 @@
 package execbuilder
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -234,6 +235,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
+
+	case *memo.WithExpr:
+		ep, err = b.buildWith(t)
+
+	case *memo.WithScanExpr:
+		ep, err = b.buildWithScan(t)
 
 	case *memo.ExplainExpr:
 		ep, err = b.buildExplain(t)
@@ -1299,6 +1306,97 @@ func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
 
+}
+
+func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
+	value, err := b.buildRelational(with.Binding)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	var label bytes.Buffer
+	fmt.Fprintf(&label, "buffer %d", with.ID)
+	if with.Name != "" {
+		fmt.Fprintf(&label, " (%s)", with.Name)
+	}
+
+	buffer, err := b.factory.ConstructBuffer(value.root, label.String())
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// TODO(justin): if the binding here has a spoolNode at its root, we can
+	// remove it, since subquery execution also guarantees complete execution.
+
+	// Add the buffer as a subquery so it gets executed ahead of time, and is
+	// available to be referenced by other queries.
+	b.subqueries = append(b.subqueries, exec.Subquery{
+		ExprNode: &tree.Subquery{
+			Select: with.OriginalExpr.Select,
+		},
+		// TODO(justin): this is wasteful: both the subquery and the bufferNode
+		// will buffer up all the results.  This should be fixed by either making
+		// the buffer point directly to the subquery results or adding a new
+		// subquery mode that reads and discards all rows. This could possibly also
+		// be fixed by ensuring that bufferNode exhausts its input (and forcing it
+		// to behave like a spoolNode) and using the EXISTS mode.
+		Mode: exec.SubqueryAllRows,
+		Root: buffer,
+	})
+
+	b.withExprs = append(b.withExprs, builtWithExpr{
+		id:         with.ID,
+		outputCols: value.outputCols,
+		bufferNode: buffer,
+	})
+
+	return b.buildRelational(with.Input)
+}
+
+func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
+	id := withScan.ID
+	var e *builtWithExpr
+	for i := range b.withExprs {
+		if b.withExprs[i].id == id {
+			e = &b.withExprs[i]
+			break
+		}
+	}
+	if e == nil {
+		panic(errors.AssertionFailedf("couldn't find With expression with ID %d", id))
+	}
+
+	var label bytes.Buffer
+	fmt.Fprintf(&label, "buffer %d", withScan.ID)
+	if withScan.Name != "" {
+		fmt.Fprintf(&label, " (%s)", withScan.Name)
+	}
+
+	node, err := b.factory.ConstructScanBuffer(e.bufferNode, label.String())
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// The ColumnIDs from the With expression need to get remapped according to
+	// the mapping in the withScan to get the actual colMap for this expression.
+	var outputCols opt.ColMap
+
+	referencedExpr := b.mem.GetExpr(withScan.ID)
+	if !referencedExpr.Relational().OutputCols.Equals(withScan.InCols.ToSet()) {
+		panic(errors.AssertionFailedf(
+			"columns being output from WITH do not match expected columns",
+		))
+	}
+
+	for i := range withScan.InCols {
+		idx, _ := e.outputCols.Get(int(withScan.InCols[i]))
+		outputCols.Set(int(withScan.OutCols[i]), idx)
+	}
+
+	return execPlan{
+		root:       node,
+		outputCols: outputCols,
+	}, nil
 }
 
 func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {

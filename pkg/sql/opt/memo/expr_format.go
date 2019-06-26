@@ -191,6 +191,20 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
+	case *WithExpr:
+		l := e.(*WithExpr)
+		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), l.ID)
+		if l.Name != "" {
+			fmt.Fprintf(f.Buffer, " (%s)", l.Name)
+		}
+
+	case *WithScanExpr:
+		lr := e.(*WithScanExpr)
+		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), lr.ID)
+		if lr.Name != "" {
+			fmt.Fprintf(f.Buffer, " (%s)", lr.Name)
+		}
+
 	default:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 	}
@@ -371,6 +385,18 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Child("columns: <none>")
 			}
 			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+		}
+
+	case *WithScanExpr:
+		if !f.HasFlags(ExprFmtHideColumns) {
+			child := tp.Child("mapping:")
+			for i := range t.InCols {
+				f.Buffer.Reset()
+				formatCol(f, "" /* label */, t.InCols[i], opt.ColSet{}, false /* omitType */)
+				f.Buffer.WriteString(" =>")
+				formatCol(f, "" /* label */, t.OutCols[i], opt.ColSet{}, false /* omitType */)
+				child.Child(f.Buffer.String())
+			}
 		}
 
 	case *CreateTableExpr:

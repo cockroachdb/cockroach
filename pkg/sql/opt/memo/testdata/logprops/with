@@ -1,0 +1,118 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+build
+WITH foo AS (SELECT * FROM xy) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: x:3(int!null) y:4(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2)-->(4)
+ ├── project
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    ├── interesting orderings: (+1)
+ │    └── scan xy
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2)
+ │         ├── prune: (1,2)
+ │         └── interesting orderings: (+1)
+ └── with-scan &1 (foo)
+      ├── columns: x:3(int!null) y:4(int)
+      ├── mapping:
+      │    ├──  xy.x:1(int) => x:3(int)
+      │    └──  xy.y:2(int) => y:4(int)
+      ├── key: (1)
+      └── fd: (1)-->(2,3), (2)-->(4)
+
+# Side effects should not be propagated up to the top-level from the Value
+# side of a WITH.
+build
+WITH foo AS (SELECT 1/0) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: "?column?":2(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1), (1)-->(2)
+ ├── project
+ │    ├── columns: "?column?":1(decimal)
+ │    ├── cardinality: [1 - 1]
+ │    ├── side-effects
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    └── project
+ │         ├── columns: "?column?":1(decimal)
+ │         ├── cardinality: [1 - 1]
+ │         ├── side-effects
+ │         ├── key: ()
+ │         ├── fd: ()-->(1)
+ │         ├── prune: (1)
+ │         ├── values
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── key: ()
+ │         │    └── tuple [type=tuple]
+ │         └── projections
+ │              └── div [type=decimal, side-effects]
+ │                   ├── const: 1 [type=int]
+ │                   └── const: 0 [type=int]
+ └── with-scan &1 (foo)
+      ├── columns: "?column?":2(decimal)
+      ├── mapping:
+      │    └──  "?column?":1(decimal) => "?column?":2(decimal)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      └── fd: ()-->(1), (1)-->(2)
+
+# Side effects should be propagated up to the top-level from the Input side of
+# a With.
+build
+WITH foo AS (SELECT 1) SELECT 1/0 FROM foo
+----
+with &1 (foo)
+ ├── columns: "?column?":3(decimal)
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    └── project
+ │         ├── columns: "?column?":1(int!null)
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(1)
+ │         ├── prune: (1)
+ │         ├── values
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── key: ()
+ │         │    └── tuple [type=tuple]
+ │         └── projections
+ │              └── const: 1 [type=int]
+ └── project
+      ├── columns: "?column?":3(decimal)
+      ├── cardinality: [1 - 1]
+      ├── side-effects
+      ├── key: ()
+      ├── fd: ()-->(3)
+      ├── prune: (3)
+      ├── with-scan &1 (foo)
+      │    ├── columns: "?column?":2(int!null)
+      │    ├── mapping:
+      │    │    └──  "?column?":1(int) => "?column?":2(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(1), (1)-->(2)
+      └── projections
+           └── div [type=decimal, side-effects]
+                ├── const: 1 [type=int]
+                └── const: 0 [type=int]
