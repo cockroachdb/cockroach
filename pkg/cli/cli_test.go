@@ -1941,6 +1941,8 @@ pq: query execution canceled due to statement timeout
 func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("currently flaky: #38151")
+
 	start := timeutil.Now()
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
