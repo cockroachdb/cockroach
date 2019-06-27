@@ -933,84 +933,84 @@ func TestMergeJoiner(t *testing.T) {
 			s, err := NewMergeJoinOp(tc.joinType, input[0], input[1], tc.leftOutCols,
 				tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings)
 			if err != nil {
-				t.Fatal("Error in merge join op constructor", err)
+				t.Fatal("error in merge join op constructor", err)
 			}
 
 			out := newOpTestOutput(s, tc.expectedOutCols, tc.expected)
 			s.(*mergeJoinOp).initWithBatchSize(tc.outputBatchSize)
 
 			if err := out.Verify(); err != nil {
-				t.Fatalf("Test case description: '%s'\n%v", tc.description, err)
+				t.Fatalf("test case description: '%s'\n%v", tc.description, err)
 			}
 		})
 	}
 }
 
-// TestMergeJoinerMultiBatch creates one long input of a 1:1 join, and keeps track of the expected
-// output to make sure the join output is batched correctly.
+// TestMergeJoinerMultiBatch creates one long input of a 1:1 join, and keeps
+// track of the expected output to make sure the join output is batched
+// correctly.
 func TestMergeJoinerMultiBatch(t *testing.T) {
 	ctx := context.Background()
-	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
-		for _, numInputBatches := range []int{1, 2, 16} {
-			for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize} {
-				t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
-					func(t *testing.T) {
-						nTuples := coldata.BatchSize * numInputBatches
-						typs := []types.T{types.Int64}
-						cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
-						groups := cols[0].Int64()
-						for i := range groups {
-							groups[i] = int64(i)
-						}
+	for _, numInputBatches := range []int{1, 2, 16} {
+		for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize} {
+			t.Run(fmt.Sprintf("numInputBatches=%d", numInputBatches),
+				func(t *testing.T) {
+					nTuples := coldata.BatchSize * numInputBatches
+					typs := []types.T{types.Int64}
+					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+					groups := cols[0].Int64()
+					for i := range groups {
+						groups[i] = int64(i)
+					}
 
-						leftSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
-						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
+					leftSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
+					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
-						a, err := NewMergeJoinOp(
-							sqlbase.InnerJoin,
-							leftSource,
-							rightSource,
-							[]uint32{0},
-							[]uint32{0},
-							typs,
-							typs,
-							[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
-							[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
-						)
-						if err != nil {
-							t.Fatal("Error in merge join op constructor", err)
-						}
+					a, err := NewMergeJoinOp(
+						sqlbase.InnerJoin,
+						leftSource,
+						rightSource,
+						[]uint32{0},
+						[]uint32{0},
+						typs,
+						typs,
+						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
+					)
+					if err != nil {
+						t.Fatal("error in merge join op constructor", err)
+					}
 
-						a.(*mergeJoinOp).initWithBatchSize(outBatchSize)
+					a.(*mergeJoinOp).initWithBatchSize(outBatchSize)
 
-						i := 0
-						count := 0
-						// Keep track of the last comparison value.
-						lastVal := int64(0)
-						for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
-							count += int(b.Length())
-							outCol := b.ColVec(0).Int64()
-							for j := int64(0); j < int64(b.Length()); j++ {
-								outVal := outCol[j]
-								expVal := lastVal
-								if outVal != expVal {
-									t.Fatalf("Found val %d, expected %d, idx %d of batch %d", outVal, expVal, j, i)
-								}
-								lastVal++
+					i := 0
+					count := 0
+					// Keep track of the last comparison value.
+					expVal := int64(0)
+					for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
+						count += int(b.Length())
+						outCol := b.ColVec(0).Int64()
+						for j := int64(0); j < int64(b.Length()); j++ {
+							outVal := outCol[j]
+							if outVal != expVal {
+								t.Fatalf("found val %d, expected %d, idx %d of batch %d",
+									outVal, expVal, j, i)
 							}
-							i++
+							expVal++
 						}
-						if count != nTuples {
-							t.Fatalf("Found count %d, expected count %d", count, nTuples)
-						}
-					})
-			}
+						i++
+					}
+					if count != nTuples {
+						t.Fatalf("found count %d, expected count %d", count, nTuples)
+					}
+				})
 		}
 	}
 }
 
-// TestMergeJoinerMultiBatchRuns creates one long input of a n:n join, and keeps track of the expected
-// count to make sure the join output is batched correctly.
+// TestMergeJoinerMultiBatchRuns creates one long input of a n:n join, and
+// keeps track of the expected count to make sure the join output is batched
+// correctly.
 func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 	ctx := context.Background()
 	for _, groupSize := range []int{coldata.BatchSize / 8, coldata.BatchSize / 4, coldata.BatchSize / 2} {
@@ -1040,7 +1040,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}, {ColIdx: 1, Direction: distsqlpb.Ordering_Column_ASC}},
 					)
 					if err != nil {
-						t.Fatal("Error in merge join op constructor", err)
+						t.Fatal("error in merge join op constructor", err)
 					}
 
 					a.(*mergeJoinOp).Init()
@@ -1056,7 +1056,8 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 							outVal := outCol[j]
 							expVal := lastVal / int64(groupSize*groupSize)
 							if outVal != expVal {
-								t.Fatalf("Found val %d, expected %d, idx %d of batch %d", outVal, expVal, j, i)
+								t.Fatalf("found val %d, expected %d, idx %d of batch %d",
+									outVal, expVal, j, i)
 							}
 							lastVal++
 						}
@@ -1064,15 +1065,17 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					}
 
 					if count != groupSize*coldata.BatchSize*numInputBatches {
-						t.Fatalf("Found count %d, expected count %d", count, groupSize*coldata.BatchSize*numInputBatches)
+						t.Fatalf("found count %d, expected count %d",
+							count, groupSize*coldata.BatchSize*numInputBatches)
 					}
 				})
 		}
 	}
 }
 
-// TestMergeJoinerLongMultiBatchCount creates one long input of a 1:1 join, and keeps track of the expected
-// count to make sure the join output is batched correctly.
+// TestMergeJoinerLongMultiBatchCount creates one long input of a 1:1 join, and
+// keeps track of the expected count to make sure the join output is batched
+// correctly.
 func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 	ctx := context.Background()
 	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
@@ -1103,7 +1106,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 							[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
 						)
 						if err != nil {
-							t.Fatal("Error in merge join op constructor", err)
+							t.Fatal("error in merge join op constructor", err)
 						}
 
 						a.(*mergeJoinOp).initWithBatchSize(outBatchSize)
@@ -1113,7 +1116,8 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 							count += int(b.Length())
 						}
 						if count != nTuples {
-							t.Fatalf("Found count %d, expected count %d", count, nTuples)
+							t.Fatalf("found count %d, expected count %d",
+								count, nTuples)
 						}
 					})
 			}
@@ -1121,8 +1125,9 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 	}
 }
 
-// TestMergeJoinerMultiBatchCountRuns creates one long input of a n:n join, and keeps track of the expected
-// count to make sure the join output is batched correctly.
+// TestMergeJoinerMultiBatchCountRuns creates one long input of a n:n join, and
+// keeps track of the expected count to make sure the join output is batched
+// correctly.
 func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 	ctx := context.Background()
 	for _, groupSize := range []int{coldata.BatchSize / 8, coldata.BatchSize / 4, coldata.BatchSize / 2} {
@@ -1152,7 +1157,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 						[]distsqlpb.Ordering_Column{{ColIdx: 0, Direction: distsqlpb.Ordering_Column_ASC}},
 					)
 					if err != nil {
-						t.Fatal("Error in merge join op constructor", err)
+						t.Fatal("error in merge join op constructor", err)
 					}
 
 					a.(*mergeJoinOp).Init()
@@ -1162,7 +1167,8 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 						count += int(b.Length())
 					}
 					if count != groupSize*coldata.BatchSize*numInputBatches {
-						t.Fatalf("Found count %d, expected count %d", count, groupSize*coldata.BatchSize*numInputBatches)
+						t.Fatalf("found count %d, expected count %d",
+							count, groupSize*coldata.BatchSize*numInputBatches)
 					}
 				})
 		}
@@ -1267,7 +1273,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							)
 
 							if err != nil {
-								t.Fatal("Error in merge join op constructor", err)
+								t.Fatal("error in merge join op constructor", err)
 							}
 
 							a.(*mergeJoinOp).Init()
@@ -1287,7 +1293,8 @@ func TestMergeJoinerRandomized(t *testing.T) {
 									expVal := exp[cpIdx].val
 									exp[cpIdx].cardinality--
 									if expVal != outVal {
-										t.Fatalf("Found val %d, expected %d, idx %d of batch %d", outVal, expVal, j, i)
+										t.Fatalf("found val %d, expected %d, idx %d of batch %d",
+											outVal, expVal, j, i)
 									}
 								}
 								i++

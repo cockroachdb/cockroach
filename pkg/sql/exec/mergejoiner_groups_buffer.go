@@ -10,52 +10,64 @@
 
 package exec
 
-// circularGroupsBuffer is a struct design to store the groups slice
-// for a given column. We know that there is a maximum number of possible
-// groups per batch, so we can cap the buffer and make it circular.
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
+
+// TODO(yuzefovich): rename this file.
+
+// circularGroupsBuffer is a struct designed to store the groups' slices for a
+// given column. We know that there is a maximum number of possible groups per
+// batch, so we can cap the buffer and make it circular.
 type circularGroupsBuffer struct {
-	bufferStartIdx     int
-	bufferEndIdx       int
-	bufferCap          int
-	bufferEndIdxForCol int
+	// startIdx indicates which index the next group to be processed is stored
+	// at.
+	startIdx int
+	// bufferEndIdx indicates the first empty slot within the buffer.
+	bufferEndIdx int
+	// nextColStartIdx is the index of the first group that belongs to the next
+	// column.
+	nextColStartIdx int
+	cap             int
 
 	leftGroups  []group
 	rightGroups []group
 }
 
-func makeGroupsBuffer(bufferCap int) circularGroupsBuffer {
+func makeGroupsBuffer(cap int) circularGroupsBuffer {
 	return circularGroupsBuffer{
-		bufferCap: bufferCap,
+		cap: cap,
 		// Allocate twice the amount of space needed so that no additional
 		// allocations are needed to make the resulting slice contiguous.
-		leftGroups:  make([]group, bufferCap*2),
-		rightGroups: make([]group, bufferCap*2),
+		leftGroups:  make([]group, cap*2),
+		rightGroups: make([]group, cap*2),
 	}
 }
 
 // reset sets the circular buffer state to groups that produce the maximal
-// cross product, ie one maximal group on each side.
-func (b *circularGroupsBuffer) reset(lIdx int, lLength int, rIdx int, rLength int) {
-	b.bufferStartIdx = 0
+// cross product, i.e. one maximal group on each side.
+func (b *circularGroupsBuffer) reset(lStartIdx int, lEndIdx int, rStartIdx int, rEndIdx int) {
+	b.startIdx = 0
 	b.bufferEndIdx = 1
-	b.bufferEndIdxForCol = 1
+	b.nextColStartIdx = 1
 
-	b.leftGroups[0] = group{lIdx, lLength, 1, 0, false, false}
-	b.rightGroups[0] = group{rIdx, rLength, 1, 0, false, false}
+	b.leftGroups[0] = group{lStartIdx, lEndIdx, 1, 0, false, false}
+	b.rightGroups[0] = group{rStartIdx, rEndIdx, 1, 0, false, false}
 }
 
-// nextGroupInCol returns whether or not there exists a next group in the current
-// column, and sets the parameters to be the left and right groups corresponding
-// to the next values in the buffer.
+// nextGroupInCol returns whether or not there exists a next group in the
+// current column, and sets the parameters to be the left and right groups
+// corresponding to the next values in the buffer.
 func (b *circularGroupsBuffer) nextGroupInCol(lGroup *group, rGroup *group) bool {
-	if b.bufferStartIdx == b.bufferEndIdxForCol {
+	if b.startIdx == b.nextColStartIdx {
 		return false
 	}
-	idx := b.bufferStartIdx
-	b.bufferStartIdx++
+	idx := b.startIdx
+	b.startIdx++
 
-	if b.bufferStartIdx >= b.bufferCap {
-		b.bufferStartIdx -= b.bufferCap
+	if b.startIdx >= b.cap {
+		b.startIdx -= b.cap
 	}
 
 	*lGroup = b.leftGroups[idx]
@@ -66,12 +78,12 @@ func (b *circularGroupsBuffer) nextGroupInCol(lGroup *group, rGroup *group) bool
 // isLastGroupInCol returns whether the last group obtained via nextGroupInCol
 // from the buffer is the last one for the column.
 func (b *circularGroupsBuffer) isLastGroupInCol() bool {
-	return b.bufferStartIdx == b.bufferEndIdxForCol
+	return b.startIdx == b.nextColStartIdx
 }
 
-// addGroupsToNextCol appends a left and right group to the buffer. In an iteration
-// of a column, these values are either processed in the next equality column, or
-// used to build the cross product.
+// addGroupsToNextCol appends a left and right group to the buffer. In an
+// iteration of a column, these values are either processed in the next
+// equality column or used to build the cross product.
 func (b *circularGroupsBuffer) addGroupsToNextCol(
 	curLIdx int, lRunLength int, curRIdx int, rRunLength int,
 ) {
@@ -90,8 +102,8 @@ func (b *circularGroupsBuffer) addGroupsToNextCol(
 	b.bufferEndIdx++
 
 	// Modulus on every step is more expensive than this check.
-	if b.bufferEndIdx >= b.bufferCap {
-		b.bufferEndIdx -= b.bufferCap
+	if b.bufferEndIdx >= b.cap {
+		b.bufferEndIdx -= b.cap
 	}
 }
 
@@ -117,43 +129,111 @@ func (b *circularGroupsBuffer) addLeftOuterGroup(curLIdx int, curRIdx int) {
 	b.bufferEndIdx++
 
 	// Modulus on every step is more expensive than this check.
-	if b.bufferEndIdx >= b.bufferCap {
-		b.bufferEndIdx -= b.bufferCap
+	if b.bufferEndIdx >= b.cap {
+		b.bufferEndIdx -= b.cap
 	}
 }
 
-// finishedCol is used to notify the circular buffer to update the indices representing
-// the "window" of available values for the next column.
+// finishedCol is used to notify the circular buffer to update the indices
+// representing the "window" of available values for the next column.
 func (b *circularGroupsBuffer) finishedCol() {
-	b.bufferStartIdx = b.bufferEndIdxForCol
-	b.bufferEndIdxForCol = b.bufferEndIdx
+	b.startIdx = b.nextColStartIdx
+	b.nextColStartIdx = b.bufferEndIdx
 }
 
-// getLGroups wraps getGroups for the groups on the left side.
-func (b *circularGroupsBuffer) getLGroups() []group {
-	return b.getGroups(b.leftGroups)
-}
-
-// getRGroups wraps getGroups for the groups on the right side.
-func (b *circularGroupsBuffer) getRGroups() []group {
-	return b.getGroups(b.rightGroups)
-}
-
-// getGroups returns a []group that is contiguous, which is a useful simplification
-// for the build phase.
-func (b *circularGroupsBuffer) getGroups(groups []group) []group {
-	startIdx := b.bufferStartIdx
+// getGroups returns left and right slices of groups that are contiguous, which
+// is a useful simplification for the build phase.
+func (b *circularGroupsBuffer) getGroups() ([]group, []group) {
+	startIdx := b.startIdx
 	endIdx := b.bufferEndIdx
+	leftGroups, rightGroups := b.leftGroups, b.rightGroups
 
 	if endIdx < startIdx {
-		copy(groups[b.bufferCap:], groups[:endIdx])
-		endIdx += b.bufferCap
+		copy(leftGroups[b.cap:], leftGroups[:endIdx])
+		copy(rightGroups[b.cap:], rightGroups[:endIdx])
+		endIdx += b.cap
 	}
 
-	return groups[startIdx:endIdx]
+	return leftGroups[startIdx:endIdx], rightGroups[startIdx:endIdx]
 }
 
-// getBufferLen returns the length of the buffer, ie the length of the "window".
-func (b *circularGroupsBuffer) getBufferLen() int {
-	return (b.bufferEndIdx - b.bufferStartIdx + b.bufferCap) % b.bufferCap
+func newMJBufferedGroup(types []types.T) *mjBufferedGroup {
+	bg := &mjBufferedGroup{
+		colVecs: make([]coldata.Vec, len(types)),
+	}
+	for i, t := range types {
+		bg.colVecs[i] = coldata.NewMemColumn(t, coldata.BatchSize)
+	}
+	return bg
+}
+
+// mjBufferedGroup is a custom implementation of coldata.Batch interface (only
+// a subset of methods is implemented) which stores the length as uint64. This
+// allows for plugging it into the builder through the common interface.
+type mjBufferedGroup struct {
+	colVecs []coldata.Vec
+	length  uint64
+	// needToReset indicates whether the buffered group should be reset on the
+	// call to reset().
+	needToReset bool
+}
+
+var _ coldata.Batch = &mjBufferedGroup{}
+
+func (bg *mjBufferedGroup) Length() uint16 {
+	panic("Length() should not be called on mjBufferedGroup; instead, " +
+		"length field should be accessed directly")
+}
+
+func (bg *mjBufferedGroup) SetLength(uint16) {
+	panic("SetLength(uint16) should not be called on mjBufferedGroup;" +
+		"instead, length field should be accessed directly")
+}
+
+func (bg *mjBufferedGroup) Width() int {
+	return len(bg.colVecs)
+}
+
+func (bg *mjBufferedGroup) ColVec(i int) coldata.Vec {
+	return bg.colVecs[i]
+}
+
+func (bg *mjBufferedGroup) ColVecs() []coldata.Vec {
+	return bg.colVecs
+}
+
+// Selection is not implemented because the tuples should only be appended to
+// mjBufferedGroup, and Append does the deselection step.
+func (bg *mjBufferedGroup) Selection() []uint16 {
+	return nil
+}
+
+// SetSelection is not implemented because the tuples should only be appended
+// to mjBufferedGroup, and Append does the deselection step.
+func (bg *mjBufferedGroup) SetSelection(bool) {
+	panic("SetSelection(bool) should not be called on mjBufferedGroup")
+}
+
+// AppendCol is not implemented because mjBufferedGroup is only initialized
+// when the column schema is known.
+func (bg *mjBufferedGroup) AppendCol(types.T) {
+	panic("AppendCol(types.T) should not be called on mjBufferedGroup")
+}
+
+// Reset is not implemented because mjBufferedGroup is not reused with
+// different column schemas at the moment.
+func (bg *mjBufferedGroup) Reset(types []types.T, length int) {
+	panic("Reset([]types.T, int) should not be called on mjBufferedGroup")
+}
+
+// reset resets the state of the buffered group so that we can reuse the
+// underlying memory.
+func (bg *mjBufferedGroup) reset() {
+	bg.length = 0
+	bg.needToReset = false
+	for _, colVec := range bg.colVecs {
+		// We do not need to reset the column vectors because those will be just
+		// written over, but we do need to reset the nulls.
+		colVec.Nulls().UnsetNulls()
+	}
 }

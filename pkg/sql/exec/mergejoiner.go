@@ -20,7 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// group is an ADT representing a contiguous section of values.
+// group is an ADT representing a contiguous set of rows that match on their
+// equality columns.
 type group struct {
 	rowStartIdx int
 	rowEndIdx   int
@@ -41,16 +42,16 @@ type group struct {
 	unmatched bool
 }
 
-// mjBuilderState contains all the state required to execute in the build phase.
+// mjBuilderState contains all the state required to execute the build phase.
 type mjBuilderState struct {
-	// Fields to hold the input sources batches from which to build the cross products.
+	// Fields to hold the input sources batches from which to build the cross
+	// products.
 	lBatch coldata.Batch
 	rBatch coldata.Batch
 
 	// Fields to identify the groups in the input sources.
-	lGroups   []group
-	rGroups   []group
-	groupsLen int
+	lGroups []group
+	rGroups []group
 
 	// outCount keeps record of the current number of rows in the output.
 	outCount uint16
@@ -64,16 +65,17 @@ type mjBuilderState struct {
 }
 
 // mjBuilderCrossProductState is used to keep track of builder state within the
-// loops to materialize the cross product. Useful for picking up where we left off.
+// loops to materialize the cross product. Useful for picking up where we left
+// off.
 type mjBuilderCrossProductState struct {
 	colIdx         int
 	groupsIdx      int
 	curSrcStartIdx int
 	numRepeatsIdx  int
-	finished       bool
 }
 
-// mjProberState contains all the state required to execute in the probing phases.
+// mjProberState contains all the state required to execute in the probing
+// phase.
 type mjProberState struct {
 	// Fields to save the "working" batches to state in between outputs.
 	lBatch  coldata.Batch
@@ -83,42 +85,40 @@ type mjProberState struct {
 	rIdx    int
 	rLength int
 
-	// Local buffer for the last left and right groups.
-	// Used when the group ends with a batch and the group on each side needs to be saved to state
-	// in order to be able to continue it in the next batch.
-	lBufferedGroup coldata.Batch
-	lGroupEndIdx   int
-	rBufferedGroup coldata.Batch
-	rGroupEndIdx   int
-
-	// inputDone is a flag to indicate whether the merge joiner has reached the end
-	// of input, and thus should wrap up execution.
-	inputDone bool
+	// Local buffer for the last left and right groups which is used when the
+	// group ends with a batch and the group on each side needs to be saved to
+	// state in order to be able to continue it in the next batch.
+	lBufferedGroup *mjBufferedGroup
+	rBufferedGroup *mjBufferedGroup
 }
 
 // mjState represents the state of the merge joiner.
 type mjState int
 
 const (
-	// mjEntry is the entry state of the merge joiner where all the batches and indices
-	// are properly set, regardless if Next was called the first time or the 1000th time.
-	// This state also routes into the correct state based on the prober state after setup.
+	// mjEntry is the entry state of the merge joiner where all the batches and
+	// indices are properly set, regardless if Next was called the first time or
+	// the 1000th time. This state also routes into the correct state based on
+	// the prober state after setup.
 	mjEntry mjState = iota
 
-	// mjSourceFinished is the state in which one of the input sources has no more available
-	// batches, thus signaling that the joiner should begin wrapping up execution by outputting
-	// any remaining groups in state.
+	// mjSourceFinished is the state in which one of the input sources has no
+	// more available batches, thus signaling that the joiner should begin
+	// wrapping up execution by outputting any remaining groups in state.
 	mjSourceFinished
 
-	// mjFinishGroup is the state in which the previous state resulted in a group that ended
-	// with a batch. This state finishes that group and builds the output.
-	mjFinishGroup
+	// mjFinishBufferedGroup is the state in which the previous state resulted in
+	// a group that ended with a batch. Such a group was buffered, and this state
+	// finishes that group and builds the output.
+	mjFinishBufferedGroup
 
-	// mjProbe is the main probing state in which the groups for the current batch are determined.
+	// mjProbe is the main probing state in which the groups for the current
+	// batch are determined.
 	mjProbe
 
-	// mjBuild is the state in which the groups determined by the probing states are built, ie
-	// materialized to the output member by creating the cross product.
+	// mjBuild is the state in which the groups determined by the probing states
+	// are built, i.e. materialized to the output member by creating the cross
+	// product.
 	mjBuild
 )
 
@@ -132,16 +132,18 @@ type mergeJoinInput struct {
 	outCols []uint32
 
 	// directions specifies the ordering direction of each column. Note that each
-	// direction corresponds to an equality column at the same location, ie the
-	// direction of eqCols[x] is encoded at directions[x], or len(eqCols) == len(directions).
+	// direction corresponds to an equality column at the same location, i.e. the
+	// direction of eqCols[x] is encoded at directions[x], or
+	// len(eqCols) == len(directions).
 	directions []distsqlpb.Ordering_Column_Direction
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
 	sourceTypes []types.T
 
-	// The distincter is used in the finishGroup phase, and is used only to determine
-	// where the current group ends, in the case that the group ended with a batch.
+	// The distincter is used in the finishGroup phase, and is used only to
+	// determine where the current group ends, in the case that the group ended
+	// with a batch.
 	distincterInput feedOperator
 	distincter      Operator
 	distinctOutput  []bool
@@ -150,40 +152,41 @@ type mergeJoinInput struct {
 	source Operator
 }
 
-// feedOperator is used to feed the distincter with input by manually setting the
-// next batch.
+// feedOperator is used to feed the distincter with input by manually setting
+// the next batch.
 type feedOperator struct {
-	bat coldata.Batch
+	batch coldata.Batch
 }
 
 func (feedOperator) Init() {}
 
 func (o *feedOperator) Next(context.Context) coldata.Batch {
-	return o.bat
+	return o.batch
 }
 
 var _ Operator = &feedOperator{}
 
-// mergeJoinOp is an operator that implements sort-merge join.
-// It performs a merge on the left and right input sources, based on the equality
-// columns, assuming both inputs are in sorted order.
+// mergeJoinOp is an operator that implements sort-merge join. It performs a
+// merge on the left and right input sources, based on the equality columns,
+// assuming both inputs are in sorted order.
 
-// The merge join operator uses a probe and build approach to generate the join.
-// What this means is that instead of going through and expanding the cross product
-// row by row, the operator performs two passes.
-// The first pass generates a list of groups of matching rows based on the equality
-// column. A group is an ADT representing a contiguous set of rows that match on their
-// equality columns. This group is represented as the starting row ordinal, the ending
-// row ordinal, and the number of times this group is expanded/repeated.
+// The merge join operator uses a probe and build approach to generate the
+// join. What this means is that instead of going through and expanding the
+// cross product row by row, the operator performs two passes.
+// The first pass generates a list of groups of matching rows based on the
+// equality columns (where a "group" represents a contiguous set of rows that
+// match on the equality columns).
 // The second pass is where the groups and their associated cross products are
 // materialized into the full output.
 
-// TODO(georgeutsin): Add outer joins functionality and templating to support different equality types
+// TODO(georgeutsin): Add outer joins functionality and templating to support
+// different equality types.
 
-// Two buffers are used, one for the group on the left table and one for the group on the
-// right table. These buffers are only used if the group ends with a batch, to make sure
-// that we don't miss any cross product entries while expanding the groups
-// (leftGroups and rightGroups) when a group spans multiple batches.
+// Two buffers are used, one for the group on the left table and one for the
+// group on the right table. These buffers are only used if the group ends with
+// a batch, to make sure that we don't miss any cross product entries while
+// expanding the groups (leftGroups and rightGroups) when a group spans
+// multiple batches.
 type mergeJoinOp struct {
 	joinType sqlbase.JoinType
 	left     mergeJoinInput
@@ -193,7 +196,9 @@ type mergeJoinOp struct {
 	output            coldata.Batch
 	needToResetOutput bool
 	outputBatchSize   uint16
-	outputCeil        uint16
+	// outputReady is a flag to indicate that merge joiner is ready to emit an
+	// output batch.
+	outputReady bool
 
 	// Local buffer for the "working" repeated groups.
 	groups circularGroupsBuffer
@@ -233,8 +238,20 @@ func NewMergeJoinOp(
 
 	c := &mergeJoinOp{
 		joinType: joinType,
-		left:     mergeJoinInput{source: left, outCols: leftOutCols, sourceTypes: leftTypes, eqCols: lEqCols, directions: lDirections},
-		right:    mergeJoinInput{source: right, outCols: rightOutCols, sourceTypes: rightTypes, eqCols: rEqCols, directions: rDirections},
+		left: mergeJoinInput{
+			source:      left,
+			outCols:     leftOutCols,
+			sourceTypes: leftTypes,
+			eqCols:      lEqCols,
+			directions:  lDirections,
+		},
+		right: mergeJoinInput{
+			source:      right,
+			outCols:     rightOutCols,
+			sourceTypes: rightTypes,
+			eqCols:      rEqCols,
+			directions:  rDirections,
+		},
 	}
 
 	var err error
@@ -266,21 +283,19 @@ func (o *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize
-	o.outputCeil = o.outputBatchSize
 	// If there are no output columns, then the operator is for a COUNT query,
-	// in which case the ceiling for output is the max uint16.
+	// in which case we treat the output batch size as the max uint16.
 	if o.output.Width() == 0 {
-		o.outputCeil = 1<<16 - 1
+		o.outputBatchSize = 1<<16 - 1
 	}
 
-	o.proberState.lBufferedGroup = coldata.NewMemBatchWithSize(o.left.sourceTypes, coldata.BatchSize)
-	o.proberState.rBufferedGroup = coldata.NewMemBatchWithSize(o.right.sourceTypes, coldata.BatchSize)
+	o.proberState.lBufferedGroup = newMJBufferedGroup(o.left.sourceTypes)
+	o.proberState.rBufferedGroup = newMJBufferedGroup(o.right.sourceTypes)
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
 
 	o.groups = makeGroupsBuffer(coldata.BatchSize)
-	o.proberState.inputDone = false
 	o.resetBuilderCrossProductState()
 }
 
@@ -293,8 +308,6 @@ const (
 	// b) panics if the sentinel isn't checked
 	zeroMJCPcurSrcStartIdx = -1
 	zeroMJCPnumRepeatsIdx  = 0
-	// Default the state of the builder to finished.
-	zeroMJCPfinished = true
 )
 
 // Package level struct for easy access to the MJCP zero state.
@@ -303,7 +316,6 @@ var zeroMJBuilderState = mjBuilderCrossProductState{
 	groupsIdx:      zeroMJCPgroupsIdx,
 	curSrcStartIdx: zeroMJCPcurSrcStartIdx,
 	numRepeatsIdx:  zeroMJCPnumRepeatsIdx,
-	finished:       zeroMJCPfinished,
 }
 
 func (o *mergeJoinOp) resetBuilderCrossProductState() {
@@ -314,7 +326,6 @@ func (o *mergeJoinOp) resetBuilderCrossProductState() {
 func (s *mjBuilderCrossProductState) reset() {
 	s.setBuilderColumnState(zeroMJBuilderState)
 	s.colIdx = zeroMJCPcolIdx
-	s.finished = zeroMJCPfinished
 }
 
 func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCrossProductState) {
@@ -323,18 +334,19 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 	s.numRepeatsIdx = target.numRepeatsIdx
 }
 
-// calculateOutputCount uses the toBuild field of each group and the global output ceiling
-// to determine the output count. Note that as soon as a group is materialized fully to output,
-// its toBuild field is set to 0.
-func (o *mergeJoinOp) calculateOutputCount(groups []group, groupsLen int) uint16 {
+// calculateOutputCount uses the toBuild field of each group and the output
+// batch size to determine the output count. Note that as soon as a group is
+// materialized partially or fully to output, its toBuild field is updated
+// accordingly.
+func (o *mergeJoinOp) calculateOutputCount(groups []group) uint16 {
 	count := int(o.builderState.outCount)
 
-	for i := 0; i < groupsLen; i++ {
+	for i := 0; i < len(groups); i++ {
 		count += groups[i].toBuild
 		groups[i].toBuild = 0
-		if count > int(o.outputCeil) {
-			groups[i].toBuild = count - int(o.outputCeil)
-			count = int(o.outputCeil)
+		if count > int(o.outputBatchSize) {
+			groups[i].toBuild = count - int(o.outputBatchSize)
+			count = int(o.outputBatchSize)
 			return uint16(count)
 		}
 	}
@@ -342,51 +354,55 @@ func (o *mergeJoinOp) calculateOutputCount(groups []group, groupsLen int) uint16
 	return uint16(count)
 }
 
-// completeGroup extends the group in state given the source input.
-// First we check that the first row in bat is still part of the same group.
-// If this is the case, we use the Distinct operator to find the first occurrence
-// in bat (or subsequent batches) that doesn't match the current group.
-// SIDE EFFECT: extends the group in state corresponding to the source.
-func (o *mergeJoinOp) completeGroup(
-	ctx context.Context, input *mergeJoinInput, bat coldata.Batch, rowIdx int,
-) (idx int, batch coldata.Batch, length int) {
-	length = int(bat.Length())
-	sel := bat.Selection()
-	savedGroup := o.proberState.lBufferedGroup
-	savedGroupIdx := &o.proberState.lGroupEndIdx
-	if input == &o.right {
-		savedGroup = o.proberState.rBufferedGroup
-		savedGroupIdx = &o.proberState.rGroupEndIdx
+// completeBufferedGroup extends the buffered group corresponding to input.
+// First, we check that the first row in batch is still part of the same group.
+// If this is the case, we use the Distinct operator to find the first
+// occurrence in batch (or subsequent batches) that doesn't match the current
+// group.
+// NOTE: we will be buffering all batches until we find such non-matching tuple
+// (or until we exhaust the input).
+// TODO(yuzefovich): this can be refactored so that only the right side does
+// unbounded buffering.
+// SIDE EFFECT: can append to the buffered group corresponding to the source.
+func (o *mergeJoinOp) completeBufferedGroup(
+	ctx context.Context, input *mergeJoinInput, batch coldata.Batch, rowIdx int,
+) (_ coldata.Batch, idx int, batchLength int) {
+	batchLength = int(batch.Length())
+	if o.isBufferedGroupFinished(input, batch, rowIdx) {
+		return batch, rowIdx, batchLength
 	}
 
-	if o.isGroupFinished(input, savedGroup, *savedGroupIdx, bat, rowIdx, sel) {
-		return rowIdx, bat, length
-	}
-
-	isGroupComplete := false
+	isBufferedGroupComplete := false
 	input.distincter.(resetter).reset()
-	// Ignore the first row of the distincter in the first pass, since we already
-	// know that we are in the same group and thus the row is not distinct,
+	// Ignore the first row of the distincter in the first pass since we already
+	// know that we are in the same group and, thus, the row is not distinct,
 	// regardless of what the distincter outputs.
 	loopStartIndex := 1
-	for !isGroupComplete {
-		input.distincterInput.bat = bat
+	var sel []uint16
+	for !isBufferedGroupComplete {
+		// Note that we're not resetting the distincter on every loop iteration
+		// because if we're doing the second, third, etc, iteration, then all the
+		// previous iterations had only the matching tuples to the buffered group,
+		// so the distincter - in a sense - compares the incoming tuples to the
+		// first tuple of the first iteration (which we know is the same group).
+		input.distincterInput.batch = batch
 		input.distincter.Next(ctx)
 
+		sel = batch.Selection()
 		var groupLength int
 		if sel != nil {
-			for groupLength = loopStartIndex; groupLength < length; groupLength++ {
+			for groupLength = loopStartIndex; groupLength < batchLength; groupLength++ {
 				if input.distinctOutput[sel[groupLength]] {
 					// We found the beginning of a new group!
-					isGroupComplete = true
+					isBufferedGroupComplete = true
 					break
 				}
 			}
 		} else {
-			for groupLength = loopStartIndex; groupLength < length; groupLength++ {
+			for groupLength = loopStartIndex; groupLength < batchLength; groupLength++ {
 				if input.distinctOutput[groupLength] {
 					// We found the beginning of a new group!
-					isGroupComplete = true
+					isBufferedGroupComplete = true
 					break
 				}
 			}
@@ -396,82 +412,91 @@ func (o *mergeJoinOp) completeGroup(
 		copy(input.distinctOutput, zeroBoolColumn)
 		loopStartIndex = 0
 
-		// Save the group to state.
-		o.saveGroupToState(rowIdx, groupLength, bat, sel, input, savedGroup, savedGroupIdx)
+		// Buffer all the tuples that are part of the buffered group.
+		o.appendToBufferedGroup(input, batch, sel, rowIdx, groupLength)
 		rowIdx += groupLength
 
-		if !isGroupComplete {
-			rowIdx, bat = 0, input.source.Next(ctx)
-			length = int(bat.Length())
-			if length == 0 {
-				// The group is complete if there are no more batches left.
-				break
+		if !isBufferedGroupComplete {
+			// The buffered group is still not complete which means that we have
+			// just appended all the tuples from batch to it, so we need to get a
+			// fresh batch from the input.
+			rowIdx, batch = 0, input.source.Next(ctx)
+			batchLength = int(batch.Length())
+			if batchLength == 0 {
+				// The input has been exhausted, so the buffered group is now complete.
+				isBufferedGroupComplete = true
 			}
 		}
 	}
 
-	return rowIdx, bat, length
+	return batch, rowIdx, batchLength
 }
 
-// saveGroupToState puts each column of the batch in a group into state, to be
-// able to build output from this set of rows later.
-// SIDE EFFECT: increments destStartIdx by the groupLength.
-func (o *mergeJoinOp) saveGroupToState(
-	idx int,
-	groupLength int,
-	bat coldata.Batch,
-	sel []uint16,
-	src *mergeJoinInput,
-	destBatch coldata.Batch,
-	destStartIdx *int,
+// appendToBufferedGroup appends all the tuples from batch that are part of the
+// same group as the ones in the buffered group that corresponds to the input
+// source. This needs to happen when a group starts at the end of an input
+// batch and can continue into the following batches.
+func (o *mergeJoinOp) appendToBufferedGroup(
+	input *mergeJoinInput, batch coldata.Batch, sel []uint16, groupStartIdx int, groupLength int,
 ) {
-	endIdx := idx + groupLength
-	for cIdx, cType := range src.sourceTypes {
-		destBatch.ColVec(cIdx).Append(
+	bufferedGroup := o.proberState.lBufferedGroup
+	if input == &o.right {
+		bufferedGroup = o.proberState.rBufferedGroup
+	}
+	destStartIdx := bufferedGroup.length
+	groupEndIdx := groupStartIdx + groupLength
+	for cIdx, cType := range input.sourceTypes {
+		bufferedGroup.ColVec(cIdx).Append(
 			coldata.AppendArgs{
 				ColType:     cType,
-				Src:         bat.ColVec(cIdx),
+				Src:         batch.ColVec(cIdx),
 				Sel:         sel,
-				DestIdx:     uint64(*destStartIdx),
-				SrcStartIdx: uint16(idx),
-				SrcEndIdx:   uint16(endIdx),
+				DestIdx:     uint64(destStartIdx),
+				SrcStartIdx: uint16(groupStartIdx),
+				SrcEndIdx:   uint16(groupEndIdx),
 			},
 		)
-		if *destStartIdx == 0 {
-			// If *destStartIdx is zero, it means that we've just appended to the
-			// very beginning of Vecs of destBatch, and since we're reusing the
-			// underlying memory, we need to reset that destBatch. We do not,
-			// however, need to reset the values vectors because those were just
-			// written over, but we do need to reset the nulls.
-			destBatch.ColVec(cIdx).Nulls().UnsetNulls()
-		}
 		if sel != nil {
-			destBatch.ColVec(cIdx).Nulls().ExtendWithSel(bat.ColVec(cIdx).Nulls(), uint64(*destStartIdx), uint16(idx), uint16(groupLength), sel)
+			bufferedGroup.ColVec(cIdx).Nulls().ExtendWithSel(
+				batch.ColVec(cIdx).Nulls(),
+				uint64(destStartIdx),
+				uint16(groupStartIdx),
+				uint16(groupLength),
+				sel,
+			)
 		} else {
-			destBatch.ColVec(cIdx).Nulls().Extend(bat.ColVec(cIdx).Nulls(), uint64(*destStartIdx), uint16(idx), uint16(groupLength))
+			bufferedGroup.ColVec(cIdx).Nulls().Extend(
+				batch.ColVec(cIdx).Nulls(),
+				uint64(destStartIdx),
+				uint16(groupStartIdx),
+				uint16(groupLength),
+			)
 		}
 	}
 
-	*destStartIdx += groupLength
+	// We've added groupLength number of tuples to bufferedGroup, so we need to
+	// adjust its length.
+	bufferedGroup.length += uint64(groupLength)
 }
 
-// setBuilderSourceToBatch sets the builder state to use groups from the circular
-// group buffer, and the batches from input.
+// setBuilderSourceToBatch sets the builder state to use groups from the
+// circular group buffer and the batches from input. This happens when we have
+// groups that are fully contained within a single input batch from each of the
+// sources.
 func (o *mergeJoinOp) setBuilderSourceToBatch() {
-	o.builderState.lGroups = o.groups.getLGroups()
-	o.builderState.rGroups = o.groups.getRGroups()
-	o.builderState.groupsLen = o.groups.getBufferLen()
+	o.builderState.lGroups, o.builderState.rGroups = o.groups.getGroups()
 	o.builderState.lBatch = o.proberState.lBatch
 	o.builderState.rBatch = o.proberState.rBatch
 }
 
-// probe is where we generate the groups slices that are used in the build phase.
-// We do this by first assuming that every row in both batches contributes to the
-// cross product. Then, with every equality column, we filter out the rows that
-// don't contribute to the cross product (ie they don't have a matching row on
-// the other side in the case of an inner join), and set the correct cardinality.
-// Note that in this phase, we do this for every group, except the last group in
-// the batch.
+// probe is where we generate the groups slices that are used in the build
+// phase. We do this by first assuming that every row in both batches
+// contributes to the cross product. Then, with every equality column, we
+// filter out the rows that don't contribute to the cross product (i.e. they
+// don't have a matching row on the other side in the case of an inner join),
+// and set the correct cardinality.
+// Note that in this phase, we do this for every group, except the last group
+// in the batch.
 func (o *mergeJoinOp) probe() {
 	o.groups.reset(o.proberState.lIdx, o.proberState.lLength, o.proberState.rIdx, o.proberState.rLength)
 	lSel := o.proberState.lBatch.Selection()
@@ -491,38 +516,52 @@ func (o *mergeJoinOp) probe() {
 	}
 }
 
-// finishProbe completes the groups on both sides of the input.
+// finishProbe completes the buffered groups on both sides of the input.
 func (o *mergeJoinOp) finishProbe(ctx context.Context) {
-	o.proberState.lIdx, o.proberState.lBatch, o.proberState.lLength = o.completeGroup(ctx, &o.left, o.proberState.lBatch, o.proberState.lIdx)
-	o.proberState.rIdx, o.proberState.rBatch, o.proberState.rLength = o.completeGroup(ctx, &o.right, o.proberState.rBatch, o.proberState.rIdx)
+	o.proberState.lBatch, o.proberState.lIdx, o.proberState.lLength = o.completeBufferedGroup(
+		ctx,
+		&o.left,
+		o.proberState.lBatch,
+		o.proberState.lIdx,
+	)
+	o.proberState.rBatch, o.proberState.rIdx, o.proberState.rLength = o.completeBufferedGroup(
+		ctx,
+		&o.right,
+		o.proberState.rBatch,
+		o.proberState.rIdx,
+	)
 }
 
-// setBuilderSourceToGroupBuffer sets the builder state to use the group that
-// ended with a batch, with its source being the buffered rows in state.
-func (o *mergeJoinOp) setBuilderSourceToGroupBuffer() {
+// setBuilderSourceToBufferedGroup sets up the builder state to use the
+// buffered group.
+func (o *mergeJoinOp) setBuilderSourceToBufferedGroup() {
+	lGroupEndIdx := int(o.proberState.lBufferedGroup.length)
+	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
 	o.builderState.lGroups[0] = group{
 		rowStartIdx: 0,
-		rowEndIdx:   o.proberState.lGroupEndIdx,
-		numRepeats:  o.proberState.rGroupEndIdx,
-		toBuild:     o.proberState.lGroupEndIdx * o.proberState.rGroupEndIdx,
+		rowEndIdx:   lGroupEndIdx,
+		numRepeats:  rGroupEndIdx,
+		toBuild:     lGroupEndIdx * rGroupEndIdx,
 	}
 	o.builderState.rGroups = o.builderState.rGroups[:1]
 	o.builderState.rGroups[0] = group{
 		rowStartIdx: 0,
-		rowEndIdx:   o.proberState.rGroupEndIdx,
-		numRepeats:  o.proberState.lGroupEndIdx,
-		toBuild:     o.proberState.rGroupEndIdx * o.proberState.lGroupEndIdx,
+		rowEndIdx:   rGroupEndIdx,
+		numRepeats:  lGroupEndIdx,
+		toBuild:     rGroupEndIdx * lGroupEndIdx,
 	}
-	o.builderState.groupsLen = 1
 
 	o.builderState.lBatch = o.proberState.lBufferedGroup
 	o.builderState.rBatch = o.proberState.rBufferedGroup
 
-	o.proberState.lGroupEndIdx = 0
-	o.proberState.rGroupEndIdx = 0
+	// We cannot yet reset the buffered groups because the builder will be taking
+	// input from them. The actual reset will take place on the next call to
+	// initProberState().
+	o.proberState.lBufferedGroup.needToReset = true
+	o.proberState.rBufferedGroup.needToReset = true
 }
 
 // exhaustLeftSourceForLeftOuter sets up the builder state for emitting
@@ -548,7 +587,6 @@ func (o *mergeJoinOp) exhaustLeftSourceForLeftOuter() {
 		toBuild:     o.proberState.lLength - o.proberState.lIdx,
 		nullGroup:   true,
 	}
-	o.builderState.groupsLen = 1
 	o.builderState.lBatch = o.proberState.lBatch
 	o.builderState.rBatch = o.proberState.rBatch
 
@@ -559,10 +597,10 @@ func (o *mergeJoinOp) exhaustLeftSourceForLeftOuter() {
 func (o *mergeJoinOp) build() {
 	if o.output.Width() != 0 {
 		outStartIdx := o.builderState.outCount
-		o.buildLeftGroups(o.builderState.lGroups, o.builderState.groupsLen, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
-		o.buildRightGroups(o.builderState.rGroups, o.builderState.groupsLen, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
+		o.buildLeftGroups(o.builderState.lGroups, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
+		o.buildRightGroups(o.builderState.rGroups, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
 	}
-	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups, o.builderState.groupsLen)
+	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
 }
 
 // initProberState sets the batches, lengths, and current indices to the right
@@ -572,23 +610,27 @@ func (o *mergeJoinOp) initProberState(ctx context.Context) {
 	// next batch.
 	if o.proberState.lBatch == nil || (o.proberState.lLength != 0 && o.proberState.lIdx == o.proberState.lLength) {
 		o.proberState.lIdx, o.proberState.lBatch = 0, o.left.source.Next(ctx)
+		o.proberState.lLength = int(o.proberState.lBatch.Length())
 	}
 	if o.proberState.rBatch == nil || (o.proberState.rLength != 0 && o.proberState.rIdx == o.proberState.rLength) {
 		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next(ctx)
+		o.proberState.rLength = int(o.proberState.rBatch.Length())
 	}
-	o.proberState.lLength = int(o.proberState.lBatch.Length())
-	o.proberState.rLength = int(o.proberState.rBatch.Length())
+	if o.proberState.lBufferedGroup.needToReset {
+		o.proberState.lBufferedGroup.reset()
+	}
+	if o.proberState.rBufferedGroup.needToReset {
+		o.proberState.rBufferedGroup.reset()
+	}
 }
 
-// groupNeedsToBeFinished is syntactic sugar for the state machine, as it wraps
-// the boolean logic to determine if there is a group in state that needs to be
-// finished.
-func (o *mergeJoinOp) groupNeedsToBeFinished() bool {
-	return o.proberState.lGroupEndIdx > 0 || o.proberState.rGroupEndIdx > 0
+// nonEmptyBufferedGroup returns true if there is a buffered group that needs
+// to be finished.
+func (o *mergeJoinOp) nonEmptyBufferedGroup() bool {
+	return o.proberState.lBufferedGroup.length > 0 || o.proberState.rBufferedGroup.length > 0
 }
 
-// sourceFinished is syntactic sugar for the state machine, as it wraps the boolean logic
-// to determine if either input source has no more rows.
+// sourceFinished returns true if either of input sources has no more rows.
 func (o *mergeJoinOp) sourceFinished() bool {
 	// TODO (georgeutsin): update this logic to be able to support joins other than INNER.
 	return o.proberState.lLength == 0 || o.proberState.rLength == 0
@@ -602,14 +644,14 @@ func (o *mergeJoinOp) Next(ctx context.Context) coldata.Batch {
 				o.needToResetOutput = false
 				for _, vec := range o.output.ColVecs() {
 					// We only need to explicitly reset nulls since the values will be
-					// copied over and the corrent length will be set.
+					// copied over and the correct length will be set.
 					vec.Nulls().UnsetNulls()
 				}
 			}
 			o.initProberState(ctx)
 
-			if o.groupNeedsToBeFinished() {
-				o.state = mjFinishGroup
+			if o.nonEmptyBufferedGroup() {
+				o.state = mjFinishBufferedGroup
 				break
 			}
 
@@ -627,21 +669,21 @@ func (o *mergeJoinOp) Next(ctx context.Context) coldata.Batch {
 				// finished, then there is nothing left to do.
 				if o.proberState.lIdx < o.proberState.lLength {
 					o.exhaustLeftSourceForLeftOuter()
-					// We do not set inputDone here to true because we want to put as
+					// We do not set outputReady here to true because we want to put as
 					// many unmatched tuples from the left into the output batch. Once
 					// outCount reaches the desired output batch size, the output will be
 					// returned.
 				} else {
-					o.proberState.inputDone = true
+					o.outputReady = true
 				}
 			} else {
-				o.setBuilderSourceToGroupBuffer()
-				o.proberState.inputDone = true
+				o.setBuilderSourceToBufferedGroup()
+				o.outputReady = true
 			}
 			o.state = mjBuild
-		case mjFinishGroup:
+		case mjFinishBufferedGroup:
 			o.finishProbe(ctx)
-			o.setBuilderSourceToGroupBuffer()
+			o.setBuilderSourceToBufferedGroup()
 			o.state = mjBuild
 		case mjProbe:
 			o.probe()
@@ -650,21 +692,17 @@ func (o *mergeJoinOp) Next(ctx context.Context) coldata.Batch {
 		case mjBuild:
 			o.build()
 
-			// If both builders had output and they didn't finish at the same time, panic.
-			if len(o.left.outCols) > 0 && len(o.right.outCols) > 0 && o.builderState.left.finished != o.builderState.right.finished {
-				panic("unexpected builder state, both left and right should finish at the same time")
-			}
-
-			if o.builderState.left.finished && o.builderState.right.finished && o.builderState.outFinished {
+			if o.builderState.outFinished {
 				o.state = mjEntry
 				o.builderState.outFinished = false
 			}
 
-			if o.proberState.inputDone || o.builderState.outCount == o.outputCeil {
+			if o.outputReady || o.builderState.outCount == o.outputBatchSize {
 				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
 				o.builderState.outCount = uint16(0)
 				o.needToResetOutput = true
+				o.outputReady = false
 				return o.output
 			}
 		default:

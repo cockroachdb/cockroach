@@ -19,19 +19,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// mjOverload contains the overloads for both equality and less than comparisons.
+// mjOverload contains the overloads for all needed comparisons.
 type mjOverload struct {
 	// The embedded overload has the shared type information for both of the
 	// overloads, so that you can reference that information inside of . without
-	// needing to pick Eq or Lt.
+	// needing to pick Eq, Lt, or Gt.
 	overload
 	Eq *overload
 	Lt *overload
 	Gt *overload
 }
 
-// selPermutation contains information about which permutation of selection vector
-// state the template is materializing.
+// selPermutation contains information about which permutation of selection
+// vector state the template is materializing.
 type selPermutation struct {
 	IsLSel bool
 	IsRSel bool
@@ -84,9 +84,8 @@ func genMergeJoinOps(wr io.Writer) error {
 
 	allOverloads := intersectOverloads(comparisonOpToOverloads[tree.EQ], comparisonOpToOverloads[tree.LT], comparisonOpToOverloads[tree.GT])
 
-	// Create an mjOverload for each overload, combining the two overloads so that
-	// the template code can access both the LT method and the EQ method in the
-	// same range loop.
+	// Create an mjOverload for each overload combining three overloads so that
+	// the template code can access all of EQ, LT, and GT in the same range loop.
 	mjOverloads := make([]mjOverload, len(allOverloads[0]))
 	for i := range allOverloads[0] {
 		mjOverloads[i] = mjOverload{
