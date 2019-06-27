@@ -193,18 +193,6 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 func (rq *replicateQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	if !repl.store.splitQueue.Disabled() && repl.needsSplitBySize() {
-		// If the range exceeds the split threshold, let that finish first.
-		// Ranges must fit in memory on both sender and receiver nodes while
-		// being replicated. This supplements the check provided by
-		// acceptsUnsplitRanges, which looks at zone config boundaries rather
-		// than data size.
-		//
-		// This check is ignored if the split queue is disabled, since in that
-		// case, the split will never come.
-		return
-	}
-
 	// Get the descriptor and zone config for this range.
 	desc, zone := repl.DescAndZone()
 

@@ -355,13 +355,6 @@ func (bq *baseQueue) SetDisabled(disabled bool) {
 	bq.mu.Unlock()
 }
 
-// Disabled returns true is the queue is currently disabled.
-func (bq *baseQueue) Disabled() bool {
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
-	return bq.mu.disabled
-}
-
 // lockProcessing locks all processing in the baseQueue. It returns
 // a function to unlock processing.
 func (bq *baseQueue) lockProcessing() func() {
