@@ -235,6 +235,23 @@ func TestAggregatorOneFunc(t *testing.T) {
 			name:            "NoGroupingCols",
 			groupCols:       []uint32{},
 		},
+		{
+			input: tuples{
+				{1, 0, 0},
+				{2, 0, 0},
+				{3, 0, 0},
+				{4, 0, 0},
+			},
+			expected: tuples{
+				{10},
+			},
+			batchSize:       1,
+			outputBatchSize: 1,
+			name:            "UnusedInputColumns",
+			colTypes:        []types.T{types.Int64, types.Int64, types.Int64},
+			groupCols:       []uint32{1, 2},
+			aggCols:         [][]uint32{{0}},
+		},
 	}
 
 	// Run tests with deliberate batch sizes and no selection vectors.
