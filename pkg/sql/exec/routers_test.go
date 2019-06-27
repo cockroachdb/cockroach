@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -568,13 +569,11 @@ func TestHashRouterCancellation(t *testing.T) {
 				}()
 			}
 
-			doneCh := make(chan struct{})
+			routerMeta := make(chan []distsqlpb.ProducerMetadata)
 			go func() {
 				r.Run(ctx)
-				meta := r.DrainMeta(ctx)
-				require.Equal(t, 1, len(meta))
-				require.True(t, testutils.IsError(meta[0].Err, "context canceled"), meta[0].Err)
-				close(doneCh)
+				routerMeta <- r.DrainMeta(ctx)
+				close(routerMeta)
 			}()
 
 			time.Sleep(time.Millisecond)
@@ -585,12 +584,14 @@ func TestHashRouterCancellation(t *testing.T) {
 				}
 			}
 			select {
-			case <-doneCh:
+			case <-routerMeta:
 				t.Fatal("hash router goroutine unexpectedly done")
 			default:
 			}
 			cancel()
-			<-doneCh
+			meta := <-routerMeta
+			require.Equal(t, 1, len(meta))
+			require.True(t, testutils.IsError(meta[0].Err, "canceled"), meta[0].Err)
 
 			if numCancels != int64(len(outputs)) {
 				t.Fatalf("expected %d canceled outputs, actual %d", len(outputs), numCancels)
