@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/json"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -30,7 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReplicateQueueRebalance(t *testing.T) {
@@ -287,4 +290,127 @@ func verifyRangeLog(
 		return errors.New("no range log entries found for up-replication events")
 	}
 	return nil
+}
+
+func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
+	for _, s := range tc.Servers {
+		_ = s.Stores().VisitStores(func(store *storage.Store) error {
+			store.SetReplicateQueueActive(active)
+			return nil
+		})
+	}
+}
+
+func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
+	for _, s := range tc.Servers {
+		_ = s.Stores().VisitStores(func(store *storage.Store) error {
+			store.SetSplitQueueActive(active)
+			return nil
+		})
+	}
+}
+
+// Test that ranges larger than range_max_bytes that can't be split can still be
+// processed by the replication queue (in particular, up-replicated).
+func TestLargeUnsplittableRangeReplicate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if testing.Short() {
+		t.Skip("short flag - #38565")
+	}
+	ctx := context.Background()
+
+	// Create a cluster with really small ranges.
+	const rangeMaxSize = base.MinRangeMaxBytes
+	zcfg := config.DefaultZoneConfig()
+	zcfg.RangeMinBytes = proto.Int64(rangeMaxSize / 2)
+	zcfg.RangeMaxBytes = proto.Int64(rangeMaxSize)
+	tc := testcluster.StartTestCluster(t, 5,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						DefaultZoneConfigOverride: &zcfg,
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	// We're going to create a table with a big row and a small row. We'll split
+	// the table in between the rows, to produce a large range and a small one.
+	// Then we'll increase the replication factor to 5 and check that both ranges
+	// behave the same - i.e. they both get up-replicated. For the purposes of
+	// this test we're only worried about the large one up-replicating, but we
+	// test the small one as a control so that we don't fool ourselves.
+
+	// Disable the queues so they don't mess with our manual relocation. We'll
+	// re-enable them later.
+	toggleReplicationQueues(tc, false /* active */)
+	toggleSplitQueues(tc, false /* active */)
+
+	db := tc.Conns[0]
+	_, err := db.Exec("create table t (i int primary key, s string)")
+	require.NoError(t, err)
+
+	_, err = db.Exec(`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES (2)`)
+	require.NoError(t, err)
+
+	toggleReplicationQueues(tc, true /* active */)
+	toggleSplitQueues(tc, true /* active */)
+
+	// We're going to create a row that's larger than range_max_bytes, but not
+	// large enough that write back-pressuring kicks in and refuses it.
+	var sb strings.Builder
+	for i := 0; i < 1.5*rangeMaxSize; i++ {
+		sb.WriteRune('a')
+	}
+	_, err = db.Exec("insert into t(i,s) values (1, $1)", sb.String())
+	require.NoError(t, err)
+	_, err = db.Exec("insert into t(i,s) values (2, 'b')")
+	require.NoError(t, err)
+
+	// Now ask everybody to up-replicate.
+	_, err = db.Exec("alter table t configure zone using num_replicas = 5")
+	require.NoError(t, err)
+
+	// Speed up the queue processing.
+	for _, s := range tc.Servers {
+		err := s.Stores().VisitStores(func(store *storage.Store) error {
+			return store.ForceReplicationScanAndProcess()
+		})
+		require.NoError(t, err)
+	}
+
+	// Wait until the smaller range (the 2nd) has up-replicated.
+	testutils.SucceedsSoon(t, func() error {
+		r := db.QueryRow(
+			"select replicas from [show experimental_ranges from table t] where start_key='/2'")
+		var repl string
+		if err := r.Scan(&repl); err != nil {
+			return err
+		}
+		if repl != "{1,2,3,4,5}" {
+			return fmt.Errorf("not up-replicated yet")
+		}
+		return nil
+	})
+
+	// Now check that the large range also gets up-replicated.
+	testutils.SucceedsSoon(t, func() error {
+		r := db.QueryRow(
+			"select replicas from [show experimental_ranges from table t] where start_key is null")
+		var repl string
+		if err := r.Scan(&repl); err != nil {
+			return err
+		}
+		if repl != "{1,2,3,4,5}" {
+			return fmt.Errorf("not up-replicated yet")
+		}
+		return nil
+	})
 }
