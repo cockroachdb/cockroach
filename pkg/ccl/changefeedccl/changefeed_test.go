@@ -1018,7 +1018,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`enterprise`, func(t *testing.T) {
+		t.Skip("https://github.com/cockroachdb/cockroach/issues/38443")
+		enterpriseTest(testFn)
+	})
 }
 
 func TestChangefeedRetryableError(t *testing.T) {
