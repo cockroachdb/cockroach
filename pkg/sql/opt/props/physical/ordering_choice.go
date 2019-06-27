@@ -472,6 +472,7 @@ func (oc *OrderingChoice) MatchesAt(index int, col opt.OrderingColumn) bool {
 func (oc *OrderingChoice) AppendCol(id opt.ColumnID, descending bool) {
 	ordCol := OrderingColumnChoice{Descending: descending}
 	ordCol.Group.Add(id)
+	oc.Optional.Remove(id)
 	oc.Columns = append(oc.Columns, ordCol)
 }
 
@@ -628,6 +629,72 @@ func (oc *OrderingChoice) ProjectCols(cols opt.ColSet) {
 	}
 }
 
+// PrefixIntersection computes an OrderingChoice which:
+//  - implies <oc> (this instance), and
+//  - implies a "segmented ordering", which is any ordering which starts with a
+//    permutation of all columns in <prefix> followed by the <suffix> ordering.
+//
+// Note that <prefix> and <suffix> cannot have any columns in common.
+//
+// Such an ordering can be computed via the following rules:
+//
+//  - if <prefix> and <suffix> are empty: return this instance.
+//
+//  - if <oc> is empty: generate an arbitrary segmented ordering.
+//
+//  - if the first column of <oc> is either in <prefix> or is the first column
+//    of <suffix> while <prefix> is empty: this column is the first column of
+//    the result; calculate the rest recursively.
+//
+func (oc OrderingChoice) PrefixIntersection(
+	prefix opt.ColSet, suffix []OrderingColumnChoice,
+) (_ OrderingChoice, ok bool) {
+	var result OrderingChoice
+	oc = oc.Copy()
+
+	prefix = prefix.Copy()
+
+	for {
+		switch {
+		case prefix.Empty() && len(suffix) == 0:
+			// Any ordering is allowed by <prefix>+<suffix>, so use <oc> directly.
+			result.Columns = append(result.Columns, oc.Columns...)
+			return result, true
+		case len(oc.Columns) == 0:
+			// Any ordering is allowed by <oc>, so pick an arbitrary ordering of the
+			// columns in <prefix> then append suffix.
+			// TODO(justin): investigate picking an order more intelligently here.
+			for col, ok := prefix.Next(0); ok; col, ok = prefix.Next(col + 1) {
+				result.AppendCol(col, false /* descending */)
+			}
+
+			result.Columns = append(result.Columns, suffix...)
+			return result, true
+		case prefix.Empty() && len(oc.Columns) > 0 && len(suffix) > 0 &&
+			oc.Columns[0].Group.Intersects(suffix[0].Group) &&
+			oc.Columns[0].Descending == suffix[0].Descending:
+			// <prefix> is empty, and <suffix> and <oc> agree on the first column, so
+			// emit that column, remove it from both, and loop.
+			newCol := oc.Columns[0]
+			newCol.Group = oc.Columns[0].Group.Intersection(suffix[0].Group)
+			result.Columns = append(result.Columns, newCol)
+
+			oc.Columns = oc.Columns[1:]
+			suffix = suffix[1:]
+		case len(oc.Columns) > 0 && prefix.Intersects(oc.Columns[0].Group):
+			// <prefix> contains the first column in <oc>, so emit it and remove it
+			// from both.
+			result.Columns = append(result.Columns, oc.Columns[0])
+
+			prefix.DifferenceWith(oc.Columns[0].Group)
+			oc.Columns = oc.Columns[1:]
+		default:
+			// If no rule applied, fail.
+			return OrderingChoice{}, false
+		}
+	}
+}
+
 // Equals returns true if the set of orderings matched by this instance is the
 // same as the set matched by the given instance.
 func (oc *OrderingChoice) Equals(rhs *OrderingChoice) bool {
@@ -640,12 +707,12 @@ func (oc *OrderingChoice) Equals(rhs *OrderingChoice) bool {
 
 	for i := range oc.Columns {
 		left := &oc.Columns[i]
-		right := &rhs.Columns[i]
+		y := &rhs.Columns[i]
 
-		if left.Descending != right.Descending {
+		if left.Descending != y.Descending {
 			return false
 		}
-		if !left.Group.Equals(right.Group) {
+		if !left.Group.Equals(y.Group) {
 			return false
 		}
 	}
