@@ -349,7 +349,7 @@ DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
   rocksdb::Status s;
 
   const rocksdb::EnvOptions soptions;
-  rocksdb::unique_ptr<rocksdb::WritableFile> destfile;
+  std::unique_ptr<rocksdb::WritableFile> destfile;
   s = this->rep->GetEnv()->NewWritableFile(ToString(path), &destfile, soptions);
   if (!s.ok()) {
     return ToDBStatus(s);
@@ -367,7 +367,7 @@ DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
 DBStatus DBImpl::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
   rocksdb::Status status;
   const rocksdb::EnvOptions soptions;
-  rocksdb::unique_ptr<rocksdb::WritableFile> rocksdb_file;
+  std::unique_ptr<rocksdb::WritableFile> rocksdb_file;
 
   // Create the file.
   status = this->rep->GetEnv()->NewWritableFile(ToString(path), &rocksdb_file, soptions);

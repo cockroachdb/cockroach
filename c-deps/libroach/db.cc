@@ -868,7 +868,7 @@ DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
   }
 
   const rocksdb::EnvOptions soptions;
-  rocksdb::unique_ptr<rocksdb::SequentialFile> sst;
+  std::unique_ptr<rocksdb::SequentialFile> sst;
   status = fw->memenv->NewSequentialFile("sst", &sst, soptions);
   if (!status.ok()) {
     return ToDBStatus(status);
