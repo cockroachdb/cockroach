@@ -12,6 +12,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -32,6 +33,9 @@ func TestSortedDistinct(t *testing.T) {
 			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
 			numCols:      4,
 			tuples: tuples{
+				{nil, nil, nil, nil},
+				{nil, nil, nil, nil},
+				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
 				{1.0, 2, "30", 5},
 				{2.0, 2, "30", 4},
@@ -40,6 +44,8 @@ func TestSortedDistinct(t *testing.T) {
 				{2.0, 3, "40", 4},
 			},
 			expected: tuples{
+				{nil, nil, nil, nil},
+				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
 				{2.0, 2, "30", 4},
 				{2.0, 3, "30", 4},
@@ -51,6 +57,9 @@ func TestSortedDistinct(t *testing.T) {
 			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
 			numCols:      4,
 			tuples: tuples{
+				{nil, nil, nil, nil},
+				{nil, nil, nil, nil},
+				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
 				{1.0, 2, "30", 5},
 				{2.0, 2, "30", 4},
@@ -59,9 +68,35 @@ func TestSortedDistinct(t *testing.T) {
 				{2.0, 3, "40", 4},
 			},
 			expected: tuples{
+				{nil, nil, nil, nil},
+				{nil, nil, "30", nil},
 				{1.0, 2, "30", 4},
 				{2.0, 2, "30", 4},
 				{2.0, 3, "30", 4},
+				{2.0, 3, "40", 4},
+			},
+		},
+		{
+			distinctCols: []uint32{0, 1, 2},
+			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
+			numCols:      4,
+			tuples: tuples{
+				{1.0, 2, "30", 4},
+				{1.0, 2, "30", 5},
+				{nil, nil, nil, nil},
+				{nil, nil, nil, nil},
+				{2.0, 2, "30", 4},
+				{2.0, 3, "30", 4},
+				{nil, nil, "30", nil},
+				{2.0, 3, "40", 4},
+				{2.0, 3, "40", 4},
+			},
+			expected: tuples{
+				{1.0, 2, "30", 4},
+				{nil, nil, nil, nil},
+				{2.0, 2, "30", 4},
+				{2.0, 3, "30", 4},
+				{nil, nil, "30", nil},
 				{2.0, 3, "40", 4},
 			},
 		},
@@ -112,8 +147,20 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	}
 
 	// don't count the artificial zeroOp'd column in the throughput
-	b.SetBytes(int64(8 * coldata.BatchSize * 3))
-	for i := 0; i < b.N; i++ {
-		distinct.Next(ctx)
+	for _, nulls := range []bool{false, true} {
+		b.Run(fmt.Sprintf("nulls=%t", nulls), func(b *testing.B) {
+			if nulls {
+				n := coldata.NewNulls(coldata.BatchSize)
+				// Setting one value to null is enough to trigger the null handling
+				// logic for the entire batch.
+				n.SetNull(0)
+				batch.ColVec(1).SetNulls(&n)
+				batch.ColVec(2).SetNulls(&n)
+			}
+			b.SetBytes(int64(8 * coldata.BatchSize * 3))
+			for i := 0; i < b.N; i++ {
+				distinct.Next(ctx)
+			}
+		})
 	}
 }
