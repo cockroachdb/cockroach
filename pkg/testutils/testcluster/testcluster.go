@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -547,6 +548,12 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store,
 // WaitForFullReplication waits until all stores in the cluster
 // have no ranges with replication pending.
 func (tc *TestCluster) WaitForFullReplication() error {
+	start := timeutil.Now()
+	defer func() {
+		end := timeutil.Now()
+		log.Infof(context.TODO(), "WaitForFullReplication took: %s", end.Sub(start))
+	}()
+
 	if len(tc.Servers) < 3 {
 		// If we have less than three nodes, we will never have full replication.
 		return nil
@@ -585,6 +592,9 @@ func (tc *TestCluster) WaitForFullReplication() error {
 				if n := s.Metrics().UnderReplicatedRangeCount.Value(); n > 0 {
 					log.Infof(context.TODO(), "%s has %d underreplicated ranges", s, n)
 					notReplicated = true
+					if err := s.ForceReplicationScanAndProcess(); err != nil {
+						return err
+					}
 				}
 				return nil
 			})
