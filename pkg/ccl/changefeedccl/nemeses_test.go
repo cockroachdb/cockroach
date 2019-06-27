@@ -34,5 +34,8 @@ func TestChangefeedNemeses(t *testing.T) {
 	}
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`cloudstorage`, func(t *testing.T) {
+		t.Skip("https://github.com/cockroachdb/cockroach/issues/38368")
+		cloudStorageTest(testFn)
+	})
 }
