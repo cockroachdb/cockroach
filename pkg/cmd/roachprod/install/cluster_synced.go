@@ -43,6 +43,7 @@ import (
 // ClusterImpl TODO(peter): document
 type ClusterImpl interface {
 	Start(c *SyncedCluster, extraArgs []string)
+	CertsDir(c *SyncedCluster, index int) string
 	NodeDir(c *SyncedCluster, index int) string
 	LogDir(c *SyncedCluster, index int) string
 	NodeURL(c *SyncedCluster, host string, port int) string
@@ -185,7 +186,7 @@ fi
 }
 
 // Wipe TODO(peter): document
-func (c *SyncedCluster) Wipe() {
+func (c *SyncedCluster) Wipe(preserveCerts bool) {
 	display := fmt.Sprintf("%s: wiping", c.Name)
 	c.Stop(9, true /* wait */)
 	c.Parallel(display, len(c.Nodes), 0, func(i int) ([]byte, error) {
@@ -198,14 +199,21 @@ func (c *SyncedCluster) Wipe() {
 		var cmd string
 		if c.IsLocal() {
 			// Not all shells like brace expansion, so we'll do it here
-			for _, dir := range []string{"certs*", "data", "logs"} {
+			dirs := []string{"data", "logs"}
+			if !preserveCerts {
+				dirs = append(dirs, "certs*")
+			}
+			for _, dir := range dirs {
 				cmd += fmt.Sprintf(`rm -fr ${HOME}/local/%d/%s ;`, c.Nodes[i], dir)
 			}
 		} else {
 			cmd = `find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; ;
 rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data} \; ;
-rm -fr {certs*,logs} ;
+rm -fr logs ;
 `
+			if !preserveCerts {
+				cmd += "rm -fr certs* ;\n"
+			}
 		}
 		return sess.CombinedOutput(cmd)
 	})
@@ -736,6 +744,154 @@ fi
 	}
 
 	return nil
+}
+
+// DistributeCerts will generate and distribute certificates to all of the
+// nodes.
+func (c *SyncedCluster) DistributeCerts() {
+	dir := ""
+	if c.IsLocal() {
+		dir = `${HOME}/local/1`
+	}
+
+	// Check to see if the certs have already been initialized.
+	var existsErr error
+	display := fmt.Sprintf("%s: checking certs", c.Name)
+	c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
+		sess, err := c.newSession(1)
+		if err != nil {
+			return nil, err
+		}
+		defer sess.Close()
+		_, existsErr = sess.CombinedOutput(`test -e ` + filepath.Join(dir, `certs.tar`))
+		return nil, nil
+	})
+
+	if existsErr == nil {
+		return
+	}
+
+	// Gather the internal IP addresses for every node in the cluster, even
+	// if it won't be added to the cluster itself we still add the IP address
+	// to the node cert.
+	var msg string
+	display = fmt.Sprintf("%s: initializing certs", c.Name)
+	nodes := allNodes(len(c.VMs))
+	var ips []string
+	if !c.IsLocal() {
+		ips = make([]string, len(nodes))
+		c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
+			var err error
+			ips[i], err = c.GetInternalIP(nodes[i])
+			return nil, errors.Wrapf(err, "IPs")
+		})
+	}
+
+	// Generate the ca, client and node certificates on the first node.
+	c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
+		sess, err := c.newSession(1)
+		if err != nil {
+			return nil, err
+		}
+		defer sess.Close()
+
+		var nodeNames []string
+		if c.IsLocal() {
+			// For local clusters, we only need to add one of the VM IP addresses.
+			nodeNames = append(nodeNames, "$(hostname)", c.VMs[0])
+		} else {
+			// Add both the local and external IP addresses, as well as the
+			// hostnames to the node certificate.
+			nodeNames = append(nodeNames, ips...)
+			nodeNames = append(nodeNames, c.VMs...)
+			for i := range c.VMs {
+				nodeNames = append(nodeNames, fmt.Sprintf("%s-%04d", c.Name, i+1))
+				// On AWS nodes internally have a DNS name in the form ip-<ip address>
+				// where dots have been replaces with dashes.
+				// See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-dns-hostnames
+				if strings.Contains(c.Localities[i], "cloud=aws") {
+					nodeNames = append(nodeNames, "ip-"+strings.ReplaceAll(ips[i], ".", "-"))
+				}
+			}
+		}
+
+		var cmd string
+		if c.IsLocal() {
+			cmd = `cd ${HOME}/local/1 ; `
+		}
+		cmd += fmt.Sprintf(`
+rm -fr certs
+mkdir -p certs
+%[1]s cert create-ca --certs-dir=certs --ca-key=certs/ca.key
+%[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key
+%[1]s cert create-node localhost %[2]s --certs-dir=certs --ca-key=certs/ca.key
+tar cvf certs.tar certs
+`, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "))
+		if out, err := sess.CombinedOutput(cmd); err != nil {
+			msg = fmt.Sprintf("%s: %v", out, err)
+		}
+		return nil, nil
+	})
+
+	if msg != "" {
+		fmt.Fprintln(os.Stderr, msg)
+		os.Exit(1)
+	}
+
+	var tmpfileName string
+	if c.IsLocal() {
+		tmpfileName = os.ExpandEnv(filepath.Join(dir, "certs.tar"))
+	} else {
+		// Retrieve the certs.tar that was created on the first node.
+		tmpfile, err := ioutil.TempFile("", "certs")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		_ = tmpfile.Close()
+		defer func() {
+			_ = os.Remove(tmpfile.Name()) // clean up
+		}()
+
+		if err := func() error {
+			return c.scp(fmt.Sprintf("%s@%s:certs.tar", c.user(1), c.host(1)), tmpfile.Name())
+		}(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+
+		tmpfileName = tmpfile.Name()
+	}
+
+	// Read the certs.tar file we just downloaded. We'll be piping it to the
+	// other nodes in the cluster.
+	certsTar, err := ioutil.ReadFile(tmpfileName)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	// Skip the the first node which is where we generated the certs.
+	display = c.Name + ": distributing certs"
+	nodes = nodes[1:]
+	c.Parallel(display, len(nodes), 0, func(i int) ([]byte, error) {
+		sess, err := c.newSession(nodes[i])
+		if err != nil {
+			return nil, err
+		}
+		defer sess.Close()
+
+		sess.SetStdin(bytes.NewReader(certsTar))
+		var cmd string
+		if c.IsLocal() {
+			cmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[i])
+		}
+		cmd += `tar xf -`
+		if out, err := sess.CombinedOutput(cmd); err != nil {
+			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
+		}
+		return nil, nil
+	})
 }
 
 const progressDone = "=======================================>"
