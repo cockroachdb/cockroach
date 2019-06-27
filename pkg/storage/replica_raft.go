@@ -595,18 +595,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
 		}
 		// NB: Note that without additional safeguards, it's incorrect to write
-		// the HardState before appending rd.Entries. This is because in a
-		// single node group, HardState.Commit can refer to an entry that is
-		// appended in the same rd.Entries. If the HardState were written
-		// first, followed immediately by a crash, the group would reboot with a
-		// committed index larger than the last index, which will set off
-		// alarms. Right now everything is in the same batch and so that problem
-		// does not exist, but should that change we can manually lower
-		// Committed before writing the HardState so that it does not exceed any
-		// rd.Entries' index (or take care to persist the HardState after
-		// appending). When the group is not a singleton, this problem does not
-		// exist because an Entry can be committed in no less than two Ready
-		// cycles. See splitMsgApps above for a similar argument.
+		// the HardState before appending rd.Entries. When catching up, a follower
+		// will receive Entries that are immediately Committed in the same
+		// Ready. If we persist the HardState but happen to lose the Entries,
+		// assertions can be tripped.
+		//
+		// We have both in the same batch, so there's no problem. If that ever
+		// changes, we must write and sync the Entries before the HardState.
 		if err := r.raftMu.stateLoader.SetHardState(ctx, writer, rd.HardState); err != nil {
 			const expl = "during setHardState"
 			return stats, expl, errors.Wrap(err, expl)
