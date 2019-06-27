@@ -126,6 +126,16 @@ type lookupResult struct {
 // Note that the above description assumes that useReverseScan is false for simplicity.
 // If useReverseScan is true, we need to use the end key of the stale descriptor instead.
 func makeLookupRequestKey(key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool) string {
+	var ret strings.Builder
+	// We only want meta1, meta2, user range lookups to be coalesced with other
+	// meta1, meta2, user range lookups. Otherwise, deadlocks could happen due to
+	// singleflight. We use the prefix "1:" to indicate a meta1 lookup and "2:"
+	// to indicate a meta2 lookup.
+	if key.AsRawKey().Compare(keys.Meta1KeyMax) < 0 {
+		ret.WriteString("1:")
+	} else if key.AsRawKey().Compare(keys.Meta2KeyMax) < 0 {
+		ret.WriteString("2:")
+	}
 	if evictToken != nil {
 		if useReverseScan {
 			key = evictToken.prevDesc.EndKey
@@ -133,7 +143,10 @@ func makeLookupRequestKey(key roachpb.RKey, evictToken *EvictionToken, useRevers
 			key = evictToken.prevDesc.StartKey
 		}
 	}
-	return string(key) + ":" + strconv.FormatBool(useReverseScan)
+	ret.Write(key)
+	ret.WriteString(":")
+	ret.WriteString(strconv.FormatBool(useReverseScan))
+	return ret.String()
 }
 
 // NewRangeDescriptorCache returns a new RangeDescriptorCache which

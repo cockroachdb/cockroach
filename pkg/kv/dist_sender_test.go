@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -3047,4 +3048,126 @@ func TestCanSendToFollower(t *testing.T) {
 			t.Fatalf("%d: unexpected replica: %v != %v", i, sentTo.NodeID, c.expectedNode)
 		}
 	}
+}
+
+func TestEvictionTokenCoalesce(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	testUserRangeDescriptor := roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("d"),
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testMetaRangeDescriptor, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	sendErrors := int32(0)
+	var queriedMetaKeys sync.Map
+
+	var ds *DistSender
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		rs, err := keys.Range(ba)
+		br := ba.CreateReply()
+		if err != nil {
+			br.Error = roachpb.NewError(err)
+			return br, nil
+		}
+		if !client.TestingIsRangeLookup(ba) {
+			// Return a SendError so DistSender retries the first range lookup in the
+			// user key-space for both batches.
+			if atomic.AddInt32(&sendErrors, 1) <= 2 {
+				br.Error = roachpb.NewError(&roachpb.SendError{})
+				return br, nil
+			}
+			return br, nil
+		}
+
+		if bytes.HasPrefix(rs.Key, keys.Meta1Prefix) {
+			// Querying meta 1 range.
+			br = &roachpb.BatchResponse{}
+			r := &roachpb.ScanResponse{}
+			var kv roachpb.KeyValue
+			if err := kv.Value.SetProto(&testMetaRangeDescriptor); err != nil {
+				br.Error = roachpb.NewError(err)
+				return br, nil
+			}
+			r.Rows = append(r.Rows, kv)
+			br.Add(r)
+			return br, nil
+		}
+		// Querying meta2 range.
+		br = &roachpb.BatchResponse{}
+		r := &roachpb.ScanResponse{}
+		var kv roachpb.KeyValue
+		if err := kv.Value.SetProto(&testUserRangeDescriptor); err != nil {
+			br.Error = roachpb.NewError(err)
+			return br, nil
+		}
+		r.Rows = append(r.Rows, kv)
+		br.Add(r)
+		// The first query for each batch request key of the meta1 range should be
+		// in separate requests because there is no prior eviction token.
+		if _, ok := queriedMetaKeys.Load(string(rs.Key)); ok {
+			// Wait until we have two in-flight requests.
+			if err := testutils.SucceedsSoonError(t, func() error {
+				// Since the previously fetched RangeDescriptor was ["a", "d"), the request keys
+				// would be coalesced to "a".
+				numCalls := ds.rangeCache.lookupRequests.NumCalls(string(roachpb.RKey("a")) + ":false")
+				if numCalls != 2 {
+					return errors.Errorf("expected %d in-flight requests, got %d", 2, numCalls)
+				}
+				return nil
+			}); err != nil {
+				br.Error = roachpb.NewError(err)
+				return br, nil
+			}
+		}
+		queriedMetaKeys.Store(string(rs.Key), struct{}{})
+		return br, nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		RPCContext: rpcContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		NodeDialer: nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		RPCRetryOptions: &retry.Options{
+			MaxRetries: 1,
+		},
+	}
+	ds = NewDistSender(cfg, g)
+
+	var batchWaitGroup sync.WaitGroup
+	putFn := func(key, value string) {
+		defer batchWaitGroup.Done()
+		put := roachpb.NewPut(roachpb.Key(key), roachpb.MakeValueFromString("c"))
+		if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil {
+			t.Errorf("put encountered error: %s", pErr)
+		}
+	}
+	batchWaitGroup.Add(2)
+	go putFn("b", "b")
+	go putFn("c", "c")
+	batchWaitGroup.Wait()
 }
