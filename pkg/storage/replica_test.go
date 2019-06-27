@@ -6567,9 +6567,13 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 func TestEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
+	cfg := TestStoreConfig(nil)
+	// Disable ticks to avoid quiescence, which can result in empty
+	// entries being proposed and causing the test to flake.
+	cfg.RaftTickInterval = math.MaxInt32
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, cfg)
 	tc.repl.store.SetRaftLogQueueActive(false)
 
 	repl := tc.repl

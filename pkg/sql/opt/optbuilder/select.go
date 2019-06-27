@@ -89,7 +89,8 @@ func (b *Builder) buildDataSource(
 		ds, resName := b.resolveDataSource(tn, privilege.SELECT)
 		switch t := ds.(type) {
 		case cat.Table:
-			return b.buildScan(t, &resName, nil /* ordinals */, indexFlags, excludeMutations, inScope)
+			tabMeta := b.addTable(t, &resName)
+			return b.buildScan(tabMeta, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case cat.View:
 			return b.buildView(t, inScope)
 		case cat.Sequence:
@@ -286,13 +287,21 @@ func (b *Builder) buildScanFromTableRef(
 		}
 	}
 
-	return b.buildScan(tab, tab.Name(), ordinals, indexFlags, excludeMutations, inScope)
+	tabMeta := b.addTable(tab, tab.Name())
+	return b.buildScan(tabMeta, ordinals, indexFlags, excludeMutations, inScope)
+}
+
+// addTable adds a table to the metadata and returns the TableMeta. The table
+// name is passed separately in order to preserve knowledge of whether the
+// catalog and schema names were explicitly specified.
+func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta {
+	md := b.factory.Metadata()
+	tabID := md.AddTableWithAlias(tab, alias)
+	return md.TableMeta(tabID)
 }
 
 // buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
-// given table with the given table name. Note that the table name is passed
-// separately in order to preserve knowledge of whether the catalog and schema
-// names were explicitly specified.
+// given table.
 //
 // If the ordinals slice is not nil, then only columns with ordinals in that
 // list are projected by the scan. Otherwise, all columns from the table are
@@ -301,16 +310,15 @@ func (b *Builder) buildScanFromTableRef(
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) buildScan(
-	tab cat.Table,
-	alias *tree.TableName,
+	tabMeta *opt.TableMeta,
 	ordinals []int,
 	indexFlags *tree.IndexFlags,
 	scanMutationCols bool,
 	inScope *scope,
 ) (outScope *scope) {
-	md := b.factory.Metadata()
-	tabID := md.AddTableWithAlias(tab, alias)
-	tabMeta := md.TableMeta(tabID)
+	tab := tabMeta.Table
+	tabID := tabMeta.MetaID
+
 	if indexFlags != nil && indexFlags.IgnoreForeignKeys {
 		tabMeta.IgnoreForeignKeys = true
 	}
@@ -386,7 +394,7 @@ func (b *Builder) buildScan(
 			}
 		}
 		outScope.expr = b.factory.ConstructScan(&private)
-		b.addCheckConstraintsToScan(outScope, tabID)
+		b.addCheckConstraintsToScan(outScope, tabMeta)
 	}
 	return outScope
 }
@@ -394,11 +402,8 @@ func (b *Builder) buildScan(
 // addCheckConstraintsToScan finds all the check constraints that apply to the
 // table and adds them to the table metadata. To do this, the scalar expression
 // of the check constraints are built here.
-func (b *Builder) addCheckConstraintsToScan(scope *scope, tabID opt.TableID) {
-	md := b.factory.Metadata()
-	tabMeta := md.TableMeta(tabID)
+func (b *Builder) addCheckConstraintsToScan(scope *scope, tabMeta *opt.TableMeta) {
 	tab := tabMeta.Table
-
 	// Find all the check constraints that apply to the table and add them
 	// to the table meta data. To do this, we must build them into scalar
 	// expressions.
@@ -415,8 +420,7 @@ func (b *Builder) addCheckConstraintsToScan(scope *scope, tabID opt.TableID) {
 		}
 
 		texpr := scope.resolveAndRequireType(expr, types.Bool)
-		tm := b.factory.Metadata().TableMeta(tabID)
-		tm.AddConstraint(b.buildScalar(texpr, scope, nil, nil, nil))
+		tabMeta.AddConstraint(b.buildScalar(texpr, scope, nil, nil, nil))
 	}
 }
 

@@ -280,6 +280,8 @@ func (f *stubFactory) ConstructSaveTable(
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructErrorIfRows(input exec.Node) (exec.Node, error) {
+func (f *stubFactory) ConstructErrorIfRows(
+	input exec.Node, mkErr func(tree.Datums) error,
+) (exec.Node, error) {
 	return struct{}{}, nil
 }

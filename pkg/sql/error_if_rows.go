@@ -13,8 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -22,6 +20,10 @@ import (
 // node produces any rows.
 type errorIfRowsNode struct {
 	plan planNode
+
+	// mkErr creates the error message, given the values of the first row
+	// produced.
+	mkErr func(values tree.Datums) error
 
 	nexted bool
 }
@@ -41,9 +43,7 @@ func (n *errorIfRowsNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 	if ok {
-		// TODO(yuzefovich): update the error once the optimizer plans this node.
-		return false, pgerror.Newf(pgcode.ForeignKeyViolation,
-			"foreign key violation: values %s", n.plan.Values())
+		return false, n.mkErr(n.plan.Values())
 	}
 	return false, nil
 }

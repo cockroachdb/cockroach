@@ -677,6 +677,38 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	case *CastExpr:
 		private = t.Typ.SQLString()
 
+	case *FKChecksItem:
+		origin := f.Memo.metadata.TableMeta(t.OriginTable)
+		referenced := f.Memo.metadata.TableMeta(t.ReferencedTable)
+		var fk cat.ForeignKeyConstraint
+		if t.FKOutbound {
+			fk = origin.Table.OutboundForeignKey(t.FKOrdinal)
+		} else {
+			fk = referenced.Table.InboundForeignKey(t.FKOrdinal)
+		}
+		// Print the FK as:
+		//   child(a,b) -> parent(a,b)
+		//
+		// TODO(radu): maybe flip these if we are deleting from the parent (i.e.
+		// FKOutbound=false)?
+		fmt.Fprintf(f.Buffer, ": %s(", origin.Alias.TableName)
+		for i := 0; i < fk.ColumnCount(); i++ {
+			if i > 0 {
+				f.Buffer.WriteByte(',')
+			}
+			col := origin.Table.Column(fk.OriginColumnOrdinal(origin.Table, i))
+			f.Buffer.WriteString(string(col.ColName()))
+		}
+		fmt.Fprintf(f.Buffer, ") -> %s(", referenced.Alias.TableName)
+		for i := 0; i < fk.ColumnCount(); i++ {
+			if i > 0 {
+				f.Buffer.WriteByte(',')
+			}
+			col := referenced.Table.Column(fk.ReferencedColumnOrdinal(referenced.Table, i))
+			f.Buffer.WriteString(string(col.ColName()))
+		}
+		f.Buffer.WriteByte(')')
+
 	default:
 		private = scalar.Private()
 	}
