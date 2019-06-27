@@ -127,10 +127,9 @@ func NewOrderedAggregator(
 			)
 	}
 
-	groupTypes := extractGroupTypes(groupCols, colTypes)
 	aggTypes := extractAggTypes(aggCols, colTypes)
 
-	op, groupCol, err := OrderedDistinctColsToOperators(input, groupCols, groupTypes)
+	op, groupCol, err := OrderedDistinctColsToOperators(input, groupCols, colTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -300,19 +299,6 @@ func (a *orderedAggregator) reset() {
 	for _, fn := range a.aggregateFuncs {
 		fn.Reset()
 	}
-}
-
-// extractGroupTypes returns an array representing the type corresponding to
-// each group column. This information is extracted from the group column
-// indices and their corresponding column types.
-func extractGroupTypes(groupCols []uint32, colTypes []types.T) []types.T {
-	groupTyps := make([]types.T, len(groupCols))
-
-	for i, colIdx := range groupCols {
-		groupTyps[i] = colTypes[colIdx]
-	}
-
-	return groupTyps
 }
 
 // extractAggTypes returns a nested array representing the input types
