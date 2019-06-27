@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 type mjTestCase struct {
 	description     string
+	joinType        sqlbase.JoinType
 	leftTuples      []tuple
 	leftTypes       []types.T
 	leftOutCols     []uint32
@@ -760,22 +762,176 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1, nil, 1, 1}, {2, 2, 2, nil}, {2, 2, 2, nil}, {2, 2, 2, nil}, {2, 2, 2, nil}, {3, nil, 3, nil}, {4, nil, 4, 4}, {4, nil, 4, 4}},
 			expectedOutCols: []int{0, 1, 2, 3},
 		},
+		{
+			description:     "basic LEFT OUTER JOIN test, L and R exhausted at the same time",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64},
+			rightTypes:      []types.T{types.Int64},
+			leftTuples:      tuples{{1}, {2}, {3}, {4}, {4}},
+			rightTuples:     tuples{{0}, {2}, {3}, {4}, {4}},
+			leftOutCols:     []uint32{0},
+			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{1, nil}, {2, 2}, {3, 3}, {4, 4}, {4, 4}, {4, 4}, {4, 4}},
+			expectedOutCols: []int{0, 1},
+		},
+		{
+			description:     "basic LEFT OUTER JOIN test, R exhausted first",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64},
+			rightTypes:      []types.T{types.Int64},
+			leftTuples:      tuples{{1}, {1}, {3}, {5}, {6}, {7}},
+			rightTuples:     tuples{{2}, {3}, {4}},
+			leftOutCols:     []uint32{0},
+			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{1, nil}, {1, nil}, {3, 3}, {5, nil}, {6, nil}, {7, nil}},
+			expectedOutCols: []int{0, 1},
+		},
+		{
+			description:     "basic LEFT OUTER JOIN test, L exhausted first",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64},
+			rightTypes:      []types.T{types.Int64},
+			leftTuples:      tuples{{3}, {5}, {6}, {7}},
+			rightTuples:     tuples{{2}, {3}, {4}, {6}, {8}, {9}},
+			leftOutCols:     []uint32{0},
+			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{3, 3}, {5, nil}, {6, 6}, {7, nil}},
+			expectedOutCols: []int{0, 1},
+		},
+		{
+			description:     "multi output column LEFT OUTER JOIN test with nulls",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64, types.Int64},
+			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTuples:      tuples{{1, 10}, {2, 20}, {3, nil}, {4, 40}},
+			rightTuples:     tuples{{1, nil}, {3, 13}, {4, 14}},
+			leftOutCols:     []uint32{0, 1},
+			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{1, 10, 1, nil}, {2, 20, nil, nil}, {3, nil, 3, 13}, {4, 40, 4, 14}},
+			expectedOutCols: []int{0, 1, 2, 3},
+		},
+		{
+			description:     "null in equality column LEFT OUTER JOIN",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64},
+			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTuples:      tuples{{nil}, {nil}, {1}, {3}},
+			rightTuples:     tuples{{nil, 1}, {1, 1}, {2, 2}, {3, 3}},
+			leftOutCols:     []uint32{0},
+			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{nil, nil, nil}, {nil, nil, nil}, {1, 1, 1}, {3, 3, 3}},
+			expectedOutCols: []int{0, 1, 2},
+		},
+		{
+			description:     "multi equality column LEFT OUTER JOIN test with nulls",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64, types.Int64},
+			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTuples:      tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, 10}, {2, 20}, {4, 40}},
+			rightTuples:     tuples{{nil, nil}, {nil, 10}, {1, nil}, {1, nil}, {2, 20}, {3, 30}},
+			leftOutCols:     []uint32{0, 1},
+			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0, 1},
+			rightEqCols:     []uint32{0, 1},
+			expected:        tuples{{nil, nil, nil, nil}, {nil, 10, nil, nil}, {1, nil, nil, nil}, {1, 10, nil, nil}, {2, 20, 2, 20}, {4, 40, nil, nil}},
+			expectedOutCols: []int{0, 1, 2, 3},
+		},
+		{
+			description:     "multi equality column (long runs on left) LEFT OUTER JOIN test with nulls",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64, types.Int64},
+			rightTypes:      []types.T{types.Int64, types.Int64},
+			leftTuples:      tuples{{1, 9}, {1, 10}, {1, 10}, {1, 11}, {2, 20}, {2, 20}, {2, 21}, {2, 22}, {2, 22}},
+			rightTuples:     tuples{{1, 8}, {1, 11}, {1, 11}, {2, 21}, {2, 23}},
+			leftOutCols:     []uint32{0, 1},
+			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0, 1},
+			rightEqCols:     []uint32{0, 1},
+			expected:        tuples{{1, 9, nil, nil}, {1, 10, nil, nil}, {1, 10, nil, nil}, {1, 11, 1, 11}, {1, 11, 1, 11}, {2, 20, nil, nil}, {2, 20, nil, nil}, {2, 21, 2, 21}, {2, 22, nil, nil}, {2, 22, nil, nil}},
+			expectedOutCols: []int{0, 1, 2, 3},
+		},
+		{
+			description:     "3 equality column LEFT OUTER JOIN test with nulls DESC ordering",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
+			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
+			rightTuples:     tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
+			leftOutCols:     []uint32{0, 1, 2},
+			rightOutCols:    []uint32{0, 1, 2},
+			leftEqCols:      []uint32{0, 1, 2},
+			rightEqCols:     []uint32{0, 1, 2},
+			expected:        tuples{{2, 3, 1, nil, nil, nil}, {2, nil, 1, nil, nil, nil}, {nil, 1, 3, nil, nil, nil}},
+			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+		},
+		{
+			description:     "3 equality column LEFT OUTER JOIN test with nulls mixed ordering",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64, types.Int64, types.Int64},
+			rightTypes:      []types.T{types.Int64, types.Int64, types.Int64},
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_DESC, distsqlpb.Ordering_Column_DESC},
+			leftTuples:      tuples{{2, 3, 1}, {2, nil, 1}, {nil, 1, 3}},
+			rightTuples:     tuples{{4, 3, 3}, {nil, 2, nil}, {nil, 1, 3}},
+			leftOutCols:     []uint32{0, 1, 2},
+			rightOutCols:    []uint32{0, 1, 2},
+			leftEqCols:      []uint32{0, 1, 2},
+			rightEqCols:     []uint32{1, 2, 0},
+			expected:        tuples{{2, 3, 1, nil, nil, nil}, {2, nil, 1, nil, nil, nil}, {nil, 1, 3, nil, nil, nil}},
+			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+		},
+		// TODO(yuzefovich): uncomment once distinct supports null handling.
+		//{
+		//	description:     "single column DESC with nulls on the left LEFT OUTER JOIN",
+		//	joinType:        sqlbase.JoinType_LEFT_OUTER,
+		//	leftTypes:       []types.T{types.Int64},
+		//	rightTypes:      []types.T{types.Int64},
+		//	leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+		//	rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+		//	leftTuples:      tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
+		//	rightTuples:     tuples{{1}},
+		//	leftOutCols:     []uint32{0},
+		//	rightOutCols:    []uint32{0},
+		//	leftEqCols:      []uint32{0},
+		//	rightEqCols:     []uint32{0},
+		//	expected:        tuples{{1, 1}, {1, 1}, {1, 1}, {nil, nil}, {nil, nil}, {nil, nil}},
+		//	expectedOutCols: []int{0, 1},
+		//},
 	}
 
 	for _, tc := range tcs {
 		tc.Init()
 		lOrderings := make([]distsqlpb.Ordering_Column, len(tc.leftEqCols))
 		for i := range tc.leftEqCols {
-			lOrderings[i] = distsqlpb.Ordering_Column{ColIdx: tc.leftEqCols[i], Direction: tc.leftDirections[i]}
+			lOrderings[i] = distsqlpb.Ordering_Column{
+				ColIdx:    tc.leftEqCols[i],
+				Direction: tc.leftDirections[i],
+			}
 		}
 
 		rOrderings := make([]distsqlpb.Ordering_Column, len(tc.rightEqCols))
 		for i := range tc.rightEqCols {
-			rOrderings[i] = distsqlpb.Ordering_Column{ColIdx: tc.rightEqCols[i], Direction: tc.rightDirections[i]}
+			rOrderings[i] = distsqlpb.Ordering_Column{
+				ColIdx:    tc.rightEqCols[i],
+				Direction: tc.rightDirections[i],
+			}
 		}
 
 		runTests(t, []tuples{tc.leftTuples, tc.rightTuples}, func(t *testing.T, input []Operator) {
-			s, err := NewMergeJoinOp(input[0], input[1], tc.leftOutCols, tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings)
+			s, err := NewMergeJoinOp(tc.joinType, input[0], input[1], tc.leftOutCols,
+				tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings)
 			if err != nil {
 				t.Fatal("Error in merge join op constructor", err)
 			}
@@ -811,6 +967,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 						a, err := NewMergeJoinOp(
+							sqlbase.InnerJoin,
 							leftSource,
 							rightSource,
 							[]uint32{0},
@@ -872,6 +1029,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
 						[]uint32{0},
@@ -934,6 +1092,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 						a, err := NewMergeJoinOp(
+							sqlbase.InnerJoin,
 							leftSource,
 							rightSource,
 							[]uint32{},
@@ -982,6 +1141,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
 					a, err := NewMergeJoinOp(
+						sqlbase.InnerJoin,
 						leftSource,
 						rightSource,
 						[]uint32{},
@@ -1095,6 +1255,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
 
 							a, err := NewMergeJoinOp(
+								sqlbase.InnerJoin,
 								leftSource,
 								rightSource,
 								[]uint32{0},
