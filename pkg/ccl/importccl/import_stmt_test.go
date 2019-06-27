@@ -928,7 +928,7 @@ func TestImportCSVStmt(t *testing.T) {
 
 	gzip := make([]string, len(files))
 	for i := range files {
-		gzip[i] = strings.TrimPrefix(gzipFile(t, filepath.Join(dir, files[i])), dir)
+		gzip[i] = strings.TrimPrefix(gzipFile(t, filepath.Join(dir, files[i])), dir) + "?param=value"
 	}
 	gzip = nodelocalPrefix(gzip)
 
@@ -1164,7 +1164,7 @@ func TestImportCSVStmt(t *testing.T) {
 
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUser,
-				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.Join(tc.files, ", ")),
+				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?param=value", "")),
 			}); err != nil {
 				t.Fatal(err)
 			}
