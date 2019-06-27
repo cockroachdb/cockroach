@@ -26,8 +26,8 @@ import (
 // SortedDiskMapBatchWriter.
 const defaultBatchCapacityBytes = 4096
 
-// RocksDBMapBatchWriter batches writes to a RocksDBMap.
-type RocksDBMapBatchWriter struct {
+// rocksDBMapBatchWriter batches writes to a RocksDBMap.
+type rocksDBMapBatchWriter struct {
 	// capacity is the number of bytes to write before a Flush() is triggered.
 	capacity int
 
@@ -38,8 +38,8 @@ type RocksDBMapBatchWriter struct {
 	store   Engine
 }
 
-// RocksDBMapIterator iterates over the keys of a RocksDBMap in sorted order.
-type RocksDBMapIterator struct {
+// rocksDBMapIterator iterates over the keys of a RocksDBMap in sorted order.
+type rocksDBMapIterator struct {
 	iter Iterator
 	// makeKey is a function that transforms a key into an MVCCKey with a prefix
 	// used to Seek() the underlying iterator.
@@ -48,9 +48,9 @@ type RocksDBMapIterator struct {
 	prefix []byte
 }
 
-// RocksDBMap is a SortedDiskMap that uses RocksDB as its underlying storage
+// rocksDBMap is a SortedDiskMap that uses RocksDB as its underlying storage
 // engine.
-type RocksDBMap struct {
+type rocksDBMap struct {
 	// TODO(asubiotto): Add memory accounting.
 	prefix          []byte
 	store           Engine
@@ -58,12 +58,12 @@ type RocksDBMap struct {
 	keyID           int64
 }
 
-var _ diskmap.SortedDiskMapBatchWriter = &RocksDBMapBatchWriter{}
-var _ diskmap.SortedDiskMapIterator = &RocksDBMapIterator{}
-var _ diskmap.SortedDiskMap = &RocksDBMap{}
+var _ diskmap.SortedDiskMapBatchWriter = &rocksDBMapBatchWriter{}
+var _ diskmap.SortedDiskMapIterator = &rocksDBMapIterator{}
+var _ diskmap.SortedDiskMap = &rocksDBMap{}
 
 // tempStorageID is the temp ID generator for a node. It generates unique
-// prefixes for NewRocksDBMap. It is a global because NewRocksDBMap needs to
+// prefixes for NewRocksDBMap. It is a global because newRocksDBMap needs to
 // prefix its writes uniquely, and using a global prevents users from having to
 // specify the prefix themselves and correctly guarantee that it is unique.
 var tempStorageID uint64
@@ -72,35 +72,23 @@ func generateTempStorageID() uint64 {
 	return atomic.AddUint64(&tempStorageID, 1)
 }
 
-// NewRocksDBMap creates a new RocksDBMap with the passed in Engine as
-// the underlying store. The RocksDBMap instance will have a keyspace prefixed
-// by a unique prefix.
-func NewRocksDBMap(e Engine) *RocksDBMap {
-	return newRocksDBMap(e, false)
-}
-
-// NewRocksDBMultiMap creates a new RocksDBMap with the passed in Engine
-// as the underlying store. The RocksDBMap instance will have a keyspace
-// prefixed by a unique prefix. Unlike NewRocksDBMap, Puts with identical
-// keys will write multiple entries (instead of overwriting previous entries)
-// that will be returned during iteration.
-func NewRocksDBMultiMap(e Engine) *RocksDBMap {
-	return newRocksDBMap(e, true)
-}
-
-func newRocksDBMap(e Engine, allowDuplicates bool) *RocksDBMap {
+// newRocksDBMap creates a new rocksDBMap with the passed in Engine as the
+// underlying store. The rocksDBMap instance will have a keyspace prefixed by a
+// unique prefix. The allowDuplicates parameter controls whether Puts with
+// identical keys will write multiple entries or overwrite previous entries.
+func newRocksDBMap(e Engine, allowDuplicates bool) *rocksDBMap {
 	prefix := generateTempStorageID()
-	return &RocksDBMap{
+	return &rocksDBMap{
 		prefix:          encoding.EncodeUvarintAscending([]byte(nil), prefix),
 		store:           e,
 		allowDuplicates: allowDuplicates,
 	}
 }
 
-// makeKey appends k to the RocksDBMap's prefix to keep the key local to this
+// makeKey appends k to the rocksDBMap's prefix to keep the key local to this
 // instance and creates an MVCCKey, which is what the underlying storage engine
 // expects. The returned key is only valid until the next call to makeKey().
-func (r *RocksDBMap) makeKey(k []byte) MVCCKey {
+func (r *rocksDBMap) makeKey(k []byte) MVCCKey {
 	// TODO(asubiotto): We can make this more performant by bypassing MVCCKey
 	// creation (have to generalize storage API). See
 	// https://github.com/cockroachdb/cockroach/issues/16718#issuecomment-311493414
@@ -114,7 +102,7 @@ func (r *RocksDBMap) makeKey(k []byte) MVCCKey {
 // makeKeyWithTimestamp makes a key appropriate for a Put operation. It is like
 // makeKey except it respects allowDuplicates, which uses the MVCC timestamp
 // field to assign a unique keyID so duplicate keys don't overwrite each other.
-func (r *RocksDBMap) makeKeyWithTimestamp(k []byte) MVCCKey {
+func (r *rocksDBMap) makeKeyWithTimestamp(k []byte) MVCCKey {
 	mvccKey := r.makeKey(k)
 	if r.allowDuplicates {
 		r.keyID++
@@ -124,12 +112,12 @@ func (r *RocksDBMap) makeKeyWithTimestamp(k []byte) MVCCKey {
 }
 
 // Put implements the SortedDiskMap interface.
-func (r *RocksDBMap) Put(k []byte, v []byte) error {
+func (r *rocksDBMap) Put(k []byte, v []byte) error {
 	return r.store.Put(r.makeKeyWithTimestamp(k), v)
 }
 
 // Get implements the SortedDiskMap interface.
-func (r *RocksDBMap) Get(k []byte) ([]byte, error) {
+func (r *rocksDBMap) Get(k []byte) ([]byte, error) {
 	if r.allowDuplicates {
 		return nil, errors.New("Get not supported if allowDuplicates is true")
 	}
@@ -137,11 +125,11 @@ func (r *RocksDBMap) Get(k []byte) ([]byte, error) {
 }
 
 // NewIterator implements the SortedDiskMap interface.
-func (r *RocksDBMap) NewIterator() diskmap.SortedDiskMapIterator {
+func (r *rocksDBMap) NewIterator() diskmap.SortedDiskMapIterator {
 	// NOTE: prefix is only false because we can't use the normal prefix
 	// extractor. This iterator still only does prefix iteration. See
-	// RocksDBMapIterator.Valid().
-	return &RocksDBMapIterator{
+	// rocksDBMapIterator.Valid().
+	return &rocksDBMapIterator{
 		iter: r.store.NewIterator(IterOptions{
 			UpperBound: roachpb.Key(r.prefix).PrefixEnd(),
 		}),
@@ -151,17 +139,17 @@ func (r *RocksDBMap) NewIterator() diskmap.SortedDiskMapIterator {
 }
 
 // NewBatchWriter implements the SortedDiskMap interface.
-func (r *RocksDBMap) NewBatchWriter() diskmap.SortedDiskMapBatchWriter {
+func (r *rocksDBMap) NewBatchWriter() diskmap.SortedDiskMapBatchWriter {
 	return r.NewBatchWriterCapacity(defaultBatchCapacityBytes)
 }
 
 // NewBatchWriterCapacity implements the SortedDiskMap interface.
-func (r *RocksDBMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDiskMapBatchWriter {
+func (r *rocksDBMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDiskMapBatchWriter {
 	makeKey := r.makeKey
 	if r.allowDuplicates {
 		makeKey = r.makeKeyWithTimestamp
 	}
-	return &RocksDBMapBatchWriter{
+	return &rocksDBMapBatchWriter{
 		capacity: capacityBytes,
 		makeKey:  makeKey,
 		batch:    r.store.NewWriteOnlyBatch(),
@@ -170,7 +158,7 @@ func (r *RocksDBMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDis
 }
 
 // Clear implements the SortedDiskMap interface.
-func (r *RocksDBMap) Clear() error {
+func (r *rocksDBMap) Clear() error {
 	if err := r.store.ClearRange(
 		MVCCKey{Key: r.prefix},
 		MVCCKey{Key: roachpb.Key(r.prefix).PrefixEnd()},
@@ -184,24 +172,24 @@ func (r *RocksDBMap) Clear() error {
 }
 
 // Close implements the SortedDiskMap interface.
-func (r *RocksDBMap) Close(ctx context.Context) {
+func (r *rocksDBMap) Close(ctx context.Context) {
 	if err := r.Clear(); err != nil {
 		log.Error(ctx, err)
 	}
 }
 
 // Seek implements the SortedDiskMapIterator interface.
-func (i *RocksDBMapIterator) Seek(k []byte) {
+func (i *rocksDBMapIterator) Seek(k []byte) {
 	i.iter.Seek(i.makeKey(k))
 }
 
 // Rewind implements the SortedDiskMapIterator interface.
-func (i *RocksDBMapIterator) Rewind() {
+func (i *rocksDBMapIterator) Rewind() {
 	i.iter.Seek(i.makeKey(nil))
 }
 
 // Valid implements the SortedDiskMapIterator interface.
-func (i *RocksDBMapIterator) Valid() (bool, error) {
+func (i *rocksDBMapIterator) Valid() (bool, error) {
 	ok, err := i.iter.Valid()
 	if err != nil {
 		return false, err
@@ -214,37 +202,37 @@ func (i *RocksDBMapIterator) Valid() (bool, error) {
 }
 
 // Next implements the SortedDiskMapIterator interface.
-func (i *RocksDBMapIterator) Next() {
+func (i *rocksDBMapIterator) Next() {
 	i.iter.Next()
 }
 
 // Key implements the SortedDiskMapIterator interface.
-func (i *RocksDBMapIterator) Key() []byte {
+func (i *rocksDBMapIterator) Key() []byte {
 	return i.iter.Key().Key[len(i.prefix):]
 }
 
 // Value implements the SortedDiskMapIterator interface.
-func (i *RocksDBMapIterator) Value() []byte {
+func (i *rocksDBMapIterator) Value() []byte {
 	return i.iter.Value()
 }
 
 // UnsafeKey implements the SortedDiskMapIterator interface.
-func (i *RocksDBMapIterator) UnsafeKey() []byte {
+func (i *rocksDBMapIterator) UnsafeKey() []byte {
 	return i.iter.UnsafeKey().Key[len(i.prefix):]
 }
 
 // UnsafeValue implements the SortedDiskMapIterator interface.
-func (i *RocksDBMapIterator) UnsafeValue() []byte {
+func (i *rocksDBMapIterator) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
 }
 
 // Close implements the SortedDiskMapIterator interface.
-func (i *RocksDBMapIterator) Close() {
+func (i *rocksDBMapIterator) Close() {
 	i.iter.Close()
 }
 
 // Put implements the SortedDiskMapBatchWriter interface.
-func (b *RocksDBMapBatchWriter) Put(k []byte, v []byte) error {
+func (b *rocksDBMapBatchWriter) Put(k []byte, v []byte) error {
 	if err := b.batch.Put(b.makeKey(k), v); err != nil {
 		return err
 	}
@@ -255,7 +243,7 @@ func (b *RocksDBMapBatchWriter) Put(k []byte, v []byte) error {
 }
 
 // Flush implements the SortedDiskMapBatchWriter interface.
-func (b *RocksDBMapBatchWriter) Flush() error {
+func (b *rocksDBMapBatchWriter) Flush() error {
 	if b.batch.Empty() {
 		return nil
 	}
@@ -267,7 +255,7 @@ func (b *RocksDBMapBatchWriter) Flush() error {
 }
 
 // Close implements the SortedDiskMapBatchWriter interface.
-func (b *RocksDBMapBatchWriter) Close(ctx context.Context) error {
+func (b *rocksDBMapBatchWriter) Close(ctx context.Context) error {
 	err := b.Flush()
 	b.batch.Close()
 	return err
