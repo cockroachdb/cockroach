@@ -106,6 +106,8 @@ func verifyColOperator(
 
 	outProc.Start(ctx)
 	outColOp.Start(ctx)
+	defer outProc.ConsumerClosed()
+	defer outColOp.ConsumerClosed()
 
 	var procRows, colOpRows sqlbase.EncDatumRows
 	rowCount := 0
