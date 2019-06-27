@@ -34,7 +34,7 @@ func TestRocksDBMap(t *testing.T) {
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
-	diskMap := NewRocksDBMap(e)
+	diskMap := newRocksDBMap(e, false /* allowDuplicates */)
 	defer diskMap.Close(ctx)
 
 	batchWriter := diskMap.NewBatchWriterCapacity(64)
@@ -169,7 +169,7 @@ func TestRocksDBMapClose(t *testing.T) {
 		}
 	}
 
-	diskMap := NewRocksDBMap(e)
+	diskMap := newRocksDBMap(e, false /* allowDuplicates */)
 
 	// Put a small amount of data into the disk map.
 	const letters = "abcdefghijklmnopqrstuvwxyz"
@@ -222,9 +222,9 @@ func TestRocksDBMapSandbox(t *testing.T) {
 	e := NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 
-	diskMaps := make([]*RocksDBMap, 3)
+	diskMaps := make([]*rocksDBMap, 3)
 	for i := 0; i < len(diskMaps); i++ {
-		diskMaps[i] = NewRocksDBMap(e)
+		diskMaps[i] = newRocksDBMap(e, false /* allowDuplicates */)
 	}
 
 	// Put [0,10) as a key into each diskMap with the value specifying which
@@ -340,11 +340,7 @@ func TestRocksDBStore(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("AllowDuplicates=%v", tc.allowDuplicates), func(t *testing.T) {
-			fn := NewRocksDBMap
-			if tc.allowDuplicates {
-				fn = NewRocksDBMultiMap
-			}
-			diskStore := fn(e)
+			diskStore := newRocksDBMap(e, tc.allowDuplicates)
 			defer diskStore.Close(ctx)
 
 			batchWriter := diskStore.NewBatchWriter()
@@ -404,7 +400,7 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 		b.Run(fmt.Sprintf("InputSize%d", inputSize), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				func() {
-					diskMap := NewRocksDBMap(tempEngine)
+					diskMap := tempEngine.NewSortedDiskMap()
 					defer diskMap.Close(ctx)
 					batchWriter := diskMap.NewBatchWriter()
 					// This Close() flushes writes.
@@ -445,7 +441,7 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 	}
 	defer tempEngine.Close()
 
-	diskMap := NewRocksDBMap(tempEngine)
+	diskMap := tempEngine.NewSortedDiskMap()
 	defer diskMap.Close(context.Background())
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))

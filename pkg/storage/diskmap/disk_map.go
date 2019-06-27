@@ -14,6 +14,8 @@ import "context"
 
 // Factory is an interface that can produce SortedDiskMaps.
 type Factory interface {
+	// Close the factory, freeing up associated resources.
+	Close()
 	// NewSortedDiskMap returns a fresh SortedDiskMap with no contents.
 	NewSortedDiskMap() SortedDiskMap
 	// NewSortedDiskMultiMap returns a fresh SortedDiskMap with no contents that permits

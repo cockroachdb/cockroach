@@ -13,20 +13,41 @@ package engine
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 )
+
+type rocksDBTempEngine struct {
+	db *RocksDB
+}
+
+// Close implements the diskmap.Factory interface.
+func (r *rocksDBTempEngine) Close() {
+	r.db.Close()
+}
+
+// NewSortedDiskMap implements the diskmap.Factory interface.
+func (r *rocksDBTempEngine) NewSortedDiskMap() diskmap.SortedDiskMap {
+	return newRocksDBMap(r.db, false /* allowDuplications */)
+}
+
+// NewSortedDiskMultiMap implements the diskmap.Factory interface.
+func (r *rocksDBTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
+	return newRocksDBMap(r.db, true /* allowDuplicates */)
+}
 
 // NewTempEngine creates a new engine for DistSQL processors to use when the
 // working set is larger than can be stored in memory.
 func NewTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
-) (MapProvidingEngine, error) {
+) (diskmap.Factory, error) {
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
-		return NewInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */), nil
+		db := NewInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */).RocksDB
+		return &rocksDBTempEngine{db: db}, nil
 	}
 
-	rocksDBCfg := RocksDBConfig{
+	cfg := RocksDBConfig{
 		Attrs: roachpb.Attributes{},
 		Dir:   tempStorage.Path,
 		// MaxSizeBytes doesn't matter for temp storage - it's not
@@ -36,11 +57,11 @@ func NewTempEngine(
 		UseFileRegistry: storeSpec.UseFileRegistry,
 		ExtraOptions:    storeSpec.ExtraOptions,
 	}
-	rocksDBCache := NewRocksDBCache(0)
-	rocksdb, err := NewRocksDB(rocksDBCfg, rocksDBCache)
+	cache := NewRocksDBCache(0)
+	db, err := NewRocksDB(cfg, cache)
 	if err != nil {
 		return nil, err
 	}
 
-	return rocksdb, nil
+	return &rocksDBTempEngine{db: db}, nil
 }
