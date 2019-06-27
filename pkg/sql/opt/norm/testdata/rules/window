@@ -273,3 +273,574 @@ project
       │         └── rank [type=int]
       └── filters
            └── rank = 3 [type=bool, outer=(6), constraints=(/6: [/3 - /3]; tight), fd=()-->(6)]
+
+# --------------------------------------------------
+# PushLimitIntoWindow
+# --------------------------------------------------
+
+norm
+SELECT rank() OVER () FROM a LIMIT 10
+----
+window partition=()
+ ├── columns: rank:6(int)
+ ├── cardinality: [0 - 10]
+ ├── limit
+ │    ├── cardinality: [0 - 10]
+ │    ├── scan a
+ │    └── const: 10 [type=int]
+ └── windows
+      └── rank [type=int]
+
+norm
+SELECT rank() OVER (PARTITION BY i) FROM a LIMIT 10
+----
+project
+ ├── columns: rank:6(int)
+ ├── cardinality: [0 - 10]
+ └── window partition=(2)
+      ├── columns: i:2(int) rank:6(int)
+      ├── cardinality: [0 - 10]
+      ├── limit
+      │    ├── columns: i:2(int)
+      │    ├── internal-ordering: +2
+      │    ├── cardinality: [0 - 10]
+      │    ├── sort
+      │    │    ├── columns: i:2(int)
+      │    │    ├── ordering: +2
+      │    │    └── scan a
+      │    │         └── columns: i:2(int)
+      │    └── const: 10 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm
+SELECT rank() OVER (PARTITION BY i ORDER BY f) FROM a LIMIT 10
+----
+project
+ ├── columns: rank:6(int)
+ ├── cardinality: [0 - 10]
+ └── window partition=(2) ordering=+3 opt(2)
+      ├── columns: i:2(int) f:3(float) rank:6(int)
+      ├── cardinality: [0 - 10]
+      ├── limit
+      │    ├── columns: i:2(int) f:3(float)
+      │    ├── internal-ordering: +2,+3
+      │    ├── cardinality: [0 - 10]
+      │    ├── sort
+      │    │    ├── columns: i:2(int) f:3(float)
+      │    │    ├── ordering: +2,+3
+      │    │    └── scan a
+      │    │         └── columns: i:2(int) f:3(float)
+      │    └── const: 10 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm
+SELECT
+  rank() OVER (PARTITION BY i ORDER BY f),
+  dense_rank() OVER (PARTITION BY i ORDER BY f)
+FROM a LIMIT 10
+----
+project
+ ├── columns: rank:6(int) dense_rank:7(int)
+ ├── cardinality: [0 - 10]
+ └── window partition=(2) ordering=+3 opt(2)
+      ├── columns: i:2(int) f:3(float) rank:6(int) dense_rank:7(int)
+      ├── cardinality: [0 - 10]
+      ├── limit
+      │    ├── columns: i:2(int) f:3(float)
+      │    ├── internal-ordering: +2,+3
+      │    ├── cardinality: [0 - 10]
+      │    ├── sort
+      │    │    ├── columns: i:2(int) f:3(float)
+      │    │    ├── ordering: +2,+3
+      │    │    └── scan a
+      │    │         └── columns: i:2(int) f:3(float)
+      │    └── const: 10 [type=int]
+      └── windows
+           ├── rank [type=int]
+           └── dense-rank [type=int]
+
+# Can't push the limit down, because the window function used is not
+# "prefix-safe".
+norm expect-not=PushLimitIntoWindow
+SELECT avg(k) OVER () FROM a LIMIT 10
+----
+project
+ ├── columns: avg:6(decimal)
+ ├── cardinality: [0 - 10]
+ └── limit
+      ├── columns: k:1(int!null) avg:6(decimal)
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── window partition=()
+      │    ├── columns: k:1(int!null) avg:6(decimal)
+      │    ├── key: (1)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null)
+      │    │    └── key: (1)
+      │    └── windows
+      │         └── avg [type=decimal, outer=(1)]
+      │              └── variable: k [type=int]
+      └── const: 10 [type=int]
+
+# Can't push the limit down, because the limit operator's ordering does not
+# agree with the window function's ordering.
+norm expect-not=PushLimitIntoWindow
+SELECT rank() OVER (ORDER BY i) FROM a ORDER BY f LIMIT 10
+----
+project
+ ├── columns: rank:6(int)  [hidden: f:3(float)]
+ ├── cardinality: [0 - 10]
+ ├── ordering: +3
+ └── limit
+      ├── columns: i:2(int) f:3(float) rank:6(int)
+      ├── internal-ordering: +3
+      ├── cardinality: [0 - 10]
+      ├── ordering: +3
+      ├── sort
+      │    ├── columns: i:2(int) f:3(float) rank:6(int)
+      │    ├── ordering: +3
+      │    └── window partition=() ordering=+2
+      │         ├── columns: i:2(int) f:3(float) rank:6(int)
+      │         ├── scan a
+      │         │    └── columns: i:2(int) f:3(float)
+      │         └── windows
+      │              └── rank [type=int]
+      └── const: 10 [type=int]
+
+# The limit should become stronger as it gets pushed down (going from +f to
+# +f,+i), because the new limit needs to match the window function's ordering,
+# rather than its own (weaker) ordering.
+norm
+SELECT rank() OVER (ORDER BY f, i) FROM a ORDER BY f LIMIT 10
+----
+sort
+ ├── columns: rank:6(int)  [hidden: f:3(float)]
+ ├── cardinality: [0 - 10]
+ ├── ordering: +3
+ └── project
+      ├── columns: f:3(float) rank:6(int)
+      ├── cardinality: [0 - 10]
+      └── window partition=() ordering=+3,+2
+           ├── columns: i:2(int) f:3(float) rank:6(int)
+           ├── cardinality: [0 - 10]
+           ├── limit
+           │    ├── columns: i:2(int) f:3(float)
+           │    ├── internal-ordering: +3,+2
+           │    ├── cardinality: [0 - 10]
+           │    ├── sort
+           │    │    ├── columns: i:2(int) f:3(float)
+           │    │    ├── ordering: +3,+2
+           │    │    └── scan a
+           │    │         └── columns: i:2(int) f:3(float)
+           │    └── const: 10 [type=int]
+           └── windows
+                └── rank [type=int]
+
+# Here we would only be able to push below the rank(), and not the avg(k). This
+# is not profitable because we still have to do the partitioning and ordering
+# for the one we were unable to push the limit below, which is the expensive
+# part.
+norm
+SELECT
+    rank() OVER (PARTITION BY i ORDER BY f),
+    avg(k) OVER (PARTITION BY i ORDER BY f)
+FROM
+    a
+LIMIT
+    10
+----
+project
+ ├── columns: rank:6(int) avg:7(decimal)
+ ├── cardinality: [0 - 10]
+ └── limit
+      ├── columns: k:1(int!null) i:2(int) f:3(float) rank:6(int) avg:7(decimal)
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── window partition=(2) ordering=+3 opt(2)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) rank:6(int) avg:7(decimal)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── windows
+      │         ├── rank [type=int]
+      │         └── avg [type=decimal, outer=(1)]
+      │              └── variable: k [type=int]
+      └── const: 10 [type=int]
+
+exec-ddl
+CREATE TABLE wxyz (w INT PRIMARY KEY, x INT, y INT, z INT)
+----
+
+norm expect-not=PushLimitIntoWindow
+SELECT *, rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
+----
+limit
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── internal-ordering: +3
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +3
+ ├── sort
+ │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── ordering: +3
+ │    └── window partition=(4) ordering=+3 opt(4)
+ │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── scan wxyz
+ │         │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2-4)
+ │         └── windows
+ │              └── rank [type=int]
+ └── const: 2 [type=int]
+
+norm expect=PushLimitIntoWindow
+SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +3
+ └── window partition=(1)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +3,+1
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── sort
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    ├── ordering: +3,+1
+      │    │    └── scan wxyz
+      │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2-4)
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm expect=PushLimitIntoWindow
+SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w, y LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +1
+ └── window partition=(1)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +1
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── scan wxyz
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    └── ordering: +1
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm expect=PushLimitIntoWindow
+SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY w LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +1
+ └── window partition=(1)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +1
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── scan wxyz
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    └── ordering: +1
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm expect=PushLimitIntoWindow
+SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY y, w LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +3,+1
+ └── window partition=(1)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +3,+1
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── sort
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    ├── ordering: +3,+1
+      │    │    └── scan wxyz
+      │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2-4)
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm expect=PushLimitIntoWindow
+SELECT *, rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY w, z LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +1
+ └── window partition=(1)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +1
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── scan wxyz
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    └── ordering: +1
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm
+SELECT *, rank() OVER (PARTITION BY x, z ORDER BY y) FROM wxyz ORDER BY z, x LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +4,+2
+ └── window partition=(2,4) ordering=+3 opt(2,4)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +4,+2,+3
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── sort
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    ├── ordering: +4,+2,+3
+      │    │    └── scan wxyz
+      │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2-4)
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm expect=PushLimitIntoWindow
+SELECT *, rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY z, y LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +4,+3
+ └── window partition=(4) ordering=+3 opt(4)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +4,+3
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── sort
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    ├── ordering: +4,+3
+      │    │    └── scan wxyz
+      │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2-4)
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm expect-not=PushLimitIntoWindow
+SELECT *, rank() OVER (PARTITION BY z ORDER BY y) FROM wxyz ORDER BY y LIMIT 2
+----
+limit
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── internal-ordering: +3
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +3
+ ├── sort
+ │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── ordering: +3
+ │    └── window partition=(4) ordering=+3 opt(4)
+ │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-4)
+ │         ├── scan wxyz
+ │         │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2-4)
+ │         └── windows
+ │              └── rank [type=int]
+ └── const: 2 [type=int]
+
+norm expect=PushLimitIntoWindow
+SELECT *, rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY w, z, y LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +1
+ └── window partition=(1)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +1
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── scan wxyz
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    └── ordering: +1
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm
+SELECT *, rank() OVER (PARTITION BY w, z ORDER BY y) FROM wxyz ORDER BY z, w, y LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +4,+1
+ └── window partition=(1)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +4,+1
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── sort
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    ├── ordering: +4,+1
+      │    │    └── scan wxyz
+      │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2-4)
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
+
+norm
+SELECT *, rank() OVER (PARTITION BY w ORDER BY y) FROM wxyz ORDER BY z LIMIT 2
+----
+sort
+ ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +4
+ └── window partition=(1)
+      ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int) rank:5(int)
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── limit
+      │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    ├── internal-ordering: +4,+1
+      │    ├── cardinality: [0 - 2]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-4)
+      │    ├── sort
+      │    │    ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-4)
+      │    │    ├── ordering: +4,+1
+      │    │    └── scan wxyz
+      │    │         ├── columns: w:1(int!null) x:2(int) y:3(int) z:4(int)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2-4)
+      │    └── const: 2 [type=int]
+      └── windows
+           └── rank [type=int]
