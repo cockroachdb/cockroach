@@ -13,6 +13,7 @@ package main
 import (
 	"io"
 	"io/ioutil"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -31,6 +32,12 @@ func genAnyNotNullAgg(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPES_T", "types.{{.}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.}}", -1)
+
+	innerLoopRe := regexp.MustCompile(`_FIND_ANY_NOT_NULL\(.*\)`)
+	s = innerLoopRe.ReplaceAllString(s, `{{template "findAnyNotNull" .}}`)
+
+	innerLoopNullsRe := regexp.MustCompile(`_FIND_ANY_NOT_NULL_HANDLE_NULL\(.*\)`)
+	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "findAnyNotNullHandleNull" .}}`)
 
 	tmpl, err := template.New("any_not_null_agg").Parse(s)
 	if err != nil {
