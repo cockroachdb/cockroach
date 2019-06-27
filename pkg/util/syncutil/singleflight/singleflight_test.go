@@ -130,6 +130,24 @@ func TestDoChanDupSuppress(t *testing.T) {
 	}
 }
 
+func TestNumCalls(t *testing.T) {
+	c := make(chan struct{})
+	fn := func() (interface{}, error) {
+		<-c
+		return "bar", nil
+	}
+	var g Group
+	assertNumCalls(t, g.NumCalls("key"), 0)
+	resC1, _ := g.DoChan("key", fn)
+	assertNumCalls(t, g.NumCalls("key"), 1)
+	resC2, _ := g.DoChan("key", fn)
+	assertNumCalls(t, g.NumCalls("key"), 2)
+	close(c)
+	<-resC1
+	<-resC2
+	assertNumCalls(t, g.NumCalls("key"), 0)
+}
+
 func assertRes(t *testing.T, res Result, expectShared bool) {
 	if got, want := fmt.Sprintf("%v (%T)", res.Val, res.Val), "bar (string)"; got != want {
 		t.Errorf("Res.Val = %v; want %v", got, want)
@@ -139,5 +157,11 @@ func assertRes(t *testing.T, res Result, expectShared bool) {
 	}
 	if res.Shared != expectShared {
 		t.Errorf("Res.Shared = %t; want %t", res.Shared, expectShared)
+	}
+}
+
+func assertNumCalls(t *testing.T, actualCalls int, expectedCalls int) {
+	if actualCalls != expectedCalls {
+		t.Errorf("NumCalls = %d; want %d", actualCalls, expectedCalls)
 	}
 }

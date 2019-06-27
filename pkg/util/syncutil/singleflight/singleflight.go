@@ -146,3 +146,13 @@ func (g *Group) Forget(key string) {
 	delete(g.m, key)
 	g.mu.Unlock()
 }
+
+// NumCalls returns the number of in-flight calls for a given key.
+func (g *Group) NumCalls(key string) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if c, ok := g.m[key]; ok {
+		return c.dups + 1
+	}
+	return 0
+}
