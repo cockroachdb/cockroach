@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net/url"
 	"strings"
 	"time"
 
@@ -174,6 +175,9 @@ func guessCompressionFromName(
 	case strings.HasSuffix(name, ".bz2") || strings.HasSuffix(name, ".bz"):
 		return roachpb.IOFileFormat_Bzip
 	default:
+		if parsed, err := url.Parse(name); err == nil && parsed.Path != name {
+			return guessCompressionFromName(parsed.Path, hint)
+		}
 		return roachpb.IOFileFormat_None
 	}
 }
