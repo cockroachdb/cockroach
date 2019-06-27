@@ -821,23 +821,32 @@ func TestLeaseEquivalence(t *testing.T) {
 	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts1.Clone()}
 	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.Clone()}
 
+	r1Voter, r1Learner := r1, r1
+	r1Voter.Type = newReplicaType(ReplicaType_VOTER)
+	r1Learner.Type = newReplicaType(ReplicaType_LEARNER)
+	epoch1Voter := Lease{Replica: r1Voter, Start: ts1, Epoch: 1}
+	epoch1Learner := Lease{Replica: r1Learner, Start: ts1, Epoch: 1}
+
 	testCases := []struct {
 		l, ol      Lease
 		expSuccess bool
 	}{
-		{epoch1, epoch1, true},        // same epoch lease
-		{expire1, expire1, true},      // same expiration lease
-		{epoch1, epoch2, false},       // different epoch leases
-		{epoch1, epoch2TS2, false},    // different epoch leases
-		{expire1, expire2TS2, false},  // different expiration leases
-		{expire1, expire2, true},      // same expiration lease, extended
-		{expire2, expire1, false},     // same expiration lease, extended but backwards
-		{epoch1, expire1, false},      // epoch and expiration leases
-		{expire1, epoch1, false},      // expiration and epoch leases
-		{proposed1, proposed1, true},  // exact leases with identical timestamps
-		{proposed1, proposed2, false}, // same proposed timestamps, but diff epochs
-		{proposed1, proposed3, true},  // different proposed timestamps, same lease
-		{stasis1, stasis2, true},      // same lease, different stasis timestamps
+		{epoch1, epoch1, true},             // same epoch lease
+		{expire1, expire1, true},           // same expiration lease
+		{epoch1, epoch2, false},            // different epoch leases
+		{epoch1, epoch2TS2, false},         // different epoch leases
+		{expire1, expire2TS2, false},       // different expiration leases
+		{expire1, expire2, true},           // same expiration lease, extended
+		{expire2, expire1, false},          // same expiration lease, extended but backwards
+		{epoch1, expire1, false},           // epoch and expiration leases
+		{expire1, epoch1, false},           // expiration and epoch leases
+		{proposed1, proposed1, true},       // exact leases with identical timestamps
+		{proposed1, proposed2, false},      // same proposed timestamps, but diff epochs
+		{proposed1, proposed3, true},       // different proposed timestamps, same lease
+		{stasis1, stasis2, true},           // same lease, different stasis timestamps
+		{epoch1, epoch1Voter, true},        // same epoch lease, different replica type
+		{epoch1, epoch1Learner, true},      // same epoch lease, different replica type
+		{epoch1Voter, epoch1Learner, true}, // same epoch lease, different replica type
 	}
 
 	for i, tc := range testCases {
