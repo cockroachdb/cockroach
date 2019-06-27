@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -197,6 +198,14 @@ func (r *RangeDescriptor) IncrementGeneration() {
 	r.Generation = proto.Int64(r.GetGeneration() + 1)
 }
 
+// GetStickyBit returns the sticky bit of this RangeDescriptor.
+func (r RangeDescriptor) GetStickyBit() hlc.Timestamp {
+	if r.StickyBit == nil {
+		return hlc.Timestamp{}
+	}
+	return *r.StickyBit
+}
+
 // Validate performs some basic validation of the contents of a range descriptor.
 func (r RangeDescriptor) Validate() error {
 	if r.NextReplicaID == 0 {
@@ -257,7 +266,7 @@ func (r ReplicaDescriptor) String() string {
 	} else {
 		fmt.Fprintf(&buf, "%d", r.ReplicaID)
 	}
-	if r.Type == ReplicaType_LEARNER {
+	if r.GetType() == ReplicaType_LEARNER {
 		buf.WriteString("LEARNER")
 	}
 	return buf.String()
@@ -275,6 +284,14 @@ func (r ReplicaDescriptor) Validate() error {
 		return errors.Errorf("ReplicaID must not be zero")
 	}
 	return nil
+}
+
+// GetType returns the type of this ReplicaDescriptor.
+func (r ReplicaDescriptor) GetType() ReplicaType {
+	if r.Type == nil {
+		return ReplicaType_VOTER
+	}
+	return *r.Type
 }
 
 // PercentilesFromData derives percentiles from a slice of data points.

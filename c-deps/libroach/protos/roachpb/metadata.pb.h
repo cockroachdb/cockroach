@@ -478,6 +478,7 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::int32 replica_id() const;
   void set_replica_id(::google::protobuf::int32 value);
 
+  // optional .cockroach.roachpb.ReplicaType type = 4;
   bool has_type() const;
   void clear_type();
   static const int kTypeFieldNumber = 4;
@@ -762,6 +763,7 @@ class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::std::string* release_end_key();
   void set_allocated_end_key(::std::string* end_key);
 
+  // optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
   bool has_sticky_bit() const;
   void clear_sticky_bit();
   static const int kStickyBitFieldNumber = 7;
@@ -2378,6 +2380,7 @@ inline void ReplicaDescriptor::set_replica_id(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicaDescriptor.replica_id)
 }
 
+// optional .cockroach.roachpb.ReplicaType type = 4;
 inline bool ReplicaDescriptor::has_type() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -2719,6 +2722,7 @@ inline void RangeDescriptor::set_generation(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeDescriptor.generation)
 }
 
+// optional .cockroach.util.hlc.Timestamp sticky_bit = 7;
 inline bool RangeDescriptor::has_sticky_bit() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
