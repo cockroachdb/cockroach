@@ -1409,9 +1409,7 @@ func (ds *DistSender) sendPartialBatch(
 			} else {
 				descKey = rs.Key
 			}
-			// TODO(nvanbenschoten): shouldn't we be passing an eviction token
-			// here from the previous iteration? See #28967.
-			desc, evictToken, err = ds.getDescriptor(ctx, descKey, nil, isReverse)
+			desc, evictToken, err = ds.getDescriptor(ctx, descKey, evictToken, isReverse)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				continue
