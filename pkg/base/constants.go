@@ -37,4 +37,7 @@ const (
 	// HeapProfileDir is the directory name where the heap profiler stores profiles
 	// when there is a potential OOM situation.
 	HeapProfileDir = "heap_profiler"
+
+	// MinRangeMaxBytes is the minimum value for range max bytes.
+	MinRangeMaxBytes = 64 << 10 // 64 KB
 )
