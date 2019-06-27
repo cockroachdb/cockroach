@@ -59,23 +59,26 @@ const _TYPES_T = types.Unhandled
 
 // anyNotNull_TYPEAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
-// TODO(jordan): this needs to have null handling when it's added!
 type anyNotNull_TYPEAgg struct {
-	done   bool
-	groups []bool
-	vec    []_GOTYPE
-	curIdx int
+	done                 bool
+	groups               []bool
+	vec                  []_GOTYPE
+	nulls                *coldata.Nulls
+	curIdx               int
+	foundForCurrentGroup bool
 }
 
 func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
 	a.vec = vec._TemplateType()
+	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNull_TYPEAgg) Reset() {
 	a.curIdx = -1
 	a.done = false
+	a.foundForCurrentGroup = false
 }
 
 func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
@@ -94,25 +97,78 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
+		if !a.foundForCurrentGroup && a.curIdx >= 0 {
+			a.nulls.SetNull(uint16(a.curIdx))
+		}
 		a.curIdx++
 		a.done = true
 		return
 	}
-	col, sel := b.ColVec(int(inputIdxs[0]))._TemplateType(), b.Selection()
-	if sel != nil {
-		sel = sel[:inputLen]
-		for _, i := range sel {
-			if a.groups[i] {
-				a.curIdx++
-				a.vec[a.curIdx] = col[i]
+	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	col, nulls := vec._TemplateType(), vec.Nulls()
+
+	if nulls.HasNulls() {
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				if a.groups[i] {
+					if !a.foundForCurrentGroup && a.curIdx >= 0 {
+						a.nulls.SetNull(uint16(a.curIdx))
+					}
+					a.curIdx++
+					a.foundForCurrentGroup = false
+				}
+				if !a.foundForCurrentGroup && !nulls.NullAt(i) {
+					a.vec[a.curIdx] = col[i]
+					a.foundForCurrentGroup = true
+				}
+			}
+		} else {
+			col = col[:inputLen]
+			for i := range col {
+				if a.groups[i] {
+					if !a.foundForCurrentGroup && a.curIdx >= 0 {
+						a.nulls.SetNull(uint16(a.curIdx))
+					}
+					a.curIdx++
+					a.foundForCurrentGroup = false
+				}
+				if !a.foundForCurrentGroup && !nulls.NullAt(uint16(i)) {
+					a.vec[a.curIdx] = col[i]
+					a.foundForCurrentGroup = true
+				}
 			}
 		}
 	} else {
-		col = col[:inputLen]
-		for i := range col {
-			if a.groups[i] {
-				a.curIdx++
-				a.vec[a.curIdx] = col[i]
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				if a.groups[i] {
+					if !a.foundForCurrentGroup && a.curIdx >= 0 {
+						a.nulls.SetNull(uint16(a.curIdx))
+					}
+					a.curIdx++
+					a.foundForCurrentGroup = false
+				}
+				if !a.foundForCurrentGroup {
+					a.vec[a.curIdx] = col[i]
+					a.foundForCurrentGroup = true
+				}
+			}
+		} else {
+			col = col[:inputLen]
+			for i := range col {
+				if a.groups[i] {
+					if !a.foundForCurrentGroup && a.curIdx >= 0 {
+						a.nulls.SetNull(uint16(a.curIdx))
+					}
+					a.curIdx++
+					a.foundForCurrentGroup = false
+				}
+				if !a.foundForCurrentGroup {
+					a.vec[a.curIdx] = col[i]
+					a.foundForCurrentGroup = true
+				}
 			}
 		}
 	}
