@@ -1,4 +1,10 @@
-# LogicTest: 5node-dist-vec
+# LogicTest: 5node-dist
+
+# Temporary until #38458 is fixed. This test fails under stress with the
+# 5node-dist-vec config, but not with the 5node-dist config and then setting
+# experimental_vectorize=on, which should be equivalent.
+statement ok
+SET experimental_vectorize=on;
 
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
