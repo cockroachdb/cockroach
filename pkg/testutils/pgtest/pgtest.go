@@ -12,8 +12,10 @@ package pgtest
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"reflect"
+	"testing"
 
 	"github.com/jackc/pgx/pgproto3"
 	"github.com/pkg/errors"
@@ -73,6 +75,9 @@ func (p *PGTest) Close() error {
 
 // Send sends msg to the serrver.
 func (p *PGTest) Send(msg pgproto3.FrontendMessage) error {
+	if testing.Verbose() {
+		fmt.Printf("SEND %T: %+[1]v\n", msg)
+	}
 	return p.fe.Send(msg)
 }
 
@@ -103,6 +108,9 @@ func (p *PGTest) Until(typs ...pgproto3.BackendMessage) ([]pgproto3.BackendMessa
 		recv, err := p.fe.Receive()
 		if err != nil {
 			return nil, errors.Wrap(err, "receive")
+		}
+		if testing.Verbose() {
+			fmt.Printf("RECV %T: %+[1]v\n", recv)
 		}
 		if errmsg, ok := recv.(*pgproto3.ErrorResponse); ok && typ != typErrorResponse {
 			return nil, errors.Errorf("waiting for %T, got %#v", typs[0], errmsg)
