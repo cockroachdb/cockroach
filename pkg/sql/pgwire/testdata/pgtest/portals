@@ -27,3 +27,50 @@ ReadyForQuery
 ----
 {"Type":"ErrorResponse"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that closing a bound portal prevents execution.
+
+# 80 = ASCII 'P'
+send
+Parse {"Name": "s", "Query": "SELECT 1"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
+Close {"ObjectType": 80, "Name": "p"}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CloseComplete"}
+{"Type":"ErrorResponse"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# The spec says that closing a prepared statement also closes its portals,
+# but that doesn't seem to be the case. Below I would expect that Bind,
+# Close, Execute causes the execute to return an error, but it instead
+# returns the portal result.
+
+# 83 = ASCII 'S'
+# After closing, re-parse with the same name to make sure the execute
+# happens on the old statement.
+send
+Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
+Close {"ObjectType": 83, "Name": "s"}
+Parse {"Name": "s", "Query": "SELECT 2"}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CloseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
