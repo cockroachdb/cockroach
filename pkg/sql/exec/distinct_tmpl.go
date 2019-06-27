@@ -134,7 +134,8 @@ func newPartitioner(t types.T) (partitioner, error) {
 // sortedDistinct_TYPEOp runs a distinct on the column in sortedDistinctCol,
 // writing true to the resultant bool column for every value that differs from
 // the previous one.
-
+// TODO(solon): Update this name to remove "sorted". The input values are not
+// necessarily in sorted order.
 type sortedDistinct_TYPEOp struct {
 	input Operator
 
@@ -151,7 +152,8 @@ type sortedDistinct_TYPEOp struct {
 
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
-	lastVal _GOTYPE
+	lastVal     _GOTYPE
+	lastValNull bool
 }
 
 var _ Operator = &sortedDistinct_TYPEOp{}
@@ -162,6 +164,7 @@ func (p *sortedDistinct_TYPEOp) Init() {
 
 func (p *sortedDistinct_TYPEOp) reset() {
 	p.foundFirstRow = false
+	p.lastValNull = false
 	if resetter, ok := p.input.(resetter); ok {
 		resetter.reset()
 	}
@@ -173,46 +176,62 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 	outputCol := p.outputCol
-	col := batch.ColVec(p.sortedDistinctCol)._TemplateType()
+	vec := batch.ColVec(p.sortedDistinctCol)
+	var nulls *coldata.Nulls
+	if vec.HasNulls() {
+		nulls = vec.Nulls()
+	}
+	col := vec._TemplateType()
 
 	// We always output the first row.
 	lastVal := p.lastVal
+	lastValNull := p.lastValNull
 	sel := batch.Selection()
-	startIdx := uint16(0)
+	firstIdx := uint16(0)
+	if sel != nil {
+		firstIdx = sel[0]
+	}
 	if !p.foundFirstRow {
-		if sel != nil {
-			lastVal = col[sel[0]]
-			outputCol[sel[0]] = true
-		} else {
-			lastVal = col[0]
-			outputCol[0] = true
-		}
-		startIdx = 1
+		outputCol[firstIdx] = true
 		p.foundFirstRow = true
-		if batch.Length() == 1 {
-			p.lastVal = lastVal
-			return batch
-		}
+	} else if nulls == nil && lastValNull {
+		// The last value of the previous batch was null, so the first value of this
+		// non-null batch is distinct.
+		outputCol[firstIdx] = true
+		lastValNull = false
 	}
 
 	n := batch.Length()
 	if sel != nil {
 		// Bounds check elimination.
-		sel = sel[startIdx:n]
-		for _, i := range sel {
-			_CHECK_DISTINCT(int(i), lastVal, col, outputCol)
+		sel = sel[:n]
+		if nulls != nil {
+			for _, i := range sel {
+				_CHECK_DISTINCT_WITH_NULLS(int(i), lastVal, col, outputCol)
+			}
+		} else {
+			for _, i := range sel {
+				_CHECK_DISTINCT(int(i), lastVal, col, outputCol)
+			}
 		}
 	} else {
 		// Bounds check elimination.
-		col = col[startIdx:n]
-		outputCol = outputCol[startIdx:n]
+		col = col[:n]
+		outputCol = outputCol[:n]
 		_ = outputCol[len(col)-1]
-		for i := range col {
-			_CHECK_DISTINCT(i, lastVal, col, outputCol)
+		if nulls != nil {
+			for i := range col {
+				_CHECK_DISTINCT_WITH_NULLS(i, lastVal, col, outputCol)
+			}
+		} else {
+			for i := range col {
+				_CHECK_DISTINCT(i, lastVal, col, outputCol)
+			}
 		}
 	}
 
 	p.lastVal = lastVal
+	p.lastValNull = lastValNull
 
 	return batch
 }
@@ -224,13 +243,24 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 type partitioner_TYPE struct{}
 
 func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint64) {
-	col := colVec._TemplateType()
-	lastVal := col[0]
+	var lastVal _GOTYPE
+	var lastValNull bool
+	var nulls *coldata.Nulls
+	if colVec.HasNulls() {
+		nulls = colVec.Nulls()
+	}
+
+	col := colVec._TemplateType()[:n]
+	outputCol = outputCol[:n]
 	outputCol[0] = true
-	outputCol = outputCol[1:n]
-	col = col[1:n]
-	for i := range col {
-		_CHECK_DISTINCT(i, lastVal, col, outputCol)
+	if nulls != nil {
+		for i := range col {
+			_CHECK_DISTINCT_WITH_NULLS(i, lastVal, col, outputCol)
+		}
+	} else {
+		for i := range col {
+			_CHECK_DISTINCT(i, lastVal, col, outputCol)
+		}
 	}
 }
 
@@ -239,7 +269,8 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint
 // {{/*
 // _CHECK_DISTINCT retrieves the value at the ith index of col, compares it
 // to the passed in lastVal, and sets the ith value of outputCol to true if the
-// compared values were distinct.
+// compared values were distinct. It presumes that the current batch has no null
+// values.
 func _CHECK_DISTINCT(i int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool) { // */}}
 
 	// {{define "checkDistinct"}}
@@ -248,6 +279,31 @@ func _CHECK_DISTINCT(i int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool) { 
 	_ASSIGN_NE(unique, v, lastVal)
 	outputCol[i] = outputCol[i] || unique
 	lastVal = v
+	// {{end}}
+
+	// {{/*
+} // */}}
+
+// {{/*
+// _CHECK_DISTINCT_WITH_NULLS behaves the same as _CHECK_DISTINCT, but it also
+// considers whether the previous and current values are null. It assumes that
+// `nulls` is non-nil.
+func _CHECK_DISTINCT_WITH_NULLS(i int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool) { // */}}
+
+	// {{define "checkDistinctWithNulls"}}
+	null := nulls.NullAt(uint16(i))
+	v := col[i]
+	if null != lastValNull {
+		// Either the current value is null and the previous was not or vice-versa.
+		outputCol[i] = true
+	} else if !null {
+		// Neither value is null, so we must compare.
+		var unique bool
+		_ASSIGN_NE(unique, v, lastVal)
+		outputCol[i] = outputCol[i] || unique
+	}
+	lastVal = v
+	lastValNull = null
 	// {{end}}
 
 	// {{/*
