@@ -113,10 +113,18 @@ func fillDatumRow_TYPE(ct *semtypes.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool
 	return result, hasNulls, nil
 }
 
+<<<<<<< HEAD
 func (si *selectInOp_TYPE) cmpIn_TYPE(target _GOTYPE) comparisonResult {
 	for i := range si.filterRow {
 		var cmp bool
 		_ASSIGN_EQ(cmp, target, si.filterRow[i])
+=======
+// requires that the input is not NULL
+func (si *selectInOp_TYPE) cmpIn_TYPE(target _GOTYPE) comparisonResult {
+	for _, val := range si.filterRow {
+		var cmp bool
+		_ASSIGN_EQ(cmp, target, val)
+>>>>>>> made vectorized template
 		if cmp {
 			return siTrue
 		}

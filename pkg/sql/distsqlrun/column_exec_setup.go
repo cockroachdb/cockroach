@@ -566,7 +566,11 @@ func planSelectionOperators(
 				negate := t.Operator == tree.NotIn
 				datumTuple, ok := tree.AsDTuple(constArg)
 				if !ok {
+<<<<<<< HEAD
 					err = errors.Errorf("IN is only supported for constant expressions")
+=======
+					err = errors.Errorf("in operator used on not a tuple")
+>>>>>>> made vectorized template
 					return nil, resultIdx, ct, err
 				}
 				op, err := exec.GetInOperator(typ, leftOp, leftIdx, datumTuple, negate)
