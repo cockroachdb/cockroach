@@ -7533,22 +7533,20 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
-	// Grab Replica.raftMu in order to block normal raft replica processing. This
-	// test is ticking the replica manually and doesn't want the store to be
-	// doing so concurrently.
 	r := tc.repl
-
 	repDesc, err := tc.repl.GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Only followers refresh pending commands during tick events. Change the
-	// replica that the range thinks is the leader so that the replica thinks
-	// it's a follower.
-	r.mu.Lock()
-	r.mu.leaderID = 2
-	r.mu.Unlock()
+	// Flush a write all the way through the Raft proposal pipeline. This
+	// ensures that leadership settles down before we start manually submitting
+	// proposals and that we don't see any unexpected proposal refreshes due to
+	// reasons like reasonNewLeaderOrConfigChange.
+	args := incrementArgs([]byte("a"), 1)
+	if _, pErr := tc.SendWrapped(&args); pErr != nil {
+		t.Fatal(pErr)
+	}
 
 	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
 	{
