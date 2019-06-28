@@ -561,6 +561,16 @@ func planSelectionOperators(
 					ctx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate)
 				return op, resultIdx, ct, err
 			}
+			if t.Operator == tree.In || t.Operator == tree.NotIn {
+				negate := t.Operator == tree.NotIn
+				datumTuple, ok := tree.AsDTuple(constArg)
+				if !ok {
+					err = errors.Errorf("IN is only supported for constant expressions")
+					return nil, resultIdx, ct, err
+				}
+				op, err := exec.GetInOperator(typ, leftOp, leftIdx, datumTuple, negate)
+				return op, resultIdx, ct, err
+			}
 			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
 			return op, resultIdx, ct, err
 		}

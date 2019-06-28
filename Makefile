@@ -795,6 +795,7 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/quicksort.eg.go \
   pkg/sql/exec/rowstovec.eg.go \
   pkg/sql/exec/selection_ops.eg.go \
+  pkg/sql/exec/select_in.eg.go \
   pkg/sql/exec/sort.eg.go \
   pkg/sql/exec/sum_agg.eg.go \
   pkg/sql/exec/tuples_differ.eg.go \
@@ -1465,6 +1466,7 @@ pkg/sql/exec/mergejoiner.eg.go: pkg/sql/exec/mergejoiner_tmpl.go
 pkg/sql/exec/min_max_agg.eg.go: pkg/sql/exec/min_max_agg_tmpl.go
 pkg/sql/exec/quicksort.eg.go: pkg/sql/exec/quicksort_tmpl.go
 pkg/sql/exec/rowstovec.eg.go: pkg/sql/exec/rowstovec_tmpl.go
+pkg/sql/exec/select_in.eg.go: pkg/sql/exec/select_in_tmpl.go
 pkg/sql/exec/sort.eg.go: pkg/sql/exec/sort_tmpl.go
 pkg/sql/exec/sum_agg.eg.go: pkg/sql/exec/sum_agg_tmpl.go
 pkg/sql/exec/tuples_differ.eg.go: pkg/sql/exec/tuples_differ_tmpl.go
