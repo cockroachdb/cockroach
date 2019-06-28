@@ -1076,6 +1076,9 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				}
 				metadataSourcesQueue = metadataSourcesQueue[:0]
 			case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+				if f.syncFlowConsumer == nil {
+					return errors.New("syncFlowConsumer unset, unable to create materializer")
+				}
 				// Make the materializer, which will write to the given receiver.
 				columnTypes := f.syncFlowConsumer.Types()
 				outputToInputColIdx := make([]int, len(columnTypes))
