@@ -72,6 +72,7 @@ const (
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
+	InformationSchemaCheckConstraints
 	InformationSchemaColumnPrivilegesID
 	InformationSchemaColumnsTableID
 	InformationSchemaConstraintColumnUsageTableID
