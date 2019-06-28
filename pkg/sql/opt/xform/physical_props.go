@@ -46,9 +46,13 @@ func BuildChildPhysicalProps(
 ) *physical.Required {
 	var childProps physical.Required
 
-	// The only operation that requires a presentation of its input is Explain.
-	if parent.Op() == opt.ExplainOp {
+	// Most operations don't require a presentation of their input; these are the
+	// exceptions.
+	switch parent.Op() {
+	case opt.ExplainOp:
 		childProps.Presentation = parent.(*memo.ExplainExpr).Props.Presentation
+	case opt.AlterTableSplitOp:
+		childProps.Presentation = parent.(*memo.AlterTableSplitExpr).Props.Presentation
 	}
 
 	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
@@ -145,17 +144,6 @@ func (n *scatterNode) Next(params runParams) (bool, error) {
 	n.run.rangeIdx++
 	hasNext := n.run.rangeIdx < len(n.run.ranges)
 	return hasNext, nil
-}
-
-var scatterNodeColumns = sqlbase.ResultColumns{
-	{
-		Name: "key",
-		Typ:  types.Bytes,
-	},
-	{
-		Name: "pretty",
-		Typ:  types.String,
-	},
 }
 
 func (n *scatterNode) Values() tree.Datums {
