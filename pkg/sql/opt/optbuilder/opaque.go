@@ -42,10 +42,7 @@ func (b *Builder) tryBuildOpaque(stmt tree.Statement, inScope *scope) (outScope 
 		panic(builderError{err})
 	}
 	outScope = inScope.push()
-	for i := range cols {
-		col := b.synthesizeColumn(outScope, cols[i].Name, cols[i].Typ, nil /* expr */, nil /* scalar */)
-		col.hidden = cols[i].Hidden
-	}
+	b.synthesizeResultColumns(outScope, cols)
 	outScope.expr = b.factory.ConstructOpaqueRel(&memo.OpaqueRelPrivate{
 		Columns:  colsToColList(outScope.cols),
 		Metadata: obj,

@@ -289,3 +289,9 @@ func (f *stubFactory) ConstructErrorIfRows(
 func (f *stubFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructAlterTableSplit(
+	index cat.Index, input exec.Node, expiration tree.TypedExpr,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}

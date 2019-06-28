@@ -404,6 +404,10 @@ type Factory interface {
 
 	// ConstructOpaque creates a node for an opaque operator.
 	ConstructOpaque(metadata opt.OpaqueMetadata) (Node, error)
+
+	// ConstructAlterTableSplit creates a node that implements ALTER TABLE/INDEX
+	// SPLIT AT.
+	ConstructAlterTableSplit(index cat.Index, input Node, expiration tree.TypedExpr) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

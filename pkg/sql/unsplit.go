@@ -90,17 +90,6 @@ func (p *planner) Unsplit(ctx context.Context, n *tree.Unsplit) (planNode, error
 	return ret, nil
 }
 
-var unsplitNodeColumns = sqlbase.ResultColumns{
-	{
-		Name: "key",
-		Typ:  types.Bytes,
-	},
-	{
-		Name: "pretty",
-		Typ:  types.String,
-	},
-}
-
 // unsplitRun contains the run-time state of unsplitNode during local execution.
 type unsplitRun struct {
 	lastUnsplitKey []byte
