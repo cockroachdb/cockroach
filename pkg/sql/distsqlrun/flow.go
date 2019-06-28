@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -497,7 +498,13 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
 	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
-		err := f.setupVectorized(ctx)
+		var err error
+		panicErr := exec.CatchVectorizedRuntimeError(func() { err = f.setupVectorized(ctx) })
+		if panicErr != nil {
+			// setupVectorized panicked. Therefore, err is unset so setting it to
+			// panicErr loses no information
+			err = panicErr
+		}
 		if err == nil {
 			log.VEventf(ctx, 1, "vectorized flow.")
 			return nil
