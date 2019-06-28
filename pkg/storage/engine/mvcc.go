@@ -648,8 +648,7 @@ type MVCCGetOptions struct {
 	// See the documentation for MVCCGet for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	// TODO(nathanvanbenschoten): Remove all references of IgnoreSequence
-	// in 2.3.
+	// TODO(nvanbenschoten): Remove all references to IgnoreSequence in 20.1.
 	IgnoreSequence bool
 	Txn            *roachpb.Transaction
 }
@@ -1975,8 +1974,7 @@ type MVCCScanOptions struct {
 	// See the documentation for MVCCScan for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	// TODO(nathanvanbenschoten): Remove all references of IgnoreSequence
-	// in 2.3.
+	// TODO(nvanbenschoten): Remove all references to IgnoreSequence in 20.1.
 	IgnoreSequence bool
 	Reverse        bool
 	Txn            *roachpb.Transaction

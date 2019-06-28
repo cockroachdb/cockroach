@@ -32,17 +32,8 @@ type VersionKey int
 const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version2_1
-	VersionCascadingZoneConfigs
-	VersionLoadSplits
-	VersionExportStorageWorkload
-	VersionLazyTxnRecord
-	VersionSequencedReads
 	VersionUnreplicatedRaftTruncatedState // see versionsSingleton for details
-	VersionCreateStats
-	VersionDirectImport
-	VersionSideloadedStorageNoReplicaID // see versionsSingleton for details
-	VersionPushTxnToInclusive
-	VersionSnapshotsWithoutLog
+	VersionSideloadedStorageNoReplicaID   // see versionsSingleton for details
 	Version19_1
 	VersionStart19_2
 	VersionQueryTxnTimestamp
@@ -297,33 +288,38 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     Version2_1,
 		Version: roachpb.Version{Major: 2, Minor: 1},
 	},
+	// Removed.
+	// {
+	// 	// VersionCascadingZoneConfigs is https://github.com/cockroachdb/cockroach/pull/30611.
+	// 	Key:     VersionCascadingZoneConfigs,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 1},
+	// },
+	// Removed.
+	// {
+	// 	// VersionLoadSplits is https://github.com/cockroachdb/cockroach/pull/31413.
+	// 	Key:     VersionLoadSplits,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 2},
+	// },
+	// Removed.
+	// {
+	// 	// VersionExportStorageWorkload is https://github.com/cockroachdb/cockroach/pull/31899.
+	// 	Key:     VersionExportStorageWorkload,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 3},
+	// },
+	// Removed.
+	// {
+	// 	// VersionLazyTxnRecord is https://github.com/cockroachdb/cockroach/pull/33566.
+	// 	Key:     VersionLazyTxnRecord,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 4},
+	// },
+	// Removed.
+	// {
+	// 	// VersionSequencedReads is https://github.com/cockroachdb/cockroach/pull/33244.
+	// 	Key:     VersionSequencedReads,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 5},
+	// },
 	{
-		// VersionCascadingZoneConfigs is https://github.com/cockroachdb/cockroach/pull/30611.
-		Key:     VersionCascadingZoneConfigs,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 1},
-	},
-	{
-		// VersionLoadSplits is https://github.com/cockroachdb/cockroach/pull/31413.
-		Key:     VersionLoadSplits,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 2},
-	},
-	{
-		// VersionExportStorageWorkload is https://github.com/cockroachdb/cockroach/pull/31899.
-		Key:     VersionExportStorageWorkload,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 3},
-	},
-	{
-		// VersionLazyTxnRecord is https://github.com/cockroachdb/cockroach/pull/33566.
-		Key:     VersionLazyTxnRecord,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 4},
-	},
-	{
-		// VersionExportStorageWorkload is https://github.com/cockroachdb/cockroach/pull/33244.
-		Key:     VersionSequencedReads,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 5},
-	},
-	{
-		// VersionLazyTxnRecord is https://github.com/cockroachdb/cockroach/pull/34660.
+		// VersionUnreplicatedRaftTruncatedState is https://github.com/cockroachdb/cockroach/pull/34660.
 		// When active, it moves the truncated state into unreplicated keyspace
 		// on log truncations.
 		//
@@ -414,16 +410,18 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionUnreplicatedRaftTruncatedState,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 6},
 	},
-	{
-		// VersionCreateStats is https://github.com/cockroachdb/cockroach/pull/34842.
-		Key:     VersionCreateStats,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 7},
-	},
-	{
-		// VersionDirectImport is https://github.com/cockroachdb/cockroach/pull/34751.
-		Key:     VersionDirectImport,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 8},
-	},
+	// Removed.
+	// {
+	// 	// VersionCreateStats is https://github.com/cockroachdb/cockroach/pull/34842.
+	// 	Key:     VersionCreateStats,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 7},
+	// },
+	// Removed.
+	// {
+	// 	// VersionDirectImport is https://github.com/cockroachdb/cockroach/pull/34751.
+	// 	Key:     VersionDirectImport,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 8},
+	// },
 	{
 		// VersionSideloadedStorageNoReplicaID is https://github.com/cockroachdb/cockroach/pull/35035.
 		//
@@ -442,16 +440,18 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionSideloadedStorageNoReplicaID,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 9},
 	},
-	{
-		// VersionPushTxnToInclusive is https://github.com/cockroachdb/cockroach/pull/35297.
-		Key:     VersionPushTxnToInclusive,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 10},
-	},
-	{
-		// VersionSnapshotsWithoutLog is https://github.com/cockroachdb/cockroach/pull/36714.
-		Key:     VersionSnapshotsWithoutLog,
-		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 11},
-	},
+	// Removed.
+	// {
+	// 	// VersionPushTxnToInclusive is https://github.com/cockroachdb/cockroach/pull/35297.
+	// 	Key:     VersionPushTxnToInclusive,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 10},
+	// },
+	// Removed.
+	// {
+	// 	// VersionSnapshotsWithoutLog is https://github.com/cockroachdb/cockroach/pull/36714.
+	// 	Key:     VersionSnapshotsWithoutLog,
+	// 	Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 11},
+	// },
 	{
 		// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch releases.
 		Key:     Version19_1,

@@ -221,11 +221,6 @@ func MakeExportStorage(
 		telemetry.Count("external-io.azure")
 		return makeAzureStorage(dest.AzureConfig, settings)
 	case roachpb.ExportStorageProvider_Workload:
-		if err := settings.Version.CheckVersion(
-			cluster.VersionExportStorageWorkload, "experimental-workload",
-		); err != nil {
-			return nil, err
-		}
 		telemetry.Count("external-io.workload")
 		return makeWorkloadStorage(dest.WorkloadConfig)
 	}

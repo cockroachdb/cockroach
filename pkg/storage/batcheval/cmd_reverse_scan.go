@@ -46,7 +46,7 @@ func ReverseScan(
 			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
 			engine.MVCCScanOptions{
 				Inconsistent:   h.ReadConsistency != roachpb.CONSISTENT,
-				IgnoreSequence: shouldIgnoreSequenceNums(cArgs.EvalCtx),
+				IgnoreSequence: shouldIgnoreSequenceNums(),
 				Txn:            h.Txn,
 				Reverse:        true,
 			})
@@ -60,7 +60,7 @@ func ReverseScan(
 		rows, resumeSpan, intents, err = engine.MVCCScan(
 			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, engine.MVCCScanOptions{
 				Inconsistent:   h.ReadConsistency != roachpb.CONSISTENT,
-				IgnoreSequence: shouldIgnoreSequenceNums(cArgs.EvalCtx),
+				IgnoreSequence: shouldIgnoreSequenceNums(),
 				Txn:            h.Txn,
 				Reverse:        true,
 			})

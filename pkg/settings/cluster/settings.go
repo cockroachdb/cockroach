@@ -221,6 +221,9 @@ func (ecv *ExposedClusterVersion) CheckVersion(versionKey VersionKey, feature st
 	return nil
 }
 
+// Silence unused warning.
+var _ = (*ExposedClusterVersion)(nil).CheckVersion
+
 // MakeTestingClusterSettings returns a Settings object that has had its version
 // initialized to BinaryServerVersion.
 func MakeTestingClusterSettings() *Settings {
