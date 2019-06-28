@@ -990,7 +990,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
 
 	s.builder.semaCtx.Properties.Require("aggregate",
-		tree.RejectNestedAggregates|tree.RejectWindowApplications)
+		tree.RejectNestedAggregates|tree.RejectWindowApplications|tree.RejectGenerators)
 
 	expr := f.Walk(s)
 

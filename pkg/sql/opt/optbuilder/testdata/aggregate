@@ -3402,3 +3402,9 @@ project
       └── aggregations
            └── array-agg [type=string[]]
                 └── variable: column5 [type=string]
+
+# Regression test for #38551.
+build
+SELECT * FROM ROWS FROM (count(json_each('[]')))
+----
+error (0A000): count(): json_each(): generator functions are not allowed in aggregate
