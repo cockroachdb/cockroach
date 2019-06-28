@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -457,15 +456,10 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 	}
 
-	// If cluster version is below 2.2, just write the complete zone
-	// config instead of the partial for backwards compatibility reasons.
-	// Otherwise write the partial zone configuration.
+	// Write the partial zone configuration.
 	hasNewSubzones := !deleteZone && index != nil
 	execConfig := params.extendedEvalCtx.ExecCfg
 	zoneToWrite := partialZone
-	if !execConfig.Settings.Version.IsActive(cluster.VersionCascadingZoneConfigs) {
-		zoneToWrite = completeZone
-	}
 
 	// Finally check for the extra protection partial zone configs would
 	// require from changes made to parent zones. The extra protections are:

@@ -490,7 +490,6 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			tcf.AmbientContext,
 			&tcs.mu.Mutex,
 			&tcs.mu.txn,
-			tcf.st,
 			tcs.clock,
 			tcs.heartbeatInterval,
 			&tcs.interceptorAlloc.txnLockGatekeeper,

@@ -1449,7 +1449,6 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 					TxnMeta: enginepb.TxnMeta{Priority: enginepb.MinTxnPriority},
 				},
 				PusheeTxn:       intent.Txn,
-				DeprecatedNow:   b.Header.Timestamp,
 				PushType:        roachpb.PUSH_ABORT,
 				InclusivePushTo: true,
 			})

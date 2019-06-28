@@ -141,13 +141,6 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 // makeJobRecord creates a CreateStats job record which can be used to plan and
 // execute statistics creation.
 func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, error) {
-	if !n.p.ExecCfg().Settings.Version.IsActive(cluster.VersionCreateStats) {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			`CREATE STATISTICS requires all nodes to be upgraded to %s`,
-			cluster.VersionByKey(cluster.VersionCreateStats),
-		)
-	}
-
 	var tableDesc *ImmutableTableDescriptor
 	var fqTableName string
 	var err error
