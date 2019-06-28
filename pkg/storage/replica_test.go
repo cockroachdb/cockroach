@@ -7539,6 +7539,15 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Flush a write all the way through the Raft proposal pipeline. This
+	// ensures that leadership settles down before we start manually submitting
+	// proposals and that we don't see any unexpected proposal refreshes due to
+	// reasons like reasonNewLeaderOrConfigChange.
+	args := incrementArgs([]byte("a"), 1)
+	if _, pErr := tc.SendWrapped(&args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
 	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
 	{
 		// The verifications of the reproposal counts below rely on r.mu.ticks
