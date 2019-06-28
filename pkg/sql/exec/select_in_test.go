@@ -65,6 +65,7 @@ func TestSelectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
+<<<<<<< HEAD
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{0},
 				func(input []Operator) (Operator, error) {
 					op := selectInOpInt64{
@@ -76,6 +77,22 @@ func TestSelectInInt64(t *testing.T) {
 					}
 					return &op, nil
 				})
+=======
+			runTests(t, []tuples{c.inputTuples}, func(t *testing.T, input []Operator) {
+				op := selectInOpInt64{
+					input:     input[0],
+					colIdx:    0,
+					filterRow: c.filterRow,
+					negate:    c.negate,
+					hasNulls:  c.hasNulls,
+				}
+				op.Init()
+				out := newOpTestOutput(&op, []int{0}, c.outputTuples)
+				if err := out.Verify(); err != nil {
+					t.Error(err)
+				}
+			})
+>>>>>>> exec: Add support for IN selection operator
 		})
 	}
 }
