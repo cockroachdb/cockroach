@@ -90,3 +90,36 @@ define OpaqueRelPrivate {
     Columns ColList
     Metadata OpaqueMetadata 
 }
+
+# AlterTableSplit represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
+[Relational, DDL]
+define AlterTableSplit {
+    # The input expression provides values for the index columns (or a prefix of
+    # them).
+    Input RelExpr
+
+    # Expiration is a string scalar that indicates a timestamp after which the
+    # ranges are eligible for automatic merging (or Null if there is no
+    # expiration).
+    Expiration ScalarExpr
+
+    _ AlterTableSplitPrivate
+}
+
+[Private]
+define AlterTableSplitPrivate {
+    # Table identifies the table to alter. It is an id that can be passed to
+    # the Metadata.Table method in order to fetch cat.Table metadata.
+    Table TableID
+
+    # Index identifies the index to scan (whether primary or secondary). It
+    # can be passed to the cat.Table.Index(i int) method in order to fetch the
+    # cat.Index metadata.
+    Index int
+
+    # Props stores the required physical properties for the enclosed expression.
+    Props PhysProps
+
+    # Columns stores the column IDs for the statement result columns.
+    Columns ColList
+}

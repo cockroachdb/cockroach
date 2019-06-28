@@ -108,17 +108,6 @@ func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, err
 	}, nil
 }
 
-var relocateNodeColumns = sqlbase.ResultColumns{
-	{
-		Name: "key",
-		Typ:  types.Bytes,
-	},
-	{
-		Name: "pretty",
-		Typ:  types.String,
-	},
-}
-
 // relocateRun contains the run-time state of
 // relocateNode during local execution.
 type relocateRun struct {

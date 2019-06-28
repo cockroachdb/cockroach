@@ -967,6 +967,14 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		f.Buffer.WriteByte(' ')
 		f.Buffer.WriteString(t.Metadata.String())
 
+	case *AlterTableSplitPrivate:
+		tab := f.Memo.metadata.Table(t.Table)
+		if t.Index == cat.PrimaryIndex {
+			fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
+		} else {
+			fmt.Fprintf(f.Buffer, " %s@%s", tableAlias(f, t.Table), tab.Index(t.Index).Name())
+		}
+
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.
 

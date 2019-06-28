@@ -435,7 +435,7 @@ func (p *planner) getSequenceSource(
 	}
 	return planDataSource{
 		plan: node,
-		info: sqlbase.NewSourceInfoForSingleTable(tn, sequenceSelectColumns),
+		info: sqlbase.NewSourceInfoForSingleTable(tn, sqlbase.SequenceSelectColumns),
 	}, nil
 }
 

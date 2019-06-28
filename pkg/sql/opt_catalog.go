@@ -580,7 +580,7 @@ func newOptTable(
 				}
 			}
 
-			ot.indexes[i].init(ot, idxDesc, idxZone)
+			ot.indexes[i].init(ot, i, idxDesc, idxZone)
 			if fk := &idxDesc.ForeignKey; fk.IsSet() {
 				ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
 					name:            idxDesc.ForeignKey.Name,
@@ -855,6 +855,7 @@ type optIndex struct {
 	// otherwise it is desc.StoreColumnIDs.
 	storedCols []sqlbase.ColumnID
 
+	indexOrdinal  int
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
@@ -864,10 +865,13 @@ var _ cat.Index = &optIndex{}
 
 // init can be used instead of newOptIndex when we have a pre-allocated instance
 // (e.g. as part of a bigger struct).
-func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor, zone *config.ZoneConfig) {
+func (oi *optIndex) init(
+	tab *optTable, indexOrdinal int, desc *sqlbase.IndexDescriptor, zone *config.ZoneConfig,
+) {
 	oi.tab = tab
 	oi.desc = desc
 	oi.zone = zone
+	oi.indexOrdinal = indexOrdinal
 	if desc == &tab.desc.PrimaryIndex {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
@@ -998,6 +1002,11 @@ func (oi *optIndex) Span() roachpb.Span {
 // Table is part of the cat.Index interface.
 func (oi *optIndex) Table() cat.Table {
 	return oi.tab
+}
+
+// Ordinal is part of the cat.Index interface.
+func (oi *optIndex) Ordinal() int {
+	return oi.indexOrdinal
 }
 
 type optTableStat struct {

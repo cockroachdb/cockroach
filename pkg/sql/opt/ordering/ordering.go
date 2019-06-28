@@ -140,11 +140,6 @@ func init() {
 		buildChildReqOrdering: limitOrOffsetBuildChildReqOrdering,
 		buildProvidedOrdering: limitOrOffsetBuildProvided,
 	}
-	funcMap[opt.ExplainOp] = funcs{
-		canProvideOrdering:    canNeverProvideOrdering,
-		buildChildReqOrdering: explainBuildChildReqOrdering,
-		buildProvidedOrdering: noProvidedOrdering,
-	}
 	funcMap[opt.ScalarGroupByOp] = funcs{
 		// ScalarGroupBy always has exactly one result; any required ordering should
 		// have been simplified to Any (unless normalization rules are disabled).
@@ -186,6 +181,16 @@ func init() {
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
 		buildProvidedOrdering: mutationBuildProvided,
+	}
+	funcMap[opt.ExplainOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: explainBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
+	funcMap[opt.AlterTableSplitOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: alterTableSplitBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
 	}
 }
 
