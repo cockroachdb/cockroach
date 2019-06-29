@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 // tuple represents a row with any-type columns.
@@ -63,6 +64,36 @@ func runTests(
 		if err := verifier(out); err != nil {
 			t.Fatal(err)
 		}
+	})
+
+	t.Run("verifySelResets", func(t *testing.T) {
+		// Verify that all operators have an unset selection vector even if an
+		// operator later in the chain sets one. This test ensures that operators
+		// that "own their own batches", such as any operator that has to reshape
+		// its output, always reset their selection vectors before returning a fresh
+		// batch.
+		inputSources := make([]Operator, len(tups))
+		for i, tup := range tups {
+			inputSources[i] = newOpTestInput(1, tup)
+		}
+		op, err := constructor(inputSources)
+		if err != nil {
+			t.Fatal(err)
+		}
+		op.Init()
+		ctx := context.Background()
+		b := op.Next(ctx)
+		if b.Selection() != nil {
+			// We're testing an operator that needs to set a selection vector for some
+			// reason already, so we can't test the condition we're looking for.
+			return
+		}
+		// Set the selection vector by hand.
+		b.SetSelection(true)
+		b = op.Next(ctx)
+		// Make sure that the next time we call the operator, it has an empty
+		// selection vector.
+		assert.Nil(t, b.Selection())
 	})
 }
 
@@ -187,6 +218,7 @@ func (s *opTestInput) Init() {
 }
 
 func (s *opTestInput) Next(context.Context) coldata.Batch {
+	s.batch.SetSelection(false)
 	if len(s.tuples) == 0 {
 		s.batch.SetLength(0)
 		return s.batch
@@ -229,8 +261,6 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 
 		s.batch.SetSelection(true)
 		copy(s.batch.Selection(), s.selection)
-	} else {
-		s.batch.SetSelection(false)
 	}
 
 	for i := range s.typs {
