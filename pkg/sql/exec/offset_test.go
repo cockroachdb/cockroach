@@ -52,13 +52,8 @@ func TestOffset(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			s := NewOffsetOp(input[0], tc.offset)
-			out := newOpTestOutput(s, []int{0}, tc.expected)
-
-			if err := out.VerifyAnyOrder(); err != nil {
-				t.Fatal(err)
-			}
+		runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
+			return NewOffsetOp(input[0], tc.offset), nil
 		})
 	}
 }

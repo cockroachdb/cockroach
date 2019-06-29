@@ -68,17 +68,10 @@ func TestSortedDistinct(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			distinct, err := NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
-			if err != nil {
-				t.Fatal(err)
-			}
-			out := newOpTestOutput(distinct, []int{0, 1, 2, 3}, tc.expected)
-
-			if err := out.VerifyAnyOrder(); err != nil {
-				t.Fatal(err)
-			}
-		})
+		runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, []int{0, 1, 2, 3},
+			func(input []Operator) (Operator, error) {
+				return NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
+			})
 	}
 }
 

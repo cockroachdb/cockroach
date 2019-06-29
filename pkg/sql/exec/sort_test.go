@@ -112,20 +112,12 @@ func TestSort(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			sort, err := NewSorter(input[0], tc.typ, tc.ordCols)
-			if err != nil {
-				t.Fatal(err)
-			}
-			cols := make([]int, len(tc.typ))
-			for i := range cols {
-				cols[i] = i
-			}
-			out := newOpTestOutput(sort, cols, tc.expected)
-
-			if err := out.Verify(); err != nil {
-				t.Fatal(err)
-			}
+		cols := make([]int, len(tc.typ))
+		for i := range cols {
+			cols[i] = i
+		}
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
+			return NewSorter(input[0], tc.typ, tc.ordCols)
 		})
 	}
 }
@@ -166,26 +158,15 @@ func TestSortRandomized(t *testing.T) {
 						expected = expected[:k]
 					}
 
-					runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-						var sorter Operator
+					cols := make([]int, nCols)
+					for i := range cols {
+						cols[i] = i
+					}
+					runTests(t, []tuples{tups}, expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
 						if topK {
-							sorter = NewTopKSorter(input[0], typs[:nCols], ordCols, k)
-						} else {
-							var err error
-							sorter, err = NewSorter(input[0], typs[:nCols], ordCols)
-							if err != nil {
-								t.Fatal(err)
-							}
+							return NewTopKSorter(input[0], typs[:nCols], ordCols, k), nil
 						}
-						cols := make([]int, nCols)
-						for i := range cols {
-							cols[i] = i
-						}
-						out := newOpTestOutput(sorter, cols, expected)
-
-						if err := out.Verify(); err != nil {
-							t.Fatalf("for input %v:\n%v", tups, err)
-						}
+						return NewSorter(input[0], typs[:nCols], ordCols)
 					})
 				})
 			}
@@ -236,7 +217,7 @@ func TestAllSpooler(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
+		runTestsWithFn(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
 			allSpooler := newAllSpooler(input[0], tc.typ)
 			allSpooler.init()
 			allSpooler.spool(context.Background())

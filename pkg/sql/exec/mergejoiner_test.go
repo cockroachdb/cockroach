@@ -929,20 +929,11 @@ func TestMergeJoiner(t *testing.T) {
 			}
 		}
 
-		runTests(t, []tuples{tc.leftTuples, tc.rightTuples}, func(t *testing.T, input []Operator) {
-			s, err := NewMergeJoinOp(tc.joinType, input[0], input[1], tc.leftOutCols,
-				tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings)
-			if err != nil {
-				t.Fatal("Error in merge join op constructor", err)
-			}
-
-			out := newOpTestOutput(s, tc.expectedOutCols, tc.expected)
-			s.(*mergeJoinOp).initWithBatchSize(tc.outputBatchSize)
-
-			if err := out.Verify(); err != nil {
-				t.Fatalf("Test case description: '%s'\n%v", tc.description, err)
-			}
-		})
+		runTests(t, []tuples{tc.leftTuples, tc.rightTuples}, tc.expected, orderedVerifier,
+			tc.expectedOutCols, func(input []Operator) (Operator, error) {
+				return NewMergeJoinOp(tc.joinType, input[0], input[1], tc.leftOutCols,
+					tc.rightOutCols, tc.leftTypes, tc.rightTypes, lOrderings, rOrderings)
+			})
 	}
 }
 
