@@ -405,6 +405,21 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 	}
 }
 
+// resooveAndBuildScalar is used to build a scalar with a required type.
+func (b *Builder) resolveAndBuildScalar(
+	expr tree.Expr, requiredType *types.T, context string, flags tree.SemaRejectFlags, inScope *scope,
+) opt.ScalarExpr {
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	b.semaCtx.Properties.Require(context, flags)
+
+	inScope.context = context
+	texpr := inScope.resolveAndRequireType(expr, requiredType)
+	return b.buildScalar(texpr, inScope, nil, nil, nil)
+}
+
 // resolveSchemaForCreate returns the schema that will contain a newly created
 // catalog object with the given name. If the current user does not have the
 // CREATE privilege, then resolveSchemaForCreate raises an error.
