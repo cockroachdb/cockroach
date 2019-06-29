@@ -12,7 +12,6 @@ package exec
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sort"
 	"testing"
@@ -21,12 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 // Adapted from the same-named test in the distsqlrun package.
 func TestOrderedSync(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
 	testCases := []struct {
 		sources  []tuples
 		ordering sqlbase.ColumnOrdering
@@ -136,41 +133,21 @@ func TestOrderedSync(t *testing.T) {
 			},
 		},
 	}
-	for testIdx, tc := range testCases {
-		for _, batchSize := range []uint16{1, 2, 3, coldata.BatchSize} {
-			for _, useSel := range []bool{false, true} {
-				name := fmt.Sprintf("case=%d/batchSize=%d/sel=%t", testIdx, batchSize, useSel)
-				t.Run(name, func(t *testing.T) {
-					inputs := make([]Operator, len(tc.sources))
-					for i := range inputs {
-						if useSel {
-							inputs[i] = newOpTestSelInput(rng, batchSize, tc.sources[i])
-						} else {
-							inputs[i] = newOpTestInput(batchSize, tc.sources[i])
-						}
-					}
-
-					numCols := len(tc.sources[0][0])
-					columnTypes := make([]types.T, numCols)
-					cols := make([]int, numCols)
-					for i := range columnTypes {
-						columnTypes[i] = types.Int64
-						cols[i] = i
-					}
-
-					op := OrderedSynchronizer{
-						inputs:      inputs,
-						ordering:    tc.ordering,
-						columnTypes: columnTypes,
-					}
-					op.Init()
-					out := newOpTestOutput(&op, cols, tc.expected)
-					if err := out.Verify(); err != nil {
-						t.Error(err)
-					}
-				})
-			}
+	for _, tc := range testCases {
+		numCols := len(tc.sources[0][0])
+		columnTypes := make([]types.T, numCols)
+		cols := make([]int, numCols)
+		for i := range columnTypes {
+			columnTypes[i] = types.Int64
+			cols[i] = i
 		}
+		runTests(t, tc.sources, tc.expected, orderedVerifier, cols, func(inputs []Operator) (Operator, error) {
+			return &OrderedSynchronizer{
+				inputs:      inputs,
+				ordering:    tc.ordering,
+				columnTypes: columnTypes,
+			}, nil
+		})
 	}
 }
 
