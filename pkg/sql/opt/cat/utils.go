@@ -52,28 +52,28 @@ func ExpandDataSourceGlob(
 // ResolveTableIndex resolves a TableIndexName.
 func ResolveTableIndex(
 	ctx context.Context, catalog Catalog, flags Flags, name *tree.TableIndexName,
-) (Index, error) {
+) (_ Table, indexOrdinal int, _ error) {
 	if name.Table.TableName != "" {
 		ds, _, err := catalog.ResolveDataSource(ctx, flags, &name.Table)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		table, ok := ds.(Table)
 		if !ok {
-			return nil, pgerror.Newf(
+			return nil, 0, pgerror.Newf(
 				pgcode.WrongObjectType, "%q is not a table", name.Table.TableName,
 			)
 		}
 		if name.Index == "" {
 			// Return primary index.
-			return table.Index(0), nil
+			return table, 0, nil
 		}
 		for i := 0; i < table.IndexCount(); i++ {
-			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
-				return idx, nil
+			if table.Index(i).Name() == tree.Name(name.Index) {
+				return table, i, nil
 			}
 		}
-		return nil, pgerror.Newf(
+		return nil, 0, pgerror.Newf(
 			pgcode.UndefinedObject, "index %q does not exist", name.Index,
 		)
 	}
@@ -81,17 +81,18 @@ func ResolveTableIndex(
 	// We have to search for a table that has an index with the given name.
 	schema, _, err := catalog.ResolveSchema(ctx, flags, &name.Table.TableNamePrefix)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	dsNames, err := schema.GetDataSourceNames(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	var found Index
+	var foundTable Table
+	var foundIndex int
 	for i := range dsNames {
 		ds, _, err := catalog.ResolveDataSource(ctx, flags, &dsNames[i])
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		table, ok := ds.(Table)
 		if !ok {
@@ -99,23 +100,24 @@ func ResolveTableIndex(
 			continue
 		}
 		for i := 0; i < table.IndexCount(); i++ {
-			if idx := table.Index(i); idx.Name() == tree.Name(name.Index) {
-				if found != nil {
-					return nil, pgerror.Newf(pgcode.AmbiguousParameter,
+			if table.Index(i).Name() == tree.Name(name.Index) {
+				if foundTable != nil {
+					return nil, 0, pgerror.Newf(pgcode.AmbiguousParameter,
 						"index name %q is ambiguous (found in %s and %s)",
-						name.Index, table.Name().String(), found.Table().Name().String())
+						name.Index, table.Name().String(), foundTable.Name().String())
 				}
-				found = idx
+				foundTable = table
+				foundIndex = i
 				break
 			}
 		}
 	}
-	if found == nil {
-		return nil, pgerror.Newf(
+	if foundTable == nil {
+		return nil, 0, pgerror.Newf(
 			pgcode.UndefinedObject, "index %q does not exist", name.Index,
 		)
 	}
-	return found, nil
+	return foundTable, foundIndex, nil
 }
 
 // FindTableColumnByName returns the ordinal of the non-mutation column having

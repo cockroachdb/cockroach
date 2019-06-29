@@ -26,17 +26,17 @@ import (
 // These statements show the ranges corresponding to the given table or index,
 // along with the list of replicas and the lease holder.
 func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, error) {
-	idx, err := cat.ResolveTableIndex(
+	table, idx, err := cat.ResolveTableIndex(
 		d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, &n.TableOrIndex,
 	)
 	if err != nil {
 		return nil, err
 	}
-	if err := d.catalog.CheckPrivilege(d.ctx, idx.Table(), privilege.SELECT); err != nil {
+	if err := d.catalog.CheckPrivilege(d.ctx, table, privilege.SELECT); err != nil {
 		return nil, err
 	}
 
-	span := idx.Span()
+	span := table.Index(idx).Span()
 	startKey := hex.EncodeToString([]byte(span.Key))
 	endKey := hex.EncodeToString([]byte(span.EndKey))
 	return parse(fmt.Sprintf(`

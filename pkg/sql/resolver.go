@@ -506,16 +506,16 @@ func (p *planner) getTableAndIndex(
 	catalog.init(p)
 	catalog.reset()
 
-	idx, err := cat.ResolveTableIndex(
+	table, idx, err := cat.ResolveTableIndex(
 		ctx, &catalog, cat.Flags{AvoidDescriptorCaches: true}, tableWithIndex,
 	)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := catalog.CheckPrivilege(ctx, idx.Table(), privilege); err != nil {
+	if err := catalog.CheckPrivilege(ctx, table, privilege); err != nil {
 		return nil, nil, err
 	}
-	optIdx := idx.(*optIndex)
+	optIdx := table.Index(idx).(*optIndex)
 	return sqlbase.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
 }
 
