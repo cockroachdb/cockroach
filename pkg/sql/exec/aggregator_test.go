@@ -285,22 +285,16 @@ func TestAggregatorOneFunc(t *testing.T) {
 			t.Run(fmt.Sprintf("Randomized"), func(t *testing.T) {
 				for _, agg := range aggTypes {
 					t.Run(agg.name, func(t *testing.T) {
-						runTests(t, []tuples{tc.input}, func(t *testing.T, input []Operator) {
-							a, err := agg.new(
-								input[0],
-								tc.colTypes,
-								tc.aggFns,
-								tc.groupCols,
-								tc.aggCols,
-							)
-							if err != nil {
-								t.Fatal(err)
-							}
-							out := newOpTestOutput(a, []int{0}, tc.expected)
-							if err := out.VerifyAnyOrder(); err != nil {
-								t.Fatal(err)
-							}
-						})
+						runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, []int{0},
+							func(input []Operator) (Operator, error) {
+								return agg.new(
+									input[0],
+									tc.colTypes,
+									tc.aggFns,
+									tc.groupCols,
+									tc.aggCols,
+								)
+							})
 					})
 				}
 			})
@@ -372,22 +366,10 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				if err := tc.init(); err != nil {
 					t.Fatal(err)
 				}
-				runTests(t, []tuples{tc.input}, func(t *testing.T, input []Operator) {
-					a, err := agg.new(
-						input[0],
-						tc.colTypes,
-						tc.aggFns,
-						tc.groupCols,
-						tc.aggCols,
-					)
-					if err != nil {
-						t.Fatal(err)
-					}
-					out := newOpTestOutput(a, []int{0, 1}, tc.expected)
-					if err := out.VerifyAnyOrder(); err != nil {
-						t.Fatal(err)
-					}
-				})
+				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, []int{0, 1},
+					func(input []Operator) (Operator, error) {
+						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
+					})
 			})
 		}
 	}
@@ -432,16 +414,10 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				if err := tc.init(); err != nil {
 					t.Fatal(err)
 				}
-				runTests(t, []tuples{tc.input}, func(t *testing.T, input []Operator) {
-					a, err := agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
-					if err != nil {
-						t.Fatal(err)
-					}
-					out := newOpTestOutput(a, []int{0, 1, 2, 3, 4, 5, 6}, tc.expected)
-					if err := out.Verify(); err != nil {
-						t.Fatal(err)
-					}
-				})
+				runTests(t, []tuples{tc.input}, tc.expected, orderedVerifier, []int{0, 1, 2, 3, 4, 5, 6},
+					func(input []Operator) (Operator, error) {
+						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
+					})
 			})
 		}
 	}
@@ -750,24 +726,13 @@ func TestHashAggregator(t *testing.T) {
 		if err := tc.init(); err != nil {
 			t.Fatal(err)
 		}
-		runTests(t, []tuples{tc.input}, func(t *testing.T, sources []Operator) {
-			ag, err := NewHashAggregator(sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
-
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			nOutput := len(tc.aggCols)
-			cols := make([]int, nOutput)
-			for i := 0; i < nOutput; i++ {
-				cols[i] = i
-			}
-
-			out := newOpTestOutput(ag, cols, tc.expected)
-
-			if err := out.VerifyAnyOrder(); err != nil {
-				t.Fatal(err)
-			}
+		nOutput := len(tc.aggCols)
+		cols := make([]int, nOutput)
+		for i := 0; i < nOutput; i++ {
+			cols[i] = i
+		}
+		runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, cols, func(sources []Operator) (Operator, error) {
+			return NewHashAggregator(sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
 		})
 	}
 }

@@ -25,12 +25,8 @@ func TestBoolVecToSelOp(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			op := NewBoolVecToSelOp(input[0], 0)
-			out := newOpTestOutput(op, []int{0}, tc.expected)
-			if err := out.Verify(); err != nil {
-				t.Fatal(err)
-			}
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
+			return NewBoolVecToSelOp(input[0], 0), nil
 		})
 	}
 }

@@ -176,20 +176,12 @@ func TestSortChunks(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			sorter, err := NewSortChunks(input[0], tc.typ, tc.ordCols, tc.matchLen)
-			if err != nil {
-				t.Fatal(err)
-			}
-			cols := make([]int, len(tc.typ))
-			for i := range cols {
-				cols[i] = i
-			}
-			out := newOpTestOutput(sorter, cols, tc.expected)
-
-			if err := out.Verify(); err != nil {
-				t.Fatalf("Test case description: '%s'\n%v", tc.description, err)
-			}
+		cols := make([]int, len(tc.typ))
+		for i := range cols {
+			cols[i] = i
+		}
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
+			return NewSortChunks(input[0], tc.typ, tc.ordCols, tc.matchLen)
 		})
 	}
 }
@@ -228,20 +220,12 @@ func TestSortChunksRandomized(t *testing.T) {
 				copy(expected, tups)
 				sort.Slice(expected, less(expected, ordCols))
 
-				runTests(t, []tuples{sortedTups}, func(t *testing.T, input []Operator) {
-					sorter, err := NewSortChunks(input[0], typs[:nCols], ordCols, matchLen)
-					if err != nil {
-						t.Fatal(err)
-					}
-					cols := make([]int, nCols)
-					for i := range cols {
-						cols[i] = i
-					}
-					out := newOpTestOutput(sorter, cols, expected)
-
-					if err := out.Verify(); err != nil {
-						t.Fatalf("for input %v:\n%v", sortedTups, err)
-					}
+				cols := make([]int, nCols)
+				for i := range cols {
+					cols[i] = i
+				}
+				runTests(t, []tuples{sortedTups}, expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
+					return NewSortChunks(input[0], typs[:nCols], ordCols, matchLen)
 				})
 			}
 		}

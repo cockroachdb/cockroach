@@ -322,7 +322,7 @@ func TestRouterOutputRandom(t *testing.T) {
 		"blockedThreshold=%d/outputSize=%d/totalInputSize=%d", blockedThreshold, outputSize, len(data),
 	)
 	t.Run(testName, func(t *testing.T) {
-		runTests(t, []tuples{data}, func(t *testing.T, inputs []Operator) {
+		runTestsWithFn(t, []tuples{data}, func(t *testing.T, inputs []Operator) {
 			var wg sync.WaitGroup
 			unblockedEventsChans := make(chan struct{}, 2)
 			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
@@ -695,7 +695,7 @@ func TestHashRouterRandom(t *testing.T) {
 	// same data to the same number of outputs.
 	var expectedDistribution []int
 	t.Run(testName, func(t *testing.T) {
-		runTests(t, []tuples{data}, func(t *testing.T, inputs []Operator) {
+		runTestsWithFn(t, []tuples{data}, func(t *testing.T, inputs []Operator) {
 			unblockEventsChan := make(chan struct{}, 2*numOutputs)
 			outputs := make([]routerOutput, numOutputs)
 			outputsAsOps := make([]Operator, numOutputs)
