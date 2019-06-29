@@ -429,6 +429,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 			// look at the root cause to sniff out the changed descriptor.
 			err = &benignError{errors.Wrap(err, msg)}
 		}
+		return reply, err
 	}
 	return reply, nil
 }
