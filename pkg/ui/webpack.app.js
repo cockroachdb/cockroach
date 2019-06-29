@@ -144,6 +144,7 @@ module.exports = (env) => {
       chunks: false,
     },
 
+    devtool: 'source-map',
     devServer: {
       contentBase: path.join(__dirname, `dist${env.dist}`),
       index: "",
