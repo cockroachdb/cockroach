@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -330,6 +330,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "build":
 		e, err := ot.OptBuild()
 		if err != nil {
+			if errors.HasAssertionFailure(err) {
+				d.Fatalf(tb, "%+v", err)
+			}
 			pgerr := pgerror.Flatten(err)
 			text := strings.TrimSpace(pgerr.Error())
 			if pgerr.Code != pgcode.Uncategorized {
@@ -344,6 +347,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "norm":
 		e, err := ot.OptNorm()
 		if err != nil {
+			if errors.HasAssertionFailure(err) {
+				d.Fatalf(tb, "%+v", err)
+			}
 			pgerr := pgerror.Flatten(err)
 			text := strings.TrimSpace(pgerr.Error())
 			if pgerr.Code != pgcode.Uncategorized {

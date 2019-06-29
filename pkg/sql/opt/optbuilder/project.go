@@ -112,7 +112,7 @@ func (b *Builder) analyzeSelectList(
 			// Fall back to slow path. Pre-normalize any VarName so the work is
 			// not done twice below.
 			if err := e.NormalizeTopLevelVarName(); err != nil {
-				panic(builderError{err})
+				panic(err)
 			}
 
 			// Special handling for "*", "<table>.*" and "(Expr).*".
@@ -177,7 +177,7 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 		colName := unresolved.Parts[0]
 		_, srcMeta, _, err := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		return srcMeta.(tree.TypedExpr)
 	}
@@ -188,7 +188,7 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 func (b *Builder) getColName(expr tree.SelectExpr) string {
 	s, err := tree.GetRenderColName(b.semaCtx.SearchPath, expr)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	return s
 }

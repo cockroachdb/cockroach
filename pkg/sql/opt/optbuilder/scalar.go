@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -71,7 +72,7 @@ func (b *Builder) buildScalar(
 			// Non-grouping column was referenced. Note that a column that is part
 			// of a larger grouping expression would have been detected by the
 			// groupStrs checking code above.
-			panic(builderError{newGroupingError(&t.name)})
+			panic(newGroupingError(&t.name))
 		}
 
 		return b.finishBuildScalarRef(t, inScope, outScope, outCol, colRefs)
@@ -92,7 +93,7 @@ func (b *Builder) buildScalar(
 		arrayType := t.ResolvedType()
 		elementType := arrayType.ArrayContents()
 		if err := types.CheckArrayElementType(elementType); err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		for i := range t.Exprs {
 			texpr := t.Exprs[i].(tree.TypedExpr)
@@ -123,7 +124,7 @@ func (b *Builder) buildScalar(
 		}
 
 		if err := types.CheckArrayElementType(typ); err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 
 		// Perform correctness checks on the outer cols, update colRefs and
@@ -301,7 +302,7 @@ func (b *Builder) buildScalar(
 			// Replace placeholders with their value.
 			d, err := t.Eval(b.evalCtx)
 			if err != nil {
-				panic(builderError{err})
+				panic(err)
 			}
 			out = b.factory.ConstructConstVal(d, t.ResolvedType())
 		} else {
@@ -320,7 +321,7 @@ func (b *Builder) buildScalar(
 				// Non-grouping column was referenced. Note that a column that is part
 				// of a larger grouping expression would have been detected by the
 				// groupStrs checking code above.
-				panic(builderError{newGroupingError(&t.cols[0].name)})
+				panic(newGroupingError(&t.cols[0].name))
 			}
 			return b.finishBuildScalarRef(&t.cols[0], inScope, outScope, outCol, colRefs)
 		}
@@ -422,13 +423,13 @@ func (b *Builder) buildFunction(
 ) (out opt.ScalarExpr) {
 	if f.WindowDef != nil {
 		if inScope.groupby.inAgg {
-			panic(builderError{sqlbase.NewWindowInAggError()})
+			panic(sqlbase.NewWindowInAggError())
 		}
 	}
 
 	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	if isAggregate(def) {
@@ -540,9 +541,7 @@ func (b *Builder) checkSubqueryOuterCols(
 		aggCols := inScope.groupby.aggOutScope.getAggregateCols()
 		for i := range aggCols {
 			if subqueryOuterCols.Contains(aggCols[i].id) {
-				panic(builderError{
-					tree.NewInvalidFunctionUsageError(tree.AggregateClass, inScope.context),
-				})
+				panic(tree.NewInvalidFunctionUsageError(tree.AggregateClass, inScope.context))
 			}
 		}
 	}
@@ -723,12 +722,12 @@ func NewScalar(
 func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			// This code allows us to propagate builder errors without adding
-			// lots of checks for `if err != nil` throughout the code. This is
-			// only possible because the code does not update shared state and does
-			// not manipulate locks.
-			if bldErr, ok := r.(builderError); ok {
-				err = bldErr
+			// This code allows us to propagate errors without adding lots of checks
+			// for `if err != nil` throughout the construction code. This is only
+			// possible because the code does not update shared state and does not
+			// manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
 			} else {
 				panic(r)
 			}
