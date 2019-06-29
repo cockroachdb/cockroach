@@ -23,7 +23,7 @@ import (
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
 	opts, err := explain.ParseOptions()
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	// We don't allow the statement under Explain to reference outer columns, so we
