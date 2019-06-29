@@ -779,17 +779,7 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 		return
 	}
 
-	// We need to save and restore the previous value of the field in
-	// semaCtx in case we are recursively called within a subquery
-	// context.
-	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require("WHERE", tree.RejectSpecial)
-	inScope.context = "WHERE"
-
-	// All "from" columns are visible to the filter expression.
-	texpr := inScope.resolveAndRequireType(where.Expr, types.Bool)
-
-	filter := b.buildScalar(texpr, inScope, nil, nil, nil)
+	filter := b.resolveAndBuildScalar(where.Expr, types.Bool, "WHERE", tree.RejectSpecial, inScope)
 
 	// Wrap the filter in a FiltersOp.
 	inScope.expr = b.factory.ConstructSelect(
