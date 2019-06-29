@@ -58,7 +58,7 @@ func (b *Builder) expandStar(
 		texpr := inScope.resolveType(t.Expr, types.Any)
 		typ := texpr.ResolvedType()
 		if typ.Family() != types.TupleFamily || typ.TupleLabels() == nil {
-			panic(builderError{tree.NewTypeIsNotCompositeError(typ)})
+			panic(tree.NewTypeIsNotCompositeError(typ))
 		}
 
 		// If the sub-expression is a tuple constructor, we'll de-tuplify below.
@@ -98,7 +98,7 @@ func (b *Builder) expandStar(
 		checkFrom(expr, inScope)
 		src, _, err := t.Resolve(b.ctx, inScope)
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
 		aliases = make([]string, 0, len(inScope.cols))
@@ -143,7 +143,7 @@ func (b *Builder) expandStarAndResolveType(
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		return b.expandStarAndResolveType(vn, inScope)
 
@@ -246,7 +246,7 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 		if i.ShouldBeInt64() {
 			val, err := i.AsInt64()
 			if err != nil {
-				panic(builderError{err})
+				panic(err)
 			}
 			ord = val
 		} else {
@@ -291,7 +291,7 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 	if vBase, ok := expr.(tree.VarName); ok {
 		v, err := vBase.NormalizeVarName()
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 
 		if c, ok := v.(*tree.ColumnItem); ok && c.TableName == nil {
@@ -308,7 +308,7 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 				}
 
 				if col.mutation {
-					panic(builderError{makeBackfillError(col.name)})
+					panic(makeBackfillError(col.name))
 				}
 
 				if index != -1 {
@@ -425,7 +425,7 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 			newErr = errors.WithHint(newErr, "verify that the current database and search_path are valid and/or the target database exists")
 			panic(newErr)
 		}
-		panic(builderError{err})
+		panic(err)
 	}
 
 	// Only allow creation of objects in the public schema.
@@ -435,7 +435,7 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	}
 
 	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilege.CREATE); err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	// Add dependency on this schema to the metadata, so that the metadata can be
@@ -453,7 +453,7 @@ func (b *Builder) resolveTable(
 	ds, resName := b.resolveDataSource(tn, priv)
 	tab, ok := ds.(cat.Table)
 	if !ok {
-		panic(builderError{sqlbase.NewWrongObjectTypeError(tn, "table")})
+		panic(sqlbase.NewWrongObjectTypeError(tn, "table"))
 	}
 	return tab, resName
 }
@@ -466,7 +466,7 @@ func (b *Builder) resolveDataSource(
 ) (cat.DataSource, cat.DataSourceName) {
 	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, cat.Flags{}, tn)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	b.checkPrivilege(tn, ds, priv)
 	return ds, resName
@@ -479,8 +479,7 @@ func (b *Builder) resolveDataSource(
 func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
 	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.StableID(ref.TableID))
 	if err != nil {
-		panic(builderError{pgerror.Wrapf(err, pgcode.UndefinedObject,
-			"%s", tree.ErrString(ref))})
+		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}
 	b.checkPrivilege(ds.Name(), ds, priv)
 	return ds
@@ -497,7 +496,7 @@ func (b *Builder) checkPrivilege(
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
 		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 	} else {
 		// The check is skipped, so don't recheck when dependencies are checked.

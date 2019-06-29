@@ -44,10 +44,10 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		numColNames := len(ct.AsColumnNames)
 		numColumns := len(outScope.cols)
 		if numColNames != 0 && numColNames != numColumns {
-			panic(builderError{sqlbase.NewSyntaxError(fmt.Sprintf(
+			panic(sqlbase.NewSyntaxError(fmt.Sprintf(
 				"CREATE TABLE specifies %d column name%s, but data source has %d column%s",
 				numColNames, util.Pluralize(int64(numColNames)),
-				numColumns, util.Pluralize(int64(numColumns))))})
+				numColumns, util.Pluralize(int64(numColumns)))))
 		}
 
 		// Synthesize rowid column, and append to end of column list.

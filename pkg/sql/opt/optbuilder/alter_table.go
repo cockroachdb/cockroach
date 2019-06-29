@@ -31,11 +31,11 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 	}
 	index, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &split.TableOrIndex)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	table := index.Table()
 	if err := b.catalog.CheckPrivilege(b.ctx, table, privilege.INSERT); err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	b.DisableMemoReuse = true
@@ -89,11 +89,11 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 	}
 	index, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &unsplit.TableOrIndex)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	table := index.Table()
 	if err := b.catalog.CheckPrivilege(b.ctx, table, privilege.INSERT); err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	b.DisableMemoReuse = true
@@ -139,11 +139,11 @@ func (b *Builder) buildAlterTableRelocate(
 	}
 	index, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &relocate.TableOrIndex)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	table := index.Table()
 	if err := b.catalog.CheckPrivilege(b.ctx, table, privilege.INSERT); err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	b.DisableMemoReuse = true

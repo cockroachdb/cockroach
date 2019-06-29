@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -44,13 +45,6 @@ type MatchedRuleFunc func(ruleName opt.RuleName) bool
 // were constructed, it is nil. Additional expressions beyond the first can be
 // accessed by following the NextExpr links on the target expression.
 type AppliedRuleFunc func(ruleName opt.RuleName, source, target opt.Expr)
-
-// placeholderError wraps errors that occur during placeholder assignment, and
-// is passed as an argument to panic. The panic is caught and converted back to
-// an error by AssignPlaceholders.
-type placeholderError struct {
-	error
-}
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
@@ -214,8 +208,8 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 			// for `if err != nil` throughout the construction code. This is only
 			// possible because the code does not update shared state and does not
 			// manipulate locks.
-			if bldErr, ok := r.(placeholderError); ok {
-				err = bldErr.error
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
 			} else {
 				panic(r)
 			}
@@ -229,7 +223,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
 			d, err := e.(*memo.PlaceholderExpr).Value.Eval(f.evalCtx)
 			if err != nil {
-				panic(placeholderError{err})
+				panic(err)
 			}
 			return f.ConstructConstVal(d, placeholder.DataType())
 		}
