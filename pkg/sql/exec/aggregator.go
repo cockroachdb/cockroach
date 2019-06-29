@@ -236,6 +236,7 @@ func (a *orderedAggregator) Init() {
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
+	a.scratch.SetSelection(false)
 	if a.done {
 		a.scratch.SetLength(0)
 		return a.scratch

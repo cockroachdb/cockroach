@@ -56,7 +56,7 @@ func TestLimit(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
 			return NewLimitOp(input[0], tc.limit), nil
 		})
 	}
