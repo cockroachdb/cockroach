@@ -24,35 +24,28 @@ import (
 )
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
-	runTests(t, []tuples{{{1}, {2}, {nil}}}, func(t *testing.T, input []Operator) {
-		op := projPlusInt64Int64ConstOp{
-			input:     input[0],
-			colIdx:    0,
-			constArg:  1,
-			outputIdx: 1,
-		}
-		op.Init()
-		out := newOpTestOutput(&op, []int{0, 1}, tuples{{1, 2}, {2, 3}, {nil, nil}})
-		if err := out.Verify(); err != nil {
-			t.Error(err)
-		}
-	})
+	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
+		[]int{0, 1}, func(input []Operator) (Operator, error) {
+			return &projPlusInt64Int64ConstOp{
+				input:     input[0],
+				colIdx:    0,
+				constArg:  1,
+				outputIdx: 1,
+			}, nil
+		})
 }
 
 func TestProjPlusInt64Int64Op(t *testing.T) {
-	runTests(t, []tuples{{{1, 2}, {3, 4}, {5, nil}}}, func(t *testing.T, input []Operator) {
-		op := projPlusInt64Int64Op{
-			input:     input[0],
-			col1Idx:   0,
-			col2Idx:   1,
-			outputIdx: 2,
-		}
-		op.Init()
-		out := newOpTestOutput(&op, []int{0, 1, 2}, tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}})
-		if err := out.Verify(); err != nil {
-			t.Error(err)
-		}
-	})
+	runTests(t, []tuples{{{1, 2}, {3, 4}, {5, nil}}}, tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}},
+		orderedVerifier, []int{0, 1, 2},
+		func(input []Operator) (Operator, error) {
+			return &projPlusInt64Int64Op{
+				input:     input[0],
+				col1Idx:   0,
+				col2Idx:   1,
+				outputIdx: 2,
+			}, nil
+		})
 }
 
 func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
