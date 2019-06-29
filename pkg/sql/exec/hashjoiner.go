@@ -241,9 +241,11 @@ func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 			return hj.Next(ctx)
 		}
 
+		hj.prober.batch.SetSelection(false)
 		return hj.prober.batch
 	case hjEmittingUnmatched:
 		hj.emitUnmatched()
+		hj.prober.batch.SetSelection(false)
 		return hj.prober.batch
 	default:
 		panic("hash joiner in unhandled state")

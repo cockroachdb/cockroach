@@ -282,6 +282,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 		p.emitted = newEmitted
+		p.output.SetSelection(false)
 		return p.output
 	}
 	panic(fmt.Sprintf("invalid sort state %v", p.state))

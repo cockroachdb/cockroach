@@ -213,6 +213,7 @@ func (t *topKSorter) emit() coldata.Batch {
 		)
 	}
 	t.output.SetLength(toEmit)
+	t.output.SetSelection(false)
 	t.emitted += toEmit
 	return t.output
 }

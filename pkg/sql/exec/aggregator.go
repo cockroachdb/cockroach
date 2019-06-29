@@ -240,6 +240,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		a.scratch.SetLength(0)
 		return a.scratch
 	}
+	a.scratch.SetSelection(false)
 	if a.scratch.resumeIdx >= a.scratch.outputSize {
 		// Copy the second part of the output batch into the first and resume from
 		// there.

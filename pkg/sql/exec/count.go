@@ -59,6 +59,7 @@ func (c *countOp) Next(ctx context.Context) coldata.Batch {
 		if length == 0 {
 			c.done = true
 			c.internalBatch.ColVec(0).Int64()[0] = c.count
+			c.internalBatch.SetSelection(false)
 			return c.internalBatch
 		}
 		c.count += int64(length)
