@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -566,7 +567,9 @@ func (mb *mutationBuilder) disambiguateColumns() {
 
 // makeMutationPrivate builds a MutationPrivate struct containing the table and
 // column metadata needed for the mutation operator.
-func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationPrivate {
+func (mb *mutationBuilder) makeMutationPrivate(
+	needResults bool, returnCols exec.ColumnOrdinalSet,
+) *memo.MutationPrivate {
 	// Helper function to create a column list in the MutationPrivate.
 	makeColList := func(scopeOrds []scopeOrdinal) opt.ColList {
 		var colList opt.ColList
@@ -596,15 +599,34 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		// can be defined (i.e. >= 0).
 		private.ReturnCols = make(opt.ColList, mb.tab.DeletableColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			scopeOrd := mb.mapToReturnScopeOrd(i)
-			if scopeOrd == -1 {
-				panic(errors.AssertionFailedf("column %d is not available in the mutation input", i))
+			if returnCols.Contains(i) || mb.usedByStatement(i) {
+				scopeOrd := mb.mapToReturnScopeOrd(i)
+				if scopeOrd == -1 {
+					panic(errors.AssertionFailedf("column %d is not available in the mutation input", i))
+				}
+				private.ReturnCols[i] = mb.outScope.cols[scopeOrd].id
 			}
-			private.ReturnCols[i] = mb.outScope.cols[scopeOrd].id
 		}
 	}
 
 	return private
+}
+
+func (mb *mutationBuilder) usedByStatement(tabOrd int) bool {
+	switch {
+	case mb.upsertOrds[tabOrd] != -1:
+		return true
+
+	case mb.updateOrds[tabOrd] != -1:
+		return true
+
+	case mb.insertOrds[tabOrd] != -1:
+		return true
+
+	default:
+		// Column is never referenced by the statement.
+		return false
+	}
 }
 
 // mapToReturnScopeOrd returns the ordinal of the scope column that provides the
@@ -644,13 +666,16 @@ func (mb *mutationBuilder) mapToReturnScopeOrd(tabOrd int) scopeOrdinal {
 	}
 }
 
-// buildReturning wraps the input expression with a Project operator that
-// projects the given RETURNING expressions.
-func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
+// prepareReturningProjection analyzes the given list of returning clause expressions,
+// creates a projection scope if needed and adds the resulting aliases and typed
+// expressions to it. The returned projections scope is going to be used to project
+// the RETURNING expressions in a mutation.
+func (mb *mutationBuilder) prepareReturningProjection(
+	returning tree.ReturningExprs,
+) (projectionsScope *scope) {
 	// Handle case of no RETURNING clause.
 	if returning == nil {
-		mb.outScope = &scope{builder: mb.b, expr: mb.outScope.expr}
-		return
+		return nil
 	}
 
 	// Start out by constructing a scope containing one column for each non-
@@ -663,7 +688,6 @@ func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
 	//   4. Project columns in same order as defined in table schema.
 	//
 	inScope := mb.outScope.replace()
-	inScope.expr = mb.outScope.expr
 	inScope.cols = make([]scopeColumn, 0, mb.tab.ColumnCount())
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 		tabCol := mb.tab.Column(i)
@@ -677,11 +701,47 @@ func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
 	}
 
 	// Construct the Project operator that projects the RETURNING expressions.
-	outScope := inScope.replace()
-	mb.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, outScope)
-	mb.b.buildProjectionList(inScope, outScope)
-	mb.b.constructProjectForScope(inScope, outScope)
-	mb.outScope = outScope
+	projectionsScope = inScope.replace()
+	mb.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, projectionsScope)
+	mb.b.buildProjectionList(inScope, projectionsScope)
+	return projectionsScope
+}
+
+// prepareReturningArgs
+func (mb *mutationBuilder) prepareReturningArgs(
+	projectionsScope *scope,
+) (
+	returningOrdSet exec.ColumnOrdinalSet,
+	projections memo.ProjectionsExpr,
+	passthrough opt.ColSet,
+) {
+	// Projection not required.
+	if projectionsScope == nil {
+		return exec.ColumnOrdinalSet{}, nil, opt.ColSet{}
+	}
+
+	// Find all the columns referenced by the returning expressions.
+	returningOrdSet = exec.ColumnOrdinalSet{}
+	projections, passthrough = mb.b.constructProjectionArgs(append(projectionsScope.cols, projectionsScope.extraCols...))
+	for _, projection := range projections {
+		outCols := projection.ScalarProps(mb.b.factory.Memo()).OuterCols
+		outCols.ForEach(func(i opt.ColumnID) {
+			returningOrdSet.Add(mb.tabID.ColumnOrdinal(i))
+		})
+	}
+	passthrough.ForEach(func(i opt.ColumnID) {
+		if i > 0 {
+			returningOrdSet.Add(mb.tabID.ColumnOrdinal(i))
+		}
+	})
+
+	// The columns of the primary index are always returned regardless of whether they
+	// are referenced.
+	primaryIndex := mb.tab.Index(0)
+	for i, n := 0, primaryIndex.KeyColumnCount(); i < n; i++ {
+		returningOrdSet.Add(primaryIndex.Column(i).Ordinal)
+	}
+	return returningOrdSet, projections, passthrough
 }
 
 // checkNumCols raises an error if the expected number of columns does not match

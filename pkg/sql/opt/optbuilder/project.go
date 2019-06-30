@@ -35,8 +35,14 @@ func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
 }
 
 func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.RelExpr {
-	var passthrough opt.ColSet
-	projections := make(memo.ProjectionsExpr, 0, len(cols))
+	projections, passthrough := b.constructProjectionArgs(cols)
+	return b.factory.ConstructProject(input, projections, passthrough)
+}
+
+func (b *Builder) constructProjectionArgs(
+	cols []scopeColumn,
+) (projections memo.ProjectionsExpr, passthrough opt.ColSet) {
+	projections = make(memo.ProjectionsExpr, 0, len(cols))
 
 	// Deduplicate the columns; we only need to project each column once.
 	colSet := opt.ColSet{}
@@ -55,7 +61,7 @@ func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.
 		}
 	}
 
-	return b.factory.ConstructProject(input, projections, passthrough)
+	return projections, passthrough
 }
 
 // analyzeProjectionList analyzes the given list of SELECT clause expressions,
@@ -77,9 +83,9 @@ func (b *Builder) analyzeProjectionList(
 	b.analyzeSelectList(selects, desiredTypes, inScope, outScope)
 }
 
-// analyzeReturningList analyzes the given list of RETURNING clause expressions,
-// and adds the resulting aliases and typed expressions to outScope. See the
-// header comment for analyzeSelectList.
+// analyzereturninglist analyzes the given list of returning clause expressions,
+// and adds the resulting aliases and typed expressions to outscope. see the
+// header comment for analyzeselectlist.
 func (b *Builder) analyzeReturningList(
 	returning tree.ReturningExprs, desiredTypes []*types.T, inScope, outScope *scope,
 ) {

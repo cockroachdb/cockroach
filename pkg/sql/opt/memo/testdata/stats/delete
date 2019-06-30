@@ -44,25 +44,31 @@ select
  ├── stats: [rows=3.3, distinct(1)=3.3, null(1)=0, distinct(2)=3.27803262, null(2)=0, distinct(3)=0.981940882, null(3)=0]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
- ├── delete xyz
+ ├── project
  │    ├── columns: x:1(string!null) y:2(int!null) z:3(float!null)
- │    ├── fetch columns: x:4(string) y:5(int) z:6(float)
  │    ├── side-effects, mutations
  │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=9.5617925, null(2)=0, distinct(3)=1, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2)
- │    └── select
- │         ├── columns: x:4(string!null) y:5(int!null) z:6(float!null)
- │         ├── stats: [rows=9.9, distinct(4)=9.9, null(4)=0, distinct(5)=9.5617925, null(5)=0, distinct(6)=1, null(6)=0]
- │         ├── key: (4)
- │         ├── fd: ()-->(6), (4)-->(5)
- │         ├── scan xyz
- │         │    ├── columns: x:4(string!null) y:5(int!null) z:6(float)
- │         │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0, distinct(5)=100, null(5)=0, distinct(6)=100, null(6)=10]
- │         │    ├── key: (4)
- │         │    └── fd: (4)-->(5,6)
- │         └── filters
- │              └── z = 5.5 [type=bool, outer=(6), constraints=(/6: [/5.5 - /5.5]; tight), fd=()-->(6)]
+ │    └── delete xyz
+ │         ├── columns: x:1(string!null) y:2(int!null) z:3(float!null)
+ │         ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ │         ├── side-effects, mutations
+ │         ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=9.5617925, null(2)=0, distinct(3)=1, null(3)=0]
+ │         ├── key: (1)
+ │         ├── fd: ()-->(3), (1)-->(2)
+ │         └── select
+ │              ├── columns: x:4(string!null) y:5(int!null) z:6(float!null)
+ │              ├── stats: [rows=9.9, distinct(4)=9.9, null(4)=0, distinct(5)=9.5617925, null(5)=0, distinct(6)=1, null(6)=0]
+ │              ├── key: (4)
+ │              ├── fd: ()-->(6), (4)-->(5)
+ │              ├── scan xyz
+ │              │    ├── columns: x:4(string!null) y:5(int!null) z:6(float)
+ │              │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0, distinct(5)=100, null(5)=0, distinct(6)=100, null(6)=10]
+ │              │    ├── key: (4)
+ │              │    └── fd: (4)-->(5,6)
+ │              └── filters
+ │                   └── z = 5.5 [type=bool, outer=(6), constraints=(/6: [/5.5 - /5.5]; tight), fd=()-->(6)]
  └── filters
       └── x > 'foo' [type=bool, outer=(1), constraints=(/1: [/e'foo\x00' - ]; tight)]
 
@@ -70,24 +76,31 @@ select
 build
 DELETE FROM xyz WHERE False RETURNING *
 ----
-delete xyz
+project
  ├── columns: x:1(string!null) y:2(int!null) z:3(float)
- ├── fetch columns: x:4(string) y:5(int) z:6(float)
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  ├── stats: [rows=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- └── select
-      ├── columns: x:4(string!null) y:5(int!null) z:6(float)
+ └── delete xyz
+      ├── columns: x:1(string!null) y:2(int!null) z:3(float)
+      ├── fetch columns: x:4(string) y:5(int) z:6(float)
       ├── cardinality: [0 - 0]
+      ├── side-effects, mutations
       ├── stats: [rows=0]
-      ├── key: (4)
-      ├── fd: (4)-->(5,6)
-      ├── scan xyz
-      │    ├── columns: x:4(string!null) y:5(int!null) z:6(float)
-      │    ├── stats: [rows=1000]
-      │    ├── key: (4)
-      │    └── fd: (4)-->(5,6)
-      └── filters
-           └── false [type=bool]
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      └── select
+           ├── columns: x:4(string!null) y:5(int!null) z:6(float)
+           ├── cardinality: [0 - 0]
+           ├── stats: [rows=0]
+           ├── key: (4)
+           ├── fd: (4)-->(5,6)
+           ├── scan xyz
+           │    ├── columns: x:4(string!null) y:5(int!null) z:6(float)
+           │    ├── stats: [rows=1000]
+           │    ├── key: (4)
+           │    └── fd: (4)-->(5,6)
+           └── filters
+                └── false [type=bool]

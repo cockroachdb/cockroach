@@ -1301,31 +1301,33 @@ project
       │    └── columns: mno.m:1(int!null) mno.n:2(int) mno.o:3(int) d:4(int) e:5(int) rowid:6(int!null)
       └── filters
            └── exists [type=bool]
-                └── update mutation
+                └── project
                      ├── columns: mutation.m:7(int!null) mutation.n:8(int)
-                     ├── fetch columns: mutation.m:12(int) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
-                     ├── update-mapping:
-                     │    ├──  o:17 => mutation.m:7
-                     │    └──  column18:18 => p:10
-                     ├── check columns: check1:19(bool)
-                     └── project
-                          ├── columns: check1:19(bool) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int) o:17(int) column18:18(int)
-                          ├── project
-                          │    ├── columns: column18:18(int) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int) o:17(int)
-                          │    ├── project
-                          │    │    ├── columns: o:17(int) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
-                          │    │    ├── scan mutation
-                          │    │    │    └── columns: mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
-                          │    │    └── projections
-                          │    │         └── variable: mno.o [type=int]
-                          │    └── projections
-                          │         └── plus [type=int]
-                          │              ├── variable: mutation.o [type=int]
-                          │              └── variable: mutation.n [type=int]
-                          └── projections
-                               └── gt [type=bool]
-                                    ├── variable: o [type=int]
-                                    └── const: 0 [type=int]
+                     └── update mutation
+                          ├── columns: mutation.m:7(int!null) mutation.n:8(int)
+                          ├── fetch columns: mutation.m:12(int) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
+                          ├── update-mapping:
+                          │    ├──  o:17 => mutation.m:7
+                          │    └──  column18:18 => p:10
+                          ├── check columns: check1:19(bool)
+                          └── project
+                               ├── columns: check1:19(bool) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int) o:17(int) column18:18(int)
+                               ├── project
+                               │    ├── columns: column18:18(int) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int) o:17(int)
+                               │    ├── project
+                               │    │    ├── columns: o:17(int) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
+                               │    │    ├── scan mutation
+                               │    │    │    └── columns: mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
+                               │    │    └── projections
+                               │    │         └── variable: mno.o [type=int]
+                               │    └── projections
+                               │         └── plus [type=int]
+                               │              ├── variable: mutation.o [type=int]
+                               │              └── variable: mutation.n [type=int]
+                               └── projections
+                                    └── gt [type=bool]
+                                         ├── variable: o [type=int]
+                                         └── const: 0 [type=int]
 
 # Try to return a mutation column.
 build
@@ -1356,6 +1358,110 @@ build
 UPDATE mutation SET m=1 ORDER BY o LIMIT 2
 ----
 error (42P10): column "o" is being backfilled
+
+# ------------------------------------------------------------------------------
+# Test RETURNING expressions.
+# ------------------------------------------------------------------------------
+
+# Create a table with multiple column families the mutations can take advantage of.
+exec-ddl
+CREATE TABLE returning_test (
+    a INT,
+    b INT,
+    c INT,
+    d INT,
+    e INT,
+    f INT,
+    g INT,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c),
+    FAMILY (d, e, f, g),
+    UNIQUE (a)
+)
+----
+
+# Fetch all the columns for the RETURN expression.
+opt
+UPDATE returning_test SET a = a + 1 RETURNING *
+----
+project
+ ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) f:6(int) g:7(int)
+ └── update returning_test
+      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) f:6(int) g:7(int) rowid:8(int!null)
+      ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) e:13(int) f:14(int) g:15(int) rowid:16(int)
+      ├── update-mapping:
+      │    └──  column17:17 => a:1
+      └── project
+           ├── columns: column17:17(int) a:9(int) b:10(int) c:11(int) d:12(int) e:13(int) f:14(int) g:15(int) rowid:16(int!null)
+           ├── scan returning_test
+           │    └── columns: a:9(int) b:10(int) c:11(int) d:12(int) e:13(int) f:14(int) g:15(int) rowid:16(int!null)
+           └── projections
+                └── plus [type=int]
+                     ├── variable: a [type=int]
+                     └── const: 1 [type=int]
+
+
+# Fetch all the columns in the (d, e, f, g) family as d is being set.
+opt
+UPDATE returning_test SET d = a + d RETURNING a, d
+----
+project
+ ├── columns: a:1(int) d:4(int)
+ └── update returning_test
+      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) f:6(int) g:7(int) rowid:8(int!null)
+      ├── fetch columns: a:9(int) d:12(int) e:13(int) f:14(int) g:15(int) rowid:16(int)
+      ├── update-mapping:
+      │    └──  column17:17 => d:4
+      └── project
+           ├── columns: column17:17(int) a:9(int) d:12(int) e:13(int) f:14(int) g:15(int) rowid:16(int!null)
+           ├── scan returning_test
+           │    └── columns: a:9(int) d:12(int) e:13(int) f:14(int) g:15(int) rowid:16(int!null)
+           └── projections
+                └── plus [type=int]
+                     ├── variable: a [type=int]
+                     └── variable: d [type=int]
+
+# Fetch only whats being updated (not the (d, e, f, g)) family.
+opt
+UPDATE returning_test SET a = a + d RETURNING a
+----
+project
+ ├── columns: a:1(int)
+ └── update returning_test
+      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) f:6(int) g:7(int) rowid:8(int!null)
+      ├── fetch columns: a:9(int) rowid:16(int)
+      ├── update-mapping:
+      │    └──  column17:17 => a:1
+      └── project
+           ├── columns: column17:17(int) a:9(int) rowid:16(int!null)
+           ├── scan returning_test
+           │    └── columns: a:9(int) d:12(int) rowid:16(int!null)
+           └── projections
+                └── plus [type=int]
+                     ├── variable: a [type=int]
+                     └── variable: d [type=int]
+
+# We only fetch the minimal set of columns which is (a, b, c, rowid).
+opt
+UPDATE returning_test SET (b, c) = (a, a + c) RETURNING a, b, c
+----
+project
+ ├── columns: a:1(int) b:2(int) c:3(int)
+ └── update returning_test
+      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) f:6(int) g:7(int) rowid:8(int!null)
+      ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:16(int)
+      ├── update-mapping:
+      │    ├──  a:9 => b:2
+      │    └──  column17:17 => c:3
+      └── project
+           ├── columns: column17:17(int) a:9(int) b:10(int) c:11(int) rowid:16(int!null)
+           ├── scan returning_test
+           │    └── columns: a:9(int) b:10(int) c:11(int) rowid:16(int!null)
+           └── projections
+                └── plus [type=int]
+                     ├── variable: a [type=int]
+                     └── variable: c [type=int]
 
 # ------------------------------------------------------------------------------
 # Test check constraints

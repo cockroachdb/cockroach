@@ -1168,16 +1168,18 @@ upsert xyz
 build
 UPSERT INTO uv VALUES (1, 2) RETURNING *
 ----
-upsert uv
+project
  ├── columns: u:1(int!null) v:2(int!null)
- ├── upsert-mapping:
- │    ├──  column1:3 => u:1
- │    └──  column2:4 => v:2
- └── values
-      ├── columns: column1:3(int!null) column2:4(int!null)
-      └── tuple [type=tuple{int, int}]
-           ├── const: 1 [type=int]
-           └── const: 2 [type=int]
+ └── upsert uv
+      ├── columns: u:1(int!null) v:2(int!null)
+      ├── upsert-mapping:
+      │    ├──  column1:3 => u:1
+      │    └──  column2:4 => v:2
+      └── values
+           ├── columns: column1:3(int!null) column2:4(int!null)
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
 
 # Use returning UPSERT as a FROM expression.
 build

@@ -322,8 +322,19 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
-	private := mb.makeMutationPrivate(returning != nil)
+	projectionsScope := mb.prepareReturningProjection(returning)
+	returnCols, projections, passthrough := mb.prepareReturningArgs(projectionsScope)
+
+	private := mb.makeMutationPrivate(returning != nil, returnCols)
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(mb.outScope.expr, mb.checks, private)
 
-	mb.buildReturning(returning)
+	// Wrap the input expression with a Project operator that projects the given RETURNING expressions.
+	// Handle case of no RETURNING clause.
+	if returning == nil {
+		mb.outScope = &scope{builder: mb.b, expr: mb.outScope.expr}
+		return
+	}
+
+	projectionsScope.expr = mb.b.factory.ConstructProject(mb.outScope.expr, projections, passthrough)
+	mb.outScope = projectionsScope
 }
