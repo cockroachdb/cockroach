@@ -462,3 +462,39 @@
     $checks
     $mutationPrivate
 )
+
+# PruneReturningCols removes columns from the mutation operator's ReturnCols
+# set if they are not used in the RETURNING clause of the mutation.
+# Removing ReturnCols will then allow the PruneMutationFetchCols to be more
+# conservative with the fetch columns.
+# TODO(ridwanmsharif): Mutations shouldn't need to return the primary key
+# columns. Make appropriate changes to SQL execution to accommodate this.
+[PruneMutationReturnCols, Normalize]
+(Project
+    $input:(Insert | Update | Upsert | Delete
+        $innerInput:*
+        $checks:*
+        $mutationPrivate:*
+    )
+    $projections:*
+    $passthrough:* &
+      (CanPruneMutationReturnCols
+        $mutationPrivate
+        $needed:(UnionCols3
+            (PrimaryKeyCols (MutationTable $mutationPrivate))
+            (ProjectionOuterCols $projections)
+            $passthrough
+        )
+      )
+)
+=>
+(Project
+    ((OpName $input)
+        $innerInput
+        $checks
+        (PruneMutationReturnCols $mutationPrivate $needed)
+    )
+    $projections
+    $passthrough
+)
+
