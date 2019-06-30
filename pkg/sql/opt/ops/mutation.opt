@@ -120,6 +120,11 @@ define MutationPrivate {
     # as part of online schema change). If no RETURNING clause was specified,
     # then ReturnCols is nil.
     ReturnCols ColList
+
+    # ReturnPruned is used only by the PruneMutationReturnCols norm rule as the
+    # base case. It stores whether the ReturnCols have been pruned. If the
+    # mutation doesn't have a RETURNING clause, ReturnPruned is false.
+    ReturnPruned bool
 }
 
 # Update evaluates a relational input expression that fetches existing rows from
