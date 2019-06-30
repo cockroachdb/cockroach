@@ -306,17 +306,6 @@ func (dsp *DistSQLPlanner) Run(
 	flow.Cleanup(ctx)
 }
 
-// errorPriority is used to rank errors such that the "best" one is chosen to be
-// presented as the query result.
-type errorPriority int
-
-const (
-	scoreNoError errorPriority = iota
-	scoreTxnRestart
-	scoreTxnAbort
-	scoreNonRetriable
-)
-
 // DistSQLReceiver is a RowReceiver that writes results to a rowResultWriter.
 // This is where the DistSQL execution meets the SQL Session - the RowContainer
 // comes from a client Session.
@@ -534,7 +523,7 @@ func (r *DistSQLReceiver) Push(
 		if meta.Err != nil {
 			// Check if the error we just received should take precedence over a
 			// previous error (if any).
-			if errPriority(meta.Err) > errPriority(r.resultWriter.Err()) {
+			if roachpb.ErrPriority(meta.Err) > roachpb.ErrPriority(r.resultWriter.Err()) {
 				if r.txn != nil {
 					if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
 						// Update the txn in response to remote errors. In the non-DistSQL
@@ -640,30 +629,6 @@ func (r *DistSQLReceiver) Push(
 		return r.status
 	}
 	return r.status
-}
-
-// errPriority computes the priority of err.
-func errPriority(err error) errorPriority {
-	if err == nil {
-		return scoreNoError
-	}
-	err = errors.Cause(err)
-	if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
-		pErr := retryErr.PErr
-		switch pErr.GetDetail().(type) {
-		case *roachpb.TransactionAbortedError:
-			return scoreTxnAbort
-		default:
-			return scoreTxnRestart
-		}
-	}
-	if retryErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
-		if retryErr.PrevTxnAborted() {
-			return scoreTxnAbort
-		}
-		return scoreTxnRestart
-	}
-	return scoreNonRetriable
 }
 
 // ProducerDone is part of the RowReceiver interface.

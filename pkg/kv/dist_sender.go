@@ -1029,6 +1029,17 @@ func maybeSwapErrorIndex(pErr *roachpb.Error, a, b int) {
 	}
 }
 
+// mergeErrors merges the two errors, combining their transaction state and
+// returning the error with the highest priority.
+func mergeErrors(pErr1, pErr2 *roachpb.Error) *roachpb.Error {
+	ret, drop := pErr1, pErr2
+	if roachpb.ErrPriority(drop.GoError()) > roachpb.ErrPriority(ret.GoError()) {
+		ret, drop = drop, ret
+	}
+	ret.UpdateTxn(drop.GetTxn())
+	return ret
+}
+
 // divideAndSendBatchToRanges sends the supplied batch to all of the
 // ranges which comprise the span specified by rs. The batch request
 // is trimmed against each range which is part of the span and sent
@@ -1139,10 +1150,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 					// the batch was parallelized and part of it succeeded.
 					pErr.UpdateTxn(br.Txn)
 				} else {
-					// Even though we ignore the second error, update the first
-					// error's transaction with any new information from the
-					// second error. This may contain interesting updates.
-					pErr.UpdateTxn(resp.pErr.GetTxn())
+					// The batch was split and saw (at least) two different errors.
+					// Merge their transaction state and determine which to return
+					// based on their priorities.
+					pErr = mergeErrors(pErr, resp.pErr)
 				}
 				continue
 			}
