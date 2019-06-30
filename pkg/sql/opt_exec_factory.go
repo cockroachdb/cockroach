@@ -1153,15 +1153,41 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 	return node, nil
 }
 
+// mutationRowIdxToReturnIdx returns the mapping from the origColDescs to the
+// returningColDescs. -1 is used for columns not part of the returnColDescs.
+// It is the responsibility of the caller to ensure a a mapping is possible,
+// that is, the returningColDescs is a subset of the origColDescs.
+func mutationRowIdxToReturnIdx(origColDescs, returnColDescs []sqlbase.ColumnDescriptor) []int {
+	// Create a ColumnID to index map.
+	colIDToRetIndex := row.ColIDtoRowIndexFromCols(origColDescs)
+
+	// Initialize the rowIdxToTabColIdx array.
+	rowIdxToRetIdx := make([]int, len(origColDescs))
+	for i := range origColDescs {
+		// -1 value indicates that this column is not being returned.
+		rowIdxToRetIdx[i] = -1
+	}
+
+	// Set the appropriate index values for the returning columns.
+	for i := range returnColDescs {
+		if idx, ok := colIDToRetIndex[returnColDescs[i].ID]; ok {
+			rowIdxToRetIdx[idx] = i
+		}
+	}
+
+	return rowIdxToRetIdx
+}
+
 func (ef *execFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
 	insertCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	rowsNeeded bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
+	rowsNeeded := !returnCols.Empty()
 	tabDesc := table.(*optTable).desc
 	colDescs := makeColDescList(table, insertCols)
 
@@ -1187,18 +1213,33 @@ func (ef *execFactory) ConstructInsert(
 
 	// Determine the relational type of the generated insert node.
 	// If rows are not needed, no columns are returned.
-	var returnCols sqlbase.ResultColumns
+	var returnColumns sqlbase.ResultColumns
+	var tabIdxToRetIdx []int
 	if rowsNeeded {
-		// Insert always returns all non-mutation columns, in the same order they
-		// are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+		returnColDescs := makeColDescList(table, returnCols)
+
+		// Only return the columns that are part of the table descriptor.
+		// This is important when columns are added and being back-filled
+		// as part of the same transaction when the delete runs.
+		// In such cases, the newly added columns shouldn't be returned.
+		// See regression logic tests for #29494.
+		if len(tabDesc.Columns) < len(returnColDescs) {
+			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
+		}
+
+		returnColumns = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+
+		// Update the tabIdxToReturnColDescs for the mutation. Insert always
+		// returns non-mutation columns in the same order they are defined in
+		// the table.
+		tabIdxToRetIdx = mutationRowIdxToReturnIdx(tabDesc.Columns, returnColDescs)
 	}
 
 	// Regular path for INSERT.
 	ins := insertNodePool.Get().(*insertNode)
 	*ins = insertNode{
 		source:  input.(planNode),
-		columns: returnCols,
+		columns: returnColumns,
 		run: insertRun{
 			ti:          tableInserter{ri: ri},
 			checkHelper: checkHelper,
@@ -1207,7 +1248,8 @@ func (ef *execFactory) ConstructInsert(
 				Cols:    tabDesc.Columns,
 				Mapping: ri.InsertColIDtoRowIndex,
 			},
-			insertCols: ri.InsertCols,
+			insertCols:     ri.InsertCols,
+			tabIdxToRetIdx: tabIdxToRetIdx,
 		},
 	}
 
@@ -1228,10 +1270,11 @@ func (ef *execFactory) ConstructUpdate(
 	table cat.Table,
 	fetchCols exec.ColumnOrdinalSet,
 	updateCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	rowsNeeded bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
+	rowsNeeded := !returnCols.Empty()
 	tabDesc := table.(*optTable).desc
 	fetchColDescs := makeColDescList(table, fetchCols)
 
@@ -1285,11 +1328,31 @@ func (ef *execFactory) ConstructUpdate(
 
 	// Determine the relational type of the generated update node.
 	// If rows are not needed, no columns are returned.
-	var returnCols sqlbase.ResultColumns
+	var returnColumns sqlbase.ResultColumns
+	var rowIdxToRetIdx []int
 	if rowsNeeded {
-		// Update always returns all non-mutation columns, in the same order they
-		// are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+		returnColDescs := makeColDescList(table, returnCols)
+
+		// Only return the columns that are part of the table descriptor.
+		// This is important when columns are added and being back-filled
+		// as part of the same transaction when the update runs.
+		// In such cases, the newly added columns shouldn't be returned.
+		// See regression logic tests for #29494.
+		if len(tabDesc.Columns) < len(returnColDescs) {
+			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
+		}
+
+		returnColumns = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+
+		// Update the rowIdxToReturnColDescs for the mutation. Update returns
+		// the of non-mutation columns specified, in the same order they are
+		// defined in the table.
+		//
+		// The Updater derives/stores the fetch columns of the mutation and
+		// since the return columns are always a subset of the fetch columns,
+		// we can use use the fetch columns generate the mapping for the
+		// returning rows.
+		rowIdxToRetIdx = mutationRowIdxToReturnIdx(ru.FetchCols, returnColDescs)
 	}
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
@@ -1303,7 +1366,7 @@ func (ef *execFactory) ConstructUpdate(
 	upd := updateNodePool.Get().(*updateNode)
 	*upd = updateNode{
 		source:  input.(planNode),
-		columns: returnCols,
+		columns: returnColumns,
 		run: updateRun{
 			tu:          tableUpdater{ru: ru},
 			checkHelper: checkHelper,
@@ -1313,9 +1376,10 @@ func (ef *execFactory) ConstructUpdate(
 				Cols:         ru.FetchCols,
 				Mapping:      ru.FetchColIDtoRowIndex,
 			},
-			sourceSlots:   sourceSlots,
-			updateValues:  make(tree.Datums, len(ru.UpdateCols)),
-			updateColsIdx: updateColsIdx,
+			sourceSlots:    sourceSlots,
+			updateValues:   make(tree.Datums, len(ru.UpdateCols)),
+			updateColsIdx:  updateColsIdx,
+			rowIdxToRetIdx: rowIdxToRetIdx,
 		},
 	}
 
@@ -1355,10 +1419,11 @@ func (ef *execFactory) ConstructUpsert(
 	insertCols exec.ColumnOrdinalSet,
 	fetchCols exec.ColumnOrdinalSet,
 	updateCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	rowsNeeded bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
+	rowsNeeded := !returnCols.Empty()
 	tabDesc := table.(*optTable).desc
 	insertColDescs := makeColDescList(table, insertCols)
 	fetchColDescs := makeColDescList(table, fetchCols)
@@ -1405,11 +1470,27 @@ func (ef *execFactory) ConstructUpsert(
 
 	// Determine the relational type of the generated upsert node.
 	// If rows are not needed, no columns are returned.
-	var returnCols sqlbase.ResultColumns
+	var returnColumns sqlbase.ResultColumns
+	var returnColDescs []sqlbase.ColumnDescriptor
+	var tabIdxToRetIdx []int
 	if rowsNeeded {
-		// Upsert always returns all non-mutation columns, in the same order they
-		// are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+		returnColDescs = makeColDescList(table, returnCols)
+
+		// Only return the columns that are part of the table descriptor.
+		// This is important when columns are added and being back-filled
+		// as part of the same transaction when the delete runs.
+		// In such cases, the newly added columns shouldn't be returned.
+		// See regression logic tests for #29494.
+		if len(tabDesc.Columns) < len(returnColDescs) {
+			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
+		}
+
+		returnColumns = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+
+		// Update the tabIdxToReturnColDescs for the mutation. Upsert returns
+		// non-mutation columns specified, in the same order they are defined
+		// in the table.
+		tabIdxToRetIdx = mutationRowIdxToReturnIdx(tabDesc.Columns, returnColDescs)
 	}
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
@@ -1424,7 +1505,7 @@ func (ef *execFactory) ConstructUpsert(
 	ups := upsertNodePool.Get().(*upsertNode)
 	*ups = upsertNode{
 		source:  input.(planNode),
-		columns: returnCols,
+		columns: returnColumns,
 		run: upsertRun{
 			checkHelper: checkHelper,
 			insertCols:  ri.InsertCols,
@@ -1438,11 +1519,13 @@ func (ef *execFactory) ConstructUpsert(
 					alloc:       &ef.planner.alloc,
 					collectRows: rowsNeeded,
 				},
-				canaryOrdinal: int(canaryCol),
-				fkTables:      fkTables,
-				fetchCols:     fetchColDescs,
-				updateCols:    updateColDescs,
-				ru:            ru,
+				canaryOrdinal:  int(canaryCol),
+				fkTables:       fkTables,
+				fetchCols:      fetchColDescs,
+				updateCols:     updateColDescs,
+				returnCols:     returnColDescs,
+				ru:             ru,
+				tabIdxToRetIdx: tabIdxToRetIdx,
 			},
 		},
 	}
@@ -1459,10 +1542,61 @@ func (ef *execFactory) ConstructUpsert(
 	return &rowCountNode{source: ups}, nil
 }
 
+// colsRequiredForDelete returns all the columns required to perform a delete
+// of a row on the table. This will include the returnColDescs columns that
+// are referenced in the RETURNING clause of the delete mutation. This
+// is different from the fetch columns of the delete mutation as it doesn't
+// include columns that are not part of index keys or the RETURNING columns.
+func colsRequiredForDelete(
+	table cat.Table, tableColDescs, returnColDescs []sqlbase.ColumnDescriptor,
+) []sqlbase.ColumnDescriptor {
+	// Find all the columns that are part of the rows returned by the delete.
+	deleteDescs := make([]sqlbase.ColumnDescriptor, 0, len(tableColDescs))
+	colMap := make(map[sqlbase.ColumnID]struct{}, len(tableColDescs))
+	for i := 0; i < table.IndexCount(); i++ {
+		index := table.Index(i)
+		for j := 0; j < index.KeyColumnCount(); j++ {
+			col := *index.Column(j).Column.(*sqlbase.ColumnDescriptor)
+			if _, ok := colMap[col.ID]; ok {
+				continue
+			}
+
+			deleteDescs = append(deleteDescs, col)
+			colMap[col.ID] = struct{}{}
+		}
+	}
+
+	// Add columns specified in the RETURNING clasue.
+	for _, col := range returnColDescs {
+		if _, ok := colMap[col.ID]; ok {
+			continue
+		}
+
+		deleteDescs = append(deleteDescs, col)
+		colMap[col.ID] = struct{}{}
+	}
+
+	// The order of the columns processed by the delete must be in the order they
+	// are present in the table.
+	tabDescs := make([]sqlbase.ColumnDescriptor, 0, len(deleteDescs))
+	for i := 0; i < len(tableColDescs); i++ {
+		col := tableColDescs[i]
+		if _, ok := colMap[col.ID]; ok {
+			tabDescs = append(tabDescs, col)
+		}
+	}
+
+	return tabDescs
+}
+
 func (ef *execFactory) ConstructDelete(
-	input exec.Node, table cat.Table, fetchCols exec.ColumnOrdinalSet, rowsNeeded bool,
+	input exec.Node,
+	table cat.Table,
+	fetchCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
+	rowsNeeded := !returnCols.Empty()
 	tabDesc := table.(*optTable).desc
 	fetchColDescs := makeColDescList(table, fetchCols)
 
@@ -1501,21 +1635,43 @@ func (ef *execFactory) ConstructDelete(
 
 	// Determine the relational type of the generated delete node.
 	// If rows are not needed, no columns are returned.
-	var returnCols sqlbase.ResultColumns
+	var returnColumns sqlbase.ResultColumns
+	var rowIdxToRetIdx []int
 	if rowsNeeded {
-		// Delete always returns all non-mutation columns, in the same order they
-		// are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+		returnColDescs := makeColDescList(table, returnCols)
+
+		// Only return the columns that are part of the table descriptor.
+		// This is important when columns are added and being back-filled
+		// as part of the same transaction when the delete runs.
+		// In such cases, the newly added columns shouldn't be returned.
+		// See regression logic tests for #29494.
+		if len(tabDesc.Columns) < len(returnColDescs) {
+			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
+		}
+
+		// Update the tabIdxToReturnColDescs for the mutation. Delete returns
+		// the non-mutation columns specified, in the same order they are defined
+		// in the table.
+		returnColumns = sqlbase.ResultColumnsFromColDescs(returnColDescs)
+
+		// Find all the columns that the Deleter returns. The returning columns
+		// of the mutation are a subset of this column set and will use this
+		// for the return mapping.
+		requiredDeleteColumns := colsRequiredForDelete(table, tabDesc.Columns, returnColDescs)
+
+		// Update the rowIdxToReturnIdx for the mutation.
+		rowIdxToRetIdx = mutationRowIdxToReturnIdx(requiredDeleteColumns, returnColDescs)
 	}
 
 	// Now make a delete node. We use a pool.
 	del := deleteNodePool.Get().(*deleteNode)
 	*del = deleteNode{
 		source:  input.(planNode),
-		columns: returnCols,
+		columns: returnColumns,
 		run: deleteRun{
-			td:         tableDeleter{rd: rd, alloc: &ef.planner.alloc},
-			rowsNeeded: rowsNeeded,
+			td:             tableDeleter{rd: rd, alloc: &ef.planner.alloc},
+			rowsNeeded:     rowsNeeded,
+			rowIdxToRetIdx: rowIdxToRetIdx,
 		},
 	}
 

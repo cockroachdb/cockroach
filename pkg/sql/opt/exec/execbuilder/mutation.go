@@ -47,14 +47,15 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	tab := b.mem.Metadata().Table(ins.Table)
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
 	checkOrds := ordinalSetFromColList(ins.CheckCols)
+	returnOrds := ordinalSetFromColList(ins.ReturnCols)
 	// If we planned FK checks, disable the execution code for FK checks.
 	disableExecFKs := len(ins.Checks) > 0
 	node, err := b.factory.ConstructInsert(
 		input.root,
 		tab,
 		insertOrds,
+		returnOrds,
 		checkOrds,
-		ins.NeedResults(),
 		disableExecFKs,
 	)
 	if err != nil {
@@ -106,14 +107,15 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	tab := md.Table(upd.Table)
 	fetchColOrds := ordinalSetFromColList(upd.FetchCols)
 	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
+	returnColOrds := ordinalSetFromColList(upd.ReturnCols)
 	checkOrds := ordinalSetFromColList(upd.CheckCols)
 	node, err := b.factory.ConstructUpdate(
 		input.root,
 		tab,
 		fetchColOrds,
 		updateColOrds,
+		returnColOrds,
 		checkOrds,
-		upd.NeedResults(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -177,6 +179,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
 	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
+	returnColOrds := ordinalSetFromColList(ups.ReturnCols)
 	checkOrds := ordinalSetFromColList(ups.CheckCols)
 	node, err := b.factory.ConstructUpsert(
 		input.root,
@@ -185,8 +188,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		insertColOrds,
 		fetchColOrds,
 		updateColOrds,
+		returnColOrds,
 		checkOrds,
-		ups.NeedResults(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -230,7 +233,8 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
-	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, del.NeedResults())
+	returnColOrds := ordinalSetFromColList(del.ReturnCols)
+	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, returnColOrds)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -310,6 +314,9 @@ func appendColsWhenPresent(dst, src opt.ColList) opt.ColList {
 // indicating columns that are not involved in the mutation.
 func ordinalSetFromColList(colList opt.ColList) exec.ColumnOrdinalSet {
 	var res util.FastIntSet
+	if colList == nil {
+		return res
+	}
 	for i, col := range colList {
 		if col != 0 {
 			res.Add(i)

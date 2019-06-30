@@ -480,20 +480,20 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-render                    ·         ·                    (z)                       +z
- │                        render 0  z                    ·                         ·
- └── run                  ·         ·                    (x, y, z, rowid[hidden])  ·
-      └── insert          ·         ·                    (x, y, z, rowid[hidden])  ·
-           │              into      xyz(x, y, z, rowid)  ·                         ·
-           │              strategy  inserter             ·                         ·
-           └── render     ·         ·                    (a, b, c, column9)        +c
-                │         render 0  a                    ·                         ·
-                │         render 1  b                    ·                         ·
-                │         render 2  c                    ·                         ·
-                │         render 3  unique_rowid()       ·                         ·
-                └── scan  ·         ·                    (a, b, c)                 +c
-·                         table     abc@abc_c_idx        ·                         ·
-·                         spans     ALL                  ·                         ·
+render                    ·         ·                    (z)                 +z
+ │                        render 0  z                    ·                   ·
+ └── run                  ·         ·                    (z, rowid[hidden])  ·
+      └── insert          ·         ·                    (z, rowid[hidden])  ·
+           │              into      xyz(x, y, z, rowid)  ·                   ·
+           │              strategy  inserter             ·                   ·
+           └── render     ·         ·                    (a, b, c, column9)  +c
+                │         render 0  a                    ·                   ·
+                │         render 1  b                    ·                   ·
+                │         render 2  c                    ·                   ·
+                │         render 3  unique_rowid()       ·                   ·
+                └── scan  ·         ·                    (a, b, c)           +c
+·                         table     abc@abc_c_idx        ·                   ·
+·                         spans     ALL                  ·                   ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO

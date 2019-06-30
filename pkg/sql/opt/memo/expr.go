@@ -381,6 +381,12 @@ func (m *MutationPrivate) NeedResults() bool {
 	return m.ReturnCols != nil
 }
 
+// IsColumnOutput returns true if the i-th ordinal column should be part of the
+// mutation's output columns.
+func (m *MutationPrivate) IsColumnOutput(i int) bool {
+	return i < len(m.ReturnCols) && m.ReturnCols[i] != 0
+}
+
 // MapToInputID maps from the ID of a returned column to the ID of the
 // corresponding input column that provides the value for it. If there is no
 // matching input column ID, MapToInputID returns 0.

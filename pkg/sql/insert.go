@@ -286,6 +286,12 @@ func (p *planner) Insert(
 		columns = sqlbase.ResultColumnsFromColDescs(desc.Columns)
 	}
 
+	// Since all columns are being returned, use the 1:1 mapping.
+	tabIdxToRetIdx := make([]int, len(desc.Columns))
+	for i := range tabIdxToRetIdx {
+		tabIdxToRetIdx[i] = i
+	}
+
 	// At this point, everything is ready for either an insertNode or an upserNode.
 
 	var node batchedPlanNode
@@ -315,8 +321,9 @@ func (p *planner) Insert(
 					Cols:    desc.Columns,
 					Mapping: ri.InsertColIDtoRowIndex,
 				},
-				defaultExprs: defaultExprs,
-				insertCols:   ri.InsertCols,
+				defaultExprs:   defaultExprs,
+				insertCols:     ri.InsertCols,
+				tabIdxToRetIdx: tabIdxToRetIdx,
 			},
 		}
 		node = in
@@ -368,12 +375,21 @@ type insertRun struct {
 	// into the row container above, when rowsNeeded is set.
 	resultRowBuffer tree.Datums
 
-	// rowIdxToRetIdx is the mapping from the ordering of rows in
-	// insertCols to the ordering in the result rows, used when
+	// rowIdxToTabColIdx is the mapping from the ordering of rows in
+	// insertCols to the ordering in the rows in the table, used when
 	// rowsNeeded is set to populate resultRowBuffer and the row
 	// container. The return index is -1 if the column for the row
-	// index is not public.
-	rowIdxToRetIdx []int
+	// index is not public. This is used in conjunction with tabIdxToRetIdx
+	// to populate the resultRowBuffer.
+	rowIdxToTabColIdx []int
+
+	// tabIdxToRetIdx is the mapping from the columns in the table to the
+	// columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the table column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value an the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column of the table is
+	// to be returned.
+	tabIdxToRetIdx []int
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
@@ -406,7 +422,7 @@ func (n *insertNode) startExec(params runParams) error {
 		//
 		// Also we need to re-order the values in the source, ordered by
 		// insertCols, when writing them to resultRowBuffer, ordered by
-		// n.columns. This uses the rowIdxToRetIdx mapping.
+		// n.columns. This uses the rowIdxToTabColIdx mapping.
 
 		n.run.resultRowBuffer = make(tree.Datums, len(n.columns))
 		for i := range n.run.resultRowBuffer {
@@ -419,13 +435,13 @@ func (n *insertNode) startExec(params runParams) error {
 			colIDToRetIndex[cols[i].ID] = i
 		}
 
-		n.run.rowIdxToRetIdx = make([]int, len(n.run.insertCols))
+		n.run.rowIdxToTabColIdx = make([]int, len(n.run.insertCols))
 		for i, col := range n.run.insertCols {
 			if idx, ok := colIDToRetIndex[col.ID]; !ok {
 				// Column must be write only and not public.
-				n.run.rowIdxToRetIdx[i] = -1
+				n.run.rowIdxToTabColIdx[i] = -1
 			} else {
-				n.run.rowIdxToRetIdx[i] = idx
+				n.run.rowIdxToTabColIdx[i] = idx
 			}
 		}
 	}
@@ -567,10 +583,13 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 			// The downstream consumer will want the rows in the order of
 			// the table descriptor, not that of insertCols. Reorder them
 			// and ignore non-public columns.
-			if idx := n.run.rowIdxToRetIdx[i]; idx >= 0 {
-				n.run.resultRowBuffer[idx] = val
+			if tabIdx := n.run.rowIdxToTabColIdx[i]; tabIdx >= 0 {
+				if retIdx := n.run.tabIdxToRetIdx[tabIdx]; retIdx >= 0 {
+					n.run.resultRowBuffer[retIdx] = val
+				}
 			}
 		}
+
 		if _, err := n.run.rows.AddRow(params.ctx, n.run.resultRowBuffer); err != nil {
 			return err
 		}

@@ -350,6 +350,27 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 	panic(errors.AssertionFailedf("no logical properties available for node: %v", e))
 }
 
+// MutationTable returns the table upon which the mutation is applied.
+func (c *CustomFuncs) MutationTable(private *memo.MutationPrivate) opt.TableID {
+	return private.Table
+}
+
+// PrimaryKeyCols returns the key columns of the primary key of the table.
+func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
+	var primaryKeyCols opt.ColSet
+	tabID := c.mem.Metadata().TableMeta(table).MetaID
+
+	// The columns of the primary key are always returned regardless of
+	// whether they are referenced.
+	tab := c.mem.Metadata().Table(table)
+	primaryIndex := tab.Index(0)
+	for i, n := 0, primaryIndex.KeyColumnCount(); i < n; i++ {
+		primaryKeyCols.Add(tabID.ColumnID(primaryIndex.Column(i).Ordinal))
+	}
+
+	return primaryKeyCols
+}
+
 // ----------------------------------------------------------------------
 //
 // Ordering functions

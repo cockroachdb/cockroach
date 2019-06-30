@@ -509,3 +509,43 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 
 	return relProps.Rule.PruneCols
 }
+
+// CanPruneMutationReturnCols checks whether the mutation's return columns can
+// be pruned. This is the pre-condition for the PruneMutationReturnCols rule.
+func (c *CustomFuncs) CanPruneMutationReturnCols(
+	private *memo.MutationPrivate, needed opt.ColSet,
+) bool {
+	if private.ReturnCols == nil {
+		return false
+	}
+
+	tabID := c.mem.Metadata().TableMeta(private.Table).MetaID
+	for i := range private.ReturnCols {
+		if private.ReturnCols[i] != 0 && !needed.Contains(tabID.ColumnID(i)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// PruneMutationReturnCols rewrites the given mutation private to no longer
+// keep ReturnCols that are not referenced by the RETURNING clause or are not
+// part of the primary key. The caller must have already done the analysis to
+// prove that such columns exist, by calling CanPruneMutationReturnCols.
+func (c *CustomFuncs) PruneMutationReturnCols(
+	private *memo.MutationPrivate, needed opt.ColSet,
+) *memo.MutationPrivate {
+	newPrivate := *private
+	newReturnCols := make(opt.ColList, len(private.ReturnCols))
+	tabID := c.mem.Metadata().TableMeta(private.Table).MetaID
+
+	for i := range private.ReturnCols {
+		if needed.Contains(tabID.ColumnID(i)) {
+			newReturnCols[i] = private.ReturnCols[i]
+		}
+	}
+
+	newPrivate.ReturnCols = newReturnCols
+	return &newPrivate
+}
