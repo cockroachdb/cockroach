@@ -267,6 +267,10 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (_ int64, pErr *
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
 		version = raftVersionSideloaded
 		r.store.metrics.AddSSTableProposals.Inc(1)
+
+		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
+			return 0, roachpb.NewErrorf("cannot sideload empty SSTable")
+		}
 	} else if log.V(4) {
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
