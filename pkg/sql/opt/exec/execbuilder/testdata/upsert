@@ -327,8 +327,8 @@ EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNI
 ----
 render                         ·         ·                    (z)                          +z
  │                             render 0  z                    ·                            ·
- └── run                       ·         ·                    (x, y, z, rowid[hidden])     ·
-      └── upsert               ·         ·                    (x, y, z, rowid[hidden])     ·
+ └── run                       ·         ·                    (z, rowid[hidden])           ·
+      └── upsert               ·         ·                    (z, rowid[hidden])           ·
            │                   into      xyz(x, y, z, rowid)  ·                            ·
            │                   strategy  opt upserter         ·                            ·
            └── render          ·         ·                    (a, b, c, column9, a, b, c)  +c
