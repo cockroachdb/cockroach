@@ -2638,6 +2638,161 @@ func TestGatewayNodeID(t *testing.T) {
 	}
 }
 
+// TestMultipleErrorsMerged tests that DistSender prioritizes errors that are
+// returned from concurrent partial batches and returns the "best" one after
+// merging the transaction metadata passed on the errors.
+func TestMultipleErrorsMerged(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
+		t.Fatal(err)
+	}
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fill MockRangeDescriptorDB with two descriptors.
+	var descriptor1 = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: testMetaEndKey,
+		EndKey:   roachpb.RKey("b"),
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor2 = roachpb.RangeDescriptor{
+		RangeID:  3,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor1,
+		descriptor2,
+	)
+
+	txn := roachpb.MakeTransaction(
+		"test", nil /* baseKey */, roachpb.NormalUserPriority,
+		clock.Now(), clock.MaxOffset().Nanoseconds(),
+	)
+	retryErr := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err")
+	abortErr := roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
+	conditionFailedErr := &roachpb.ConditionFailedError{}
+
+	testCases := []struct {
+		err1, err2 error
+		expErr     string
+	}{
+		{
+			err1:   retryErr,
+			err2:   nil,
+			expErr: "mixed success and failure: TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
+			err1:   abortErr,
+			err2:   nil,
+			expErr: "mixed success and failure: TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
+		},
+		{
+			err1:   conditionFailedErr,
+			err2:   nil,
+			expErr: "mixed success and failure: unexpected value",
+		},
+		{
+			err1:   retryErr,
+			err2:   retryErr,
+			expErr: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
+			err1:   retryErr,
+			err2:   abortErr,
+			expErr: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
+		},
+		{
+			err1:   abortErr,
+			err2:   abortErr,
+			expErr: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
+		},
+		{
+			err1:   retryErr,
+			err2:   conditionFailedErr,
+			expErr: "unexpected value",
+		},
+		{
+			err1:   abortErr,
+			err2:   conditionFailedErr,
+			expErr: "unexpected value",
+		},
+		{
+			err1:   conditionFailedErr,
+			err2:   conditionFailedErr,
+			expErr: "unexpected value",
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			var testFn simpleSendFn = func(
+				_ context.Context,
+				_ SendOptions,
+				_ ReplicaSlice,
+				ba roachpb.BatchRequest,
+			) (*roachpb.BatchResponse, error) {
+				reply := ba.CreateReply()
+				if delRng := ba.Requests[0].GetDeleteRange(); delRng == nil {
+					return nil, errors.Errorf("expected DeleteRange request, found %v", ba.Requests[0])
+				} else if delRng.Key.Equal(roachpb.Key("a")) {
+					reply.Error = roachpb.NewError(tc.err1)
+				} else if delRng.Key.Equal(roachpb.Key("b")) {
+					reply.Error = roachpb.NewError(tc.err2)
+				} else {
+					return nil, errors.Errorf("unexpected DeleteRange boundaries")
+				}
+				return reply, nil
+			}
+
+			cfg := DistSenderConfig{
+				AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+				Clock:      clock,
+				RPCContext: rpcContext,
+				TestingKnobs: ClientTestingKnobs{
+					TransportFactory: adaptSimpleTransport(testFn),
+				},
+				RangeDescriptorDB: descDB,
+			}
+			ds := NewDistSender(cfg, g)
+
+			var ba roachpb.BatchRequest
+			ba.Txn = txn.Clone()
+			ba.Add(roachpb.NewDeleteRange(roachpb.Key("a"), roachpb.Key("c"), false))
+
+			if _, pErr := ds.Send(context.Background(), ba); pErr == nil {
+				t.Fatalf("expected an error to be returned from distSender")
+			} else if !testutils.IsPError(pErr, regexp.QuoteMeta(tc.expErr)) {
+				t.Fatalf("expected error %q; found %v", tc.expErr, pErr)
+			}
+		})
+	}
+}
+
 // Regression test for #20067.
 // If a batch is partitioned into multiple partial batches, the
 // roachpb.Error.Index of each batch should correspond to its original index in
@@ -2660,7 +2815,6 @@ func TestErrorIndexAlignment(t *testing.T) {
 	}
 	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
 		t.Fatal(err)
-
 	}
 
 	// Fill MockRangeDescriptorDB with two descriptors.

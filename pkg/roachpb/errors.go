@@ -39,16 +39,56 @@ func (e *UnhandledRetryableError) Error() string {
 
 var _ error = &UnhandledRetryableError{}
 
+// transactionRestartError is an interface implemented by errors that cause
+// a transaction to be restarted.
+type transactionRestartError interface {
+	canRestartTransaction() TransactionRestart
+}
+
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
 // a roachpb.BatchResponse) unexpectedly has Error set in its response header.
 func ErrorUnexpectedlySet(culprit, response interface{}) string {
 	return fmt.Sprintf("error is unexpectedly set, culprit is %T:\n%+v", culprit, response)
 }
 
-// transactionRestartError is an interface implemented by errors that cause
-// a transaction to be restarted.
-type transactionRestartError interface {
-	canRestartTransaction() TransactionRestart
+// ErrorPriority is used to rank errors such that the "best" one is chosen to be
+// presented as the batch result when a batch is split up and observes multiple
+// errors.
+type ErrorPriority int
+
+const (
+	_ ErrorPriority = iota
+	// ErrorScoreTxnRestart indicates that the transaction should be restarted
+	// with an incremented epoch.
+	ErrorScoreTxnRestart
+	// ErrorScoreTxnAbort indicates that the transaction is aborted. The
+	// operation can only try again under the purview of a new transaction.
+	ErrorScoreTxnAbort
+	// ErrorScoreNonRetriable indicates that the transaction performed an
+	// operation that does not warrant a retry. Often this indicates that the
+	// operation ran into a logic error. The error should be propagated to the
+	// client and the transaction should terminate immediately.
+	ErrorScoreNonRetriable
+)
+
+// ErrPriority computes the priority of the given error.
+func ErrPriority(err error) ErrorPriority {
+	if err == nil {
+		return 0
+	}
+	switch v := err.(type) {
+	case *UnhandledRetryableError:
+		if _, ok := v.PErr.GetDetail().(*TransactionAbortedError); ok {
+			return ErrorScoreTxnAbort
+		}
+		return ErrorScoreTxnRestart
+	case *TransactionRetryWithProtoRefreshError:
+		if v.PrevTxnAborted() {
+			return ErrorScoreTxnAbort
+		}
+		return ErrorScoreTxnRestart
+	}
+	return ErrorScoreNonRetriable
 }
 
 // NewError creates an Error from the given error.
