@@ -308,8 +308,8 @@ EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
 ----
 render                    ·         ·              (a)                       +a
  │                        render 0  a              ·                         ·
- └── run                  ·         ·              (a, b, c, rowid[hidden])  ·
-      └── update          ·         ·              (a, b, c, rowid[hidden])  ·
+ └── run                  ·         ·              (a, rowid[hidden])        ·
+      └── update          ·         ·              (a, rowid[hidden])        ·
            │              table     abc            ·                         ·
            │              set       a              ·                         ·
            │              strategy  updater        ·                         ·

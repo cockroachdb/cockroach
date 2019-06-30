@@ -222,8 +222,8 @@ func (f *stubFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
 	insertCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	rowsNeeded bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
@@ -234,8 +234,8 @@ func (f *stubFactory) ConstructUpdate(
 	table cat.Table,
 	fetchCols exec.ColumnOrdinalSet,
 	updateCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	rowsNeeded bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -247,14 +247,17 @@ func (f *stubFactory) ConstructUpsert(
 	insertCols exec.ColumnOrdinalSet,
 	fetchCols exec.ColumnOrdinalSet,
 	updateCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	rowsNeeded bool,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
 
 func (f *stubFactory) ConstructDelete(
-	input exec.Node, table cat.Table, fetchCols exec.ColumnOrdinalSet, rowsNeeded bool,
+	input exec.Node,
+	table cat.Table,
+	fetchCols exec.ColumnOrdinalSet,
+	returnCols exec.ColumnOrdinalSet,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
