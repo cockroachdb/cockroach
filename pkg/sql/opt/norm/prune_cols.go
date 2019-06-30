@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -508,4 +509,57 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 	}
 
 	return relProps.Rule.PruneCols
+}
+
+// CanPruneMutationReturnCols checks whether the mutations return columns can
+// be pruned. This is the base case for the PruneMutationReturnCols rule.
+func (c *CustomFuncs) CanPruneMutationReturnCols(private *memo.MutationPrivate) bool {
+	if private.ReturnCols == nil || private.ReturnPruned {
+		return false
+	}
+
+	return true
+}
+
+// PruneMutationReturnCols rewrites the given mutation private to no longer
+// keep ReturnCols that are not referenced by the RETURNING clause or are not
+// part of the primary key. The caller must have already done the analysis to
+// prove that these columns are not needed, by calling CanPruneMutationReturnCols.
+func (c *CustomFuncs) PruneMutationReturnCols(
+	private *memo.MutationPrivate, projections memo.ProjectionsExpr, passthrough opt.ColSet,
+) *memo.MutationPrivate {
+	newPrivate := *private
+	newReturnCols := make(opt.ColList, len(private.ReturnCols))
+
+	// Find all the columns referenced by the projections.
+	returningOrdSet := exec.ColumnOrdinalSet{}
+	for _, projection := range projections {
+		outCols := projection.ScalarProps(c.mem).OuterCols
+		outCols.ForEach(func(i opt.ColumnID) {
+			returningOrdSet.Add(private.Table.ColumnOrdinal(i))
+		})
+	}
+	passthrough.ForEach(func(i opt.ColumnID) {
+		if i > 0 {
+			returningOrdSet.Add(private.Table.ColumnOrdinal(i))
+		}
+	})
+
+	// The columns of the primary index are always returned regardless of
+	// whether they are referenced.
+	tab := c.mem.Metadata().Table(private.Table)
+	primaryIndex := tab.Index(0)
+	for i, n := 0, primaryIndex.KeyColumnCount(); i < n; i++ {
+		returningOrdSet.Add(primaryIndex.Column(i).Ordinal)
+	}
+
+	for i := 0; i < len(private.ReturnCols); i++ {
+		if returningOrdSet.Contains(i) {
+			newReturnCols[i] = private.ReturnCols[i]
+		}
+	}
+
+	newPrivate.ReturnCols = newReturnCols
+	newPrivate.ReturnPruned = true
+	return &newPrivate
 }
