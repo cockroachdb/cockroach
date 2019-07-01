@@ -969,8 +969,8 @@ create_table_stmt ::=
 	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
 
 create_table_as_stmt ::=
-	'CREATE' 'TABLE' table_name opt_column_list 'AS' select_stmt
-	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name opt_column_list 'AS' select_stmt
+	'CREATE' 'TABLE' table_name ctas_opt_col_list 'AS' select_stmt
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name ctas_opt_col_list 'AS' select_stmt
 
 create_view_stmt ::=
 	'CREATE' 'VIEW' view_name opt_column_list 'AS' select_stmt
@@ -1352,6 +1352,10 @@ opt_table_elem_list ::=
 	table_elem_list
 	| 
 
+ctas_opt_col_list ::=
+	'(' ctas_table_elem_list ')'
+	| 
+
 view_name ::=
 	table_name
 
@@ -1689,6 +1693,9 @@ partition_by ::=
 	| 'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')'
 	| 'PARTITION' 'BY' 'NOTHING'
 
+ctas_table_elem_list ::=
+	( ctas_table_elem ) ( ( ',' ctas_table_elem ) )*
+
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
 
@@ -1911,6 +1918,9 @@ list_partitions ::=
 range_partitions ::=
 	( range_partition ) ( ( ',' range_partition ) )*
 
+ctas_table_elem ::=
+	ctas_column_def
+
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
@@ -2121,6 +2131,9 @@ list_partition ::=
 range_partition ::=
 	partition 'VALUES' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')' opt_partition_by
 
+ctas_column_def ::=
+	column_name ctas_col_qual_list
+
 col_qualification_elem ::=
 	'NOT' 'NULL'
 	| 'NULL'
@@ -2230,6 +2243,9 @@ func_expr_windowless ::=
 rowsfrom_list ::=
 	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
 
+ctas_col_qual_list ::=
+	(  ) ( ( ctas_col_qualification ) )*
+
 opt_name_parens ::=
 	'(' name ')'
 	| 
@@ -2295,6 +2311,9 @@ join_outer ::=
 rowsfrom_item ::=
 	func_expr_windowless
 
+ctas_col_qualification ::=
+	ctas_col_qualification_elem
+
 frame_extent ::=
 	frame_bound
 	| 'BETWEEN' frame_bound 'AND' frame_bound
@@ -2316,6 +2335,9 @@ substr_from ::=
 
 substr_for ::=
 	'FOR' a_expr
+
+ctas_col_qualification_elem ::=
+	'PRIMARY' 'KEY'
 
 frame_bound ::=
 	'UNBOUNDED' 'PRECEDING'

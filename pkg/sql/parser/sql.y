@@ -802,7 +802,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.IsolationLevel> iso_level
 %type <tree.UserPriority> user_priority
 
-%type <tree.TableDefs> opt_table_elem_list table_elem_list
+%type <tree.TableDefs> opt_table_elem_list table_elem_list ctas_opt_col_list ctas_table_elem_list
 %type <*tree.InterleaveDef> opt_interleave
 %type <*tree.PartitionBy> opt_partition_by partition_by
 %type <str> partition opt_partition
@@ -871,8 +871,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.TransactionModes> transaction_mode_list transaction_mode
 
 %type <tree.NameList> opt_storing
-%type <*tree.ColumnTableDef> column_def
-%type <tree.TableDef> table_elem
+%type <*tree.ColumnTableDef> column_def ctas_column_def
+%type <tree.TableDef> table_elem ctas_table_elem
 %type <tree.Expr> where_clause opt_where_clause
 %type <*tree.ArraySubscript> array_subscript
 %type <tree.Expr> opt_slice_bound
@@ -944,9 +944,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ConstraintTableDef> table_constraint constraint_elem
 %type <tree.TableDef> index_def
 %type <tree.TableDef> family_def
-%type <[]tree.NamedColumnQualification> col_qual_list
-%type <tree.NamedColumnQualification> col_qualification
-%type <tree.ColumnQualification> col_qualification_elem
+%type <[]tree.NamedColumnQualification> col_qual_list ctas_col_qual_list
+%type <tree.NamedColumnQualification> col_qualification ctas_col_qualification
+%type <tree.ColumnQualification> col_qualification_elem ctas_col_qualification_elem
 %type <tree.CompositeKeyMatchMethod> key_match
 %type <tree.ReferenceActions> reference_actions
 %type <tree.ReferenceAction> reference_action reference_on_delete reference_on_update
@@ -3997,7 +3997,6 @@ create_table_stmt:
       Interleave: $8.interleave(),
       Defs: $6.tblDefs(),
       AsSource: nil,
-      AsColumnNames: nil,
       PartitionBy: $9.partitionBy(),
     }
   }
@@ -4010,7 +4009,6 @@ create_table_stmt:
       Interleave: $11.interleave(),
       Defs: $9.tblDefs(),
       AsSource: nil,
-      AsColumnNames: nil,
       PartitionBy: $12.partitionBy(),
     }
   }
@@ -4021,28 +4019,26 @@ opt_table_with:
 | WITH name error { return unimplemented(sqllex, "create table with " + $2) }
 
 create_table_as_stmt:
-  CREATE opt_temp TABLE table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
+  CREATE opt_temp TABLE table_name ctas_opt_col_list opt_table_with AS select_stmt opt_create_as_data
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: false,
       Interleave: nil,
-      Defs: nil,
+      Defs: $5.tblDefs(),
       AsSource: $8.slct(),
-      AsColumnNames: $5.nameList(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
+| CREATE opt_temp TABLE IF NOT EXISTS table_name ctas_opt_col_list opt_table_with AS select_stmt opt_create_as_data
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: true,
       Interleave: nil,
-      Defs: nil,
+      Defs: $8.tblDefs(),
       AsSource: $11.slct(),
-      AsColumnNames: $8.nameList(),
     }
   }
 
@@ -4423,6 +4419,65 @@ constraint_elem:
       Match: $9.compositeKeyMatchMethod(),
       Actions: $10.referenceActions(),
     }
+  }
+
+
+ctas_opt_col_list:
+  '(' ctas_table_elem_list ')'
+  {
+    $$.val = $2.val
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.TableDefs(nil)
+  }
+
+ctas_table_elem_list:
+  ctas_table_elem
+  {
+    $$.val = tree.TableDefs{$1.tblDef()}
+  }
+| ctas_table_elem_list ',' ctas_table_elem
+  {
+    $$.val = append($1.tblDefs(), $3.tblDef())
+  }
+
+ctas_table_elem:
+  ctas_column_def
+  {
+    $$.val = $1.colDef()
+  }
+
+ctas_column_def:
+  column_name ctas_col_qual_list
+  {
+    tableDef, err := tree.NewColumnTableDef(tree.Name($1), nil, false, $2.colQuals())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = tableDef
+  }
+
+ctas_col_qual_list:
+  ctas_col_qual_list ctas_col_qualification
+  {
+    $$.val = append($1.colQuals(), $2.colQual())
+  }
+| /* EMPTY */
+  {
+    $$.val = []tree.NamedColumnQualification(nil)
+  }
+
+ctas_col_qualification:
+  ctas_col_qualification_elem
+  {
+    $$.val = tree.NamedColumnQualification{Qualification: $1.colQualElem()}
+  }
+
+ctas_col_qualification_elem:
+  PRIMARY KEY
+  {
+    $$.val = tree.PrimaryKeyConstraint{}
   }
 
 opt_deferrable:
