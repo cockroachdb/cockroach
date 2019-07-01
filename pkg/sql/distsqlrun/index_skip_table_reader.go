@@ -27,8 +27,6 @@ import (
 // the indexSkipTableReader returns all distinct rows where that prefix
 // of the index is distinct. It uses the index to seek to distinct values
 // of the prefix instead of doing a full table scan.
-// As of now, the indexSkipTableReader does not support use with
-// interleaved tables.
 type indexSkipTableReader struct {
 	ProcessorBase
 
@@ -43,6 +41,8 @@ type indexSkipTableReader struct {
 	// indexLen holds the number of columns in the index that
 	// is being considered.
 	indexLen int
+
+	reverse bool
 
 	ignoreMisplannedRanges bool
 	misplannedRanges       []roachpb.RangeInfo
@@ -79,6 +79,7 @@ func newIndexSkipTableReader(
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
 	t.ignoreMisplannedRanges = flowCtx.local
+	t.reverse = spec.Reverse
 
 	if err := t.Init(
 		t,
@@ -122,21 +123,28 @@ func newIndexSkipTableReader(
 		ValNeededForCol:  neededColumns,
 	}
 
-	// TODO: support reverse scans
-	if err := t.fetcher.Init(false /* reverseScan */, true, /* returnRangeInfo */
+	if err := t.fetcher.Init(t.reverse, true, /* returnRangeInfo */
 		false /* isCheck */, &t.alloc, tableArgs); err != nil {
 		return nil, err
 	}
 
-	// Make a copy of the spans for this reader, as we will modify them
+	// Make a copy of the spans for this reader, as we will modify them.
 	nSpans := len(spec.Spans)
 	if cap(t.spans) >= nSpans {
 		t.spans = t.spans[:nSpans]
 	} else {
 		t.spans = make(roachpb.Spans, nSpans)
 	}
-	for i, s := range spec.Spans {
-		t.spans[i] = s.Span
+
+	// If we are scanning in reverse, then copy the spans in backwards.
+	if t.reverse {
+		for i, s := range spec.Spans {
+			t.spans[len(spec.Spans)-i-1] = s.Span
+		}
+	} else {
+		for i, s := range spec.Spans {
+			t.spans[i] = s.Span
+		}
 	}
 
 	return t, nil
@@ -154,7 +162,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			return nil, t.DrainHelper()
 		}
 
-		// Start a scan to get the smallest value within this span
+		// Start a scan to get the smallest value within this span.
 		err := t.fetcher.StartScan(
 			t.Ctx, t.flowCtx.txn, t.spans[t.currentSpan:t.currentSpan+1],
 			true, 1 /* batch size limit */, t.flowCtx.traceKV,
@@ -164,8 +172,8 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 
-		// range info resets once a scan begins, so we need to maintain
-		// the range info we get after each scan
+		// Range info resets once a scan begins, so we need to maintain
+		// the range info we get after each scan.
 		if !t.ignoreMisplannedRanges {
 			ranges := misplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.flowCtx.nodeID)
 			for _, r := range ranges {
@@ -185,23 +193,32 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 			return nil, &distsqlpb.ProducerMetadata{Err: err}
 		}
 		if row == nil {
-			// no more rows in this span, so move to the next one!
+			// No more rows in this span, so move to the next one.
 			t.currentSpan++
 			continue
 		}
 
-		// 0xff is the largest prefix marker for any encoded key. To ensure that
-		// our new key is larger than any value with the same prefix, we place
-		// 0xff at all other index column values, and one more to guard against
-		// 0xff present as a value in the table (0xff encodes a type of null)
-		for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
-			key = append(key, 0xff)
+		if !t.reverse {
+			// 0xff is the largest prefix marker for any encoded key. To ensure that
+			// our new key is larger than any value with the same prefix, we place
+			// 0xff at all other index column values, and one more to guard against
+			// 0xff present as a value in the table (0xff encodes a type of null).
+			for i := 0; i < (t.indexLen - t.keyPrefixLen + 1); i++ {
+				key = append(key, 0xff)
+			}
+			t.spans[t.currentSpan].Key = key
+		} else {
+			// In the case of reverse, this is much easier. The reverse fetcher
+			// returns the key retrieved, in this case the first key smaller
+			// than EndKey in the current span. Since EndKey is exclusive, we
+			// just set the retrieved key as EndKey for the next scan.
+			t.spans[t.currentSpan].EndKey = key
 		}
 
-		t.spans[t.currentSpan].Key = key
+		// If the changes we made turned our current span invalid, mark that
+		// we should move on to the next span before returning the row.
 		if !t.spans[t.currentSpan].Valid() {
 			t.currentSpan++
-			continue
 		}
 
 		if outRow := t.ProcessRowHelper(row); outRow != nil {
