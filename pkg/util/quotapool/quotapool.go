@@ -196,12 +196,20 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 	if closeErr != nil {
 		return closeErr
 	}
+	start := timeutil.Now()
+	// Set up onAcquisition if we have one.
+	if qp.config.onAcquisition != nil {
+		defer func() {
+			if err == nil {
+				qp.config.onAcquisition(ctx, qp.name, r, start)
+			}
+		}()
+	}
+
 	// Set up the infrastructure to report slow requests.
 	var slowTimer *timeutil.Timer
 	var slowTimerC <-chan time.Time
-	var start time.Time
 	if qp.onSlowAcquisition != nil {
-		start = timeutil.Now()
 		slowTimer = timeutil.NewTimer()
 		defer slowTimer.Stop()
 		// Intentionally reset only once, for we care more about the select duration in
