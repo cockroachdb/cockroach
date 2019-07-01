@@ -86,6 +86,10 @@ func (ec *ErrClosed) Error() string {
 type QuotaPool struct {
 	config
 
+	// name is used for logging purposes and is passed to functions used to report
+	// acquistions or slow acqusitions.
+	name string
+
 	// chanSyncPool is used to pool allocations of the channels used to notify
 	// goroutines waiting in Acquire.
 	chanSyncPool sync.Pool
@@ -134,6 +138,7 @@ type QuotaPool struct {
 // acquired without ever making more than the quota capacity available.
 func New(name string, initialResource Resource, options ...Option) *QuotaPool {
 	qp := &QuotaPool{
+		name:  name,
 		quota: make(chan Resource, 1),
 		done:  make(chan struct{}),
 		chanSyncPool: sync.Pool{

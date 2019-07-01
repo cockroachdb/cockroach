@@ -313,7 +313,9 @@ func TestSlowAcquisition(t *testing.T) {
 	firstKey := ctxKey(1)
 	firstCtx := context.WithValue(ctx, firstKey, "foo")
 	slowCalled, acquiredCalled := make(chan struct{}), make(chan struct{})
-	f := func(ctx context.Context, _ string, _ quotapool.Request, _ time.Time) func() {
+	const poolName = "test"
+	f := func(ctx context.Context, name string, _ quotapool.Request, _ time.Time) func() {
+		assert.Equal(t, poolName, name)
 		if ctx.Value(firstKey) != nil {
 			return func() {}
 		}
@@ -322,7 +324,7 @@ func TestSlowAcquisition(t *testing.T) {
 			close(acquiredCalled)
 		}
 	}
-	qp := quotapool.NewIntPool("test", 1, quotapool.OnSlowAcquisition(time.Microsecond, f))
+	qp := quotapool.NewIntPool(poolName, 1, quotapool.OnSlowAcquisition(time.Microsecond, f))
 	alloc, err := qp.Acquire(firstCtx, 1)
 	if err != nil {
 		t.Fatal(err)

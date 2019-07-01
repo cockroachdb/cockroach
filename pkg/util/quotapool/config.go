@@ -58,7 +58,6 @@ type optionFunc func(cfg *config)
 func (f optionFunc) apply(cfg *config) { f(cfg) }
 
 type config struct {
-	name                     string
 	onSlowAcquisition        SlowAcquisitionFunc
 	slowAcquisitionThreshold time.Duration
 }
