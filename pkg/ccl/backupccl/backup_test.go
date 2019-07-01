@@ -1207,6 +1207,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 			ORDER BY c.id, c.email
 		`)
 		origDB.Exec(t, `CREATE VIEW store.unused_view AS SELECT id from store.customers WHERE FALSE`)
+		origDB.Exec(t, `CREATE VIEW store.referencing_early_customers AS SELECT id, email FROM store.early_customers`)
 
 		for i := 0; i < numAccounts; i++ {
 			origDB.Exec(t, `INSERT INTO store.customers VALUES ($1, $1::string)`, i)
@@ -1363,7 +1364,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(tc.Conns[0])
 		db.Exec(t, createStore)
 		db.ExpectErr(
-			t, `cannot restore "early_customers" without restoring referenced table`,
+			t, `cannot restore view "early_customers" without restoring referenced table`,
 			`RESTORE store.early_customers FROM $1`, localFoo,
 		)
 		db.Exec(t, `RESTORE store.early_customers, store.customers, store.orders FROM $1`, localFoo)
@@ -1394,7 +1395,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(tc.Conns[0])
 
 		db.ExpectErr(
-			t, `cannot restore "ordercounts" without restoring referenced table`,
+			t, `cannot restore view "ordercounts" without restoring referenced table`,
 			`RESTORE DATABASE storestats FROM $1`, localFoo,
 		)
 
@@ -1402,7 +1403,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, createStoreStats)
 
 		db.ExpectErr(
-			t, `cannot restore "ordercounts" without restoring referenced table`,
+			t, `cannot restore view "ordercounts" without restoring referenced table`,
 			`RESTORE storestats.ordercounts, store.customers FROM $1`, localFoo,
 		)
 
@@ -1446,6 +1447,39 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `DROP DATABASE store CASCADE`)
 		db.CheckQueryResults(t, `SELECT * FROM otherstore.early_customers ORDER BY id`, origEarlyCustomers)
 
+	})
+
+	t.Run("restore and skip missing views", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
+		defer tc.Stopper().Stop(context.TODO())
+		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+		// Test cases where, after filtering out views that can't be restored, there are no other tables to restore
+
+		db.ExpectErr(t, `no tables to restore: DATABASE storestats`,
+			`RESTORE DATABASE storestats from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+
+		db.ExpectErr(t, `no tables to restore: TABLE storestats.ordercounts`,
+			`RESTORE storestats.ordercounts from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+
+		// referencing_early_customers depends only on early_customers, which can't be restored
+		db.ExpectErr(t, `no tables to restore: TABLE store.early_customers, store.referencing_early_customers`,
+			`RESTORE store.early_customers, store.referencing_early_customers from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+
+		// Test that views with valid dependencies are restored
+
+		db.Exec(t, `RESTORE DATABASE store from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+		db.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
+		db.CheckQueryResults(t, `SELECT * FROM store.referencing_early_customers`, origEarlyCustomers)
+		db.Exec(t, `DROP DATABASE store CASCADE`)
+
+		// Test when some tables (views) are skipped and others are restored
+
+		db.Exec(t, createStore)
+		// storestats.ordercounts depends also on store.orders, so it can't be restored
+		db.Exec(t, `RESTORE storestats.ordercounts, store.customers from $1 WITH OPTIONS ('skip_missing_views')`, localFoo)
+		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store.customers`, origCustomers)
+		db.ExpectErr(t, `relation "storestats.ordercounts" does not exist`, `SELECT * FROM storestats.ordercounts`)
 	})
 }
 
