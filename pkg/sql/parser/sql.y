@@ -802,7 +802,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.IsolationLevel> iso_level
 %type <tree.UserPriority> user_priority
 
-%type <tree.TableDefs> opt_table_elem_list table_elem_list
+%type <tree.TableDefs> opt_table_elem_list table_elem_list create_as_opt_col_list create_as_table_defs
 %type <*tree.InterleaveDef> opt_interleave
 %type <*tree.PartitionBy> opt_partition_by partition_by
 %type <str> partition opt_partition
@@ -816,7 +816,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.NameList> opt_column_list insert_column_list opt_stats_columns
 %type <tree.OrderBy> sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
-%type <tree.IndexElemList> index_params
+%type <tree.IndexElemList> index_params create_as_params
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
 %type <*tree.From> from_clause update_from_clause
@@ -896,7 +896,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.AliasClause> alias_clause opt_alias_clause
 %type <bool> opt_ordinality opt_compact opt_automatic
 %type <*tree.Order> sortby
-%type <tree.IndexElem> index_elem
+%type <tree.IndexElem> index_elem create_as_param
 %type <tree.TableExpr> table_ref func_table
 %type <tree.Exprs> rowsfrom_list
 %type <tree.Expr> rowsfrom_item
@@ -941,12 +941,12 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> unreserved_keyword type_func_name_keyword cockroachdb_extra_type_func_name_keyword
 %type <str> col_name_keyword reserved_keyword cockroachdb_extra_reserved_keyword extra_var_value
 
-%type <tree.ConstraintTableDef> table_constraint constraint_elem
+%type <tree.ConstraintTableDef> table_constraint constraint_elem create_as_constraint_def create_as_constraint_elem
 %type <tree.TableDef> index_def
 %type <tree.TableDef> family_def
-%type <[]tree.NamedColumnQualification> col_qual_list
-%type <tree.NamedColumnQualification> col_qualification
-%type <tree.ColumnQualification> col_qualification_elem
+%type <[]tree.NamedColumnQualification> col_qual_list create_as_col_qual_list
+%type <tree.NamedColumnQualification> col_qualification create_as_col_qualification
+%type <tree.ColumnQualification> col_qualification_elem create_as_col_qualification_elem
 %type <tree.CompositeKeyMatchMethod> key_match
 %type <tree.ReferenceActions> reference_actions
 %type <tree.ReferenceAction> reference_action reference_on_delete reference_on_update
@@ -3997,7 +3997,6 @@ create_table_stmt:
       Interleave: $8.interleave(),
       Defs: $6.tblDefs(),
       AsSource: nil,
-      AsColumnNames: nil,
       PartitionBy: $9.partitionBy(),
     }
   }
@@ -4010,7 +4009,6 @@ create_table_stmt:
       Interleave: $11.interleave(),
       Defs: $9.tblDefs(),
       AsSource: nil,
-      AsColumnNames: nil,
       PartitionBy: $12.partitionBy(),
     }
   }
@@ -4021,28 +4019,26 @@ opt_table_with:
 | WITH name error { return unimplemented(sqllex, "create table with " + $2) }
 
 create_table_as_stmt:
-  CREATE opt_temp TABLE table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
+  CREATE opt_temp TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: false,
       Interleave: nil,
-      Defs: nil,
+      Defs: $5.tblDefs(),
       AsSource: $8.slct(),
-      AsColumnNames: $5.nameList(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
+| CREATE opt_temp TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
       Table: name,
       IfNotExists: true,
       Interleave: nil,
-      Defs: nil,
+      Defs: $8.tblDefs(),
       AsSource: $11.slct(),
-      AsColumnNames: $8.nameList(),
     }
   }
 
@@ -4423,6 +4419,100 @@ constraint_elem:
       Match: $9.compositeKeyMatchMethod(),
       Actions: $10.referenceActions(),
     }
+  }
+
+
+create_as_opt_col_list:
+  '(' create_as_table_defs ')'
+  {
+    $$.val = $2.val
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.TableDefs(nil)
+  }
+
+create_as_table_defs:
+  column_name create_as_col_qual_list
+  {
+    tableDef, err := tree.NewColumnTableDef(tree.Name($1), nil, false, $2.colQuals())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+
+    var colToTableDef tree.TableDef = tableDef
+    $$.val = tree.TableDefs{colToTableDef}
+  }
+| create_as_table_defs ',' create_as_constraint_def
+  {
+    var constraintToTableDef tree.TableDef = $3.constraintDef()
+    $$.val = append($1.tblDefs(), constraintToTableDef)
+  }
+| create_as_table_defs ',' column_name create_as_col_qual_list
+  {
+    tableDef, err := tree.NewColumnTableDef(tree.Name($3), nil, false, $4.colQuals())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+
+    var colToTableDef tree.TableDef = tableDef
+
+    $$.val = append($1.tblDefs(), colToTableDef)
+  }
+
+create_as_constraint_def:
+  create_as_constraint_elem
+  {
+    $$.val = $1.constraintDef()
+  }
+
+create_as_constraint_elem:
+  PRIMARY KEY '(' create_as_params ')'
+  {
+    $$.val = &tree.UniqueConstraintTableDef{
+      IndexTableDef: tree.IndexTableDef{
+        Columns: $4.idxElems(),
+      },
+      PrimaryKey:    true,
+    }
+  }
+
+create_as_params:
+  create_as_param
+  {
+    $$.val = tree.IndexElemList{$1.idxElem()}
+  }
+| create_as_params ',' create_as_param
+  {
+    $$.val = append($1.idxElems(), $3.idxElem())
+  }
+
+create_as_param:
+  column_name
+  {
+    $$.val = tree.IndexElem{Column: tree.Name($1)}
+  }
+
+create_as_col_qual_list:
+  create_as_col_qual_list create_as_col_qualification
+  {
+    $$.val = append($1.colQuals(), $2.colQual())
+  }
+| /* EMPTY */
+  {
+    $$.val = []tree.NamedColumnQualification(nil)
+  }
+
+create_as_col_qualification:
+  create_as_col_qualification_elem
+  {
+    $$.val = tree.NamedColumnQualification{Qualification: $1.colQualElem()}
+  }
+
+create_as_col_qualification_elem:
+  PRIMARY KEY
+  {
+    $$.val = tree.PrimaryKeyConstraint{}
   }
 
 opt_deferrable:
