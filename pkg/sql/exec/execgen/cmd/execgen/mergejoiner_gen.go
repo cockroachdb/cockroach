@@ -40,6 +40,12 @@ type selPermutation struct {
 	RSelString string
 }
 
+type joinTypeInfo struct {
+	IsInner     bool
+	IsLeftOuter bool
+	String      string
+}
+
 func genMergeJoinOps(wr io.Writer) error {
 	d, err := ioutil.ReadFile("pkg/sql/exec/mergejoiner_tmpl.go")
 	if err != nil {
@@ -57,15 +63,36 @@ func genMergeJoinOps(wr io.Writer) error {
 	s = strings.Replace(s, "_IS_L_SEL", "{{$sel.IsLSel}}", -1)
 	s = strings.Replace(s, "_IS_R_SEL", "{{$sel.IsRSel}}", -1)
 	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
+	s = strings.Replace(s, "_JOIN_TYPE_STRING", "{{$joinType.String}}", -1)
+	s = strings.Replace(s, "_JOIN_TYPE", "$joinType", -1)
+	s = strings.Replace(s, "_MJ_OVERLOAD", "$mjOverload", -1)
 
-	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 4)
-	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "Sel" $1 "LNull" $2 "RNull" $3 "Asc" $4}}`)
+	leftUnmatchedGroupSwitch := makeFunctionRegex("_LEFT_UNMATCHED_GROUP_SWITCH", 1)
+	s = leftUnmatchedGroupSwitch.ReplaceAllString(s, `{{template "leftUnmatchedGroupSwitch" buildDict "Global" $ "JoinType" $1}}`)
+
+	nullFromLeftSwitch := makeFunctionRegex("_NULL_FROM_LEFT_SWITCH", 1)
+	s = nullFromLeftSwitch.ReplaceAllString(s, `{{template "nullFromLeftSwitch" buildDict "Global" $ "JoinType" $1}}`)
+
+	incrementLeftSwitch := makeFunctionRegex("_INCREMENT_LEFT_SWITCH", 4)
+	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "MJOverload" $3 "LNull" $4}}`)
+
+	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
+	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
+
+	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 5)
+	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "LNull" $3 "RNull" $4 "Asc" $5}}`)
+
+	sourceFinishedSwitch := makeFunctionRegex("_SOURCE_FINISHED_SWITCH", 1)
+	s = sourceFinishedSwitch.ReplaceAllString(s, `{{template "sourceFinishedSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
 	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 2)
 	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "IsSel" $1 "HasNulls" $2 }}`)
 
 	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 2)
 	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "IsSel" $1  "HasNulls" $2 }}`)
+
+	nullInBufferedGroupSwitch := makeFunctionRegex("_NULL_IN_BUFFERED_GROUP_SWITCH", 1)
+	s = nullInBufferedGroupSwitch.ReplaceAllString(s, `{{template "nullInBufferedGroupSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
 	s = assignEqRe.ReplaceAllString(s, `{{.Eq.Assign $1 $2 $3}}`)
@@ -124,12 +151,25 @@ func genMergeJoinOps(wr io.Writer) error {
 		},
 	}
 
+	joinTypeInfos := []joinTypeInfo{
+		{
+			IsInner: true,
+			String:  "Inner",
+		},
+		{
+			IsLeftOuter: true,
+			String:      "LeftOuter",
+		},
+	}
+
 	return tmpl.Execute(wr, struct {
 		MJOverloads     interface{}
 		SelPermutations interface{}
+		JoinTypes       interface{}
 	}{
 		MJOverloads:     mjOverloads,
 		SelPermutations: selPermutations,
+		JoinTypes:       joinTypeInfos,
 	})
 }
 
