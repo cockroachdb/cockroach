@@ -1255,6 +1255,17 @@ func conditionalGetDescValueFromDB(
 			return nil, errors.Wrap(err, "decoding current range descriptor value")
 		}
 	}
+	// TODO(jeffreyxiao): This is hacky fix to ensure that we don't fail the
+	// conditional get because of the ordering of InternalReplicas. Calling
+	// Replicas() will sort the list of InternalReplicas as a side-effect. The
+	// invariant of having InternalReplicas sorted is not maintained in 19.1.
+	// Additionally, in 19.2, it's possible for the in-memory copy of
+	// RangeDescriptor to become sorted by a call to Replicas() without updating
+	// the copy in kv. These two factors makes it possible for the in-memory copy
+	// to be out of sync from the copy in kv in a mixed-version cluster which
+	// causes this conditional get to fail.
+	existingDesc.Replicas()
+	expectation.Replicas()
 	if !existingDesc.Equal(expectation) {
 		return nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
 	}
