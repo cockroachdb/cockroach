@@ -188,6 +188,11 @@ func (p *IntPool) AcquireFunc(ctx context.Context, f IntRequestFunc) (*IntAlloc,
 	return p.newIntAlloc(r.took), nil
 }
 
+// Len returns the current length of the queue for this IntPool.
+func (p *IntPool) Len() int {
+	return p.qp.Len()
+}
+
 // ApproximateQuota will report approximately the amount of quota available in
 // the pool. It is precise if there are no ongoing acquisitions. If there are,
 // the return value can be up to 'v' less than actual available quota where 'v'

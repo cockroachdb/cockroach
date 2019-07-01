@@ -118,6 +118,11 @@ type QuotaPool struct {
 		// channel buffer.
 		q notifyQueue
 
+		// numCanceled is the number of members of q which have been canceled.
+		// It is used to determine the current number of active waiters in the queue
+		// which is q.len() less this value.
+		numCanceled int
+
 		// closed is set to true when the quota pool is closed (see
 		// QuotaPool.Close).
 		closed bool
@@ -230,8 +235,8 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 				// Goroutines are not a risk of getting notified and finding
 				// out they're not first in line.
 				notifyCh <- struct{}{}
+				qp.mu.numCanceled++
 			}
-
 			qp.mu.Unlock()
 			return ctx.Err()
 		case <-qp.done:
@@ -312,6 +317,7 @@ func (qp *QuotaPool) notifyNextLocked() {
 			// shifting the queue.
 			<-ch
 			qp.chanSyncPool.Put(qp.mu.q.dequeue())
+			qp.mu.numCanceled--
 			continue
 		}
 		break
@@ -334,6 +340,13 @@ func (qp *QuotaPool) ApproximateQuota(f func(Resource)) {
 	default:
 		f(nil)
 	}
+}
+
+// Len returns the current length of the queue for this QuotaPool.
+func (qp *QuotaPool) Len() int {
+	qp.mu.Lock()
+	defer qp.mu.Unlock()
+	return int(qp.mu.q.len) - qp.mu.numCanceled
 }
 
 // Close signals to all ongoing and subsequent acquisitions that they are
