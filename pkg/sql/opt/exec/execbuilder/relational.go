@@ -241,6 +241,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ShowTraceForSessionExpr:
 		ep, err = b.buildShowTrace(t)
 
+	case *memo.OpaqueRelExpr:
+		ep, err = b.buildOpaque(t)
+
 	default:
 		if opt.IsSetOp(e) {
 			ep, err = b.buildSetOp(e)
@@ -254,6 +257,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 			ep, err = b.buildApplyJoin(e)
 			break
 		}
+		return execPlan{}, errors.AssertionFailedf("no execbuild for %T", t)
 	}
 	if err != nil {
 		return execPlan{}, err
@@ -1622,6 +1626,20 @@ func (b *Builder) applySaveTable(
 		return execPlan{}, err
 	}
 	return input, err
+}
+
+func (b *Builder) buildOpaque(opaque *memo.OpaqueRelExpr) (execPlan, error) {
+	node, err := b.factory.ConstructOpaque(opaque.Metadata)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	ep := execPlan{root: node}
+	for i, c := range opaque.Columns {
+		ep.outputCols.Set(int(c), i)
+	}
+
+	return ep, nil
 }
 
 // needProjection figures out what projection is needed on top of the input plan

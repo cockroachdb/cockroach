@@ -10,23 +10,13 @@ define True {}
 test.opt:3:1: Name rule is missing "Normalize" or "Explore" tag
 
 #
-# Ensure that types are defined.
-#
-optgen compile test.opt
-define Not {
-    Input Node
-}
-----
-test.opt:2:5: Node is not registered as a valid type in metadata.go
-
-#
 # Ensure that there is only one private field in define, and that it is the
 # last field.
 #
 optgen compile test.opt
 define Op {
     Private Type
-    Other   Node
+    Other   RelExpr
 }
 
 define Op2 {
