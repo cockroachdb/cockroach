@@ -391,6 +391,7 @@ func doExpandPlan(
 	case *showFingerprintsNode:
 	case *showTraceNode:
 	case *scatterNode:
+	case *unsplitAllNode:
 	case nil:
 
 	default:
@@ -908,6 +909,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *showTraceNode:
 	case *scanBufferNode:
 	case *scatterNode:
+	case *unsplitAllNode:
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
