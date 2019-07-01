@@ -661,6 +661,7 @@ func (o *mergeJoinOp) Next(ctx context.Context) coldata.Batch {
 			}
 
 			if o.proberState.inputDone || o.builderState.outCount == o.outputCeil {
+				o.output.SetSelection(false)
 				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
 				o.builderState.outCount = uint16(0)

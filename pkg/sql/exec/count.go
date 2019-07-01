@@ -49,6 +49,7 @@ func (c *countOp) Init() {
 }
 
 func (c *countOp) Next(ctx context.Context) coldata.Batch {
+	c.internalBatch.SetSelection(false)
 	if c.done {
 		c.internalBatch.SetLength(0)
 		return c.internalBatch
