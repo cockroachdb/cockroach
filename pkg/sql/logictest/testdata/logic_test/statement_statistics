@@ -127,7 +127,7 @@ SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  -
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        -
 SET application_name = _                                          -
 SET distsql = "on"                                                -
-SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           -
+SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           ·
 SHOW application_name                                             ·
 
 # Check that names are anonymized properly:

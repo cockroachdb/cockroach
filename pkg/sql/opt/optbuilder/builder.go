@@ -235,6 +235,8 @@ func (b *Builder) buildStmt(
 		return b.buildUpdate(stmt, inScope)
 
 	default:
+		// See if this statement can be rewritten to another statement using the
+		// delegate functionality.
 		newStmt, err := delegate.TryDelegate(b.ctx, b.catalog, b.evalCtx, stmt)
 		if err != nil {
 			panic(builderError{err})
@@ -245,6 +247,14 @@ func (b *Builder) buildStmt(
 			// invalidation). We don't care about caching plans for these statements.
 			b.DisableMemoReuse = true
 			return b.buildStmt(newStmt, desiredTypes, inScope)
+		}
+
+		// See if we have an opaque handler registered for this statement type.
+		if outScope := b.tryBuildOpaque(stmt, inScope); outScope != nil {
+			// The opaque handler may resolve objects; we don't care about caching
+			// plans for these statements.
+			b.DisableMemoReuse = true
+			return outScope
 		}
 		panic(unimplementedWithIssueDetailf(34848, stmt.StatementTag(), "unsupported statement: %T", stmt))
 	}

@@ -401,6 +401,9 @@ type Factory interface {
 	// results, but errors out if the input returns any rows. The mkErr function
 	// is used to create the error.
 	ConstructErrorIfRows(input Node, mkErr func(tree.Datums) error) (Node, error)
+
+	// ConstructOpaque creates a node for an opaque operator.
+	ConstructOpaque(metadata opt.OpaqueMetadata) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being
