@@ -65,7 +65,6 @@ func TestSelectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
-<<<<<<< HEAD
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{0},
 				func(input []Operator) (Operator, error) {
 					op := selectInOpInt64{
@@ -77,22 +76,6 @@ func TestSelectInInt64(t *testing.T) {
 					}
 					return &op, nil
 				})
-=======
-			runTests(t, []tuples{c.inputTuples}, func(t *testing.T, input []Operator) {
-				op := selectInOpInt64{
-					input:     input[0],
-					colIdx:    0,
-					filterRow: c.filterRow,
-					negate:    c.negate,
-					hasNulls:  c.hasNulls,
-				}
-				op.Init()
-				out := newOpTestOutput(&op, []int{0}, c.outputTuples)
-				if err := out.Verify(); err != nil {
-					t.Error(err)
-				}
-			})
->>>>>>> exec: Add support for IN selection operator
 		})
 	}
 }
@@ -151,5 +134,74 @@ func BenchmarkSelectInInt64(b *testing.B) {
 				benchmarkSelectInInt64(b, useSel, hasNulls)
 			})
 		}
+	}
+}
+
+func TestProjectInInt64(t *testing.T) {
+	testCases := []struct {
+		desc         string
+		inputTuples  tuples
+		outputTuples tuples
+		filterRow    []int64
+		hasNulls     bool
+		negate       bool
+	}{
+		{
+			desc:         "Simple in test",
+			inputTuples:  tuples{{0}, {1}},
+			outputTuples: tuples{{true}, {true}},
+			filterRow:    []int64{0, 1},
+			hasNulls:     false,
+			negate:       false,
+		},
+		{
+			desc:         "Simple not in test",
+			inputTuples:  tuples{{2}},
+			outputTuples: tuples{{true}},
+			filterRow:    []int64{0, 1},
+			hasNulls:     false,
+			negate:       true,
+		},
+		{
+			desc:         "In test with NULLs",
+			inputTuples:  tuples{{1}, {2}, {nil}},
+			outputTuples: tuples{{true}, {nil}, {nil}},
+			filterRow:    []int64{1},
+			hasNulls:     true,
+			negate:       false,
+		},
+		{
+			desc:         "Not in test with NULLs",
+			inputTuples:  tuples{{1}, {2}, {nil}},
+			outputTuples: tuples{{false}, {nil}, {nil}},
+			filterRow:    []int64{1},
+			hasNulls:     true,
+			negate:       true,
+		},
+		{
+			desc:         "Not in test with NULLs and no nulls in filter",
+			inputTuples:  tuples{{1}, {2}, {nil}},
+			outputTuples: tuples{{false}, {true}, {nil}},
+			filterRow:    []int64{1},
+			hasNulls:     false,
+			negate:       true,
+		},
+	}
+
+	for _, c := range testCases {
+		t.Run(c.desc, func(t *testing.T) {
+			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, []int{1},
+				func(input []Operator) (Operator, error) {
+					op := projectInOpInt64{
+						input:     input[0],
+						colIdx:    0,
+						outputIdx: 1,
+						filterRow: c.filterRow,
+						negate:    c.negate,
+						hasNulls:  c.hasNulls,
+					}
+					return &op, nil
+				})
+		})
 	}
 }

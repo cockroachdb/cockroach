@@ -33,11 +33,7 @@ func genSelectIn(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
-<<<<<<< HEAD
 	tmpl, err := template.New("select_in").Parse(s)
-=======
-	tmpl, err := template.New("select_in").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
->>>>>>> made vectorized template
 	if err != nil {
 		return err
 	}

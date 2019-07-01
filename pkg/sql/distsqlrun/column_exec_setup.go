@@ -566,11 +566,7 @@ func planSelectionOperators(
 				negate := t.Operator == tree.NotIn
 				datumTuple, ok := tree.AsDTuple(constArg)
 				if !ok {
-<<<<<<< HEAD
 					err = errors.Errorf("IN is only supported for constant expressions")
-=======
-					err = errors.Errorf("in operator used on not a tuple")
->>>>>>> made vectorized template
 					return nil, resultIdx, ct, err
 				}
 				op, err := exec.GetInOperator(typ, leftOp, leftIdx, datumTuple, negate)
@@ -674,7 +670,18 @@ func planProjectionExpr(
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
 		resultIdx = len(ct)
-		op, err = exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
+		var op exec.Operator
+		if binOp == tree.In || binOp == tree.NotIn {
+			negate := binOp == tree.NotIn
+			datumTuple, ok := tree.AsDTuple(rConstArg)
+			if !ok {
+				err = errors.Errorf("IN operator supported only on constant expressions")
+				return nil, resultIdx, ct, err
+			}
+			op, err = exec.GetInProjectionOperator(typ, leftOp, leftIdx, resultIdx, datumTuple, negate)
+		} else {
+			op, err = exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
+		}
 		ct = append(ct, *typ)
 		return op, resultIdx, ct, err
 	}
