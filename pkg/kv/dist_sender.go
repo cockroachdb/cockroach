@@ -97,6 +97,12 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderRangeLookups = metric.Metadata{
+		Name:        "distsender.rangelookups",
+		Help:        "Number of range lookups.",
+		Measurement: "Range Lookups",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -126,6 +132,7 @@ type DistSenderMetrics struct {
 	NextReplicaErrCount     *metric.Counter
 	NotLeaseHolderErrCount  *metric.Counter
 	InLeaseTransferBackoffs *metric.Counter
+	RangeLookups            *metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -139,6 +146,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		NextReplicaErrCount:     metric.NewCounter(metaTransportSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount:  metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
 		InLeaseTransferBackoffs: metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
+		RangeLookups:            metric.NewCounter(metaDistSenderRangeLookups),
 	}
 }
 
@@ -334,6 +342,7 @@ func (ds *DistSender) LeaseHolderCache() *LeaseHolderCache {
 func (ds *DistSender) RangeLookup(
 	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+	ds.metrics.RangeLookups.Inc(1)
 	// We perform the range lookup scan with a READ_UNCOMMITTED consistency
 	// level because we want the scan to return intents as well as committed
 	// values. The reason for this is because it's not clear whether the intent
