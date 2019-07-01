@@ -41,7 +41,12 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		// Build the input query.
 		outScope := b.buildSelect(ct.AsSource, nil /* desiredTypes */, inScope)
 
-		numColNames := len(ct.AsColumnNames)
+		numColNames := 0
+		for i := 0; i < len(ct.Defs); i++ {
+			if _, ok := ct.Defs[i].(*tree.ColumnTableDef); ok {
+				numColNames++
+			}
+		}
 		numColumns := len(outScope.cols)
 		if numColNames != 0 && numColNames != numColumns {
 			panic(builderError{sqlbase.NewSyntaxError(fmt.Sprintf(
@@ -50,17 +55,20 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 				numColumns, util.Pluralize(int64(numColumns))))})
 		}
 
-		// Synthesize rowid column, and append to end of column list.
-		props, overloads := builtins.GetBuiltinProperties("unique_rowid")
-		private := &memo.FunctionPrivate{
-			Name:       "unique_rowid",
-			Typ:        types.Int,
-			Properties: props,
-			Overload:   &overloads[0],
+		input = outScope.expr
+		if !ct.AsHasUserSpecifiedPrimaryKey() {
+			// Synthesize rowid column, and append to end of column list.
+			props, overloads := builtins.GetBuiltinProperties("unique_rowid")
+			private := &memo.FunctionPrivate{
+				Name:       "unique_rowid",
+				Typ:        types.Int,
+				Properties: props,
+				Overload:   &overloads[0],
+			}
+			fn := b.factory.ConstructFunction(memo.EmptyScalarListExpr, private)
+			scopeCol := b.synthesizeColumn(outScope, "rowid", types.Int, nil /* expr */, fn)
+			input = b.factory.CustomFuncs().ProjectExtraCol(outScope.expr, fn, scopeCol.id)
 		}
-		fn := b.factory.ConstructFunction(memo.EmptyScalarListExpr, private)
-		scopeCol := b.synthesizeColumn(outScope, "rowid", types.Int, nil /* expr */, fn)
-		input = b.factory.CustomFuncs().ProjectExtraCol(outScope.expr, fn, scopeCol.id)
 		inputCols = outScope.makePhysicalProps().Presentation
 	} else {
 		// Create dummy empty input.

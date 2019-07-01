@@ -1110,9 +1110,9 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	title = pretty.ConcatSpace(title, p.Doc(&node.Table))
 
 	if node.As() {
-		if len(node.AsColumnNames) > 0 {
+		if len(node.Defs) > 0 {
 			title = pretty.ConcatSpace(title,
-				p.bracket("(", p.Doc(&node.AsColumnNames), ")"))
+				p.bracket("(", p.Doc(&node.Defs), ")"))
 		}
 		title = pretty.ConcatSpace(title, pretty.Keyword("AS"))
 	} else {
@@ -1609,7 +1609,11 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	clauses := make([]pretty.Doc, 0, 7)
 
 	// Column type.
-	clauses = append(clauses, pretty.Text(node.columnTypeString()))
+	// ColumnTableDef node type will not be specified if it represents a CREATE
+	// TABLE ... AS query.
+	if node.Type != nil {
+		clauses = append(clauses, pretty.Text(node.columnTypeString()))
+	}
 
 	// Compute expression (for computed columns).
 	if node.IsComputed() {
@@ -1690,10 +1694,26 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 		clauses = append(clauses, p.maybePrependConstraintName(&node.References.ConstraintName, fk))
 	}
 
-	return pretty.TableRow{
-		Label: node.Name.String(),
-		Doc:   pretty.Group(pretty.Stack(clauses...)),
+	// Prevents an additional space from being appended at the end of every column
+	// name in the case of CREATE TABLE ... AS query. The additional space is
+	// being caused due to the absence of column type qualifiers in CTAS queries.
+	//
+	// TODO(adityamaru): Consult someone with more knowledge about the pretty
+	// printer architecture to find a cleaner solution.
+	var tblRow pretty.TableRow
+	if node.Type == nil {
+		tblRow = pretty.TableRow{
+			Label: node.Name.String(),
+			Doc:   pretty.Stack(clauses...),
+		}
+	} else {
+		tblRow = pretty.TableRow{
+			Label: node.Name.String(),
+			Doc:   pretty.Group(pretty.Stack(clauses...)),
+		}
 	}
+
+	return tblRow
 }
 
 func (node *CheckConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
