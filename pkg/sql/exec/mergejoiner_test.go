@@ -22,6 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
+type mjTestInitializer interface {
+	initWithBatchSize(outBatchSize uint16)
+}
+
 type mjTestCase struct {
 	description     string
 	joinType        sqlbase.JoinType
@@ -892,23 +896,22 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{2, 3, 1, nil, nil, nil}, {2, nil, 1, nil, nil, nil}, {nil, 1, 3, nil, nil, nil}},
 			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
 		},
-		// TODO(yuzefovich): uncomment once distinct supports null handling.
-		//{
-		//	description:     "single column DESC with nulls on the left LEFT OUTER JOIN",
-		//	joinType:        sqlbase.JoinType_LEFT_OUTER,
-		//	leftTypes:       []types.T{types.Int64},
-		//	rightTypes:      []types.T{types.Int64},
-		//	leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-		//	rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
-		//	leftTuples:      tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
-		//	rightTuples:     tuples{{1}},
-		//	leftOutCols:     []uint32{0},
-		//	rightOutCols:    []uint32{0},
-		//	leftEqCols:      []uint32{0},
-		//	rightEqCols:     []uint32{0},
-		//	expected:        tuples{{1, 1}, {1, 1}, {1, 1}, {nil, nil}, {nil, nil}, {nil, nil}},
-		//	expectedOutCols: []int{0, 1},
-		//},
+		{
+			description:     "single column DESC with nulls on the left LEFT OUTER JOIN",
+			joinType:        sqlbase.JoinType_LEFT_OUTER,
+			leftTypes:       []types.T{types.Int64},
+			rightTypes:      []types.T{types.Int64},
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_DESC},
+			leftTuples:      tuples{{1}, {1}, {1}, {nil}, {nil}, {nil}},
+			rightTuples:     tuples{{1}},
+			leftOutCols:     []uint32{0},
+			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{1, 1}, {1, 1}, {1, 1}, {nil, nil}, {nil, nil}, {nil, nil}},
+			expectedOutCols: []int{0, 1},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -932,7 +935,12 @@ func TestMergeJoiner(t *testing.T) {
 		// We use a custom verifier function so that we can get the merge join op
 		// to use a custom output batch size per test, to exercise more cases.
 		var mergeJoinVerifier verifier = func(output *opTestOutput) error {
-			output.input.(*mergeJoinOp).initWithBatchSize(tc.outputBatchSize)
+			if mj, ok := output.input.(mjTestInitializer); ok {
+				mj.initWithBatchSize(tc.outputBatchSize)
+			} else {
+				t.Fatalf("unexpectedly merge joiner doesn't implement mjTestInitializer")
+			}
+
 			return output.Verify()
 		}
 
@@ -979,7 +987,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						t.Fatal("error in merge join op constructor", err)
 					}
 
-					a.(*mergeJoinOp).initWithBatchSize(outBatchSize)
+					a.(*mergeJoinInnerOp).initWithBatchSize(outBatchSize)
 
 					i := 0
 					count := 0
@@ -1041,7 +1049,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						t.Fatal("error in merge join op constructor", err)
 					}
 
-					a.(*mergeJoinOp).Init()
+					a.(*mergeJoinInnerOp).Init()
 
 					i := 0
 					count := 0
@@ -1107,7 +1115,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 							t.Fatal("error in merge join op constructor", err)
 						}
 
-						a.(*mergeJoinOp).initWithBatchSize(outBatchSize)
+						a.(*mergeJoinInnerOp).initWithBatchSize(outBatchSize)
 
 						count := 0
 						for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
@@ -1158,7 +1166,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 						t.Fatal("error in merge join op constructor", err)
 					}
 
-					a.(*mergeJoinOp).Init()
+					a.(*mergeJoinInnerOp).Init()
 
 					count := 0
 					for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
@@ -1274,7 +1282,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 								t.Fatal("error in merge join op constructor", err)
 							}
 
-							a.(*mergeJoinOp).Init()
+							a.(*mergeJoinInnerOp).Init()
 
 							i := 0
 							count := 0
@@ -1360,21 +1368,24 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				leftSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
 				rightSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
 
-				s := mergeJoinOp{
-					left: mergeJoinInput{
-						eqCols:      []uint32{0},
-						outCols:     []uint32{0, 1},
-						sourceTypes: sourceTypes,
-						source:      leftSource,
-						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
-					},
+				s := mergeJoinInnerOp{
+					mergeJoinBase{
+						joinType: sqlbase.JoinType_INNER,
+						left: mergeJoinInput{
+							eqCols:      []uint32{0},
+							outCols:     []uint32{0, 1},
+							sourceTypes: sourceTypes,
+							source:      leftSource,
+							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						},
 
-					right: mergeJoinInput{
-						eqCols:      []uint32{0},
-						outCols:     []uint32{2, 3},
-						sourceTypes: sourceTypes,
-						source:      rightSource,
-						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						right: mergeJoinInput{
+							eqCols:      []uint32{0},
+							outCols:     []uint32{2, 3},
+							sourceTypes: sourceTypes,
+							source:      rightSource,
+							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						},
 					},
 				}
 
@@ -1399,24 +1410,26 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, nBatches), nBatches)
 				rightSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
 
-				s := mergeJoinOp{
-					left: mergeJoinInput{
-						eqCols:      []uint32{0},
-						outCols:     []uint32{0, 1},
-						sourceTypes: sourceTypes,
-						source:      leftSource,
-						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
-					},
+				s := mergeJoinInnerOp{
+					mergeJoinBase{
+						joinType: sqlbase.JoinType_INNER,
+						left: mergeJoinInput{
+							eqCols:      []uint32{0},
+							outCols:     []uint32{0, 1},
+							sourceTypes: sourceTypes,
+							source:      leftSource,
+							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						},
 
-					right: mergeJoinInput{
-						eqCols:      []uint32{0},
-						outCols:     []uint32{2, 3},
-						sourceTypes: sourceTypes,
-						source:      rightSource,
-						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						right: mergeJoinInput{
+							eqCols:      []uint32{0},
+							outCols:     []uint32{2, 3},
+							sourceTypes: sourceTypes,
+							source:      rightSource,
+							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						},
 					},
 				}
-
 				s.Init()
 
 				b.StartTimer()
@@ -1440,21 +1453,24 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), nBatches)
 				rightSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), nBatches)
 
-				s := mergeJoinOp{
-					left: mergeJoinInput{
-						eqCols:      []uint32{0},
-						outCols:     []uint32{0, 1},
-						sourceTypes: sourceTypes,
-						source:      leftSource,
-						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
-					},
+				s := mergeJoinInnerOp{
+					mergeJoinBase{
+						joinType: sqlbase.JoinType_INNER,
+						left: mergeJoinInput{
+							eqCols:      []uint32{0},
+							outCols:     []uint32{0, 1},
+							sourceTypes: sourceTypes,
+							source:      leftSource,
+							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						},
 
-					right: mergeJoinInput{
-						eqCols:      []uint32{0},
-						outCols:     []uint32{2, 3},
-						sourceTypes: sourceTypes,
-						source:      rightSource,
-						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						right: mergeJoinInput{
+							eqCols:      []uint32{0},
+							outCols:     []uint32{2, 3},
+							sourceTypes: sourceTypes,
+							source:      rightSource,
+							directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						},
 					},
 				}
 
