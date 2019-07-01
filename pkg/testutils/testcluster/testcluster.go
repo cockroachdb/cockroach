@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -546,7 +547,16 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store,
 
 // WaitForFullReplication waits until all stores in the cluster
 // have no ranges with replication pending.
+//
+// TODO(andrei): This method takes inexplicably long.
+// I think it shouldn't need any retries. See #38565.
 func (tc *TestCluster) WaitForFullReplication() error {
+	start := timeutil.Now()
+	defer func() {
+		end := timeutil.Now()
+		log.Infof(context.TODO(), "WaitForFullReplication took: %s", end.Sub(start))
+	}()
+
 	if len(tc.Servers) < 3 {
 		// If we have less than three nodes, we will never have full replication.
 		return nil
@@ -561,19 +571,17 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	notReplicated := true
 	for r := retry.Start(opts); r.Next() && notReplicated; {
 		notReplicated = false
-		for i, s := range tc.Servers {
+		for _, s := range tc.Servers {
 			err := s.Stores().VisitStores(func(s *storage.Store) error {
 				if n := s.ClusterNodeCount(); n != len(tc.Servers) {
 					log.Infof(context.TODO(), "%s only sees %d/%d available nodes", s, n, len(tc.Servers))
 					notReplicated = true
 					return nil
 				}
-				// Force the first node to upreplicate everything. Otherwise, if we rely
-				// on the scanner to do it, it'll take a while.
-				if i == 0 {
-					if err := s.ForceReplicationScanAndProcess(); err != nil {
-						return err
-					}
+				// Force upreplication. Otherwise, if we rely on the scanner to do it,
+				// it'll take a while.
+				if err := s.ForceReplicationScanAndProcess(); err != nil {
+					return err
 				}
 				if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
 					// This can sometimes fail since ComputeMetrics calls
