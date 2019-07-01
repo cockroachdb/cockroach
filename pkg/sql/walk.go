@@ -773,6 +773,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&sortNode{}):                 "sort",
 	reflect.TypeOf(&splitNode{}):                "split",
 	reflect.TypeOf(&unsplitNode{}):              "unsplit",
+	reflect.TypeOf(&unsplitAllNode{}):           "unsplit all",
 	reflect.TypeOf(&spoolNode{}):                "spool",
 	reflect.TypeOf(&truncateNode{}):             "truncate",
 	reflect.TypeOf(&unaryNode{}):                "emptyrow",

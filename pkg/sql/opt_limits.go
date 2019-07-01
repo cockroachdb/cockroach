@@ -240,6 +240,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *showTraceNode:
 	case *scatterNode:
 	case *scanBufferNode:
+	case *unsplitAllNode:
 
 	case *applyJoinNode, *lookupJoinNode, *zigzagJoinNode, *saveTableNode:
 		// These nodes are only planned by the optimizer.
