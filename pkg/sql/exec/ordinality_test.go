@@ -42,15 +42,11 @@ func TestOrdinality(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			numExpectedCols := len(tc.expected[0])
-			ordinality := NewOrdinalityOp(input[0])
-			out := newOpTestOutput(ordinality, []int{0, 1, 2}[:numExpectedCols], tc.expected)
-
-			if err := out.Verify(); err != nil {
-				t.Fatal(err)
-			}
-		})
+		numExpectedCols := len(tc.expected[0])
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, []int{0, 1, 2}[:numExpectedCols],
+			func(input []Operator) (Operator, error) {
+				return NewOrdinalityOp(input[0]), nil
+			})
 	}
 }
 

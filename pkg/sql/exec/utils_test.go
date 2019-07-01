@@ -30,11 +30,48 @@ type tuple []interface{}
 // tuples represents a table of a single type.
 type tuples []tuple
 
+type verifier func(output *opTestOutput) error
+
+// orderedVerifier compares the input and output tuples, returning an error if
+// they're not identical.
+var orderedVerifier verifier = (*opTestOutput).Verify
+
+// unorderedVerifier compares the input and output tuples as sets, returning an
+// error if they aren't equal by set comparison (irrespective of order).
+var unorderedVerifier verifier = (*opTestOutput).VerifyAnyOrder
+
 // runTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
-// Provide a test function that takes a list of input Operators, which will give
-// back the tuples provided in batches.
-func runTests(t *testing.T, tups []tuples, test func(t *testing.T, inputs []Operator)) {
+// tups is the set of input tuples.
+// expected is the set of output tuples.
+// constructor is a function that takes a list of input Operators and returns
+// the operator to test, or an error.
+func runTests(
+	t *testing.T,
+	tups []tuples,
+	expected tuples,
+	verifier verifier,
+	cols []int,
+	constructor func(inputs []Operator) (Operator, error),
+) {
+	runTestsWithFn(t, tups, func(t *testing.T, inputs []Operator) {
+		op, err := constructor(inputs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := newOpTestOutput(op, cols, expected)
+		if err := verifier(out); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// runTestsWithFn is like runTests, but the input function is responsible for
+// performing any required tests.
+// tups is the set of input tuples.
+// test is a function that takes a list of input Operators and performs testing
+// with t.
+func runTestsWithFn(t *testing.T, tups []tuples, test func(t *testing.T, inputs []Operator)) {
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, batchSize := range []uint16{1, 2, 3, 16, 1024} {
@@ -606,7 +643,7 @@ func TestOpTestInputOutput(t *testing.T) {
 			{1, 5, 0},
 		},
 	}
-	runTests(t, inputs, func(t *testing.T, sources []Operator) {
+	runTestsWithFn(t, inputs, func(t *testing.T, sources []Operator) {
 		out := newOpTestOutput(sources[0], []int{0, 1, 2}, inputs[0])
 
 		if err := out.Verify(); err != nil {
