@@ -204,8 +204,9 @@ type Factory interface {
 	// index (or a prefix of them); lookupCols are ordinals for the table columns
 	// we are retrieving.
 	//
-	// The node produces the columns in the input and lookupCols (ordered by
-	// ordinal). The ON condition can refer to these using IndexedVars.
+	// The node produces the columns in the input and (unless join type is
+	// LeftSemiJoin or LeftAntiJoin) the lookupCols, ordered by ordinal. The ON
+	// condition can refer to these using IndexedVars.
 	ConstructLookupJoin(
 		joinType sqlbase.JoinType,
 		input Node,

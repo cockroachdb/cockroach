@@ -7322,11 +7322,10 @@ group-by
  │         ├── save-table-name: q22_project_3
  │         ├── columns: cntrycode:27(string) c_acctbal:6(float!null)
  │         ├── stats: [rows=16666.6667, distinct(6)=16666.6667, null(6)=0, distinct(27)=16666.6667, null(27)=0]
- │         ├── anti-join (merge)
- │         │    ├── save-table-name: q22_merge_join_4
+ │         ├── anti-join (lookup orders@o_ck)
+ │         │    ├── save-table-name: q22_lookup_join_4
  │         │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
- │         │    ├── left ordering: +1
- │         │    ├── right ordering: +19
+ │         │    ├── key columns: [1] = [19]
  │         │    ├── stats: [rows=16666.6667, distinct(1)=16658.9936, null(1)=0, distinct(5)=16666.6667, null(5)=0, distinct(6)=16666.6667, null(6)=0]
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(5,6)
@@ -7336,14 +7335,12 @@ group-by
  │         │    │    ├── stats: [rows=16666.6667, distinct(1)=16658.9936, null(1)=0, distinct(5)=16666.6667, null(5)=0, distinct(6)=16666.6667, null(6)=0]
  │         │    │    ├── key: (1)
  │         │    │    ├── fd: (1)-->(5,6)
- │         │    │    ├── ordering: +1
  │         │    │    ├── scan customer
  │         │    │    │    ├── save-table-name: q22_scan_6
  │         │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
  │         │    │    │    ├── stats: [rows=150000, distinct(1)=148813, null(1)=0, distinct(5)=150000, null(5)=0, distinct(6)=140628, null(6)=0]
  │         │    │    │    ├── key: (1)
- │         │    │    │    ├── fd: (1)-->(5,6)
- │         │    │    │    └── ordering: +1
+ │         │    │    │    └── fd: (1)-->(5,6)
  │         │    │    └── filters
  │         │    │         ├── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(5)]
  │         │    │         └── gt [type=bool, outer=(6), subquery, constraints=(/6: (/NULL - ])]
@@ -7370,11 +7367,6 @@ group-by
  │         │    │                        └── aggregations
  │         │    │                             └── avg [type=float, outer=(14)]
  │         │    │                                  └── variable: c_acctbal [type=float]
- │         │    ├── scan orders@o_ck
- │         │    │    ├── save-table-name: q22_scan_10
- │         │    │    ├── columns: o_custkey:19(int!null)
- │         │    │    ├── stats: [rows=1500000, distinct(19)=99846, null(19)=0]
- │         │    │    └── ordering: +19
  │         │    └── filters (true)
  │         └── projections
  │              └── substring(c_phone, 1, 2) [type=string, outer=(5)]
@@ -7415,7 +7407,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_acctbal}   16667.00       2.61 <==       16667.00            2.64 <==            0.00            1.00
 {cntrycode}   16667.00       2.61 <==       16667.00            2381.00 <==         0.00            1.00
 
-stats table=q22_merge_join_4
+stats table=q22_lookup_join_4
 ----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   6384       6304            0
@@ -7478,11 +7470,3 @@ column_names  row_count  distinct_count  null_count
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {c_acctbal}   150000.00      1.00           140628.00           1.00                0.00            1.00
 {c_phone}     150000.00      1.00           150000.00           1.01                0.00            1.00
-
-stats table=q22_scan_10
-----
-column_names  row_count  distinct_count  null_count
-{o_custkey}   1500000    99846           0
-~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_custkey}   1500000.00     1.00           99846.00            1.00                0.00            1.00

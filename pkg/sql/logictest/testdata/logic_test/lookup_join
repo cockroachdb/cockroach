@@ -14,8 +14,6 @@ INSERT INTO gh VALUES (NULL, 1)
 
 # Set up the statistics as if the first table is much smaller than the second.
 # This will make lookup join into the second table be the best plan.
-# TODO(radu): we have to use very small row counts because of the poor row
-# count estimation for joins (left-rows * right-rows / 10).
 statement ok
 ALTER TABLE abc INJECT STATISTICS '[
   {
@@ -507,3 +505,59 @@ d     e  f  a  b     c
 NULL  2  1  1  1     2
 1     1  2  2  NULL  2
 1     1  2  2  1     1
+
+# Test lookup semi and anti join.
+query III rowsort
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
+----
+1  1     2
+2  1     1
+2  NULL  2
+
+query III rowsort
+SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
+----
+
+query III rowsort
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+1  1  2
+2  1  1
+
+query III rowsort
+SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+2  NULL  2
+
+query III rowsort
+SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
+----
+1  1  2
+2  1  1
+
+query III rowsort
+SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
+----
+2  NULL  2
+
+query II
+SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
+----
+1   2
+2   4
+3   6
+4   8
+5   10
+6   12
+7   14
+8   16
+9   18
+10  20
+
+query II
+SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=data.a AND small.b+data.c>15) ORDER BY a
+----
+3  6
+4  8
+5  10
+6  12

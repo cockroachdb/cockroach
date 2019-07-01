@@ -600,3 +600,104 @@ sort            ·         ·            (d, e, f, a, b, c)  +f
       └── scan  ·         ·            (a, b, c)           ·
 ·               table     abc@primary  ·                   ·
 ·               spans     ALL          ·                   ·
+
+# Test lookup semi and anti join.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
+----
+render            ·         ·            (a, b, c)  ·
+ │                render 0  a            ·          ·
+ │                render 1  b            ·          ·
+ │                render 2  c            ·          ·
+ └── lookup-join  ·         ·            (a, b, c)  ·
+      │           table     def@primary  ·          ·
+      │           type      semi         ·          ·
+      └── scan    ·         ·            (a, b, c)  ·
+·                 table     abc@primary  ·          ·
+·                 spans     ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
+----
+render            ·         ·            (a, b, c)  ·
+ │                render 0  a            ·          ·
+ │                render 1  b            ·          ·
+ │                render 2  c            ·          ·
+ └── lookup-join  ·         ·            (a, b, c)  ·
+      │           table     def@primary  ·          ·
+      │           type      anti         ·          ·
+      └── scan    ·         ·            (a, b, c)  ·
+·                 table     abc@primary  ·          ·
+·                 spans     ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+render            ·         ·            (a, b, c)  ·
+ │                render 0  a            ·          ·
+ │                render 1  b            ·          ·
+ │                render 2  c            ·          ·
+ └── lookup-join  ·         ·            (a, b, c)  ·
+      │           table     def@primary  ·          ·
+      │           type      semi         ·          ·
+      └── scan    ·         ·            (a, b, c)  ·
+·                 table     abc@primary  ·          ·
+·                 spans     ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
+----
+render            ·         ·            (a, b, c)  ·
+ │                render 0  a            ·          ·
+ │                render 1  b            ·          ·
+ │                render 2  c            ·          ·
+ └── lookup-join  ·         ·            (a, b, c)  ·
+      │           table     def@primary  ·          ·
+      │           type      anti         ·          ·
+      └── scan    ·         ·            (a, b, c)  ·
+·                 table     abc@primary  ·          ·
+·                 spans     ALL          ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
+----
+render            ·         ·              (a, b, c)  ·
+ │                render 0  a              ·          ·
+ │                render 1  b              ·          ·
+ │                render 2  c              ·          ·
+ └── lookup-join  ·         ·              (a, b, c)  ·
+      │           table     def@primary    ·          ·
+      │           type      semi           ·          ·
+      │           pred      (@4 + @2) > 1  ·          ·
+      └── scan    ·         ·              (a, b, c)  ·
+·                 table     abc@primary    ·          ·
+·                 spans     ALL            ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
+----
+render            ·         ·              (a, b, c)  ·
+ │                render 0  a              ·          ·
+ │                render 1  b              ·          ·
+ │                render 2  c              ·          ·
+ └── lookup-join  ·         ·              (a, b, c)  ·
+      │           table     def@primary    ·          ·
+      │           type      anti           ·          ·
+      │           pred      (@4 + @2) > 1  ·          ·
+      └── scan    ·         ·              (a, b, c)  ·
+·                 table     abc@primary    ·          ·
+·                 spans     ALL            ·          ·
+
+query T
+SELECT url FROM [ EXPLAIN (DISTSQL)
+  SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlEFr2zAUx-_7FOJdJ-NIdtLUp1w6SOmS0eY2ctCiR-fN0TOSDCsl3304HqtdWlngQ3q0lD__X35PvGcwpHGjjuig-A4COEjgkAGHHDjMYc-htnRA58i2P-kCa_0HihmH0tSNb4_3HA5kEYpn8KWvEArYqR8V3qPSaNMZcNDoVVmda2pbHpV9Wrmjqirg8FAr4wqWpIIpo5lg5H-iBQ7bxhdsJfhKwv7EgRr_0ue8ekQoxInHM91Saf4hzYdIu6caC3Z382XHHm6-rtntdr0B_p9UK6-Awx3R76Zmv6g0jEyLFgcp34V8YSOr0aIeYq3EZ9if3vgnG0qoTsVQ7Hv12aBexM9NRM0tFUkqp05uhKo3ucXlJifj1ck4dTJJs6nqRqh66q4upy6LV5fFqcuSNJ-qboSqp255OXV5vLo8Tl2epPOp6kaoeuquP8aqfQPyHl1NxmHUFp21exj1I3Z721FjD_jN0uFc031uz7nzgUbnu1vRfaxNd9UC9sMiGJaDsHgdluHmkeosmM7D4XwK9zwYXoSbF1Oar4LhZbh5OaX5Ojyr2cgzCT-y193706e_AQAA__8Shyy4
+
+query T
+SELECT url FROM [ EXPLAIN (DISTSQL)
+  SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=data.a AND small.b+data.c>15) ORDER BY a
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFr2z4Uxd__n0Lcp_6pjC3ZTlM9-aWFlC4Zbd62PGjRpfPmWEaSYaXkuw_HZbXLKmsEQh4t-XDO_R3BfYFaK1zKHVoQX4ABBQ4UUqCQAYUcNhQao7dorTbdL71goX6BSCiUddO67nhDYasNgngBV7oKQcBafqvwAaVCEydAQaGTZXWwaUy5k-a5sDtZVUDhsZG1FSSKGZG1Ioxo9x0NULgtK4dGkIuCkUtS8P_J1zZJ0i3hiRBisVzPgcKqdYIUjBYcNnsKunVvoayTTwiC7Wl48Dtd1q-583Hu9XODgtzf3K7J482nBblbLZZA_4yjpJNA4V7rn21DfuiyJrruonUhl-Si4N0Q-esQSFj-T0PwD4d4y66NQoNqHLtgl7DZ_2XSpY50E7NxOx_ZpyN7Fl4-Cyo_ZlHMT1L_RPRB_bPzrZ-H8-dh_HkUpyfhPxF9wP_qfPmn4fzTMP5pFGcn4T8RfcB_fr78s3D-WRj_LIrzk_CfiD7gf32-_Cd26APaRtcWgzZL0u0mVE_Y7zKrW7PFz0ZvDzb95-qgOxwotK6_Zf3Hou6vuoBDMfOK-UjM3ou533nCOvWqM784OyZ37hXP_M6zY5yvvOK533l-jPO1v6tk4pn4H9l7783-v98BAAD__0_IfTU=
