@@ -145,11 +145,14 @@ message IndexSkipTableReaderSpec {
 // values in the input stream (join by lookup). The output always preserves the
 // order of the input rows.
 //
-// The "internal columns" of a JoinReader (see ProcessorSpec) are either the
-// columns of the table or the concatenation of the columns of the input stream
-// with the table columns, depending on the lookup columns specified.
+// The "internal columns" of a JoinReader (see ProcessorSpec) are either:
+//  - the columns of the table, if we are performing an index join (no lookup
+//    columns) or if we are performing a semi or anti join, or
+//  - the concatenation of the columns of the input stream with the table
+//    columns.
+//
 // Internally, only the values for the columns needed by the post-processing
-// stage are be populated.
+// stage are populated.
 //
 // Example:
 // Input stream columns: | a | b |              Table columns: | c | d | e |
@@ -168,12 +171,15 @@ message JoinReaderSpec {
 
   // Column indexes in the input stream specifying the columns which match with
   // the index columns. These are the equality columns of the join.
+  //
   // If empty (index join), the start of the input stream schema is assumed to
   // match the index columns. The joinReader will perform an index join and the
   // "internal columns" will be the columns of the table.
+  //
   // If populated (lookup join), the `joinReader` will perform a lookup join
   // and the "internal columns" will be the concatenation of the input stream
-  // columns followed by the table columns.
+  // columns followed by the table columns (except for semi/anti join, which
+  // don't output any table columns).
   repeated uint32 lookup_columns = 3 [packed = true];
 
   // "ON" expression (in addition to the equality constraints captured by the
@@ -181,7 +187,6 @@ message JoinReaderSpec {
   // stream has M columns, in this expression variables @1 to @N refer to
   // columns of the left stream and variables @N to @(N+M) refer to columns in
   // the right stream.
-  // Having "ON" expression implies no merged columns.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   // For lookup joins. Filter expression to be applied to index rows before
