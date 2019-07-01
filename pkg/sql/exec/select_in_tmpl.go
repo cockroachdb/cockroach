@@ -61,6 +61,35 @@ const (
 	siNull
 )
 
+func GetInProjectionOperator(
+	ct *semtypes.T,
+	input Operator,
+	colIdx int,
+	resultIdx int,
+	datumTuple *tree.DTuple,
+	negate bool,
+) (Operator, error) {
+	var err error
+	switch t := conv.FromColumnType(ct); t {
+	// {{range .}}
+	case types._TYPE:
+		obj := &projectInOp_TYPE{
+			input:     input,
+			colIdx:    colIdx,
+			outputIdx: resultIdx,
+			negate:    negate,
+		}
+		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
+		if err != nil {
+			return nil, err
+		}
+		return obj, nil
+	// {{end}}
+	default:
+		return nil, errors.Errorf("unhandled type: %s", t)
+	}
+}
+
 func GetInOperator(
 	ct *semtypes.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (Operator, error) {
@@ -94,6 +123,15 @@ type selectInOp_TYPE struct {
 	negate    bool
 }
 
+type projectInOp_TYPE struct {
+	input     Operator
+	colIdx    int
+	outputIdx int
+	filterRow []_GOTYPE
+	hasNulls  bool
+	negate    bool
+}
+
 func fillDatumRow_TYPE(ct *semtypes.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
 	conv := conv.GetDatumToPhysicalFn(ct)
 	var result []_GOTYPE
@@ -113,15 +151,15 @@ func fillDatumRow_TYPE(ct *semtypes.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool
 	return result, hasNulls, nil
 }
 
-func (si *selectInOp_TYPE) cmpIn_TYPE(target _GOTYPE) comparisonResult {
-	for i := range si.filterRow {
+func cmpIn_TYPE(target _GOTYPE, filterRow []_GOTYPE, hasNulls bool) comparisonResult {
+	for i := range filterRow {
 		var cmp bool
-		_ASSIGN_EQ(cmp, target, si.filterRow[i])
+		_ASSIGN_EQ(cmp, target, filterRow[i])
 		if cmp {
 			return siTrue
 		}
 	}
-	if si.hasNulls {
+	if hasNulls {
 		return siNull
 	} else {
 		return siFalse
@@ -130,6 +168,10 @@ func (si *selectInOp_TYPE) cmpIn_TYPE(target _GOTYPE) comparisonResult {
 
 func (si *selectInOp_TYPE) Init() {
 	si.input.Init()
+}
+
+func (pi *projectInOp_TYPE) Init() {
+	pi.input.Init()
 }
 
 func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
@@ -154,7 +196,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !nulls.NullAt(uint16(i)) && si.cmpIn_TYPE(col[i]) == compVal {
+					if !nulls.NullAt(uint16(i)) && cmpIn_TYPE(col[i], si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
 					}
@@ -164,7 +206,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				sel := batch.Selection()
 				col = col[:n]
 				for i := range col {
-					if !nulls.NullAt(uint16(i)) && si.cmpIn_TYPE(col[i]) == compVal {
+					if !nulls.NullAt(uint16(i)) && cmpIn_TYPE(col[i], si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
 					}
@@ -174,7 +216,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if si.cmpIn_TYPE(col[i]) == compVal {
+					if cmpIn_TYPE(col[i], si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
 					}
@@ -184,7 +226,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				sel := batch.Selection()
 				col = col[:n]
 				for i := range col {
-					if si.cmpIn_TYPE(col[i]) == compVal {
+					if cmpIn_TYPE(col[i], si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
 						idx++
 					}
@@ -197,6 +239,87 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 	}
+}
+
+func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
+	batch := pi.input.Next(ctx)
+	if batch.Length() == 0 {
+		return batch
+	}
+
+	if pi.outputIdx == batch.Width() {
+		batch.AppendCol(types.Bool)
+	}
+
+	vec := batch.ColVec(pi.colIdx)
+	col := vec._TemplateType()[:coldata.BatchSize]
+
+	projVec := batch.ColVec(pi.outputIdx)
+	projCol := projVec.Bool()[:coldata.BatchSize]
+	projNulls := projVec.Nulls()
+
+	n := batch.Length()
+
+	cmpVal := siTrue
+	if pi.negate {
+		cmpVal = siFalse
+	}
+
+	if vec.HasNulls() {
+		nulls := vec.Nulls()
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, i := range sel {
+				if nulls.NullAt(uint16(i)) {
+					projNulls.SetNull(uint16(i))
+				} else {
+					cmpRes := cmpIn_TYPE(col[i], pi.filterRow, pi.hasNulls)
+					if cmpRes == siNull {
+						projNulls.SetNull(uint16(i))
+					} else {
+						projCol[i] = cmpRes == cmpVal
+					}
+				}
+			}
+		} else {
+			col = col[:n]
+			for i := range col {
+				if nulls.NullAt(uint16(i)) {
+					projNulls.SetNull(uint16(i))
+				} else {
+					cmpRes := cmpIn_TYPE(col[i], pi.filterRow, pi.hasNulls)
+					if cmpRes == siNull {
+						projNulls.SetNull(uint16(i))
+					} else {
+						projCol[i] = cmpRes == cmpVal
+					}
+				}
+			}
+		}
+	} else {
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, i := range sel {
+				cmpRes := cmpIn_TYPE(col[i], pi.filterRow, pi.hasNulls)
+				if cmpRes == siNull {
+					projNulls.SetNull(uint16(i))
+				} else {
+					projCol[i] = cmpRes == cmpVal
+				}
+			}
+		} else {
+			col = col[:n]
+			for i := range col {
+				cmpRes := cmpIn_TYPE(col[i], pi.filterRow, pi.hasNulls)
+				if cmpRes == siNull {
+					projNulls.SetNull(uint16(i))
+				} else {
+					projCol[i] = cmpRes == cmpVal
+				}
+			}
+		}
+	}
+	return batch
 }
 
 // {{end}}
