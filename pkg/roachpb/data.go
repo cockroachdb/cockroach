@@ -1217,6 +1217,9 @@ func PrepareTransactionForRetry(
 		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
 	if !aborted {
+		if txn.Status.IsFinalized() {
+			log.Fatalf(ctx, "transaction unexpectedly finalized in (%T): %s", pErr.GetDetail(), pErr)
+		}
 		txn.Restart(pri, txn.Priority, txn.Timestamp)
 	}
 	return txn
