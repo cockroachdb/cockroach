@@ -139,6 +139,7 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *showTraceReplicaNode:
 	case *splitNode:
 	case *unsplitNode:
+	case *unsplitAllNode:
 	case *truncateNode:
 	case *unaryNode:
 	case *valuesNode:

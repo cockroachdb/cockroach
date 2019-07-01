@@ -296,6 +296,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *showTraceNode:
 	case *scatterNode:
 	case *scanBufferNode:
+	case *unsplitAllNode:
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))

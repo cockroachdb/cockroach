@@ -409,6 +409,7 @@ func (p *planner) propagateFilters(
 	case *showTraceNode:
 	case *scanBufferNode:
 	case *scatterNode:
+	case *unsplitAllNode:
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
