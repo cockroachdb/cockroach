@@ -21,6 +21,7 @@ package exec
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/apd"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // {{/*
@@ -64,21 +64,42 @@ func _ASSIGN_LT(_, _, _ interface{}) uint64 {
 	panic("")
 }
 
+// _L_SEL_IND is the template type variable for the loop variable that
+// is either curLIdx or lSel[curLIdx] depending on whether we're in a
+// selection or not.
 const _L_SEL_IND = 0
+
+// _R_SEL_IND is the template type variable for the loop variable that
+// is either curRIdx or rSel[curRIdx] depending on whether we're in a
+// selection or not.
+
 const _R_SEL_IND = 0
 
 // _SEL_ARG is used in place of the string "$sel", since that isn't valid go
 // code.
 const _SEL_ARG = 0
 
+// _JOIN_TYPE is used in place of the string "$joinType", since that isn't
+// valid go code.
+const _JOIN_TYPE = 0
+
+// _MJ_OVERLOAD is used in place of the string "$mjOverload", since that isn't
+// valid go code.
+const _MJ_OVERLOAD = 0
+
 // */}}
 
 // {{/*
-func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool) { // */}}
+// This code snippet is the "meat" of the probing phase.
+func _PROBE_SWITCH(
+	joinType joinTypeInfo, sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool,
+) { // */}}
 	// {{define "probeSwitch"}}
 	// {{ $sel := $.Sel }}
+	// {{ $joinType := $.JoinType }}
+	// {{ $mjOverloads := $.Global.MJOverloads }}
 	switch colType {
-	// {{range $.Global.MJOverloads }}
+	// {{range $mjOverload := $.Global.MJOverloads }}
 	case _TYPES_T:
 		lKeys := lVec._TemplateType()
 		rKeys := rVec._TemplateType()
@@ -89,26 +110,13 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 			curLLength := lGroup.rowEndIdx
 			curRLength := rGroup.rowEndIdx
 			areGroupsProcessed := false
-			if o.joinType == sqlbase.JoinType_LEFT_OUTER {
-				if lGroup.unmatched {
-					if curLIdx+1 != curLLength {
-						panic("unexpectedly length of the left unmatched group is not 1")
-					}
-					// The row already does not have a match, so we don't need to do any
-					// additional processing.
-					o.groups.addLeftOuterGroup(curLIdx, curRIdx)
-					curLIdx++
-					areGroupsProcessed = true
-				}
-			}
+			_LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE)
 			// Expand or filter each group based on the current equality column.
 			for curLIdx < curLLength && curRIdx < curRLength && !areGroupsProcessed {
 				// TODO(georgeutsin): change null check logic for non INNER joins.
 				// {{ if $.LNull }}
 				if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
-					if o.joinType == sqlbase.JoinType_LEFT_OUTER {
-						o.groups.addLeftOuterGroup(curLIdx, curRIdx)
-					}
+					_NULL_FROM_LEFT_SWITCH(_JOIN_TYPE)
 					curLIdx++
 					continue
 				}
@@ -120,13 +128,7 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 				}
 				// {{ end }}
 
-				// _L_SEL_IND is the template type variable for the loop variable that
-				// is either curLIdx or lSel[curLIdx] depending on whether we're in a
-				// selection or not.
 				lVal := lKeys[_L_SEL_IND]
-				// _R_SEL_IND is the template type variable for the loop variable that
-				// is either curRIdx or rSel[curRIdx] depending on whether we're in a
-				// selection or not.
 				rVal := rKeys[_R_SEL_IND]
 
 				var match bool
@@ -209,46 +211,18 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 					// {{ end }}
 					if incrementLeft {
 						curLIdx++
-						if o.joinType == sqlbase.JoinType_LEFT_OUTER {
-							// All the rows on the left within the current group will not get
-							// a match on the right, so we're adding each of them as a left
-							// outer group.
-							o.groups.addLeftOuterGroup(curLIdx-1, curRIdx)
-							for curLIdx < curLLength {
-								// {{ if $.LNull }}
-								if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
-									break
-								}
-								// {{ end }}
-								newLVal := lKeys[_L_SEL_IND]
-								_ASSIGN_EQ("match", "newLVal", "lVal")
-								if !match {
-									break
-								}
-								o.groups.addLeftOuterGroup(curLIdx, curRIdx)
-								curLIdx++
-							}
-						}
+						// {{ if $.LNull }}
+						_INCREMENT_LEFT_SWITCH(_JOIN_TYPE, _SEL_ARG, _MJ_OVERLOAD, true)
+						// {{ else }}
+						_INCREMENT_LEFT_SWITCH(_JOIN_TYPE, _SEL_ARG, _MJ_OVERLOAD, false)
+						// {{ end }}
 					} else {
 						curRIdx++
 					}
 
 				}
 			}
-			if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
-				// The current group is not the last one within the column, so it
-				// cannot be extended into the next batch, and we need to process it
-				// right now.
-				if o.joinType == sqlbase.JoinType_LEFT_OUTER {
-					// Any unprocessed row in the left group will not get a match, so
-					// each one of them becomes a new unmatched group with a
-					// corresponding null group.
-					for curLIdx < curLLength {
-						o.groups.addLeftOuterGroup(curLIdx, curRIdx)
-						curLIdx++
-					}
-				}
-			}
+			_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE)
 			// Both o.proberState.lIdx and o.proberState.rIdx should point to the
 			// last elements processed in their respective batches.
 			o.proberState.lIdx = curLIdx
@@ -264,8 +238,125 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 
 // */}}
 
-// {{ range $sel := .SelPermutations }}
-func (o *mergeJoinOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL() {
+// {{/*
+// This code snippet processes an unmatched group from the left.
+func _LEFT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
+	// {{define "leftUnmatchedGroupSwitch"}}
+	// {{ if $.JoinType.IsInner }}
+	// {{/*
+	// Unmatched groups are not possible with INNER JOIN, so there is nothing to
+	// do here.
+	// */}}
+	// {{ else if $.JoinType.IsLeftOuter }}
+	if lGroup.unmatched {
+		if curLIdx+1 != curLLength {
+			panic("unexpectedly length of the left unmatched group is not 1")
+		}
+		// The row already does not have a match, so we don't need to do any
+		// additional processing.
+		o.groups.addLeftOuterGroup(curLIdx, curRIdx)
+		curLIdx++
+		areGroupsProcessed = true
+	}
+	// {{ end }}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{/*
+// This code snippet decides what to do if we encounter null in the equality
+// column from the left input.
+func _NULL_FROM_LEFT_SWITCH(joinType joinTypeInfo) { // */}}
+	// {{define "nullFromLeftSwitch"}}
+	// {{ if $.JoinType.IsInner }}
+	// {{/*
+	// Nulls coming from the left input are ignored in INNER JOIN.
+	// */}}
+	// {{ else if $.JoinType.IsLeftOuter }}
+	o.groups.addLeftOuterGroup(curLIdx, curRIdx)
+	// {{ end }}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{/*
+// This code snippet decides what to do when - while looking for a match
+// between two inputs - we need to advance the left side, i.e. it decides how
+// to handle an unmatched tuple from the left.
+func _INCREMENT_LEFT_SWITCH(
+	joinType joinTypeInfo, sel selPermutation, overload mjOverload, lHasNulls bool,
+) { // */}}
+	// {{define "incrementLeftSwitch"}}
+	// {{ $sel := $.Sel }}
+	// {{ $mjOverload := $.MJOverload }}
+	// {{ if $.JoinType.IsInner }}
+	// {{/*
+	// Unmatched tuple from the left source is not outputted in INNER JOIN.
+	// */}}
+	// {{ else if $.JoinType.IsLeftOuter }}
+	// All the rows on the left within the current group will not get
+	// a match on the right, so we're adding each of them as a left
+	// outer group.
+	o.groups.addLeftOuterGroup(curLIdx-1, curRIdx)
+	for curLIdx < curLLength {
+		// {{ if $.LNull }}
+		if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
+			break
+		}
+		// {{ end }}
+		newLVal := lKeys[_L_SEL_IND]
+		// {{with $mjOverload}}
+		_ASSIGN_EQ("match", "newLVal", "lVal")
+		// {{end}}
+		if !match {
+			break
+		}
+		o.groups.addLeftOuterGroup(curLIdx, curRIdx)
+		curLIdx++
+	}
+	// {{ end }}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{/*
+// This code snippet processes all but last groups in a column after we have
+// reached the end of either the left or right group.
+func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(joinType joinTypeInfo) { // */}}
+	// {{define "processNotLastGroupInColumnSwitch"}}
+	// {{ if $.JoinType.IsInner }}
+	// {{/*
+	// Nothing to do here since an unmatched tuple is omitted.
+	// */}}
+	// {{ else if $.JoinType.IsLeftOuter }}
+	if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+		// The current group is not the last one within the column, so it
+		// cannot be extended into the next batch, and we need to process it
+		// right now.
+		// Any unprocessed row in the left group will not get a match, so
+		// each one of them becomes a new unmatched group with a
+		// corresponding null group.
+		for curLIdx < curLLength {
+			o.groups.addLeftOuterGroup(curLIdx, curRIdx)
+			curLIdx++
+		}
+	}
+	// {{ end }}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{ range $joinType := $.JoinTypes }}
+// {{ range $sel := $.SelPermutations }}
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL() {
 	lSel := o.proberState.lBatch.Selection()
 	rSel := o.proberState.rBatch.Selection()
 EqLoop:
@@ -276,29 +367,29 @@ EqLoop:
 		if lVec.HasNulls() {
 			if rVec.HasNulls() {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_SEL_ARG, true, true, true)
+					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, true, true, true)
 				} else {
-					_PROBE_SWITCH(_SEL_ARG, true, true, false)
+					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, true, true, false)
 				}
 			} else {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_SEL_ARG, true, false, true)
+					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, true, false, true)
 				} else {
-					_PROBE_SWITCH(_SEL_ARG, true, false, false)
+					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, true, false, false)
 				}
 			}
 		} else {
 			if rVec.HasNulls() {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_SEL_ARG, false, true, true)
+					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, false, true, true)
 				} else {
-					_PROBE_SWITCH(_SEL_ARG, false, true, false)
+					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, false, true, false)
 				}
 			} else {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
-					_PROBE_SWITCH(_SEL_ARG, false, false, true)
+					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, false, false, true)
 				} else {
-					_PROBE_SWITCH(_SEL_ARG, false, false, false)
+					_PROBE_SWITCH(_JOIN_TYPE, _SEL_ARG, false, false, false)
 				}
 			}
 		}
@@ -309,8 +400,11 @@ EqLoop:
 }
 
 // {{end}}
+// {{end}}
 
 // {{/*
+// This code snippet builds the output corresponding to the left side (i.e. is
+// the main body of buildLeftGroups()).
 func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 	// {{define "leftSwitch"}}
 
@@ -408,7 +502,8 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 // Note: this is different from buildRightGroups in that each row of group is
 // repeated numRepeats times, instead of a simple copy of the group as a whole.
 // SIDE EFFECTS: writes into o.output.
-func (o *mergeJoinOp) buildLeftGroups(
+// {{ range $joinType := .JoinTypes }}
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftGroups(
 	leftGroups []group,
 	colOffset int,
 	input *mergeJoinInput,
@@ -445,7 +540,11 @@ LeftColLoop:
 	o.builderState.left.reset()
 }
 
+// {{ end }}
+
 // {{/*
+// This code snippet builds the output corresponding to the right side (i.e. is
+// the main body of buildRightGroups()).
 func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 	// {{define "rightSwitch"}}
 
@@ -547,7 +646,8 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 // Note: this is different from buildLeftGroups in that each group is not
 // expanded but directly copied numRepeats times.
 // SIDE EFFECTS: writes into o.output.
-func (o *mergeJoinOp) buildRightGroups(
+// {{ range $joinType := .JoinTypes }}
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroups(
 	rightGroups []group,
 	colOffset int,
 	input *mergeJoinInput,
@@ -586,9 +686,38 @@ RightColLoop:
 	o.builderState.right.reset()
 }
 
+// {{ end }}
+
+// {{/*
+// This code snippet performs a null check on the last buffered tuple on the
+// colIdx column.
+func _NULL_IN_BUFFERED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
+	// {{define "nullInBufferedGroupSwitch"}}
+	// {{ if $.JoinType.IsInner }}
+	// {{/*
+	// Nulls cannot be in equality columns in the buffered group in INNER JOIN
+	// because such tuple would not get a match, so they are never buffered.
+	// */}}
+	// {{ else if $.JoinType.IsLeftOuter }}
+	if input == &o.left {
+		// Nulls only from the left input can be saved in the buffer, so we do
+		// not perform this check on the right input.
+		// TODO(yuzefovich): update this when new join types are supported.
+		if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
+			return true
+		}
+	}
+	// {{ end }}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{ range $joinType := .JoinTypes }}
 // isBufferedGroupFinished checks to see whether or not the buffered group
 // corresponding to input continues in batch.
-func (o *mergeJoinOp) isBufferedGroupFinished(
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) isBufferedGroupFinished(
 	input *mergeJoinInput, batch coldata.Batch, rowIdx int,
 ) bool {
 	if batch.Length() == 0 {
@@ -607,18 +736,9 @@ func (o *mergeJoinOp) isBufferedGroupFinished(
 		colTyp := input.sourceTypes[colIdx]
 
 		switch colTyp {
-		// {{ range .MJOverloads }}
+		// {{ range $.MJOverloads }}
 		case _TYPES_T:
-			if input == &o.left {
-				// Nulls only from the left input can be saved in the buffer, so we do
-				// not perform this check on the right input.
-				// TODO(yuzefovich): update this when new join types are supported.
-				if o.joinType == sqlbase.LeftOuterJoin {
-					if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
-						return true
-					}
-				}
-			}
+			_NULL_IN_BUFFERED_GROUP_SWITCH(_JOIN_TYPE)
 			prevVal := bufferedGroup.ColVec(int(colIdx))._TemplateType()[lastBufferedTupleIdx]
 			var curVal _GOTYPE
 			if sel != nil {
@@ -646,3 +766,511 @@ func (o *mergeJoinOp) isBufferedGroupFinished(
 	}
 	return false
 }
+
+func newMergeJoin_JOIN_TYPE_STRINGOp(
+	left Operator,
+	right Operator,
+	leftOutCols []uint32,
+	rightOutCols []uint32,
+	leftTypes []types.T,
+	rightTypes []types.T,
+	leftOrdering []distsqlpb.Ordering_Column,
+	rightOrdering []distsqlpb.Ordering_Column,
+) (Operator, error) {
+	lEqCols := make([]uint32, len(leftOrdering))
+	lDirections := make([]distsqlpb.Ordering_Column_Direction, len(leftOrdering))
+	for i, c := range leftOrdering {
+		lEqCols[i] = c.ColIdx
+		lDirections[i] = c.Direction
+	}
+
+	rEqCols := make([]uint32, len(rightOrdering))
+	rDirections := make([]distsqlpb.Ordering_Column_Direction, len(rightOrdering))
+	for i, c := range rightOrdering {
+		rEqCols[i] = c.ColIdx
+		rDirections[i] = c.Direction
+	}
+
+	mj := &mergeJoin_JOIN_TYPE_STRINGOp{
+		left: mergeJoinInput{
+			source:      left,
+			outCols:     leftOutCols,
+			sourceTypes: leftTypes,
+			eqCols:      lEqCols,
+			directions:  lDirections,
+		},
+		right: mergeJoinInput{
+			source:      right,
+			outCols:     rightOutCols,
+			sourceTypes: rightTypes,
+			eqCols:      rEqCols,
+			directions:  rDirections,
+		},
+	}
+	var err error
+	mj.left.distincterInput = feedOperator{}
+	mj.left.distincter, mj.left.distinctOutput, err = OrderedDistinctColsToOperators(
+		&mj.left.distincterInput, lEqCols, leftTypes)
+	if err != nil {
+		return nil, err
+	}
+	mj.right.distincterInput = feedOperator{}
+	mj.right.distincter, mj.right.distinctOutput, err = OrderedDistinctColsToOperators(
+		&mj.right.distincterInput, rEqCols, rightTypes)
+	if err != nil {
+		return nil, err
+	}
+	return mj, nil
+}
+
+type mergeJoin_JOIN_TYPE_STRINGOp struct {
+	left  mergeJoinInput
+	right mergeJoinInput
+
+	// Output buffer definition.
+	output            coldata.Batch
+	needToResetOutput bool
+	outputBatchSize   uint16
+	// outputReady is a flag to indicate that merge joiner is ready to emit an
+	// output batch.
+	outputReady bool
+
+	// Local buffer for the "working" repeated groups.
+	groups circularGroupsBuffer
+
+	state        mjState
+	proberState  mjProberState
+	builderState mjBuilderState
+}
+
+var _ Operator = &mergeJoin_JOIN_TYPE_STRINGOp{}
+
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) Init() {
+	o.initWithBatchSize(coldata.BatchSize)
+}
+
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) initWithBatchSize(outBatchSize uint16) {
+	outColTypes := make([]types.T, len(o.left.sourceTypes)+len(o.right.sourceTypes))
+	copy(outColTypes, o.left.sourceTypes)
+	copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
+
+	o.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
+	o.left.source.Init()
+	o.right.source.Init()
+	o.outputBatchSize = outBatchSize
+	// If there are no output columns, then the operator is for a COUNT query,
+	// in which case we treat the output batch size as the max uint16.
+	if o.output.Width() == 0 {
+		o.outputBatchSize = 1<<16 - 1
+	}
+
+	o.proberState.lBufferedGroup = newMJBufferedGroup(o.left.sourceTypes)
+	o.proberState.rBufferedGroup = newMJBufferedGroup(o.right.sourceTypes)
+
+	o.builderState.lGroups = make([]group, 1)
+	o.builderState.rGroups = make([]group, 1)
+
+	o.groups = makeGroupsBuffer(coldata.BatchSize)
+	o.resetBuilderCrossProductState()
+}
+
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) resetBuilderCrossProductState() {
+	o.builderState.left.reset()
+	o.builderState.right.reset()
+}
+
+// calculateOutputCount uses the toBuild field of each group and the output
+// batch size to determine the output count. Note that as soon as a group is
+// materialized partially or fully to output, its toBuild field is updated
+// accordingly.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) calculateOutputCount(groups []group) uint16 {
+	count := int(o.builderState.outCount)
+
+	for i := 0; i < len(groups); i++ {
+		count += groups[i].toBuild
+		groups[i].toBuild = 0
+		if count > int(o.outputBatchSize) {
+			groups[i].toBuild = count - int(o.outputBatchSize)
+			count = int(o.outputBatchSize)
+			return uint16(count)
+		}
+	}
+	o.builderState.outFinished = true
+	return uint16(count)
+}
+
+// appendToBufferedGroup appends all the tuples from batch that are part of the
+// same group as the ones in the buffered group that corresponds to the input
+// source. This needs to happen when a group starts at the end of an input
+// batch and can continue into the following batches.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) appendToBufferedGroup(
+	input *mergeJoinInput, batch coldata.Batch, sel []uint16, groupStartIdx int, groupLength int,
+) {
+	bufferedGroup := o.proberState.lBufferedGroup
+	if input == &o.right {
+		bufferedGroup = o.proberState.rBufferedGroup
+	}
+	destStartIdx := bufferedGroup.length
+	groupEndIdx := groupStartIdx + groupLength
+	for cIdx, cType := range input.sourceTypes {
+		bufferedGroup.ColVec(cIdx).Append(
+			coldata.AppendArgs{
+				ColType:     cType,
+				Src:         batch.ColVec(cIdx),
+				Sel:         sel,
+				DestIdx:     uint64(destStartIdx),
+				SrcStartIdx: uint16(groupStartIdx),
+				SrcEndIdx:   uint16(groupEndIdx),
+			},
+		)
+		if sel != nil {
+			bufferedGroup.ColVec(cIdx).Nulls().ExtendWithSel(
+				batch.ColVec(cIdx).Nulls(),
+				uint64(destStartIdx),
+				uint16(groupStartIdx),
+				uint16(groupLength),
+				sel,
+			)
+		} else {
+			bufferedGroup.ColVec(cIdx).Nulls().Extend(
+				batch.ColVec(cIdx).Nulls(),
+				uint64(destStartIdx),
+				uint16(groupStartIdx),
+				uint16(groupLength),
+			)
+		}
+	}
+
+	// We've added groupLength number of tuples to bufferedGroup, so we need to
+	// adjust its length.
+	bufferedGroup.length += uint64(groupLength)
+}
+
+// setBuilderSourceToBatch sets the builder state to use groups from the
+// circular group buffer and the batches from input. This happens when we have
+// groups that are fully contained within a single input batch from each of the
+// sources.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBatch() {
+	o.builderState.lGroups, o.builderState.rGroups = o.groups.getGroups()
+	o.builderState.lBatch = o.proberState.lBatch
+	o.builderState.rBatch = o.proberState.rBatch
+}
+
+// setBuilderSourceToBufferedGroup sets up the builder state to use the
+// buffered group.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
+	lGroupEndIdx := int(o.proberState.lBufferedGroup.length)
+	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
+	// The capacity of builder state lGroups and rGroups is always at least 1
+	// given the init.
+	o.builderState.lGroups = o.builderState.lGroups[:1]
+	o.builderState.lGroups[0] = group{
+		rowStartIdx: 0,
+		rowEndIdx:   lGroupEndIdx,
+		numRepeats:  rGroupEndIdx,
+		toBuild:     lGroupEndIdx * rGroupEndIdx,
+	}
+	o.builderState.rGroups = o.builderState.rGroups[:1]
+	o.builderState.rGroups[0] = group{
+		rowStartIdx: 0,
+		rowEndIdx:   rGroupEndIdx,
+		numRepeats:  lGroupEndIdx,
+		toBuild:     rGroupEndIdx * lGroupEndIdx,
+	}
+
+	o.builderState.lBatch = o.proberState.lBufferedGroup
+	o.builderState.rBatch = o.proberState.rBufferedGroup
+
+	// We cannot yet reset the buffered groups because the builder will be taking
+	// input from them. The actual reset will take place on the next call to
+	// initProberState().
+	o.proberState.lBufferedGroup.needToReset = true
+	o.proberState.rBufferedGroup.needToReset = true
+}
+
+// exhaustLeftSourceForLeftOuter sets up the builder state for emitting
+// remaining tuples on the left with nulls for the right side of output. It
+// should only be called once the right source has been exhausted, and if
+// we're doing LEFT OUTER join.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSourceForLeftOuter() {
+	// The capacity of builder state lGroups and rGroups is always at least 1
+	// given the init.
+	o.builderState.lGroups = o.builderState.lGroups[:1]
+	o.builderState.lGroups[0] = group{
+		rowStartIdx: o.proberState.lIdx,
+		rowEndIdx:   o.proberState.lLength,
+		numRepeats:  1,
+		toBuild:     o.proberState.lLength - o.proberState.lIdx,
+		unmatched:   true,
+	}
+	o.builderState.rGroups = o.builderState.rGroups[:1]
+	o.builderState.rGroups[0] = group{
+		rowStartIdx: o.proberState.lIdx,
+		rowEndIdx:   o.proberState.lLength,
+		numRepeats:  1,
+		toBuild:     o.proberState.lLength - o.proberState.lIdx,
+		nullGroup:   true,
+	}
+	o.builderState.lBatch = o.proberState.lBatch
+	o.builderState.rBatch = o.proberState.rBatch
+
+	o.proberState.lIdx = o.proberState.lLength
+}
+
+// build creates the cross product, and writes it to the output member.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) build() {
+	if o.output.Width() != 0 {
+		outStartIdx := o.builderState.outCount
+		o.buildLeftGroups(o.builderState.lGroups, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
+		o.buildRightGroups(o.builderState.rGroups, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
+	}
+	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
+}
+
+// initProberState sets the batches, lengths, and current indices to the right
+// locations given the last iteration of the operator.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) initProberState(ctx context.Context) {
+	// If this is the first batch or we're done with the current batch, get the
+	// next batch.
+	if o.proberState.lBatch == nil || (o.proberState.lLength != 0 && o.proberState.lIdx == o.proberState.lLength) {
+		o.proberState.lIdx, o.proberState.lBatch = 0, o.left.source.Next(ctx)
+		o.proberState.lLength = int(o.proberState.lBatch.Length())
+	}
+	if o.proberState.rBatch == nil || (o.proberState.rLength != 0 && o.proberState.rIdx == o.proberState.rLength) {
+		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next(ctx)
+		o.proberState.rLength = int(o.proberState.rBatch.Length())
+	}
+	if o.proberState.lBufferedGroup.needToReset {
+		o.proberState.lBufferedGroup.reset()
+	}
+	if o.proberState.rBufferedGroup.needToReset {
+		o.proberState.rBufferedGroup.reset()
+	}
+}
+
+// nonEmptyBufferedGroup returns true if there is a buffered group that needs
+// to be finished.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) nonEmptyBufferedGroup() bool {
+	return o.proberState.lBufferedGroup.length > 0 || o.proberState.rBufferedGroup.length > 0
+}
+
+// sourceFinished returns true if either of input sources has no more rows.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) sourceFinished() bool {
+	// TODO (georgeutsin): update this logic to be able to support joins other than INNER.
+	return o.proberState.lLength == 0 || o.proberState.rLength == 0
+}
+
+// completeBufferedGroup extends the buffered group corresponding to input.
+// First, we check that the first row in batch is still part of the same group.
+// If this is the case, we use the Distinct operator to find the first
+// occurrence in batch (or subsequent batches) that doesn't match the current
+// group.
+// NOTE: we will be buffering all batches until we find such non-matching tuple
+// (or until we exhaust the input).
+// TODO(yuzefovich): this can be refactored so that only the right side does
+// unbounded buffering.
+// SIDE EFFECT: can append to the buffered group corresponding to the source.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) completeBufferedGroup(
+	ctx context.Context, input *mergeJoinInput, batch coldata.Batch, rowIdx int,
+) (_ coldata.Batch, idx int, batchLength int) {
+	batchLength = int(batch.Length())
+	if o.isBufferedGroupFinished(input, batch, rowIdx) {
+		return batch, rowIdx, batchLength
+	}
+
+	isBufferedGroupComplete := false
+	input.distincter.(resetter).reset()
+	// Ignore the first row of the distincter in the first pass since we already
+	// know that we are in the same group and, thus, the row is not distinct,
+	// regardless of what the distincter outputs.
+	loopStartIndex := 1
+	var sel []uint16
+	for !isBufferedGroupComplete {
+		// Note that we're not resetting the distincter on every loop iteration
+		// because if we're doing the second, third, etc, iteration, then all the
+		// previous iterations had only the matching tuples to the buffered group,
+		// so the distincter - in a sense - compares the incoming tuples to the
+		// first tuple of the first iteration (which we know is the same group).
+		input.distincterInput.batch = batch
+		input.distincter.Next(ctx)
+
+		sel = batch.Selection()
+		var groupLength int
+		if sel != nil {
+			for groupLength = loopStartIndex; groupLength < batchLength; groupLength++ {
+				if input.distinctOutput[sel[groupLength]] {
+					// We found the beginning of a new group!
+					isBufferedGroupComplete = true
+					break
+				}
+			}
+		} else {
+			for groupLength = loopStartIndex; groupLength < batchLength; groupLength++ {
+				if input.distinctOutput[groupLength] {
+					// We found the beginning of a new group!
+					isBufferedGroupComplete = true
+					break
+				}
+			}
+		}
+
+		// Zero out the distinct output for the next pass.
+		copy(input.distinctOutput, zeroBoolColumn)
+		loopStartIndex = 0
+
+		// Buffer all the tuples that are part of the buffered group.
+		o.appendToBufferedGroup(input, batch, sel, rowIdx, groupLength)
+		rowIdx += groupLength
+
+		if !isBufferedGroupComplete {
+			// The buffered group is still not complete which means that we have
+			// just appended all the tuples from batch to it, so we need to get a
+			// fresh batch from the input.
+			rowIdx, batch = 0, input.source.Next(ctx)
+			batchLength = int(batch.Length())
+			if batchLength == 0 {
+				// The input has been exhausted, so the buffered group is now complete.
+				isBufferedGroupComplete = true
+			}
+		}
+	}
+
+	return batch, rowIdx, batchLength
+}
+
+// finishProbe completes the buffered groups on both sides of the input.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) finishProbe(ctx context.Context) {
+	o.proberState.lBatch, o.proberState.lIdx, o.proberState.lLength = o.completeBufferedGroup(
+		ctx,
+		&o.left,
+		o.proberState.lBatch,
+		o.proberState.lIdx,
+	)
+	o.proberState.rBatch, o.proberState.rIdx, o.proberState.rLength = o.completeBufferedGroup(
+		ctx,
+		&o.right,
+		o.proberState.rBatch,
+		o.proberState.rIdx,
+	)
+}
+
+// probe is where we generate the groups slices that are used in the build
+// phase. We do this by first assuming that every row in both batches
+// contributes to the cross product. Then, with every equality column, we
+// filter out the rows that don't contribute to the cross product (i.e. they
+// don't have a matching row on the other side in the case of an inner join),
+// and set the correct cardinality.
+// Note that in this phase, we do this for every group, except the last group
+// in the batch.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) probe() {
+	o.groups.reset(o.proberState.lIdx, o.proberState.lLength, o.proberState.rIdx, o.proberState.rLength)
+	lSel := o.proberState.lBatch.Selection()
+	rSel := o.proberState.rBatch.Selection()
+	if lSel != nil {
+		if rSel != nil {
+			o.probeBodyLSeltrueRSeltrue()
+		} else {
+			o.probeBodyLSeltrueRSelfalse()
+		}
+	} else {
+		if rSel != nil {
+			o.probeBodyLSelfalseRSeltrue()
+		} else {
+			o.probeBodyLSelfalseRSelfalse()
+		}
+	}
+}
+
+// {{ end }}
+
+// {{/*
+// This code snippet is executed when at least one of the input sources has
+// been exhausted. It processes any remaining tuples and then sets up the
+// builder.
+func _SOURCE_FINISHED_SWITCH(joinType joinTypeInfo) { // */}}
+	// {{define "sourceFinishedSwitch"}}
+	// {{ if $.JoinType.IsInner }}
+	o.setBuilderSourceToBufferedGroup()
+	o.outputReady = true
+	// {{ else if $.JoinType.IsLeftOuter }}
+	// At least one of the sources is finished. If it was the right one,
+	// then we need to emit remaining tuples from the left source with
+	// nulls corresponding to the right one. But if the left source is
+	// finished, then there is nothing left to do.
+	if o.proberState.lIdx < o.proberState.lLength {
+		o.exhaustLeftSourceForLeftOuter()
+		// We do not set outputReady here to true because we want to put as
+		// many unmatched tuples from the left into the output batch. Once
+		// outCount reaches the desired output batch size, the output will be
+		// returned.
+	} else {
+		o.outputReady = true
+	}
+	// {{ end }}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{ range $joinType := .JoinTypes }}
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
+	for {
+		switch o.state {
+		case mjEntry:
+			if o.needToResetOutput {
+				o.needToResetOutput = false
+				for _, vec := range o.output.ColVecs() {
+					// We only need to explicitly reset nulls since the values will be
+					// copied over and the correct length will be set.
+					vec.Nulls().UnsetNulls()
+				}
+			}
+			o.initProberState(ctx)
+
+			if o.nonEmptyBufferedGroup() {
+				o.state = mjFinishBufferedGroup
+				break
+			}
+
+			if o.sourceFinished() {
+				o.state = mjSourceFinished
+				break
+			}
+
+			o.state = mjProbe
+		case mjSourceFinished:
+			_SOURCE_FINISHED_SWITCH(_JOIN_TYPE)
+			o.state = mjBuild
+		case mjFinishBufferedGroup:
+			o.finishProbe(ctx)
+			o.setBuilderSourceToBufferedGroup()
+			o.state = mjBuild
+		case mjProbe:
+			o.probe()
+			o.setBuilderSourceToBatch()
+			o.state = mjBuild
+		case mjBuild:
+			o.build()
+
+			if o.builderState.outFinished {
+				o.state = mjEntry
+				o.builderState.outFinished = false
+			}
+
+			if o.outputReady || o.builderState.outCount == o.outputBatchSize {
+				o.output.SetSelection(false)
+				o.output.SetLength(o.builderState.outCount)
+				// Reset builder out count.
+				o.builderState.outCount = uint16(0)
+				o.needToResetOutput = true
+				o.outputReady = false
+				return o.output
+			}
+		default:
+			panic(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
+		}
+	}
+}
+
+// {{ end }}
