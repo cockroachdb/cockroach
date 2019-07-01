@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -261,9 +262,6 @@ func (c *Constraint) FromString(short string) error {
 	return nil
 }
 
-// minRangeMaxBytes is the minimum value for range max bytes.
-const minRangeMaxBytes = 64 << 10 // 64 KB
-
 // NewZoneConfig is the zone configuration used when no custom
 // config has been specified.
 func NewZoneConfig() *ZoneConfig {
@@ -396,9 +394,9 @@ func (z *ZoneConfig) Validate() error {
 		}
 	}
 
-	if z.RangeMaxBytes != nil && *z.RangeMaxBytes < minRangeMaxBytes {
+	if z.RangeMaxBytes != nil && *z.RangeMaxBytes < base.MinRangeMaxBytes {
 		return fmt.Errorf("RangeMaxBytes %d less than minimum allowed %d",
-			*z.RangeMaxBytes, minRangeMaxBytes)
+			*z.RangeMaxBytes, base.MinRangeMaxBytes)
 	}
 
 	if z.RangeMinBytes != nil && *z.RangeMinBytes < 0 {
