@@ -134,6 +134,33 @@ func (b *circularGroupsBuffer) addLeftOuterGroup(curLIdx int, curRIdx int) {
 	}
 }
 
+// addRightOuterGroup adds a left and right group to the buffer that correspond
+// to an unmatched row from the right side in the case of RIGHT OUTER JOIN.
+func (b *circularGroupsBuffer) addRightOuterGroup(curLIdx int, curRIdx int) {
+	b.leftGroups[b.endIdx] = group{
+		rowStartIdx: curLIdx,
+		rowEndIdx:   curLIdx + 1,
+		numRepeats:  1,
+		toBuild:     1,
+		nullGroup:   true,
+		unmatched:   false,
+	}
+	b.rightGroups[b.endIdx] = group{
+		rowStartIdx: curRIdx,
+		rowEndIdx:   curRIdx + 1,
+		numRepeats:  1,
+		toBuild:     1,
+		nullGroup:   false,
+		unmatched:   true,
+	}
+	b.endIdx++
+
+	// Modulus on every step is more expensive than this check.
+	if b.endIdx >= b.cap {
+		b.endIdx -= b.cap
+	}
+}
+
 // finishedCol is used to notify the circular buffer to update the indices
 // representing the "window" of available values for the next column.
 func (b *circularGroupsBuffer) finishedCol() {

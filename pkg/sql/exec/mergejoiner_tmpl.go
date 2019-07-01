@@ -111,6 +111,7 @@ func _PROBE_SWITCH(
 			curRLength := rGroup.rowEndIdx
 			areGroupsProcessed := false
 			_LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE)
+			_RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE)
 			// Expand or filter each group based on the current equality column.
 			for curLIdx < curLLength && curRIdx < curRLength && !areGroupsProcessed {
 				// TODO(georgeutsin): change null check logic for non INNER joins.
@@ -123,6 +124,7 @@ func _PROBE_SWITCH(
 				// {{ end }}
 				// {{ if $.RNull }}
 				if rVec.Nulls().NullAt64(uint64(_R_SEL_IND)) {
+					_NULL_FROM_RIGHT_SWITCH(_JOIN_TYPE)
 					curRIdx++
 					continue
 				}
@@ -218,6 +220,11 @@ func _PROBE_SWITCH(
 						// {{ end }}
 					} else {
 						curRIdx++
+						// {{ if $.RNull }}
+						_INCREMENT_RIGHT_SWITCH(_JOIN_TYPE, _SEL_ARG, _MJ_OVERLOAD, true)
+						// {{ else }}
+						_INCREMENT_RIGHT_SWITCH(_JOIN_TYPE, _SEL_ARG, _MJ_OVERLOAD, false)
+						// {{ end }}
 					}
 
 				}
@@ -258,6 +265,43 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
 		curLIdx++
 		areGroupsProcessed = true
 	}
+	// {{ else if $.JoinType.IsRightOuter }}
+	// {{/*
+	// Unmatched groups from the left are not possible with RIGHT OUTER JOIN, so
+	// there is nothing to do here.
+	// */}}
+	// {{ end }}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{/*
+// This code snippet processes an unmatched group from the right.
+func _RIGHT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
+	// {{define "rightUnmatchedGroupSwitch"}}
+	// {{ if $.JoinType.IsInner }}
+	// {{/*
+	// Unmatched groups are not possible with INNER JOIN, so there is nothing to
+	// do here.
+	// */}}
+	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{/*
+	// Unmatched groups from the right are not possible with LEFT OUTER JOIN, so
+	// there is nothing to do here.
+	// */}}
+	// {{ else if $.JoinType.IsRightOuter }}
+	if rGroup.unmatched {
+		if curRIdx+1 != curRLength {
+			panic("unexpectedly length of the right unmatched group is not 1")
+		}
+		// The row already does not have a match, so we don't need to do any
+		// additional processing.
+		o.groups.addRightOuterGroup(curLIdx, curRIdx)
+		curRIdx++
+		areGroupsProcessed = true
+	}
 	// {{ end }}
 	// {{end}}
 	// {{/*
@@ -276,6 +320,32 @@ func _NULL_FROM_LEFT_SWITCH(joinType joinTypeInfo) { // */}}
 	// */}}
 	// {{ else if $.JoinType.IsLeftOuter }}
 	o.groups.addLeftOuterGroup(curLIdx, curRIdx)
+	// {{ else if $.JoinType.IsRightOuter }}
+	// {{/*
+	// Nulls coming from the left input are ignored in RIGHT OUTER JOIN.
+	// */}}
+	// {{ end }}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{/*
+// This code snippet decides what to do if we encounter null in the equality
+// column from the right input.
+func _NULL_FROM_RIGHT_SWITCH(joinType joinTypeInfo) { // */}}
+	// {{define "nullFromRightSwitch"}}
+	// {{ if $.JoinType.IsInner }}
+	// {{/*
+	// Nulls coming from the right input are ignored in INNER JOIN.
+	// */}}
+	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{/*
+	// Nulls coming from the right input are ignored in LEFT OUTER JOIN.
+	// */}}
+	// {{ else if $.JoinType.IsRightOuter }}
+	o.groups.addRightOuterGroup(curLIdx, curRIdx)
 	// {{ end }}
 	// {{end}}
 	// {{/*
@@ -318,6 +388,55 @@ func _INCREMENT_LEFT_SWITCH(
 		o.groups.addLeftOuterGroup(curLIdx, curRIdx)
 		curLIdx++
 	}
+	// {{ else if $.JoinType.IsRightOuter }}
+	// {{/*
+	// Unmatched tuple from the left source is not outputted in RIGHT OUTER JOIN.
+	// */}}
+	// {{ end }}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
+
+// {{/*
+// This code snippet decides what to do when - while looking for a match
+// between two inputs - we need to advance the right side, i.e. it decides how
+// to handle an unmatched tuple from the right.
+func _INCREMENT_RIGHT_SWITCH(
+	joinType joinTypeInfo, sel selPermutation, overload mjOverload, rHasNulls bool,
+) { // */}}
+	// {{define "incrementRightSwitch"}}
+	// {{ $sel := $.Sel }}
+	// {{ $mjOverload := $.MJOverload }}
+	// {{ if $.JoinType.IsInner }}
+	// {{/*
+	// Unmatched tuple from the right source is not outputted in INNER JOIN.
+	// */}}
+	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{/*
+	// Unmatched tuple from the right source is not outputted in LEFT OUTER JOIN.
+	// */}}
+	// {{ else if $.JoinType.IsRightOuter }}
+	// All the rows on the right within the current group will not get a match on
+	// the left, so we're adding each of them as a right outer group.
+	o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
+	for curRIdx < curRLength {
+		// {{ if $.RNull }}
+		if rVec.Nulls().NullAt64(uint64(_R_SEL_IND)) {
+			break
+		}
+		// {{ end }}
+		newRVal := rKeys[_R_SEL_IND]
+		// {{with $mjOverload}}
+		_ASSIGN_EQ("match", "newRVal", "rVal")
+		// {{end}}
+		if !match {
+			break
+		}
+		o.groups.addRightOuterGroup(curLIdx, curRIdx)
+		curRIdx++
+	}
 	// {{ end }}
 	// {{end}}
 	// {{/*
@@ -345,6 +464,19 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(joinType joinTypeInfo) { // */}}
 		for curLIdx < curLLength {
 			o.groups.addLeftOuterGroup(curLIdx, curRIdx)
 			curLIdx++
+		}
+	}
+	// {{ else if $.JoinType.IsRightOuter }}
+	if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
+		// The current group is not the last one within the column, so it
+		// cannot be extended into the next batch, and we need to process it
+		// right now.
+		// Any unprocessed row in the right group will not get a match, so
+		// each one of them becomes a new unmatched group with a
+		// corresponding null group.
+		for curRIdx < curRLength {
+			o.groups.addRightOuterGroup(curLIdx, curRIdx)
+			curRIdx++
 		}
 	}
 	// {{ end }}
@@ -438,20 +570,25 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 					toAppend = outputBatchSize - outStartIdx
 				}
 
-				var isNull bool
-				// {{ if $.HasNulls }}
-				isNull = src.Nulls().NullAt64(uint64(srcStartIdx))
-				if isNull {
+				if leftGroup.nullGroup {
 					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
 					outStartIdx += toAppend
-				}
-				// {{ end }}
+				} else {
+					var isNull bool
+					// {{ if $.HasNulls }}
+					isNull = src.Nulls().NullAt64(uint64(srcStartIdx))
+					if isNull {
+						out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
+						outStartIdx += toAppend
+					}
+					// {{ end }}
 
-				if !isNull {
-					val = srcCol[srcStartIdx]
-					for i := 0; i < toAppend; i++ {
-						outCol[outStartIdx] = val
-						outStartIdx++
+					if !isNull {
+						val = srcCol[srcStartIdx]
+						for i := 0; i < toAppend; i++ {
+							outCol[outStartIdx] = val
+							outStartIdx++
+						}
 					}
 				}
 
@@ -700,9 +837,16 @@ func _NULL_IN_BUFFERED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
 	// */}}
 	// {{ else if $.JoinType.IsLeftOuter }}
 	if input == &o.left {
-		// Nulls only from the left input can be saved in the buffer, so we do
-		// not perform this check on the right input.
-		// TODO(yuzefovich): update this when new join types are supported.
+		// Nulls only from the left input can be saved in the buffer in case of
+		// LEFT OUTER JOIN, so we do not perform this check on the right input.
+		if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
+			return true
+		}
+	}
+	// {{ else if $.JoinType.IsRightOuter }}
+	if input == &o.right {
+		// Nulls only from the right input can be saved in the buffer in case of
+		// RIGHT OUTER JOIN, so we do not perform this check on the left input.
 		if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
 			return true
 		}
@@ -992,6 +1136,8 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
 // remaining tuples on the left with nulls for the right side of output. It
 // should only be called once the right source has been exhausted, and if
 // we're doing LEFT OUTER join.
+// TODO(yuzefovich): rename to exhaustLeftSource and template it based on join
+// type.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSourceForLeftOuter() {
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
@@ -1015,6 +1161,37 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSourceForLeftOuter() {
 	o.builderState.rBatch = o.proberState.rBatch
 
 	o.proberState.lIdx = o.proberState.lLength
+}
+
+// exhaustRightSourceForRightOuter sets up the builder state for emitting
+// remaining tuples on the right with nulls for the left side of output. It
+// should only be called once the left source has been exhausted, and if
+// we're doing RIGHT OUTER join.
+// TODO(yuzefovich): rename to exhaustRightSource and template it based on join
+// type.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSourceForRightOuter() {
+	// The capacity of builder state lGroups and rGroups is always at least 1
+	// given the init.
+	o.builderState.lGroups = o.builderState.lGroups[:1]
+	o.builderState.lGroups[0] = group{
+		rowStartIdx: o.proberState.rIdx,
+		rowEndIdx:   o.proberState.rLength,
+		numRepeats:  1,
+		toBuild:     o.proberState.rLength - o.proberState.rIdx,
+		nullGroup:   true,
+	}
+	o.builderState.rGroups = o.builderState.rGroups[:1]
+	o.builderState.rGroups[0] = group{
+		rowStartIdx: o.proberState.rIdx,
+		rowEndIdx:   o.proberState.rLength,
+		numRepeats:  1,
+		toBuild:     o.proberState.rLength - o.proberState.rIdx,
+		unmatched:   true,
+	}
+	o.builderState.lBatch = o.proberState.lBatch
+	o.builderState.rBatch = o.proberState.rBatch
+
+	o.proberState.rIdx = o.proberState.rLength
 }
 
 // build creates the cross product, and writes it to the output member.
@@ -1201,6 +1378,20 @@ func _SOURCE_FINISHED_SWITCH(joinType joinTypeInfo) { // */}}
 		o.exhaustLeftSourceForLeftOuter()
 		// We do not set outputReady here to true because we want to put as
 		// many unmatched tuples from the left into the output batch. Once
+		// outCount reaches the desired output batch size, the output will be
+		// returned.
+	} else {
+		o.outputReady = true
+	}
+	// {{ else if $.JoinType.IsRightOuter }}
+	// At least one of the sources is finished. If it was the left one,
+	// then we need to emit remaining tuples from the right source with
+	// nulls corresponding to the left one. But if the right source is
+	// finished, then there is nothing left to do.
+	if o.proberState.rIdx < o.proberState.rLength {
+		o.exhaustRightSourceForRightOuter()
+		// We do not set outputReady here to true because we want to put as
+		// many unmatched tuples from the right into the output batch. Once
 		// outCount reaches the desired output batch size, the output will be
 		// returned.
 	} else {

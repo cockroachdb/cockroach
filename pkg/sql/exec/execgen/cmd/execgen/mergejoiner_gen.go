@@ -41,9 +41,11 @@ type selPermutation struct {
 }
 
 type joinTypeInfo struct {
-	IsInner     bool
-	IsLeftOuter bool
-	String      string
+	IsInner      bool
+	IsLeftOuter  bool
+	IsRightOuter bool
+
+	String string
 }
 
 func genMergeJoinOps(wr io.Writer) error {
@@ -70,11 +72,20 @@ func genMergeJoinOps(wr io.Writer) error {
 	leftUnmatchedGroupSwitch := makeFunctionRegex("_LEFT_UNMATCHED_GROUP_SWITCH", 1)
 	s = leftUnmatchedGroupSwitch.ReplaceAllString(s, `{{template "leftUnmatchedGroupSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
+	rightUnmatchedGroupSwitch := makeFunctionRegex("_RIGHT_UNMATCHED_GROUP_SWITCH", 1)
+	s = rightUnmatchedGroupSwitch.ReplaceAllString(s, `{{template "rightUnmatchedGroupSwitch" buildDict "Global" $ "JoinType" $1}}`)
+
 	nullFromLeftSwitch := makeFunctionRegex("_NULL_FROM_LEFT_SWITCH", 1)
 	s = nullFromLeftSwitch.ReplaceAllString(s, `{{template "nullFromLeftSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
+	nullFromRightSwitch := makeFunctionRegex("_NULL_FROM_RIGHT_SWITCH", 1)
+	s = nullFromRightSwitch.ReplaceAllString(s, `{{template "nullFromRightSwitch" buildDict "Global" $ "JoinType" $1}}`)
+
 	incrementLeftSwitch := makeFunctionRegex("_INCREMENT_LEFT_SWITCH", 4)
 	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "MJOverload" $3 "LNull" $4}}`)
+
+	incrementRightSwitch := makeFunctionRegex("_INCREMENT_RIGHT_SWITCH", 4)
+	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "MJOverload" $3 "RNull" $4}}`)
 
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -159,6 +170,10 @@ func genMergeJoinOps(wr io.Writer) error {
 		{
 			IsLeftOuter: true,
 			String:      "LeftOuter",
+		},
+		{
+			IsRightOuter: true,
+			String:       "RightOuter",
 		},
 	}
 
