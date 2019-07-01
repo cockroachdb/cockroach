@@ -1950,18 +1950,20 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 
 	// Map the columns of the lookupJoinNode to the result streams of the
 	// JoinReader.
-	planToStreamColMap := makePlanToStreamColMap(len(n.columns))
-	copy(planToStreamColMap, plan.PlanToStreamColMap)
 	numInputNodeCols := len(planColumns(n.input))
+	planToStreamColMap := makePlanToStreamColMap(numInputNodeCols + len(n.table.cols))
+	copy(planToStreamColMap, plan.PlanToStreamColMap)
 	for i := range n.table.cols {
 		planToStreamColMap[numInputNodeCols+i] = numLeftCols + i
 	}
 
 	// Set the ON condition.
 	if n.onCond != nil {
-		// Note that the ON condition refers to the *internal* columns of the
-		// processor (before the OutputColumns projection).
-		indexVarMap := makePlanToStreamColMap(len(n.columns))
+		// Note that (regardless of the join type or the OutputColumns projection)
+		// the ON condition refers to the input columns with var indexes 0 to
+		// numInputNodeCols-1 and to table columns with var indexes starting from
+		// numInputNodeCols.
+		indexVarMap := makePlanToStreamColMap(numInputNodeCols + len(n.table.cols))
 		copy(indexVarMap, plan.PlanToStreamColMap)
 		for i := range n.table.cols {
 			indexVarMap[numInputNodeCols+i] = int(post.OutputColumns[numLeftCols+i])
@@ -1973,6 +1975,12 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
+	}
+
+	if n.joinType == sqlbase.LeftSemiJoin || n.joinType == sqlbase.LeftAntiJoin {
+		// For anti/semi join, we only produce the input columns.
+		planToStreamColMap = planToStreamColMap[:numInputNodeCols]
+		post.OutputColumns = post.OutputColumns[:numInputNodeCols]
 	}
 
 	// Instantiate one join reader for every stream.

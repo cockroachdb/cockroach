@@ -633,8 +633,12 @@ func (ef *execFactory) ConstructLookupJoin(
 	for i, c := range keyCols {
 		n.keyCols[i] = int(c)
 	}
+	// Build the result columns.
 	inputCols := planColumns(input.(planNode))
-	scanCols := planColumns(tableScan)
+	var scanCols sqlbase.ResultColumns
+	if joinType != sqlbase.LeftSemiJoin && joinType != sqlbase.LeftAntiJoin {
+		scanCols = planColumns(tableScan)
+	}
 	n.columns = make(sqlbase.ResultColumns, 0, len(inputCols)+len(scanCols))
 	n.columns = append(n.columns, inputCols...)
 	n.columns = append(n.columns, scanCols...)

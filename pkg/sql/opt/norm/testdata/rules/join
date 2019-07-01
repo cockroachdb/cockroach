@@ -169,29 +169,21 @@ left-join (merge)
 opt expect=PushFilterIntoJoinLeft
 SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE x=k AND s='foo')
 ----
-semi-join (merge)
+semi-join (lookup b)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
- ├── left ordering: +1
- ├── right ordering: +6
+ ├── key columns: [1] = [6]
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1 opt(4) [actual: +1]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(4) [actual: +1]
+ │    │    └── fd: (1)-->(2-5)
  │    └── filters
  │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- ├── scan b
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
  └── filters (true)
 
 # Do not push anti-join conditions into left input.
