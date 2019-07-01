@@ -298,6 +298,22 @@ func TestQuotaPoolCappedAcquisition(t *testing.T) {
 	}
 }
 
+func TestOnAcquisition(t *testing.T) {
+	const quota = 100
+	var called bool
+	qp := quotapool.NewIntPool("test", quota,
+		quotapool.OnAcquisition(func(ctx context.Context, poolName string, _ quotapool.Request, start time.Time,
+		) {
+			assert.Equal(t, poolName, "test")
+			called = true
+		}))
+	ctx := context.Background()
+	alloc, err := qp.Acquire(ctx, 1)
+	assert.Nil(t, err)
+	assert.True(t, called)
+	alloc.Release()
+}
+
 // TestSlowAcquisition ensures that the SlowAcquisition callback is called
 // when an Acquire call takes longer than the configured timeout.
 func TestSlowAcquisition(t *testing.T) {
