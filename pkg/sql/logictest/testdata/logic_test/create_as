@@ -144,3 +144,49 @@ SELECT * FROM baz
 ----
 a  b  c
 1  2  4
+
+# Check that CREATE TABLE AS allows users to specify primary key (#20940)
+statement ok
+CREATE TABLE foo5 (a, b PRIMARY KEY, c) AS SELECT * FROM baz
+
+query TT
+SHOW CREATE TABLE foo5
+----
+foo5  CREATE TABLE foo5 (
+    a INT8 NULL,
+    b INT8 NOT NULL,
+    c INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (b ASC),
+    FAMILY "primary" (a, b, c)
+    )
+
+statement ok
+SET OPTIMIZER=ON; CREATE TABLE foo6 (a PRIMARY KEY, b, c) AS SELECT * FROM baz; SET OPTIMIZER=OFF
+
+query TT
+SHOW CREATE TABLE foo6
+----
+foo6  CREATE TABLE foo6 (
+    a INT8 NOT NULL,
+    b INT8 NULL,
+    c INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    FAMILY "primary" (a, b, c)
+    )
+
+statement error generate insert row: null value in column "x" violates not-null constraint
+CREATE TABLE foo7 (x PRIMARY KEY) AS VALUES (1), (NULL);
+
+statement ok
+BEGIN; CREATE TABLE foo8 (item PRIMARY KEY, qty) AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50); END
+
+query TT
+SHOW CREATE TABLE foo8
+----
+foo8  CREATE TABLE foo8 (
+    item STRING NOT NULL,
+    qty INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (item ASC),
+    FAMILY "primary" (item, qty)
+    )
+
