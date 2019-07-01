@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -445,6 +447,61 @@ func BenchmarkConcurrentIntQuotaPool(b *testing.B) {
 	} {
 		b.Run(test(c.workers, c.quota))
 	}
+}
+
+// TestLen verifies that the Len() method of the IntPool works as expected.
+func TestLen(t *testing.T) {
+	qp := quotapool.NewIntPool("test", 1, quotapool.LogSlowAcquisition)
+	ctx := context.Background()
+	allocCh := make(chan *quotapool.IntAlloc)
+	doAcquire := func(ctx context.Context) {
+		alloc, err := qp.Acquire(ctx, 1)
+		if ctx.Err() == nil && assert.Nil(t, err) {
+			allocCh <- alloc
+		}
+	}
+	assertLenSoon := func(exp int) {
+		testutils.SucceedsSoon(t, func() error {
+			if got := qp.Len(); got != exp {
+				return errors.Errorf("expected queue len to be %d, got %d", got, exp)
+			}
+			return nil
+		})
+	}
+	// Initially qp should have a length of 0.
+	assert.Equal(t, 0, qp.Len())
+	// Acquire all of the quota from the pool.
+	alloc, err := qp.Acquire(ctx, 1)
+	assert.Nil(t, err)
+	// The length should still be 0.
+	assert.Equal(t, 0, qp.Len())
+	// Launch a goroutine to acquire quota, ensure that the length increases.
+	go doAcquire(ctx)
+	assertLenSoon(1)
+	// Create more goroutines which will block to be canceled later in order to
+	// ensure that cancelations deduct from the length.
+	const numToCancel = 12 // an arbitrary number
+	ctxToCancel, cancel := context.WithCancel(ctx)
+	for i := 0; i < numToCancel; i++ {
+		go doAcquire(ctxToCancel)
+	}
+	// Ensure that all of the new goroutines are reflected in the length.
+	assertLenSoon(numToCancel + 1)
+	// Launch another goroutine with the default context.
+	go doAcquire(ctx)
+	assertLenSoon(numToCancel + 2)
+	// Cancel some of the goroutines.
+	cancel()
+	// Ensure that they are soon not reflected in the length.
+	assertLenSoon(2)
+	// Unblock the first goroutine.
+	alloc.Release()
+	alloc = <-allocCh
+	assert.Equal(t, 1, qp.Len())
+	// Unblock the second goroutine.
+	alloc.Release()
+	<-allocCh
+	assert.Equal(t, 0, qp.Len())
 }
 
 // BenchmarkIntQuotaPoolFunc benchmarks the common case where we have sufficient
