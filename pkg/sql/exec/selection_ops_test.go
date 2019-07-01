@@ -31,17 +31,12 @@ const (
 
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	tups := tuples{{0}, {1}, {2}, {nil}}
-	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-		op := selLTInt64Int64ConstOp{
+	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
+		return &selLTInt64Int64ConstOp{
 			input:    input[0],
 			colIdx:   0,
 			constArg: 2,
-		}
-		op.Init()
-		out := newOpTestOutput(&op, []int{0}, tuples{{0}, {1}})
-		if err := out.Verify(); err != nil {
-			t.Error(err)
-		}
+		}, nil
 	})
 }
 
@@ -55,17 +50,12 @@ func TestSelLTInt64Int64(t *testing.T) {
 		{-1, nil},
 		{nil, nil},
 	}
-	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-		op := selLTInt64Int64Op{
+	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, []int{0, 1}, func(input []Operator) (Operator, error) {
+		return &selLTInt64Int64Op{
 			input:   input[0],
 			col1Idx: 0,
 			col2Idx: 1,
-		}
-		op.Init()
-		out := newOpTestOutput(&op, []int{0, 1}, tuples{{0, 1}})
-		if err := out.Verify(); err != nil {
-			t.Error(err)
-		}
+		}, nil
 	})
 }
 

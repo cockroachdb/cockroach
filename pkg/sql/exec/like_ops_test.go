@@ -23,33 +23,23 @@ import (
 
 func TestSelPrefixBytesBytesConstOp(t *testing.T) {
 	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
-	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-		op := selPrefixBytesBytesConstOp{
+	runTests(t, []tuples{tups}, tuples{{"def"}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
+		return &selPrefixBytesBytesConstOp{
 			input:    input[0],
 			colIdx:   0,
 			constArg: []byte("de"),
-		}
-		op.Init()
-		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
-		if err := out.Verify(); err != nil {
-			t.Error(err)
-		}
+		}, nil
 	})
 }
 
 func TestSelSuffixBytesBytesConstOp(t *testing.T) {
 	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
-	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-		op := selSuffixBytesBytesConstOp{
+	runTests(t, []tuples{tups}, tuples{{"def"}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
+		return &selSuffixBytesBytesConstOp{
 			input:    input[0],
 			colIdx:   0,
 			constArg: []byte("ef"),
-		}
-		op.Init()
-		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
-		if err := out.Verify(); err != nil {
-			t.Error(err)
-		}
+		}, nil
 	})
 }
 
@@ -59,17 +49,12 @@ func TestSelRegexpBytesBytesConstOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-		op := selRegexpBytesBytesConstOp{
+	runTests(t, []tuples{tups}, tuples{{"def"}}, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
+		return &selRegexpBytesBytesConstOp{
 			input:    input[0],
 			colIdx:   0,
 			constArg: pattern,
-		}
-		op.Init()
-		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
-		if err := out.Verify(); err != nil {
-			t.Error(err)
-		}
+		}, nil
 	})
 }
 

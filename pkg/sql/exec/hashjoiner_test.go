@@ -707,38 +707,28 @@ func TestHashJoinerInt64(t *testing.T) {
 
 		for _, buildDistinct := range buildFlags {
 			t.Run(fmt.Sprintf("buildDistinct=%v", buildDistinct), func(t *testing.T) {
-				runTests(t, inputs, func(t *testing.T, sources []Operator) {
-					leftSource, rightSource := sources[0], sources[1]
+				nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
+				nLeftOutCols := uint32(len(tc.leftOutCols))
+				nLeftCols := uint32(len(tc.leftTypes))
 
-					hj, err := NewEqHashJoinerOp(
+				cols := make([]int, nOutCols)
+
+				for i, colIdx := range tc.leftOutCols {
+					cols[i] = int(colIdx)
+				}
+				for i, colIdx := range tc.rightOutCols {
+					cols[uint32(i)+nLeftOutCols] = int(colIdx + nLeftCols)
+				}
+
+				runTests(t, inputs, tc.expectedTuples, unorderedVerifier, cols, func(sources []Operator) (Operator, error) {
+					leftSource, rightSource := sources[0], sources[1]
+					return NewEqHashJoinerOp(
 						leftSource, rightSource,
 						tc.leftEqCols, tc.rightEqCols,
 						tc.leftOutCols, tc.rightOutCols,
 						tc.leftTypes, tc.rightTypes,
 						tc.buildRightSide, tc.buildDistinct,
 						tc.joinType)
-					if err != nil {
-						t.Fatal(err)
-					}
-
-					nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
-					nLeftOutCols := uint32(len(tc.leftOutCols))
-					nLeftCols := uint32(len(tc.leftTypes))
-
-					cols := make([]int, nOutCols)
-
-					for i, colIdx := range tc.leftOutCols {
-						cols[i] = int(colIdx)
-					}
-					for i, colIdx := range tc.rightOutCols {
-						cols[uint32(i)+nLeftOutCols] = int(colIdx + nLeftCols)
-					}
-
-					out := newOpTestOutput(hj, cols, tc.expectedTuples)
-
-					if err := out.VerifyAnyOrder(); err != nil {
-						t.Fatal(err)
-					}
 				})
 			})
 

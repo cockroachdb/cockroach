@@ -53,22 +53,14 @@ func TestSimpleProjectOp(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
-			count := NewSimpleProjectOp(input[0], tc.colsToKeep)
-			out := newOpTestOutput(count, []int{0, 1}, tc.expected)
-
-			if err := out.Verify(); err != nil {
-				t.Fatal(err)
-			}
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, []int{0, 1}, func(input []Operator) (Operator, error) {
+			return NewSimpleProjectOp(input[0], tc.colsToKeep), nil
 		})
 	}
 
 	// Empty projection.
-	runTests(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, func(t *testing.T, input []Operator) {
-		count := NewSimpleProjectOp(input[0], nil)
-		out := newOpTestOutput(count, []int{}, tuples{{}, {}})
-		if err := out.Verify(); err != nil {
-			t.Fatal(err)
-		}
-	})
+	runTests(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, tuples{{}, {}}, orderedVerifier, []int{},
+		func(input []Operator) (Operator, error) {
+			return NewSimpleProjectOp(input[0], nil), nil
+		})
 }
