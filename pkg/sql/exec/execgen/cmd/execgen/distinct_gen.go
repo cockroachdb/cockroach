@@ -40,6 +40,9 @@ func genDistinctOps(wr io.Writer) error {
 	innerLoopRe := regexp.MustCompile(`_CHECK_DISTINCT\(.*\)`)
 	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" .}}`)
 
+	innerLoopNullsRe := regexp.MustCompile(`_CHECK_DISTINCT_WITH_NULLS\(.*\)`)
+	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "checkDistinctWithNulls" .}}`)
+
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("distinct_op").Parse(s)
 	if err != nil {
