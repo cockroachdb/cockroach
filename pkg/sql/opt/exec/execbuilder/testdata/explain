@@ -397,13 +397,14 @@ values  ·     ·
 query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
 ----
-limit            ·       ·
- │               count   1
- │               offset  1
- └── ordinality  ·       ·
-      └── scan   ·       ·
-·                table   t@primary
-·                spans   ALL
+limit                 ·       ·
+ │                    offset  1
+ └── limit            ·       ·
+      │               count   2
+      └── ordinality  ·       ·
+           └── scan   ·       ·
+·                     table   t@primary
+·                     spans   ALL
 
 query TTT
 EXPLAIN SELECT DISTINCT v FROM t
@@ -417,14 +418,15 @@ distinct   ·            ·
 query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
 ----
-limit           ·            ·
- │              count        1
- │              offset       1
- └── distinct   ·            ·
-      │         distinct on  v
-      └── scan  ·            ·
-·               table        t@primary
-·               spans        ALL
+limit                ·            ·
+ │                   offset       1
+ └── limit           ·            ·
+      │              count        2
+      └── distinct   ·            ·
+           │         distinct on  v
+           └── scan  ·            ·
+·                    table        t@primary
+·                    spans        ALL
 
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
