@@ -67,7 +67,8 @@ func _ASSIGN_LT(_, _, _ interface{}) uint64 {
 const _L_SEL_IND = 0
 const _R_SEL_IND = 0
 
-// _SEL_ARG is used in place of the string "$sel", since that isn't valid go code.
+// _SEL_ARG is used in place of the string "$sel", since that isn't valid go
+// code.
 const _SEL_ARG = 0
 
 // */}}
@@ -119,11 +120,13 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 				}
 				// {{ end }}
 
-				// _L_SEL_IND is the template type variable for the loop variable that's either
-				// curLIdx or lSel[curLIdx] depending on whether we're in a selection or not.
+				// _L_SEL_IND is the template type variable for the loop variable that
+				// is either curLIdx or lSel[curLIdx] depending on whether we're in a
+				// selection or not.
 				lVal := lKeys[_L_SEL_IND]
-				// _R_SEL_IND is the template type variable for the loop variable that's either
-				// curRIdx or rSel[curRIdx] depending on whether we're in a selection or not.
+				// _R_SEL_IND is the template type variable for the loop variable that
+				// is either curRIdx or rSel[curRIdx] depending on whether we're in a
+				// selection or not.
 				rVal := rKeys[_R_SEL_IND]
 
 				var match bool
@@ -182,18 +185,20 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 						}
 					}
 
-					// Last equality column and either group is incomplete. Save state and have it handled in the next iteration.
+					// Last equality column and either group is incomplete. Save state
+					// and have it handled in the next iteration.
 					if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
-						o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lBufferedGroup, &o.proberState.lGroupEndIdx)
+						o.appendToBufferedGroup(&o.left, o.proberState.lBatch, lSel, beginLIdx, lGroupLength)
 						o.proberState.lIdx = lGroupLength + beginLIdx
-						o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rBufferedGroup, &o.proberState.rGroupEndIdx)
+						o.appendToBufferedGroup(&o.right, o.proberState.rBatch, rSel, beginRIdx, rGroupLength)
 						o.proberState.rIdx = rGroupLength + beginRIdx
 
 						o.groups.finishedCol()
 						break EqLoop
 					}
 
-					// Neither group ends with the batch so add the group to the circular buffer and increment the indices.
+					// Neither group ends with the batch, so add the group to the
+					// circular buffer.
 					o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 				} else { // mismatch
 					var incrementLeft bool
@@ -235,16 +240,17 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 				// cannot be extended into the next batch, and we need to process it
 				// right now.
 				if o.joinType == sqlbase.JoinType_LEFT_OUTER {
-					// Any unprocessed row in the left group will not get a match, so each
-					// one of them becomes a new unmatched group with a corresponding null
-					// group.
+					// Any unprocessed row in the left group will not get a match, so
+					// each one of them becomes a new unmatched group with a
+					// corresponding null group.
 					for curLIdx < curLLength {
 						o.groups.addLeftOuterGroup(curLIdx, curRIdx)
 						curLIdx++
 					}
 				}
 			}
-			// Both o.proberState.lIdx and o.proberState.rIdx should point to the last elements processed in their respective batches.
+			// Both o.proberState.lIdx and o.proberState.rIdx should point to the
+			// last elements processed in their respective batches.
 			o.proberState.lIdx = curLIdx
 			o.proberState.rIdx = curRIdx
 		}
@@ -296,7 +302,8 @@ EqLoop:
 				}
 			}
 		}
-		// Look at the groups associated with the next equality column by moving the circular buffer pointer up.
+		// Look at the groups associated with the next equality column by moving
+		// the circular buffer pointer up.
 		o.groups.finishedCol()
 	}
 }
@@ -316,9 +323,10 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 		var srcStartIdx int
 
 		// Loop over every group.
-		for ; o.builderState.left.groupsIdx < groupsLen; o.builderState.left.groupsIdx++ {
+		for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
 			leftGroup := &leftGroups[o.builderState.left.groupsIdx]
-			// If curSrcStartIdx is uninitialized, start it at the group's start idx. Otherwise continue where we left off.
+			// If curSrcStartIdx is uninitialized, start it at the group's start idx.
+			// Otherwise continue where we left off.
 			if o.builderState.left.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
 				o.builderState.left.curSrcStartIdx = leftGroup.rowStartIdx
 			}
@@ -354,7 +362,8 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 				}
 
 				if toAppend < repeatsLeft {
-					// We didn't materialize all the rows in the group so save state and move to next column.
+					// We didn't materialize all the rows in the group so save state and
+					// move to the next column.
 					o.builderState.left.numRepeatsIdx += toAppend
 					if o.builderState.left.colIdx == len(input.outCols)-1 {
 						o.builderState.left.colIdx = zeroMJCPcolIdx
@@ -379,8 +388,9 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 
 // */}}
 
-// buildLeftGroups takes a []group and expands each group into the output by repeating
-// each row in the group numRepeats times. For example, given an input table:
+// buildLeftGroups takes a []group and expands each group into the output by
+// repeating each row in the group numRepeats times. For example, given an
+// input table:
 //  L1 |  L2
 //  --------
 //  1  |  a
@@ -395,19 +405,17 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 //  1  |  b
 //  1  |  b
 //  1  |  b
-// Note: this is different from buildRightGroups in that each row of group is repeated
-// numRepeats times, instead of a simple copy of the group as a whole.
+// Note: this is different from buildRightGroups in that each row of group is
+// repeated numRepeats times, instead of a simple copy of the group as a whole.
 // SIDE EFFECTS: writes into o.output.
 func (o *mergeJoinOp) buildLeftGroups(
 	leftGroups []group,
-	groupsLen int,
 	colOffset int,
 	input *mergeJoinInput,
-	bat coldata.Batch,
+	batch coldata.Batch,
 	destStartIdx uint16,
 ) {
-	o.builderState.left.finished = false
-	sel := bat.Selection()
+	sel := batch.Selection()
 	initialBuilderState := o.builderState.left
 	outputBatchSize := int(o.outputBatchSize)
 	// Loop over every column.
@@ -416,7 +424,7 @@ LeftColLoop:
 		colIdx := input.outCols[o.builderState.left.colIdx]
 		outStartIdx := int(destStartIdx)
 		out := o.output.ColVec(int(colIdx))
-		src := bat.ColVec(int(colIdx))
+		src := batch.ColVec(int(colIdx))
 		colType := input.sourceTypes[colIdx]
 
 		if sel != nil {
@@ -448,7 +456,7 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 		outCol := out._TemplateType()
 
 		// Loop over every group.
-		for ; o.builderState.right.groupsIdx < groupsLen; o.builderState.right.groupsIdx++ {
+		for ; o.builderState.right.groupsIdx < len(rightGroups); o.builderState.right.groupsIdx++ {
 			rightGroup := &rightGroups[o.builderState.right.groupsIdx]
 			// Repeat every group numRepeats times.
 			for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
@@ -471,7 +479,8 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 					// {{ end }}
 					// {{ end }}
 
-					// Optimization in the case that group length is 1, use assign instead of copy.
+					// Optimization in the case that group length is 1, use assign
+					// instead of copy.
 					if toAppend == 1 {
 						// {{ if $.IsSel }}
 						outCol[outStartIdx] = srcCol[sel[o.builderState.right.curSrcStartIdx]]
@@ -491,7 +500,8 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 
 				outStartIdx += toAppend
 
-				// If we haven't materialized all the rows from the group, then we are done with the current column.
+				// If we haven't materialized all the rows from the group, then we are
+				// done with the current column.
 				if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 					// If it's the last column, save state and return.
 					if o.builderState.right.colIdx == len(input.outCols)-1 {
@@ -534,20 +544,18 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 //  1  |  b
 //  1  |  a
 //  1  |  b
-// Note: this is different from buildLeftGroups in that each group is not expanded,
-// but directly copied numRepeats times.
+// Note: this is different from buildLeftGroups in that each group is not
+// expanded but directly copied numRepeats times.
 // SIDE EFFECTS: writes into o.output.
 func (o *mergeJoinOp) buildRightGroups(
 	rightGroups []group,
-	groupsLen int,
 	colOffset int,
 	input *mergeJoinInput,
-	bat coldata.Batch,
+	batch coldata.Batch,
 	destStartIdx uint16,
 ) {
-	o.builderState.right.finished = false
 	initialBuilderState := o.builderState.right
-	sel := bat.Selection()
+	sel := batch.Selection()
 	outputBatchSize := int(o.outputBatchSize)
 
 	// Loop over every column.
@@ -556,7 +564,7 @@ RightColLoop:
 		colIdx := input.outCols[o.builderState.right.colIdx]
 		outStartIdx := int(destStartIdx)
 		out := o.output.ColVec(int(colIdx) + colOffset)
-		src := bat.ColVec(int(colIdx))
+		src := batch.ColVec(int(colIdx))
 		colType := input.sourceTypes[colIdx]
 
 		if sel != nil {
@@ -578,20 +586,23 @@ RightColLoop:
 	o.builderState.right.reset()
 }
 
-// isGroupFinished checks to see whether or not the savedGroup continues in bat.
-func (o *mergeJoinOp) isGroupFinished(
-	input *mergeJoinInput,
-	savedGroup coldata.Batch,
-	savedGroupIdx int,
-	bat coldata.Batch,
-	rowIdx int,
-	sel []uint16,
+// isBufferedGroupFinished checks to see whether or not the buffered group
+// corresponding to input continues in batch.
+func (o *mergeJoinOp) isBufferedGroupFinished(
+	input *mergeJoinInput, batch coldata.Batch, rowIdx int,
 ) bool {
-	if bat.Length() == 0 {
+	if batch.Length() == 0 {
 		return true
 	}
+	sel := batch.Selection()
+	bufferedGroup := o.proberState.lBufferedGroup
+	if input == &o.right {
+		bufferedGroup = o.proberState.rBufferedGroup
+	}
+	lastBufferedTupleIdx := bufferedGroup.length - 1
 
-	// Check all equality columns in the first row of the bat to make sure we're in the same group.
+	// Check all equality columns in the first row of batch to make sure we're in
+	// the same group.
 	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
 		colTyp := input.sourceTypes[colIdx]
 
@@ -603,25 +614,25 @@ func (o *mergeJoinOp) isGroupFinished(
 				// not perform this check on the right input.
 				// TODO(yuzefovich): update this when new join types are supported.
 				if o.joinType == sqlbase.LeftOuterJoin {
-					if savedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(savedGroupIdx - 1)) {
+					if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
 						return true
 					}
 				}
 			}
-			prevVal := savedGroup.ColVec(int(colIdx))._TemplateType()[savedGroupIdx-1]
+			prevVal := bufferedGroup.ColVec(int(colIdx))._TemplateType()[lastBufferedTupleIdx]
 			var curVal _GOTYPE
 			if sel != nil {
 				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
-				if bat.ColVec(int(colIdx)).HasNulls() && bat.ColVec(int(colIdx)).Nulls().NullAt64(uint64(sel[rowIdx])) {
+				if batch.ColVec(int(colIdx)).HasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(uint64(sel[rowIdx])) {
 					return true
 				}
-				curVal = bat.ColVec(int(colIdx))._TemplateType()[sel[rowIdx]]
+				curVal = batch.ColVec(int(colIdx))._TemplateType()[sel[rowIdx]]
 			} else {
 				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
-				if bat.ColVec(int(colIdx)).HasNulls() && bat.ColVec(int(colIdx)).Nulls().NullAt64(uint64(rowIdx)) {
+				if batch.ColVec(int(colIdx)).HasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(uint64(rowIdx)) {
 					return true
 				}
-				curVal = bat.ColVec(int(colIdx))._TemplateType()[rowIdx]
+				curVal = batch.ColVec(int(colIdx))._TemplateType()[rowIdx]
 			}
 			var match bool
 			_ASSIGN_EQ("match", "prevVal", "curVal")
