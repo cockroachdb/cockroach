@@ -36,6 +36,12 @@ func genSumAgg(wr io.Writer) error {
 	assignAddRe := regexp.MustCompile(`_ASSIGN_ADD\((.*),(.*),(.*)\)`)
 	s = assignAddRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
 
+	innerLoopRe := regexp.MustCompile(`_ACCUMULATE_SUM\(.*\)`)
+	s = innerLoopRe.ReplaceAllString(s, `{{template "accumulateSum" .}}`)
+
+	innerLoopNullsRe := regexp.MustCompile(`_ACCUMULATE_SUM_WITH_NULL\(.*\)`)
+	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "accumulateSumWithNull" .}}`)
+
 	tmpl, err := template.New("sum_agg").Parse(s)
 	if err != nil {
 		return err

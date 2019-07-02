@@ -65,6 +65,11 @@ type sum_TYPEAgg struct {
 		curIdx int
 		// vec points to the output vector we are updating.
 		vec []_GOTYPE
+		// nulls points to the output null vector that we are updating.
+		nulls *coldata.Nulls
+		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+		// for the group that is currently being aggregated.
+		foundNonNullForCurrentGroup bool
 	}
 }
 
@@ -73,12 +78,15 @@ var _ aggregateFunc = &sum_TYPEAgg{}
 func (a *sum_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
 	a.scratch.vec = v._TemplateType()
+	a.scratch.nulls = v.Nulls()
 	a.Reset()
 }
 
 func (a *sum_TYPEAgg) Reset() {
 	copy(a.scratch.vec, zero_TYPEColumn)
 	a.scratch.curIdx = -1
+	a.scratch.foundNonNullForCurrentGroup = false
+	a.scratch.nulls.UnsetNulls()
 	a.done = false
 }
 
@@ -99,33 +107,95 @@ func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
-		// The aggregation is finished. Flush the last value.
+		// The aggregation is finished. Flush the last value. If we haven't found
+		// any non-nulls for this group so far, the output for this group should be
+		// null. If a.scratch.curIdx is negative, it means the input has zero rows, and
+		// there should be no output at all.
+		if !a.scratch.foundNonNullForCurrentGroup && a.scratch.curIdx >= 0 {
+			a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
+		}
 		a.scratch.curIdx++
 		a.done = true
 		return
 	}
-	col, sel := b.ColVec(int(inputIdxs[0]))._TYPE(), b.Selection()
-	if sel != nil {
-		sel = sel[:inputLen]
-		for _, i := range sel {
-			x := 0
-			if a.groups[i] {
-				x = 1
+	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	col, nulls := vec._TemplateType(), vec.Nulls()
+	if nulls.HasNulls() {
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_ACCUMULATE_SUM_WITH_NULL(a, nulls, i)
 			}
-			a.scratch.curIdx += x
-			_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
+		} else {
+			col = col[:inputLen]
+			for i := range col {
+				_ACCUMULATE_SUM_WITH_NULL(a, nulls, i)
+			}
 		}
 	} else {
-		col = col[:inputLen]
-		for i := range col {
-			x := 0
-			if a.groups[i] {
-				x = 1
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_ACCUMULATE_SUM(a, i)
 			}
-			a.scratch.curIdx += x
-			_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
+		} else {
+			col = col[:inputLen]
+			for i := range col {
+				_ACCUMULATE_SUM(a, i)
+			}
 		}
 	}
 }
 
 // {{end}}
+
+// {{/*
+// _ACCUMULATE_SUM finds a non-null value for the group that contains the ith
+// row. If a non-null value was already found, then it does nothing. If this is
+// the first row of a new group, and no non-nulls have been found for the
+// current group, then the output for the current group is set to null. This
+// function presumes that the current batch has no null values.
+func _ACCUMULATE_SUM(a *sum_TYPEAgg, i int) { // */}}
+
+	// {{define "accumulateSum"}}
+	if a.groups[i] {
+		// If we encounter a new group, and we haven't found any non-nulls for the
+		// current group, the output for this group should be null. If
+		// a.scratch.curIdx is negative, it means that this is the first group.
+		if !a.scratch.foundNonNullForCurrentGroup && a.scratch.curIdx >= 0 {
+			a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
+		}
+		a.scratch.curIdx += 1
+		a.scratch.foundNonNullForCurrentGroup = false
+	}
+	_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
+	a.scratch.foundNonNullForCurrentGroup = true
+	// {{end}}
+
+	// {{/*
+} // */}}
+
+// {{/*
+// _ACCUMULATE_SUM_WITH_NULL behaves the same as _ACCUMULATE_SUM but handles
+// the presence of nulls in the input batch.
+func _ACCUMULATE_SUM_WITH_NULL(a *sum_TYPEAgg, nulls *coldata.Nulls, i int) { // */}}
+
+	// {{define "accumulateSumWithNull"}}
+	if a.groups[i] {
+		// If we encounter a new group, and we haven't found any non-nulls for the
+		// current group, the output for this group should be null. If
+		// a.scratch.curIdx is negative, it means that this is the first group.
+		if !a.scratch.foundNonNullForCurrentGroup && a.scratch.curIdx >= 0 {
+			a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
+		}
+		a.scratch.curIdx += 1
+		a.scratch.foundNonNullForCurrentGroup = false
+	}
+	if !nulls.NullAt(uint16(i)) {
+		_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
+		a.scratch.foundNonNullForCurrentGroup = true
+	}
+	// {{end}}
+
+	// {{/*
+} // */}}
