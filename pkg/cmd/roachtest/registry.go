@@ -82,4 +82,5 @@ func registerBenchmarks(r *registry) {
 	registerIndexesBench(r)
 	registerTPCCBench(r)
 	registerTPCHBench(r)
+	registerYCSBBenchUniformA(r)
 }
