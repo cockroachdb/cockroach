@@ -85,7 +85,7 @@ func (f *UnionFind) findRoot(n int) (subtreeRoot int, minElement int) {
 
 // Union joins the groups to which a and b belong.
 func (f *UnionFind) Union(a, b int) {
-	if a > math.MaxUint32 || a < 0 || b > math.MaxUint32 || b < 0 {
+	if int64(a) > math.MaxUint32 || a < 0 || int64(b) > math.MaxUint32 || b < 0 {
 		panic(fmt.Sprintf("invalid args %d, %d", a, b))
 	}
 	// Substitute a, b with the roots of the corresponding trees.
