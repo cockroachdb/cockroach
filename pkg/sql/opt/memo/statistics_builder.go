@@ -2660,8 +2660,10 @@ func (sb *statisticsBuilder) selectivityFromNullCounts(
 			// estimate zero rows. Adjust the estimate for nullsRemoved to avoid
 			// this.
 			if nullsRemoved == rowCount {
-				nullsRemoved = max(nullsRemoved-1, 0)
+				// Note: this approach protects against floating point precision errors.
+				nullsRemoved *= 0.9999999
 			}
+
 			selectivity *= 1 - nullsRemoved/rowCount
 		}
 	}
@@ -2721,7 +2723,8 @@ func (sb *statisticsBuilder) joinSelectivityFromNullCounts(
 			// estimate zero rows. Adjust the estimate for crossJoinNullCount to
 			// avoid this.
 			if crossJoinNullCount == inputRowCount {
-				crossJoinNullCount = max(crossJoinNullCount-1, 0)
+				// Note: this approach protects against floating point precision errors.
+				crossJoinNullCount *= 0.9999999
 			}
 			selectivity *= 1 - crossJoinNullCount/inputRowCount
 		}
