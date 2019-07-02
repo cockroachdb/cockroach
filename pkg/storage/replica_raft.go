@@ -328,8 +328,12 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (_ int64, pErr *
 	return int64(maxLeaseIndex), nil
 }
 
+func (r *Replica) numPendingProposalsRLocked() int {
+	return len(r.mu.proposals) + r.mu.proposalBuf.Len()
+}
+
 func (r *Replica) hasPendingProposalsRLocked() bool {
-	return len(r.mu.proposals) > 0 || r.mu.proposalBuf.Len() > 0
+	return r.numPendingProposalsRLocked() > 0
 }
 
 // stepRaftGroup calls Step on the replica's RawNode with the provided request's
