@@ -225,3 +225,36 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	require.Nil(t, g.Wait())
 	t.Logf("%d successful proposals before destroy", len(mlais))
 }
+
+// TestProposalBufferRegistersAllOnProposalError tests that all proposals in the
+// proposal buffer are registered with the proposer when the buffer is flushed,
+// even if an error is seen when proposing a batch of entries.
+func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var p testProposer
+	var b propBuf
+	b.Init(&p)
+
+	num := propBufArrayMinSize
+	for i := 0; i < num; i++ {
+		pd, data := newPropData(false)
+		_, err := b.Insert(pd, data)
+		require.Nil(t, err)
+	}
+	require.Equal(t, num, b.Len())
+
+	propNum := 0
+	propErr := errors.New("failed proposal")
+	b.testing.submitProposalFilter = func(*ProposalData) (drop bool, err error) {
+		propNum++
+		require.Equal(t, propNum, p.registered)
+		if propNum == 2 {
+			return false, propErr
+		}
+		return false, nil
+	}
+	err := b.flushLocked()
+	require.Equal(t, propErr, err)
+	require.Equal(t, num, p.registered)
+}

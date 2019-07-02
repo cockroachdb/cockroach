@@ -141,7 +141,7 @@ type propBuf struct {
 		// drop Raft proposals before they are handed to etcd/raft to begin the
 		// process of replication. Dropped proposals are still eligible to be
 		// reproposed due to ticks.
-		submitProposalFilter func(*ProposalData) (drop bool)
+		submitProposalFilter func(*ProposalData) (drop bool, err error)
 	}
 }
 
@@ -391,6 +391,11 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 	// and apply them.
 	buf := b.arr.asSlice()[:used]
 	ents := make([]raftpb.Entry, 0, used)
+	// Remember the first error that we see when proposing the batch. We don't
+	// immediately return this error because we want to finish clearing out the
+	// buffer and registering each of the proposals with the proposer, but we
+	// stop trying to propose commands to raftGroup.
+	var firstErr error
 	for i, p := range buf {
 		buf[i] = nil // clear buffer
 
@@ -400,13 +405,19 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 		// Potentially drop the proposal before passing it to etcd/raft, but
 		// only after performing necessary bookkeeping.
 		if filter := b.testing.submitProposalFilter; filter != nil {
-			if drop := filter(p); drop {
+			if drop, err := filter(p); drop || err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
 				continue
 			}
 		}
 
-		// If we don't have a raft group, we can't propose the command.
-		if raftGroup == nil {
+		// If we don't have a raft group or if the raft group has rejected one
+		// of the proposals, we don't try to propose any more proposals. The
+		// rest of the proposals will still be registered with the proposer, so
+		// they will eventually be reproposed.
+		if raftGroup == nil || firstErr != nil {
 			continue
 		}
 
@@ -416,7 +427,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
 			if err := proposeBatch(raftGroup, b.p.replicaID(), ents); err != nil {
-				return err
+				firstErr = err
+				continue
 			}
 			ents = ents[len(ents):]
 
@@ -427,7 +439,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			}
 			encodedCtx, err := protoutil.Marshal(&confChangeCtx)
 			if err != nil {
-				return err
+				firstErr = err
+				continue
 			}
 
 			if err := raftGroup.ProposeConfChange(raftpb.ConfChange{
@@ -439,7 +452,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 				// ignored prior to the introduction of ErrProposalDropped).
 				// TODO(bdarnell): Handle ErrProposalDropped better.
 				// https://github.com/cockroachdb/cockroach/issues/21849
-				return err
+				firstErr = err
+				continue
 			}
 		} else {
 			// Add to the batch of entries that will soon be proposed. It is
@@ -455,6 +469,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 				Data: p.encodedCommand,
 			})
 		}
+	}
+	if firstErr != nil {
+		return firstErr
 	}
 	return proposeBatch(raftGroup, b.p.replicaID(), ents)
 }
