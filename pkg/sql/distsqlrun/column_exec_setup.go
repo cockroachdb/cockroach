@@ -300,9 +300,9 @@ func newColOperator(
 		}
 		if core.MergeJoiner.Type != sqlbase.JoinType_INNER &&
 			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_OUTER &&
-			core.MergeJoiner.Type != sqlbase.JoinType_RIGHT_OUTER {
-			return nil, nil, errors.Newf("can plan only inner, left outer, and " +
-				"right outer merge joins")
+			core.MergeJoiner.Type != sqlbase.JoinType_RIGHT_OUTER &&
+			core.MergeJoiner.Type != sqlbase.JoinType_FULL_OUTER {
+			return nil, nil, errors.Newf("can plan only inner and outer merge joins")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
