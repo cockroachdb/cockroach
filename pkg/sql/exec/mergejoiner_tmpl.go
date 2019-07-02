@@ -114,7 +114,6 @@ func _PROBE_SWITCH(
 			_RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE)
 			// Expand or filter each group based on the current equality column.
 			for curLIdx < curLLength && curRIdx < curRLength && !areGroupsProcessed {
-				// TODO(georgeutsin): change null check logic for non INNER joins.
 				// {{ if $.LNull }}
 				if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
 					_NULL_FROM_LEFT_SWITCH(_JOIN_TYPE)
@@ -147,7 +146,6 @@ func _PROBE_SWITCH(
 					} else {
 						curLIdx++
 						for curLIdx < curLLength {
-							// TODO(georgeutsin): change null check logic for non INNER joins.
 							// {{ if $.LNull }}
 							if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
 								lComplete = true
@@ -171,7 +169,6 @@ func _PROBE_SWITCH(
 					} else {
 						curRIdx++
 						for curRIdx < curRLength {
-							// TODO(georgeutsin): change null check logic for non INNER joins.
 							// {{ if $.RNull }}
 							if rVec.Nulls().NullAt64(uint64(_R_SEL_IND)) {
 								rComplete = true
@@ -886,13 +883,11 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) isBufferedGroupFinished(
 			prevVal := bufferedGroup.ColVec(int(colIdx))._TemplateType()[lastBufferedTupleIdx]
 			var curVal _GOTYPE
 			if sel != nil {
-				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
 				if batch.ColVec(int(colIdx)).HasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(uint64(sel[rowIdx])) {
 					return true
 				}
 				curVal = batch.ColVec(int(colIdx))._TemplateType()[sel[rowIdx]]
 			} else {
-				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
 				if batch.ColVec(int(colIdx)).HasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(uint64(rowIdx)) {
 					return true
 				}
@@ -1132,13 +1127,16 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
 	o.proberState.rBufferedGroup.needToReset = true
 }
 
-// exhaustLeftSourceForLeftOuter sets up the builder state for emitting
-// remaining tuples on the left with nulls for the right side of output. It
-// should only be called once the right source has been exhausted, and if
-// we're doing LEFT OUTER join.
-// TODO(yuzefovich): rename to exhaustLeftSource and template it based on join
-// type.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSourceForLeftOuter() {
+// exhaustLeftSource sets up the builder to process any remaining tuples from
+// the left source. It should only be called when the right source has been
+// exhausted.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
+	// {{ if $joinType.IsInner }}
+	// {{/*
+	// Remaining tuples from the left source do not have a match, so they are
+	// ignored in INNER JOIN.
+	// */}}
+	// {{ else if $joinType.IsLeftOuter }}
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
@@ -1161,15 +1159,29 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSourceForLeftOuter() {
 	o.builderState.rBatch = o.proberState.rBatch
 
 	o.proberState.lIdx = o.proberState.lLength
+	// {{ else if $joinType.IsRightOuter }}
+	// {{/*
+	// Remaining tuples from the left source do not have a match, so they are
+	// ignored in RIGHT OUTER JOIN.
+	// */}}
+	// {{ end }}
 }
 
-// exhaustRightSourceForRightOuter sets up the builder state for emitting
-// remaining tuples on the right with nulls for the left side of output. It
-// should only be called once the left source has been exhausted, and if
-// we're doing RIGHT OUTER join.
-// TODO(yuzefovich): rename to exhaustRightSource and template it based on join
-// type.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSourceForRightOuter() {
+// exhaustRightSource sets up the builder to process any remaining tuples from
+// the right source. It should only be called when the left source has been
+// exhausted.
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
+	// {{ if $joinType.IsInner }}
+	// {{/*
+	// Remaining tuples from the right source do not have a match, so they are
+	// ignored in INNER JOIN.
+	// */}}
+	// {{ else if $joinType.IsLeftOuter }}
+	// {{/*
+	// Remaining tuples from the right source do not have a match, so they are
+	// ignored in LEFT OUTER JOIN.
+	// */}}
+	// {{ else if $joinType.IsRightOuter }}
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
@@ -1192,6 +1204,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSourceForRightOuter() {
 	o.builderState.rBatch = o.proberState.rBatch
 
 	o.proberState.rIdx = o.proberState.rLength
+	// {{ end }}
 }
 
 // build creates the cross product, and writes it to the output member.
@@ -1233,7 +1246,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) nonEmptyBufferedGroup() bool {
 
 // sourceFinished returns true if either of input sources has no more rows.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) sourceFinished() bool {
-	// TODO (georgeutsin): update this logic to be able to support joins other than INNER.
 	return o.proberState.lLength == 0 || o.proberState.rLength == 0
 }
 
@@ -1375,7 +1387,7 @@ func _SOURCE_FINISHED_SWITCH(joinType joinTypeInfo) { // */}}
 	// nulls corresponding to the right one. But if the left source is
 	// finished, then there is nothing left to do.
 	if o.proberState.lIdx < o.proberState.lLength {
-		o.exhaustLeftSourceForLeftOuter()
+		o.exhaustLeftSource()
 		// We do not set outputReady here to true because we want to put as
 		// many unmatched tuples from the left into the output batch. Once
 		// outCount reaches the desired output batch size, the output will be
@@ -1389,7 +1401,7 @@ func _SOURCE_FINISHED_SWITCH(joinType joinTypeInfo) { // */}}
 	// nulls corresponding to the left one. But if the right source is
 	// finished, then there is nothing left to do.
 	if o.proberState.rIdx < o.proberState.rLength {
-		o.exhaustRightSourceForRightOuter()
+		o.exhaustRightSource()
 		// We do not set outputReady here to true because we want to put as
 		// many unmatched tuples from the right into the output batch. Once
 		// outCount reaches the desired output batch size, the output will be

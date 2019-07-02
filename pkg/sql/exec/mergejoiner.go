@@ -33,11 +33,10 @@ type group struct {
 	// nullGroup indicates whether the output corresponding to the group should
 	// consist of all nulls.
 	nullGroup bool
-	// unmatched indicates that the row in the group does not have matching rows
+	// unmatched indicates that the rows in the group do not have matching rows
 	// from the other side (i.e. other side's group will be a null group).
-	// NOTE: at the moment, the assumption is that such group will consist of a
-	// single row.
-	// TODO(yuzefovich): update the logic if the assumption ever changes.
+	// NOTE: during the probing phase, the assumption is that such group will
+	// consist of a single row.
 	unmatched bool
 }
 
@@ -177,9 +176,6 @@ var _ Operator = &feedOperator{}
 // match on the equality columns).
 // The second pass is where the groups and their associated cross products are
 // materialized into the full output.
-
-// TODO(georgeutsin): Add outer joins functionality and templating to support
-// different equality types.
 
 // Two buffers are used, one for the group on the left table and one for the
 // group on the right table. These buffers are only used if the group ends with
