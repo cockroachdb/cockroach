@@ -1113,17 +1113,19 @@ func changeReplicasTrigger(
 	// holding the lease.
 	pd.Local.GossipFirstRange = rec.IsFirstRange()
 
-	var cpy roachpb.RangeDescriptor
-	{
-		desc := rec.Desc()
-		cpy = *desc
+	var desc roachpb.RangeDescriptor
+	if change.Desc != nil {
+		desc = *change.Desc
+	} else {
+		desc = *rec.Desc()
+		desc.SetReplicas(roachpb.MakeReplicaDescriptors(change.UpdatedReplicas))
+		desc.NextReplicaID = change.NextReplicaID
 	}
-	cpy.SetReplicas(roachpb.MakeReplicaDescriptors(change.UpdatedReplicas))
-	cpy.NextReplicaID = change.NextReplicaID
+
 	// TODO(tschottdorf): duplication of Desc with the trigger below, should
 	// likely remove it from the trigger.
 	pd.Replicated.State = &storagepb.ReplicaState{
-		Desc: &cpy,
+		Desc: &desc,
 	}
 	pd.Replicated.ChangeReplicas = &storagepb.ChangeReplicas{
 		ChangeReplicasTrigger: *change,
