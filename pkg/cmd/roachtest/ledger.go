@@ -15,7 +15,7 @@ import (
 	"fmt"
 )
 
-func registerLedger(r *registry) {
+func registerLedger(r *testRegistry) {
 	const nodes = 6
 	const azs = "us-central1-a,us-central1-b,us-central1-c"
 	r.Add(testSpec{

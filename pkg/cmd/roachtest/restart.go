@@ -19,7 +19,7 @@ import (
 )
 
 func runRestart(ctx context.Context, t *test, c *cluster, downDuration time.Duration) {
-	crdbNodes := c.Range(1, c.nodes)
+	crdbNodes := c.Range(1, c.spec.NodeCount)
 	workloadNode := c.Node(1)
 	const restartNode = 3
 
@@ -82,7 +82,7 @@ func runRestart(ctx context.Context, t *test, c *cluster, downDuration time.Dura
 	}
 }
 
-func registerRestart(r *registry) {
+func registerRestart(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("restart/down-for-2m"),
 		Cluster: makeClusterSpec(3),

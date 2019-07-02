@@ -217,7 +217,7 @@ func (s *bankState) startChaosMonkey(
 
 		// Don't begin the chaos monkey until all nodes are serving SQL connections.
 		// This ensures that we don't test cluster initialization under chaos.
-		for i := 1; i <= c.nodes; i++ {
+		for i := 1; i <= c.spec.NodeCount; i++ {
 			db := c.Conn(ctx, i)
 			var res int
 			err := db.QueryRowContext(ctx, `SELECT 1`).Scan(&res)
@@ -296,9 +296,9 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 		defer s.waitGroup.Done()
 
 		r := newRand()
-		nodes := make([]string, c.nodes)
+		nodes := make([]string, c.spec.NodeCount)
 
-		for i := 0; i < c.nodes; i++ {
+		for i := 0; i < c.spec.NodeCount; i++ {
 			nodes[i] = strconv.Itoa(i + 1)
 		}
 
@@ -413,7 +413,7 @@ func (s *bankState) waitClientsStop(
 					curRound, strings.Join(strCounts, ", "))
 			} else {
 				newOutput = fmt.Sprintf("test finished, waiting for shutdown of %d clients",
-					c.nodes-doneClients)
+					c.spec.NodeCount-doneClients)
 			}
 			// This just stops the logs from being a bit too spammy.
 			if newOutput != prevOutput {
@@ -431,14 +431,14 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	// TODO(peter): Run for longer when !local.
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:  make(chan error, c.nodes),
+		errChan:  make(chan error, c.spec.NodeCount),
 		deadline: start.Add(time.Minute),
-		clients:  make([]bankClient, c.nodes),
+		clients:  make([]bankClient, c.spec.NodeCount),
 	}
 	s.initBank(ctx, t, c)
 	defer s.waitGroup.Wait()
 
-	for i := 0; i < c.nodes; i++ {
+	for i := 0; i < c.spec.NodeCount; i++ {
 		s.clients[i].Lock()
 		s.initClient(ctx, c, i+1)
 		s.clients[i].Unlock()
@@ -449,7 +449,7 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	rnd, seed := randutil.NewPseudoRand()
 	t.l.Printf("monkey starts (seed %d)\n", seed)
 	pickNodes := func() []int {
-		nodes := rnd.Perm(c.nodes)[:rnd.Intn(c.nodes)+1]
+		nodes := rnd.Perm(c.spec.NodeCount)[:rnd.Intn(c.spec.NodeCount)+1]
 		for i := range nodes {
 			nodes[i]++
 		}
@@ -485,7 +485,7 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	s.initBank(ctx, t, c)
 	defer s.waitGroup.Wait()
 
-	clientIdx := c.nodes
+	clientIdx := c.spec.NodeCount
 	client := &s.clients[0]
 	client.db = c.Conn(ctx, clientIdx)
 
@@ -515,14 +515,14 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:  make(chan error, c.nodes),
+		errChan:  make(chan error, c.spec.NodeCount),
 		deadline: start.Add(time.Minute),
-		clients:  make([]bankClient, c.nodes),
+		clients:  make([]bankClient, c.spec.NodeCount),
 	}
 	s.initBank(ctx, t, c)
 	defer s.waitGroup.Wait()
 
-	for i := 0; i < c.nodes; i++ {
+	for i := 0; i < c.spec.NodeCount; i++ {
 		s.clients[i].Lock()
 		s.initClient(ctx, c, i+1)
 		s.clients[i].Unlock()
@@ -551,14 +551,14 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:  make(chan error, c.nodes),
+		errChan:  make(chan error, c.spec.NodeCount),
 		deadline: start.Add(time.Minute),
-		clients:  make([]bankClient, c.nodes),
+		clients:  make([]bankClient, c.spec.NodeCount),
 	}
 	s.initBank(ctx, t, c)
 	defer s.waitGroup.Wait()
 
-	for i := 0; i < c.nodes; i++ {
+	for i := 0; i < c.spec.NodeCount; i++ {
 		s.clients[i].Lock()
 		s.initClient(ctx, c, i+1)
 		s.clients[i].Unlock()
@@ -568,7 +568,7 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 	rnd, seed := randutil.NewPseudoRand()
 	c.l.Printf("monkey starts (seed %d)\n", seed)
 	pickNodes := func() []int {
-		nodes := rnd.Perm(c.nodes)[:rnd.Intn(c.nodes)+1]
+		nodes := rnd.Perm(c.spec.NodeCount)[:rnd.Intn(c.spec.NodeCount)+1]
 		for i := range nodes {
 			nodes[i]++
 		}

@@ -49,7 +49,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 					`--listen-addr=:{pgport:1} --http-port=$[{pgport:1}+1] `+
 					`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
 		})
-		for i := 2; i <= c.nodes; i++ {
+		for i := 2; i <= c.spec.NodeCount; i++ {
 			i := i
 			g.Go(func() error {
 				return c.RunE(ctx, c.Node(i),
@@ -78,7 +78,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 
 		func() {
 			var g errgroup.Group
-			for i := 1; i <= c.nodes; i++ {
+			for i := 1; i <= c.spec.NodeCount; i++ {
 				i := i
 				g.Go(func() error {
 					return c.RunE(ctx, c.Node(i),
@@ -99,7 +99,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 
 			// Wait for the servers to bind their ports.
 			if err := retry.ForDuration(10*time.Second, func() error {
-				for i := 1; i <= c.nodes; i++ {
+				for i := 1; i <= c.spec.NodeCount; i++ {
 					resp, err := http.Get(urlMap[i] + "/health")
 					if err != nil {
 						return err
@@ -112,7 +112,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 			}
 
 			var dbs []*gosql.DB
-			for i := 1; i <= c.nodes; i++ {
+			for i := 1; i <= c.spec.NodeCount; i++ {
 				db := c.Conn(ctx, i)
 				defer db.Close()
 				dbs = append(dbs, db)

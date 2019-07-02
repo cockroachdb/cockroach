@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerCopy(r *registry) {
+func registerCopy(r *testRegistry) {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.

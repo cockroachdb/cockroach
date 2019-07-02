@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerReplicaGC(r *registry) {
+func registerReplicaGC(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:    "replicagc-changed-peers/withRestart",
@@ -36,7 +36,7 @@ func registerReplicaGC(r *registry) {
 }
 
 func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRestart bool) {
-	if c.nodes != 6 {
+	if c.spec.NodeCount != 6 {
 		t.Fatal("test needs to be run with 6 nodes")
 	}
 

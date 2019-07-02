@@ -10,7 +10,7 @@
 
 package main
 
-func registerTests(r *registry) {
+func registerTests(r *testRegistry) {
 	// Helpful shell pipeline to generate the list below:
 	//
 	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -E -v '^register(Tests|Benchmarks)$' | grep -v '^\w*Bench$' | sort -f | awk '{printf "\t%s(r)\n", $0}'
@@ -21,7 +21,8 @@ func registerTests(r *registry) {
 	registerCancel(r)
 	registerCDC(r)
 	registerClearRange(r)
-	registerClock(r)
+	registerClockJumpTests(r)
+	registerClockMonotonicTests(r)
 	registerCopy(r)
 	registerDecommission(r)
 	registerDiskFull(r)
@@ -74,7 +75,7 @@ func registerTests(r *registry) {
 	registerTPCHBench(r)
 }
 
-func registerBenchmarks(r *registry) {
+func registerBenchmarks(r *testRegistry) {
 	// Helpful shell pipeline to generate the list below:
 	//
 	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -v '^registerTests$' | grep '^\w*Bench$' | sort | awk '{printf "\t%s(r)\n", $0}'

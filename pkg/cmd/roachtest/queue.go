@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerQueue(r *registry) {
+func registerQueue(r *testRegistry) {
 	// One node runs the workload generator, all other nodes host CockroachDB.
 	const numNodes = 2
 	r.Add(testSpec{
@@ -33,8 +33,8 @@ func registerQueue(r *registry) {
 }
 
 func runQueue(ctx context.Context, t *test, c *cluster) {
-	dbNodeCount := c.nodes - 1
-	workloadNode := c.nodes
+	dbNodeCount := c.spec.NodeCount - 1
+	workloadNode := c.spec.NodeCount
 
 	// Distribute programs to the correct nodes and start CockroachDB.
 	c.Put(ctx, cockroach, "./cockroach", c.Range(1, dbNodeCount))

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerClearRange(r *registry) {
+func registerClearRange(r *testRegistry) {
 	for _, checks := range []bool{true, false} {
 		checks := checks
 		r.Add(testSpec{
@@ -27,7 +27,10 @@ func registerClearRange(r *registry) {
 			// to <3:30h but it varies.
 			Timeout:    5*time.Hour + 90*time.Minute,
 			MinVersion: `v2.2.0`,
-			Cluster:    makeClusterSpec(10),
+			// This test reformats a drive to ZFS, so we don't want it reused.
+			// TODO(andrei): Can the test itself reuse the cluster (under --count=2)?
+			// In other words, would a OnlyTagged("clearrange") policy be good?
+			Cluster: makeClusterSpec(10, reuseNone()),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClearRange(ctx, t, c, checks)
 			},

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"golang.org/x/sync/errgroup"
@@ -28,7 +29,7 @@ import (
 func TestQuotaPoolBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	quotas := []int64{1, 10, 100, 1000}
+	quotas := []uint64{1, 10, 100, 1000}
 	goroutineCounts := []int{1, 10, 100}
 
 	for _, quota := range quotas {
@@ -264,7 +265,7 @@ func TestQuotaPoolMaxQuota(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := alloc.Acquired(); got != quota {
-		t.Fatalf("expected to acquire the max quota %d, instead got %d", quota, got)
+		t.Fatalf("expected to acquire the capacity quota %d, instead got %d", quota, got)
 	}
 	alloc.Release()
 	if q := qp.ApproximateQuota(); q != quota {
@@ -345,6 +346,45 @@ func TestSlowAcquisition(t *testing.T) {
 	}
 }
 
+// Test that AcquireFunc() is called after IntAlloc.Freeze() is called - so that an ongoing acquisition gets
+// the chance to observe that there's no capacity for its request.
+func TestQuotaPoolCapacityDecrease(t *testing.T) {
+	qp := quotapool.NewIntPool("test", 100)
+	ctx := context.Background()
+
+	alloc50, err := qp.Acquire(ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first := true
+	firstCh := make(chan struct{})
+	doneCh := make(chan struct{})
+	go func() {
+		_, err = qp.AcquireFunc(ctx,
+			func(_ context.Context, pi quotapool.PoolInfo) (took uint64, err error) {
+				if first {
+					first = false
+					close(firstCh)
+				}
+				if pi.Capacity < 100 {
+					return 0, fmt.Errorf("hopeless")
+				}
+				return 0, quotapool.ErrNotEnoughQuota
+			})
+		close(doneCh)
+	}()
+
+	// Wait for the callback to be called the first time. It should return ErrNotEnoughQuota.
+	<-firstCh
+	// Now leak the quota. This should call the callback to be called again.
+	alloc50.Freeze()
+	<-doneCh
+	if !testutils.IsError(err, "hopeless") {
+		t.Fatalf("expected hopeless error, got: %v", err)
+	}
+}
+
 // BenchmarkIntQuotaPool benchmarks the common case where we have sufficient
 // quota available in the pool and we repeatedly acquire and release quota.
 func BenchmarkIntQuotaPool(b *testing.B) {
@@ -366,9 +406,9 @@ func BenchmarkIntQuotaPool(b *testing.B) {
 func BenchmarkConcurrentIntQuotaPool(b *testing.B) {
 	// test returns the arguments to b.Run for a given number of workers and
 	// quantity of quota.
-	test := func(workers, quota int) (string, func(b *testing.B)) {
+	test := func(workers int, quota uint64) (string, func(b *testing.B)) {
 		return fmt.Sprintf("workers=%d,quota=%d", workers, quota), func(b *testing.B) {
-			qp := quotapool.NewIntPool("test", int64(quota), quotapool.LogSlowAcquisition)
+			qp := quotapool.NewIntPool("test", quota, quotapool.LogSlowAcquisition)
 			g, ctx := errgroup.WithContext(context.Background())
 			runWorker := func(workerNum int) {
 				g.Go(func() error {
@@ -393,7 +433,8 @@ func BenchmarkConcurrentIntQuotaPool(b *testing.B) {
 		}
 	}
 	for _, c := range []struct {
-		workers, quota int
+		workers int
+		quota   uint64
 	}{
 		{1, 1},
 		{2, 2},
@@ -425,11 +466,11 @@ func BenchmarkIntQuotaPoolFunc(b *testing.B) {
 }
 
 // intRequest is a wrapper to create a IntRequestFunc from an int64.
-type intRequest int64
+type intRequest uint64
 
-func (ir intRequest) acquire(_ context.Context, v int64) (fulfilled bool, took int64) {
-	if int64(ir) < v {
-		return false, 0
+func (ir intRequest) acquire(_ context.Context, pi quotapool.PoolInfo) (took uint64, err error) {
+	if uint64(ir) < pi.Available {
+		return 0, quotapool.ErrNotEnoughQuota
 	}
-	return true, int64(ir)
+	return uint64(ir), nil
 }

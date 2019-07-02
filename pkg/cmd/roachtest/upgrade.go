@@ -26,9 +26,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerUpgrade(r *registry) {
+func registerUpgrade(r *testRegistry) {
 	runUpgrade := func(ctx context.Context, t *test, c *cluster, oldVersion string) {
-		nodes := c.nodes
+		nodes := c.spec.NodeCount
 		goos := ifLocal(runtime.GOOS, "linux")
 
 		b, err := binfetcher.Download(ctx, binfetcher.Options{
@@ -266,7 +266,7 @@ func registerUpgrade(r *registry) {
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			pred, err := r.PredecessorVersion()
+			pred, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -419,7 +419,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 					t.l.Printf("%s: using workaround for upgrade\n", newVersion)
 				}
 
-				for i := 1; i < c.nodes; i++ {
+				for i := 1; i < c.spec.NodeCount; i++ {
 					err := retry.ForDuration(30*time.Second, func() error {
 						db := c.Conn(ctx, i)
 						defer db.Close()

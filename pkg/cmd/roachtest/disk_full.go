@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskFull(r *registry) {
+func registerDiskFull(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "disk-full",
 		MinVersion: `v2.1.0`,
@@ -31,7 +31,7 @@ func registerDiskFull(r *registry) {
 				return
 			}
 
-			nodes := c.nodes - 1
+			nodes := c.spec.NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 			c.Start(ctx, t, c.Range(1, nodes))
