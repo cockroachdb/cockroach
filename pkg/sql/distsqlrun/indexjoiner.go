@@ -23,7 +23,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const indexJoinerBatchSize = 100
+const indexJoinerBatchSize = 10000
 
 // indexJoiner performs a join between a secondary index, the `input`, and the
 // primary index of the same table, `desc`, to retrieve columns which are not
