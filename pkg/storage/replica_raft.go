@@ -235,6 +235,15 @@ func (r *Replica) evalAndPropose(
 // removing the proposal from the pending map (on success, in
 // processRaftCommand, or on failure via cleanupFailedProposalLocked).
 func (r *Replica) propose(ctx context.Context, p *ProposalData) (_ int64, pErr *roachpb.Error) {
+	// Make sure we clean up the proposal if we fail to insert it into the
+	// proposal buffer successfully. This ensure that we always release any
+	// quota that we acquire.
+	defer func() {
+		if pErr != nil {
+			r.cleanupFailedProposal(p)
+		}
+	}()
+
 	// Make sure the maximum lease index is unset. This field will be set in
 	// propBuf.Insert and its encoded bytes will be appended to the encoding
 	// buffer as a RaftCommandFooter.
@@ -258,7 +267,8 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (_ int64, pErr *
 		// leases can stay in such a state for a very long time when using epoch-
 		// based range leases). This shouldn't happen often, but has been seen
 		// before (#12591).
-		if crt.ChangeType == roachpb.REMOVE_REPLICA && crt.Replica.ReplicaID == r.mu.replicaID {
+		replID := p.command.ProposerReplica.ReplicaID
+		if crt.ChangeType == roachpb.REMOVE_REPLICA && crt.Replica.ReplicaID == replID {
 			msg := fmt.Sprintf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
 			log.Error(p.ctx, msg)
 			return 0, roachpb.NewErrorf("%s: %s", r, msg)
