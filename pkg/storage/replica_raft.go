@@ -190,6 +190,14 @@ func (r *Replica) evalAndPropose(
 	if err := r.maybeAcquireProposalQuota(ctx, proposal.quotaSize); err != nil {
 		return nil, nil, 0, roachpb.NewError(err)
 	}
+	// Make sure we clean up the proposal if we fail to insert it into the
+	// proposal buffer successfully. This ensures that we always release any
+	// quota that we acquire.
+	defer func() {
+		if pErr != nil {
+			r.cleanupFailedProposal(proposal)
+		}
+	}()
 
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
 		filterArgs := storagebase.ProposalFilterArgs{
@@ -230,11 +238,13 @@ func (r *Replica) evalAndPropose(
 	return proposalCh, abandon, maxLeaseIndex, nil
 }
 
-// propose starts tracking a command and proposes it to raft. If
-// this method succeeds, the caller is responsible for eventually
-// removing the proposal from the pending map (on success, in
-// processRaftCommand, or on failure via cleanupFailedProposalLocked).
-func (r *Replica) propose(ctx context.Context, p *ProposalData) (_ int64, pErr *roachpb.Error) {
+// propose encodes a command, starts tracking it, and proposes it to raft. The
+// method is also responsible for assigning the command its maximum lease index.
+//
+// The method hands ownership of the command over to the Raft machinery. After
+// the method returns, all access to the command must be performed while holding
+// Replica.mu and Replica.raftMu.
+func (r *Replica) propose(ctx context.Context, p *ProposalData) (int64, *roachpb.Error) {
 	// Make sure the maximum lease index is unset. This field will be set in
 	// propBuf.Insert and its encoded bytes will be appended to the encoding
 	// buffer as a RaftCommandFooter.
@@ -258,7 +268,8 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (_ int64, pErr *
 		// leases can stay in such a state for a very long time when using epoch-
 		// based range leases). This shouldn't happen often, but has been seen
 		// before (#12591).
-		if crt.ChangeType == roachpb.REMOVE_REPLICA && crt.Replica.ReplicaID == r.mu.replicaID {
+		replID := p.command.ProposerReplica.ReplicaID
+		if crt.ChangeType == roachpb.REMOVE_REPLICA && crt.Replica.ReplicaID == replID {
 			msg := fmt.Sprintf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
 			log.Error(p.ctx, msg)
 			return 0, roachpb.NewErrorf("%s: %s", r, msg)

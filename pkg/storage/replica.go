@@ -571,8 +571,16 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// cleanupFailedProposalLocked cleans up after a proposal that has failed. It
+// cleanupFailedProposal cleans up after a proposal that has failed. It
 // clears any references to the proposal and releases associated quota.
+func (r *Replica) cleanupFailedProposal(p *ProposalData) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cleanupFailedProposalLocked(p)
+}
+
+// cleanupFailedProposalLocked is like cleanupFailedProposal, but requires
+// the Replica mutex to be exclusively held.
 func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 	// Clear the proposal from the proposals map. May be a no-op if the
 	// proposal has not yet been inserted into the map.
