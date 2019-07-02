@@ -6948,12 +6948,12 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	// Cancel the request before it is proposed to Raft.
 	dropProp := int32(1)
 	tc.repl.mu.Lock()
-	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
+	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if v := p.ctx.Value(magicKey{}); v != nil {
 			cancel()
-			return atomic.LoadInt32(&dropProp) == 1
+			return atomic.LoadInt32(&dropProp) == 1, nil
 		}
-		return false
+		return false, nil
 	}
 	tc.repl.mu.Unlock()
 
@@ -7172,12 +7172,12 @@ func TestReplicaIDChangePending(t *testing.T) {
 	// Stop the command from being proposed to the raft group and being removed.
 	proposedOnOld := make(chan struct{}, 1)
 	repl.mu.Lock()
-	repl.mu.proposalBuf.testing.submitProposalFilter = func(*ProposalData) (drop bool) {
+	repl.mu.proposalBuf.testing.submitProposalFilter = func(*ProposalData) (drop bool, _ error) {
 		select {
 		case proposedOnOld <- struct{}{}:
 		default:
 		}
-		return true
+		return true, nil
 	}
 	lease := *repl.mu.state.Lease
 	repl.mu.Unlock()
@@ -7202,14 +7202,14 @@ func TestReplicaIDChangePending(t *testing.T) {
 	// re-proposed.
 	proposedOnNew := make(chan struct{}, 1)
 	repl.mu.Lock()
-	repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
+	repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if p.Request.Timestamp == magicTS {
 			select {
 			case proposedOnNew <- struct{}{}:
 			default:
 			}
 		}
-		return false
+		return false, nil
 	}
 	repl.mu.Unlock()
 
@@ -7379,12 +7379,12 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	tc.repl.mu.Lock()
 	lease := *repl.mu.state.Lease
 	abandoned := make(map[int64]struct{}) // protected by repl.mu
-	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
+	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if _, ok := abandoned[int64(p.command.MaxLeaseIndex)]; ok {
 			log.Infof(p.ctx, "abandoning command")
-			return true
+			return true, nil
 		}
-		return false
+		return false, nil
 	}
 	tc.repl.mu.Unlock()
 
@@ -7439,14 +7439,14 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	dropAll := int32(1)
 	tc.repl.mu.Lock()
 	lease := *tc.repl.mu.state.Lease
-	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
+	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if atomic.LoadInt32(&dropAll) == 1 {
-			return true
+			return true, nil
 		}
 		if v := p.ctx.Value(magicKey{}); v != nil {
 			seenCmds = append(seenCmds, int(p.command.MaxLeaseIndex))
 		}
-		return false
+		return false, nil
 	}
 	tc.repl.mu.Unlock()
 
@@ -7571,11 +7571,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	dropProposals.m = make(map[*ProposalData]struct{})
 
 	r.mu.Lock()
-	r.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
+	r.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		dropProposals.Lock()
 		defer dropProposals.Unlock()
 		_, ok := dropProposals.m[p]
-		return ok
+		return ok, nil
 	}
 	r.mu.Unlock()
 
@@ -8366,16 +8366,16 @@ func TestCancelPendingCommands(t *testing.T) {
 	proposalDroppedCh := make(chan struct{})
 	proposalDropped := false
 	tc.repl.mu.Lock()
-	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool) {
+	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if _, ok := p.Request.GetArg(roachpb.Increment); ok {
 			if !proposalDropped {
 				// Notify the main thread the first time we drop a proposal.
 				close(proposalDroppedCh)
 				proposalDropped = true
 			}
-			return true
+			return true, nil
 		}
-		return false
+		return false, nil
 	}
 	tc.repl.mu.Unlock()
 
