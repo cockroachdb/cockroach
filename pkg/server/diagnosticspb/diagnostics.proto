@@ -45,6 +45,7 @@ message NodeInfo {
   build.Info build = 8 [(gogoproto.nullable) = false];
   int64 uptime = 9;
   string license_type = 10;
+  TopologyInfo topology = 11 [(gogoproto.nullable) = false];
 }
 
 message StoreInfo {
@@ -92,3 +93,7 @@ message MemInfo {
   uint64 available = 2;
 }
 
+message TopologyInfo {
+  string provider = 1;
+  string region = 2;
+}
