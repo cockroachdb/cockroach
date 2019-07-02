@@ -1101,14 +1101,14 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 ]
 ----
-limit           ·       ·
- │              count   5
- │              offset  5
- └── sort       ·       ·
-      │         order   +c
-      └── scan  ·       ·
-·               table   noncover@primary
-·               spans   ALL
+limit            ·       ·
+ │               offset  5
+ └── index-join  ·       ·
+      │          table   noncover@primary
+      └── scan   ·       ·
+·                table   noncover@c
+·                spans   ALL
+·                limit   10
 
 query TTT
 SELECT tree, field, description FROM [

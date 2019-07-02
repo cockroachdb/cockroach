@@ -54,3 +54,27 @@ $input
     $projections
     $passthrough
 )
+
+# PushLimitIntoOffset pushes the Limit operator into the offset. This should
+# not have a negative impact but it would allow the use of the GenerateLimitedScans
+# rule.
+[PushLimitIntoOffset, Normalize]
+(Limit
+    (Offset
+        $input:*
+        (Const $offset:* & (IsPositiveLimit $offset))
+        $offsetOrdering:*
+    )
+    (Const $limit:* & (IsPositiveLimit $limit))
+    $limitOrdering:* & (IsSameOrdering $offsetOrdering $limitOrdering)
+)
+=>
+(Offset
+    (Limit
+        $input
+        (Const (AddConsts $offset $limit))
+        $limitOrdering
+     )
+    (Const $offset)
+    $offsetOrdering
+)
