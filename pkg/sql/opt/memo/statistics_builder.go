@@ -2657,12 +2657,12 @@ func (sb *statisticsBuilder) selectivityFromNullCounts(
 
 			// We want to avoid setting selectivity to zero because the stats may be
 			// stale, and we can end up with weird and inefficient plans if we
-			// estimate zero rows. Adjust the estimate for nullsRemoved to avoid
-			// this.
+			// estimate zero rows. Multiply by a small number instead.
 			if nullsRemoved == rowCount {
-				nullsRemoved = max(nullsRemoved-1, 0)
+				selectivity *= 1e-7
+			} else {
+				selectivity *= 1 - nullsRemoved/rowCount
 			}
-			selectivity *= 1 - nullsRemoved/rowCount
 		}
 	}
 
@@ -2718,12 +2718,12 @@ func (sb *statisticsBuilder) joinSelectivityFromNullCounts(
 		if colStat.NullCount == 0 {
 			// We want to avoid setting selectivity to zero because the stats may be
 			// stale, and we can end up with weird and inefficient plans if we
-			// estimate zero rows. Adjust the estimate for crossJoinNullCount to
-			// avoid this.
+			// estimate zero rows. Multiply by a small number instead.
 			if crossJoinNullCount == inputRowCount {
-				crossJoinNullCount = max(crossJoinNullCount-1, 0)
+				selectivity *= 1e-7
+			} else {
+				selectivity *= 1 - crossJoinNullCount/inputRowCount
 			}
-			selectivity *= 1 - crossJoinNullCount/inputRowCount
 		}
 	}
 
