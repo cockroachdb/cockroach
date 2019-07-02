@@ -16,6 +16,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -453,6 +454,7 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		for i := range nodes {
 			nodes[i]++
 		}
+		sort.Ints(nodes)
 		return nodes
 	}
 	s.startChaosMonkey(ctx, t, c, true, pickNodes, -1)
