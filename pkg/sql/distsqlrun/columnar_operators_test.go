@@ -119,7 +119,29 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
-	nSeeds := 20
+	type mjTestSpec struct {
+		joinType sqlbase.JoinType
+		anyOrder bool
+	}
+	testSpecs := []mjTestSpec{
+		{
+			joinType: sqlbase.JoinType_INNER,
+		},
+		{
+			joinType: sqlbase.JoinType_LEFT_OUTER,
+		},
+		{
+			joinType: sqlbase.JoinType_RIGHT_OUTER,
+		},
+		{
+			joinType: sqlbase.JoinType_FULL_OUTER,
+			// FULL OUTER JOIN doesn't guarantee any ordering on its output (since it
+			// is ambiguous), so we're comparing the outputs as sets.
+			anyOrder: true,
+		},
+	}
+
+	nSeeds := 10
 	nRows := 10
 	maxCols := 3
 	maxNum := 5
@@ -133,11 +155,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 			// TODO (georgeutsin): Randomize the types of the columns.
 			typs[i] = *types.Int
 		}
-		for _, joinType := range []sqlbase.JoinType{
-			sqlbase.JoinType_INNER,
-			sqlbase.JoinType_LEFT_OUTER,
-			sqlbase.JoinType_RIGHT_OUTER,
-		} {
+		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				inputTypes := typs[:nCols]
 				// Note: we're only generating column orderings on all nCols columns since
@@ -172,14 +190,14 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 				mjSpec := &distsqlpb.MergeJoinerSpec{
 					LeftOrdering:  distsqlpb.Ordering{Columns: lOrderingCols},
 					RightOrdering: distsqlpb.Ordering{Columns: rOrderingCols},
-					Type:          joinType,
+					Type:          testSpec.joinType,
 				}
 				pspec := &distsqlpb.ProcessorSpec{
 					Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
 					Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
 				}
-				if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
-					fmt.Printf("------- seed = %d -------\n", seed)
+				if err := verifyColOperator(testSpec.anyOrder, [][]types.T{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
+					fmt.Printf("--- join type = %s\tseed = %d ---\n", testSpec.joinType.String(), seed)
 					t.Fatal(err)
 				}
 			}
