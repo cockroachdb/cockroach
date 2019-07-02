@@ -266,9 +266,13 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		copy(s.batch.Selection(), s.selection)
 	}
 
+	// Reset nulls for all columns in this batch.
+	for i := 0; i < s.batch.Width(); i++ {
+		s.batch.ColVec(i).Nulls().UnsetNulls()
+	}
+
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
-		vec.Nulls().UnsetNulls()
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
@@ -342,6 +346,11 @@ func (s *opFixedSelTestInput) Init() {
 		}
 	}
 
+	// Reset nulls for all columns in this batch.
+	for i := 0; i < s.batch.Width(); i++ {
+		s.batch.ColVec(i).Nulls().UnsetNulls()
+	}
+
 	if s.sel != nil {
 		s.batch.SetSelection(true)
 		// When non-nil selection vector is given, we convert all tuples into the
@@ -349,7 +358,6 @@ func (s *opFixedSelTestInput) Init() {
 		// selection vector later in Next().
 		for i := range s.typs {
 			vec := s.batch.ColVec(i)
-			vec.Nulls().UnsetNulls()
 			// Automatically convert the Go values into exec.Type slice elements using
 			// reflection. This is slow, but acceptable for tests.
 			col := reflect.ValueOf(vec.Col())
