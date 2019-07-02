@@ -34,9 +34,12 @@ func genSumAgg(wr io.Writer) error {
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
 	assignAddRe := regexp.MustCompile(`_ASSIGN_ADD\((.*),(.*),(.*)\)`)
-	s = assignAddRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
+	s = assignAddRe.ReplaceAllString(s, "{{.Global.Assign $1 $2 $3}}")
 
-	tmpl, err := template.New("sum_agg").Parse(s)
+	accumulateSum := makeFunctionRegex("_ACCUMULATE_SUM", 4)
+	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateSum" buildDict "Global" . "HasNulls" $4}}`)
+
+	tmpl, err := template.New("sum_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
