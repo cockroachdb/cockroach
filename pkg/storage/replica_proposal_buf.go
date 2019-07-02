@@ -68,12 +68,17 @@ func makePropBufCntReq(incLeaseIndex bool) propBufCntReq {
 	return r
 }
 
+// arrayLen returns the number of elements in the proposal buffer's array.
+func (r propBufCntRes) arrayLen() int {
+	return int(r & (1<<32 - 1))
+}
+
 // arrayIndex returns the index into the proposal buffer that was reserved for
 // the request. The returned index will be -1 if no index was reserved (e.g. by
 // propBufCnt.read) and if the buffer is empty.
 func (r propBufCntRes) arrayIndex() int {
 	// NB: -1 because the array is 0-indexed.
-	return int(r&(1<<32-1)) - 1
+	return r.arrayLen() - 1
 }
 
 // leaseIndexOffset returns the offset from the proposal buffer's current lease
@@ -162,7 +167,7 @@ func (b *propBuf) Init(p proposer) {
 
 // Len returns the number of proposals currently in the buffer.
 func (b *propBuf) Len() int {
-	return b.cnt.read().arrayIndex() + 1
+	return b.cnt.read().arrayLen()
 }
 
 // LastAssignedLeaseIndexRLocked returns the last assigned lease index.
@@ -361,7 +366,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 	// buffer. This ensures that we synchronize with all producers and other
 	// consumers.
 	res := b.cnt.clear()
-	used := res.arrayIndex() + 1
+	used := res.arrayLen()
 	// Before returning, consider resizing the proposal buffer's array,
 	// depending on how much of it was used before the current flush.
 	defer b.arr.adjustSize(used)
