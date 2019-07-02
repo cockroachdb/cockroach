@@ -6532,6 +6532,49 @@ func TestReplicaDestroy(t *testing.T) {
 	}
 }
 
+// TestQuotaPoolReleasedOnFailedProposal tests that the quota acquired by
+// proposals is released back into the quota pool if the proposal fails before
+// being submitted to Raft.
+func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	// Flush a write all the way through the Raft proposal pipeline to ensure
+	// that the replica becomes the Raft leader and sets up its quota pool.
+	iArgs := incrementArgs([]byte("a"), 1)
+	if _, pErr := tc.SendWrapped(&iArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	type magicKey struct{}
+	var minQuotaSize int64
+	propErr := errors.New("proposal error")
+
+	tc.repl.mu.Lock()
+	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
+		if v := p.ctx.Value(magicKey{}); v != nil {
+			minQuotaSize = tc.repl.mu.proposalQuota.approximateQuota() + p.quotaSize
+			return 0, propErr
+		}
+		return 0, nil
+	}
+	tc.repl.mu.Unlock()
+
+	var ba roachpb.BatchRequest
+	pArg := putArgs(roachpb.Key("a"), make([]byte, 1<<10))
+	ba.Add(&pArg)
+	ctx := context.WithValue(context.Background(), magicKey{}, "foo")
+	if _, pErr := tc.Sender().Send(ctx, ba); !testutils.IsPError(pErr, propErr.Error()) {
+		t.Fatalf("expected error %v, found %v", propErr, pErr)
+	}
+	if curQuota := tc.repl.QuotaAvailable(); curQuota < minQuotaSize {
+		t.Fatalf("proposal quota not released: found=%d, want=%d", curQuota, minQuotaSize)
+	}
+}
+
 // TestQuotaPoolAccessOnDestroyedReplica tests the occurrence of #17303 where
 // following a leader replica getting destroyed, the scheduling of
 // handleRaftReady twice on the replica would cause a panic when
@@ -7280,13 +7323,13 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	var wrongLeaseIndex uint64 // populated below
 
 	tc.repl.mu.Lock()
-	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
 		if v := p.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
-				return wrongLeaseIndex
+				return wrongLeaseIndex, nil
 			}
 		}
-		return 0
+		return 0, nil
 	}
 	tc.repl.mu.Unlock()
 
@@ -7731,12 +7774,12 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 		t.Fatalf("test requires LeaseAppliedIndex >= 2 at this point, have %d", ai)
 	}
 	assigned := false
-	repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+	repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
 		if p == proposal && !assigned {
 			assigned = true
-			return ai - 1
+			return ai - 1, nil
 		}
-		return 0
+		return 0, nil
 	}
 	repl.mu.Unlock()
 
@@ -7877,16 +7920,16 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 
 	r := tc.repl
 	r.mu.Lock()
-	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
+	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
 		// We're going to recognize the first time the commnand for the
 		// EndTransaction is proposed and we're going to hackily decrease its
 		// MaxLeaseIndex, so that the processing gets rejected further on.
 		ut := p.Local.UpdatedTxns
 		if atomic.LoadInt64(&proposalRecognized) == 0 && ut != nil && len(*ut) == 1 && (*ut)[0].ID == txn.ID {
 			atomic.StoreInt64(&proposalRecognized, 1)
-			return p.command.MaxLeaseIndex - 1
+			return p.command.MaxLeaseIndex - 1, nil
 		}
-		return 0
+		return 0, nil
 	}
 	r.mu.Unlock()
 

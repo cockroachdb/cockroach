@@ -136,7 +136,7 @@ type propBuf struct {
 	testing struct {
 		// leaseIndexFilter can be used by tests to override the max lease index
 		// assigned to a proposal by returning a non-zero lease index.
-		leaseIndexFilter func(*ProposalData) (indexOverride uint64)
+		leaseIndexFilter func(*ProposalData) (indexOverride uint64, err error)
 		// submitProposalFilter can be used by tests to observe and optionally
 		// drop Raft proposals before they are handed to etcd/raft to begin the
 		// process of replication. Dropped proposals are still eligible to be
@@ -208,7 +208,9 @@ func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
 	// Assign the command's maximum lease index.
 	p.command.MaxLeaseIndex = b.liBase + res.leaseIndexOffset()
 	if filter := b.testing.leaseIndexFilter; filter != nil {
-		if override := filter(p); override != 0 {
+		if override, err := filter(p); err != nil {
+			return 0, err
+		} else if override != 0 {
 			p.command.MaxLeaseIndex = override
 		}
 	}
