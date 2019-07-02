@@ -684,13 +684,12 @@ func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Re
 	}
 }
 
-func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, explain, &rel.Shared)
+func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel *props.Relational) {
+	BuildSharedProps(b.mem, e, &rel.Shared)
 
 	// Output Columns
 	// --------------
-	// Output columns are stored in the definition.
-	rel.OutputCols = explain.ColList.ToSet()
+	rel.OutputCols = cols.ToSet()
 
 	// Not Null Columns
 	// ----------------
@@ -698,11 +697,11 @@ func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props
 
 	// Outer Columns
 	// -------------
-	// EXPLAIN doesn't allow outer columns.
+	// No outer columns.
 
 	// Functional Dependencies
 	// -----------------------
-	// Explain operator has an empty FD set.
+	// Empty FD set.
 
 	// Cardinality
 	// -----------
@@ -716,39 +715,28 @@ func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props
 	}
 }
 
+func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props.Relational) {
+	b.buildBasicProps(explain, explain.ColList, rel)
+}
+
 func (b *logicalPropsBuilder) buildShowTraceForSessionProps(
 	showTrace *ShowTraceForSessionExpr, rel *props.Relational,
 ) {
-	BuildSharedProps(b.mem, showTrace, &rel.Shared)
+	b.buildBasicProps(showTrace, showTrace.ColList, rel)
+}
 
-	// Output Columns
-	// --------------
-	// Output columns are stored in the definition.
-	rel.OutputCols = showTrace.ColList.ToSet()
+func (b *logicalPropsBuilder) buildOpaqueRelProps(op *OpaqueRelExpr, rel *props.Relational) {
+	b.buildBasicProps(op, op.Columns, rel)
+	rel.CanHaveSideEffects = true
+	rel.CanMutate = true
+}
 
-	// Not Null Columns
-	// ----------------
-	// All columns are assumed to be nullable.
-
-	// Outer Columns
-	// -------------
-	// SHOW TRACE doesn't allow outer columns.
-
-	// Functional Dependencies
-	// -----------------------
-	// ShowTrace operator has an empty FD set.
-
-	// Cardinality
-	// -----------
-	// Don't make any assumptions about cardinality of output.
-	rel.Cardinality = props.AnyCardinality
-
-	// Statistics
-	// ----------
-	if !b.disableStats {
-		b.sb.buildUnknown(rel)
-	}
-
+func (b *logicalPropsBuilder) buildAlterTableSplitProps(
+	split *AlterTableSplitExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(split, split.Columns, rel)
+	rel.CanHaveSideEffects = true
+	rel.CanMutate = true
 }
 
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
@@ -1782,39 +1770,6 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 
 	default:
 		return innerJoinCard
-	}
-}
-
-func (b *logicalPropsBuilder) buildOpaqueRelProps(op *OpaqueRelExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, op, &rel.Shared)
-	rel.CanHaveSideEffects = true
-	rel.CanMutate = true
-
-	// Output Columns
-	// --------------
-	rel.OutputCols = op.Columns.ToSet()
-
-	// Not Null Columns
-	// ----------------
-	// All columns are assumed to be nullable.
-
-	// Outer Columns
-	// -------------
-	// No outer columns.
-
-	// Functional Dependencies
-	// -----------------------
-	// None.
-
-	// Cardinality
-	// -----------
-	// Any.
-	rel.Cardinality = props.AnyCardinality
-
-	// Statistics
-	// ----------
-	if !b.disableStats {
-		b.sb.buildUnknown(rel)
 	}
 }
 

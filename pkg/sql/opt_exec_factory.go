@@ -1592,6 +1592,24 @@ func (ef *execFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, 
 	return o.plan, nil
 }
 
+// ConstructAlterTableSplit is part of the exec.Factory interface.
+func (ef *execFactory) ConstructAlterTableSplit(
+	index cat.Index, input exec.Node, expiration tree.TypedExpr,
+) (exec.Node, error) {
+	expirationTime, err := parseExpirationTime(ef.planner.EvalContext(), expiration)
+	if err != nil {
+		return nil, err
+	}
+
+	return &splitNode{
+		force:          ef.planner.SessionData().ForceSplitAt,
+		tableDesc:      &index.Table().(*optTable).desc.TableDescriptor,
+		index:          index.(*optIndex).desc,
+		rows:           input.(planNode),
+		expirationTime: expirationTime,
+	}, nil
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode

@@ -244,6 +244,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.OpaqueRelExpr:
 		ep, err = b.buildOpaque(t)
 
+	case *memo.AlterTableSplitExpr:
+		ep, err = b.buildAlterTableSplit(t)
+
 	default:
 		if opt.IsSetOp(e) {
 			ep, err = b.buildSetOp(e)

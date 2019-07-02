@@ -663,9 +663,6 @@ func (tt *Table) FindOrdinal(name string) int {
 type Index struct {
 	IdxName string
 
-	// Ordinal is the ordinal of this index in the table.
-	Ordinal int
-
 	// KeyCount is the number of columns that make up the unique key for the
 	// index. See the cat.Index.KeyColumnCount for more details.
 	KeyCount int
@@ -687,13 +684,16 @@ type Index struct {
 	// the parent table, database, or even the default zone.
 	IdxZone *config.ZoneConfig
 
+	// Ordinal is the ordinal of this index in the table.
+	ordinal int
+
 	// table is a back reference to the table this index is on.
 	table *Table
 }
 
 // ID is part of the cat.Index interface.
 func (ti *Index) ID() cat.StableID {
-	return 1 + cat.StableID(ti.Ordinal)
+	return 1 + cat.StableID(ti.ordinal)
 }
 
 // Name is part of the cat.Index interface.
@@ -704,6 +704,11 @@ func (ti *Index) Name() tree.Name {
 // Table is part of the cat.Index interface.
 func (ti *Index) Table() cat.Table {
 	return ti.table
+}
+
+// Ordinal is part of the cat.Index interface.
+func (ti *Index) Ordinal() int {
+	return ti.ordinal
 }
 
 // IsUnique is part of the cat.Index interface.

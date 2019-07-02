@@ -95,8 +95,8 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 	}
 
 	ep := execPlan{root: node}
-	for i := range explain.ColList {
-		ep.outputCols.Set(int(explain.ColList[i]), i)
+	for i, c := range explain.ColList {
+		ep.outputCols.Set(int(c), i)
 	}
 	// The subqueries are now owned by the explain node; remove them so they don't
 	// also show up in the final plan.
@@ -110,10 +110,34 @@ func (b *Builder) buildShowTrace(show *memo.ShowTraceForSessionExpr) (execPlan, 
 		return execPlan{}, err
 	}
 	ep := execPlan{root: node}
-	for i := range show.ColList {
-		ep.outputCols.Set(int(show.ColList[i]), i)
+	for i, c := range show.ColList {
+		ep.outputCols.Set(int(c), i)
 	}
-	// The subqueries are now owned by the explain node; remove them so they don't
-	// also show up in the final plan.
+	return ep, nil
+}
+
+func (b *Builder) buildAlterTableSplit(split *memo.AlterTableSplitExpr) (execPlan, error) {
+	input, err := b.buildRelational(split.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	scalarCtx := buildScalarCtx{}
+	expiration, err := b.buildScalar(&scalarCtx, split.Expiration)
+	if err != nil {
+		return execPlan{}, err
+	}
+	table := b.mem.Metadata().Table(split.Table)
+	node, err := b.factory.ConstructAlterTableSplit(
+		table.Index(split.Index),
+		input.root,
+		expiration,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i, c := range split.Columns {
+		ep.outputCols.Set(int(c), i)
+	}
 	return ep, nil
 }

@@ -96,25 +96,25 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
-		return n.getColumns(mut, scrubColumns)
+		return n.getColumns(mut, sqlbase.ScrubColumns)
 	case *explainDistSQLNode:
 		return n.getColumns(mut, sqlbase.ExplainDistSQLColumns)
 	case *relocateNode:
-		return n.getColumns(mut, relocateNodeColumns)
+		return n.getColumns(mut, sqlbase.AlterTableRelocateColumns)
 	case *scatterNode:
-		return n.getColumns(mut, scatterNodeColumns)
+		return n.getColumns(mut, sqlbase.AlterTableScatterColumns)
 	case *showFingerprintsNode:
-		return n.getColumns(mut, showFingerprintsColumns)
+		return n.getColumns(mut, sqlbase.ShowFingerprintsColumns)
 	case *splitNode:
-		return n.getColumns(mut, splitNodeColumns)
+		return n.getColumns(mut, sqlbase.AlterTableSplitColumns)
 	case *unsplitNode:
-		return n.getColumns(mut, unsplitNodeColumns)
+		return n.getColumns(mut, sqlbase.AlterTableUnsplitColumns)
 	case *unsplitAllNode:
-		return n.getColumns(mut, unsplitNodeColumns)
+		return n.getColumns(mut, sqlbase.AlterTableUnsplitColumns)
 	case *showTraceReplicaNode:
 		return n.getColumns(mut, sqlbase.ShowReplicaTraceColumns)
 	case *sequenceSelectNode:
-		return n.getColumns(mut, sequenceSelectColumns)
+		return n.getColumns(mut, sqlbase.SequenceSelectColumns)
 
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.

@@ -75,9 +75,16 @@ func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 		}
 	}
 
-	expirationTime, err := parseExpirationTime(&p.semaCtx, p.EvalContext(), n.ExpireExpr)
-	if err != nil {
-		return nil, err
+	expirationTime := hlc.MaxTimestamp
+	if n.ExpireExpr != nil {
+		typedExpireExpr, err := n.ExpireExpr.TypeCheck(&p.semaCtx, types.String)
+		if err != nil {
+			return nil, err
+		}
+		expirationTime, err = parseExpirationTime(p.EvalContext(), typedExpireExpr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &splitNode{
@@ -87,21 +94,6 @@ func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 		rows:           rows,
 		expirationTime: expirationTime,
 	}, nil
-}
-
-var splitNodeColumns = sqlbase.ResultColumns{
-	{
-		Name: "key",
-		Typ:  types.Bytes,
-	},
-	{
-		Name: "pretty",
-		Typ:  types.String,
-	},
-	{
-		Name: "split_enforced_until",
-		Typ:  types.Timestamp,
-	},
 }
 
 // splitRun contains the run-time state of splitNode during local execution.
@@ -194,21 +186,17 @@ func getRowKey(
 // parseExpriationTime parses an expression into a hlc.Timestamp representing
 // the expiration time of the split.
 func parseExpirationTime(
-	semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, expireExpr tree.Expr,
+	evalCtx *tree.EvalContext, expireExpr tree.TypedExpr,
 ) (hlc.Timestamp, error) {
-	if expireExpr == nil {
-		return hlc.MaxTimestamp, nil
-	}
-	typedExpireExpr, err := expireExpr.TypeCheck(semaCtx, types.String)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	if !tree.IsConst(evalCtx, typedExpireExpr) {
+	if !tree.IsConst(evalCtx, expireExpr) {
 		return hlc.Timestamp{}, errors.Errorf("SPLIT AT: only constant expressions are allowed for expiration")
 	}
-	d, err := typedExpireExpr.Eval(evalCtx)
+	d, err := expireExpr.Eval(evalCtx)
 	if err != nil {
 		return hlc.Timestamp{}, err
+	}
+	if d == tree.DNull {
+		return hlc.MaxTimestamp, nil
 	}
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
 	ts, err := tree.DatumToHLC(evalCtx, stmtTimestamp, d)

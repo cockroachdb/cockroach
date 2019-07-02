@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -68,18 +67,3 @@ func (ss *sequenceSelectNode) Values() tree.Datums {
 }
 
 func (ss *sequenceSelectNode) Close(ctx context.Context) {}
-
-var sequenceSelectColumns = sqlbase.ResultColumns{
-	{
-		Name: `last_value`,
-		Typ:  types.Int,
-	},
-	{
-		Name: `log_cnt`,
-		Typ:  types.Int,
-	},
-	{
-		Name: `is_called`,
-		Typ:  types.Bool,
-	},
-}
