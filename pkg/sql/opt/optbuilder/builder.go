@@ -210,14 +210,8 @@ func (b *Builder) buildStmt(
 ) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
-	case *tree.CreateTable:
-		return b.buildCreateTable(stmt, inScope)
-
 	case *tree.Delete:
 		return b.buildDelete(stmt, inScope)
-
-	case *tree.Explain:
-		return b.buildExplain(stmt, inScope)
 
 	case *tree.Insert:
 		return b.buildInsert(stmt, inScope)
@@ -228,11 +222,20 @@ func (b *Builder) buildStmt(
 	case *tree.Select:
 		return b.buildSelect(stmt, desiredTypes, inScope)
 
+	case *tree.Update:
+		return b.buildUpdate(stmt, inScope)
+
+	case *tree.CreateTable:
+		return b.buildCreateTable(stmt, inScope)
+
+	case *tree.Explain:
+		return b.buildExplain(stmt, inScope)
+
 	case *tree.ShowTraceForSession:
 		return b.buildShowTrace(stmt, inScope)
 
-	case *tree.Update:
-		return b.buildUpdate(stmt, inScope)
+	case *tree.Split:
+		return b.buildAlterTableSplit(stmt, inScope)
 
 	default:
 		// See if this statement can be rewritten to another statement using the

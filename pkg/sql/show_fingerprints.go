@@ -68,11 +68,6 @@ func (p *planner) ShowFingerprints(
 	}, nil
 }
 
-var showFingerprintsColumns = sqlbase.ResultColumns{
-	{Name: "index_name", Typ: types.String},
-	{Name: "fingerprint", Typ: types.String},
-}
-
 // showFingerprintsRun contains the run-time state of
 // showFingerprintsNode during local execution.
 type showFingerprintsRun struct {

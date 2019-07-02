@@ -38,6 +38,10 @@ type Index interface {
 	// Table returns a reference to the table this index is based on.
 	Table() Table
 
+	// Ordinal returns the ordinal of this index within the context of its Table.
+	// Specifically idx = Table().Index(idx.Ordinal).
+	Ordinal() int
+
 	// IsUnique returns true if this index is declared as UNIQUE in the schema.
 	IsUnique() bool
 

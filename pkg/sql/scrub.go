@@ -78,17 +78,6 @@ func (p *planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
 	return &scrubNode{n: n}, nil
 }
 
-var scrubColumns = sqlbase.ResultColumns{
-	{Name: "job_uuid", Typ: types.Uuid},
-	{Name: "error_type", Typ: types.String},
-	{Name: "database", Typ: types.String},
-	{Name: "table", Typ: types.String},
-	{Name: "primary_key", Typ: types.String},
-	{Name: "timestamp", Typ: types.Timestamp},
-	{Name: "repaired", Typ: types.Bool},
-	{Name: "details", Typ: types.Jsonb},
-}
-
 // scrubRun contains the run-time state of scrubNode during local execution.
 type scrubRun struct {
 	checkQueue []checkOperation
