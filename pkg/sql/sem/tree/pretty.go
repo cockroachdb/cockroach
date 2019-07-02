@@ -679,6 +679,10 @@ func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
 				args,
 			)
 		}
+
+		if len(node.OrderBy) > 0 {
+			args = pretty.ConcatSpace(args, node.OrderBy.doc(p))
+		}
 		d = pretty.Concat(d, p.bracket("(", args, ")"))
 	} else {
 		d = pretty.Concat(d, pretty.Text("()"))
