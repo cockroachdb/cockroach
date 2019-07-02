@@ -894,7 +894,7 @@ func (r *Replica) State() storagepb.RangeInfo {
 	defer r.mu.RUnlock()
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagepb.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
-	ri.NumPending = uint64(len(r.mu.proposals))
+	ri.NumPending = uint64(r.numPendingProposalsRLocked())
 	ri.RaftLogSize = r.mu.raftLogSize
 	ri.RaftLogSizeTrusted = r.mu.raftLogSizeTrusted
 	ri.NumDropped = uint64(r.mu.droppedMessages)
