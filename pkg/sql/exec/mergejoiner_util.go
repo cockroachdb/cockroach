@@ -15,8 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
-// TODO(yuzefovich): rename this file.
-
 // circularGroupsBuffer is a struct designed to store the groups' slices for a
 // given column. We know that there is a maximum number of possible groups per
 // batch, so we can cap the buffer and make it circular.

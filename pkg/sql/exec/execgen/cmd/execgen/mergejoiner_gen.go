@@ -87,7 +87,7 @@ func genMergeJoinOps(wr io.Writer) error {
 	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "MJOverload" $3 "lHasNulls" $4}}`)
 
 	incrementRightSwitch := makeFunctionRegex("_INCREMENT_RIGHT_SWITCH", 4)
-	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "MJOverload" $3 "RNull" $4}}`)
+	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "JoinType" $1 "Sel" $2 "MJOverload" $3 "rHasNulls" $4}}`)
 
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
