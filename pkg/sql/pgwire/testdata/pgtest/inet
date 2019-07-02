@@ -10,7 +10,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse"}
+{"Type":"ErrorResponse","Code":"08P01"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # IPv4family
@@ -23,7 +23,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse"}
+{"Type":"ErrorResponse","Code":"22P03"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # IPv6family
@@ -36,5 +36,18 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse"}
+{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Unknown family
+send
+Bind {"ParameterFormatCodes": [1], "Parameters": [[6, 0, 0, 0, 0, 0]]}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"22P03"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
