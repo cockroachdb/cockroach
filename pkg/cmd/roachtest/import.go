@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerImportTPCC(r *registry) {
+func registerImportTPCC(r *testRegistry) {
 	runImportTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
@@ -107,7 +107,7 @@ func registerImportTPCC(r *registry) {
 	})
 }
 
-func registerImportTPCH(r *registry) {
+func registerImportTPCH(r *testRegistry) {
 	for _, item := range []struct {
 		nodes   int
 		timeout time.Duration

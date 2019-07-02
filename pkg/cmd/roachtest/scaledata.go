@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 )
 
-func registerScaleData(r *registry) {
+func registerScaleData(r *testRegistry) {
 	// apps is a suite of Sqlapp applications designed to be used to check the
 	// consistency of a database under load. Each Sqlapp application launches a
 	// set of workers who perform database operations while another worker
@@ -53,9 +53,9 @@ func registerScaleData(r *registry) {
 }
 
 func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur time.Duration) {
-	roachNodeCount := c.nodes - 1
+	roachNodeCount := c.spec.NodeCount - 1
 	roachNodes := c.Range(1, roachNodeCount)
-	appNode := c.Node(c.nodes)
+	appNode := c.Node(c.spec.NodeCount)
 
 	if local && runtime.GOOS != "linux" {
 		t.Fatalf("must run on linux os, found %s", runtime.GOOS)

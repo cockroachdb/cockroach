@@ -186,7 +186,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 		}
 
 		var bytesUsed []usage
-		for i := 1; i <= dul.c.nodes; i++ {
+		for i := 1; i <= dul.c.spec.NodeCount; i++ {
 			cur, err := getDiskUsageInBytes(ctx, dul.c, quietLogger, i)
 			if err != nil {
 				// This can trigger spuriously as compactions remove files out from under `du`.
@@ -209,7 +209,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 	}
 }
 
-func registerRestore(r *registry) {
+func registerRestore(r *testRegistry) {
 	for _, item := range []struct {
 		nodes   int
 		timeout time.Duration

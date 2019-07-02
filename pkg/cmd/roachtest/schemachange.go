@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerSchemaChangeKV(r *registry) {
+func registerSchemaChangeKV(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    `schemachange/mixed/kv`,
 		Cluster: makeClusterSpec(5),
@@ -45,7 +45,7 @@ func registerSchemaChangeKV(r *registry) {
 			m.Wait()
 
 			c.Run(ctx, c.Node(1), `./workload init kv --drop --db=test`)
-			for node := 1; node <= c.nodes; node++ {
+			for node := 1; node <= c.spec.NodeCount; node++ {
 				node := node
 				// TODO(dan): Ideally, the test would fail if this queryload failed,
 				// but we can't put it in monitor as-is because the test deadlocks.
@@ -283,11 +283,11 @@ func findIndexProblem(
 	return nil
 }
 
-func registerSchemaChangeIndexTPCC1000(r *registry) {
+func registerSchemaChangeIndexTPCC1000(r *testRegistry) {
 	r.Add(makeIndexAddTpccTest(makeClusterSpec(5, cpu(16)), 1000, time.Hour*2))
 }
 
-func registerSchemaChangeIndexTPCC100(r *registry) {
+func registerSchemaChangeIndexTPCC100(r *testRegistry) {
 	r.Add(makeIndexAddTpccTest(makeClusterSpec(5), 100, time.Minute*15))
 }
 
@@ -314,7 +314,7 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 	}
 }
 
-func registerSchemaChangeBulkIngest(r *registry) {
+func registerSchemaChangeBulkIngest(r *testRegistry) {
 	r.Add(makeSchemaChangeBulkIngestTest(5, 100000000, time.Minute*20))
 }
 
@@ -336,8 +336,8 @@ func makeSchemaChangeBulkIngestTest(numNodes, numRows int, length time.Duration)
 			cNum := 1
 			payloadBytes := 4
 
-			crdbNodes := c.Range(1, c.nodes-1)
-			workloadNode := c.Node(c.nodes)
+			crdbNodes := c.Range(1, c.spec.NodeCount-1)
+			workloadNode := c.Node(c.spec.NodeCount)
 
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload", workloadNode)
@@ -362,7 +362,7 @@ func makeSchemaChangeBulkIngestTest(numNodes, numRows int, length time.Duration)
 			}
 			cmdWriteAndRead := fmt.Sprintf(
 				"./workload run bulkingest --duration %s {pgurl:1-%d} --a %d --b %d --c %d --payload-bytes %d",
-				indexDuration.String(), c.nodes-1, aNum, bNum, cNum, payloadBytes,
+				indexDuration.String(), c.spec.NodeCount-1, aNum, bNum, cNum, payloadBytes,
 			)
 			m.Go(func(ctx context.Context) error {
 				c.Run(ctx, workloadNode, cmdWriteAndRead)

@@ -36,7 +36,7 @@ type splitParams struct {
 	waitDuration  time.Duration // Duration the workload should run for.
 }
 
-func registerLoadSplits(r *registry) {
+func registerLoadSplits(r *testRegistry) {
 	const numNodes = 3
 
 	r.Add(testSpec{
@@ -155,7 +155,7 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 		setRangeMaxBytes(params.maxSize)
 
 		t.Status("running uniform kv workload")
-		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init kv {pgurl:1-%d}", c.nodes))
+		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init kv {pgurl:1-%d}", c.spec.NodeCount))
 
 		t.Status("checking initial range count")
 		rangeCount := func() int {
@@ -185,7 +185,7 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 		}
 		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload run kv "+
 			"--init --concurrency=%d --read-percent=%d --span-percent=%d %s {pgurl:1-%d} --duration='%s'",
-			params.concurrency, params.readPercent, params.spanPercent, extraFlags, c.nodes,
+			params.concurrency, params.readPercent, params.spanPercent, extraFlags, c.spec.NodeCount,
 			params.waitDuration.String()))
 
 		t.Status(fmt.Sprintf("waiting for splits"))
@@ -198,7 +198,7 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 	m.Wait()
 }
 
-func registerLargeRange(r *registry) {
+func registerLargeRange(r *testRegistry) {
 	const size = 10 << 30 // 10 GB
 	// TODO(nvanbenschoten): Snapshots currently hold the entirety of a range in
 	// memory on the receiving side. This is dangerous when we grow a range to
@@ -283,7 +283,7 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 		// schema but before populating it. This is ok because upreplication
 		// occurs much faster than we can actually create a large range.
 		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init bank "+
-			"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, c.nodes))
+			"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, c.spec.NodeCount))
 
 		t.Status("checking for single range")
 		rangeCount := func() int {

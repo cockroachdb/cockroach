@@ -32,7 +32,7 @@ import (
 //
 // Once DistSQL queries provide more testing knobs, these tests can likely be
 // replaced with unit tests.
-func registerCancel(r *registry) {
+func registerCancel(r *testRegistry) {
 	runCancel := func(ctx context.Context, t *test, c *cluster,
 		queries []string, warehouses int, useDistsql bool) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
