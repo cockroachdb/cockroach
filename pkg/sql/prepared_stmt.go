@@ -100,12 +100,6 @@ type preparedStatementsAccessor interface {
 // Note that PreparedPortals maintain a reference counter internally.
 // References need to be registered with incRef() and de-registered with
 // decRef().
-//
-// TODO(andrei): In Postgres, portals can only be used to "execute a query" once
-// (but they allow one to move back and forth through the results). Our portals
-// can be used to execute a query multiple times, which is a bug (executing an
-// exhausted portal in Postres returns 0 results; in CRDB executing a portal a
-// second time always restarts the query).
 type PreparedPortal struct {
 	Stmt  *PreparedStatement
 	Qargs tree.QueryArguments
