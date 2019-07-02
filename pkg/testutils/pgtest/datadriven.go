@@ -134,6 +134,8 @@ func toMessage(typ string) interface{} {
 	switch typ {
 	case "Bind":
 		return &pgproto3.Bind{}
+	case "Close":
+		return &pgproto3.Close{}
 	case "CommandComplete":
 		return &pgproto3.CommandComplete{}
 	case "DataRow":
