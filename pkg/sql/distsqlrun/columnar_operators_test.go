@@ -12,6 +12,7 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sort"
 	"testing"
@@ -117,64 +118,70 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	var da sqlbase.DatumAlloc
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	rng, _ := randutil.NewPseudoRand()
 
-	nRows := 100
-	maxCols := 5
-	maxNum := 10
+	nSeeds := 20
+	nRows := 10
+	maxCols := 3
+	maxNum := 5
 	nullProbability := 0.1
-	typs := make([]types.T, maxCols)
-	for i := range typs {
-		// TODO (georgeutsin): Randomize the types of the columns.
-		typs[i] = *types.Int
-	}
-	for _, joinType := range []sqlbase.JoinType{
-		sqlbase.JoinType_INNER,
-		sqlbase.JoinType_LEFT_OUTER,
-		sqlbase.JoinType_RIGHT_OUTER,
-	} {
-		for nCols := 1; nCols <= maxCols; nCols++ {
-			inputTypes := typs[:nCols]
-			// Note: we're only generating column orderings on all nCols columns since
-			// if there are columns not in the ordering, the results are not fully
-			// deterministic.
-			lOrderingCols := generateColumnOrdering(rng, nCols, nCols)
-			rOrderingCols := generateColumnOrdering(rng, nCols, nCols)
-			// Set the directions of both columns to be the same.
-			for i, lCol := range lOrderingCols {
-				rOrderingCols[i].Direction = lCol.Direction
-			}
+	for nSeed := 1; nSeed < nSeeds; nSeed++ {
+		seed := rand.Int()
+		rng := rand.New(rand.NewSource(int64(seed)))
 
-			lRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-			rRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-			lMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: lOrderingCols})
-			rMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: rOrderingCols})
-			sort.Slice(lRows, func(i, j int) bool {
-				cmp, err := lRows[i].Compare(inputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
-				if err != nil {
+		typs := make([]types.T, maxCols)
+		for i := range typs {
+			// TODO (georgeutsin): Randomize the types of the columns.
+			typs[i] = *types.Int
+		}
+		for _, joinType := range []sqlbase.JoinType{
+			sqlbase.JoinType_INNER,
+			sqlbase.JoinType_LEFT_OUTER,
+			sqlbase.JoinType_RIGHT_OUTER,
+		} {
+			for nCols := 1; nCols <= maxCols; nCols++ {
+				inputTypes := typs[:nCols]
+				// Note: we're only generating column orderings on all nCols columns since
+				// if there are columns not in the ordering, the results are not fully
+				// deterministic.
+				lOrderingCols := generateColumnOrdering(rng, nCols, nCols)
+				rOrderingCols := generateColumnOrdering(rng, nCols, nCols)
+				// Set the directions of both columns to be the same.
+				for i, lCol := range lOrderingCols {
+					rOrderingCols[i].Direction = lCol.Direction
+				}
+
+				lRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+				rRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+				lMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: lOrderingCols})
+				rMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: rOrderingCols})
+				sort.Slice(lRows, func(i, j int) bool {
+					cmp, err := lRows[i].Compare(inputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
+					if err != nil {
+						t.Fatal(err)
+					}
+					return cmp < 0
+				})
+				sort.Slice(rRows, func(i, j int) bool {
+					cmp, err := rRows[i].Compare(inputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
+					if err != nil {
+						t.Fatal(err)
+					}
+					return cmp < 0
+				})
+
+				mjSpec := &distsqlpb.MergeJoinerSpec{
+					LeftOrdering:  distsqlpb.Ordering{Columns: lOrderingCols},
+					RightOrdering: distsqlpb.Ordering{Columns: rOrderingCols},
+					Type:          joinType,
+				}
+				pspec := &distsqlpb.ProcessorSpec{
+					Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
+					Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
+				}
+				if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
+					fmt.Printf("------- seed = %d -------\n", seed)
 					t.Fatal(err)
 				}
-				return cmp < 0
-			})
-			sort.Slice(rRows, func(i, j int) bool {
-				cmp, err := rRows[i].Compare(inputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
-				if err != nil {
-					t.Fatal(err)
-				}
-				return cmp < 0
-			})
-
-			mjSpec := &distsqlpb.MergeJoinerSpec{
-				LeftOrdering:  distsqlpb.Ordering{Columns: lOrderingCols},
-				RightOrdering: distsqlpb.Ordering{Columns: rOrderingCols},
-				Type:          joinType,
-			}
-			pspec := &distsqlpb.ProcessorSpec{
-				Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
-				Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
-			}
-			if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
-				t.Fatal(err)
 			}
 		}
 	}
