@@ -538,15 +538,16 @@ project
  ├── columns: k:1(int!null)
  ├── cardinality: [0 - 10]
  ├── key: (1)
- └── limit
+ └── offset
       ├── columns: k:1(int!null) i:2(int)
       ├── internal-ordering: +2
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2)
-      ├── offset
+      ├── limit
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── internal-ordering: +2
+      │    ├── cardinality: [0 - 20]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── ordering: +2
@@ -559,7 +560,7 @@ project
       │    │         ├── columns: k:1(int!null) i:2(int)
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2)
-      │    └── const: 10 [type=int]
+      │    └── const: 20 [type=int]
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
@@ -569,15 +570,16 @@ SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10 OFFSET 10)
 project
  ├── columns: s:4(string)
  ├── cardinality: [0 - 10]
- └── limit
+ └── offset
       ├── columns: k:1(int!null) i:2(int) s:4(string)
       ├── internal-ordering: +2,+1
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2,4)
-      ├── offset
+      ├── limit
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── internal-ordering: +2,+1
+      │    ├── cardinality: [0 - 20]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
       │    ├── ordering: +2,+1
@@ -590,7 +592,7 @@ project
       │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2,4)
-      │    └── const: 10 [type=int]
+      │    └── const: 20 [type=int]
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
@@ -602,15 +604,16 @@ project
  ├── cardinality: [0 - 10]
  ├── key: (1)
  ├── fd: (1)-->(4)
- └── limit
+ └── offset
       ├── columns: k:1(int!null) i:2(int) s:4(string)
       ├── internal-ordering: +2,+1
       ├── cardinality: [0 - 10]
       ├── key: (1)
       ├── fd: (1)-->(2,4)
-      ├── offset
+      ├── limit
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    ├── internal-ordering: +2,+1
+      │    ├── cardinality: [0 - 20]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,4)
       │    ├── ordering: +2,+1
@@ -623,7 +626,7 @@ project
       │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2,4)
-      │    └── const: 10 [type=int]
+      │    └── const: 20 [type=int]
       └── const: 10 [type=int]
 
 # Project filter offset/limit columns, but can't push all the way down to scan.
@@ -633,12 +636,13 @@ SELECT f, f*2.0 AS r FROM (SELECT f, s FROM a GROUP BY f, s OFFSET 5 LIMIT 5) a
 project
  ├── columns: f:3(float) r:5(float)
  ├── cardinality: [0 - 5]
- ├── limit
+ ├── offset
  │    ├── columns: f:3(float) s:4(string)
  │    ├── cardinality: [0 - 5]
  │    ├── key: (3,4)
- │    ├── offset
+ │    ├── limit
  │    │    ├── columns: f:3(float) s:4(string)
+ │    │    ├── cardinality: [0 - 10]
  │    │    ├── key: (3,4)
  │    │    ├── distinct-on
  │    │    │    ├── columns: f:3(float) s:4(string)
@@ -646,7 +650,7 @@ project
  │    │    │    ├── key: (3,4)
  │    │    │    └── scan a
  │    │    │         └── columns: f:3(float) s:4(string)
- │    │    └── const: 5 [type=int]
+ │    │    └── const: 10 [type=int]
  │    └── const: 5 [type=int]
  └── projections
       └── f * 2.0 [type=float, outer=(3)]

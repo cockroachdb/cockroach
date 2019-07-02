@@ -1063,12 +1063,25 @@ func (c *CustomFuncs) IsUnorderedGrouping(grouping *memo.GroupingPrivate) bool {
 //
 // ----------------------------------------------------------------------
 
+// IsPositiveLimit is true if the given limit value is greater than zero.
+func (c *CustomFuncs) IsPositiveLimit(limit tree.Datum) bool {
+	limitVal := int64(*limit.(*tree.DInt))
+	return limitVal > 0
+}
+
 // LimitGeMaxRows returns true if the given constant limit value is greater than
 // or equal to the max number of rows returned by the input expression.
 func (c *CustomFuncs) LimitGeMaxRows(limit tree.Datum, input memo.RelExpr) bool {
 	limitVal := int64(*limit.(*tree.DInt))
 	maxRows := input.Relational().Cardinality.Max
 	return limitVal >= 0 && maxRows < math.MaxUint32 && limitVal >= int64(maxRows)
+}
+
+// IsSameOrdering evaluates whether the two orderings are equal.
+func (c *CustomFuncs) IsSameOrdering(
+	first physical.OrderingChoice, other physical.OrderingChoice,
+) bool {
+	return first.Equals(&other)
 }
 
 // ----------------------------------------------------------------------
@@ -1673,4 +1686,11 @@ func (c *CustomFuncs) EqualsNumber(datum tree.Datum, value int64) bool {
 		return *t == tree.DInt(value)
 	}
 	return false
+}
+
+// AddConsts adds the numeric constants together.
+func (c *CustomFuncs) AddConsts(first tree.Datum, second tree.Datum) tree.Datum {
+	firstVal := int64(*first.(*tree.DInt))
+	secondVal := int64(*second.(*tree.DInt))
+	return tree.NewDInt(tree.DInt(firstVal + secondVal))
 }
