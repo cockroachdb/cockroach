@@ -417,8 +417,7 @@ func (sc *SchemaChanger) DropTableDesc(
 					b.DelRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 					return nil
 				}); err != nil {
-				return errors.Wrapf(err,
-					"failed to update job %d", errors.Safe(tableDesc.GetDropJobID()))
+				log.Warningf(ctx, "failed to update job %d: %+v", errors.Safe(tableDesc.GetDropJobID()), err)
 			}
 		}
 		return txn.Run(ctx, b)
