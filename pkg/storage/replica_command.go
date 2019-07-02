@@ -977,14 +977,10 @@ func (r *Replica) changeReplicas(
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-				// TODO(benesch): this trigger should just specify the updated
-				// descriptor, like the split and merge triggers, so that the receiver
-				// doesn't need to reconstruct the range descriptor update.
 				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
-					ChangeType:      changeType,
-					Replica:         repDesc,
-					UpdatedReplicas: updatedDesc.Replicas().Unwrap(),
-					NextReplicaID:   updatedDesc.NextReplicaID,
+					ChangeType: changeType,
+					Replica:    repDesc,
+					Desc:       &updatedDesc,
 				},
 			},
 		})
