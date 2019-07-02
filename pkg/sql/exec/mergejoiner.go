@@ -202,6 +202,8 @@ func NewMergeJoinOp(
 		return newMergeJoinLeftOuterOp(left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
 	case sqlbase.JoinType_RIGHT_OUTER:
 		return newMergeJoinRightOuterOp(left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
+	case sqlbase.JoinType_FULL_OUTER:
+		return newMergeJoinFullOuterOp(left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
 	default:
 		panic("unsupported join type")
 	}

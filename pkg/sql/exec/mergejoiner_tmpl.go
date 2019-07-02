@@ -251,7 +251,8 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
 	// Unmatched groups are not possible with INNER JOIN, so there is nothing to
 	// do here.
 	// */}}
-	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsLeftOuter }}
 	if lGroup.unmatched {
 		if curLIdx+1 != curLLength {
 			panic("unexpectedly length of the left unmatched group is not 1")
@@ -262,7 +263,8 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
 		curLIdx++
 		areGroupsProcessed = true
 	}
-	// {{ else if $.JoinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsRightOuter }}
 	// {{/*
 	// Unmatched groups from the left are not possible with RIGHT OUTER JOIN, so
 	// there is nothing to do here.
@@ -283,12 +285,14 @@ func _RIGHT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
 	// Unmatched groups are not possible with INNER JOIN, so there is nothing to
 	// do here.
 	// */}}
-	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsLeftOuter }}
 	// {{/*
 	// Unmatched groups from the right are not possible with LEFT OUTER JOIN, so
 	// there is nothing to do here.
 	// */}}
-	// {{ else if $.JoinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsRightOuter }}
 	if rGroup.unmatched {
 		if curRIdx+1 != curRLength {
 			panic("unexpectedly length of the right unmatched group is not 1")
@@ -315,9 +319,11 @@ func _NULL_FROM_LEFT_SWITCH(joinType joinTypeInfo) { // */}}
 	// {{/*
 	// Nulls coming from the left input are ignored in INNER JOIN.
 	// */}}
-	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsLeftOuter }}
 	o.groups.addLeftOuterGroup(curLIdx, curRIdx)
-	// {{ else if $.JoinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsRightOuter }}
 	// {{/*
 	// Nulls coming from the left input are ignored in RIGHT OUTER JOIN.
 	// */}}
@@ -337,11 +343,13 @@ func _NULL_FROM_RIGHT_SWITCH(joinType joinTypeInfo) { // */}}
 	// {{/*
 	// Nulls coming from the right input are ignored in INNER JOIN.
 	// */}}
-	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsLeftOuter }}
 	// {{/*
 	// Nulls coming from the right input are ignored in LEFT OUTER JOIN.
 	// */}}
-	// {{ else if $.JoinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsRightOuter }}
 	o.groups.addRightOuterGroup(curLIdx, curRIdx)
 	// {{ end }}
 	// {{end}}
@@ -364,7 +372,8 @@ func _INCREMENT_LEFT_SWITCH(
 	// {{/*
 	// Unmatched tuple from the left source is not outputted in INNER JOIN.
 	// */}}
-	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsLeftOuter }}
 	// All the rows on the left within the current group will not get
 	// a match on the right, so we're adding each of them as a left
 	// outer group.
@@ -385,7 +394,8 @@ func _INCREMENT_LEFT_SWITCH(
 		o.groups.addLeftOuterGroup(curLIdx, curRIdx)
 		curLIdx++
 	}
-	// {{ else if $.JoinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsRightOuter }}
 	// {{/*
 	// Unmatched tuple from the left source is not outputted in RIGHT OUTER JOIN.
 	// */}}
@@ -410,11 +420,13 @@ func _INCREMENT_RIGHT_SWITCH(
 	// {{/*
 	// Unmatched tuple from the right source is not outputted in INNER JOIN.
 	// */}}
-	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsLeftOuter }}
 	// {{/*
 	// Unmatched tuple from the right source is not outputted in LEFT OUTER JOIN.
 	// */}}
-	// {{ else if $.JoinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsRightOuter }}
 	// All the rows on the right within the current group will not get a match on
 	// the left, so we're adding each of them as a right outer group.
 	o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
@@ -450,7 +462,8 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(joinType joinTypeInfo) { // */}}
 	// {{/*
 	// Nothing to do here since an unmatched tuple is omitted.
 	// */}}
-	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsLeftOuter }}
 	if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
 		// The current group is not the last one within the column, so it
 		// cannot be extended into the next batch, and we need to process it
@@ -463,7 +476,8 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(joinType joinTypeInfo) { // */}}
 			curLIdx++
 		}
 	}
-	// {{ else if $.JoinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsRightOuter }}
 	if !o.groups.isLastGroupInCol() && !areGroupsProcessed {
 		// The current group is not the last one within the column, so it
 		// cannot be extended into the next batch, and we need to process it
@@ -832,21 +846,10 @@ func _NULL_IN_BUFFERED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
 	// Nulls cannot be in equality columns in the buffered group in INNER JOIN
 	// because such tuple would not get a match, so they are never buffered.
 	// */}}
-	// {{ else if $.JoinType.IsLeftOuter }}
-	if input == &o.left {
-		// Nulls only from the left input can be saved in the buffer in case of
-		// LEFT OUTER JOIN, so we do not perform this check on the right input.
-		if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
-			return true
-		}
-	}
-	// {{ else if $.JoinType.IsRightOuter }}
-	if input == &o.right {
-		// Nulls only from the right input can be saved in the buffer in case of
-		// RIGHT OUTER JOIN, so we do not perform this check on the left input.
-		if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
-			return true
-		}
+	// {{ end }}
+	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsRightOuter }}
+	if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
+		return true
 	}
 	// {{ end }}
 	// {{end}}
@@ -1136,7 +1139,8 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 	// Remaining tuples from the left source do not have a match, so they are
 	// ignored in INNER JOIN.
 	// */}}
-	// {{ else if $joinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if $joinType.IsLeftOuter }}
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
@@ -1159,7 +1163,8 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 	o.builderState.rBatch = o.proberState.rBatch
 
 	o.proberState.lIdx = o.proberState.lLength
-	// {{ else if $joinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $joinType.IsRightOuter }}
 	// {{/*
 	// Remaining tuples from the left source do not have a match, so they are
 	// ignored in RIGHT OUTER JOIN.
@@ -1176,12 +1181,14 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
 	// Remaining tuples from the right source do not have a match, so they are
 	// ignored in INNER JOIN.
 	// */}}
-	// {{ else if $joinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if $joinType.IsLeftOuter }}
 	// {{/*
 	// Remaining tuples from the right source do not have a match, so they are
 	// ignored in LEFT OUTER JOIN.
 	// */}}
-	// {{ else if $joinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $joinType.IsRightOuter }}
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
@@ -1381,7 +1388,11 @@ func _SOURCE_FINISHED_SWITCH(joinType joinTypeInfo) { // */}}
 	// {{ if $.JoinType.IsInner }}
 	o.setBuilderSourceToBufferedGroup()
 	o.outputReady = true
-	// {{ else if $.JoinType.IsLeftOuter }}
+	// {{ end }}
+	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsRightOuter }}
+	outputReady := true
+	// {{ end }}
+	// {{ if $.JoinType.IsLeftOuter }}
 	// At least one of the sources is finished. If it was the right one,
 	// then we need to emit remaining tuples from the left source with
 	// nulls corresponding to the right one. But if the left source is
@@ -1392,10 +1403,10 @@ func _SOURCE_FINISHED_SWITCH(joinType joinTypeInfo) { // */}}
 		// many unmatched tuples from the left into the output batch. Once
 		// outCount reaches the desired output batch size, the output will be
 		// returned.
-	} else {
-		o.outputReady = true
+		outputReady = false
 	}
-	// {{ else if $.JoinType.IsRightOuter }}
+	// {{ end }}
+	// {{ if $.JoinType.IsRightOuter }}
 	// At least one of the sources is finished. If it was the left one,
 	// then we need to emit remaining tuples from the right source with
 	// nulls corresponding to the left one. But if the right source is
@@ -1406,9 +1417,11 @@ func _SOURCE_FINISHED_SWITCH(joinType joinTypeInfo) { // */}}
 		// many unmatched tuples from the right into the output batch. Once
 		// outCount reaches the desired output batch size, the output will be
 		// returned.
-	} else {
-		o.outputReady = true
+		outputReady = false
 	}
+	// {{ end }}
+	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsRightOuter }}
+	o.outputReady = outputReady
 	// {{ end }}
 	// {{end}}
 	// {{/*
