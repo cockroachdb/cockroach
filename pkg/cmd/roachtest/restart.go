@@ -37,9 +37,14 @@ func runRestart(ctx context.Context, t *test, c *cluster, downDuration time.Dura
 	// sstable entries from the import. They're huge and are not representative of
 	// normal traffic.
 	//
-	// TODO(dan): It seems like some part of `fixtures import` should do this for
-	// you. It's odd that a cluster that's freshly initialized with fixtures
-	// import behaves so differently than it does 10m after.
+	// NB: less would probably do a good enough job, but let's play it safe.
+	//
+	// TODO(dan/tbg): It's awkward that this is necessary. We should be able to
+	// do a better job here, for example by truncating only a smaller prefix of
+	// the log instead of all of it (right now there's no notion of per-entry
+	// size when we do truncate). Also having quiescing ranges truncate to
+	// lastIndex will be helpful because that drives the log size down eagerly
+	// when things are healthy.
 	t.Status("waiting for addsstable truncations")
 	time.Sleep(11 * time.Minute)
 
@@ -56,6 +61,15 @@ func runRestart(ctx context.Context, t *test, c *cluster, downDuration time.Dura
 	// Bring it back up and make sure it can serve a query within a reasonable
 	// time limit. For now, less time than it was down for.
 	c.Start(ctx, t, c.Node(restartNode))
+
+	// Dialing the formerly down node may still be prevented by the circuit breaker
+	// for a short moment (seconds) after n3 restarts. If it happens, the COUNT(*)
+	// can fail with a "no inbound stream connection" error. This is not what we
+	// want to catch in this test, so work around it.
+	//
+	// See
+	time.Sleep(15 * time.Second)
+
 	start := timeutil.Now()
 	restartNodeDB := c.Conn(ctx, restartNode)
 	if _, err := restartNodeDB.Exec(`SELECT count(*) FROM tpcc.order_line`); err != nil {
