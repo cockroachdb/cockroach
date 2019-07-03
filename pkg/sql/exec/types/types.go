@@ -110,3 +110,83 @@ func (t T) GoTypeName() string {
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
 }
+
+// Get is a function that should only be used in templates.
+func (t T) Get(target, i string) string {
+	if t == Bytes {
+		return fmt.Sprintf("%s.Get(%s)", target, i)
+	}
+	return fmt.Sprintf("%s[%s]", target, i)
+}
+
+// Set is a function that should only be used in templates.
+func (t T) Set(target, i, new string) string {
+	if t == Bytes {
+		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
+	}
+	return fmt.Sprintf("%s[%s] = %s", target, i, new)
+}
+
+// Swap is a function that should only be used in templates.
+func (t T) Swap(target, i, j string) string {
+	if t == Bytes {
+		return fmt.Sprintf("%s.Swap(%s, %s)", target, i, j)
+	}
+	return fmt.Sprintf("%[1]s[%[2]s], %[1]s[%[3]s] = %[1]s[%[3]s], %[1]s[%[2]s]", target, i, j)
+}
+
+// Slice is a function that should only be used in templates.
+func (t T) Slice(target, start, end string) string {
+	if t == Bytes {
+		return fmt.Sprintf("%s.Slice(%s, %s)", target, start, end)
+	}
+	return fmt.Sprintf("%s[%s:%s]", target, start, end)
+}
+
+// CopySlice is a function that should only be used in templates.
+func (t T) CopySlice(target, src, destIdx, srcStartIdx, srcEndIdx string) string {
+	if t == Bytes {
+		return fmt.Sprintf("%s.CopySlice(%s, %s, %s, %s)", target, src, destIdx, srcStartIdx, srcEndIdx)
+	}
+	return fmt.Sprintf("copy(%s[%s:], %s[%s:%s])", target, destIdx, src, srcStartIdx, srcEndIdx)
+}
+
+// AppendSlice is a function that should only be used in templates.
+func (t T) AppendSlice(target, src, destIdx, srcStartIdx, srcEndIdx string) string {
+	if t == Bytes {
+		return fmt.Sprintf("%s.AppendSlice(%s, %s, %s, %s)", target, src, destIdx, srcStartIdx, srcEndIdx)
+	}
+	return fmt.Sprintf("%[1]s = append(%[1]s[:%s], %s[%s:%s]...)", target, destIdx, src, srcStartIdx, srcEndIdx)
+}
+
+// AppendVal is a function that should only be used in templates.
+func (t T) AppendVal(target, v string) string {
+	if t == Bytes {
+		return fmt.Sprintf("%s.AppendVal(%s)", target, v)
+	}
+	return fmt.Sprintf("%[1]s = append(%[1]s, %s)", target, v)
+}
+
+// Len is a function that should only be used in templates.
+func (t T) Len(target string) string {
+	if t == Bytes {
+		return fmt.Sprintf("%s.Len()", target)
+	}
+	return fmt.Sprintf("len(%s)", target)
+}
+
+// Loop is a function that should only be used in templates.
+func (t T) Loop(target string) string {
+	if t == Bytes {
+		return fmt.Sprintf("i := 0; i < %s.Len(); i++", target)
+	}
+	return fmt.Sprintf("i := range %s", target)
+}
+
+// Zero is a function that should only be used in templates.
+func (t T) Zero(target string) string {
+	if t == Bytes {
+		return fmt.Sprintf("%s.Zero()", target)
+	}
+	return fmt.Sprintf("for n := 0; n < len(%[1]s); n += copy(%[1]s[n:], zero%sColumn) {}", target, t.String())
+}
