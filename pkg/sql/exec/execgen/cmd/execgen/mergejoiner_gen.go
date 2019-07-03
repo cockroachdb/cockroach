@@ -44,6 +44,7 @@ type joinTypeInfo struct {
 	IsInner      bool
 	IsLeftOuter  bool
 	IsRightOuter bool
+	IsLeftSemi   bool
 
 	String string
 }
@@ -178,6 +179,10 @@ func genMergeJoinOps(wr io.Writer) error {
 			IsLeftOuter:  true,
 			IsRightOuter: true,
 			String:       "FullOuter",
+		},
+		{
+			IsLeftSemi: true,
+			String:     "LeftSemi",
 		},
 	}
 
