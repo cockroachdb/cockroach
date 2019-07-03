@@ -2329,8 +2329,8 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 // FindIndexByIndexIdx returns an active index with the specified
 // index's index which has a domain of [0, # of secondary indexes] and whether
 // the index is a secondary index.
-// The primary index has an index of 0 and the first secondary index (if it exists)
-// has an index of 1.
+// The primary index has an index of 0 and the first secondary index
+// (if it exists) has an index of 1.
 func (desc *TableDescriptor) FindIndexByIndexIdx(
 	indexIdx int,
 ) (index *IndexDescriptor, isSecondary bool, err error) {
@@ -2374,6 +2374,14 @@ func (desc *TableDescriptor) IsInterleaved() bool {
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
+// There are three Validity types for the mutations:
+// Validated   - The constraint has already been added and validated, should
+//               never be the case for a validated constraint to enter this
+//               method.
+// Validating  - The constraint has already been added, and just needs to be
+//               marked as validated.
+// Unvalidated - The constraint has not yet been added, and needs to be added
+//               for the first time.
 func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) error {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
@@ -2390,15 +2398,18 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			switch t.Constraint.ConstraintType {
 			case ConstraintToUpdate_CHECK:
 				switch t.Constraint.Check.Validity {
-				case ConstraintValidity_Unvalidated:
-					desc.Checks = append(desc.Checks, &t.Constraint.Check)
 				case ConstraintValidity_Validating:
+					// Constraint already added, just mark it as Validated
 					for _, c := range desc.Checks {
 						if c.Name == t.Constraint.Name {
 							c.Validity = ConstraintValidity_Validated
 							break
 						}
 					}
+				case ConstraintValidity_Unvalidated:
+					// add the constraint to the list of check constraints on the table
+					// descriptor
+					desc.Checks = append(desc.Checks, &t.Constraint.Check)
 				default:
 					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
 				}
@@ -2407,7 +2418,17 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 				if err != nil {
 					return err
 				}
-				idx.ForeignKey.Validity = ConstraintValidity_Validated
+				switch t.Constraint.ForeignKey.Validity {
+				case ConstraintValidity_Validating:
+					// Constraint already added, just mark it as Validated
+					idx.ForeignKey.Validity = ConstraintValidity_Validated
+				case ConstraintValidity_Unvalidated:
+					// Takes care of adding the Foreign Key to the table index. Adding the
+					// backreference to the referenced table index must be taken care of
+					// in another call.
+					// TODO (tyler): Combine both of these tasks in the same place.
+					idx.ForeignKey = t.Constraint.ForeignKey
+				}
 			case ConstraintToUpdate_NOT_NULL:
 				// Remove the dummy check constraint that was in place during validation
 				for i, c := range desc.Checks {

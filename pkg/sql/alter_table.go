@@ -273,7 +273,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					} else {
 						tableState = NonEmptyTable
 					}
-					err = params.p.resolveFK(params.ctx, n.tableDesc, d, affected, tableState)
+					err = params.p.resolveFK(params.ctx, n.tableDesc, d, affected, tableState, t.ValidationBehavior)
 				})
 				if err != nil {
 					return err
