@@ -68,12 +68,17 @@ func makePropBufCntReq(incLeaseIndex bool) propBufCntReq {
 	return r
 }
 
+// arrayLen returns the number of elements in the proposal buffer's array.
+func (r propBufCntRes) arrayLen() int {
+	return int(r & (1<<32 - 1))
+}
+
 // arrayIndex returns the index into the proposal buffer that was reserved for
 // the request. The returned index will be -1 if no index was reserved (e.g. by
 // propBufCnt.read) and if the buffer is empty.
 func (r propBufCntRes) arrayIndex() int {
 	// NB: -1 because the array is 0-indexed.
-	return int(r&(1<<32-1)) - 1
+	return r.arrayLen() - 1
 }
 
 // leaseIndexOffset returns the offset from the proposal buffer's current lease
@@ -131,12 +136,12 @@ type propBuf struct {
 	testing struct {
 		// leaseIndexFilter can be used by tests to override the max lease index
 		// assigned to a proposal by returning a non-zero lease index.
-		leaseIndexFilter func(*ProposalData) (indexOverride uint64)
+		leaseIndexFilter func(*ProposalData) (indexOverride uint64, err error)
 		// submitProposalFilter can be used by tests to observe and optionally
 		// drop Raft proposals before they are handed to etcd/raft to begin the
 		// process of replication. Dropped proposals are still eligible to be
 		// reproposed due to ticks.
-		submitProposalFilter func(*ProposalData) (drop bool)
+		submitProposalFilter func(*ProposalData) (drop bool, err error)
 	}
 }
 
@@ -162,7 +167,7 @@ func (b *propBuf) Init(p proposer) {
 
 // Len returns the number of proposals currently in the buffer.
 func (b *propBuf) Len() int {
-	return b.cnt.read().arrayIndex() + 1
+	return b.cnt.read().arrayLen()
 }
 
 // LastAssignedLeaseIndexRLocked returns the last assigned lease index.
@@ -203,7 +208,9 @@ func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
 	// Assign the command's maximum lease index.
 	p.command.MaxLeaseIndex = b.liBase + res.leaseIndexOffset()
 	if filter := b.testing.leaseIndexFilter; filter != nil {
-		if override := filter(p); override != 0 {
+		if override, err := filter(p); err != nil {
+			return 0, err
+		} else if override != 0 {
 			p.command.MaxLeaseIndex = override
 		}
 	}
@@ -361,7 +368,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 	// buffer. This ensures that we synchronize with all producers and other
 	// consumers.
 	res := b.cnt.clear()
-	used := res.arrayIndex() + 1
+	used := res.arrayLen()
 	// Before returning, consider resizing the proposal buffer's array,
 	// depending on how much of it was used before the current flush.
 	defer b.arr.adjustSize(used)
@@ -386,6 +393,11 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 	// and apply them.
 	buf := b.arr.asSlice()[:used]
 	ents := make([]raftpb.Entry, 0, used)
+	// Remember the first error that we see when proposing the batch. We don't
+	// immediately return this error because we want to finish clearing out the
+	// buffer and registering each of the proposals with the proposer, but we
+	// stop trying to propose commands to raftGroup.
+	var firstErr error
 	for i, p := range buf {
 		buf[i] = nil // clear buffer
 
@@ -395,13 +407,19 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 		// Potentially drop the proposal before passing it to etcd/raft, but
 		// only after performing necessary bookkeeping.
 		if filter := b.testing.submitProposalFilter; filter != nil {
-			if drop := filter(p); drop {
+			if drop, err := filter(p); drop || err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
 				continue
 			}
 		}
 
-		// If we don't have a raft group, we can't propose the command.
-		if raftGroup == nil {
+		// If we don't have a raft group or if the raft group has rejected one
+		// of the proposals, we don't try to propose any more proposals. The
+		// rest of the proposals will still be registered with the proposer, so
+		// they will eventually be reproposed.
+		if raftGroup == nil || firstErr != nil {
 			continue
 		}
 
@@ -411,7 +429,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
 			if err := proposeBatch(raftGroup, b.p.replicaID(), ents); err != nil {
-				return err
+				firstErr = err
+				continue
 			}
 			ents = ents[len(ents):]
 
@@ -422,7 +441,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			}
 			encodedCtx, err := protoutil.Marshal(&confChangeCtx)
 			if err != nil {
-				return err
+				firstErr = err
+				continue
 			}
 
 			if err := raftGroup.ProposeConfChange(raftpb.ConfChange{
@@ -434,7 +454,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 				// ignored prior to the introduction of ErrProposalDropped).
 				// TODO(bdarnell): Handle ErrProposalDropped better.
 				// https://github.com/cockroachdb/cockroach/issues/21849
-				return err
+				firstErr = err
+				continue
 			}
 		} else {
 			// Add to the batch of entries that will soon be proposed. It is
@@ -450,6 +471,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 				Data: p.encodedCommand,
 			})
 		}
+	}
+	if firstErr != nil {
+		return firstErr
 	}
 	return proposeBatch(raftGroup, b.p.replicaID(), ents)
 }

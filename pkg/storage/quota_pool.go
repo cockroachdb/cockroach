@@ -25,6 +25,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -99,12 +100,16 @@ func (qp *quotaPool) addLocked(v int64) {
 	qp.quota <- v
 }
 
-func logSlowQuota(ctx context.Context, v int64, start time.Time) func() {
-	log.Warningf(ctx, "have been waiting %s attempting to acquire %s of proposal quota",
-		timeutil.Since(start), humanizeutil.IBytes(v))
+func logSlowQuota(ctx context.Context, want, have int64, start time.Time) func() {
+	var haveStr string
+	if have > 0 {
+		haveStr = fmt.Sprintf("; acquired %s so far", humanizeutil.IBytes(have))
+	}
+	log.Warningf(ctx, "have been waiting %s attempting to acquire %s of proposal quota%s",
+		timeutil.Since(start), humanizeutil.IBytes(want), haveStr)
 	return func() {
 		log.Infof(ctx, "acquired %s of proposal quota after %s",
-			humanizeutil.IBytes(v), timeutil.Since(start))
+			humanizeutil.IBytes(want), timeutil.Since(start))
 	}
 }
 
@@ -138,7 +143,7 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 		select {
 		case <-slowTimer.C:
 			slowTimer.Read = true
-			defer logSlowQuota(ctx, v, start)()
+			defer logSlowQuota(ctx, v, 0, start)()
 			continue
 		case <-ctx.Done():
 			qp.Lock()
@@ -183,7 +188,7 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 		select {
 		case <-slowTimer.C:
 			slowTimer.Read = true
-			defer logSlowQuota(ctx, v, start)()
+			defer logSlowQuota(ctx, v, acquired, start)()
 		case <-ctx.Done():
 			qp.Lock()
 			if acquired > 0 {
