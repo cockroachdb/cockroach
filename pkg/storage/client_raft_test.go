@@ -485,7 +485,7 @@ func TestFailedReplicaChange(t *testing.T) {
 
 	// The first failed replica change has laid down intents. Make sure those
 	// are pushable by making the transaction abandoned.
-	mtc.manualClock.Increment(10 * base.DefaultHeartbeatInterval.Nanoseconds())
+	mtc.manualClock.Increment(10 * base.DefaultTxnHeartbeatInterval.Nanoseconds())
 
 	if _, err := repl.ChangeReplicas(
 		context.Background(),
