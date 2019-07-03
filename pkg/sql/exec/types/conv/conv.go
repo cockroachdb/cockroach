@@ -163,5 +163,11 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			return d.Decimal, nil
 		}
 	}
-	panic(fmt.Sprintf("unhandled type %s", ct.DebugString()))
+	// It would probably be more correct to return an error here, rather than a
+	// function which always returns an error. But since the function tends to be
+	// invoked immediately after GetDatumToPhysicalFn is called, this works just
+	// as well and makes the error handling less messy for the caller.
+	return func(datum tree.Datum) (interface{}, error) {
+		return nil, errors.Errorf("unhandled type %s", ct.DebugString())
+	}
 }

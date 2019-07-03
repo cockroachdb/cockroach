@@ -382,3 +382,9 @@ NULL
 1
 1.0
 1.00
+
+# Test unhandled type conversion. (Should fall back to distsql.)
+query T
+SELECT ARRAY(SELECT 1) FROM a LIMIT 1
+----
+{1}
