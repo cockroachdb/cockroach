@@ -70,6 +70,11 @@ func (n *Nulls) SetNull(i uint16) {
 	n.SetNull64(uint64(i))
 }
 
+// UnsetNull unsets the ith value of the column.
+func (n *Nulls) UnsetNull(i uint16) {
+	n.UnsetNull64(uint64(i))
+}
+
 // SetNullRange sets all the values in [start, end) to null.
 func (n *Nulls) SetNullRange(start uint64, end uint64) {
 	if start >= end {
@@ -144,6 +149,11 @@ func (n *Nulls) NullAt64(i uint64) bool {
 func (n *Nulls) SetNull64(i uint64) {
 	n.hasNulls = true
 	n.nulls[i/8] &= flippedBitMask[i%8]
+}
+
+// UnsetNull64 unsets the ith values of the column.
+func (n *Nulls) UnsetNull64(i uint64) {
+	n.nulls[i/8] |= bitMask[i%8]
 }
 
 // Extend extends the nulls vector with the next toAppend values from src,

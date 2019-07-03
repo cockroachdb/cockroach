@@ -75,10 +75,9 @@ type topKSorter struct {
 func (t *topKSorter) Init() {
 	t.input.Init()
 	t.topK = coldata.NewMemBatchWithSize(t.inputTypes, int(t.k))
-	t.comparators = make([]vecComparator, len(t.orderingCols))
-	for i := range t.orderingCols {
-		typ := t.inputTypes[t.orderingCols[i].ColIdx]
-		// one vec for output batch and one for current input batch
+	t.comparators = make([]vecComparator, len(t.inputTypes))
+	for i := range t.inputTypes {
+		typ := t.inputTypes[i]
 		t.comparators[i] = GetVecComparator(typ, 2)
 	}
 	t.output = coldata.NewMemBatchWithSize(t.inputTypes, coldata.BatchSize)
@@ -161,18 +160,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 			maxIdx := t.heap[0]
 			if t.compareRow(inputVecIdx, topKVecIdx, idx, maxIdx) < 0 {
 				for j := range t.inputTypes {
-					// TODO(solon): Make this copy more efficient, perhaps by adding a
-					// copy method to the vecComparator interface. This would avoid
-					// needing to switch on the column type every time.
-					t.topK.ColVec(j).Copy(
-						coldata.CopyArgs{
-							ColType:     t.inputTypes[j],
-							Src:         inputBatch.ColVec(j),
-							DestIdx:     uint64(maxIdx),
-							SrcStartIdx: uint64(idx),
-							SrcEndIdx:   uint64(idx + 1),
-						},
-					)
+					t.comparators[j].set(inputVecIdx, topKVecIdx, idx, maxIdx)
 				}
 				heap.Fix(t, 0)
 			}
@@ -221,7 +209,7 @@ func (t *topKSorter) emit() coldata.Batch {
 func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 uint16) int {
 	for i := range t.orderingCols {
 		info := t.orderingCols[i]
-		res := t.comparators[i].compare(vecIdx1, vecIdx2, rowIdx1, rowIdx2)
+		res := t.comparators[info.ColIdx].compare(vecIdx1, vecIdx2, rowIdx1, rowIdx2)
 		if res != 0 {
 			switch d := info.Direction; d {
 			case distsqlpb.Ordering_Column_ASC:
@@ -237,9 +225,8 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 uint16) i
 }
 
 func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
-	for i := range t.orderingCols {
-		vec := batch.ColVec(int(t.orderingCols[i].ColIdx))
-		t.comparators[i].setVec(vecIdx, vec)
+	for i := range t.inputTypes {
+		t.comparators[i].setVec(vecIdx, batch.ColVec(i))
 	}
 }
 
