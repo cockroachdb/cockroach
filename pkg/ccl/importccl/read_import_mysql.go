@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -42,7 +43,7 @@ import (
 // KVs using the mapped converter and sent to kvCh.
 type mysqldumpReader struct {
 	evalCtx  *tree.EvalContext
-	tables   map[string]*sql.RowConverter
+	tables   map[string]*row.DatumRowConverter
 	kvCh     chan []roachpb.KeyValue
 	debugRow func(tree.Datums)
 }
@@ -56,13 +57,13 @@ func newMysqldumpReader(
 ) (*mysqldumpReader, error) {
 	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh}
 
-	converters := make(map[string]*sql.RowConverter, len(tables))
+	converters := make(map[string]*row.DatumRowConverter, len(tables))
 	for name, table := range tables {
 		if table == nil {
 			converters[name] = nil
 			continue
 		}
-		conv, err := sql.NewRowConverter(table, evalCtx, kvCh)
+		conv, err := row.NewDatumRowConverter(table, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
 		}
