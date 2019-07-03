@@ -553,8 +553,12 @@ func (c *CustomFuncs) PruneMutationReturnCols(
 		returningOrdSet.Add(primaryIndex.Column(i).Ordinal)
 	}
 
+	forceReturnAll := false
+	if len(projections) == 0 && passthrough.Len() == 0 {
+		forceReturnAll = true
+	}
 	for i := 0; i < len(private.ReturnCols); i++ {
-		if returningOrdSet.Contains(i) {
+		if returningOrdSet.Contains(i) || forceReturnAll {
 			newReturnCols[i] = private.ReturnCols[i]
 		}
 	}
