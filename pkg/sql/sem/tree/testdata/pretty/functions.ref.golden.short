@@ -4,6 +4,9 @@
 -
 SELECT
 	min(a, b),
+	min(a ORDER BY b),
+	min(a ORDER BY b, c),
+	min(a ORDER BY b, c, d),
 	min(DISTINCT a, b),
 	min(),
 	min() OVER (),
