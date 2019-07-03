@@ -3336,11 +3336,11 @@ void Transaction::InitAsDefaultInstance() {
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->orig_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-  ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->max_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
-      ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->refreshed_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->epoch_zero_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->max_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
 void Transaction::clear_meta() {
@@ -3361,12 +3361,6 @@ void Transaction::clear_orig_timestamp() {
   }
   orig_timestamp_ = NULL;
 }
-void Transaction::clear_max_timestamp() {
-  if (GetArenaNoVirtual() == NULL && max_timestamp_ != NULL) {
-    delete max_timestamp_;
-  }
-  max_timestamp_ = NULL;
-}
 void Transaction::clear_refreshed_timestamp() {
   if (GetArenaNoVirtual() == NULL && refreshed_timestamp_ != NULL) {
     delete refreshed_timestamp_;
@@ -3379,20 +3373,26 @@ void Transaction::clear_epoch_zero_timestamp() {
   }
   epoch_zero_timestamp_ = NULL;
 }
+void Transaction::clear_max_timestamp() {
+  if (GetArenaNoVirtual() == NULL && max_timestamp_ != NULL) {
+    delete max_timestamp_;
+  }
+  max_timestamp_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int Transaction::kMetaFieldNumber;
 const int Transaction::kNameFieldNumber;
 const int Transaction::kStatusFieldNumber;
 const int Transaction::kLastHeartbeatFieldNumber;
 const int Transaction::kOrigTimestampFieldNumber;
-const int Transaction::kMaxTimestampFieldNumber;
+const int Transaction::kOrigTimestampWasObservedFieldNumber;
 const int Transaction::kRefreshedTimestampFieldNumber;
+const int Transaction::kEpochZeroTimestampFieldNumber;
+const int Transaction::kMaxTimestampFieldNumber;
 const int Transaction::kObservedTimestampsFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
 const int Transaction::kIntentSpansFieldNumber;
 const int Transaction::kInFlightWritesFieldNumber;
-const int Transaction::kEpochZeroTimestampFieldNumber;
-const int Transaction::kOrigTimestampWasObservedFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Transaction::Transaction()
@@ -3444,16 +3444,16 @@ Transaction::Transaction(const Transaction& from)
     refreshed_timestamp_ = NULL;
   }
   ::memcpy(&status_, &from.status_,
-    static_cast<size_t>(reinterpret_cast<char*>(&orig_timestamp_was_observed_) -
-    reinterpret_cast<char*>(&status_)) + sizeof(orig_timestamp_was_observed_));
+    static_cast<size_t>(reinterpret_cast<char*>(&write_too_old_) -
+    reinterpret_cast<char*>(&status_)) + sizeof(write_too_old_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Transaction)
 }
 
 void Transaction::SharedCtor() {
   name_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&meta_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&orig_timestamp_was_observed_) -
-      reinterpret_cast<char*>(&meta_)) + sizeof(orig_timestamp_was_observed_));
+      reinterpret_cast<char*>(&write_too_old_) -
+      reinterpret_cast<char*>(&meta_)) + sizeof(write_too_old_));
 }
 
 Transaction::~Transaction() {
@@ -3515,8 +3515,8 @@ void Transaction::Clear() {
   }
   refreshed_timestamp_ = NULL;
   ::memset(&status_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&orig_timestamp_was_observed_) -
-      reinterpret_cast<char*>(&status_)) + sizeof(orig_timestamp_was_observed_));
+      reinterpret_cast<char*>(&write_too_old_) -
+      reinterpret_cast<char*>(&status_)) + sizeof(write_too_old_));
   _internal_metadata_.Clear();
 }
 
@@ -3890,14 +3890,14 @@ size_t Transaction::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->status());
   }
 
-  // bool write_too_old = 12;
-  if (this->write_too_old() != 0) {
-    total_size += 1 + 1;
-  }
-
   // bool orig_timestamp_was_observed = 16;
   if (this->orig_timestamp_was_observed() != 0) {
     total_size += 2 + 1;
+  }
+
+  // bool write_too_old = 12;
+  if (this->write_too_old() != 0) {
+    total_size += 1 + 1;
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -3945,11 +3945,11 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.status() != 0) {
     set_status(from.status());
   }
-  if (from.write_too_old() != 0) {
-    set_write_too_old(from.write_too_old());
-  }
   if (from.orig_timestamp_was_observed() != 0) {
     set_orig_timestamp_was_observed(from.orig_timestamp_was_observed());
+  }
+  if (from.write_too_old() != 0) {
+    set_write_too_old(from.write_too_old());
   }
 }
 
@@ -3982,8 +3982,8 @@ void Transaction::InternalSwap(Transaction* other) {
   swap(epoch_zero_timestamp_, other->epoch_zero_timestamp_);
   swap(refreshed_timestamp_, other->refreshed_timestamp_);
   swap(status_, other->status_);
-  swap(write_too_old_, other->write_too_old_);
   swap(orig_timestamp_was_observed_, other->orig_timestamp_was_observed_);
+  swap(write_too_old_, other->write_too_old_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
