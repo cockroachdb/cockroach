@@ -392,20 +392,7 @@ func colsToColList(cols []scopeColumn) opt.ColList {
 	return colList
 }
 
-func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
-	if b.exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
-		panic(builderError{
-			pgerror.Newf(pgcode.Grouping, "aggregate functions are not allowed in %s", op),
-		})
-	}
-	if b.exprTransformCtx.WindowFuncInExpr(expr) {
-		panic(builderError{
-			pgerror.Newf(pgcode.Windowing, "window functions are not allowed in %s", op),
-		})
-	}
-}
-
-// resooveAndBuildScalar is used to build a scalar with a required type.
+// resolveAndBuildScalar is used to build a scalar with a required type.
 func (b *Builder) resolveAndBuildScalar(
 	expr tree.Expr, requiredType *types.T, context string, flags tree.SemaRejectFlags, inScope *scope,
 ) opt.ScalarExpr {
