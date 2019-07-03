@@ -141,6 +141,9 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 			// is ambiguous), so we're comparing the outputs as sets.
 			anyOrder: true,
 		},
+		{
+			joinType: sqlbase.JoinType_LEFT_SEMI,
+		},
 	}
 
 	nRuns := 5
@@ -183,6 +186,14 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 						}
 						return cmp < 0
 					})
+					outputTypes := append(inputTypes, inputTypes...)
+					if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI {
+						outputTypes = inputTypes
+					}
+					outputColumns := make([]uint32, len(outputTypes))
+					for i := range outputColumns {
+						outputColumns[i] = uint32(i)
+					}
 
 					mjSpec := &distsqlpb.MergeJoinerSpec{
 						LeftOrdering:  distsqlpb.Ordering{Columns: lOrderingCols},
@@ -192,8 +203,15 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 					pspec := &distsqlpb.ProcessorSpec{
 						Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
 						Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
+						Post:  distsqlpb.PostProcessSpec{Projection: true, OutputColumns: outputColumns},
 					}
-					if err := verifyColOperator(testSpec.anyOrder, [][]types.T{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
+					if err := verifyColOperator(
+						testSpec.anyOrder,
+						[][]types.T{inputTypes, inputTypes},
+						[]sqlbase.EncDatumRows{lRows, rRows},
+						outputTypes,
+						pspec,
+					); err != nil {
 						fmt.Printf("--- join type = %s seed = %d run = %d ---\n", testSpec.joinType.String(), seed, run)
 						t.Fatal(err)
 					}
