@@ -78,3 +78,63 @@ alter-table-split
  │         ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(string)
  │         └── ordering: +1
  └── null [type=string]
+
+build
+ALTER TABLE abc UNSPLIT AT VALUES (1), (2)
+----
+alter-table-unsplit
+ ├── columns: key:1(bytes) pretty:2(string)
+ └── values
+      ├── columns: column1:6(int!null)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 2 [type=int]
+
+build
+ALTER TABLE abc UNSPLIT ALL
+----
+alter-table-unsplit-all
+ └── columns: key:1(bytes) pretty:2(string)
+
+build
+ALTER TABLE abc UNSPLIT AT VALUES (1, 2), (3, 4)
+----
+error (42601): too many columns in UNSPLIT AT data
+
+build
+ALTER INDEX abc@bc UNSPLIT ALL
+----
+alter-table-unsplit-all
+ └── columns: key:1(bytes) pretty:2(string)
+
+build
+ALTER INDEX abc@bc UNSPLIT AT VALUES (1, 'foo'), (2, 'bar')
+----
+alter-table-unsplit
+ ├── columns: key:1(bytes) pretty:2(string)
+ └── values
+      ├── columns: column1:6(int!null) column2:7(string!null)
+      ├── tuple [type=tuple{int, string}]
+      │    ├── const: 1 [type=int]
+      │    └── const: 'foo' [type=string]
+      └── tuple [type=tuple{int, string}]
+           ├── const: 2 [type=int]
+           └── const: 'bar' [type=string]
+
+build
+ALTER INDEX abc@bc UNSPLIT AT VALUES (1, 2), (3, 4)
+----
+error (42601): UNSPLIT AT data column 2 (c) must be of type string, not type int
+
+build
+ALTER INDEX abc@bc UNSPLIT AT SELECT b FROM abc ORDER BY a
+----
+alter-table-unsplit
+ ├── columns: key:1(bytes) pretty:2(string)
+ └── project
+      ├── columns: b:7(int)  [hidden: abc.a:6(int!null)]
+      ├── ordering: +6
+      └── scan abc
+           ├── columns: abc.a:6(int!null) abc.b:7(int) abc.c:8(string)
+           └── ordering: +6
