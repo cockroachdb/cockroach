@@ -302,8 +302,9 @@ func newColOperator(
 		if core.MergeJoiner.Type != sqlbase.JoinType_INNER &&
 			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_OUTER &&
 			core.MergeJoiner.Type != sqlbase.JoinType_RIGHT_OUTER &&
-			core.MergeJoiner.Type != sqlbase.JoinType_FULL_OUTER {
-			return nil, nil, errors.Newf("can plan only inner and outer merge joins")
+			core.MergeJoiner.Type != sqlbase.JoinType_FULL_OUTER &&
+			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
+			return nil, nil, errors.Newf("can plan only inner, outer, and left semi merge joins")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -319,7 +320,7 @@ func newColOperator(
 			for _, col := range post.OutputColumns {
 				if col < nLeftCols {
 					leftOutCols = append(leftOutCols, col)
-				} else {
+				} else if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
 					rightOutCols = append(rightOutCols, col-nLeftCols)
 				}
 			}
@@ -328,8 +329,10 @@ func newColOperator(
 				leftOutCols = append(leftOutCols, i)
 			}
 
-			for i := uint32(0); i < nRightCols; i++ {
-				rightOutCols = append(rightOutCols, i)
+			if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
+				for i := uint32(0); i < nRightCols; i++ {
+					rightOutCols = append(rightOutCols, i)
+				}
 			}
 		}
 
@@ -347,7 +350,11 @@ func newColOperator(
 
 		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
-		copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
+		if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
+			copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
+		} else {
+			columnTypes = columnTypes[:nLeftCols]
+		}
 
 	case core.JoinReader != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
