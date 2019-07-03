@@ -463,6 +463,9 @@ func TestNewTruncateDecisionMaxSize(t *testing.T) {
 // removed.
 func TestNewTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/38584")
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t,
