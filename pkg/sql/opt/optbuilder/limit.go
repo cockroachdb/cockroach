@@ -25,7 +25,6 @@ import (
 func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 	if limit.Offset != nil {
 		input := inScope.expr.(memo.RelExpr)
-		b.assertNoAggregationOrWindowing(limit.Offset, "OFFSET")
 		offset := b.resolveAndBuildScalar(
 			limit.Offset, types.Int, "OFFSET", tree.RejectSpecial, parentScope,
 		)
@@ -33,7 +32,6 @@ func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 	}
 	if limit.Count != nil {
 		input := inScope.expr.(memo.RelExpr)
-		b.assertNoAggregationOrWindowing(limit.Count, "LIMIT")
 		limit := b.resolveAndBuildScalar(
 			limit.Count, types.Int, "LIMIT", tree.RejectSpecial, parentScope,
 		)

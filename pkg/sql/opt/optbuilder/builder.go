@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -87,12 +86,11 @@ type Builder struct {
 	factory *norm.Factory
 	stmt    tree.Statement
 
-	ctx              context.Context
-	semaCtx          *tree.SemaContext
-	evalCtx          *tree.EvalContext
-	catalog          cat.Catalog
-	exprTransformCtx transform.ExprTransformContext
-	scopeAlloc       []scope
+	ctx        context.Context
+	semaCtx    *tree.SemaContext
+	evalCtx    *tree.EvalContext
+	catalog    cat.Catalog
+	scopeAlloc []scope
 
 	// If set, the planner will skip checking for the SELECT privilege when
 	// resolving data sources (tables, views, etc). This is used when compiling
