@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -391,7 +392,7 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 }
 
 type pgDumpReader struct {
-	tables map[string]*sql.RowConverter
+	tables map[string]*row.DatumRowConverter
 	descs  map[string]*sqlbase.TableDescriptor
 	kvCh   chan []roachpb.KeyValue
 	opts   roachpb.PgDumpOptions
@@ -406,10 +407,10 @@ func newPgDumpReader(
 	descs map[string]*sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
-	converters := make(map[string]*sql.RowConverter, len(descs))
+	converters := make(map[string]*row.DatumRowConverter, len(descs))
 	for name, desc := range descs {
 		if desc.IsTable() {
-			conv, err := sql.NewRowConverter(desc, evalCtx, kvCh)
+			conv, err := row.NewDatumRowConverter(desc, evalCtx, kvCh)
 			if err != nil {
 				return nil, err
 			}
