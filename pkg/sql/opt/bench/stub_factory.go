@@ -305,3 +305,9 @@ func (f *stubFactory) ConstructAlterTableUnsplit(
 func (f *stubFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructAlterTableRelocate(
+	index cat.Index, input exec.Node, relocateLease bool,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}

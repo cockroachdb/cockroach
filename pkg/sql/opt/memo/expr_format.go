@@ -187,7 +187,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr,
-		*WindowExpr, *OpaqueRelExpr:
+		*WindowExpr, *OpaqueRelExpr, *AlterTableSplitExpr, *AlterTableUnsplitExpr,
+		*AlterTableUnsplitAllExpr, *AlterTableRelocateExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
@@ -979,6 +980,12 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
 		} else {
 			fmt.Fprintf(f.Buffer, " %s@%s", tableAlias(f, t.Table), tab.Index(t.Index).Name())
+		}
+
+	case *AlterTableRelocatePrivate:
+		FormatPrivate(f, &t.AlterTableSplitPrivate, nil)
+		if t.RelocateLease {
+			f.Buffer.WriteString(" [lease]")
 		}
 
 	case *JoinPrivate:

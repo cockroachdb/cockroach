@@ -40,8 +40,8 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 
 	b.DisableMemoReuse = true
 
-	// Calculate the desired types for the select statement. It is OK if the
-	// select statement returns fewer columns (the relevant prefix is used).
+	// Calculate the desired types for the input expression. It is OK if it
+	// returns fewer columns (the relevant prefix is used).
 	colNames, colTypes := getIndexColumnNamesAndTypes(index)
 
 	// We don't allow the input statement to reference outer columns, so we
@@ -112,8 +112,8 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 		return outScope
 	}
 
-	// Calculate the desired types for the select statement. It is OK if the
-	// select statement returns fewer columns (the relevant prefix is used).
+	// Calculate the desired types for the input expression. It is OK if it
+	// returns fewer columns (the relevant prefix is used).
 	colNames, colTypes := getIndexColumnNamesAndTypes(index)
 
 	// We don't allow the input statement to reference outer columns, so we
@@ -125,6 +125,64 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 	outScope.expr = b.factory.ConstructAlterTableUnsplit(
 		inputScope.expr.(memo.RelExpr),
 		private,
+	)
+	return outScope
+}
+
+// buildAlterTableRelocate builds an ALTER TABLE/INDEX .. UNSPLIT AT/ALL .. statement.
+func (b *Builder) buildAlterTableRelocate(
+	relocate *tree.Relocate, inScope *scope,
+) (outScope *scope) {
+	flags := cat.Flags{
+		AvoidDescriptorCaches: true,
+		NoTableStats:          true,
+	}
+	index, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &relocate.TableOrIndex)
+	if err != nil {
+		panic(builderError{err})
+	}
+	table := index.Table()
+	if err := b.catalog.CheckPrivilege(b.ctx, table, privilege.INSERT); err != nil {
+		panic(builderError{err})
+	}
+
+	b.DisableMemoReuse = true
+
+	outScope = inScope.push()
+	b.synthesizeResultColumns(outScope, sqlbase.AlterTableRelocateColumns)
+
+	// Calculate the desired types for the input expression. It is OK if it
+	// returns fewer columns (the relevant prefix is used).
+	colNames, colTypes := getIndexColumnNamesAndTypes(index)
+
+	// The first column is the target leaseholder or the relocation array,
+	// depending on variant.
+	cmdName := "EXPERIMENTAL_RELOCATE"
+	if relocate.RelocateLease {
+		cmdName += " LEASE"
+		colNames = append([]string{"target leaseholder"}, colNames...)
+		colTypes = append([]*types.T{types.Int}, colTypes...)
+	} else {
+		colNames = append([]string{"relocation array"}, colNames...)
+		colTypes = append([]*types.T{types.IntArray}, colTypes...)
+	}
+
+	// We don't allow the input statement to reference outer columns, so we
+	// pass a "blank" scope rather than inScope.
+	inputScope := b.buildStmt(relocate.Rows, colTypes, &scope{builder: b})
+	checkInputColumns(cmdName, inputScope, colNames, colTypes, 2)
+
+	outScope.expr = b.factory.ConstructAlterTableRelocate(
+		inputScope.expr.(memo.RelExpr),
+		&memo.AlterTableRelocatePrivate{
+			RelocateLease: relocate.RelocateLease,
+			AlterTableSplitPrivate: memo.AlterTableSplitPrivate{
+				Table:   b.factory.Metadata().AddTable(table),
+				Index:   index.Ordinal(),
+				Columns: colsToColList(outScope.cols),
+				Props:   inputScope.makePhysicalProps(),
+			},
+		},
 	)
 	return outScope
 }
@@ -151,7 +209,7 @@ func checkInputColumns(
 		if len(inputScope.cols) == 0 {
 			panic(pgerror.Newf(pgcode.Syntax, "no columns in %s data", context))
 		}
-		panic(pgerror.Newf(pgcode.Syntax, "too few columns in %s data", context))
+		panic(pgerror.Newf(pgcode.Syntax, "less than %d columns in %s data", minPrefix, context))
 	}
 	if len(inputScope.cols) > len(colTypes) {
 		panic(pgerror.Newf(pgcode.Syntax, "too many columns in %s data", context))

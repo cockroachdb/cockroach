@@ -243,6 +243,9 @@ func (b *Builder) buildStmt(
 	case *tree.Unsplit:
 		return b.buildAlterTableUnsplit(stmt, inScope)
 
+	case *tree.Relocate:
+		return b.buildAlterTableRelocate(stmt, inScope)
+
 	default:
 		// See if this statement can be rewritten to another statement using the
 		// delegate functionality.

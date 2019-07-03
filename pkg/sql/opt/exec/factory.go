@@ -416,6 +416,10 @@ type Factory interface {
 	// ConstructAlterTableUnsplitAll creates a node that implements ALTER TABLE/INDEX
 	// UNSPLIT ALL.
 	ConstructAlterTableUnsplitAll(index cat.Index) (Node, error)
+
+	// ConstructAlterTableRelocate creates a node that implements ALTER TABLE/INDEX
+	// UNSPLIT AT.
+	ConstructAlterTableRelocate(index cat.Index, input Node, relocateLease bool) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

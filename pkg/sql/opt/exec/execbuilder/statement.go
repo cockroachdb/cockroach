@@ -176,3 +176,24 @@ func (b *Builder) buildAlterTableUnsplitAll(
 	}
 	return ep, nil
 }
+
+func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr) (execPlan, error) {
+	input, err := b.buildRelational(relocate.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	table := b.mem.Metadata().Table(relocate.Table)
+	node, err := b.factory.ConstructAlterTableRelocate(
+		table.Index(relocate.Index),
+		input.root,
+		relocate.RelocateLease,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i, c := range relocate.Columns {
+		ep.outputCols.Set(int(c), i)
+	}
+	return ep, nil
+}

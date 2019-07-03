@@ -197,6 +197,11 @@ func init() {
 		buildChildReqOrdering: alterTableUnsplitBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.AlterTableRelocateOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: alterTableRelocateBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
