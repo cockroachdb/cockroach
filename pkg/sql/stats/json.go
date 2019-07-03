@@ -102,9 +102,6 @@ func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData
 		return nil, err
 	}
 	h.ColumnType = *colType
-	if err != nil {
-		return nil, err
-	}
 	h.Buckets = make([]HistogramData_Bucket, len(js.HistogramBuckets))
 	for i := range h.Buckets {
 		hb := &js.HistogramBuckets[i]
