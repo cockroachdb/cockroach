@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -32,7 +32,7 @@ import (
 const defaultScanBuffer = 1024 * 1024 * 4
 
 type pgCopyReader struct {
-	conv sql.RowConverter
+	conv row.DatumRowConverter
 	opts roachpb.PgCopyOptions
 }
 
@@ -44,7 +44,7 @@ func newPgCopyReader(
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*pgCopyReader, error) {
-	conv, err := sql.NewRowConverter(tableDesc, evalCtx, kvCh)
+	conv, err := row.NewDatumRowConverter(tableDesc, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}

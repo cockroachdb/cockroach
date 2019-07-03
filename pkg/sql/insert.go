@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/errors"
 )
 
 var insertNodePool = sync.Pool{
@@ -522,7 +521,7 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Process the incoming row tuple and generate the full inserted
 	// row. This fills in the defaults, computes computed columns, and
 	// check the data width complies with the schema constraints.
-	rowVals, err := GenerateInsertRow(
+	rowVals, err := row.GenerateInsertRow(
 		n.run.defaultExprs,
 		n.run.computeExprs,
 		n.run.insertCols,
@@ -599,110 +598,6 @@ func (n *insertNode) Close(ctx context.Context) {
 // enableAutoCommit is part of the autoCommitNode interface.
 func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
-}
-
-// GenerateInsertRow prepares a row tuple for insertion. It fills in default
-// expressions, verifies non-nullable columns, and checks column widths.
-//
-// The result is a row tuple providing values for every column in insertCols.
-// This results contains:
-//
-// - the values provided by rowVals, the tuple of source values. The
-//   caller ensures this provides values 1-to-1 to the prefix of
-//   insertCols that was specified explicitly in the INSERT statement.
-// - the default values for any additional columns in insertCols that
-//   have default values in defaultExprs.
-// - the computed values for any additional columns in insertCols
-//   that are computed. The mapping in rowContainerForComputedCols
-//   maps the indexes of the comptuedCols/computeExpr slices
-//   back into indexes in the result row tuple.
-//
-func GenerateInsertRow(
-	defaultExprs []tree.TypedExpr,
-	computeExprs []tree.TypedExpr,
-	insertCols []sqlbase.ColumnDescriptor,
-	computedCols []sqlbase.ColumnDescriptor,
-	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
-	rowVals tree.Datums,
-	rowContainerForComputedVals *sqlbase.RowIndexedVarContainer,
-) (tree.Datums, error) {
-	// The values for the row may be shorter than the number of columns being
-	// inserted into. Generate default values for those columns using the
-	// default expressions. This will not happen if the row tuple was produced
-	// by a ValuesClause, because all default expressions will have been populated
-	// already by fillDefaults.
-	if len(rowVals) < len(insertCols) {
-		// It's not cool to append to the slice returned by a node; make a copy.
-		oldVals := rowVals
-		rowVals = make(tree.Datums, len(insertCols))
-		copy(rowVals, oldVals)
-
-		for i := len(oldVals); i < len(insertCols); i++ {
-			if defaultExprs == nil {
-				rowVals[i] = tree.DNull
-				continue
-			}
-			d, err := defaultExprs[i].Eval(evalCtx)
-			if err != nil {
-				return nil, err
-			}
-			rowVals[i] = d
-		}
-	}
-
-	// Generate the computed values, if needed.
-	if len(computeExprs) > 0 {
-		rowContainerForComputedVals.CurSourceRow = rowVals
-		evalCtx.PushIVarContainer(rowContainerForComputedVals)
-		for i := range computedCols {
-			// Note that even though the row is not fully constructed at this point,
-			// since we disallow computed columns from referencing other computed
-			// columns, all the columns which could possibly be referenced *are*
-			// available.
-			d, err := computeExprs[i].Eval(evalCtx)
-			if err != nil {
-				return nil, errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&computedCols[i].Name)))
-			}
-			rowVals[rowContainerForComputedVals.Mapping[computedCols[i].ID]] = d
-		}
-		evalCtx.PopIVarContainer()
-	}
-
-	// Verify the column constraints.
-	//
-	// We would really like to use enforceLocalColumnConstraints() here,
-	// but this is not possible because of some brain damage in the
-	// Insert() constructor, which causes insertCols to contain
-	// duplicate columns descriptors: computed columns are listed twice,
-	// one will receive a NULL value and one will receive a comptued
-	// value during execution. It "works out in the end" because the
-	// latter (non-NULL) value overwrites the earlier, but
-	// enforceLocalColumnConstraints() does not know how to reason about
-	// this.
-	//
-	// In the end it does not matter much, this code is going away in
-	// favor of the (simpler, correct) code in the CBO.
-
-	// Check to see if NULL is being inserted into any non-nullable column.
-	for _, col := range tableDesc.WritableColumns() {
-		if !col.Nullable {
-			if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
-				return nil, sqlbase.NewNonNullViolationError(col.Name)
-			}
-		}
-	}
-
-	// Ensure that the values honor the specified column widths.
-	for i := 0; i < len(insertCols); i++ {
-		outVal, err := sqlbase.LimitValueWidth(&insertCols[i].Type, rowVals[i], &insertCols[i].Name)
-		if err != nil {
-			return nil, err
-		}
-		rowVals[i] = outVal
-	}
-
-	return rowVals, nil
 }
 
 // processColumns returns the column descriptors identified by the

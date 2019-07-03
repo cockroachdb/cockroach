@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -162,7 +162,7 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 	// Create a new evalCtx per converter so each go routine gets its own
 	// collationenv, which can't be accessed in parallel.
 	evalCtx := c.evalCtx.Copy()
-	conv, err := sql.NewRowConverter(c.tableDesc, evalCtx, c.kvCh)
+	conv, err := row.NewDatumRowConverter(c.tableDesc, evalCtx, c.kvCh)
 	if err != nil {
 		return err
 	}

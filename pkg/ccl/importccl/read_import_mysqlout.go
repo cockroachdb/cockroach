@@ -16,15 +16,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 )
 
 type mysqloutfileReader struct {
-	conv sql.RowConverter
+	conv row.DatumRowConverter
 	opts roachpb.MySQLOutfileOptions
 }
 
@@ -36,7 +36,7 @@ func newMysqloutfileReader(
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*mysqloutfileReader, error) {
-	conv, err := sql.NewRowConverter(tableDesc, evalCtx, kvCh)
+	conv, err := row.NewDatumRowConverter(tableDesc, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}
