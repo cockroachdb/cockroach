@@ -469,7 +469,7 @@
 # conservative with the fetch columns.
 [PruneMutationReturnCols, Normalize]
 (Project
-    $input: (Insert | Update | Upsert
+    $input: (Insert | Update | Upsert | Delete
         $innerInput:*
         $checks:*
         $mutationPrivate:* & (CanPruneMutationReturnCols $mutationPrivate))
