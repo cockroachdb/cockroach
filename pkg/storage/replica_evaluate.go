@@ -191,8 +191,50 @@ func evaluateBatch(
 	}
 
 	var result result.Result
+
+	// WriteTooOldErrors are unique: When one is returned, we also lay
+	// down an intent at our new proposed timestamp. We have the option
+	// of continuing past a WriteTooOldError to the end of the
+	// transaction (at which point the txn.WriteTooOld flag will trigger
+	// a RefreshSpan and possibly a client-side retry).
+	//
+	// Within a batch, there's no downside to continuing past the
+	// WriteTooOldError, so we at least defer returning the error to the
+	// end of the batch.
+	//
+	// Across batches, it's more complicated. We want to avoid
+	// client-side retries whenever possible. However, if a client-side
+	// retry is inevitable, it's probably best to continue and lay down
+	// as many intents as possible before that retry (this can avoid n^2
+	// behavior in some scenarios with high contention on multiple keys,
+	// although we haven't verified this in practice).
+	//
+	// The SQL layer will transparently retry on the server side if
+	// we're in the first statement in a transaction. If we're in a
+	// first statement, we want to return WriteTooOldErrors immediately
+	// to take advantage of this. We don't have this information
+	// available at this level currently, so we err on the side of
+	// returning the WriteTooOldError immediately to get the server-side
+	// retry when it is available.
+	//
+	// TODO(bdarnell): Plumb the SQL CanAutoRetry field through to
+	// !ba.Header.DeferWriteTooOldError.
+	//
+	// A more subtle heuristic is also possible: If we get a
+	// WriteTooOldError while writing to a key that we have already read
+	// (either earlier in the transaction, or as a part of the same
+	// operation for a ConditionalPut, Increment, or InitPut), a
+	// WriteTooOldError that is deferred to the end of the transaction
+	// is guarantee to result in a failed RefreshSpans and therefore a
+	// client-side retry. In some cases it may be possible to
+	// successfully retry at the TxnCoordSender, avoiding the
+	// client-side retry (this is likely for Increment, but unlikely for
+	// the others). In such cases, we may want to return the
+	// WriteTooOldError even if the SQL CanAutoRetry is false. As of
+	// this writing, nearly all writes issued by SQL are preceded by
+	// reads of the same key.
 	var writeTooOldErr *roachpb.Error
-	returnWriteTooOldErr := true
+	mustReturnWriteTooOldErr := false
 
 	for index, union := range ba.Requests {
 		// Execute the command.
@@ -243,49 +285,28 @@ func evaluateBatch(
 					writeTooOldErr.GetDetail().(*roachpb.WriteTooOldError).ActualTimestamp.Forward(tErr.ActualTimestamp)
 				} else {
 					writeTooOldErr = pErr
-					// For transactions, we want to swallow the write too old error
-					// and just move the transaction timestamp forward and set the
-					// WriteTooOld flag. See below for exceptions.
-					if ba.Txn != nil {
-						returnWriteTooOldErr = false
-					}
 				}
-				// Set the flag to return a WriteTooOldError with the max timestamp
-				// encountered evaluating the entire batch on cput and inc requests.
-				// Because both of these requests must have their keys refreshed on
-				// commit with Transaction.WriteTooOld is true, and that refresh will
-				// fail, we'd be otherwise guaranteed to do a client-side retry.
-				// Returning an error allows a txn-coord-side retry.
-				switch args.(type) {
-				case *roachpb.ConditionalPutRequest:
-					// Conditional puts are an exception. Here, it makes less sense to
-					// continue because it's likely that the cput will fail on retry (a
-					// newer value is less likely to match the expected value). It's
-					// better to return the WriteTooOldError directly, allowing the txn
-					// coord sender to retry if it can refresh all other spans encountered
-					// already during the transaction, and then, if the cput results in a
-					// condition failed error, report that back to the client instead of a
-					// retryable error.
-					returnWriteTooOldErr = true
-				case *roachpb.IncrementRequest:
-					// Increments are an exception for similar reasons. If we wait until
-					// commit, we'll need a client-side retry, so we return immediately
-					// to see if we can do a txn coord sender retry instead.
-					returnWriteTooOldErr = true
-				case *roachpb.InitPutRequest:
-					// Init puts are also an exception. There's no reason to believe they
-					// will succeed on a retry, so better to short circuit and return the
-					// write too old error.
-					returnWriteTooOldErr = true
+
+				// Requests which are both read and write are not currently
+				// accounted for in RefreshSpans, so they rely on eager
+				// returning of WriteTooOldErrors.
+				// TODO(bdarnell): add read+write requests to the read refresh spans
+				// in TxnCoordSender, and then I think this can go away.
+				if roachpb.IsReadAndWrite(args) {
+					mustReturnWriteTooOldErr = true
 				}
+
 				if ba.Txn != nil {
 					ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
 					ba.Txn.WriteTooOld = true
 				}
+
 				// Clear pErr; we're done processing it by having moved the
 				// batch or txn timestamps forward and set WriteTooOld if this
-				// is a transactional write. The EndTransaction will detect
-				// this pushed timestamp and return a TransactionRetryError.
+				// is a transactional write. If we don't return the
+				// WriteTooOldError from this method, we will detect the
+				// pushed timestamp at commit time and refresh or retry the
+				// transaction.
 				pErr = nil
 			default:
 				return nil, result, pErr
@@ -311,9 +332,19 @@ func evaluateBatch(
 		}
 	}
 
+	// If there was an EndTransaction in the batch that finalized the transaction,
+	// the WriteTooOld status has been fully processed and we can discard the error.
+	if ba.Txn != nil && ba.Txn.Status.IsFinalized() {
+		writeTooOldErr = nil
+	} else if ba.Txn == nil {
+		// Non-transactional requests are unable to defer WriteTooOldErrors
+		// because there is no where to defer them to.
+		mustReturnWriteTooOldErr = true
+	}
+
 	// If there's a write too old error, return now that we've found
 	// the high water timestamp for retries.
-	if writeTooOldErr != nil && returnWriteTooOldErr {
+	if writeTooOldErr != nil && (mustReturnWriteTooOldErr || !ba.Header.DeferWriteTooOldError) {
 		return nil, result, writeTooOldErr
 	}
 
