@@ -8,13 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package row
 
 import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -23,21 +22,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Inserter implements the putter interface.
-type Inserter func(roachpb.KeyValue)
+// KVInserter implements the putter interface.
+type KVInserter func(roachpb.KeyValue)
 
 // CPut is not implmented.
-func (i Inserter) CPut(key, value, expValue interface{}) {
+func (i KVInserter) CPut(key, value, expValue interface{}) {
 	panic("unimplemented")
 }
 
 // Del is not implemented.
-func (i Inserter) Del(key ...interface{}) {
+func (i KVInserter) Del(key ...interface{}) {
 	panic("unimplemented")
 }
 
 // Put method of the putter interface.
-func (i Inserter) Put(key, value interface{}) {
+func (i KVInserter) Put(key, value interface{}) {
 	i(roachpb.KeyValue{
 		Key:   *key.(*roachpb.Key),
 		Value: *value.(*roachpb.Value),
@@ -45,16 +44,120 @@ func (i Inserter) Put(key, value interface{}) {
 }
 
 // InitPut method of the putter interface.
-func (i Inserter) InitPut(key, value interface{}, failOnTombstones bool) {
+func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 	i(roachpb.KeyValue{
 		Key:   *key.(*roachpb.Key),
 		Value: *value.(*roachpb.Value),
 	})
 }
 
-// RowConverter converts Datums into kvs and streams it to the destination
+// GenerateInsertRow prepares a row tuple for insertion. It fills in default
+// expressions, verifies non-nullable columns, and checks column widths.
+//
+// The result is a row tuple providing values for every column in insertCols.
+// This results contains:
+//
+// - the values provided by rowVals, the tuple of source values. The
+//   caller ensures this provides values 1-to-1 to the prefix of
+//   insertCols that was specified explicitly in the INSERT statement.
+// - the default values for any additional columns in insertCols that
+//   have default values in defaultExprs.
+// - the computed values for any additional columns in insertCols
+//   that are computed. The mapping in rowContainerForComputedCols
+//   maps the indexes of the comptuedCols/computeExpr slices
+//   back into indexes in the result row tuple.
+//
+func GenerateInsertRow(
+	defaultExprs []tree.TypedExpr,
+	computeExprs []tree.TypedExpr,
+	insertCols []sqlbase.ColumnDescriptor,
+	computedCols []sqlbase.ColumnDescriptor,
+	evalCtx *tree.EvalContext,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	rowVals tree.Datums,
+	rowContainerForComputedVals *sqlbase.RowIndexedVarContainer,
+) (tree.Datums, error) {
+	// The values for the row may be shorter than the number of columns being
+	// inserted into. Generate default values for those columns using the
+	// default expressions. This will not happen if the row tuple was produced
+	// by a ValuesClause, because all default expressions will have been populated
+	// already by fillDefaults.
+	if len(rowVals) < len(insertCols) {
+		// It's not cool to append to the slice returned by a node; make a copy.
+		oldVals := rowVals
+		rowVals = make(tree.Datums, len(insertCols))
+		copy(rowVals, oldVals)
+
+		for i := len(oldVals); i < len(insertCols); i++ {
+			if defaultExprs == nil {
+				rowVals[i] = tree.DNull
+				continue
+			}
+			d, err := defaultExprs[i].Eval(evalCtx)
+			if err != nil {
+				return nil, err
+			}
+			rowVals[i] = d
+		}
+	}
+
+	// Generate the computed values, if needed.
+	if len(computeExprs) > 0 {
+		rowContainerForComputedVals.CurSourceRow = rowVals
+		evalCtx.PushIVarContainer(rowContainerForComputedVals)
+		for i := range computedCols {
+			// Note that even though the row is not fully constructed at this point,
+			// since we disallow computed columns from referencing other computed
+			// columns, all the columns which could possibly be referenced *are*
+			// available.
+			d, err := computeExprs[i].Eval(evalCtx)
+			if err != nil {
+				return nil, errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&computedCols[i].Name)))
+			}
+			rowVals[rowContainerForComputedVals.Mapping[computedCols[i].ID]] = d
+		}
+		evalCtx.PopIVarContainer()
+	}
+
+	// Verify the column constraints.
+	//
+	// We would really like to use enforceLocalColumnConstraints() here,
+	// but this is not possible because of some brain damage in the
+	// Insert() constructor, which causes insertCols to contain
+	// duplicate columns descriptors: computed columns are listed twice,
+	// one will receive a NULL value and one will receive a comptued
+	// value during execution. It "works out in the end" because the
+	// latter (non-NULL) value overwrites the earlier, but
+	// enforceLocalColumnConstraints() does not know how to reason about
+	// this.
+	//
+	// In the end it does not matter much, this code is going away in
+	// favor of the (simpler, correct) code in the CBO.
+
+	// Check to see if NULL is being inserted into any non-nullable column.
+	for _, col := range tableDesc.WritableColumns() {
+		if !col.Nullable {
+			if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
+				return nil, sqlbase.NewNonNullViolationError(col.Name)
+			}
+		}
+	}
+
+	// Ensure that the values honor the specified column widths.
+	for i := 0; i < len(insertCols); i++ {
+		outVal, err := sqlbase.LimitValueWidth(&insertCols[i].Type, rowVals[i], &insertCols[i].Name)
+		if err != nil {
+			return nil, err
+		}
+		rowVals[i] = outVal
+	}
+
+	return rowVals, nil
+}
+
+// DatumRowConverter converts Datums into kvs and streams it to the destination
 // channel.
-type RowConverter struct {
+type DatumRowConverter struct {
 	// current row buf
 	Datums []tree.Datum
 
@@ -67,7 +170,7 @@ type RowConverter struct {
 
 	// The rest of these are derived from tableDesc, just cached here.
 	hidden                int
-	ri                    row.Inserter
+	ri                    Inserter
 	EvalCtx               *tree.EvalContext
 	cols                  []sqlbase.ColumnDescriptor
 	VisibleCols           []sqlbase.ColumnDescriptor
@@ -76,20 +179,20 @@ type RowConverter struct {
 	computedIVarContainer sqlbase.RowIndexedVarContainer
 }
 
-const kvRowConverterBatchSize = 5000
+const kvDatumRowConverterBatchSize = 5000
 
-// NewRowConverter returns an instance of a RowConverter.
-func NewRowConverter(
+// NewDatumRowConverter returns an instance of a DatumRowConverter.
+func NewDatumRowConverter(
 	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- []roachpb.KeyValue,
-) (*RowConverter, error) {
+) (*DatumRowConverter, error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
-	c := &RowConverter{
+	c := &DatumRowConverter{
 		tableDesc: immutDesc,
 		KvCh:      kvCh,
 		EvalCtx:   evalCtx,
 	}
 
-	ri, err := row.MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
+	ri, err := MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
 		immutDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")
@@ -131,7 +234,7 @@ func NewRowConverter(
 	}
 
 	padding := 2 * (len(immutDesc.Indexes) + len(immutDesc.Families))
-	c.BatchCap = kvRowConverterBatchSize + padding
+	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch = make([]roachpb.KeyValue, 0, c.BatchCap)
 
 	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
@@ -143,7 +246,7 @@ func NewRowConverter(
 
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
-func (c *RowConverter) Row(ctx context.Context, fileIndex int32, rowIndex int64) error {
+func (c *DatumRowConverter) Row(ctx context.Context, fileIndex int32, rowIndex int64) error {
 	if c.hidden >= 0 {
 		// We don't want to call unique_rowid() for the hidden PK column because
 		// it is not idempotent. The sampling from the first stage will be useless
@@ -172,19 +275,19 @@ func (c *RowConverter) Row(ctx context.Context, fileIndex int32, rowIndex int64)
 	}
 	if err := c.ri.InsertRow(
 		ctx,
-		Inserter(func(kv roachpb.KeyValue) {
+		KVInserter(func(kv roachpb.KeyValue) {
 			kv.Value.InitChecksum(kv.Key)
 			c.KvBatch = append(c.KvBatch, kv)
 		}),
 		insertRow,
 		true, /* ignoreConflicts */
-		row.SkipFKs,
+		SkipFKs,
 		false, /* traceKV */
 	); err != nil {
 		return errors.Wrap(err, "insert row")
 	}
 	// If our batch is full, flush it and start a new one.
-	if len(c.KvBatch) >= kvRowConverterBatchSize {
+	if len(c.KvBatch) >= kvDatumRowConverterBatchSize {
 		if err := c.SendBatch(ctx); err != nil {
 			return err
 		}
@@ -194,7 +297,7 @@ func (c *RowConverter) Row(ctx context.Context, fileIndex int32, rowIndex int64)
 
 // SendBatch streams kv operations from the current KvBatch to the destination
 // channel, and resets the KvBatch to empty.
-func (c *RowConverter) SendBatch(ctx context.Context) error {
+func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 	if len(c.KvBatch) == 0 {
 		return nil
 	}
