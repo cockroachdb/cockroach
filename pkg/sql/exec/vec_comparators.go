@@ -21,6 +21,10 @@ type vecComparator interface {
 	// 0, or 1.
 	compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint16) int
 
+	// set sets the value of the vector at dstVecIdx at index dstIdx to the value
+	// at the vector at srcVecIdx at index srcIdx.
+	set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16)
+
 	// setVec updates the vector at idx.
 	setVec(idx int, vec coldata.Vec)
 }
