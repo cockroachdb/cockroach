@@ -87,7 +87,7 @@ func (x ValueType) String() string {
 	return proto.EnumName(ValueType_name, int32(x))
 }
 func (ValueType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{0}
+	return fileDescriptor_data_03c755ced533a672, []int{0}
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
@@ -111,7 +111,7 @@ func (x ReplicaChangeType) String() string {
 	return proto.EnumName(ReplicaChangeType_name, int32(x))
 }
 func (ReplicaChangeType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{1}
+	return fileDescriptor_data_03c755ced533a672, []int{1}
 }
 
 // TransactionStatus specifies possible states for a transaction.
@@ -163,7 +163,7 @@ func (x TransactionStatus) String() string {
 	return proto.EnumName(TransactionStatus_name, int32(x))
 }
 func (TransactionStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{2}
+	return fileDescriptor_data_03c755ced533a672, []int{2}
 }
 
 // Span is a key range with an inclusive start Key and an exclusive end Key.
@@ -180,7 +180,7 @@ type Span struct {
 func (m *Span) Reset()      { *m = Span{} }
 func (*Span) ProtoMessage() {}
 func (*Span) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{0}
+	return fileDescriptor_data_03c755ced533a672, []int{0}
 }
 func (m *Span) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -232,7 +232,7 @@ func (m *Value) Reset()         { *m = Value{} }
 func (m *Value) String() string { return proto.CompactTextString(m) }
 func (*Value) ProtoMessage()    {}
 func (*Value) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{1}
+	return fileDescriptor_data_03c755ced533a672, []int{1}
 }
 func (m *Value) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -268,7 +268,7 @@ func (m *KeyValue) Reset()         { *m = KeyValue{} }
 func (m *KeyValue) String() string { return proto.CompactTextString(m) }
 func (*KeyValue) ProtoMessage()    {}
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{2}
+	return fileDescriptor_data_03c755ced533a672, []int{2}
 }
 func (m *KeyValue) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -306,7 +306,7 @@ func (m *StoreIdent) Reset()         { *m = StoreIdent{} }
 func (m *StoreIdent) String() string { return proto.CompactTextString(m) }
 func (*StoreIdent) ProtoMessage()    {}
 func (*StoreIdent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{3}
+	return fileDescriptor_data_03c755ced533a672, []int{3}
 }
 func (m *StoreIdent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -346,7 +346,7 @@ func (m *SplitTrigger) Reset()         { *m = SplitTrigger{} }
 func (m *SplitTrigger) String() string { return proto.CompactTextString(m) }
 func (*SplitTrigger) ProtoMessage()    {}
 func (*SplitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{4}
+	return fileDescriptor_data_03c755ced533a672, []int{4}
 }
 func (m *SplitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -394,7 +394,7 @@ func (m *MergeTrigger) Reset()         { *m = MergeTrigger{} }
 func (m *MergeTrigger) String() string { return proto.CompactTextString(m) }
 func (*MergeTrigger) ProtoMessage()    {}
 func (*MergeTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{5}
+	return fileDescriptor_data_03c755ced533a672, []int{5}
 }
 func (m *MergeTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -438,7 +438,7 @@ type ChangeReplicasTrigger struct {
 func (m *ChangeReplicasTrigger) Reset()      { *m = ChangeReplicasTrigger{} }
 func (*ChangeReplicasTrigger) ProtoMessage() {}
 func (*ChangeReplicasTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{6}
+	return fileDescriptor_data_03c755ced533a672, []int{6}
 }
 func (m *ChangeReplicasTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -480,7 +480,7 @@ func (m *ModifiedSpanTrigger) Reset()         { *m = ModifiedSpanTrigger{} }
 func (m *ModifiedSpanTrigger) String() string { return proto.CompactTextString(m) }
 func (*ModifiedSpanTrigger) ProtoMessage()    {}
 func (*ModifiedSpanTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{7}
+	return fileDescriptor_data_03c755ced533a672, []int{7}
 }
 func (m *ModifiedSpanTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -526,7 +526,7 @@ func (m *StickyBitTrigger) Reset()         { *m = StickyBitTrigger{} }
 func (m *StickyBitTrigger) String() string { return proto.CompactTextString(m) }
 func (*StickyBitTrigger) ProtoMessage()    {}
 func (*StickyBitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{8}
+	return fileDescriptor_data_03c755ced533a672, []int{8}
 }
 func (m *StickyBitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -565,7 +565,7 @@ func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
 func (m *InternalCommitTrigger) String() string { return proto.CompactTextString(m) }
 func (*InternalCommitTrigger) ProtoMessage()    {}
 func (*InternalCommitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{9}
+	return fileDescriptor_data_03c755ced533a672, []int{9}
 }
 func (m *InternalCommitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -634,7 +634,7 @@ func (m *ObservedTimestamp) Reset()         { *m = ObservedTimestamp{} }
 func (m *ObservedTimestamp) String() string { return proto.CompactTextString(m) }
 func (*ObservedTimestamp) ProtoMessage()    {}
 func (*ObservedTimestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{10}
+	return fileDescriptor_data_03c755ced533a672, []int{10}
 }
 func (m *ObservedTimestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -679,24 +679,21 @@ type Transaction struct {
 	// coordinator to indicate client activity. Concurrent transactions will
 	// avoid aborting a transaction if it observes recent-enough activity.
 	LastHeartbeat hlc.Timestamp `protobuf:"bytes,5,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat"`
-	// The original timestamp at which the transaction started. For serializable
-	// transactions, if the timestamp drifts from the original timestamp, the
-	// transaction will retry unless we manage to "refresh the reads" - see
-	// refreshed_timestamp.
+	// The timestamp at which the transaction's current epoch started. For
+	// serializable transactions, if the timestamp drifts from the original
+	// timestamp, the transaction will retry unless we manage to "refresh the
+	// reads" - see refreshed_timestamp.
 	//
 	// This timestamp is the one at which all reads occur, unless
-	// refreshed_timestamp is set.
-	//
-	// Note that writes do not occur at this timestamp; they instead occur at the
-	// provisional commit timestamp, meta.Timestamp.
+	// refreshed_timestamp is set. Intent writes do not occur at this timestamp;
+	// they instead occur at the provisional commit timestamp, meta.Timestamp.
 	OrigTimestamp hlc.Timestamp `protobuf:"bytes,6,opt,name=orig_timestamp,json=origTimestamp,proto3" json:"orig_timestamp"`
-	// Initial Timestamp + clock skew. Reads which encounter values with
-	// timestamps between timestamp and max_timestamp trigger a txn
-	// retry error, unless the node being read is listed in observed_timestamps
-	// (in which case no more read uncertainty can occur).
-	// The case max_timestamp < timestamp is possible for transactions which have
-	// been pushed; in this case, max_timestamp should be ignored.
-	MaxTimestamp hlc.Timestamp `protobuf:"bytes,7,opt,name=max_timestamp,json=maxTimestamp,proto3" json:"max_timestamp"`
+	// This flag is set if the transaction's original timestamp was
+	// "leaked" beyond the transaction (i.e. if returned via NOW() or
+	// transaction_timestamp()). If true, this prevents optimizations
+	// which commit at a higher timestamp without resorting to a
+	// client-side retry.
+	OrigTimestampWasObserved bool `protobuf:"varint,16,opt,name=orig_timestamp_was_observed,json=origTimestampWasObserved,proto3" json:"orig_timestamp_was_observed,omitempty"`
 	// The refreshed timestamp is the timestamp at which the transaction
 	// can commit without necessitating a serializable restart. This
 	// value is forwarded to the transaction's current timestamp (meta.timestamp)
@@ -711,6 +708,18 @@ type Transaction struct {
 	// time-bound iterator used to resolve intents - i.e. there can be intents to
 	// resolve up to the timestamp that the txn started with.
 	RefreshedTimestamp hlc.Timestamp `protobuf:"bytes,15,opt,name=refreshed_timestamp,json=refreshedTimestamp,proto3" json:"refreshed_timestamp"`
+	// Epoch zero timestamp is used to keep track of the earliest timestamp
+	// that any epoch of the transaction used. This is set only if the
+	// transaction is restarted and the epoch is bumped. It is used during
+	// intent resolution to more efficiently scan for intents.
+	EpochZeroTimestamp hlc.Timestamp `protobuf:"bytes,14,opt,name=epoch_zero_timestamp,json=epochZeroTimestamp,proto3" json:"epoch_zero_timestamp"`
+	// Initial Timestamp + clock skew. Reads which encounter values with
+	// timestamps between timestamp and max_timestamp trigger a txn
+	// retry error, unless the node being read is listed in observed_timestamps
+	// (in which case no more read uncertainty can occur).
+	// The case max_timestamp < timestamp is possible for transactions which have
+	// been pushed; in this case, max_timestamp should be ignored.
+	MaxTimestamp hlc.Timestamp `protobuf:"bytes,7,opt,name=max_timestamp,json=maxTimestamp,proto3" json:"max_timestamp"`
 	// A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
 	// as observed from their local clock during this transaction. The purpose of
 	// this list is to avoid uncertainty related restarts which normally occur
@@ -816,23 +825,12 @@ type Transaction struct {
 	// treated as immutable and all updates should be performed on a copy of the
 	// slice.
 	InFlightWrites []SequencedWrite `protobuf:"bytes,17,rep,name=in_flight_writes,json=inFlightWrites,proto3" json:"in_flight_writes"`
-	// Epoch zero timestamp is used to keep track of the earliest timestamp
-	// that any epoch of the transaction used. This is set only if the
-	// transaction is restarted and the epoch is bumped. It is used during
-	// intent resolution to more efficiently scan for intents.
-	EpochZeroTimestamp hlc.Timestamp `protobuf:"bytes,14,opt,name=epoch_zero_timestamp,json=epochZeroTimestamp,proto3" json:"epoch_zero_timestamp"`
-	// This flag is set if the transaction's original timestamp was
-	// "leaked" beyond the transaction (i.e. if returned via NOW() or
-	// transaction_timestamp()). If true, this prevents optimizations
-	// which commit at a higher timestamp without resorting to a
-	// client-side retry.
-	OrigTimestampWasObserved bool `protobuf:"varint,16,opt,name=orig_timestamp_was_observed,json=origTimestampWasObserved,proto3" json:"orig_timestamp_was_observed,omitempty"`
 }
 
 func (m *Transaction) Reset()      { *m = Transaction{} }
 func (*Transaction) ProtoMessage() {}
 func (*Transaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{11}
+	return fileDescriptor_data_03c755ced533a672, []int{11}
 }
 func (m *Transaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -887,7 +885,7 @@ func (m *TransactionRecord) Reset()         { *m = TransactionRecord{} }
 func (m *TransactionRecord) String() string { return proto.CompactTextString(m) }
 func (*TransactionRecord) ProtoMessage()    {}
 func (*TransactionRecord) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{12}
+	return fileDescriptor_data_03c755ced533a672, []int{12}
 }
 func (m *TransactionRecord) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -923,7 +921,7 @@ func (m *Intent) Reset()         { *m = Intent{} }
 func (m *Intent) String() string { return proto.CompactTextString(m) }
 func (*Intent) ProtoMessage()    {}
 func (*Intent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{13}
+	return fileDescriptor_data_03c755ced533a672, []int{13}
 }
 func (m *Intent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -960,7 +958,7 @@ func (m *SequencedWrite) Reset()         { *m = SequencedWrite{} }
 func (m *SequencedWrite) String() string { return proto.CompactTextString(m) }
 func (*SequencedWrite) ProtoMessage()    {}
 func (*SequencedWrite) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{14}
+	return fileDescriptor_data_03c755ced533a672, []int{14}
 }
 func (m *SequencedWrite) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1024,7 +1022,7 @@ type Lease struct {
 func (m *Lease) Reset()      { *m = Lease{} }
 func (*Lease) ProtoMessage() {}
 func (*Lease) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{15}
+	return fileDescriptor_data_03c755ced533a672, []int{15}
 }
 func (m *Lease) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1069,7 +1067,7 @@ func (m *AbortSpanEntry) Reset()         { *m = AbortSpanEntry{} }
 func (m *AbortSpanEntry) String() string { return proto.CompactTextString(m) }
 func (*AbortSpanEntry) ProtoMessage()    {}
 func (*AbortSpanEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{16}
+	return fileDescriptor_data_03c755ced533a672, []int{16}
 }
 func (m *AbortSpanEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1133,7 +1131,7 @@ func (m *TxnCoordMeta) Reset()         { *m = TxnCoordMeta{} }
 func (m *TxnCoordMeta) String() string { return proto.CompactTextString(m) }
 func (*TxnCoordMeta) ProtoMessage()    {}
 func (*TxnCoordMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_1200867e53905d72, []int{17}
+	return fileDescriptor_data_03c755ced533a672, []int{17}
 }
 func (m *TxnCoordMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1484,10 +1482,16 @@ func (this *Transaction) Equal(that interface{}) bool {
 	if !this.OrigTimestamp.Equal(&that1.OrigTimestamp) {
 		return false
 	}
-	if !this.MaxTimestamp.Equal(&that1.MaxTimestamp) {
+	if this.OrigTimestampWasObserved != that1.OrigTimestampWasObserved {
 		return false
 	}
 	if !this.RefreshedTimestamp.Equal(&that1.RefreshedTimestamp) {
+		return false
+	}
+	if !this.EpochZeroTimestamp.Equal(&that1.EpochZeroTimestamp) {
+		return false
+	}
+	if !this.MaxTimestamp.Equal(&that1.MaxTimestamp) {
 		return false
 	}
 	if len(this.ObservedTimestamps) != len(that1.ObservedTimestamps) {
@@ -1516,12 +1520,6 @@ func (this *Transaction) Equal(that interface{}) bool {
 		if !this.InFlightWrites[i].Equal(&that1.InFlightWrites[i]) {
 			return false
 		}
-	}
-	if !this.EpochZeroTimestamp.Equal(&that1.EpochZeroTimestamp) {
-		return false
-	}
-	if this.OrigTimestampWasObserved != that1.OrigTimestampWasObserved {
-		return false
 	}
 	return true
 }
@@ -6180,9 +6178,9 @@ var (
 	ErrIntOverflowData   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/data.proto", fileDescriptor_data_1200867e53905d72) }
+func init() { proto.RegisterFile("roachpb/data.proto", fileDescriptor_data_03c755ced533a672) }
 
-var fileDescriptor_data_1200867e53905d72 = []byte{
+var fileDescriptor_data_03c755ced533a672 = []byte{
 	// 2056 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x58, 0xcf, 0x6f, 0xdb, 0xc8,
 	0xf5, 0x17, 0x45, 0xca, 0xa2, 0x9e, 0x7e, 0x98, 0x9e, 0xc4, 0x89, 0x36, 0xc1, 0x57, 0xca, 0x57,
