@@ -295,3 +295,13 @@ func (f *stubFactory) ConstructAlterTableSplit(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructAlterTableUnsplit(
+	index cat.Index, input exec.Node,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
+	return struct{}{}, nil
+}

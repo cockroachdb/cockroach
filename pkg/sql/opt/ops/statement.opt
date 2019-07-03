@@ -123,3 +123,18 @@ define AlterTableSplitPrivate {
     # Columns stores the column IDs for the statement result columns.
     Columns ColList
 }
+
+# AlterTableUnsplit represents an `ALTER TABLE/INDEX .. UNSPLIT AT ..`
+# statement.
+[Relational, DDL]
+define AlterTableUnsplit {
+    Input RelExpr
+
+    _ AlterTableSplitPrivate
+}
+
+# AlterTableUnsplit represents an `ALTER TABLE/INDEX .. UNSPLIT ALL` statement.
+[Relational, DDL]
+define AlterTableUnsplitAll {
+    _ AlterTableSplitPrivate
+}

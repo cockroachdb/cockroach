@@ -1610,6 +1610,25 @@ func (ef *execFactory) ConstructAlterTableSplit(
 	}, nil
 }
 
+// ConstructAlterTableUnsplit is part of the exec.Factory interface.
+func (ef *execFactory) ConstructAlterTableUnsplit(
+	index cat.Index, input exec.Node,
+) (exec.Node, error) {
+	return &unsplitNode{
+		tableDesc: &index.Table().(*optTable).desc.TableDescriptor,
+		index:     index.(*optIndex).desc,
+		rows:      input.(planNode),
+	}, nil
+}
+
+// ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
+func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
+	return &unsplitAllNode{
+		tableDesc: &index.Table().(*optTable).desc.TableDescriptor,
+		index:     index.(*optIndex).desc,
+	}, nil
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode
