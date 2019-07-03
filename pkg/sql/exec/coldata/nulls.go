@@ -114,6 +114,42 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 	}
 }
 
+// UnsetNullRange unsets all the nulls in the range [start, end).
+func (n *Nulls) UnsetNullRange(start, end uint64) {
+	if start >= end {
+		return
+	}
+
+	sIdx := start / 8
+	eIdx := (end - 1) / 8
+
+	// Case where mask only spans one byte.
+	if sIdx == eIdx {
+		mask := onesMask << (start % 8)
+		if end%8 != 0 {
+			mask = mask & (onesMask >> (8 - (end % 8)))
+		}
+		n.nulls[sIdx] |= mask
+		return
+	}
+
+	// Case where mask spans at least two bytes.
+	if sIdx < eIdx {
+		mask := onesMask << (start % 8)
+		n.nulls[sIdx] |= mask
+		if end%8 == 0 {
+			n.nulls[eIdx] = onesMask
+		} else {
+			mask = onesMask >> (8 - (end % 8))
+			n.nulls[eIdx] |= mask
+		}
+
+		for i := sIdx + 1; i < eIdx; i++ {
+			n.nulls[i] = onesMask
+		}
+	}
+}
+
 // Truncate sets all values greater than start to null.
 func (n *Nulls) Truncate(start uint16) {
 	end := uint64(len(n.nulls) * 8)
