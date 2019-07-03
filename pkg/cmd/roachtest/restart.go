@@ -67,7 +67,7 @@ func runRestart(ctx context.Context, t *test, c *cluster, downDuration time.Dura
 	// can fail with a "no inbound stream connection" error. This is not what we
 	// want to catch in this test, so work around it.
 	//
-	// See
+	// See https://github.com/cockroachdb/cockroach/issues/38602.
 	time.Sleep(15 * time.Second)
 
 	start := timeutil.Now()
