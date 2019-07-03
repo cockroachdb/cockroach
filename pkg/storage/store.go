@@ -74,8 +74,8 @@ import (
 
 const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
-	rangeIDAllocCount             = 10
-	defaultHeartbeatIntervalTicks = 5
+	rangeIDAllocCount                 = 10
+	defaultRaftHeartbeatIntervalTicks = 5
 
 	// defaultRaftEntryCacheSize is the default size in bytes for a
 	// store's Raft log entry cache.
@@ -748,7 +748,7 @@ func (sc *StoreConfig) SetDefaults() {
 		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 2
 	}
 	if sc.RaftHeartbeatIntervalTicks == 0 {
-		sc.RaftHeartbeatIntervalTicks = defaultHeartbeatIntervalTicks
+		sc.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
 	}
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize

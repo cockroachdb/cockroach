@@ -437,7 +437,7 @@ func NewContext(
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
 	ctx.Stopper = stopper
-	ctx.heartbeatInterval = baseCtx.HeartbeatInterval
+	ctx.heartbeatInterval = baseCtx.RPCHeartbeatInterval
 	ctx.RemoteClocks = newRemoteClockMonitor(
 		ctx.LocalClock, 10*ctx.heartbeatInterval, baseCtx.HistogramWindowInterval)
 	ctx.heartbeatTimeout = 2 * ctx.heartbeatInterval

@@ -42,7 +42,7 @@ var TxnLivenessHeartbeatMultiplier = envutil.EnvOrDefaultInt(
 // mutable to allow tests to override it.
 //
 // Use TestingOverrideTxnLivenessThreshold to override the value in tests.
-var TxnLivenessThreshold = time.Duration(TxnLivenessHeartbeatMultiplier) * base.DefaultHeartbeatInterval
+var TxnLivenessThreshold = time.Duration(TxnLivenessHeartbeatMultiplier) * base.DefaultTxnHeartbeatInterval
 
 // TestingOverrideTxnLivenessThreshold allows tests to override the transaction
 // liveness threshold. The function returns a closure that should be called to

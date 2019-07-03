@@ -265,7 +265,7 @@ func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *client.
 
 // DefaultCancelInterval is a reasonable interval at which to poll this node
 // for liveness failures and cancel running jobs.
-var DefaultCancelInterval = base.DefaultHeartbeatInterval
+var DefaultCancelInterval = base.DefaultTxnHeartbeatInterval
 
 // DefaultAdoptInterval is a reasonable interval at which to poll system.jobs
 // for jobs with expired leases.

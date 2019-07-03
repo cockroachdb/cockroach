@@ -455,7 +455,7 @@ func NewTxnCoordSenderFactory(
 		tcf.st = cluster.MakeTestingClusterSettings()
 	}
 	if tcf.heartbeatInterval == 0 {
-		tcf.heartbeatInterval = base.DefaultHeartbeatInterval
+		tcf.heartbeatInterval = base.DefaultTxnHeartbeatInterval
 	}
 	if tcf.metrics == (TxnMetrics{}) {
 		tcf.metrics = MakeTxnMetrics(metric.TestSampleInterval)
