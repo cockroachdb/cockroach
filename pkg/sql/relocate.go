@@ -76,7 +76,7 @@ func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, err
 	}
 	cols := planColumns(rows)
 	if len(cols) < 2 {
-		return nil, errors.Errorf("less than two columns in %s data", cmdName)
+		return nil, errors.Errorf("less than 2 columns in %s data", cmdName)
 	}
 	if len(cols) > len(index.ColumnIDs)+1 {
 		return nil, errors.Errorf("too many columns in %s data", cmdName)
@@ -102,9 +102,6 @@ func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, err
 		tableDesc:     tableDesc.TableDesc(),
 		index:         index,
 		rows:          rows,
-		run: relocateRun{
-			storeMap: make(map[roachpb.StoreID]roachpb.NodeID),
-		},
 	}, nil
 }
 
@@ -119,6 +116,7 @@ type relocateRun struct {
 }
 
 func (n *relocateNode) startExec(runParams) error {
+	n.run.storeMap = make(map[roachpb.StoreID]roachpb.NodeID)
 	return nil
 }
 

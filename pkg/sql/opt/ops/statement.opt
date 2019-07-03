@@ -138,3 +138,20 @@ define AlterTableUnsplit {
 define AlterTableUnsplitAll {
     _ AlterTableSplitPrivate
 }
+
+# AlterTableRelocate represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
+[Relational, DDL]
+define AlterTableRelocate {
+    # The input expression provides values for the index columns (or a prefix of
+    # them).
+    Input RelExpr
+
+    _ AlterTableRelocatePrivate
+}
+
+[Private]
+define AlterTableRelocatePrivate {
+    RelocateLease bool
+
+    _ AlterTableSplitPrivate
+}
