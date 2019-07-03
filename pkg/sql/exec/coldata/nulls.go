@@ -97,20 +97,56 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 	}
 
 	// Case where mask spans at least two bytes.
-	if sIdx < eIdx {
-		mask := onesMask >> (8 - (start % 8))
-		n.nulls[sIdx] &= mask
+	mask := onesMask >> (8 - (start % 8))
+	n.nulls[sIdx] &= mask
 
-		if end%8 == 0 {
-			n.nulls[eIdx] = 0
-		} else {
-			mask = onesMask << (end % 8)
-			n.nulls[eIdx] &= mask
-		}
+	if end%8 == 0 {
+		n.nulls[eIdx] = 0
+	} else {
+		mask = onesMask << (end % 8)
+		n.nulls[eIdx] &= mask
+	}
 
-		for i := sIdx + 1; i < eIdx; i++ {
-			n.nulls[i] = 0
+	for i := sIdx + 1; i < eIdx; i++ {
+		n.nulls[i] = 0
+	}
+}
+
+// UnsetNullRange unsets all the nulls in the range [start, end).
+// As of now, UnsetNullRange does not correctly update hasNulls,
+// as it is unclear how to efficiently/smartly perform this check.
+// After using UnsetNullRange, n might not contain any null values,
+// but hasNulls will still be true.
+func (n *Nulls) UnsetNullRange(start, end uint64) {
+	if start >= end {
+		return
+	}
+
+	sIdx := start / 8
+	eIdx := (end - 1) / 8
+
+	// Case where mask only spans one byte.
+	if sIdx == eIdx {
+		mask := onesMask << (start % 8)
+		if end%8 != 0 {
+			mask = mask & (onesMask >> (8 - (end % 8)))
 		}
+		n.nulls[sIdx] |= mask
+		return
+	}
+
+	// Case where mask spans at least two bytes.
+	mask := onesMask << (start % 8)
+	n.nulls[sIdx] |= mask
+	if end%8 == 0 {
+		n.nulls[eIdx] = onesMask
+	} else {
+		mask = onesMask >> (8 - (end % 8))
+		n.nulls[eIdx] |= mask
+	}
+
+	for i := sIdx + 1; i < eIdx; i++ {
+		n.nulls[i] = onesMask
 	}
 }
 

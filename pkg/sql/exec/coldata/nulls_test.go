@@ -72,6 +72,21 @@ func TestSetNullRange(t *testing.T) {
 	}
 }
 
+func TestUnsetNullRange(t *testing.T) {
+	for _, start := range pos {
+		for _, end := range pos {
+			n := NewNulls(BatchSize)
+			n.SetNulls()
+			n.UnsetNullRange(start, end)
+			for i := uint64(0); i < BatchSize; i++ {
+				notExpected := i >= start && i < end
+				require.NotEqual(t, notExpected, n.NullAt64(i),
+					"NullAt(%d) saw %t, expected %t, after SetNullRange(%d, %d)", i, n.NullAt64(i), !notExpected, start, end)
+			}
+		}
+	}
+}
+
 func TestNullsTruncate(t *testing.T) {
 	for _, size := range pos {
 		n := NewNulls(BatchSize)
