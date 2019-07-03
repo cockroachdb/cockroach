@@ -1912,8 +1912,9 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 
 	joinReaderSpec := distsqlpb.JoinReaderSpec{
-		Table: *n.table.desc.TableDesc(),
-		Type:  n.joinType,
+		Table:      *n.table.desc.TableDesc(),
+		Type:       n.joinType,
+		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table)
 	if err != nil {
