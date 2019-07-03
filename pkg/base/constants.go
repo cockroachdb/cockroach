@@ -19,12 +19,12 @@ const (
 	// for more on this setting.
 	DefaultMaxClockOffset = 500 * time.Millisecond
 
-	// DefaultHeartbeatInterval is how often heartbeats are sent from the
+	// DefaultTxnHeartbeatInterval is how often heartbeats are sent from the
 	// transaction coordinator to a live transaction. These keep it from
 	// being preempted by other transactions writing the same keys. If a
-	// transaction fails to be heartbeat within 2x the heartbeat interval,
+	// transaction fails to be heartbeat within 5x the heartbeat interval,
 	// it may be aborted by conflicting txns.
-	DefaultHeartbeatInterval = 1 * time.Second
+	DefaultTxnHeartbeatInterval = 1 * time.Second
 
 	// SlowRequestThreshold is the amount of time to wait before considering a
 	// request to be "slow".

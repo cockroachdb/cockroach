@@ -5043,7 +5043,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	const indetCommitError = "txn in indeterminate STAGING state"
 
 	m := int64(txnwait.TxnLivenessHeartbeatMultiplier)
-	ns := base.DefaultHeartbeatInterval.Nanoseconds()
+	ns := base.DefaultTxnHeartbeatInterval.Nanoseconds()
 	testCases := []struct {
 		status          roachpb.TransactionStatus // -1 for no record
 		heartbeatOffset int64                     // nanoseconds from original timestamp, 0 for no heartbeat
