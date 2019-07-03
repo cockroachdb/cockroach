@@ -316,12 +316,12 @@ error (42803): count(): aggregate functions are not allowed in GROUP BY
 build
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v)
 ----
-error (42803): aggregate functions are not allowed in LIMIT
+error (42703): column "v" does not exist
 
 build
 SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v)
 ----
-error (42803): aggregate functions are not allowed in OFFSET
+error (42703): column "v" does not exist
 
 build
 VALUES (99, count(1))

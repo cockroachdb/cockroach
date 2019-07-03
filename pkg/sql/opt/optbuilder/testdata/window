@@ -48,12 +48,12 @@ error (42P20): sum(): window functions are not allowed in RETURNING
 build
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v) OVER ()
 ----
-error (42P20): window functions are not allowed in LIMIT
+error (42703): column "v" does not exist
 
 build
 SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v) OVER ()
 ----
-error (42P20): window functions are not allowed in OFFSET
+error (42703): column "v" does not exist
 
 build
 INSERT INTO kv (k, v) VALUES (99, count(1) OVER ())
