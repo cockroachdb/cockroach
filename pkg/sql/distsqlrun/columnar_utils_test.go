@@ -134,8 +134,8 @@ func verifyColOperator(
 		if anyOrder {
 			// We accumulate all the rows to be matched using set comparison when
 			// both "producers" are done.
-			procRows = append(procRows, rowProc)
-			colOpRows = append(colOpRows, rowColOp)
+			procRows = append(procRows, rowProc.Copy())
+			colOpRows = append(colOpRows, rowColOp.Copy())
 		} else {
 			// anyOrder is false, so the result rows must match in the same order.
 			expStr := rowProc.String(outputTypes)
