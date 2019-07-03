@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -345,7 +346,10 @@ func (oc *optCatalog) dataSourceForTable(
 		}
 	}
 
-	ds := newOptTable(desc, id, name, tableStats, zoneConfig)
+	ds, err := newOptTable(desc, id, name, tableStats, zoneConfig)
+	if err != nil {
+		return nil, err
+	}
 	if !desc.IsVirtualTable() {
 		// Virtual tables can have multiple effective instances that utilize the
 		// same descriptor (see above).
@@ -535,7 +539,7 @@ func newOptTable(
 	name *cat.DataSourceName,
 	stats []*stats.TableStatistic,
 	tblZone *config.ZoneConfig,
-) *optTable {
+) (*optTable, error) {
 	ot := &optTable{
 		desc:     desc,
 		id:       id,
@@ -632,14 +636,16 @@ func newOptTable(
 		n := 0
 		for i := range stats {
 			// We skip any stats that have columns that don't exist in the table anymore.
-			if ot.stats[n].init(ot, stats[i]) {
+			if ok, err := ot.stats[n].init(ot, stats[i]); err != nil {
+				return nil, err
+			} else if ok {
 				n++
 			}
 		}
 		ot.stats = ot.stats[:n]
 	}
 
-	return ot
+	return ot, nil
 }
 
 // ID is part of the cat.Object interface.
@@ -1015,15 +1021,17 @@ type optTableStat struct {
 	rowCount       uint64
 	distinctCount  uint64
 	nullCount      uint64
+	histogram      []cat.HistogramBucket
 }
 
 var _ cat.TableStatistic = &optTableStat{}
 
-func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool) {
+func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool, _ error) {
 	os.createdAt = stat.CreatedAt
 	os.rowCount = stat.RowCount
 	os.distinctCount = stat.DistinctCount
 	os.nullCount = stat.NullCount
+
 	os.columnOrdinals = make([]int, len(stat.ColumnIDs))
 	for i, c := range stat.ColumnIDs {
 		var ok bool
@@ -1031,10 +1039,28 @@ func (os *optTableStat) init(tab *optTable, stat *stats.TableStatistic) (ok bool
 		if !ok {
 			// Column not in table (this is possible if the column was removed since
 			// the statistic was calculated).
-			return false
+			return false, nil
 		}
 	}
-	return true
+
+	if stat.Histogram != nil {
+		os.histogram = make([]cat.HistogramBucket, len(stat.Histogram.Buckets))
+		typ := &stat.Histogram.ColumnType
+		var a sqlbase.DatumAlloc
+		for i := range os.histogram {
+			bucket := &stat.Histogram.Buckets[i]
+			datum, _, err := sqlbase.DecodeTableKey(&a, typ, bucket.UpperBound, encoding.Ascending)
+			if err != nil {
+				return false, err
+			}
+			os.histogram[i] = cat.HistogramBucket{
+				NumEq:      uint64(bucket.NumEq),
+				NumRange:   uint64(bucket.NumRange),
+				UpperBound: datum,
+			}
+		}
+	}
+	return true, nil
 }
 
 func (os *optTableStat) equals(other *optTableStat) bool {
@@ -1079,6 +1105,11 @@ func (os *optTableStat) DistinctCount() uint64 {
 // NullCount is part of the cat.TableStatistic interface.
 func (os *optTableStat) NullCount() uint64 {
 	return os.nullCount
+}
+
+// Histogram is part of the cat.TableStatistic interface.
+func (os *optTableStat) Histogram() []cat.HistogramBucket {
+	return os.histogram
 }
 
 // optFamily is a wrapper around sqlbase.ColumnFamilyDescriptor that keeps a

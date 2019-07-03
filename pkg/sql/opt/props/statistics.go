@@ -15,8 +15,10 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/olekukonko/tablewriter"
 )
 
 // Statistics is a collection of measurements and statistics that is used by
@@ -113,6 +115,20 @@ func (s *Statistics) String() string {
 		fmt.Fprintf(&buf, ", null%s=%.9g", col.Cols.String(), col.NullCount)
 	}
 	buf.WriteString("]")
+	for _, col := range colStats {
+		if col.Histogram != nil {
+			label := fmt.Sprintf("histogram%s=", col.Cols.String())
+			indent := strings.Repeat(" ", tablewriter.DisplayWidth(label))
+			fmt.Fprintf(&buf, "\n%s", label)
+			histLines := strings.Split(strings.TrimRight(col.Histogram.String(), "\n"), "\n")
+			for i, line := range histLines {
+				if i != 0 {
+					fmt.Fprintf(&buf, "\n%s", indent)
+				}
+				fmt.Fprintf(&buf, "%s", strings.TrimRight(line, " "))
+			}
+		}
+	}
 
 	return buf.String()
 }
@@ -128,9 +144,7 @@ type ColumnStatistic struct {
 	Cols opt.ColSet
 
 	// DistinctCount is the estimated number of distinct values of this
-	// set of columns for this expression. Excludes values containing
-	// a null in one of the cols - those are counted in NullCount.
-	// TODO(itsbilal): Count null values as a distinct value as well.
+	// set of columns for this expression. Includes null values.
 	DistinctCount float64
 
 	// NullCount is the estimated number of null values of this set of
@@ -138,14 +152,23 @@ type ColumnStatistic struct {
 	// count tracks all instances of at least one null value in the
 	// column set.
 	NullCount float64
+
+	// Histogram is only used when the size of Cols is one. It contains
+	// the approximate distribution of values for that column, represented
+	// by a slice of histogram buckets.
+	Histogram *Histogram
 }
 
-// ApplySelectivity updates the distinct count and null count according to a
-// given selectivity.
+// ApplySelectivity updates the distinct count, null count, and histogram
+// according to a given selectivity.
 func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
 	// Since the null count is a simple count of all null rows, we can
 	// just multiply the selectivity with it.
 	c.NullCount *= selectivity
+
+	if c.Histogram != nil {
+		c.Histogram.ApplySelectivity(selectivity)
+	}
 
 	if selectivity == 1 || c.DistinctCount == 0 {
 		return

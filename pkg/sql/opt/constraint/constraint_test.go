@@ -189,13 +189,13 @@ func TestConstraintContainsSpan(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			c := ParseConstraint(&evalCtx, tc.constraint)
 
-			spans := parseSpans(tc.containedSpans)
+			spans := parseSpans(&evalCtx, tc.containedSpans)
 			for i := 0; i < spans.Count(); i++ {
 				if sp := spans.Get(i); !c.ContainsSpan(&evalCtx, sp) {
 					t.Errorf("%s should contain span %s", c, sp)
 				}
 			}
-			spans = parseSpans(tc.notContainedSpans)
+			spans = parseSpans(&evalCtx, tc.notContainedSpans)
 			for i := 0; i < spans.Count(); i++ {
 				if sp := spans.Get(i); c.ContainsSpan(&evalCtx, sp) {
 					t.Errorf("%s should not contain span %s", c, sp)
@@ -258,6 +258,8 @@ func TestConstraintCombine(t *testing.T) {
 
 func TestConsolidateSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		s string
@@ -301,7 +303,7 @@ func TestConsolidateSpans(t *testing.T) {
 	kc := testKeyContext(1, 2, -3)
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			spans := parseSpans(tc.s)
+			spans := parseSpans(&evalCtx, tc.s)
 			var c Constraint
 			c.Init(kc, &spans)
 			c.ConsolidateSpans(kc.EvalCtx)
@@ -314,6 +316,8 @@ func TestConsolidateSpans(t *testing.T) {
 
 func TestExactPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 
 	testData := []struct {
 		s string
@@ -361,7 +365,7 @@ func TestExactPrefix(t *testing.T) {
 	kc := testKeyContext(1, 2, 3)
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			spans := parseSpans(tc.s)
+			spans := parseSpans(&evalCtx, tc.s)
 			var c Constraint
 			c.Init(kc, &spans)
 			if res := c.ExactPrefix(kc.EvalCtx); res != tc.e {
