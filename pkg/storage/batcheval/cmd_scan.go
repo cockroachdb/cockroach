@@ -80,5 +80,4 @@ func Scan(
 		reply.IntentRows, err = CollectIntentRows(ctx, batch, cArgs, intents)
 	}
 	return result.FromIntents(intents, args), err
-
 }
