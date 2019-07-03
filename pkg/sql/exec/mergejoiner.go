@@ -206,6 +206,8 @@ func NewMergeJoinOp(
 		return &mergeJoinFullOuterOp{base}, err
 	case sqlbase.JoinType_LEFT_SEMI:
 		return &mergeJoinLeftSemiOp{base}, err
+	case sqlbase.JoinType_LEFT_ANTI:
+		return &mergeJoinLeftAntiOp{base}, err
 	default:
 		panic("unsupported join type")
 	}
@@ -350,26 +352,6 @@ func (o *mergeJoinBase) initWithBatchSize(outBatchSize uint16) {
 func (o *mergeJoinBase) resetBuilderCrossProductState() {
 	o.builderState.left.reset()
 	o.builderState.right.reset()
-}
-
-// calculateOutputCount uses the toBuild field of each group and the output
-// batch size to determine the output count. Note that as soon as a group is
-// materialized partially or fully to output, its toBuild field is updated
-// accordingly.
-func (o *mergeJoinBase) calculateOutputCount(groups []group) uint16 {
-	count := int(o.builderState.outCount)
-
-	for i := 0; i < len(groups); i++ {
-		count += groups[i].toBuild
-		groups[i].toBuild = 0
-		if count > int(o.outputBatchSize) {
-			groups[i].toBuild = count - int(o.outputBatchSize)
-			count = int(o.outputBatchSize)
-			return uint16(count)
-		}
-	}
-	o.builderState.outFinished = true
-	return uint16(count)
 }
 
 // appendToBufferedGroup appends all the tuples from batch that are part of the
