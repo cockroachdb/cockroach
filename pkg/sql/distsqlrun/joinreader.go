@@ -121,10 +121,6 @@ func newJoinReader(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*joinReader, error) {
-	if spec.Visibility != distsqlpb.ScanVisibility_PUBLIC {
-		return nil, errors.AssertionFailedf("joinReader specified with visibility %+v", spec.Visibility)
-	}
-
 	jr := &joinReader{
 		desc:                 spec.Table,
 		input:                input,
@@ -140,13 +136,14 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
-	jr.colIdxMap = jr.desc.ColumnIdxMap()
+	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	jr.colIdxMap = jr.desc.ColumnIdxMapWithMutations(returnMutations)
 
 	var columnIDs []sqlbase.ColumnID
 	columnIDs, jr.indexDirs = jr.index.FullColumnIDs()
 	indexCols := make([]uint32, len(columnIDs))
 	jr.indexTypes = make([]types.T, len(columnIDs))
-	columnTypes := jr.desc.ColumnTypesWithMutations(true)
+	columnTypes := jr.desc.ColumnTypesWithMutations(returnMutations)
 	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
 		jr.indexTypes[i] = columnTypes[jr.colIdxMap[columnID]]
@@ -184,15 +181,15 @@ func newJoinReader(
 		collectingStats = true
 	}
 
-	if isSecondary && !jr.neededRightCols().SubsetOf(getIndexColSet(jr.index, jr.colIdxMap)) {
+	neededRightCols := jr.neededRightCols()
+	if isSecondary && !neededRightCols.SubsetOf(getIndexColSet(jr.index, jr.colIdxMap)) {
 		return nil, errors.Errorf("joinreader index does not cover all columns")
 	}
 
 	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
 		&fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		jr.neededRightCols(), false /* isCheck */, &jr.alloc,
-		distsqlpb.ScanVisibility_PUBLIC,
+		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility,
 	)
 	if err != nil {
 		return nil, err
