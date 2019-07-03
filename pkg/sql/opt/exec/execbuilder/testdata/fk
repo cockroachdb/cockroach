@@ -25,7 +25,10 @@ CREATE TABLE b (
 )
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) NOT VALID
+
+statement ok
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
 COMMIT

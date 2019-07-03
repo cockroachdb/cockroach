@@ -1390,10 +1390,6 @@ subtest unvalidated_fk_plan
 # To get an unvalidated foreign key for testing, use the loophole that we
 # currently don't support adding a validated FK in the same transaction as
 # CREATE TABLE
-# TODO (lucy): Once this is no longer true (and we support adding NOT VALID
-# constraints), update this test
-statement ok
-BEGIN
 
 statement ok
 CREATE TABLE a (
@@ -1415,10 +1411,10 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) NOT VALID
 
-statement ok
-COMMIT
+statement error pq: foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', rowid=[0-9]* has no match in "a"
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 # Verify that the optimizer doesn't use an unvalidated constraint to simplify plans.
 query TTT
@@ -2101,3 +2097,44 @@ DELETE FROM t1 WHERE x IS NULL
 
 statement ok
 DROP TABLE t2, t2 CASCADE
+
+subtest test_not_valid_fk
+
+statement ok
+CREATE TABLE person (id INT PRIMARY KEY, age INT, name STRING)
+
+statement ok
+CREATE TABLE pet (id INT PRIMARY KEY, name STRING)
+
+statement ok
+INSERT INTO pet VALUES (0, 'crookshanks')
+
+statement error pq: foreign key violation: "pet" row id=0 has no match in "person"
+ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person (id)
+
+statement ok
+ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person (id) NOT VALID
+
+query TTTTB
+SHOW CONSTRAINTS FROM pet
+----
+pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  false
+pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
+
+statement error pq: foreign key violation: "pet" row id=0 has no match in "person"
+ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
+
+statement ok
+INSERT INTO person VALUES (0, 18, 'Hermione Granger')
+
+statement ok
+ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
+
+query TTTTB
+SHOW CONSTRAINTS FROM pet
+----
+pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  true
+pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
+
+statement ok
+DROP TABLE person, pet

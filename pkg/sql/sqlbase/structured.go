@@ -2374,6 +2374,10 @@ func (desc *TableDescriptor) IsInterleaved() bool {
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
+// There are three Validity types for the mutations:
+// Validated   - The constraint has already been added and successfully validated.
+// Validating  - The constraint has already been added, and just needs to be marked as validated.
+// Unvalidated - The constraint has not yet been added.
 func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) error {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
@@ -2391,6 +2395,7 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			case ConstraintToUpdate_CHECK:
 				switch t.Constraint.Check.Validity {
 				case ConstraintValidity_Unvalidated:
+					// add the constraint to a slice of constraints to be checked
 					desc.Checks = append(desc.Checks, &t.Constraint.Check)
 				case ConstraintValidity_Validating:
 					for _, c := range desc.Checks {
@@ -2403,11 +2408,21 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
 				}
 			case ConstraintToUpdate_FOREIGN_KEY:
+				// Takes care of adding the Foreign Key to the table index. Adding the backref table to the table index of the
+				// referenced table is taken care in another call, which is done in a call to makeMutationComplete later
+				// in this function.
+				// TODO (tyler): Combine both of these tasks in the same place.
 				idx, err := desc.FindIndexByID(t.Constraint.ForeignKeyIndex)
 				if err != nil {
 					return err
 				}
-				idx.ForeignKey.Validity = ConstraintValidity_Validated
+				switch t.Constraint.ForeignKey.Validity {
+				case ConstraintValidity_Validating:
+					idx.ForeignKey.Validity = ConstraintValidity_Validated
+				case ConstraintValidity_Unvalidated:
+					// In the case of Foreign Keys, we update the index to hold the FK to be added
+					idx.ForeignKey = t.Constraint.ForeignKey
+				}
 			case ConstraintToUpdate_NOT_NULL:
 				// Remove the dummy check constraint that was in place during validation
 				for i, c := range desc.Checks {
