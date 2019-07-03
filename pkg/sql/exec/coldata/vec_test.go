@@ -299,6 +299,60 @@ func TestCopy(t *testing.T) {
 	}
 }
 
+func TestCopyNulls(t *testing.T) {
+	const typ = types.Int64
+
+	// Set up the destination vector.
+	dst := NewMemColumn(typ, BatchSize)
+	dstInts := dst.Int64()
+	for i := range dstInts {
+		dstInts[i] = int64(1)
+	}
+	// Set some nulls in the destination vector.
+	for i := 0; i < 5; i++ {
+		dst.Nulls().SetNull(uint16(i))
+	}
+
+	// Set up the source vector.
+	src := NewMemColumn(typ, BatchSize)
+	srcInts := src.Int64()
+	for i := range srcInts {
+		srcInts[i] = 2
+	}
+	// Set some nulls in the source.
+	for i := 3; i < 8; i++ {
+		src.Nulls().SetNull(uint16(i))
+	}
+
+	copyArgs := CopyArgs{
+		ColType:     typ,
+		Src:         src,
+		DestIdx:     3,
+		SrcStartIdx: 3,
+		SrcEndIdx:   10,
+	}
+
+	dst.Copy(copyArgs)
+
+	// Verify that original nulls aren't deleted, and that
+	// the nulls in the source have been copied over.
+	for i := 0; i < 8; i++ {
+		require.True(t, dst.Nulls().NullAt(uint16(i)), "expected null at %d, found not null", i)
+	}
+
+	// Verify that the data from src has been copied over.
+	for i := 8; i < 10; i++ {
+		require.True(t, dstInts[i] == 2, "data from src was not copied over")
+		require.True(t, !dst.Nulls().NullAt(uint16(i)), "no extra nulls were added")
+	}
+
+	// Verify that the remaining elements in dst have not been touched.
+	for i := 10; i < BatchSize; i++ {
+		require.True(t, dstInts[i] == 1, "data in dst outside copy range has been changed")
+		require.True(t, !dst.Nulls().NullAt(uint16(i)), "no extra nulls were added")
+	}
+}
+
 func BenchmarkAppend(b *testing.B) {
 	const typ = types.Int64
 
