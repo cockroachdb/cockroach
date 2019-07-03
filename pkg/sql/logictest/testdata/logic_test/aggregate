@@ -229,10 +229,12 @@ SELECT count(DISTINCT w) FROM kv GROUP BY 1
 query error aggregate functions are not allowed in RETURNING
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v)
 
-query error aggregate functions are not allowed in LIMIT
+# The HP and CBO have different errors.
+query error (aggregate functions are not allowed in LIMIT|column "v" does not exist)
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v)
 
-query error aggregate functions are not allowed in OFFSET
+# The HP and CBO have different errors.
+query error (aggregate functions are not allowed in OFFSET|column "v" does not exist)
 SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v)
 
 query error aggregate functions are not allowed in VALUES
