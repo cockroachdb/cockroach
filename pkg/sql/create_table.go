@@ -384,8 +384,9 @@ func (p *planner) resolveFK(
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 	ts FKTableState,
+	validationBehavior tree.ValidationBehavior,
 ) error {
-	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts)
+	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts, validationBehavior)
 }
 
 func qualifyFKColErrorWithDB(
@@ -421,8 +422,8 @@ const (
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
 // map of other tables that need to be updated when this table is created.
 // Constraints that are not known to hold for existing data are created
-// "unvalidated", but when table is empty (e.g. during creation), no existing
-// data imples no existing violations, and thus the constraint can be created
+// "unvalidated", but when table is empty (e.g. during creating on), no existing
+// data implies no existing violations, and thus the constraint can be created
 // without the unvalidated flag.
 //
 // The caller should pass an instance of fkSelfResolver as
@@ -437,6 +438,10 @@ const (
 //
 // The passed Txn is used to lookup databases to qualify names in error messages
 // but if nil, will result in unqualified names in those errors.
+//
+// The passed validationBehavior is used to determine whether or not preexisting
+// entries in the table need to be validated against the foreign key being added.
+// This only applies for existing tables, not new tables.
 func ResolveFK(
 	ctx context.Context,
 	txn *client.Txn,
@@ -445,6 +450,7 @@ func ResolveFK(
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 	ts FKTableState,
+	validationBehavior tree.ValidationBehavior,
 ) error {
 	for _, col := range d.FromCols {
 		col, _, err := tbl.FindColumnByName(col)
@@ -586,7 +592,11 @@ func ResolveFK(
 	}
 
 	if ts != NewTable {
-		ref.Validity = sqlbase.ConstraintValidity_Validating
+		if validationBehavior == tree.ValidationSkip {
+			ref.Validity = sqlbase.ConstraintValidity_Unvalidated
+		} else {
+			ref.Validity = sqlbase.ConstraintValidity_Validating
+		}
 	}
 	backref := sqlbase.ForeignKeyReference{Table: tbl.ID}
 
@@ -1282,7 +1292,7 @@ func MakeTableDesc(
 			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
-			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable); err != nil {
+			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable, tree.ValidationDefault); err != nil {
 				return desc, err
 			}
 
