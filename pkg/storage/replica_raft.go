@@ -427,13 +427,17 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	defer r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
-		if err := r.mu.proposalBuf.FlushLockedWithRaftGroup(raftGroup); err != nil {
+		nEnts, err := r.mu.proposalBuf.FlushLockedWithRaftGroup(raftGroup)
+		if err != nil {
 			return false, err
 		}
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
-		return hasReady /* unquiesceAndWakeLeader */, nil
+		// If nEnts > 0, then we've just added proposals to the Raft group and
+		// so it will unquiesce automatically. Otherwise, if there's a Ready,
+		// unquiesce explicitly.
+		return hasReady && nEnts == 0 /* unquiesceAndWakeLeader */, nil
 	})
 	r.mu.Unlock()
 	if err != nil {

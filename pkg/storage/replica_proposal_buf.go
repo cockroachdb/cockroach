@@ -349,7 +349,9 @@ func (b *propBuf) flushLocked() error {
 //
 // If raftGroup is non-nil (the common case) then the commands will also be
 // proposed to the RawNode. This initiates Raft replication of the commands.
-func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
+// Returns the number of entries proposed to Raft on success, and an error
+// otherwise.
+func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) (_numProposed int, _ error) {
 	// Before returning, make sure to forward the lease index base to at least
 	// the proposer's currently applied lease index. This ensures that if the
 	// lease applied index advances outside of this proposer's control (i.e.
@@ -367,7 +369,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 	defer b.arr.adjustSize(used)
 	if used == 0 {
 		// The buffer is empty. Nothing to do.
-		return nil
+		return 0, nil
 	} else if used > b.arr.len() {
 		// The buffer is full and at least one writer has tried to allocate
 		// on top of the full buffer, so notify them to try again.
@@ -411,7 +413,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
 			if err := proposeBatch(raftGroup, b.p.replicaID(), ents); err != nil {
-				return err
+				return 0, err
 			}
 			ents = ents[len(ents):]
 
@@ -422,7 +424,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			}
 			encodedCtx, err := protoutil.Marshal(&confChangeCtx)
 			if err != nil {
-				return err
+				return 0, err
 			}
 
 			if err := raftGroup.ProposeConfChange(raftpb.ConfChange{
@@ -434,7 +436,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 				// ignored prior to the introduction of ErrProposalDropped).
 				// TODO(bdarnell): Handle ErrProposalDropped better.
 				// https://github.com/cockroachdb/cockroach/issues/21849
-				return err
+				return 0, err
 			}
 		} else {
 			// Add to the batch of entries that will soon be proposed. It is
@@ -451,7 +453,10 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 			})
 		}
 	}
-	return proposeBatch(raftGroup, b.p.replicaID(), ents)
+	if err := proposeBatch(raftGroup, b.p.replicaID(), ents); err != nil {
+		return 0, err
+	}
+	return len(ents), nil
 }
 
 func (b *propBuf) forwardLeaseIndexBase(v uint64) {
@@ -489,7 +494,7 @@ func proposeBatch(raftGroup *raft.RawNode, replID roachpb.ReplicaID, ents []raft
 // The representative example of this is a caller that wants to flush the buffer
 // into the proposals map before canceling all proposals.
 func (b *propBuf) FlushLockedWithoutProposing() {
-	if err := b.FlushLockedWithRaftGroup(nil /* raftGroup */); err != nil {
+	if _, err := b.FlushLockedWithRaftGroup(nil /* raftGroup */); err != nil {
 		log.Fatalf(context.Background(), "unexpected error: %v", err)
 	}
 }
