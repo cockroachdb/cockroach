@@ -288,7 +288,7 @@ func insertStmtToKVs(
 		return errors.Errorf("load insert: expected VALUES clause: %q", stmt)
 	}
 
-	b := sql.Inserter(f)
+	b := row.KVInserter(f)
 	computedIVarContainer := sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
 		Cols:    tableDesc.Columns,
@@ -315,7 +315,7 @@ func insertStmtToKVs(
 		var computeExprs []tree.TypedExpr
 		var computedCols []sqlbase.ColumnDescriptor
 
-		insertRow, err := sql.GenerateInsertRow(
+		insertRow, err := row.GenerateInsertRow(
 			defaultExprs, computeExprs, cols, computedCols, evalCtx, tableDesc, insertRow, &computedIVarContainer,
 		)
 		if err != nil {

@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	sqltypes "github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -231,7 +231,7 @@ func NewWorkloadKVConverter(
 func (w *WorkloadKVConverter) Worker(
 	ctx context.Context, evalCtx *tree.EvalContext, finishedBatchFn func(),
 ) error {
-	conv, err := sql.NewRowConverter(w.tableDesc, evalCtx, w.kvCh)
+	conv, err := row.NewDatumRowConverter(w.tableDesc, evalCtx, w.kvCh)
 	if err != nil {
 		return err
 	}

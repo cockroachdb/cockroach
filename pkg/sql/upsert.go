@@ -364,7 +364,7 @@ func (n *upsertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Process the incoming row tuple and generate the full inserted
 	// row. This fills in the defaults, computes computed columns, and
 	// checks the data width complies with the schema constraints.
-	rowVals, err := GenerateInsertRow(
+	rowVals, err := row.GenerateInsertRow(
 		n.run.defaultExprs,
 		n.run.computeExprs,
 		n.run.insertCols,
