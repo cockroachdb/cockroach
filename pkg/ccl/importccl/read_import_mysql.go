@@ -493,7 +493,7 @@ type delayedFK struct {
 func addDelayedFKs(ctx context.Context, defs []delayedFK, resolver fkResolver) error {
 	for _, def := range defs {
 		if err := sql.ResolveFK(
-			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable,
+			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable, tree.ValidationDefault,
 		); err != nil {
 			return err
 		}

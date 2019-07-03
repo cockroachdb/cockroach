@@ -2407,7 +2407,12 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 				if err != nil {
 					return err
 				}
-				idx.ForeignKey.Validity = ConstraintValidity_Validated
+				switch t.Constraint.ForeignKey.Validity {
+				case ConstraintValidity_Validating:
+					idx.ForeignKey.Validity = ConstraintValidity_Validated
+				case ConstraintValidity_Unvalidated:
+					idx.ForeignKey = t.Constraint.ForeignKey
+				}
 			case ConstraintToUpdate_NOT_NULL:
 				// Remove the dummy check constraint that was in place during validation
 				for i, c := range desc.Checks {
