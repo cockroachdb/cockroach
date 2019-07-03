@@ -934,7 +934,7 @@ statement ok
 ALTER TABLE check_table ADD c INT
 
 statement ok
-ALTER TABLE check_table ADD CONSTRAINT c_0 CHECK (c > 0)
+ALTER TABLE check_table ADD CONSTRAINT c_0 CHECK (c > 0) NOT VALID
 
 statement ok
 ALTER TABLE check_table ADD d INT DEFAULT 1
@@ -948,7 +948,7 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
 ----
-check_table  c_0      CHECK        CHECK ((c > 0))      true
+check_table  c_0      CHECK        CHECK ((c > 0))      false
 check_table  d_0      CHECK        CHECK ((d > 0))      true
 check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
 
@@ -976,6 +976,12 @@ ALTER TABLE check_table ADD CONSTRAINT e_0 CHECK (e::INT > 0)
 
 statement error pgcode XXA00 validate check constraint: could not parse "a" as type int
 COMMIT
+
+statement ok
+ALTER TABLE check_table VALIDATE CONSTRAINT c_0
+
+statement ok
+ALTER TABLE check_table VALIDATE CONSTRAINT d_0
 
 # Constraint e_0 was not added
 query TTTTB

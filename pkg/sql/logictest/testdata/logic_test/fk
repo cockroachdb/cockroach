@@ -1390,10 +1390,6 @@ subtest unvalidated_fk_plan
 # To get an unvalidated foreign key for testing, use the loophole that we
 # currently don't support adding a validated FK in the same transaction as
 # CREATE TABLE
-# TODO (lucy): Once this is no longer true (and we support adding NOT VALID
-# constraints), update this test
-statement ok
-BEGIN
 
 statement ok
 CREATE TABLE a (
@@ -1415,10 +1411,10 @@ statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
 
 statement ok
-ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) NOT VALID
 
-statement ok
-COMMIT
+statement error pq: foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', rowid=[0-9]* has no match in "a"
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 # Verify that the optimizer doesn't use an unvalidated constraint to simplify plans.
 query TTT
@@ -1691,8 +1687,8 @@ ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z,
 statement ok
 DROP TABLE b, a
 
-subtest Composite_Full
-# Originally from 26748.
+subtest Composite_Simple_Unvalidated
+# Test inserting into table with an unvalidated constraint, and running VALIDATE CONSTRAINT later
 
 # Test composite key with two columns.
 statement ok
@@ -1704,10 +1700,175 @@ CREATE TABLE a (
 
 statement ok
 CREATE TABLE b (
- a_y STRING NULL
+  a_y STRING NULL
  ,a_x STRING NULL
- ,CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) MATCH FULL
 );
+
+# Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x)
+
+statement ok
+INSERT INTO a (x, y) VALUES ('x1', 'y1')
+
+# All of these are allowed because we do composite matching using MATCH SIMPLE.
+statement ok
+INSERT INTO b (a_x) VALUES ('x1')
+
+statement ok
+INSERT INTO b (a_y) VALUES ('y1')
+
+statement ok
+INSERT INTO b (a_y, a_x) VALUES ('y1', NULL)
+
+statement ok
+INSERT INTO b (a_y, a_x) VALUES (NULL, 'x1')
+
+statement ok
+INSERT INTO b (a_y, a_x) VALUES ('y2', NULL)
+
+statement ok
+INSERT INTO b (a_y, a_x) VALUES (NULL, 'x2')
+
+statement ok
+INSERT INTO b (a_x, a_y) VALUES ('x1', 'y1')
+
+statement ok
+INSERT INTO b (a_x, a_y) VALUES (NULL, NULL)
+
+statement ok
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+DROP TABLE b, a
+
+# Test composite key with three columns.
+statement ok
+CREATE TABLE a (
+  x STRING NULL
+ ,y STRING NULL
+ ,z STRING NULL
+ ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
+);
+
+statement ok
+CREATE TABLE b (
+  a_y STRING NULL
+ ,a_x STRING NULL
+ ,a_z STRING NULL
+);
+
+# Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+
+statement ok
+INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
+
+# All of these are allowed because we do composite matching using MATCH SIMPLE.
+statement ok
+INSERT INTO b (a_x) VALUES ('x1')
+
+statement ok
+INSERT INTO b (a_y) VALUES ('y1')
+
+statement ok
+INSERT INTO b (a_z) VALUES ('z1')
+
+statement ok
+INSERT INTO b (a_x, a_y) VALUES ('x1', 'y1')
+
+statement ok
+INSERT INTO b (a_x, a_y) VALUES (NULL, 'y1')
+
+statement ok
+INSERT INTO b (a_x, a_y) VALUES ('x1', NULL)
+
+statement ok
+INSERT INTO b (a_x, a_z) VALUES ('x1', 'z1')
+
+statement ok
+INSERT INTO b (a_x, a_z) VALUES (NULL, 'z1')
+
+statement ok
+INSERT INTO b (a_x, a_z) VALUES ('x1', NULL)
+
+statement ok
+INSERT INTO b (a_y, a_z) VALUES ('y1', 'z1')
+
+statement ok
+INSERT INTO b (a_y, a_z) VALUES (NULL, 'z1')
+
+statement ok
+INSERT INTO b (a_y, a_z) VALUES ('y1', NULL)
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, NULL)
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', NULL)
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z1')
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', 'y1', NULL)
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, 'z1')
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', NULL, NULL)
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y2', NULL)
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z2')
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', NULL)
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', NULL, 'z2')
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y2', 'z2')
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, NULL)
+
+statement ok
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+DROP TABLE b, a
+
+#subtest Composite_Simple_Validate_Constraint_Invalid
+
+subtest Composite_Full
+# Originally from 26748.
+
+# Test composite key with two columns.
+statement ok
+CREATE TABLE a (
+  x STRING NULL,
+  y STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (y, x)
+);
+
+statement ok
+CREATE TABLE b (
+  a_y STRING NULL,
+  a_x STRING NULL
+);
+
+# Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) MATCH FULL NOT VALID
 
 statement ok
 INSERT INTO a (x, y) VALUES ('x1', 'y1')
@@ -1738,19 +1899,21 @@ DROP TABLE b, a
 # Test composite key with three columns.
 statement ok
 CREATE TABLE a (
-  x STRING NULL
- ,y STRING NULL
- ,z STRING NULL
- ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
+  x STRING NULL,
+  y STRING NULL,
+  z STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (z, y, x)
 );
 
 statement ok
 CREATE TABLE b (
-  a_y STRING NULL
- ,a_x STRING NULL
- ,a_z STRING NULL
- ,CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
+  a_y STRING NULL,
+  a_x STRING NULL,
+  a_z STRING NULL
 );
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
 
 statement ok
 INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
@@ -1949,6 +2112,295 @@ ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z,
 statement ok
 DROP TABLE b, a
 
+subtest Composite_Full_Validate_Later
+# Test inserting into table with an unvalidated constraint, and running VALIDATE CONSTRAINT later
+
+# Test composite key with two columns.
+statement ok
+CREATE TABLE a (
+  x STRING NULL
+ ,y STRING NULL
+ ,CONSTRAINT "primary" PRIMARY KEY (y, x)
+);
+
+statement ok
+CREATE TABLE b (
+  a_y STRING NULL
+ ,a_x STRING NULL
+);
+
+# Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_y, a_x) REFERENCES a (y, x) MATCH FULL NOT VALID
+
+statement ok
+INSERT INTO a (x, y) VALUES ('x1', 'y1')
+
+# These statements should all fail because this uses MATCH FULL.
+statement error missing value for column "a_y" in multi-part foreign key
+INSERT INTO b (a_x) VALUES ('x1')
+
+statement error missing value for column "a_x" in multi-part foreign key
+INSERT INTO b (a_y) VALUES ('y1')
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+INSERT INTO b (a_y, a_x) VALUES ('y1', NULL)
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+INSERT INTO b (a_y, a_x) VALUES (NULL, 'x1')
+
+# These next two statements should still be allowed.
+statement ok
+INSERT INTO b (a_x, a_y) VALUES ('x1', 'y1')
+
+statement ok
+INSERT INTO b (a_x, a_y) VALUES (NULL, NULL)
+
+statement ok
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+DROP TABLE b, a
+
+# Test composite key with three columns.
+statement ok
+CREATE TABLE a (
+  x STRING NULL
+ ,y STRING NULL
+ ,z STRING NULL
+ ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
+);
+
+statement ok
+CREATE TABLE b (
+  a_y STRING NULL
+ ,a_x STRING NULL
+ ,a_z STRING NULL
+);
+
+# Add the constraint separately so that it's unvalidated, so we can test VALIDATE CONSTRAINT.
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement ok
+INSERT INTO a (x, y, z) VALUES ('x1', 'y1', 'z1')
+
+# These statements should all fail because this uses MATCH FULL.
+statement error missing values for columns \["a_y" "a_z"\] in multi-part foreign key
+INSERT INTO b (a_x) VALUES ('x1')
+
+statement error missing values for columns \["a_x" "a_z"\] in multi-part foreign key
+INSERT INTO b (a_y) VALUES ('y1')
+
+statement error missing values for columns \["a_x" "a_y"\] in multi-part foreign key
+INSERT INTO b (a_z) VALUES ('z1')
+
+statement error missing value for column "a_z" in multi-part foreign key
+INSERT INTO b (a_x, a_y) VALUES ('x1', 'y1')
+
+statement error missing value for column "a_z" in multi-part foreign key
+INSERT INTO b (a_x, a_y) VALUES (NULL, 'y1')
+
+statement error missing value for column "a_z" in multi-part foreign key
+INSERT INTO b (a_x, a_y) VALUES ('x1', NULL)
+
+statement error missing value for column "a_y" in multi-part foreign key
+INSERT INTO b (a_x, a_z) VALUES ('x1', 'z1')
+
+statement error missing value for column "a_y" in multi-part foreign key
+INSERT INTO b (a_x, a_z) VALUES (NULL, 'z1')
+
+statement error missing value for column "a_y" in multi-part foreign key
+INSERT INTO b (a_x, a_z) VALUES ('x1', NULL)
+
+statement error missing value for column "a_x" in multi-part foreign key
+INSERT INTO b (a_y, a_z) VALUES ('y1', 'z1')
+
+statement error missing value for column "a_x" in multi-part foreign key
+INSERT INTO b (a_y, a_z) VALUES (NULL, 'z1')
+
+statement error missing value for column "a_x" in multi-part foreign key
+INSERT INTO b (a_y, a_z) VALUES ('y1', NULL)
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, NULL)
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', NULL)
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z1')
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', 'y1', NULL)
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, 'z1')
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
+
+# This statement should still be allowed.
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, NULL)
+
+statement ok
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+DROP TABLE b, a
+
+subtest Composite_Full_Validate_Constraint_Invalid
+# Test VALIDATE CONSTRAINT by inserting invalid rows before the constraint is added, one at a time.
+
+statement ok
+CREATE TABLE a (
+  x STRING NULL
+ ,y STRING NULL
+ ,z STRING NULL
+ ,CONSTRAINT "primary" PRIMARY KEY (z, y, x)
+);
+
+statement ok
+CREATE TABLE b (
+  a_y STRING NULL
+ ,a_x STRING NULL
+ ,a_z STRING NULL
+ ,INDEX idx (a_z, a_y, a_x)
+);
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, NULL)
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', NULL)
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z1')
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', 'y1', NULL)
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, 'z1')
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement error foreign key violation: MATCH FULL does not allow mixing of null and nonnull values
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement error pq: foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', rowid=[0-9]* has no match in "a"
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z1')
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement error pq: foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+TRUNCATE b
+
+statement ok
+ALTER TABLE b DROP CONSTRAINT fk_ref
+
+statement ok
+INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z2')
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL NOT VALID
+
+statement error pq: foreign key violation: "b" row a_z='z2', a_y='y2', a_x='x2', rowid=[0-9]* has no match in "a"
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+statement ok
+DROP TABLE b, a
+
 subtest auto_add_fk_with_composite_index_to_empty_table
 
 statement ok
@@ -2101,3 +2553,44 @@ DELETE FROM t1 WHERE x IS NULL
 
 statement ok
 DROP TABLE t2, t2 CASCADE
+
+subtest test_not_valid_fk
+
+statement ok
+CREATE TABLE person (id INT PRIMARY KEY, age INT, name STRING)
+
+statement ok
+CREATE TABLE pet (id INT PRIMARY KEY, name STRING)
+
+statement ok
+INSERT INTO pet VALUES (0, 'crookshanks')
+
+statement error pq: foreign key violation: "pet" row id=0 has no match in "person"
+ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person (id)
+
+statement ok
+ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person (id) NOT VALID
+
+query TTTTB
+SHOW CONSTRAINTS FROM pet
+----
+pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  false
+pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
+
+statement error pq: foreign key violation: "pet" row id=0 has no match in "person"
+ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
+
+statement ok
+INSERT INTO person VALUES (0, 18, 'Hermione Granger')
+
+statement ok
+ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
+
+query TTTTB
+SHOW CONSTRAINTS FROM pet
+----
+pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  true
+pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
+
+statement ok
+DROP TABLE person, pet

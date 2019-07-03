@@ -1210,13 +1210,54 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	isRollback := false
 	jobSucceeded := true
 	now := timeutil.Now().UnixNano()
-	return sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
+
+	// tableIDsToUpdate - the ids of the table descriptors to be updated with the foreign keys
+	// update - closure to update the table descriptors
+	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
+
+		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+		for _, mutation := range desc.Mutations {
+			if mutation.MutationID != sc.mutationID {
+				break
+			}
+			if constraint := mutation.GetConstraint(); constraint != nil &&
+				constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
+				mutation.Direction == sqlbase.DescriptorMutation_ADD &&
+				constraint.ForeignKey.Validity == sqlbase.ConstraintValidity_Unvalidated {
+				// Add backref table to referenced table with an unvalidated foreign key constraint
+				fk := &constraint.ForeignKey
+				if fk.Table != desc.ID {
+					fksByBackrefTable[constraint.ForeignKey.Table] = append(fksByBackrefTable[constraint.ForeignKey.Table], constraint)
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	tableIDsToUpdate := make([]sqlbase.ID, 0, len(fksByBackrefTable)+1)
+	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
+	for id := range fksByBackrefTable {
+		tableIDsToUpdate = append(tableIDsToUpdate, id)
+	}
+
+	update := func(descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
 		// Reset vars here because update function can be called multiple times in a retry.
 		isRollback = false
 		jobSucceeded = true
 
 		i := 0
-		for _, mutation := range desc.Mutations {
+		scDesc, ok := descs[sc.tableID]
+		if !ok {
+			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+		}
+		for _, mutation := range scDesc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
@@ -1227,8 +1268,8 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				indexDesc != nil {
 				if sc.canClearRangeForDrop(indexDesc) {
 					jobSucceeded = false
-					desc.GCMutations = append(
-						desc.GCMutations,
+					scDesc.GCMutations = append(
+						scDesc.GCMutations,
 						sqlbase.TableDescriptor_GCDescriptorMutation{
 							IndexID:  indexDesc.ID,
 							DropTime: now,
@@ -1236,7 +1277,23 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 						})
 				}
 			}
-			if err := desc.MakeMutationComplete(mutation); err != nil {
+			if constraint := mutation.GetConstraint(); constraint != nil &&
+				constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
+				mutation.Direction == sqlbase.DescriptorMutation_ADD &&
+				constraint.ForeignKey.Validity == sqlbase.ConstraintValidity_Unvalidated {
+				// Add backreference on the referenced table (which could be the same table)
+				backref := sqlbase.ForeignKeyReference{Table: sc.tableID, Index: constraint.ForeignKeyIndex}
+				backrefTable, ok := descs[constraint.ForeignKey.Table]
+				if !ok {
+					return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
+				}
+				backrefIdx, err := backrefTable.FindIndexByID(constraint.ForeignKey.Index)
+				if err != nil {
+					return err
+				}
+				backrefIdx.ReferencedBy = append(backrefIdx.ReferencedBy, backref)
+			}
+			if err := scDesc.MakeMutationComplete(mutation); err != nil {
 				return err
 			}
 			i++
@@ -1247,17 +1304,19 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			return errDidntUpdateDescriptor
 		}
 		// Trim the executed mutations from the descriptor.
-		desc.Mutations = desc.Mutations[i:]
+		scDesc.Mutations = scDesc.Mutations[i:]
 
-		for i, g := range desc.MutationJobs {
+		for i, g := range scDesc.MutationJobs {
 			if g.MutationID == sc.mutationID {
 				// Trim the executed mutation group from the descriptor.
-				desc.MutationJobs = append(desc.MutationJobs[:i], desc.MutationJobs[i+1:]...)
+				scDesc.MutationJobs = append(scDesc.MutationJobs[:i], scDesc.MutationJobs[i+1:]...)
 				break
 			}
 		}
 		return nil
-	}, func(txn *client.Txn) error {
+	}
+
+	descs, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *client.Txn) error {
 		if jobSucceeded {
 			if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
 				return errors.Wrapf(err,
@@ -1292,6 +1351,10 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			}{uint32(sc.mutationID)},
 		)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return descs[sc.tableID], nil
 }
 
 // notFirstInLine returns true whenever the schema change has been queued
@@ -1353,7 +1416,7 @@ func (sc *SchemaChanger) refreshStats() {
 
 // reverseMutations reverses the direction of all the mutations with the
 // mutationID. This is called after hitting an irrecoverable error while
-// applying a schema change. If a column being added is reversed and droped,
+// applying a schema change. If a column being added is reversed and dropped,
 // all new indexes referencing the column will also be dropped.
 func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError error) error {
 	// Reverse the flow of the state machine.
@@ -1374,7 +1437,8 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			}
 			if constraint := mutation.GetConstraint(); constraint != nil &&
 				constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
-				mutation.Direction == sqlbase.DescriptorMutation_ADD {
+				mutation.Direction == sqlbase.DescriptorMutation_ADD &&
+				constraint.ForeignKey.Validity == sqlbase.ConstraintValidity_Validating {
 				fk := &constraint.ForeignKey
 				if fk.Table != desc.ID {
 					fksByBackrefTable[constraint.ForeignKey.Table] = append(fksByBackrefTable[constraint.ForeignKey.Table], constraint)
