@@ -299,12 +299,9 @@ func newColOperator(
 		if !core.MergeJoiner.OnExpr.Empty() {
 			return nil, nil, errors.Newf("can't plan merge join with on expressions")
 		}
-		if core.MergeJoiner.Type != sqlbase.JoinType_INNER &&
-			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_OUTER &&
-			core.MergeJoiner.Type != sqlbase.JoinType_RIGHT_OUTER &&
-			core.MergeJoiner.Type != sqlbase.JoinType_FULL_OUTER &&
-			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
-			return nil, nil, errors.Newf("can plan only inner, outer, and left semi merge joins")
+		if core.MergeJoiner.Type == sqlbase.JoinType_INTERSECT_ALL ||
+			core.MergeJoiner.Type == sqlbase.JoinType_EXCEPT_ALL {
+			return nil, nil, errors.Newf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -320,7 +317,8 @@ func newColOperator(
 			for _, col := range post.OutputColumns {
 				if col < nLeftCols {
 					leftOutCols = append(leftOutCols, col)
-				} else if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
+				} else if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
+					core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
 					rightOutCols = append(rightOutCols, col-nLeftCols)
 				}
 			}
@@ -329,7 +327,8 @@ func newColOperator(
 				leftOutCols = append(leftOutCols, i)
 			}
 
-			if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
+			if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
+				core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
 				for i := uint32(0); i < nRightCols; i++ {
 					rightOutCols = append(rightOutCols, i)
 				}
@@ -350,7 +349,8 @@ func newColOperator(
 
 		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
-		if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI {
+		if core.MergeJoiner.Type != sqlbase.JoinType_LEFT_SEMI &&
+			core.MergeJoiner.Type != sqlbase.JoinType_LEFT_ANTI {
 			copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 		} else {
 			columnTypes = columnTypes[:nLeftCols]

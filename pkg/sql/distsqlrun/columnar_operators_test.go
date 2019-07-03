@@ -142,6 +142,9 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		{
 			joinType: sqlbase.JoinType_LEFT_SEMI,
 		},
+		{
+			joinType: sqlbase.JoinType_LEFT_ANTI,
+		},
 	}
 
 	nSeeds := 10
@@ -191,7 +194,8 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 				})
 
 				outputTypes := append(inputTypes, inputTypes...)
-				if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI {
+				if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
+					testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
 					outputTypes = inputTypes
 				}
 				outputColumns := make([]uint32, len(outputTypes))

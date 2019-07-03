@@ -45,6 +45,7 @@ type joinTypeInfo struct {
 	IsLeftOuter  bool
 	IsRightOuter bool
 	IsLeftSemi   bool
+	IsLeftAnti   bool
 
 	String string
 }
@@ -97,8 +98,8 @@ func genMergeJoinOps(wr io.Writer) error {
 	sourceFinishedSwitch := makeFunctionRegex("_SOURCE_FINISHED_SWITCH", 1)
 	s = sourceFinishedSwitch.ReplaceAllString(s, `{{template "sourceFinishedSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
-	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 2)
-	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "IsSel" $1 "HasNulls" $2 }}`)
+	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 3)
+	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "JoinType" $1 "IsSel" $2 "HasNulls" $3 }}`)
 
 	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 2)
 	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "IsSel" $1  "HasNulls" $2 }}`)
@@ -184,6 +185,10 @@ func genMergeJoinOps(wr io.Writer) error {
 		{
 			IsLeftSemi: true,
 			String:     "LeftSemi",
+		},
+		{
+			IsLeftAnti: true,
+			String:     "LeftAnti",
 		},
 	}
 
