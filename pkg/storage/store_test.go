@@ -1574,6 +1574,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		manual.Increment(100)
 		// Now, try a put using the pusher's txn.
 		h.Txn = pusher
+		h.DeferWriteTooOldError = true
 		resultCh := make(chan *roachpb.Error, 1)
 		go func() {
 			_, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &pArgs)
@@ -1680,9 +1681,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		{
 			args := putArgs(key, []byte("value2"))
 			assignSeqNumsForReqs(pushee, &args)
-			if _, pErr := client.SendWrappedWith(
-				context.Background(), store.TestSender(), roachpb.Header{Txn: pushee}, &args,
-			); pErr != nil {
+			h := roachpb.Header{Txn: pushee, DeferWriteTooOldError: true}
+			if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &args); pErr != nil {
 				t.Fatal(pErr)
 			}
 		}
