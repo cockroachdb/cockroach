@@ -1904,6 +1904,7 @@ sort
  ├── fd: (2,3)-->(11)
  ├── ordering: +3,+2
  ├── prune: (11)
+ ├── interesting orderings: (+3,+2)
  └── group-by
       ├── save-table-name: consistency_07_group_by_2
       ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
@@ -1913,6 +1914,7 @@ sort
       ├── key: (2,3)
       ├── fd: (2,3)-->(11)
       ├── prune: (11)
+      ├── interesting orderings: (+3,+2)
       ├── scan order_line@order_line_fk
       │    ├── save-table-name: consistency_07_scan_3
       │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)

@@ -159,7 +159,7 @@ func init() {
 	}
 	funcMap[opt.SortOp] = funcs{
 		canProvideOrdering:    nil, // should never get called
-		buildChildReqOrdering: noChildReqOrdering,
+		buildChildReqOrdering: sortBuildChildReqOrdering,
 		buildProvidedOrdering: sortBuildProvided,
 	}
 	funcMap[opt.InsertOp] = funcs{

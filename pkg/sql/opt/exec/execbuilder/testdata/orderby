@@ -231,7 +231,7 @@ render                ·      ·
       └── index-join  ·      ·
            │          table  abc@primary
            └── scan   ·      ·
-·                     table  abc@bc
+·                     table  abc@ba
 ·                     spans  /11-/30
 
 # An inequality should not be enough to force the use of the index.

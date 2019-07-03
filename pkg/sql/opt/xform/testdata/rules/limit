@@ -55,13 +55,14 @@ limit
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,4)
- ├── sort
+ ├── sort (segmented)
  │    ├── columns: i:2(int) s:4(string)
  │    ├── cardinality: [0 - 10]
  │    ├── ordering: +4,+2
  │    └── scan a@s_idx
  │         ├── columns: i:2(int) s:4(string)
- │         └── limit: 10
+ │         ├── limit: 10
+ │         └── ordering: +4
  └── const: 1 [type=int]
 
 # Don't push when scan doesn't satisfy limit's ordering.
@@ -155,7 +156,7 @@ limit
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: +2,+3
- ├── sort
+ ├── sort (segmented)
  │    ├── columns: k:1(int!null) u:2(int!null) v:3(int)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
@@ -164,11 +165,13 @@ limit
  │         ├── columns: k:1(int!null) u:2(int!null) v:3(int)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,3)
+ │         ├── ordering: +2
  │         └── scan kuv@secondary
  │              ├── columns: k:1(int!null) u:2(int!null)
  │              ├── constraint: /2/1: [/2 - /9]
  │              ├── key: (1)
- │              └── fd: (1)-->(2)
+ │              ├── fd: (1)-->(2)
+ │              └── ordering: +2
  └── const: 5 [type=int]
 
 exec-ddl

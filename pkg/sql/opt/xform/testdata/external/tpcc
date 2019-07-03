@@ -1505,6 +1505,7 @@ sort
  ├── fd: (2,3)-->(11)
  ├── ordering: +3,+2
  ├── prune: (11)
+ ├── interesting orderings: (+3,+2)
  └── group-by
       ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
       ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
@@ -1513,6 +1514,7 @@ sort
       ├── key: (2,3)
       ├── fd: (2,3)-->(11)
       ├── prune: (11)
+      ├── interesting orderings: (+3,+2)
       ├── scan order_line@order_line_stock_fk_idx
       │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
       │    ├── stats: [rows=30005985, distinct(2,3)=1000, null(2,3)=0]
@@ -3136,6 +3138,7 @@ sort
  ├── fd: (2,3)-->(11)
  ├── ordering: +3,+2
  ├── prune: (11)
+ ├── interesting orderings: (+3,+2)
  └── group-by
       ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
       ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
@@ -3144,6 +3147,7 @@ sort
       ├── key: (2,3)
       ├── fd: (2,3)-->(11)
       ├── prune: (11)
+      ├── interesting orderings: (+3,+2)
       ├── scan order_line@order_line_stock_fk_idx
       │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
       │    ├── stats: [rows=646903924, distinct(2,3)=100, null(2,3)=0]
