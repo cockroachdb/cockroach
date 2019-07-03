@@ -839,6 +839,8 @@ func TestParse(t *testing.T) {
 
 		{`SELECT 1 FROM t GROUP BY a`},
 		{`SELECT 1 FROM t GROUP BY a, b`},
+		{`SELECT sum(x ORDER BY y) FROM t`},
+		{`SELECT sum(x ORDER BY y, z) FROM t`},
 
 		{`SELECT a FROM t HAVING a = b`},
 
