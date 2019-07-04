@@ -330,7 +330,7 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 	ord := 0
 	for i, n := 0, tab.DeletableColumnCount(); i < n; i++ {
 		colID := private.Table.ColumnID(i)
-		if outCols.Contains(colID) {
+		if outCols.Contains(colID) && ((i < len(private.InsertCols) && private.InsertCols[i] != 0) || private.FetchCols[i] != 0) {
 			colMap.Set(int(colID), ord)
 			ord++
 		}

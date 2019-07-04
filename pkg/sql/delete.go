@@ -333,7 +333,13 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		//
 		// d.columns is guaranteed to only contain the requested
 		// public columns.
-		resultValues := sourceVals[:len(d.run.td.rd.FetchCols)]
+		resultValues := make(tree.Datums, d.run.rows.NumCols())
+		for i := 0; i < len(d.run.td.rd.FetchCols); i++ {
+			if i < len(resultValues) {
+				resultValues[i] = sourceVals[i]
+			}
+		}
+
 		if _, err := d.run.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}

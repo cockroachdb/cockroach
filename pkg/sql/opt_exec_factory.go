@@ -1287,9 +1287,17 @@ func (ef *execFactory) ConstructUpdate(
 	// If rows are not needed, no columns are returned.
 	var returnCols sqlbase.ResultColumns
 	if rowsNeeded {
+		var cols []sqlbase.ColumnDescriptor
+		for _, col := range tabDesc.Columns {
+			for _, fetchCol := range ru.FetchCols {
+				if fetchCol.ID == col.ID {
+					cols = append(cols, fetchCol)
+				}
+			}
+		}
 		// Update always returns all non-mutation columns, in the same order they
 		// are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+		returnCols = sqlbase.ResultColumnsFromColDescs(cols)
 	}
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
@@ -1503,9 +1511,17 @@ func (ef *execFactory) ConstructDelete(
 	// If rows are not needed, no columns are returned.
 	var returnCols sqlbase.ResultColumns
 	if rowsNeeded {
+		var cols []sqlbase.ColumnDescriptor
+		for _, col := range tabDesc.Columns {
+			for _, fetchCol := range rd.FetchCols {
+				if fetchCol.ID == col.ID {
+					cols = append(cols, fetchCol)
+				}
+			}
+		}
 		// Delete always returns all non-mutation columns, in the same order they
 		// are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(tabDesc.Columns)
+		returnCols = sqlbase.ResultColumnsFromColDescs(cols)
 	}
 
 	// Now make a delete node. We use a pool.
