@@ -29,3 +29,21 @@ func alterTableSplitBuildChildReqOrdering(
 	}
 	return parent.(*memo.AlterTableSplitExpr).Props.Ordering
 }
+
+func alterTableUnsplitBuildChildReqOrdering(
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
+	if childIdx != 0 {
+		return physical.OrderingChoice{}
+	}
+	return parent.(*memo.AlterTableUnsplitExpr).Props.Ordering
+}
+
+func alterTableRelocateBuildChildReqOrdering(
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
+	if childIdx != 0 {
+		return physical.OrderingChoice{}
+	}
+	return parent.(*memo.AlterTableRelocateExpr).Props.Ordering
+}

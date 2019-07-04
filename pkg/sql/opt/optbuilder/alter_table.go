@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -39,31 +40,15 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 
 	b.DisableMemoReuse = true
 
-	// Calculate the desired types for the select statement. It is OK if the
-	// select statement returns fewer columns (the relevant prefix is used).
-	desiredTypes := make([]*types.T, index.LaxKeyColumnCount())
-	for i := range desiredTypes {
-		desiredTypes[i] = index.Column(i).DatumType()
-	}
+	// Calculate the desired types for the input expression. It is OK if it
+	// returns fewer columns (the relevant prefix is used).
+	colNames, colTypes := getIndexColumnNamesAndTypes(index)
 
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	emptyScope := &scope{builder: b}
-	stmtScope := b.buildStmt(split.Rows, desiredTypes, emptyScope)
-	if len(stmtScope.cols) == 0 {
-		panic(pgerror.Newf(pgcode.Syntax, "no columns in SPLIT AT data"))
-	}
-	if len(stmtScope.cols) > len(desiredTypes) {
-		panic(pgerror.Newf(pgcode.Syntax, "too many columns in SPLIT AT data"))
-	}
-	for i := range stmtScope.cols {
-		if !stmtScope.cols[i].typ.Equivalent(desiredTypes[i]) {
-			panic(pgerror.Newf(
-				pgcode.Syntax, "SPLIT AT data column %d (%s) must be of type %s, not type %s",
-				i+1, index.Column(i).ColName(), desiredTypes[i], stmtScope.cols[i].typ,
-			))
-		}
-	}
+	inputScope := b.buildStmt(split.Rows, colTypes, emptyScope)
+	checkInputColumns("SPLIT AT", inputScope, colNames, colTypes, 1)
 
 	// Build the expiration scalar.
 	var expiration opt.ScalarExpr
@@ -84,14 +69,157 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 	outScope = inScope.push()
 	b.synthesizeResultColumns(outScope, sqlbase.AlterTableSplitColumns)
 	outScope.expr = b.factory.ConstructAlterTableSplit(
-		stmtScope.expr.(memo.RelExpr),
+		inputScope.expr.(memo.RelExpr),
 		expiration,
 		&memo.AlterTableSplitPrivate{
 			Table:   b.factory.Metadata().AddTable(table),
 			Index:   index.Ordinal(),
 			Columns: colsToColList(outScope.cols),
-			Props:   stmtScope.makePhysicalProps(),
+			Props:   inputScope.makePhysicalProps(),
 		},
 	)
 	return outScope
+}
+
+// buildAlterTableUnsplit builds an ALTER TABLE/INDEX .. UNSPLIT AT/ALL .. statement.
+func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) (outScope *scope) {
+	flags := cat.Flags{
+		AvoidDescriptorCaches: true,
+		NoTableStats:          true,
+	}
+	index, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &unsplit.TableOrIndex)
+	if err != nil {
+		panic(builderError{err})
+	}
+	table := index.Table()
+	if err := b.catalog.CheckPrivilege(b.ctx, table, privilege.INSERT); err != nil {
+		panic(builderError{err})
+	}
+
+	b.DisableMemoReuse = true
+
+	outScope = inScope.push()
+	b.synthesizeResultColumns(outScope, sqlbase.AlterTableUnsplitColumns)
+	private := &memo.AlterTableSplitPrivate{
+		Table:   b.factory.Metadata().AddTable(table),
+		Index:   index.Ordinal(),
+		Columns: colsToColList(outScope.cols),
+	}
+
+	if unsplit.All {
+		private.Props = physical.MinRequired
+		outScope.expr = b.factory.ConstructAlterTableUnsplitAll(private)
+		return outScope
+	}
+
+	// Calculate the desired types for the input expression. It is OK if it
+	// returns fewer columns (the relevant prefix is used).
+	colNames, colTypes := getIndexColumnNamesAndTypes(index)
+
+	// We don't allow the input statement to reference outer columns, so we
+	// pass a "blank" scope rather than inScope.
+	inputScope := b.buildStmt(unsplit.Rows, colTypes, &scope{builder: b})
+	checkInputColumns("UNSPLIT AT", inputScope, colNames, colTypes, 1)
+	private.Props = inputScope.makePhysicalProps()
+
+	outScope.expr = b.factory.ConstructAlterTableUnsplit(
+		inputScope.expr.(memo.RelExpr),
+		private,
+	)
+	return outScope
+}
+
+// buildAlterTableRelocate builds an ALTER TABLE/INDEX .. UNSPLIT AT/ALL .. statement.
+func (b *Builder) buildAlterTableRelocate(
+	relocate *tree.Relocate, inScope *scope,
+) (outScope *scope) {
+	flags := cat.Flags{
+		AvoidDescriptorCaches: true,
+		NoTableStats:          true,
+	}
+	index, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &relocate.TableOrIndex)
+	if err != nil {
+		panic(builderError{err})
+	}
+	table := index.Table()
+	if err := b.catalog.CheckPrivilege(b.ctx, table, privilege.INSERT); err != nil {
+		panic(builderError{err})
+	}
+
+	b.DisableMemoReuse = true
+
+	outScope = inScope.push()
+	b.synthesizeResultColumns(outScope, sqlbase.AlterTableRelocateColumns)
+
+	// Calculate the desired types for the input expression. It is OK if it
+	// returns fewer columns (the relevant prefix is used).
+	colNames, colTypes := getIndexColumnNamesAndTypes(index)
+
+	// The first column is the target leaseholder or the relocation array,
+	// depending on variant.
+	cmdName := "EXPERIMENTAL_RELOCATE"
+	if relocate.RelocateLease {
+		cmdName += " LEASE"
+		colNames = append([]string{"target leaseholder"}, colNames...)
+		colTypes = append([]*types.T{types.Int}, colTypes...)
+	} else {
+		colNames = append([]string{"relocation array"}, colNames...)
+		colTypes = append([]*types.T{types.IntArray}, colTypes...)
+	}
+
+	// We don't allow the input statement to reference outer columns, so we
+	// pass a "blank" scope rather than inScope.
+	inputScope := b.buildStmt(relocate.Rows, colTypes, &scope{builder: b})
+	checkInputColumns(cmdName, inputScope, colNames, colTypes, 2)
+
+	outScope.expr = b.factory.ConstructAlterTableRelocate(
+		inputScope.expr.(memo.RelExpr),
+		&memo.AlterTableRelocatePrivate{
+			RelocateLease: relocate.RelocateLease,
+			AlterTableSplitPrivate: memo.AlterTableSplitPrivate{
+				Table:   b.factory.Metadata().AddTable(table),
+				Index:   index.Ordinal(),
+				Columns: colsToColList(outScope.cols),
+				Props:   inputScope.makePhysicalProps(),
+			},
+		},
+	)
+	return outScope
+}
+
+// getIndexColumnNamesAndTypes returns the names and types of the index columns.
+func getIndexColumnNamesAndTypes(index cat.Index) (colNames []string, colTypes []*types.T) {
+	colNames = make([]string, index.LaxKeyColumnCount())
+	colTypes = make([]*types.T, index.LaxKeyColumnCount())
+	for i := range colNames {
+		c := index.Column(i)
+		colNames[i] = string(c.ColName())
+		colTypes[i] = c.DatumType()
+	}
+	return colNames, colTypes
+}
+
+// checkInputColumns verifies the types of the columns in the given scope. The
+// input must have at least minPrefix columns, and their types must match that
+// prefix of colTypes.
+func checkInputColumns(
+	context string, inputScope *scope, colNames []string, colTypes []*types.T, minPrefix int,
+) {
+	if len(inputScope.cols) < minPrefix {
+		if len(inputScope.cols) == 0 {
+			panic(pgerror.Newf(pgcode.Syntax, "no columns in %s data", context))
+		}
+		panic(pgerror.Newf(pgcode.Syntax, "less than %d columns in %s data", minPrefix, context))
+	}
+	if len(inputScope.cols) > len(colTypes) {
+		panic(pgerror.Newf(pgcode.Syntax, "too many columns in %s data", context))
+	}
+	for i := range inputScope.cols {
+		if !inputScope.cols[i].typ.Equivalent(colTypes[i]) {
+			panic(pgerror.Newf(
+				pgcode.Syntax, "%s data column %d (%s) must be of type %s, not type %s",
+				context, i+1, colNames[i], colTypes[i], inputScope.cols[i].typ,
+			))
+		}
+	}
 }
