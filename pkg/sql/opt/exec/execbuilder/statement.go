@@ -141,3 +141,59 @@ func (b *Builder) buildAlterTableSplit(split *memo.AlterTableSplitExpr) (execPla
 	}
 	return ep, nil
 }
+
+func (b *Builder) buildAlterTableUnsplit(unsplit *memo.AlterTableUnsplitExpr) (execPlan, error) {
+	input, err := b.buildRelational(unsplit.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	table := b.mem.Metadata().Table(unsplit.Table)
+	node, err := b.factory.ConstructAlterTableUnsplit(
+		table.Index(unsplit.Index),
+		input.root,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i, c := range unsplit.Columns {
+		ep.outputCols.Set(int(c), i)
+	}
+	return ep, nil
+}
+
+func (b *Builder) buildAlterTableUnsplitAll(
+	unsplitAll *memo.AlterTableUnsplitAllExpr,
+) (execPlan, error) {
+	table := b.mem.Metadata().Table(unsplitAll.Table)
+	node, err := b.factory.ConstructAlterTableUnsplitAll(table.Index(unsplitAll.Index))
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i, c := range unsplitAll.Columns {
+		ep.outputCols.Set(int(c), i)
+	}
+	return ep, nil
+}
+
+func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr) (execPlan, error) {
+	input, err := b.buildRelational(relocate.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	table := b.mem.Metadata().Table(relocate.Table)
+	node, err := b.factory.ConstructAlterTableRelocate(
+		table.Index(relocate.Index),
+		input.root,
+		relocate.RelocateLease,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i, c := range relocate.Columns {
+		ep.outputCols.Set(int(c), i)
+	}
+	return ep, nil
+}

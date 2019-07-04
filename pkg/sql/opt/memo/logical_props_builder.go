@@ -739,6 +739,30 @@ func (b *logicalPropsBuilder) buildAlterTableSplitProps(
 	rel.CanMutate = true
 }
 
+func (b *logicalPropsBuilder) buildAlterTableUnsplitProps(
+	unsplit *AlterTableUnsplitExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(unsplit, unsplit.Columns, rel)
+	rel.CanHaveSideEffects = true
+	rel.CanMutate = true
+}
+
+func (b *logicalPropsBuilder) buildAlterTableUnsplitAllProps(
+	unsplitAll *AlterTableUnsplitAllExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(unsplitAll, unsplitAll.Columns, rel)
+	rel.CanHaveSideEffects = true
+	rel.CanMutate = true
+}
+
+func (b *logicalPropsBuilder) buildAlterTableRelocateProps(
+	relocate *AlterTableRelocateExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(relocate, relocate.Columns, rel)
+	rel.CanHaveSideEffects = true
+	rel.CanMutate = true
+}
+
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
 	BuildSharedProps(b.mem, limit, &rel.Shared)
 

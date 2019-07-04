@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"context"
+	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -141,8 +142,10 @@ func (b *Builder) Build() (err error) {
 			// only possible because the code does not update shared state and does
 			// not manipulate locks.
 			if e, ok := r.(error); ok {
-				err = e
-				return
+				if _, x := r.(runtime.Error); !x {
+					err = e
+					return
+				}
 			}
 			// Other panic objects can't be considered "safe" and thus are
 			// propagated as crashes that terminate the session.
@@ -234,6 +237,12 @@ func (b *Builder) buildStmt(
 
 	case *tree.Split:
 		return b.buildAlterTableSplit(stmt, inScope)
+
+	case *tree.Unsplit:
+		return b.buildAlterTableUnsplit(stmt, inScope)
+
+	case *tree.Relocate:
+		return b.buildAlterTableRelocate(stmt, inScope)
 
 	default:
 		// See if this statement can be rewritten to another statement using the
