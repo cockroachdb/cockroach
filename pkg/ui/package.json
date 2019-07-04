@@ -31,7 +31,8 @@
     "redux-saga": "^0.15.6",
     "redux-thunk": "^2.2.0",
     "reselect": "^3.0.0",
-    "whatwg-fetch": "^2.0.3"
+    "whatwg-fetch": "^2.0.3",
+    "snyk": "^1.189.0"
   },
   "devDependencies": {
     "@types/analytics-node": "^0.0.32",
@@ -127,5 +128,10 @@
   "engines": {
     "node": ">=6",
     "yarn": ">=1.7.0"
-  }
+  },
+  "scripts": {
+    "snyk-protect": "snyk protect",
+    "prepublish": "npm run snyk-protect"
+  },
+  "snyk": true
 }
