@@ -12,6 +12,7 @@ package rowcontainer
 
 import (
 	"context"
+	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -194,7 +195,9 @@ func (c *RowContainer) allocChunks(ctx context.Context, numChunks int) error {
 func (c *RowContainer) rowSize(row tree.Datums) int64 {
 	rsz := c.fixedColsSize
 	for _, i := range c.varSizedColumns {
-		rsz += int64(row[i].Size())
+		if i < len(row) && row[i] != nil {
+			rsz += int64(row[i].Size())
+		}
 	}
 	return rsz
 }
@@ -213,7 +216,7 @@ func (c *RowContainer) getChunkAndPos(rowIdx int) (chunk int, pos int) {
 // Returns an error if the allocation was denied by the MemoryMonitor.
 func (c *RowContainer) AddRow(ctx context.Context, row tree.Datums) (tree.Datums, error) {
 	if len(row) != c.numCols {
-		//panic(fmt.Sprintf("invalid row length %d, expected %d", len(row), c.numCols))
+		panic(fmt.Sprintf("invalid row length %d, expected %d", len(row), c.numCols))
 	}
 	if c.numCols == 0 {
 		c.numRows++
@@ -241,6 +244,11 @@ func (c *RowContainer) AddRow(ctx context.Context, row tree.Datums) (tree.Datums
 // Len reports the number of rows currently held in this RowContainer.
 func (c *RowContainer) Len() int {
 	return c.numRows
+}
+
+// NumCols reports the number of columns for each row in the container.
+func (c *RowContainer) NumCols() int {
+	return c.numCols
 }
 
 // At accesses a row at a specific index.
