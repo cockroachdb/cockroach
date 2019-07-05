@@ -29,28 +29,24 @@ func NewWindowSortingPartitioner(
 	partitionIdxs []uint32,
 	ordCols []distsqlpb.Ordering_Column,
 	partitionColIdx int,
-) (op Operator, orderingColsIdxs []uint32, err error) {
+) (op Operator, err error) {
 	partitionAndOrderingCols := make([]distsqlpb.Ordering_Column, len(partitionIdxs)+len(ordCols))
 	for i, idx := range partitionIdxs {
 		partitionAndOrderingCols[i] = distsqlpb.Ordering_Column{ColIdx: idx}
 	}
 	copy(partitionAndOrderingCols[len(partitionIdxs):], ordCols)
-	orderingColsIdxs = make([]uint32, len(ordCols))
-	for i := range ordCols {
-		orderingColsIdxs[i] = uint32(len(partitionIdxs) + i)
-	}
 	input, err = NewSorter(input, inputTyps, partitionAndOrderingCols)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	var distinctCol []bool
 	input, distinctCol, err = OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return &windowSortingPartitioner{input: input, distinctCol: distinctCol, partitionColIdx: partitionColIdx}, orderingColsIdxs, nil
+	return &windowSortingPartitioner{input: input, distinctCol: distinctCol, partitionColIdx: partitionColIdx}, nil
 }
 
 type windowSortingPartitioner struct {
