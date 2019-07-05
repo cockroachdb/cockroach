@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+
 	// For the debug http handlers.
 	_ "net/http/pprof"
 	"os/exec"
@@ -470,7 +471,11 @@ type loggingOpt struct {
 	// not.
 	tee            teeOptType
 	stdout, stderr io.Writer
-	artifactsDir   string
+	// artifactsDir is that path to the dir that will contain the artifacts for
+	// all the tests.
+	artifactsDir string
+	// runnerLogPath is that path to the runner's log file.
+	runnerLogPath string
 }
 
 type workerStatus struct {
