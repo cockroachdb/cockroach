@@ -12,7 +12,6 @@ package vecbuiltins
 
 import "github.com/cockroachdb/cockroach/pkg/sql/exec"
 
-// TODO(yuzefovich): add randomized tests.
 // TODO(yuzefovich): add benchmarks.
 
 // NewRowNumberOperator creates a new exec.Operator that computes window
@@ -22,21 +21,21 @@ import "github.com/cockroachdb/cockroach/pkg/sql/exec"
 func NewRowNumberOperator(
 	input exec.Operator, outputColIdx int, partitionColIdx int,
 ) exec.Operator {
-	rowNumberInternal := rowNumberInternal{
+	base := rowNumberBase{
 		input:           input,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
 	}
 	if partitionColIdx == -1 {
-		return &rowNumberNoPartitionOp{rowNumberInternal}
+		return &rowNumberNoPartitionOp{base}
 	}
-	return &rowNumberWithPartitionOp{rowNumberInternal}
+	return &rowNumberWithPartitionOp{base}
 }
 
-// rowNumberInternal extracts common fields and common initialization of two
+// rowNumberBase extracts common fields and common initialization of two
 // variations of row number operators. Note that it is not an operator itself
 // and should not be used directly.
-type rowNumberInternal struct {
+type rowNumberBase struct {
 	input           exec.Operator
 	outputColIdx    int
 	partitionColIdx int
@@ -44,6 +43,6 @@ type rowNumberInternal struct {
 	rowNumber int64
 }
 
-func (r *rowNumberInternal) Init() {
+func (r *rowNumberBase) Init() {
 	r.input.Init()
 }

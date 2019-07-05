@@ -30,7 +30,7 @@ import (
 // {{ range . }}
 
 type _ROW_NUMBER_STRINGOp struct {
-	rowNumberInternal
+	rowNumberBase
 }
 
 var _ exec.Operator = &_ROW_NUMBER_STRINGOp{}

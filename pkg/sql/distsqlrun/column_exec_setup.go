@@ -410,8 +410,8 @@ func newColOperator(
 		}
 		wf := core.Windower.WindowFns[0]
 		if wf.Frame != nil &&
-			wf.Frame.Mode != distsqlpb.WindowerSpec_Frame_RANGE &&
-			(wf.Frame.Bounds.Start.BoundType != distsqlpb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
+			(wf.Frame.Mode != distsqlpb.WindowerSpec_Frame_RANGE ||
+				wf.Frame.Bounds.Start.BoundType != distsqlpb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
 				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != distsqlpb.WindowerSpec_Frame_CURRENT_ROW)) {
 			return nil, nil, errors.Newf("window functions with non-default window frames are not supported")
 		}
