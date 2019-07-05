@@ -74,13 +74,10 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
     : ColumnDescriptor<AggregateStatistics>[] {
   const transactionTypeText = (
     <React.Fragment>
-      Statements in explicit transactions are wrapped by <code>BEGIN</code> and <code>COMMIT</code> statements
-      by the client. CockroachDB wraps individual statements in implicit transactions.
-      Explicit transactions employ{" "}
-      <a href={docsURL.transactionalPipelining} target="_blank">
-        transactional pipelining
-      </a>
-      {" "}and therefore report latencies that do not account for replication.
+      The statement latency displayed for implicit transactions is accurate.
+      The statement latency reported for explicit transactions does not account for
+      replication and might be greater than displayed here
+      (<a href={docsURL.transactionalPipelining} target="_blank">see transaction pipelining</a>).
     </React.Fragment>
   );
   const original: ColumnDescriptor<AggregateStatistics>[] = [
