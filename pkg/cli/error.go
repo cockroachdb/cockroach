@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -101,32 +101,32 @@ func MaybeDecorateGRPCError(
 		}
 
 		// Is this an "unable to connect" type of error?
-		unwrappedErr := errors.Cause(err)
-
-		if unwrappedErr == pq.ErrSSLNotSupported {
+		if errors.Is(err, pq.ErrSSLNotSupported) {
 			// SQL command failed after establishing a TCP connection
 			// successfully, but discovering that it cannot use TLS while it
 			// expected the server supports TLS.
 			return connInsecureHint()
 		}
 
-		switch wErr := unwrappedErr.(type) {
-		case *security.Error:
+		if wErr := (*security.Error)(nil); errors.As(err, &wErr) {
 			return errors.Errorf("cannot load certificates.\n"+
 				"Check your certificate settings, set --certs-dir, or use --insecure for insecure clusters.\n\n%v",
-				unwrappedErr)
+				err)
+		}
 
-		case *x509.UnknownAuthorityError:
+		if wErr := (*x509.UnknownAuthorityError)(nil); errors.As(err, &wErr) {
 			// A SQL connection was attempted with an incorrect CA.
 			return connSecurityHint()
+		}
 
-		case *initialSQLConnectionError:
+		if wErr := (*initialSQLConnectionError)(nil); errors.As(err, &wErr) {
 			// SQL handshake failed after establishing a TCP connection
 			// successfully, something else than CockroachDB responded, was
 			// confused and closed the door on us.
 			return connRefused()
+		}
 
-		case *pq.Error:
+		if wErr := (*pq.Error)(nil); errors.As(err, &wErr) {
 			// SQL commands will fail with a pq error but only after
 			// establishing a TCP connection successfully. So if we got
 			// here, there was a TCP connection already.
@@ -137,8 +137,9 @@ func MaybeDecorateGRPCError(
 			}
 			// Otherwise, there was a regular SQL error. Just report that.
 			return wErr
+		}
 
-		case *net.OpError:
+		if wErr := (*net.OpError)(nil); errors.As(err, &wErr) {
 			// A non-RPC client command was used (e.g. a SQL command) and an
 			// error occurred early while establishing the TCP connection.
 
@@ -150,8 +151,9 @@ func MaybeDecorateGRPCError(
 				return connSecurityHint()
 			}
 			return connFailed()
+		}
 
-		case *netutil.InitialHeartbeatFailedError:
+		if wErr := (*netutil.InitialHeartbeatFailedError)(nil); errors.As(err, &wErr) {
 			// A GRPC TCP connection was established but there was an early failure.
 			// Try to distinguish the cases.
 			msg := wErr.Error()
@@ -177,28 +179,27 @@ func MaybeDecorateGRPCError(
 		}
 
 		// Is it a plain context cancellation (i.e. timeout)?
-		switch unwrappedErr {
-		case context.DeadlineExceeded:
-			return opTimeout()
-		case context.Canceled:
+		if errors.IsAny(err,
+			context.DeadlineExceeded,
+			context.Canceled) {
 			return opTimeout()
 		}
 
 		// Is it a GRPC-observed context cancellation (i.e. timeout), a GRPC
 		// connection error, or a known indication of a too-old server?
-		if code := status.Code(unwrappedErr); code == codes.DeadlineExceeded {
+		if code := status.Code(errors.Cause(err)); code == codes.DeadlineExceeded {
 			return opTimeout()
 		} else if code == codes.Unimplemented &&
-			strings.Contains(unwrappedErr.Error(), "unknown method Decommission") ||
-			strings.Contains(unwrappedErr.Error(), "unknown service cockroach.server.serverpb.Init") {
+			strings.Contains(err.Error(), "unknown method Decommission") ||
+			strings.Contains(err.Error(), "unknown service cockroach.server.serverpb.Init") {
 			return fmt.Errorf(
 				"incompatible client and server versions (likely server version: v1.0, required: >=v1.1)")
-		} else if grpcutil.IsClosedConnection(unwrappedErr) {
+		} else if grpcutil.IsClosedConnection(err) {
 			return errors.Errorf("connection lost.\n\n%v", err)
 		}
 
 		// Does the server require GSSAPI authentication?
-		if strings.Contains(unwrappedErr.Error(), "pq: unknown authentication response: 7") {
+		if strings.Contains(err.Error(), "pq: unknown authentication response: 7") {
 			return fmt.Errorf(
 				"server requires GSSAPI authentication for this user.\n" +
 					"The CockroachDB CLI does not support GSSAPI authentication; use 'psql' instead")

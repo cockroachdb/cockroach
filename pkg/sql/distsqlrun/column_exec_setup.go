@@ -946,13 +946,24 @@ type VectorizedSetupError struct {
 	cause error
 }
 
-// Error is part of the error interface.
-func (e *VectorizedSetupError) Error() string {
-	return e.cause.Error()
-}
+var _ error = (*VectorizedSetupError)(nil)
+var _ fmt.Formatter = (*VectorizedSetupError)(nil)
+var _ errors.Formatter = (*VectorizedSetupError)(nil)
 
-// Unwrap is part of the Wrapper interface.
-func (e *VectorizedSetupError) Unwrap() error {
+// Error implemented the error interface.
+func (e *VectorizedSetupError) Error() string { return e.cause.Error() }
+
+// Cause implements the causer interface.
+func (e *VectorizedSetupError) Cause() error { return e.cause }
+
+// Format implements the fmt.Formatter interface.
+func (e *VectorizedSetupError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+// FormatError implements the errors.Formatter interface.
+func (e *VectorizedSetupError) FormatError(p errors.Printer) error {
+	if p.Detail() {
+		p.Print("error while setting up columnar execution")
+	}
 	return e.cause
 }
 

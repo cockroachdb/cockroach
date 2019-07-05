@@ -53,8 +53,9 @@ func TestRunWithTimeout(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		return errors.Wrap(ctx.Err(), "custom error")
 	})
-	if err.Error() != expectedMsg {
-		t.Fatalf("expected %s, actual %s", expectedMsg, err.Error())
+	expExtended := expectedMsg + ": custom error: context deadline exceeded"
+	if err.Error() != expExtended {
+		t.Fatalf("expected %s, actual %s", expExtended, err.Error())
 	}
 	netError, ok = err.(net.Error)
 	if !ok {

@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 type sqlConnI interface {
@@ -73,6 +73,20 @@ type initialSQLConnectionError struct {
 
 // Error implements the error interface.
 func (i *initialSQLConnectionError) Error() string { return i.err.Error() }
+
+// Cause implements causer.
+func (i *initialSQLConnectionError) Cause() error { return i.err }
+
+// Format implements fmt.Formatter.
+func (i *initialSQLConnectionError) Format(s fmt.State, verb rune) { errors.FormatError(i, s, verb) }
+
+// FormatError implements errors.Formatter.
+func (i *initialSQLConnectionError) FormatError(p errors.Printer) error {
+	if p.Detail() {
+		p.Print("error while establishing the SQL session")
+	}
+	return i.err
+}
 
 // wrapConnError detects TCP EOF errors during the initial SQL handshake.
 // These are translated to a message "perhaps this is not a CockroachDB node"

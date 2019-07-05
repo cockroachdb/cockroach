@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -181,6 +183,9 @@ func (b builderError) Error() string { return b.error.Error() }
 // Cause implements the causer interface. This is used so that builderErrors
 // can be peeked through by the common error facilities.
 func (b builderError) Cause() error { return b.error }
+
+// Format implements the fmt.Formatter interface.
+func (b builderError) Format(s fmt.State, verb rune) { errors.FormatError(b, s, verb) }
 
 // unimplementedWithIssueDetailf formats according to a format
 // specifier and returns a Postgres error with the
