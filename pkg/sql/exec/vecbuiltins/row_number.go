@@ -10,24 +10,10 @@
 
 package vecbuiltins
 
-import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/exec"
 
 // TODO(yuzefovich): add randomized tests.
 // TODO(yuzefovich): add benchmarks.
-type rowNumberOp struct {
-	input           exec.Operator
-	outputColIdx    int
-	partitionColIdx int
-
-	rowNumber int64
-}
-
-var _ exec.Operator = &rowNumberOp{}
 
 // NewRowNumberOperator creates a new exec.Operator that computes window
 // function ROW_NUMBER. outputColIdx specifies in which exec.Vec the operator
@@ -36,24 +22,28 @@ var _ exec.Operator = &rowNumberOp{}
 func NewRowNumberOperator(
 	input exec.Operator, outputColIdx int, partitionColIdx int,
 ) exec.Operator {
-	return &rowNumberOp{input: input, outputColIdx: outputColIdx, partitionColIdx: partitionColIdx}
+	rowNumberInternal := rowNumberInternal{
+		input:           input,
+		outputColIdx:    outputColIdx,
+		partitionColIdx: partitionColIdx,
+	}
+	if partitionColIdx == -1 {
+		return &rowNumberNoPartitionOp{rowNumberInternal}
+	}
+	return &rowNumberWithPartitionOp{rowNumberInternal}
 }
 
-func (r *rowNumberOp) Init() {
+// rowNumberInternal extracts common fields and common initialization of two
+// variations of row number operators. Note that it is not an operator itself
+// and should not be used directly.
+type rowNumberInternal struct {
+	input           exec.Operator
+	outputColIdx    int
+	partitionColIdx int
+
+	rowNumber int64
+}
+
+func (r *rowNumberInternal) Init() {
 	r.input.Init()
-	// ROW_NUMBER starts counting from 1.
-	r.rowNumber = 1
-}
-
-func (r *rowNumberOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.input.Next(ctx)
-	if batch.Length() == 0 {
-		return batch
-	}
-	if r.partitionColIdx != -1 {
-		r.nextBodyWithPartition(batch)
-	} else {
-		r.nextBodyNoPartition(batch)
-	}
-	return batch
 }

@@ -20,15 +20,27 @@
 package vecbuiltins
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
-// {{/*
-func _NEXT_ROW_NUMBER_(hasPartition bool) { // */}}
-	// {{define "nextRowNumber"}}
+// {{ range . }}
 
-	// {{ if $.HasPartition }}
+type _ROW_NUMBER_STRINGOp struct {
+	rowNumberInternal
+}
+
+var _ exec.Operator = &_ROW_NUMBER_STRINGOp{}
+
+func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
+	batch := r.input.Next(ctx)
+	if batch.Length() == 0 {
+		return batch
+	}
+	// {{ if .HasPartition }}
 	if r.partitionColIdx == batch.Width() {
 		batch.AppendCol(types.Bool)
 	} else if r.partitionColIdx > batch.Width() {
@@ -46,35 +58,26 @@ func _NEXT_ROW_NUMBER_(hasPartition bool) { // */}}
 	sel := batch.Selection()
 	if sel != nil {
 		for i := uint16(0); i < batch.Length(); i++ {
-			// {{ if $.HasPartition }}
+			// {{ if .HasPartition }}
 			if partitionCol[sel[i]] {
 				r.rowNumber = 1
 			}
 			// {{ end }}
-			rowNumberCol[sel[i]] = r.rowNumber
 			r.rowNumber++
+			rowNumberCol[sel[i]] = r.rowNumber
 		}
 	} else {
 		for i := uint16(0); i < batch.Length(); i++ {
-			// {{ if $.HasPartition }}
+			// {{ if .HasPartition }}
 			if partitionCol[i] {
-				r.rowNumber = 1
+				r.rowNumber = 0
 			}
 			// {{ end }}
-			rowNumberCol[i] = r.rowNumber
 			r.rowNumber++
+			rowNumberCol[i] = r.rowNumber
 		}
 	}
-	// {{end}}
-	// {{/*
+	return batch
 }
 
-// */}}
-
-func (r *rowNumberOp) nextBodyWithPartition(batch coldata.Batch) {
-	_NEXT_ROW_NUMBER_(true)
-}
-
-func (r *rowNumberOp) nextBodyNoPartition(batch coldata.Batch) {
-	_NEXT_ROW_NUMBER_(false)
-}
+// {{ end }}

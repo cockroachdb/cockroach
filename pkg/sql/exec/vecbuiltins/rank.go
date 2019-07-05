@@ -46,12 +46,12 @@ func NewRankOperator(
 	}
 	if dense {
 		if partitionColIdx != -1 {
-			return &rankDense_true_HasPartition_true_Op{rankInitFields: initFields}, nil
+			return &denseRankWithPartitionOp{rankInitFields: initFields}, nil
 		}
-		return &rankDense_true_HasPartition_false_Op{rankInitFields: initFields}, nil
+		return &denseRankNoPartitionOp{rankInitFields: initFields}, nil
 	}
 	if partitionColIdx != -1 {
-		return &rankDense_false_HasPartition_true_Op{rankInitFields: initFields}, nil
+		return &rankWithPartitionOp{rankInitFields: initFields}, nil
 	}
-	return &rankDense_false_HasPartition_false_Op{rankInitFields: initFields}, nil
+	return &rankNoPartitionOp{rankInitFields: initFields}, nil
 }
