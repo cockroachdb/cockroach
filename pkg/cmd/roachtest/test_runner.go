@@ -575,8 +575,8 @@ func (r *testRunner) runTest(
 		if teamCity {
 			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), t.Name())
 
+			artifactsGlobPath := filepath.Join(artifactsDir, "**")
 			escapedTestName := teamCityNameEscape(t.Name())
-			artifactsGlobPath := filepath.Join(artifactsDir, escapedTestName, "**")
 			artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
 			shout(ctx, l, stdout, "##teamcity[publishArtifacts '%s']", artifactsSpec)
 		}
