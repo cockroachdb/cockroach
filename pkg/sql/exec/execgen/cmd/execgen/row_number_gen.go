@@ -13,8 +13,14 @@ package main
 import (
 	"io"
 	"io/ioutil"
+	"strings"
 	"text/template"
 )
+
+type rowNumberTmplInfo struct {
+	HasPartition bool
+	String       string
+}
 
 func genRowNumberOp(wr io.Writer) error {
 	d, err := ioutil.ReadFile("pkg/sql/exec/vecbuiltins/row_number_tmpl.go")
@@ -24,8 +30,7 @@ func genRowNumberOp(wr io.Writer) error {
 
 	s := string(d)
 
-	nextRowNumber := makeFunctionRegex("_NEXT_ROW_NUMBER_", 1)
-	s = nextRowNumber.ReplaceAllString(s, `{{template "nextRowNumber" buildDict "Global" $ "HasPartition" $1 }}`)
+	s = strings.Replace(s, "_ROW_NUMBER_STRING", "{{.String}}", -1)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("row_number_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
@@ -33,7 +38,12 @@ func genRowNumberOp(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, struct{}{})
+	rankTmplInfos := []rowNumberTmplInfo{
+		{HasPartition: false, String: "rowNumberNoPartition"},
+		{HasPartition: true, String: "rowNumberWithPartition"},
+	}
+	return tmpl.Execute(wr, rankTmplInfos)
+
 }
 
 func init() {
