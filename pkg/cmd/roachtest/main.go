@@ -389,7 +389,7 @@ func testsToRun(ctx context.Context, r testRegistry, filter *testFilter) []testS
 		} else {
 			if teamCity {
 				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
-					s.Name, s.Skip)
+					s.Name, teamCityEscape(s.Skip))
 			}
 			fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
 		}
