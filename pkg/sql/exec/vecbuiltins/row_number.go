@@ -12,7 +12,6 @@ package vecbuiltins
 
 import "github.com/cockroachdb/cockroach/pkg/sql/exec"
 
-// TODO(yuzefovich): add randomized tests.
 // TODO(yuzefovich): add benchmarks.
 
 // NewRowNumberOperator creates a new exec.Operator that computes window
