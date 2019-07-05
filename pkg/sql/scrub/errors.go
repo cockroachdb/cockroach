@@ -10,7 +10,11 @@
 
 package scrub
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/errors"
+)
 
 const (
 	// MissingIndexEntryError occurs when a primary k/v is missing a
@@ -49,6 +53,14 @@ type Error struct {
 func (s *Error) Error() string {
 	return fmt.Sprintf("%s: %+v", s.Code, s.underlying)
 }
+
+// Cause unwraps the error.
+func (s *Error) Cause() error {
+	return s.underlying
+}
+
+// Format implements fmt.Formatter.
+func (s *Error) Format(st fmt.State, verb rune) { errors.FormatError(s, st, verb) }
 
 // WrapError wraps an error with a Error.
 func WrapError(code string, err error) *Error {

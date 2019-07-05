@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 )
@@ -162,8 +163,24 @@ type InitialHeartbeatFailedError struct {
 	WrappedErr error
 }
 
-func (e InitialHeartbeatFailedError) Error() string {
-	return fmt.Sprintf("initial connection heartbeat failed: %s", e.WrappedErr)
+var _ error = (*InitialHeartbeatFailedError)(nil)
+var _ fmt.Formatter = (*InitialHeartbeatFailedError)(nil)
+var _ errors.Formatter = (*InitialHeartbeatFailedError)(nil)
+
+// Note: Error is not a causer. If this is changed to implement
+// Cause()/Unwrap(), change the type assertions in package cli and
+// elsewhere to use errors.As() or equivalent.
+
+// Error implements error.
+func (e *InitialHeartbeatFailedError) Error() string { return fmt.Sprintf("%v", e) }
+
+// Format implements fmt.Formatter.
+func (e *InitialHeartbeatFailedError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+// FormatError implements errors.FormatError.
+func (e *InitialHeartbeatFailedError) FormatError(p errors.Printer) error {
+	p.Print("initial connection heartbeat failed")
+	return e.WrappedErr
 }
 
 // NewInitialHeartBeatFailedError creates a new InitialHeartbeatFailedError.

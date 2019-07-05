@@ -376,7 +376,7 @@
   revision = "edce558372380347c6fef147e62f5559a9f8413d"
 
 [[projects]]
-  digest = "1:6b5e345345b4cf676295f7ab95b5f024ad24deac577882012abef561ae150daa"
+  digest = "1:89001b96f00cd27fe64ffca49eb6434e80677d9aa39a98d8e4eeab166c0a3d44"
   name = "github.com/cockroachdb/errors"
   packages = [
     ".",
@@ -399,8 +399,8 @@
     "withstack",
   ]
   pruneopts = "UT"
-  revision = "27e2233ae32c6bd067736ebb257682451b89cd76"
-  version = "v1.1.1"
+  revision = "733db073f39e36d451b4d1186edcf4005f6d7ac7"
+  version = "v1.2.1"
 
 [[projects]]
   digest = "1:cd936a7edd1897083994b6d397f9c975a5a8dc58e845f0cf3d1e5cf4717b918b"
@@ -2037,6 +2037,7 @@
     "google.golang.org/grpc/connectivity",
     "google.golang.org/grpc/credentials",
     "google.golang.org/grpc/encoding",
+    "google.golang.org/grpc/encoding/proto",
     "google.golang.org/grpc/grpclog",
     "google.golang.org/grpc/health/grpc_health_v1",
     "google.golang.org/grpc/keepalive",
