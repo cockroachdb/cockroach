@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
-// TODO(yuzefovich): add randomized tests.
 // TODO(yuzefovich): add benchmarks.
 
 // NewRankOperator creates a new exec.Operator that computes window function

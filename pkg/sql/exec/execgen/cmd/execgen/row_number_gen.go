@@ -43,7 +43,6 @@ func genRowNumberOp(wr io.Writer) error {
 		{HasPartition: true, String: "rowNumberWithPartition"},
 	}
 	return tmpl.Execute(wr, rankTmplInfos)
-
 }
 
 func init() {

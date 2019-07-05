@@ -199,3 +199,102 @@ func generateColumnOrdering(
 	}
 	return orderingCols
 }
+
+func TestWindowFunctionsAgainstProcessor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rng, _ := randutil.NewPseudoRand()
+
+	nRows := 10
+	maxCols := 4
+	maxNum := 5
+	// TODO(yuzefovich): use non-zero null probability once sorter handles nulls.
+	nullProbability := 0.0
+	typs := make([]types.T, maxCols)
+	for i := range typs {
+		// TODO(yuzefovich): randomize the types of the columns once we support
+		// window functions that take in arguments.
+		typs[i] = *types.Int
+	}
+	for _, windowFn := range []distsqlpb.WindowerSpec_WindowFunc{
+		distsqlpb.WindowerSpec_ROW_NUMBER,
+		distsqlpb.WindowerSpec_RANK,
+		distsqlpb.WindowerSpec_DENSE_RANK,
+	} {
+		for _, partitionBy := range [][]uint32{
+			{},     // No PARTITION BY clause.
+			{0},    // Partitioning on the first input column.
+			{0, 1}, // Partitioning on the first and second input columns.
+		} {
+			for _, nOrderingCols := range []int{
+				0, // No ORDER BY clause.
+				1, // ORDER BY on at most one column.
+				2, // ORDER BY on at most two columns.
+			} {
+				for nCols := 1; nCols <= maxCols; nCols++ {
+					if len(partitionBy) > nCols || nOrderingCols > nCols {
+						continue
+					}
+					inputTypes := typs[:nCols]
+					rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+
+					windowerSpec := &distsqlpb.WindowerSpec{
+						PartitionBy: partitionBy,
+						WindowFns: []distsqlpb.WindowerSpec_WindowFn{
+							{
+								Func:         distsqlpb.WindowerSpec_Func{WindowFunc: &windowFn},
+								Ordering:     generateOrderingGivenPartitionBy(rng, nCols, nOrderingCols, partitionBy),
+								OutputColIdx: uint32(nCols),
+							},
+						},
+					}
+					if windowFn == distsqlpb.WindowerSpec_ROW_NUMBER &&
+						len(partitionBy)+len(windowerSpec.WindowFns[0].Ordering.Columns) < nCols {
+						// The output of row_number is not deterministic if there are
+						// columns that are not present in either PARTITION BY or ORDER BY
+						// clauses, so we skip such a configuration.
+						continue
+					}
+
+					pspec := &distsqlpb.ProcessorSpec{
+						Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:  distsqlpb.ProcessorCoreUnion{Windower: windowerSpec},
+					}
+					if err := verifyColOperator(true /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, append(inputTypes, *types.Int), pspec); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+		}
+	}
+}
+
+// generateOrderingGivenPartitionBy produces a random ordering of up to
+// nOrderingCols columns on a table with nCols columns such that only columns
+// not present in partitionBy are used. This is useful to simulate how
+// optimizer plans window functions - for example, with an OVER clause as
+// (PARTITION BY a ORDER BY a DESC), the optimizer will omit the ORDER BY
+// clause entirely.
+func generateOrderingGivenPartitionBy(
+	rng *rand.Rand, nCols int, nOrderingCols int, partitionBy []uint32,
+) distsqlpb.Ordering {
+	var ordering distsqlpb.Ordering
+	if nOrderingCols == 0 || len(partitionBy) == nCols {
+		return ordering
+	}
+	ordering = distsqlpb.Ordering{Columns: make([]distsqlpb.Ordering_Column, 0, nOrderingCols)}
+	for len(ordering.Columns) == 0 {
+		for _, ordCol := range generateColumnOrdering(rng, nCols, nOrderingCols) {
+			usedInPartitionBy := false
+			for _, p := range partitionBy {
+				if p == ordCol.ColIdx {
+					usedInPartitionBy = true
+					break
+				}
+			}
+			if !usedInPartitionBy {
+				ordering.Columns = append(ordering.Columns, ordCol)
+			}
+		}
+	}
+	return ordering
+}
