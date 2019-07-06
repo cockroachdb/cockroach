@@ -41,6 +41,7 @@ type offsetInjector struct {
 // deploy installs ntp and downloads / compiles bumptime used to create a clock offset
 func (oi *offsetInjector) deploy(ctx context.Context, l *logger) error {
 	if err := oi.c.RunE(ctx, oi.c.All(), "test -x ./bumptime"); err == nil {
+		oi.deployed = true
 		return nil
 	}
 
