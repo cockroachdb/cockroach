@@ -24,6 +24,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// runnerLogsDir is the dir under the artifacts root where the test runner log
+// and other runner-related logs (i.e. cluster creation logs) will be written.
+const runnerLogsDir = "_runner-logs"
+
 func main() {
 	rand.Seed(timeutil.Now().UnixNano())
 	username := os.Getenv("ROACHPROD_USER")
@@ -269,8 +273,9 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 		// stdout/stderr.
 		cfg.parallelism = n * cfg.count
 	}
+	runnerDir := filepath.Join(cfg.artifactsDir, runnerLogsDir)
 	runnerLogPath := filepath.Join(
-		cfg.artifactsDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
 	l, tee := testRunnerLogger(context.Background(), cfg.parallelism, runnerLogPath)
 	lopt := loggingOpt{
 		l:             l,
@@ -294,8 +299,12 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 	// kills the process.
 	l.PrintfCtx(ctx, "runTests destroying all clusters")
 	cr.destroyAllClusters(context.Background(), l)
-	return err
 
+	if teamCity {
+		// Collect the runner logs.
+		fmt.Printf("##teamcity[publishArtifacts '%s']\n", runnerDir)
+	}
+	return err
 }
 
 // getUser takes the value passed on the command line and comes up with the
