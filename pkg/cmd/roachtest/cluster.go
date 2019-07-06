@@ -951,7 +951,7 @@ func (f *clusterFactory) newCluster(
 	c.status("creating cluster")
 
 	// Logs for creating a new cluster go to a dedicated log file.
-	logPath := filepath.Join(f.artifactsDir, "cluster-create", name+".log")
+	logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", name+".log")
 	l, err := rootLogger(logPath, teeOpt)
 	if err != nil {
 		log.Fatal(ctx, err)

@@ -219,7 +219,7 @@ func (r *testRunner) Run(
 		existingClusterName := clustersOpt.clusterName
 		if existingClusterName != "" {
 			// Logs for attaching to a cluster go to a dedicated log file.
-			logPath := filepath.Join(artifactsDir, "cluster-create", existingClusterName+".log")
+			logPath := filepath.Join(artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
 			clusterL, err := rootLogger(logPath, lopt.tee)
 			defer clusterL.close()
 			if err != nil {
