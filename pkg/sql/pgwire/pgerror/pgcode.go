@@ -14,10 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/errors/assert"
-	"github.com/cockroachdb/errors/errbase"
-	"github.com/cockroachdb/errors/issuelink"
-	"github.com/cockroachdb/errors/markers"
+	"github.com/cockroachdb/errors"
 )
 
 // WithCandidateCode decorates the error with a candidate postgres
@@ -42,7 +39,7 @@ func IsCandidateCode(err error) bool {
 // HasCandidateCode returns tue iff the error or one of its causes
 // has a candidate pg error code.
 func HasCandidateCode(err error) bool {
-	_, ok := markers.If(err, func(err error) (v interface{}, ok bool) {
+	_, ok := errors.If(err, func(err error) (v interface{}, ok bool) {
 		v, ok = err.(*withCandidateCode)
 		return
 	})
@@ -80,7 +77,7 @@ func GetPGCodeInternal(err error, computeDefaultCode func(err error) (code strin
 		code = newCode
 	}
 
-	if c := errbase.UnwrapOnce(err); c != nil {
+	if c := errors.UnwrapOnce(err); c != nil {
 		innerCode := GetPGCodeInternal(c, computeDefaultCode)
 		code = combineCodes(innerCode, code)
 	}
@@ -107,10 +104,10 @@ func ComputeDefaultCode(err error) string {
 		return pgcode.StatementCompletionUnknown
 	}
 
-	if assert.IsAssertionFailure(err) {
+	if errors.IsAssertionFailure(err) {
 		return pgcode.Internal
 	}
-	if issuelink.IsUnimplementedError(err) {
+	if errors.IsUnimplementedError(err) {
 		return pgcode.FeatureNotSupported
 	}
 	return ""

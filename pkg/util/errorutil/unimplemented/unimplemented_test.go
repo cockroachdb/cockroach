@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/issuelink"
 )
 
 func TestUnimplemented(t *testing.T) {
@@ -51,12 +50,12 @@ func TestUnimplemented(t *testing.T) {
 				}
 				if test.expIssue != 0 {
 					ref := fmt.Sprintf("%s\nSee: %s",
-						issuelink.UnimplementedErrorHint, makeURL(test.expIssue))
+						errors.UnimplementedErrorHint, makeURL(test.expIssue))
 					if hint == ref {
 						found |= 2
 					}
 				}
-				if strings.HasPrefix(hint, issuelink.UnimplementedErrorHint) {
+				if strings.HasPrefix(hint, errors.UnimplementedErrorHint) {
 					found |= 4
 				}
 			}
@@ -68,7 +67,7 @@ func TestUnimplemented(t *testing.T) {
 			}
 			if found&4 == 0 {
 				t.Errorf("expected standard hint introduction %q, not found\n%+v",
-					issuelink.UnimplementedErrorHint, hints)
+					errors.UnimplementedErrorHint, hints)
 			}
 
 			links := errors.GetAllIssueLinks(test.err)

@@ -35,9 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors/markers"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -169,7 +168,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// into the local flow.
 	}
 	if firstErr != nil {
-		if _, ok := markers.If(firstErr, func(err error) (v interface{}, ok bool) {
+		if _, ok := errors.If(firstErr, func(err error) (v interface{}, ok bool) {
 			v, ok = err.(*distsqlrun.VectorizedSetupError)
 			return v, ok
 		}); ok && evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn {
