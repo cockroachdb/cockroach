@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/errbase"
 )
 
 type withCandidateCode struct {
@@ -55,5 +54,5 @@ func decodeWithCandidateCode(
 }
 
 func init() {
-	errbase.RegisterWrapperDecoder(errbase.GetTypeKey((*withCandidateCode)(nil)), decodeWithCandidateCode)
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*withCandidateCode)(nil)), decodeWithCandidateCode)
 }

@@ -20,13 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/hintdetail"
 	"github.com/lib/pq"
 )
 
 var _ error = (*Error)(nil)
-var _ hintdetail.ErrorHinter = (*Error)(nil)
-var _ hintdetail.ErrorDetailer = (*Error)(nil)
+var _ errors.ErrorHinter = (*Error)(nil)
+var _ errors.ErrorDetailer = (*Error)(nil)
 var _ errors.SafeDetailer = (*Error)(nil)
 var _ fmt.Formatter = (*Error)(nil)
 
