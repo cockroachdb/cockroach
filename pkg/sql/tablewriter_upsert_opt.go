@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/errors"
 )
 
 // optTableUpserter implements the upsert operation when it is planned by the
@@ -211,16 +210,15 @@ func (tu *optTableUpserter) updateConflictingRow(
 	// We now need a row that has the shape of the result row.
 	for colID, returnIndex := range tu.colIDToReturnIndex {
 		// If an update value for a given column exists, use that; else use the
-		// existing value of that column.
+		// existing value of that column if it has been fetched.
 		rowIndex, ok := tu.ru.UpdateColIDtoRowIndex[colID]
 		if ok {
 			tu.resultRow[returnIndex] = updateValues[rowIndex]
 		} else {
 			rowIndex, ok = tu.ru.FetchColIDtoRowIndex[colID]
-			if !ok {
-				return errors.AssertionFailedf("no existing value is available for column")
+			if ok {
+				tu.resultRow[returnIndex] = fetchRow[rowIndex]
 			}
-			tu.resultRow[returnIndex] = fetchRow[rowIndex]
 		}
 	}
 
