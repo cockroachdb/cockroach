@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // {{/*
@@ -713,23 +712,8 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 		switch colTyp {
 		// {{ range $.MJOverloads }}
 		case _TYPES_T:
-			switch o.joinType {
-			case sqlbase.JoinType_INNER:
-				// {{/*
-				// Nulls cannot be in equality columns in the buffered group in INNER JOIN
-				// because such tuple would not get a match, so they are never buffered.
-				// */}}
-			case sqlbase.JoinType_LEFT_OUTER:
-				if input == &o.left {
-					// Nulls only from the left input can be saved in the buffer, so we do
-					// not perform this check on the right input.
-					// TODO(yuzefovich): update this when new join types are supported.
-					if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
-						return true
-					}
-				}
-			default:
-				panic("")
+			if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
+				return true
 			}
 			prevVal := bufferedGroup.ColVec(int(colIdx))._TemplateType()[lastBufferedTupleIdx]
 			var curVal _GOTYPE
