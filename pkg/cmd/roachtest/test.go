@@ -161,9 +161,9 @@ func (t *test) status(ctx context.Context, id int64, args ...interface{}) {
 	}
 	if !t.l.closed() {
 		if id == t.runnerID {
-			t.l.PrintfCtx(ctx, "test status: %s", msg)
+			t.l.PrintfCtxDepth(ctx, 2, "test status: %s", msg)
 		} else {
-			t.l.PrintfCtx(ctx, "test worker status: %s", msg)
+			t.l.PrintfCtxDepth(ctx, 2, "test worker status: %s", msg)
 		}
 	}
 }
