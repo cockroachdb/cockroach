@@ -2491,22 +2491,19 @@ sort
       ├── fd: (27)-->(28,29)
       ├── project
       │    ├── columns: cntrycode:27(string) c_acctbal:6(float!null)
-      │    ├── anti-join (merge)
+      │    ├── anti-join (lookup orders@o_ck)
       │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
-      │    │    ├── left ordering: +1
-      │    │    ├── right ordering: +19
+      │    │    ├── key columns: [1] = [19]
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(5,6)
       │    │    ├── select
       │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
       │    │    │    ├── key: (1)
       │    │    │    ├── fd: (1)-->(5,6)
-      │    │    │    ├── ordering: +1
       │    │    │    ├── scan customer
       │    │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
       │    │    │    │    ├── key: (1)
-      │    │    │    │    ├── fd: (1)-->(5,6)
-      │    │    │    │    └── ordering: +1
+      │    │    │    │    └── fd: (1)-->(5,6)
       │    │    │    └── filters
       │    │    │         ├── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(5)]
       │    │    │         └── gt [type=bool, outer=(6), subquery, constraints=(/6: (/NULL - ])]
@@ -2527,9 +2524,6 @@ sort
       │    │    │                        └── aggregations
       │    │    │                             └── avg [type=float, outer=(14)]
       │    │    │                                  └── variable: c_acctbal [type=float]
-      │    │    ├── scan orders@o_ck
-      │    │    │    ├── columns: o_custkey:19(int!null)
-      │    │    │    └── ordering: +19
       │    │    └── filters (true)
       │    └── projections
       │         └── substring(c_phone, 1, 2) [type=string, outer=(5)]

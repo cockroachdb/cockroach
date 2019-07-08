@@ -49,7 +49,7 @@
 # table) which allow it (including non-covering indexes). See the
 # GenerateLookupJoins custom function for more details.
 [GenerateLookupJoins, Explore]
-(InnerJoin | LeftJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
     $on:*
