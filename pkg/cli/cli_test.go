@@ -382,6 +382,7 @@ func (c cliTest) runWithArgsUnredirected(origArgs []string) {
 		return Run(args)
 	}(); err != nil {
 		fmt.Println(err)
+		maybeShowErrorDetails(os.Stdout, err, false /*printNewLine*/)
 	}
 }
 
@@ -2554,4 +2555,24 @@ func Example_sqlfmt() {
 	// SELECT 1 + 2 + 3
 	// sqlfmt --no-simplify -e select (1+2)+3
 	// SELECT (1 + 2) + 3
+}
+
+func Example_dump_no_visible_columns() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.RunWithArgs([]string{"sql", "-e", "create table t(x int); set sql_safe_updates=false; alter table t drop x"})
+	c.RunWithArgs([]string{"dump", "defaultdb"})
+
+	// Output:
+	// sql -e create table t(x int); set sql_safe_updates=false; alter table t drop x
+	// ALTER TABLE
+	// dump defaultdb
+	// CREATE TABLE t (,
+	// 	FAMILY "primary" (rowid)
+	// );
+	// table "defaultdb.public.t" has no visible columns
+	// HINT: To proceed with the dump, either omit this table from the list of tables to dump, drop the table, or add some visible columns.
+	// --
+	// See: https://github.com/cockroachdb/cockroach/issues/37768
 }
