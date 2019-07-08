@@ -312,7 +312,7 @@ func ensureInterleavesIncluded(tables []*sqlbase.TableDescriptor) error {
 func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
 	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
-		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+		return nil, errors.Wrapf(err,
 			"unable to scan range descriptors")
 	}
 
