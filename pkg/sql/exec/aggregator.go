@@ -106,6 +106,7 @@ type orderedAggregator struct {
 }
 
 var _ Operator = &orderedAggregator{}
+var _ StaticMemOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping
 // columns. aggCols is a slice where each index represents a new aggregation
@@ -317,4 +318,8 @@ func extractAggTypes(aggCols [][]uint32, colTypes []types.T) [][]types.T {
 	}
 
 	return aggTyps
+}
+
+func (a *orderedAggregator) DeclareStaticMemoryUsage() int64 {
+	return a.scratch.Batch.SizeBytes()
 }

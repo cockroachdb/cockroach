@@ -45,6 +45,9 @@ type Batch interface {
 	// columns and allocations, invalidating existing references to the Batch or
 	// its Vecs. However, Reset does _not_ zero out the column data.
 	Reset(types []types.T, length int)
+	// SizeBytes returns an approximation of the amount of memory used to
+	// represent this batch.
+	SizeBytes() int64
 }
 
 var _ Batch = &MemBatch{}
@@ -154,4 +157,13 @@ func (m *MemBatch) Reset(types []types.T, length int) {
 	for _, col := range m.ColVecs() {
 		col.Nulls().UnsetNulls()
 	}
+}
+
+// SizeBytes implements the Batch interface
+func (m *MemBatch) SizeBytes() int64 {
+	size := int64(0)
+	for _, vec := range m.ColVecs() {
+		size += vec.SizeBytes()
+	}
+	return size
 }

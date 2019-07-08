@@ -1016,6 +1016,8 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 	inputs := make([]exec.Operator, 0, 2)
 	metadataSourcesQueue := make([]distsqlpb.MetadataSource, 0, 1)
 
+	vectorizedFlowAcct := f.EvalCtx.Mon.MakeBoundAccount()
+
 	recordingStats := false
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		recordingStats = true
@@ -1043,6 +1045,14 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
+		if staticMemOp, ok := op.(exec.StaticMemOperator); ok {
+			fmt.Println("GOT SOME STATIC MEMORY USAGE", staticMemOp.DeclareStaticMemoryUsage())
+			if err := vectorizedFlowAcct.Grow(ctx, staticMemOp.DeclareStaticMemoryUsage()); err != nil {
+				return errors.Wrap(err, "not enough memory to construct vectorized operator")
+			}
+		}
+
 		if metaSource, ok := op.(distsqlpb.MetadataSource); ok {
 			metadataSourcesQueue = append(metadataSourcesQueue, metaSource)
 		}
