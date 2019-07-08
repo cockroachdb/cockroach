@@ -90,7 +90,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		vec := batch.ColVec(i)
 
 		var arrowBitmap []byte
-		if vec.HasNulls() {
+		if vec.MaybeHasNulls() {
 			n := vec.Nulls()
 			// To conform to the Arrow spec, zero out all trailing null values.
 			n.Truncate(batch.Length())

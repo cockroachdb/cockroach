@@ -75,7 +75,7 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 			{{(.Assign "projCol[i]" "col[i]" "p.constArg")}}
 		}
 	}
-	if vec.Nulls().HasNulls() {
+	if vec.Nulls().MaybeHasNulls() {
 		nulls := vec.Nulls().Copy()
 		projVec.SetNulls(&nulls)
 	}
@@ -119,7 +119,7 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 			{{(.Assign "projCol[i]" "p.constArg" "col[i]")}}
 		}
 	}
-	if vec.Nulls().HasNulls() {
+	if vec.Nulls().MaybeHasNulls() {
 		nulls := vec.Nulls().Copy()
 		projVec.SetNulls(&nulls)
 	}
@@ -166,7 +166,7 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 			{{(.Assign "projCol[i]" "col1[i]" "col2[i]")}}
 		}
 	}
-	if vec1.Nulls().HasNulls() || vec2.Nulls().HasNulls() {
+	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 		projVec.SetNulls(vec1.Nulls().Or(vec2.Nulls()))
 	}
 	return batch
