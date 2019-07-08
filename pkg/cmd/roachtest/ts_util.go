@@ -89,3 +89,46 @@ func verifyTxnPerSecond(
 		t.l.Printf("spent %f%% of time below target of %f txn/s", perc*100, txnTarget)
 	}
 }
+
+func verifyLookupsPerSec(
+	ctx context.Context,
+	c *cluster,
+	t *test,
+	adminNode nodeListOption,
+	start, end time.Time,
+	rangeLookupsTarget float64,
+) {
+	// Query needed information over the timespan of the query.
+	adminURLs := c.ExternalAdminUIAddr(ctx, adminNode)
+	url := "http://" + adminURLs[0] + "/ts/query"
+	request := tspb.TimeSeriesQueryRequest{
+		StartNanos: start.UnixNano(),
+		EndNanos:   end.UnixNano(),
+		// Ask for one minute intervals. We can't just ask for the whole hour
+		// because the time series query system does not support downsampling
+		// offsets.
+		SampleNanos: (1 * time.Minute).Nanoseconds(),
+		Queries: []tspb.Query{
+			{
+				Name:             "cr.node.distsender.rangelookups",
+				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
+			},
+		},
+	}
+	var response tspb.TimeSeriesQueryResponse
+	if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
+		t.Fatal(err)
+	}
+
+	// Drop the first two minutes of datapoints as a "ramp-up" period.
+	perMinute := response.Results[0].Datapoints[2:]
+
+	// Verify that each individual one minute periods were below the target.
+	for _, dp := range perMinute {
+		if dp.Value > rangeLookupsTarget {
+			t.Fatalf("Found minute interval with %f lookup/sec above target of %f lookup/sec\n", dp.Value, rangeLookupsTarget)
+		}
+	}
+}
