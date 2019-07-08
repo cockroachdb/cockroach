@@ -130,8 +130,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	}
 	for _, joinType := range []sqlbase.JoinType{
 		sqlbase.JoinType_INNER,
-		// TODO(yuzefovich): uncomment once ordered distinct handles nulls.
-		//sqlbase.JoinType_LEFT_OUTER,
+		sqlbase.JoinType_LEFT_OUTER,
 	} {
 		for nCols := 1; nCols <= maxCols; nCols++ {
 			inputTypes := typs[:nCols]
