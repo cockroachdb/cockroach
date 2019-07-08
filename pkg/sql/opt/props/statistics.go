@@ -189,6 +189,13 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
 	// This formula returns d * selectivity when d=n but is closer to d
 	// when d << n.
 	c.DistinctCount = d - d*math.Pow(1-selectivity, n/d)
+	const epsilon = 1e-10
+	if c.DistinctCount < epsilon {
+		// Avoid setting the distinct count to 0 (since the row count is
+		// non-zero).
+		c.DistinctCount = epsilon
+	}
+
 }
 
 // ColumnStatistics is a slice of pointers to ColumnStatistic values.
