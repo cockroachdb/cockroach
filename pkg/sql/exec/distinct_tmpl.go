@@ -178,7 +178,7 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.sortedDistinctCol)
 	var nulls *coldata.Nulls
-	if vec.HasNulls() {
+	if vec.MaybeHasNulls() {
 		nulls = vec.Nulls()
 	}
 	col := vec._TemplateType()
@@ -246,7 +246,7 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint
 	var lastVal _GOTYPE
 	var lastValNull bool
 	var nulls *coldata.Nulls
-	if colVec.HasNulls() {
+	if colVec.MaybeHasNulls() {
 		nulls = colVec.Nulls()
 	}
 

@@ -273,8 +273,8 @@ EqLoop:
 		lVec := o.proberState.lBatch.ColVec(int(o.left.eqCols[eqColIdx]))
 		rVec := o.proberState.rBatch.ColVec(int(o.right.eqCols[eqColIdx]))
 		colType := o.left.sourceTypes[int(o.left.eqCols[eqColIdx])]
-		if lVec.HasNulls() {
-			if rVec.HasNulls() {
+		if lVec.MaybeHasNulls() {
+			if rVec.MaybeHasNulls() {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
 					_PROBE_SWITCH(_SEL_ARG, true, true, true)
 				} else {
@@ -288,7 +288,7 @@ EqLoop:
 				}
 			}
 		} else {
-			if rVec.HasNulls() {
+			if rVec.MaybeHasNulls() {
 				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
 					_PROBE_SWITCH(_SEL_ARG, false, true, true)
 				} else {
@@ -428,13 +428,13 @@ LeftColLoop:
 		colType := input.sourceTypes[colIdx]
 
 		if sel != nil {
-			if src.HasNulls() {
+			if src.MaybeHasNulls() {
 				_LEFT_SWITCH(true, true)
 			} else {
 				_LEFT_SWITCH(true, false)
 			}
 		} else {
-			if src.HasNulls() {
+			if src.MaybeHasNulls() {
 				_LEFT_SWITCH(false, true)
 			} else {
 				_LEFT_SWITCH(false, false)
@@ -568,13 +568,13 @@ RightColLoop:
 		colType := input.sourceTypes[colIdx]
 
 		if sel != nil {
-			if src.HasNulls() {
+			if src.MaybeHasNulls() {
 				_RIGHT_SWITCH(true, true)
 			} else {
 				_RIGHT_SWITCH(true, false)
 			}
 		} else {
-			if src.HasNulls() {
+			if src.MaybeHasNulls() {
 				_RIGHT_SWITCH(false, true)
 			} else {
 				_RIGHT_SWITCH(false, false)
@@ -623,13 +623,13 @@ func (o *mergeJoinOp) isBufferedGroupFinished(
 			var curVal _GOTYPE
 			if sel != nil {
 				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
-				if batch.ColVec(int(colIdx)).HasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(uint64(sel[rowIdx])) {
+				if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(uint64(sel[rowIdx])) {
 					return true
 				}
 				curVal = batch.ColVec(int(colIdx))._TemplateType()[sel[rowIdx]]
 			} else {
 				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
-				if batch.ColVec(int(colIdx)).HasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(uint64(rowIdx)) {
+				if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(uint64(rowIdx)) {
 					return true
 				}
 				curVal = batch.ColVec(int(colIdx))._TemplateType()[rowIdx]
