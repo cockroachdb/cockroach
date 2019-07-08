@@ -57,7 +57,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		outputTuples tuples
 	}{
 		{
-			desc:         "Absolute value",
+			desc:         "AbsVal",
 			expr:         "abs(@1)",
 			inputCols:    []int{0},
 			inputTuples:  tuples{{1}, {-1}},
@@ -66,7 +66,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 			outputTypes:  []semtypes.T{*semtypes.Int, *semtypes.Int},
 		},
 		{
-			desc:         "String length",
+			desc:         "StringLen",
 			expr:         "length(@1)",
 			inputCols:    []int{0},
 			inputTuples:  tuples{{"Hello"}, {"The"}},

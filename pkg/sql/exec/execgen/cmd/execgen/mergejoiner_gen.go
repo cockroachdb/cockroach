@@ -90,10 +90,10 @@ func genMergeJoinOps(wr io.Writer) error {
 	s = nullFromRightSwitch.ReplaceAllString(s, `{{template "nullFromRightSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
 	incrementLeftSwitch := makeFunctionRegex("_INCREMENT_LEFT_SWITCH", 4)
-	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "JoinType" $1 "SelPermutation" $2 "MJOverload" $3 "lHasNulls" $4}}`)
+	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "MJOverload" $3 "lHasNulls" $4}}`)
 
 	incrementRightSwitch := makeFunctionRegex("_INCREMENT_RIGHT_SWITCH", 4)
-	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "JoinType" $1 "SelPermutation" $2 "MJOverload" $3 "rHasNulls" $4}}`)
+	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "MJOverload" $3 "rHasNulls" $4}}`)
 
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -118,6 +118,8 @@ func genMergeJoinOps(wr io.Writer) error {
 
 	assignGtRe := makeFunctionRegex("_ASSIGN_GT", 3)
 	s = assignGtRe.ReplaceAllString(s, `{{.Gt.Assign $1 $2 $3}}`)
+
+	s = replaceManipulationFuncs(".LTyp", s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("mergejoin_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)

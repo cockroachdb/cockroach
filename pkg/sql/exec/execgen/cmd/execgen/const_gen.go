@@ -32,6 +32,7 @@ func genConstOps(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPES_T", "types.{{.}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.}}", -1)
+	s = replaceManipulationFuncs("", s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("const_op").Parse(s)

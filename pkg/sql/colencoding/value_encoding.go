@@ -58,7 +58,7 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 	case types.BytesFamily, types.StringFamily:
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
-		vec.Bytes()[idx] = data
+		vec.Bytes().Set(int(idx), data)
 	case types.DateFamily, types.OidFamily:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)

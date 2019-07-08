@@ -113,6 +113,7 @@ func (t T) GoTypeName() string {
 
 // Remove unused warnings for templating functions.
 var (
+	_ = Bool.GoTypeSliceName
 	_ = Bool.Get
 	_ = Bool.Set
 	_ = Bool.Swap

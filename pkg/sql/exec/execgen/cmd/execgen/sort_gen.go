@@ -44,7 +44,7 @@ func genSortOps(wr io.Writer) error {
 	s := string(d)
 
 	// Replace the template variables.
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
+	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
 	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_DIR_ENUM", "{{.Dir}}", -1)
@@ -53,6 +53,8 @@ func genSortOps(wr io.Writer) error {
 
 	assignLtRe := regexp.MustCompile(`_ASSIGN_LT\((.*),(.*),(.*)\)`)
 	s = assignLtRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
+
+	s = replaceManipulationFuncs(".LTyp", s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("sort_op").Parse(s)
