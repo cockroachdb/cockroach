@@ -204,6 +204,8 @@ func NewMergeJoinOp(
 		return &mergeJoinInnerOp{base}, err
 	case sqlbase.JoinType_LEFT_OUTER:
 		return &mergeJoinLeftOuterOp{base}, err
+	case sqlbase.JoinType_RIGHT_OUTER:
+		return &mergeJoinRightOuterOp{base}, err
 	default:
 		panic("unsupported join type")
 	}
@@ -463,6 +465,8 @@ func (o *mergeJoinBase) setBuilderSourceToBufferedGroup() {
 // remaining tuples on the left with nulls for the right side of output. It
 // should only be called once the right source has been exhausted, and if
 // we're doing LEFT OUTER join.
+// TODO(yuzefovich): rename to exhaustLeftSource and template it based on join
+// type.
 func (o *mergeJoinBase) exhaustLeftSourceForLeftOuter() {
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
@@ -486,6 +490,37 @@ func (o *mergeJoinBase) exhaustLeftSourceForLeftOuter() {
 	o.builderState.rBatch = o.proberState.rBatch
 
 	o.proberState.lIdx = o.proberState.lLength
+}
+
+// exhaustRightSourceForRightOuter sets up the builder state for emitting
+// remaining tuples on the right with nulls for the left side of output. It
+// should only be called once the left source has been exhausted, and if
+// we're doing RIGHT OUTER join.
+// TODO(yuzefovich): rename to exhaustRightSource and template it based on join
+// type.
+func (o *mergeJoinBase) exhaustRightSourceForRightOuter() {
+	// The capacity of builder state lGroups and rGroups is always at least 1
+	// given the init.
+	o.builderState.lGroups = o.builderState.lGroups[:1]
+	o.builderState.lGroups[0] = group{
+		rowStartIdx: o.proberState.rIdx,
+		rowEndIdx:   o.proberState.rLength,
+		numRepeats:  1,
+		toBuild:     o.proberState.rLength - o.proberState.rIdx,
+		nullGroup:   true,
+	}
+	o.builderState.rGroups = o.builderState.rGroups[:1]
+	o.builderState.rGroups[0] = group{
+		rowStartIdx: o.proberState.rIdx,
+		rowEndIdx:   o.proberState.rLength,
+		numRepeats:  1,
+		toBuild:     o.proberState.rLength - o.proberState.rIdx,
+		unmatched:   true,
+	}
+	o.builderState.lBatch = o.proberState.lBatch
+	o.builderState.rBatch = o.proberState.rBatch
+
+	o.proberState.rIdx = o.proberState.rLength
 }
 
 // build creates the cross product, and writes it to the output member.
