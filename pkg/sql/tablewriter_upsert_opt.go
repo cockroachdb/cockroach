@@ -222,6 +222,8 @@ func (tu *optTableUpserter) updateConflictingRow(
 		}
 	}
 
+	// The resulting row may have nil values for columns that aren't
+	// being upserted, updated or fetched.
 	_, err = tu.rowsUpserted.AddRow(ctx, tu.resultRow)
 	return err
 }

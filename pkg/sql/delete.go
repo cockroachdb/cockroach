@@ -331,13 +331,11 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// contain additional columns for every newly dropped column not
 		// visible. We do not want them to be available for RETURNING.
 		//
-		// d.columns is guaranteed to only contain the requested
+		// d.run.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
 		resultValues := make(tree.Datums, d.run.rows.NumCols())
-		for i := 0; i < len(d.run.td.rd.FetchCols); i++ {
-			if i < len(resultValues) {
-				resultValues[i] = sourceVals[i]
-			}
+		for i := 0; i < d.run.rows.NumCols(); i++ {
+			resultValues[i] = sourceVals[i]
 		}
 
 		if _, err := d.run.rows.AddRow(params.ctx, resultValues); err != nil {
