@@ -108,7 +108,7 @@ func (p *{{template "opConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		col := vec.{{.LTyp}}()[:coldata.BatchSize]
 		var idx uint16
 		n := batch.Length()
-		if vec.HasNulls() {
+		if vec.MaybeHasNulls() {
 			nulls := vec.Nulls()
 			{{template "selConstLoop" buildDict "Global" . "HasNulls" true }}
 		} else {
@@ -148,7 +148,7 @@ func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 		n := batch.Length()
 
 		var idx uint16
-		if vec1.HasNulls() || vec2.HasNulls() {
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
 			nulls := vec1.Nulls().Or(vec2.Nulls())
 			{{template "selLoop" buildDict "Global" . "HasNulls" true }}
 		} else {

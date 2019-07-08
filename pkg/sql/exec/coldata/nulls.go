@@ -34,11 +34,15 @@ func init() {
 	}
 }
 
-// Nulls represents a list of potentially nullable values.
+// Nulls represents a list of potentially nullable values using a bitmap. It is
+// intended to be used alongside a slice (e.g. in the Vec interface) -- if the
+// ith bit is off, then the ith element in that slice should be treated as NULL.
 type Nulls struct {
 	nulls []byte
-	// hasNulls represents whether or not the memColumn has any null values set.
-	hasNulls bool
+	// maybeHasNulls is a best-effort representation of whether or not the
+	// vector has any null values set. If it is false, there definitely will be
+	// no null values. If it is true, there may or may not be null values.
+	maybeHasNulls bool
 }
 
 // NewNulls returns a new nulls vector, initialized with a length.
@@ -55,9 +59,10 @@ func NewNulls(len int) Nulls {
 	}
 }
 
-// HasNulls returns true if the column has any null values.
-func (n *Nulls) HasNulls() bool {
-	return n.hasNulls
+// MaybeHasNulls returns true if the column possibly has any null values, and
+// returns false if the column definitely has no null values.
+func (n *Nulls) MaybeHasNulls() bool {
+	return n.maybeHasNulls
 }
 
 // NullAt returns true if the ith value of the column is null.
@@ -81,7 +86,7 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 		return
 	}
 
-	n.hasNulls = true
+	n.maybeHasNulls = true
 	sIdx := start / 8
 	eIdx := (end - 1) / 8
 
@@ -113,12 +118,13 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 }
 
 // UnsetNullRange unsets all the nulls in the range [start, end).
-// As of now, UnsetNullRange does not correctly update hasNulls,
-// as it is unclear how to efficiently/smartly perform this check.
 // After using UnsetNullRange, n might not contain any null values,
-// but hasNulls will still be true.
+// but maybeHasNulls could still be true.
 func (n *Nulls) UnsetNullRange(start, end uint64) {
 	if start >= end {
+		return
+	}
+	if !n.maybeHasNulls {
 		return
 	}
 
@@ -150,7 +156,7 @@ func (n *Nulls) UnsetNullRange(start, end uint64) {
 	}
 }
 
-// Truncate sets all values greater than start to null.
+// Truncate sets all values with index greater than or equal to start to null.
 func (n *Nulls) Truncate(start uint16) {
 	end := uint64(len(n.nulls) * 8)
 	n.SetNullRange(uint64(start), end)
@@ -158,7 +164,7 @@ func (n *Nulls) Truncate(start uint16) {
 
 // UnsetNulls sets the column to have no null values.
 func (n *Nulls) UnsetNulls() {
-	n.hasNulls = false
+	n.maybeHasNulls = false
 
 	startIdx := 0
 	for startIdx < len(n.nulls) {
@@ -166,9 +172,16 @@ func (n *Nulls) UnsetNulls() {
 	}
 }
 
+// UnsetNullsAfter sets all values with index greater than or equal to idx to
+// non-null.
+func (n *Nulls) UnsetNullsAfter(idx uint16) {
+	end := uint64(len(n.nulls) * 8)
+	n.UnsetNullRange(uint64(idx), end)
+}
+
 // SetNulls sets the column to have only null values.
 func (n *Nulls) SetNulls() {
-	n.hasNulls = true
+	n.maybeHasNulls = true
 
 	startIdx := 0
 	for startIdx < len(n.nulls) {
@@ -183,7 +196,7 @@ func (n *Nulls) NullAt64(i uint64) bool {
 
 // SetNull64 sets the ith value of the column to null.
 func (n *Nulls) SetNull64(i uint64) {
-	n.hasNulls = true
+	n.maybeHasNulls = true
 	n.nulls[i/8] &= flippedBitMask[i%8]
 }
 
@@ -205,7 +218,7 @@ func (n *Nulls) Extend(src *Nulls, destStartIdx uint64, srcStartIdx uint16, toAp
 	if current < needed {
 		n.nulls = append(n.nulls, filledNulls[:needed-current]...)
 	}
-	if src.HasNulls() {
+	if src.MaybeHasNulls() {
 		for i := uint16(0); i < toAppend; i++ {
 			// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
 			// like n.nulls[i] |= vec.nulls[i].
@@ -231,7 +244,7 @@ func (n *Nulls) ExtendWithSel(
 	if current < needed {
 		n.nulls = append(n.nulls, filledNulls[:needed-current]...)
 	}
-	if src.HasNulls() {
+	if src.MaybeHasNulls() {
 		for i := uint16(0); i < toAppend; i++ {
 			// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
 			// like n.nulls[i] |= vec.nulls[i].
@@ -245,14 +258,14 @@ func (n *Nulls) ExtendWithSel(
 // Slice returns a new Nulls representing a slice of the current Nulls from
 // [start, end).
 func (n *Nulls) Slice(start uint64, end uint64) Nulls {
-	if !n.hasNulls {
+	if !n.maybeHasNulls {
 		return NewNulls(int(end - start))
 	}
 	if start >= end {
 		return NewNulls(0)
 	}
 	s := NewNulls(int(end - start))
-	s.hasNulls = true
+	s.maybeHasNulls = true
 	mod := start % 8
 	startIdx := int(start / 8)
 	if mod == 0 {
@@ -288,7 +301,7 @@ func (n *Nulls) NullBitmap() []byte {
 // valid.
 func (n *Nulls) SetNullBitmap(bm []byte, size int) {
 	n.nulls = bm
-	n.hasNulls = false
+	n.maybeHasNulls = false
 	// Set all indices as valid past the last element.
 	if len(bm) > 0 && size != 0 {
 		// Set the last bits in the last element in which we want to preserve null
@@ -308,7 +321,7 @@ func (n *Nulls) SetNullBitmap(bm []byte, size int) {
 
 	for i := 0; i < len(bm); i++ {
 		if bm[i] != onesMask {
-			n.hasNulls = true
+			n.maybeHasNulls = true
 			return
 		}
 	}
@@ -322,28 +335,28 @@ func (n *Nulls) Or(n2 *Nulls) *Nulls {
 		n, n2 = n2, n
 	}
 	nulls := make([]byte, len(n2.nulls))
-	if n.hasNulls && n2.hasNulls {
+	if n.maybeHasNulls && n2.maybeHasNulls {
 		for i := 0; i < len(n.nulls); i++ {
 			nulls[i] = n.nulls[i] & n2.nulls[i]
 		}
 		// If n2 is longer, we can just copy the remainder.
 		copy(nulls[len(n.nulls):], n2.nulls[len(n.nulls):])
-	} else if n.hasNulls {
+	} else if n.maybeHasNulls {
 		copy(nulls, n.nulls)
-	} else if n2.hasNulls {
+	} else if n2.maybeHasNulls {
 		copy(nulls, n2.nulls)
 	}
 	return &Nulls{
-		hasNulls: n.hasNulls || n2.hasNulls,
-		nulls:    nulls,
+		maybeHasNulls: n.maybeHasNulls || n2.maybeHasNulls,
+		nulls:         nulls,
 	}
 }
 
 // Copy returns a copy of n which can be modified independently.
 func (n *Nulls) Copy() Nulls {
 	c := Nulls{
-		hasNulls: n.hasNulls,
-		nulls:    make([]byte, len(n.nulls)),
+		maybeHasNulls: n.maybeHasNulls,
+		nulls:         make([]byte, len(n.nulls)),
 	}
 	copy(c.nulls, n.nulls)
 	return c
