@@ -819,8 +819,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 				ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return status, nil
 			}); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
-					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
+				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(*sc.job.ID()))
 			}
 		}
 		return nil
