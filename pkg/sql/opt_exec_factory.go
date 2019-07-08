@@ -1287,17 +1287,21 @@ func (ef *execFactory) ConstructUpdate(
 	// If rows are not needed, no columns are returned.
 	var returnCols sqlbase.ResultColumns
 	if rowsNeeded {
-		var cols []sqlbase.ColumnDescriptor
-		for _, col := range tabDesc.Columns {
-			for _, fetchCol := range ru.FetchCols {
-				if fetchCol.ID == col.ID {
-					cols = append(cols, fetchCol)
-				}
-			}
+		// Update always returns the minimal set of non-mutation columns required,
+		// in the same order they are defined in the table.
+		var returnColDescs []sqlbase.ColumnDescriptor
+
+		// Only return the columns that are part of the table descriptor.
+		// This is important when columns are added and being back-filled
+		// as part of the same transaction when the update runs.
+		// In such cases, the newly added columns shouldn't be returned.
+		// See regression logic tests for #29494.
+		returnColDescs = ru.FetchCols
+		if len(tabDesc.Columns) < len(ru.FetchCols) {
+			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
 		}
-		// Update always returns all non-mutation columns, in the same order they
-		// are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(cols)
+
+		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
 	}
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
@@ -1511,17 +1515,21 @@ func (ef *execFactory) ConstructDelete(
 	// If rows are not needed, no columns are returned.
 	var returnCols sqlbase.ResultColumns
 	if rowsNeeded {
-		var cols []sqlbase.ColumnDescriptor
-		for _, col := range tabDesc.Columns {
-			for _, fetchCol := range rd.FetchCols {
-				if fetchCol.ID == col.ID {
-					cols = append(cols, fetchCol)
-				}
-			}
+		// Delete always returns the minimal set of non-mutation columns required,
+		// in the same order they are defined in the table.
+		var returnColDescs []sqlbase.ColumnDescriptor
+
+		// Only return the columns that are part of the table descriptor.
+		// This is important when columns are added and being back-filled
+		// as part of the same transaction when the delete runs.
+		// In such cases, the newly added columns shouldn't be returned.
+		// See regression logic tests for #29494.
+		returnColDescs = rd.FetchCols
+		if len(tabDesc.Columns) < len(rd.FetchCols) {
+			returnColDescs = returnColDescs[:len(tabDesc.Columns)]
 		}
-		// Delete always returns all non-mutation columns, in the same order they
-		// are defined in the table.
-		returnCols = sqlbase.ResultColumnsFromColDescs(cols)
+
+		returnCols = sqlbase.ResultColumnsFromColDescs(returnColDescs)
 	}
 
 	// Now make a delete node. We use a pool.
