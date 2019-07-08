@@ -114,7 +114,7 @@ func (n *Nulls) SetNullRange(start uint64, end uint64) {
 	}
 }
 
-// Truncate sets all values greater than start to null.
+// Truncate sets all values with index greater than or equal to start to null.
 func (n *Nulls) Truncate(start uint16) {
 	end := uint64(len(n.nulls) * 8)
 	n.SetNullRange(uint64(start), end)
@@ -127,6 +127,20 @@ func (n *Nulls) UnsetNulls() {
 	startIdx := 0
 	for startIdx < len(n.nulls) {
 		startIdx += copy(n.nulls[startIdx:], filledNulls[:])
+	}
+}
+
+// UnsetNullsAfter sets all values with index greater than or equal to idx to
+// non-null.
+func (n *Nulls) UnsetNullsAfter(idx uint16) {
+	nullsCopy := n.Slice(0, uint64(idx))
+	n.UnsetNulls()
+	if nullsCopy.HasNulls() {
+		for i := uint16(0); i < idx; i++ {
+			if nullsCopy.NullAt(i) {
+				n.SetNull(i)
+			}
+		}
 	}
 }
 
