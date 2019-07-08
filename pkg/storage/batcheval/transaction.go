@@ -137,12 +137,6 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 		// Set the LastHeartbeat timestamp to the intent's timestamp.
 		// We use this as an indication of client activity.
 		LastHeartbeat: txn.Timestamp,
-		// We set the OrigTimestamp to avoid triggering an assertion
-		// in txn.AssertInitialized on 2.1 nodes. This value may not
-		// be accurate, but it won't cause issues anywhere that it
-		// can leak to.
-		// TODO(nvanbenschoten): Remove this in 2.3.
-		OrigTimestamp: txn.Timestamp,
 	}
 
 	// Determine whether the transaction record could ever actually be written
