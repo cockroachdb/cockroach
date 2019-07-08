@@ -111,6 +111,14 @@ func (t T) GoTypeName() string {
 	}
 }
 
+// GoTypeSliceName returns how a slice of the receiver type is represented.
+func (t T) GoTypeSliceName() string {
+	if t == Bytes {
+		return "*coldata.Bytes"
+	}
+	return "[]" + t.GoTypeName()
+}
+
 // Get is a function that should only be used in templates.
 func (t T) Get(target, i string) string {
 	if t == Bytes {

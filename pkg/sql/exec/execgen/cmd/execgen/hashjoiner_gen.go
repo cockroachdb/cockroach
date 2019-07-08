@@ -31,6 +31,7 @@ func genHashJoiner(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_SEL_IND", "{{.SelInd}}", -1)
+	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
 
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
 	s = assignNeRe.ReplaceAllString(s, `{{.Global.Assign "$1" "$2" "$3"}}`)
@@ -64,8 +65,9 @@ func genHashJoiner(wr io.Writer) error {
 		s,
 		`{{template "checkColBody" buildDict "Global" .Global "SelInd" .SelInd "ProbeHasNulls" $7 "BuildHasNulls" $8 "AllowNullEquality" $9}}`)
 
-	tmpl, err := template.New("hashjoiner_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
+	s = replaceManipulationFuncs(".Global.LTyp", s)
 
+	tmpl, err := template.New("hashjoiner_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}

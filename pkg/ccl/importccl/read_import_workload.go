@@ -92,13 +92,13 @@ func makeDatumFromColOffset(
 	case types.Bytes:
 		switch hint.Family() {
 		case sqltypes.BytesFamily:
-			return alloc.NewDBytes(tree.DBytes(col.Bytes()[rowIdx])), nil
+			return alloc.NewDBytes(tree.DBytes(col.Bytes().Get(rowIdx))), nil
 		case sqltypes.StringFamily:
-			data := col.Bytes()[rowIdx]
+			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
 			return alloc.NewDString(tree.DString(str)), nil
 		default:
-			data := col.Bytes()[rowIdx]
+			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
 			return tree.ParseDatumStringAs(hint, str, evalCtx)
 		}

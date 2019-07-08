@@ -15,9 +15,9 @@ type Bytes struct {
 	data [][]byte
 }
 
-// MakeBytes returns a Bytes struct with enough capacity for n elements.
-func MakeBytes(n int) Bytes {
-	return Bytes{
+// NewBytes returns a Bytes struct with enough capacity for n elements.
+func NewBytes(n int) *Bytes {
+	return &Bytes{
 		data: make([][]byte, n),
 	}
 }
@@ -39,19 +39,19 @@ func (b Bytes) Swap(i int, j int) {
 
 // Slice returns a new Bytes struct with its internal data sliced according to
 // start and end.
-func (b Bytes) Slice(start, end int) Bytes {
-	return Bytes{data: b.data[start:end]}
+func (b Bytes) Slice(start, end int) *Bytes {
+	return &Bytes{data: b.data[start:end]}
 }
 
 // CopySlice copies srcStartIdx inclusive and srcEndIdx inclusive []byte values
 // from src into the receiver starting at destIdx.
-func (b Bytes) CopySlice(src Bytes, destIdx, srcStartIdx, srcEndIdx int) {
+func (b Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	copy(b.data[destIdx:], src.data[srcStartIdx:srcEndIdx])
 }
 
 // AppendSlice appends srcStartIdx inclusive and srcEndIdx inclusive []byte
 // values from src into the receiver starting at destIdx.
-func (b *Bytes) AppendSlice(src Bytes, destIdx, srcStartIdx, srcEndIdx int) {
+func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	b.data = append(b.data[:destIdx], src.data[srcStartIdx:srcEndIdx]...)
 }
 

@@ -102,8 +102,8 @@ func BenchmarkLikeOps(b *testing.B) {
 	batch := coldata.NewMemBatch([]types.T{types.Bytes})
 	col := batch.ColVec(0).Bytes()
 	width := 64
-	for i := int64(0); i < coldata.BatchSize; i++ {
-		col[i] = randutil.RandBytes(rng, width)
+	for i := 0; i < coldata.BatchSize; i++ {
+		col.Set(i, randutil.RandBytes(rng, width))
 	}
 
 	// Set a known prefix and suffix on half the batch so we're not filtering
@@ -111,8 +111,8 @@ func BenchmarkLikeOps(b *testing.B) {
 	prefix := "abc"
 	suffix := "xyz"
 	for i := 0; i < coldata.BatchSize/2; i++ {
-		copy(col[i][:3], prefix)
-		copy(col[i][width-3:], suffix)
+		copy(col.Get(i)[:3], prefix)
+		copy(col.Get(i)[width-3:], suffix)
 	}
 
 	batch.SetLength(coldata.BatchSize)

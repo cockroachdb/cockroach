@@ -229,11 +229,11 @@ func TypedTuples(count int, colTypes []types.T, fn func(int) []interface{}) Batc
 				case float64:
 					col.Float64()[0] = d
 				case string:
-					col.Bytes()[0] = []byte(d)
+					col.Bytes().Set(0, []byte(d))
 				case []byte:
-					col.Bytes()[0] = d
+					col.Bytes().Set(0, d)
 				case time.Time:
-					col.Bytes()[0] = []byte(d.Round(time.Microsecond).UTC().Format(timestampOutputFormat))
+					col.Bytes().Set(0, []byte(d.Round(time.Microsecond).UTC().Format(timestampOutputFormat)))
 				default:
 					panic(fmt.Sprintf(`unhandled datum type %T`, d))
 				}
@@ -294,9 +294,10 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 			// data/splits are okay with the fidelity loss. So, to avoid the
 			// complexity and the undesirable pkg/sql/parser dep, we simply treat them
 			// all as bytes and let the caller deal with the ambiguity.
-			for rowIdx, datum := range col.Bytes() {
+			colBytes := col.Bytes()
+			for rowIdx := 0; rowIdx < colBytes.Len(); rowIdx++ {
 				if !nulls.NullAt64(uint64(rowIdx)) {
-					datums[rowIdx*numCols+colIdx] = datum
+					datums[rowIdx*numCols+colIdx] = colBytes.Get(rowIdx)
 				}
 			}
 		default:
