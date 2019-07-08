@@ -1732,16 +1732,16 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* mutable_max_timestamp();
   void set_allocated_max_timestamp(::cockroach::util::hlc::Timestamp* max_timestamp);
 
-  bool has_epoch_zero_timestamp() const;
-  void clear_epoch_zero_timestamp();
-  static const int kEpochZeroTimestampFieldNumber = 14;
+  bool has_deprecated_min_timestamp() const;
+  void clear_deprecated_min_timestamp();
+  static const int kDeprecatedMinTimestampFieldNumber = 14;
   private:
-  const ::cockroach::util::hlc::Timestamp& _internal_epoch_zero_timestamp() const;
+  const ::cockroach::util::hlc::Timestamp& _internal_deprecated_min_timestamp() const;
   public:
-  const ::cockroach::util::hlc::Timestamp& epoch_zero_timestamp() const;
-  ::cockroach::util::hlc::Timestamp* release_epoch_zero_timestamp();
-  ::cockroach::util::hlc::Timestamp* mutable_epoch_zero_timestamp();
-  void set_allocated_epoch_zero_timestamp(::cockroach::util::hlc::Timestamp* epoch_zero_timestamp);
+  const ::cockroach::util::hlc::Timestamp& deprecated_min_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_deprecated_min_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_deprecated_min_timestamp();
+  void set_allocated_deprecated_min_timestamp(::cockroach::util::hlc::Timestamp* deprecated_min_timestamp);
 
   bool has_refreshed_timestamp() const;
   void clear_refreshed_timestamp();
@@ -1784,7 +1784,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* last_heartbeat_;
   ::cockroach::util::hlc::Timestamp* orig_timestamp_;
   ::cockroach::util::hlc::Timestamp* max_timestamp_;
-  ::cockroach::util::hlc::Timestamp* epoch_zero_timestamp_;
+  ::cockroach::util::hlc::Timestamp* deprecated_min_timestamp_;
   ::cockroach::util::hlc::Timestamp* refreshed_timestamp_;
   int status_;
   bool orig_timestamp_was_observed_;
@@ -4215,51 +4215,51 @@ inline void Transaction::set_allocated_refreshed_timestamp(::cockroach::util::hl
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.refreshed_timestamp)
 }
 
-inline bool Transaction::has_epoch_zero_timestamp() const {
-  return this != internal_default_instance() && epoch_zero_timestamp_ != NULL;
+inline bool Transaction::has_deprecated_min_timestamp() const {
+  return this != internal_default_instance() && deprecated_min_timestamp_ != NULL;
 }
-inline const ::cockroach::util::hlc::Timestamp& Transaction::_internal_epoch_zero_timestamp() const {
-  return *epoch_zero_timestamp_;
+inline const ::cockroach::util::hlc::Timestamp& Transaction::_internal_deprecated_min_timestamp() const {
+  return *deprecated_min_timestamp_;
 }
-inline const ::cockroach::util::hlc::Timestamp& Transaction::epoch_zero_timestamp() const {
-  const ::cockroach::util::hlc::Timestamp* p = epoch_zero_timestamp_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.epoch_zero_timestamp)
+inline const ::cockroach::util::hlc::Timestamp& Transaction::deprecated_min_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = deprecated_min_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.deprecated_min_timestamp)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
       &::cockroach::util::hlc::_Timestamp_default_instance_);
 }
-inline ::cockroach::util::hlc::Timestamp* Transaction::release_epoch_zero_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.epoch_zero_timestamp)
+inline ::cockroach::util::hlc::Timestamp* Transaction::release_deprecated_min_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.deprecated_min_timestamp)
   
-  ::cockroach::util::hlc::Timestamp* temp = epoch_zero_timestamp_;
-  epoch_zero_timestamp_ = NULL;
+  ::cockroach::util::hlc::Timestamp* temp = deprecated_min_timestamp_;
+  deprecated_min_timestamp_ = NULL;
   return temp;
 }
-inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_epoch_zero_timestamp() {
+inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_deprecated_min_timestamp() {
   
-  if (epoch_zero_timestamp_ == NULL) {
+  if (deprecated_min_timestamp_ == NULL) {
     auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
-    epoch_zero_timestamp_ = p;
+    deprecated_min_timestamp_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.epoch_zero_timestamp)
-  return epoch_zero_timestamp_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.deprecated_min_timestamp)
+  return deprecated_min_timestamp_;
 }
-inline void Transaction::set_allocated_epoch_zero_timestamp(::cockroach::util::hlc::Timestamp* epoch_zero_timestamp) {
+inline void Transaction::set_allocated_deprecated_min_timestamp(::cockroach::util::hlc::Timestamp* deprecated_min_timestamp) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(epoch_zero_timestamp_);
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(deprecated_min_timestamp_);
   }
-  if (epoch_zero_timestamp) {
+  if (deprecated_min_timestamp) {
     ::google::protobuf::Arena* submessage_arena = NULL;
     if (message_arena != submessage_arena) {
-      epoch_zero_timestamp = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, epoch_zero_timestamp, submessage_arena);
+      deprecated_min_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, deprecated_min_timestamp, submessage_arena);
     }
     
   } else {
     
   }
-  epoch_zero_timestamp_ = epoch_zero_timestamp;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.epoch_zero_timestamp)
+  deprecated_min_timestamp_ = deprecated_min_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.deprecated_min_timestamp)
 }
 
 inline bool Transaction::has_max_timestamp() const {
