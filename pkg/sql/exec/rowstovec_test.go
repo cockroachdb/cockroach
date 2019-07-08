@@ -89,8 +89,8 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 			t.Fatal(err)
 		}
 		expected := coldata.NewMemColumn(types.Bytes, 2)
-		expected.Bytes()[0] = []byte("foo")
-		expected.Bytes()[1] = []byte("bar")
+		expected.Bytes().Set(0, []byte("foo"))
+		expected.Bytes().Set(1, []byte("bar"))
 		if !reflect.DeepEqual(vec, expected) {
 			t.Errorf("expected vector %+v, got %+v", expected, vec)
 		}

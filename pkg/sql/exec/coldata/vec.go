@@ -93,8 +93,8 @@ type Vec interface {
 	Float32() []float32
 	// Float64 returns a float64 slice.
 	Float64() []float64
-	// Bytes returns a []byte slice.
-	Bytes() [][]byte
+	// Bytes returns a flat Bytes representation.
+	Bytes() *Bytes
 	// TODO(jordan): should this be [][]byte?
 	// Decimal returns an apd.Decimal slice.
 	Decimal() []apd.Decimal
@@ -162,7 +162,7 @@ func NewMemColumn(t types.T, n int) Vec {
 	case types.Bool:
 		return &memColumn{t: t, col: make([]bool, n), nulls: nulls}
 	case types.Bytes:
-		return &memColumn{t: t, col: MakeBytes(n), nulls: nulls}
+		return &memColumn{t: t, col: NewBytes(n), nulls: nulls}
 	case types.Int8:
 		return &memColumn{t: t, col: make([]int8, n), nulls: nulls}
 	case types.Int16:
@@ -218,8 +218,8 @@ func (m *memColumn) Float64() []float64 {
 	return m.col.([]float64)
 }
 
-func (m *memColumn) Bytes() [][]byte {
-	return m.col.([][]byte)
+func (m *memColumn) Bytes() *Bytes {
+	return m.col.(*Bytes)
 }
 
 func (m *memColumn) Decimal() []apd.Decimal {

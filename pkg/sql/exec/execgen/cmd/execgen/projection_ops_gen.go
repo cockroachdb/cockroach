@@ -71,13 +71,16 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	projCol := projVec.{{.RetTyp}}()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
-			{{(.Assign "projCol[i]" "col[i]" "p.constArg")}}
+			arg := {{.LTyp.Get "col" "int(i)"}}
+			{{(.Assign "projCol[i]" "arg" "p.constArg")}}
 		}
 	} else {
-		col = col[:n]
-		_ = projCol[len(col)-1]
-		for i := range col {
-			{{(.Assign "projCol[i]" "col[i]" "p.constArg")}}
+		col = {{.LTyp.Slice "col" "0" "int(n)"}}
+		colLen := {{.LTyp.Len "col"}}
+		_ = projCol[colLen-1]
+		for {{.LTyp.Range "i" "col"}} {
+			arg := {{.LTyp.Get "col" "i"}}
+			{{(.Assign "projCol[i]" "arg" "p.constArg")}}
 		}
 	}
 	if vec.Nulls().MaybeHasNulls() {
@@ -119,13 +122,16 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	projCol := projVec.{{.RetTyp}}()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
-			{{(.Assign "projCol[i]" "p.constArg" "col[i]")}}
+			arg := {{.RTyp.Get "col" "int(i)"}}
+			{{(.Assign "projCol[i]" "p.constArg" "arg")}}
 		}
 	} else {
-		col = col[:n]
-		_ = projCol[len(col)-1]
-		for i := range col {
-			{{(.Assign "projCol[i]" "p.constArg" "col[i]")}}
+		col = {{.RTyp.Slice "col" "0" "int(n)"}}
+		colLen := {{.RTyp.Len "col"}}
+		_ = projCol[colLen-1]
+		for {{.RTyp.Range "i" "col"}} {
+			arg := {{.RTyp.Get "col" "i"}}
+			{{(.Assign "projCol[i]" "p.constArg" "arg")}}
 		}
 	}
 	if vec.Nulls().MaybeHasNulls() {
@@ -169,14 +175,19 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 	col2 := vec2.{{.RTyp}}()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
-			{{(.Assign "projCol[i]" "col1[i]" "col2[i]")}}
+			arg1 := {{.LTyp.Get "col1" "int(i)"}}
+			arg2 := {{.RTyp.Get "col2" "int(i)"}}
+			{{(.Assign "projCol[i]" "arg1" "arg2")}}
 		}
 	} else {
-		col1 = col1[:n]
-		_ = projCol[len(col1)-1]
-		_ = col2[len(col1)-1]
-		for i := range col1 {
-			{{(.Assign "projCol[i]" "col1[i]" "col2[i]")}}
+		col1 = {{.LTyp.Slice "col1" "0" "int(n)"}}
+		colLen := {{.LTyp.Len "col1"}}
+		_ = projCol[colLen-1]
+		_ = {{.LTyp.Slice "col2" "0" "colLen-1"}}
+		for {{.LTyp.Range "i" "col1"}} {
+			arg1 := {{.LTyp.Get "col1" "i"}}
+			arg2 := {{.LTyp.Get "col2" "i"}}
+			{{(.Assign "projCol[i]" "arg1" "arg2")}}
 		}
 	}
 	if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {

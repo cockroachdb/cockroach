@@ -50,13 +50,13 @@ func PhysicalTypeColElemToDatum(
 	case semtypes.DateFamily:
 		return tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
 	case semtypes.StringFamily:
-		b := col.Bytes()[rowIdx]
+		b := col.Bytes().Get(int(rowIdx))
 		if ct.Oid() == oid.T_name {
 			return da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
 		}
 		return da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
 	case semtypes.BytesFamily:
-		return da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
+		return da.NewDBytes(tree.DBytes(col.Bytes().Get(int(rowIdx))))
 	case semtypes.OidFamily:
 		return da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 	default:

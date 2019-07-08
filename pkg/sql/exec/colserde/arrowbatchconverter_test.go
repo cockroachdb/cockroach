@@ -162,12 +162,12 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			// This type has variable length elements, fit all of them to be fixedLen
 			// bytes long.
 			bytes := batch.ColVec(0).Bytes()
-			for i := range bytes {
-				diff := len(bytes[i]) - fixedLen
+			for i := 0; i < bytes.Len(); i++ {
+				diff := len(bytes.Get(i)) - fixedLen
 				if diff < 0 {
-					bytes[i] = append(bytes[i], make([]byte, -diff)...)
+					bytes.Set(i, append(bytes.Get(i), make([]byte, -diff)...))
 				} else if diff > 0 {
-					bytes[i] = bytes[i][:fixedLen]
+					bytes.Set(i, bytes.Get(i)[:fixedLen])
 				}
 			}
 		}

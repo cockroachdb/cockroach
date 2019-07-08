@@ -147,7 +147,7 @@ func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
 		return strconv.FormatFloat(col.Float64()[rowIdx], 'f', -1, 64)
 	case types.Bytes:
 		// See the HACK comment in ColBatchToRows.
-		bytes := col.Bytes()[rowIdx]
+		bytes := col.Bytes().Get(rowIdx)
 		return *(*string)(unsafe.Pointer(&bytes))
 	}
 	panic(fmt.Sprintf(`unhandled type %s`, col.Type().GoTypeName()))

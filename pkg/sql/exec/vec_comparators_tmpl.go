@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -50,9 +51,12 @@ func _COMPARE(_, _, _ string) bool {
 
 // */}}
 
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.GET
+
 // {{range .}}
 type _TYPEVecComparator struct {
-	vecs  [][]_GOTYPE
+	vecs  []_GOTYPESLICE
 	nulls []*coldata.Nulls
 }
 
@@ -66,8 +70,8 @@ func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1][valIdx1]
-	right := c.vecs[vecIdx2][valIdx2]
+	left := execgen.GET(c.vecs[vecIdx1], int(valIdx1))
+	right := execgen.GET(c.vecs[vecIdx2], int(valIdx2))
 	var cmp int
 	_COMPARE("cmp", "left", "right")
 	return cmp
@@ -83,7 +87,8 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		c.vecs[dstVecIdx][dstIdx] = c.vecs[srcVecIdx][srcIdx]
+		v := execgen.GET(c.vecs[srcVecIdx], int(srcIdx))
+		execgen.SET(c.vecs[dstVecIdx], int(dstIdx), v)
 	}
 }
 
@@ -94,7 +99,7 @@ func GetVecComparator(t types.T, numVecs int) vecComparator {
 	// {{range .}}
 	case types._TYPE:
 		return &_TYPEVecComparator{
-			vecs:  make([][]_GOTYPE, numVecs),
+			vecs:  make([]_GOTYPESLICE, numVecs),
 			nulls: make([]*coldata.Nulls, numVecs),
 		}
 		// {{end}}
