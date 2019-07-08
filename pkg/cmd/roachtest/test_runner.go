@@ -636,6 +636,7 @@ func (r *testRunner) runTest(
 	// timeout.
 	success := false
 	done := make(chan struct{})
+	var	collectClusterLogsOnce sync.Once
 	go func() {
 		defer close(done) // closed only after we've grabbed the debug info below
 
@@ -652,29 +653,7 @@ func (r *testRunner) runTest(
 				success = true
 				return
 			}
-
-			if err := c.FetchDebugZip(ctx); err != nil {
-				t.l.Printf("failed to download logs: %s", err)
-			}
-			if err := c.FetchDmesg(ctx); err != nil {
-				c.l.Printf("failed to fetch dmesg: %s", err)
-			}
-			if err := c.FetchJournalctl(ctx); err != nil {
-				c.l.Printf("failed to fetch journalctl: %s", err)
-			}
-			if err := c.FetchCores(ctx); err != nil {
-				c.l.Printf("failed to fetch cores: %s", err)
-			}
-			if err := c.CopyRoachprodState(ctx); err != nil {
-				c.l.Printf("failed to copy roachprod state: %s", err)
-			}
-			// NB: fetch the logs even when we have a debug zip because
-			// debug zip can't ever get the logs for down nodes.
-			// We only save artifacts for failed tests in CI, so this
-			// duplication is acceptable.
-			if err := c.FetchLogs(ctx); err != nil {
-				c.l.Printf("failed to download logs: %s", err)
-			}
+			collectClusterLogsOnce.Do(func () {r.collectClusterLogs(ctx, c, t.l)})
 		}()
 
 		// This is the call to actually run the test.
@@ -700,10 +679,40 @@ func (r *testRunner) runTest(
 				panic("expected success=false after a timeout")
 			}
 		case <-time.After(5 * time.Minute):
-			return false, fmt.Errorf("test timed out and afterwards failed to respond to cancelation")
+			msg := "test timed out and afterwards failed to respond to cancelation"
+			t.l.PrintfCtx(ctx, msg)
+			collectClusterLogsOnce.Do(func(){r.collectClusterLogs(ctx, c, t.l)})
+			return false, fmt.Errorf(msg)
 		}
 	}
 	return success, nil
+}
+
+
+func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logger) {
+	l.PrintfCtx(ctx, "collecting cluster logs")
+	if err := c.FetchDebugZip(ctx); err != nil {
+		l.Printf("failed to download logs: %s", err)
+	}
+	if err := c.FetchDmesg(ctx); err != nil {
+		l.Printf("failed to fetch dmesg: %s", err)
+	}
+	if err := c.FetchJournalctl(ctx); err != nil {
+		l.Printf("failed to fetch journalctl: %s", err)
+	}
+	if err := c.FetchCores(ctx); err != nil {
+		l.Printf("failed to fetch cores: %s", err)
+	}
+	if err := c.CopyRoachprodState(ctx); err != nil {
+		l.Printf("failed to copy roachprod state: %s", err)
+	}
+	// NB: fetch the logs even when we have a debug zip because
+	// debug zip can't ever get the logs for down nodes.
+	// We only save artifacts for failed tests in CI, so this
+	// duplication is acceptable.
+	if err := c.FetchLogs(ctx); err != nil {
+		l.Printf("failed to download logs: %s", err)
+	}
 }
 
 func callerName() string {
