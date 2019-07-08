@@ -41,7 +41,8 @@ if sel := batch.Selection(); sel != nil {
 	sel = sel[:n]
 	for _, i := range sel {
 		var cmp bool
-		{{(.Global.Assign "cmp" "col[i]" "p.constArg")}}
+		arg := {{.Global.LTyp.Get "col" "int(i)"}}
+		{{(.Global.Assign "cmp" "arg" "p.constArg")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(i) {{end}}{
 			sel[idx] = i
 			idx++
@@ -50,10 +51,11 @@ if sel := batch.Selection(); sel != nil {
 } else {
 	batch.SetSelection(true)
 	sel := batch.Selection()
-	col = col[:n]
-	for i := range col {
+	col = {{.Global.LTyp.Slice "col" "0" "int(n)"}}
+	for {{.Global.LTyp.Loop "col"}} {
 		var cmp bool
-		{{(.Global.Assign "cmp" "col[i]" "p.constArg")}}
+		arg := {{.Global.LTyp.Get "col" "i"}}
+		{{(.Global.Assign "cmp" "arg" "p.constArg")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(uint16(i)) {{end}}{
 			sel[idx] = uint16(i)
 			idx++
@@ -67,7 +69,9 @@ if sel := batch.Selection(); sel != nil {
 	sel = sel[:n]
 	for _, i := range sel {
 		var cmp bool
-		{{(.Global.Assign "cmp" "col1[i]" "col2[i]")}}
+		arg1 := {{.Global.LTyp.Get "col1" "int(i)"}}
+		arg2 := {{.Global.RTyp.Get "col2" "int(i)"}}
+		{{(.Global.Assign "cmp" "arg1" "arg2")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(i) {{end}}{
 			sel[idx] = i
 			idx++
@@ -76,11 +80,14 @@ if sel := batch.Selection(); sel != nil {
 } else {
 	batch.SetSelection(true)
 	sel := batch.Selection()
-	col1 = col1[:n]
-	col2 = col2[:len(col1)]
-	for i := range col1 {
+	col1 = {{.Global.LTyp.Slice "col1" "0" "int(n)"}}
+	col1Len := {{.Global.LTyp.Len "col1"}}
+	col2 = {{.Global.RTyp.Slice "col2" "0" "col1Len"}}
+	for {{.Global.LTyp.Loop "col1"}} {
 		var cmp bool
-		{{(.Global.Assign "cmp" "col1[i]" "col2[i]")}}
+		arg1 := {{.Global.LTyp.Get "col1" "i"}}
+		arg2 := {{.Global.RTyp.Get "col2" "i"}}
+		{{(.Global.Assign "cmp" "arg1" "arg2")}}
 		if cmp {{if .HasNulls}}&& !nulls.NullAt(uint16(i)) {{end}}{
 			sel[idx] = uint16(i)
 			idx++
@@ -105,7 +112,8 @@ func (p *{{template "opConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		}
 
 		vec := batch.ColVec(p.colIdx)
-		col := vec.{{.LTyp}}()[:coldata.BatchSize]
+		col := vec.{{.LTyp}}()
+		col = {{.LTyp.Slice "col" "0" "coldata.BatchSize"}}
 		var idx uint16
 		n := batch.Length()
 		if vec.MaybeHasNulls() {
@@ -143,8 +151,11 @@ func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 
 		vec1 := batch.ColVec(p.col1Idx)
 		vec2 := batch.ColVec(p.col2Idx)
-		col1 := vec1.{{.LTyp}}()[:coldata.BatchSize]
-		col2 := vec2.{{.RTyp}}()[:coldata.BatchSize]
+		col1 := vec1.{{.LTyp}}()
+		col1 = {{.LTyp.Slice "col1" "0" "coldata.BatchSize"}}
+		col2 := vec2.{{.RTyp}}()
+		col2 = {{.RTyp.Slice "col2" "0" "coldata.BatchSize"}}
+	
 		n := batch.Length()
 
 		var idx uint16

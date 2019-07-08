@@ -167,14 +167,14 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 			case types.DateFamily:
 				m.row[outIdx].Datum = tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
 			case types.StringFamily:
-				b := col.Bytes()[rowIdx]
+				b := col.Bytes().Get(int(rowIdx))
 				if ct.Oid() == oid.T_name {
 					m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
 				} else {
 					m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
 				}
 			case types.BytesFamily:
-				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
+				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes().Get(int(rowIdx))))
 			case types.OidFamily:
 				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 			default:
