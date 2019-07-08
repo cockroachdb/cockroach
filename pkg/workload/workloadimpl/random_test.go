@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tpcc
+package workloadimpl_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"golang.org/x/exp/rand"
 )
 
@@ -22,22 +23,8 @@ func BenchmarkRandStringFast(b *testing.B) {
 	rng := rand.NewSource(uint64(timeutil.Now().UnixNano()))
 	buf := make([]byte, strLen)
 
-	b.Run(`letters`, func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			randStringLetters(rng, buf)
-		}
-		b.SetBytes(strLen)
-	})
-	b.Run(`numbers`, func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			randStringNumbers(rng, buf)
-		}
-		b.SetBytes(strLen)
-	})
-	b.Run(`aChars`, func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			randStringAChars(rng, buf)
-		}
-		b.SetBytes(strLen)
-	})
+	for i := 0; i < b.N; i++ {
+		workloadimpl.RandStringFast(rng, buf, `0123456789abcdefghijklmnopqrstuvwxyz`)
+	}
+	b.SetBytes(strLen)
 }
