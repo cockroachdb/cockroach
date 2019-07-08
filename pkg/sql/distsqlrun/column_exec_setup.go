@@ -670,7 +670,17 @@ func planProjectionExpr(
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
 		resultIdx = len(ct)
-		op, err = exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
+		if binOp == tree.In || binOp == tree.NotIn {
+			negate := binOp == tree.NotIn
+			datumTuple, ok := tree.AsDTuple(rConstArg)
+			if !ok {
+				err = errors.Errorf("IN operator supported only on constant expressions")
+				return nil, resultIdx, ct, err
+			}
+			op, err = exec.GetInProjectionOperator(typ, leftOp, leftIdx, resultIdx, datumTuple, negate)
+		} else {
+			op, err = exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
+		}
 		ct = append(ct, *typ)
 		return op, resultIdx, ct, err
 	}
@@ -1086,6 +1096,9 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				}
 				metadataSourcesQueue = metadataSourcesQueue[:0]
 			case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+				if f.syncFlowConsumer == nil {
+					return errors.New("syncFlowConsumer unset, unable to create materializer")
+				}
 				// Make the materializer, which will write to the given receiver.
 				columnTypes := f.syncFlowConsumer.Types()
 				outputToInputColIdx := make([]int, len(columnTypes))
