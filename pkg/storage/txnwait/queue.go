@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -33,12 +34,26 @@ const maxWaitForQueryTxn = 50 * time.Millisecond
 
 // TxnLivenessHeartbeatMultiplier specifies what multiple the transaction
 // liveness threshold should be of the transaction heartbeat internval.
-const TxnLivenessHeartbeatMultiplier = 5
+var TxnLivenessHeartbeatMultiplier = envutil.EnvOrDefaultInt(
+	"COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER", 5)
 
 // TxnLivenessThreshold is the maximum duration between transaction heartbeats
 // before the transaction is considered expired by Queue. It is exposed and
 // mutable to allow tests to override it.
-var TxnLivenessThreshold = TxnLivenessHeartbeatMultiplier * base.DefaultHeartbeatInterval
+//
+// Use TestingOverrideTxnLivenessThreshold to override the value in tests.
+var TxnLivenessThreshold = time.Duration(TxnLivenessHeartbeatMultiplier) * base.DefaultTxnHeartbeatInterval
+
+// TestingOverrideTxnLivenessThreshold allows tests to override the transaction
+// liveness threshold. The function returns a closure that should be called to
+// reset the value.
+func TestingOverrideTxnLivenessThreshold(t time.Duration) func() {
+	old := TxnLivenessThreshold
+	TxnLivenessThreshold = t
+	return func() {
+		TxnLivenessThreshold = old
+	}
+}
 
 // ShouldPushImmediately returns whether the PushTxn request should
 // proceed without queueing. This is true for pushes which are neither
@@ -552,6 +567,29 @@ func (q *Queue) MaybeWaitForPush(
 			pending.txn.Store(updatedPushee)
 			if updatedPushee.Status.IsFinalized() {
 				log.VEvent(ctx, 2, "push request is satisfied")
+				if updatedPushee.Status == roachpb.ABORTED {
+					// Inform any other waiting pushers that the transaction is now
+					// finalized. Intuitively we would expect that if any pusher was
+					// stuck waiting for the transaction to be finalized then it would
+					// have heard about the update when the transaction record moved
+					// into its finalized state. This is correct for cases where a
+					// command explicitly wrote the transaction record with a finalized
+					// status.
+					//
+					// However, this does not account for the case where a transaction
+					// becomes uncommittable due a loss of resolution in the store's
+					// timestamp cache. In that case, a transaction may suddenly become
+					// uncommittable without an associated write to its record. When
+					// this happens, no one else will immediately inform the other
+					// pushers about the uncommittable transaction. Eventually the
+					// pushee's coordinator will come along and roll back its record,
+					// but that's only if the pushee isn't itself waiting on the result
+					// of one of the pushers here. If there is such a dependency cycle
+					// then the other pushers may have to wait for up to the transaction
+					// expiration to query the pushee again and notice that the pushee
+					// is now uncommittable.
+					q.UpdateTxn(ctx, updatedPushee)
+				}
 				return createPushTxnResponse(updatedPushee), nil
 			}
 			if IsExpired(q.store.Clock().Now(), updatedPushee) {

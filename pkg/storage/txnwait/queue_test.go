@@ -12,14 +12,19 @@ package txnwait
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShouldPushImmediately(t *testing.T) {
@@ -125,16 +130,38 @@ func TestIsPushed(t *testing.T) {
 	}
 }
 
+// mockRepl implements the ReplicaInterface interface.
 type mockRepl struct{}
 
 func (mockRepl) ContainsKey(_ roachpb.Key) bool { return true }
 
+// mockStore implements the StoreInterface interface.
 type mockStore struct {
-	StoreInterface
+	manual  *hlc.ManualClock
+	clock   *hlc.Clock
+	stopper *stop.Stopper
+	db      *client.DB
 	metrics *Metrics
 }
 
-func (s mockStore) GetTxnWaitMetrics() *Metrics { return s.metrics }
+func newMockStore(s client.SenderFunc) StoreInterface {
+	var ms mockStore
+	ms.manual = hlc.NewManualClock(123)
+	ms.clock = hlc.NewClock(ms.manual.UnixNano, time.Nanosecond)
+	ms.stopper = stop.NewStopper()
+	ms.metrics = NewMetrics(time.Minute)
+	if s != nil {
+		factory := client.NonTransactionalFactoryFunc(s)
+		ms.db = client.NewDB(testutils.MakeAmbientCtx(), factory, ms.clock)
+	}
+	return ms
+}
+
+func (s mockStore) Clock() *hlc.Clock             { return s.clock }
+func (s mockStore) Stopper() *stop.Stopper        { return s.stopper }
+func (s mockStore) DB() *client.DB                { return s.db }
+func (s mockStore) GetTxnWaitKnobs() TestingKnobs { return TestingKnobs{} }
+func (s mockStore) GetTxnWaitMetrics() *Metrics   { return s.metrics }
 
 // TestMaybeWaitForQueryWithContextCancellation adds a new waiting query to the
 // queue and cancels its context. It then verifies that the query was cleaned
@@ -142,8 +169,9 @@ func (s mockStore) GetTxnWaitMetrics() *Metrics { return s.metrics }
 // leak.
 func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	metrics := NewMetrics(time.Minute)
-	q := NewQueue(mockStore{metrics: metrics})
+	ms := newMockStore(nil)
+	defer ms.Stopper().Stop(context.Background())
+	q := NewQueue(ms)
 	q.Enable()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -161,6 +189,7 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 		t.Errorf("expected no waiting queries, found %v", q.mu.queries)
 	}
 
+	metrics := ms.GetTxnWaitMetrics()
 	allMetricsAreZero := metrics.PusheeWaiting.Value() == 0 &&
 		metrics.PusherWaiting.Value() == 0 &&
 		metrics.QueryWaiting.Value() == 0 &&
@@ -169,4 +198,64 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	if !allMetricsAreZero {
 		t.Errorf("expected all metric gauges to be zero, got some that aren't")
 	}
+}
+
+// TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn tests that if any
+// QueryTxn on a pushee txn returns an aborted transaction status, all
+// pushees of that transaction are informed of the aborted status and
+// released.
+func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var mockSender client.SenderFunc
+	ms := newMockStore(func(
+		ctx context.Context, ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, *roachpb.Error) {
+		return mockSender(ctx, ba)
+	})
+	defer ms.Stopper().Stop(context.Background())
+	q := NewQueue(ms)
+	q.Enable()
+
+	// Set an extremely high transaction liveness threshold so that the pushee
+	// is only queried once per pusher.
+	defer TestingOverrideTxnLivenessThreshold(time.Hour)()
+
+	// Enqueue pushee transaction in the queue.
+	txn := roachpb.MakeTransaction("test", nil, 0, ms.Clock().Now(), 0)
+	q.Enqueue(&txn)
+
+	const numPushees = 3
+	var queryTxnCount int32
+	mockSender = func(
+		ctx context.Context, ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		resp := br.Responses[0].GetInner().(*roachpb.QueryTxnResponse)
+		resp.QueriedTxn = txn
+		if atomic.AddInt32(&queryTxnCount, 1) == numPushees {
+			// Only the last pusher's query observes an ABORTED transaction. As
+			// mentioned in the corresponding comment in MaybeWaitForPush, this
+			// isn't expected without an associated update to the pushee's
+			// transaction record. However, it is possible if the pushee hasn't
+			// written a transaction record yet and the timestamp cache loses
+			// resolution due to memory pressure. While rare, we need to handle
+			// this case correctly.
+			resp.QueriedTxn.Status = roachpb.ABORTED
+		}
+		return br, nil
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < numPushees; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx := context.Background()
+			req := roachpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: roachpb.PUSH_ABORT}
+			res, err := q.MaybeWaitForPush(ctx, mockRepl{}, &req)
+			require.Nil(t, err)
+			require.NotNil(t, res)
+			require.Equal(t, roachpb.ABORTED, res.PusheeTxn.Status)
+		}()
+	}
+	wg.Wait()
 }
