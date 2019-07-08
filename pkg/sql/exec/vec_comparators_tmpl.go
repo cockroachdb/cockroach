@@ -78,6 +78,15 @@ func (c *_TYPEVecComparator) setVec(idx int, vec coldata.Vec) {
 	c.nulls[idx] = vec.Nulls()
 }
 
+func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16) {
+	if c.nulls[srcVecIdx].HasNulls() && c.nulls[srcVecIdx].NullAt(srcIdx) {
+		c.nulls[dstVecIdx].SetNull(dstIdx)
+	} else {
+		c.nulls[dstVecIdx].UnsetNull(dstIdx)
+		c.vecs[dstVecIdx][dstIdx] = c.vecs[srcVecIdx][srcIdx]
+	}
+}
+
 // {{end}}
 
 func GetVecComparator(t types.T, numVecs int) vecComparator {

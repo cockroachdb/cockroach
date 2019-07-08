@@ -47,8 +47,8 @@ func TestTopKSorter(t *testing.T) {
 		},
 		{
 			name:     "nulls",
-			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}, {nil}},
-			expected: tuples{{nil}, {1}, {2}},
+			tuples:   tuples{{1}, {2}, {nil}, {3}, {4}, {5}, {6}, {7}, {nil}},
+			expected: tuples{{nil}, {nil}, {1}},
 			typ:      []types.T{types.Int64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 			k:        3,

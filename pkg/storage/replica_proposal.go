@@ -791,12 +791,15 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 	// Non-state updates and actions.
 	// ======================
 
-	// The caller is required to detach and handle intents.
+	// The caller is required to detach and handle the following three fields.
 	if lResult.Intents != nil {
 		log.Fatalf(ctx, "LocalEvalResult.Intents should be nil: %+v", lResult.Intents)
 	}
 	if lResult.EndTxns != nil {
 		log.Fatalf(ctx, "LocalEvalResult.EndTxns should be nil: %+v", lResult.EndTxns)
+	}
+	if lResult.MaybeWatchForMerge {
+		log.Fatalf(ctx, "LocalEvalResult.MaybeWatchForMerge should be false")
 	}
 
 	if lResult.GossipFirstRange {

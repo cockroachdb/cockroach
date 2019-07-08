@@ -93,6 +93,18 @@ func TestSetAndUnsetNulls(t *testing.T) {
 	for i := uint16(0); i < BatchSize; i++ {
 		require.True(t, n.NullAt(i))
 	}
+
+	for i := uint16(0); i < BatchSize; i += 3 {
+		n.UnsetNull(i)
+	}
+	for i := uint16(0); i < BatchSize; i++ {
+		if i%3 == 0 {
+			require.False(t, n.NullAt(i))
+		} else {
+			require.True(t, n.NullAt(i))
+		}
+	}
+
 	n.UnsetNulls()
 	for i := uint16(0); i < BatchSize; i++ {
 		require.False(t, n.NullAt(i))

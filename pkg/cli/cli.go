@@ -65,7 +65,15 @@ func Main() {
 
 	errCode := 0
 	if err := Run(os.Args[1:]); err != nil {
+		// Display the error and its details/hints.
+		fmt.Fprintln(stderr, "Error:", err.Error())
+		maybeShowErrorDetails(stderr, err, false /* printNewline */)
+
+		// Remind the user of which command was being run.
 		fmt.Fprintf(stderr, "Failed running %q\n", cmdName)
+
+		// Finally, extract the error code, as optionally specified
+		// by the sub-command.
 		errCode = 1
 		var cliErr *cliError
 		if errors.As(err, &cliErr) {
@@ -158,6 +166,10 @@ var cockroachCmd = &cobra.Command{
 	// Commands should manually print usage information when the error is,
 	// in fact, a result of a bad invocation, e.g. too many arguments.
 	SilenceUsage: true,
+	// Disable automatic printing of the error. We want to also print
+	// details and hints, which cobra does not do for us. Instead
+	// we do the printing in Main().
+	SilenceErrors: true,
 }
 
 func init() {

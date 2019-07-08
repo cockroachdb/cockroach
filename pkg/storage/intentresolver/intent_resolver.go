@@ -245,11 +245,13 @@ func (ir *IntentResolver) ProcessWriteIntentError(
 	var cleanup func(*roachpb.WriteIntentError, *enginepb.TxnMeta)
 	if len(wiErr.Intents) == 1 && len(wiErr.Intents[0].Span.EndKey) == 0 {
 		var done bool
+		var pErr *roachpb.Error
 		// Note that the write intent error may be mutated here in the event
 		// that this pusher is queued to wait for a different transaction
 		// instead.
-		if cleanup, wiErr, done = ir.contentionQ.add(ctx, wiErr, h); done {
-			return cleanup, nil
+		cleanup, wiErr, done, pErr = ir.contentionQ.add(ctx, wiErr, h)
+		if done || pErr != nil {
+			return cleanup, pErr
 		}
 	}
 
