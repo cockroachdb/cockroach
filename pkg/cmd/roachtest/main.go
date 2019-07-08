@@ -24,6 +24,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// runnerLogsDir is the dir under the artifacts root where the test runner log
+// and other runner-related logs (i.e. cluster creation logs) will be written.
+const runnerLogsDir = "_runner-logs"
+
 func main() {
 	rand.Seed(timeutil.Now().UnixNano())
 	username := os.Getenv("ROACHPROD_USER")
@@ -269,13 +273,17 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 		// stdout/stderr.
 		cfg.parallelism = n * cfg.count
 	}
-	l, tee := testRunnerLogger(context.Background(), cfg.parallelism, cfg.artifactsDir)
+	runnerDir := filepath.Join(cfg.artifactsDir, runnerLogsDir)
+	runnerLogPath := filepath.Join(
+		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+	l, tee := testRunnerLogger(context.Background(), cfg.parallelism, runnerLogPath)
 	lopt := loggingOpt{
-		l:            l,
-		tee:          tee,
-		stdout:       os.Stdout,
-		stderr:       os.Stderr,
-		artifactsDir: cfg.artifactsDir,
+		l:             l,
+		tee:           tee,
+		stdout:        os.Stdout,
+		stderr:        os.Stderr,
+		artifactsDir:  cfg.artifactsDir,
+		runnerLogPath: runnerLogPath,
 	}
 
 	// We're going to run all the workers (and thus all the tests) in a context
@@ -291,8 +299,12 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 	// kills the process.
 	l.PrintfCtx(ctx, "runTests destroying all clusters")
 	cr.destroyAllClusters(context.Background(), l)
-	return err
 
+	if teamCity {
+		// Collect the runner logs.
+		fmt.Printf("##teamcity[publishArtifacts '%s']\n", runnerDir)
+	}
+	return err
 }
 
 // getUser takes the value passed on the command line and comes up with the
@@ -349,8 +361,10 @@ func CtrlC(ctx context.Context, l *logger, cancel func(), cr *clusterRegistry) {
 
 // testRunnerLogger returns a logger to be used by the test runner and a tee
 // option for the test logs.
+//
+// runnerLogPath is the path to the file that will contain the runner's log.
 func testRunnerLogger(
-	ctx context.Context, parallelism int, artifactsDir string,
+	ctx context.Context, parallelism int, runnerLogPath string,
 ) (*logger, teeOptType) {
 	teeOpt := noTee
 	if parallelism == 1 {
@@ -358,8 +372,6 @@ func testRunnerLogger(
 	}
 
 	var l *logger
-	runnerLogPath := filepath.Join(
-		artifactsDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
 	if teeOpt == teeToStdout {
 		verboseCfg := loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
 		var err error

@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -144,8 +145,6 @@ func (c clustersOpt) validate() error {
 //   parallelism bounds the maximum number of tests that run concurrently. Note
 //   that the concurrency is also affected by cpuQuota.
 // clusterOpt: Options for the clusters to use by tests.
-// artifactsDir: A directory where all the test artifacts (in particular, log
-//   files) will be placed.
 // lopt: Options for logging.
 func (r *testRunner) Run(
 	ctx context.Context,
@@ -201,7 +200,7 @@ func (r *testRunner) Run(
 		numConcurrentClusterCreations = 1000
 	}
 	clusterFactory := newClusterFactory(
-		clustersOpt.user, clustersOpt.clusterID, artifactsDir, r.cr, numConcurrentClusterCreations)
+		clustersOpt.user, clustersOpt.clusterID, lopt.artifactsDir, r.cr, numConcurrentClusterCreations)
 
 	// allocateCluster will be used by workers to create new clusters (or to attach
 	// to an existing one).
@@ -220,7 +219,7 @@ func (r *testRunner) Run(
 		existingClusterName := clustersOpt.clusterName
 		if existingClusterName != "" {
 			// Logs for attaching to a cluster go to a dedicated log file.
-			logPath := filepath.Join(artifactsDir, "cluster-create", existingClusterName+".log")
+			logPath := filepath.Join(artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
 			clusterL, err := rootLogger(logPath, lopt.tee)
 			defer clusterL.close()
 			if err != nil {
@@ -276,7 +275,7 @@ func (r *testRunner) Run(
 				ctx, fmt.Sprintf("w%d", i) /* name */, r.work, qp,
 				stopper.ShouldQuiesce(),
 				clustersOpt.keepClustersOnTestFailure,
-				lopt.artifactsDir, lopt.tee, lopt.stdout,
+				lopt.artifactsDir, lopt.runnerLogPath, lopt.tee, lopt.stdout,
 				allocateCluster,
 				l,
 			); err != nil {
@@ -334,6 +333,8 @@ type clusterAllocatorFn func(
 // name: The worker's name, to be used as a prefix for log messages.
 // artifactsRootDir: The artifacts dir. Each test's logs are going to be under a
 //   run_<n> dir. If empty, test log files will not be created.
+// testRunnerLogPath: The path to the test runner's log. It will be copied to
+//  	failing tests' artifacts dir if running under TeamCity.
 // stdout: The Writer to use for messages that need to go to stdout (e.g. the
 // 	 "=== RUN" and "--- FAIL" lines).
 // teeOpt: The teeing option for future test loggers.
@@ -346,6 +347,7 @@ func (r *testRunner) runWorker(
 	interrupt <-chan struct{},
 	debug bool,
 	artifactsRootDir string,
+	testRunnerLogPath string,
 	teeOpt teeOptType,
 	stdout io.Writer,
 	allocateCluster clusterAllocatorFn,
@@ -449,7 +451,7 @@ func (r *testRunner) runWorker(
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
 		var success bool
-		success, err = r.runTest(ctx, t, testToRun.runNum, c, t.ArtifactsDir(), stdout, testL)
+		success, err = r.runTest(ctx, t, testToRun.runNum, c, testRunnerLogPath, stdout, testL)
 		testL.close()
 		if err != nil {
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
@@ -492,14 +494,15 @@ func (r *testRunner) runWorker(
 // Args:
 // c: The cluster on which the test will run. runTest() does not wipe or destroy
 //    the cluster.
-// artifactsDir: A dir that will be collected by TeamCity. All the test's
-// 		artifacts are expected to be there.
+// testRunnerLogPath: The path to the test runner's log. It will be copied to
+//  	the test's artifacts dir if the test fails and we're running under
+//  	TeamCity.
 func (r *testRunner) runTest(
 	ctx context.Context,
 	t *test,
 	runNum int,
 	c *cluster,
-	artifactsDir string,
+	testRunnerLogPath string,
 	stdout io.Writer,
 	l *logger,
 ) (bool, error) {
@@ -545,6 +548,13 @@ func (r *testRunner) runTest(
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
 					t.Name(), teamCityEscape(string(output)), t.Name(),
 				)
+
+				// Copy a snapshot of the testrunner's log to the test's artifacts dir
+				// so that we collect it below.
+				cp := exec.Command("cp", testRunnerLogPath, t.artifactsDir)
+				if err := cp.Run(); err != nil {
+					l.ErrorfCtx(ctx, "failed to copy test runner's logs to test artifacts: %s", err)
+				}
 			}
 
 			shout(ctx, l, stdout, "--- FAIL: %s %s\n%s", t.Name(), durationStr, output)
@@ -575,7 +585,7 @@ func (r *testRunner) runTest(
 		if teamCity {
 			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), t.Name())
 
-			artifactsGlobPath := filepath.Join(artifactsDir, "**")
+			artifactsGlobPath := filepath.Join(t.ArtifactsDir(), "**")
 			escapedTestName := teamCityNameEscape(t.Name())
 			artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
 			shout(ctx, l, stdout, "##teamcity[publishArtifacts '%s']", artifactsSpec)
