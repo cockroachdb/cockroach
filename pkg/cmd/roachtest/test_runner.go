@@ -466,29 +466,37 @@ func (r *testRunner) runWorker(
 			}
 			l.PrintfCtx(ctx, msg)
 		}
-		// If a test failed and debug was set, we bail.
-		if (err != nil || t.Failed()) && debug {
-			failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
-			if err != nil {
-				failureMsg += err.Error()
+		if err != nil || t.Failed() {
+				failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
+				if err != nil {
+					failureMsg += err.Error()
+				} else {
+					failureMsg += t.FailureMsg()
+				}
+
+			if debug {
+				// Save the cluster for future debugging.
+				c.Save(ctx, failureMsg, l)
+
+				// Continue with a fresh cluster.
+				c = nil
 			} else {
-				failureMsg += t.FailureMsg()
+				// On any test failure or error, we destroy the cluster. We could be
+				// more selective, but this sounds safer.
+				l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
+				c.Destroy(ctx, closeLogger, l)
+				c = nil
 			}
-			// Save the cluster for future debugging.
-			c.Save(ctx, failureMsg, l)
 
 			if err != nil {
 				return err
 			}
-
-			// Continue with a fresh cluster.
-			c = nil
 		}
 	}
 }
 
-// An error is returned in exceptional situations. The cluster cannot be reused
-// if an error is returned.
+// An error is returned if the test is still running (on another goroutine) when
+// this returns. This happens when the test doesn't respond to cancellation.
 // Returns true if the test is considered to have passed, false otherwise.
 //
 // Args:
@@ -629,8 +637,8 @@ func (r *testRunner) runTest(
 		l.PrintfCtx(ctx, "cluster needs to survive until %s, but has expiration: %s. Extending.",
 			minExp, c.expiration)
 		if err := c.Extend(ctx, extend, l); err != nil {
-			t.printfAndFail(0 /* skip */, "failed to extend cluster")
-			return false, err
+			t.printfAndFail(0 /* skip */, "failed to extend cluster: %s", err)
+			return false, nil
 		}
 	}
 
@@ -692,6 +700,8 @@ func (r *testRunner) runTest(
 			msg := "test timed out and afterwards failed to respond to cancelation"
 			t.l.PrintfCtx(ctx, msg)
 			collectClusterLogsOnce.Do(func() { r.collectClusterLogs(ctx, c, t.l) })
+			// We return an error here because the test goroutine is still running, so
+			// we want to alert the caller of this unusual situation.
 			return false, fmt.Errorf(msg)
 		}
 	}
