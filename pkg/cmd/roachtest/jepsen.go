@@ -295,9 +295,15 @@ func registerJepsen(r *testRegistry) {
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	tests := []string{
-		"bank", "bank-multitable", "g2",
-		"monotonic", "register", "sequential",
-		"sets", "multi-register"}
+		"bank",
+		"bank-multitable",
+		"g2",
+		"monotonic",
+		"register",
+		"sequential",
+		"sets",
+		"multi-register",
+	}
 	for _, testName := range tests {
 		testName := testName
 		for _, nemesis := range jepsenNemeses {
@@ -313,6 +319,9 @@ func registerJepsen(r *testRegistry) {
 				// initialized.
 				Cluster: makeClusterSpec(6, reuseTagged("jepsen")),
 				Run: func(ctx context.Context, t *test, c *cluster) {
+					if testName == "multi-register" {
+						t.Skip("#36431", "" /* details */)
+					}
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},
 			}
