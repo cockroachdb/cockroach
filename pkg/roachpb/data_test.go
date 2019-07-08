@@ -389,10 +389,10 @@ func TestTransactionBumpEpoch(t *testing.T) {
 	if a, e := txn.Epoch, enginepb.TxnEpoch(1); a != e {
 		t.Errorf("expected epoch %d; got %d", e, a)
 	}
-	if txn.EpochZeroTimestamp == (hlc.Timestamp{}) {
-		t.Errorf("expected non-nil epoch zero timestamp")
-	} else if txn.EpochZeroTimestamp != origNow {
-		t.Errorf("expected zero timestamp == origNow; %s != %s", txn.EpochZeroTimestamp, origNow)
+	if txn.DeprecatedMinTimestamp == (hlc.Timestamp{}) {
+		t.Errorf("expected non-nil deprecated min timestamp")
+	} else if txn.DeprecatedMinTimestamp != origNow {
+		t.Errorf("expected deprecated min timestamp == origNow; %s != %s", txn.DeprecatedMinTimestamp, origNow)
 	}
 }
 
@@ -489,7 +489,7 @@ var nonZeroTxn = Transaction{
 	WriteTooOld:              true,
 	IntentSpans:              []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:           []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
-	EpochZeroTimestamp:       makeTS(1, 1),
+	DeprecatedMinTimestamp:   makeTS(1, 1),
 	OrigTimestampWasObserved: true,
 }
 
@@ -525,20 +525,20 @@ func TestTransactionUpdateMinTimestamp(t *testing.T) {
 	if a, e := txn2.MinTimestamp, txn.MinTimestamp; a != e {
 		t.Errorf("expected min timestamp %s; got %s", e, a)
 	}
-	if a, e := txn2.EpochZeroTimestamp, txn.EpochZeroTimestamp; a != e {
-		t.Errorf("expected epoch zero timestamp %s; got %s", e, a)
+	if a, e := txn2.DeprecatedMinTimestamp, txn.DeprecatedMinTimestamp; a != e {
+		t.Errorf("expected deprecated min timestamp %s; got %s", e, a)
 	}
 
 	txn3 := nonZeroTxn
 	txn3.MinTimestamp = nonZeroTxn.MinTimestamp.Prev()
-	txn3.EpochZeroTimestamp = nonZeroTxn.EpochZeroTimestamp.Prev()
+	txn3.DeprecatedMinTimestamp = nonZeroTxn.DeprecatedMinTimestamp.Prev()
 	txn.Update(&txn3)
 
 	if a, e := txn.MinTimestamp, txn3.MinTimestamp; a != e {
 		t.Errorf("expected min timestamp %s; got %s", e, a)
 	}
-	if a, e := txn.EpochZeroTimestamp, txn3.EpochZeroTimestamp; a != e {
-		t.Errorf("expected epoch zero timestamp %s; got %s", e, a)
+	if a, e := txn.DeprecatedMinTimestamp, txn3.DeprecatedMinTimestamp; a != e {
+		t.Errorf("expected deprecated min timestamp %s; got %s", e, a)
 	}
 }
 
