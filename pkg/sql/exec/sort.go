@@ -277,7 +277,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 						Src:         p.input.getValues(j),
 						Sel64:       p.order,
 						SrcStartIdx: p.emitted,
-						SrcEndIdx:   uint64(p.output.Length()),
+						SrcEndIdx:   p.emitted + uint64(p.output.Length()),
 					},
 				)
 			}
