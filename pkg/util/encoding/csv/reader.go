@@ -64,11 +64,12 @@ package csv
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/cockroachdb/errors"
 )
 
 // A ParseError is returned for parsing errors.
@@ -80,14 +81,29 @@ type ParseError struct {
 	Err       error // The actual error
 }
 
-func (e *ParseError) Error() string {
+var _ error = (*ParseError)(nil)
+var _ fmt.Formatter = (*ParseError)(nil)
+var _ errors.Formatter = (*ParseError)(nil)
+
+// Error implements error.
+func (e *ParseError) Error() string { return fmt.Sprintf("%v", e) }
+
+// Cause implements causer.
+func (e *ParseError) Cause() error { return e.Err }
+
+// Format implements fmt.Formatter.
+func (e *ParseError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+// FormatError implements errors.Formatter.
+func (e *ParseError) FormatError(p errors.Printer) error {
 	if e.Err == ErrFieldCount {
-		return fmt.Sprintf("record on line %d: %v", e.Line, e.Err)
+		p.Printf("record on line %d", e.Line)
+	} else if e.StartLine != e.Line {
+		p.Printf("record on line %d; parse error on line %d, column %d", e.StartLine, e.Line, e.Column)
+	} else {
+		p.Printf("parse error on line %d, column %d", e.Line, e.Column)
 	}
-	if e.StartLine != e.Line {
-		return fmt.Sprintf("record on line %d; parse error on line %d, column %d: %v", e.StartLine, e.Line, e.Column, e.Err)
-	}
-	return fmt.Sprintf("parse error on line %d, column %d: %v", e.Line, e.Column, e.Err)
+	return e.Err
 }
 
 // These are the errors that can be returned in ParseError.Err.

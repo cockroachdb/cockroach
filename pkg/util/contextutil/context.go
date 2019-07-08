@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // WithCancel adds an info log to context.WithCancel's CancelFunc. Prefer using
@@ -87,29 +88,41 @@ type TimeoutError struct {
 	cause     error
 }
 
-func (t TimeoutError) Error() string {
-	return fmt.Sprintf("operation %q timed out after %s", t.operation, t.duration)
-}
-
-// Timeout implements net.Error.
-func (TimeoutError) Timeout() bool { return true }
-
-// Temporary implements net.Error.
-func (TimeoutError) Temporary() bool { return true }
-
-// Cause implements Causer.
-func (t TimeoutError) Cause() error {
-	// This ensures that people looking for DeadlineExceeded in particular still
-	// see it.
-	if t.cause == nil {
-		return context.DeadlineExceeded
-	}
-	return t.cause
-}
+var _ error = (*TimeoutError)(nil)
+var _ fmt.Formatter = (*TimeoutError)(nil)
+var _ errors.Formatter = (*TimeoutError)(nil)
 
 // We implement net.Error the same way that context.DeadlineExceeded does, so
 // that people looking for net.Error attributes will still find them.
-var _ net.Error = TimeoutError{}
+var _ net.Error = (*TimeoutError)(nil)
+
+func (t *TimeoutError) Error() string { return fmt.Sprintf("%v", t) }
+
+// Format implements fmt.Formatter.
+func (t *TimeoutError) Format(s fmt.State, verb rune) { errors.FormatError(t, s, verb) }
+
+// FormatError implements errors.Formatter.
+func (t *TimeoutError) FormatError(p errors.Printer) error {
+	p.Printf("operation %q timed out after %s", t.operation, t.duration)
+	if t.cause != context.DeadlineExceeded {
+		// If there were details (wrappers, stack trace etc.) ensure
+		// they get printed.
+		return t.cause
+	}
+	// We omit the "context deadline exceeded" suffix in the common case.
+	return nil
+}
+
+// Timeout implements net.Error.
+func (*TimeoutError) Timeout() bool { return true }
+
+// Temporary implements net.Error.
+func (*TimeoutError) Temporary() bool { return true }
+
+// Cause implements Causer.
+func (t *TimeoutError) Cause() error {
+	return t.cause
+}
 
 // RunWithTimeout runs a function with a timeout, the same way you'd do with
 // context.WithTimeout. It improves the opaque error messages returned by
@@ -121,7 +134,7 @@ func RunWithTimeout(
 	defer cancel()
 	err := fn(ctx)
 	if err != nil && ctx.Err() == context.DeadlineExceeded {
-		return TimeoutError{
+		err = &TimeoutError{
 			operation: op,
 			duration:  timeout,
 			cause:     err,

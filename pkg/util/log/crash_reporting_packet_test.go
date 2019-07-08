@@ -220,7 +220,7 @@ func TestInternalErrorReporting(t *testing.T) {
 		key   string
 		reVal string
 	}{
-		{"1: details", "%s\n.*string"},
+		{"1: details", "%s\n.*<string>"},
 		{"2: stacktrace", `.*builtins.go.*\n.*eval.go.*Eval`},
 		{"3: details", `%s\(\).*\n.*force_assertion_error`},
 		{"4: stacktrace", ".*eval.go.*Eval"},
@@ -255,7 +255,7 @@ func TestInternalErrorReporting(t *testing.T) {
 					`\*safedetails.withSafeDetails: %s \(1\)\n`+
 					`builtins.go:\d+: \*withstack.withStack \(2\)\n`+
 					`\*assert.withAssertionFailure\n`+
-					`\*errors.withMessage\n`+
+					`\*errutil.withMessage\n`+
 					`\*safedetails.withSafeDetails: %s\(\) \(3\)\n`+
 					`eval.go:\d+: \*withstack.withStack \(4\)\n`+
 					`\*telemetrykeys.withTelemetry: crdb_internal.force_assertion_error\(\) \(5\)\n`+

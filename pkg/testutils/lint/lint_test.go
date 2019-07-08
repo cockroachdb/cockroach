@@ -1126,13 +1126,26 @@ func TestLint(t *testing.T) {
 
 		// forbiddenImportPkg -> permittedReplacementPkg
 		forbiddenImports := map[string]string{
-			"golang.org/x/net/context":         "context",
-			"log":                              "util/log",
-			"path":                             "path/filepath",
-			"github.com/golang/protobuf/proto": "github.com/gogo/protobuf/proto",
-			"github.com/satori/go.uuid":        "util/uuid",
-			"golang.org/x/sync/singleflight":   "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
-			"syscall":                          "sysutil",
+			"golang.org/x/net/context":                    "context",
+			"log":                                         "util/log",
+			"path":                                        "path/filepath",
+			"github.com/golang/protobuf/proto":            "github.com/gogo/protobuf/proto",
+			"github.com/satori/go.uuid":                   "util/uuid",
+			"golang.org/x/sync/singleflight":              "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
+			"syscall":                                     "sysutil",
+			"github.com/cockroachdb/errors/assert":        "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/barriers":      "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/contexttags":   "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/domains":       "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/errbase":       "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/errutil":       "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/issuelink":     "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/markers":       "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/report":        "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/safedetails":   "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/secondary":     "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/telemetrykeys": "github.com/cockroachdb/errors",
+			"github.com/cockroachdb/errors/withstack":     "github.com/cockroachdb/errors",
 		}
 
 		// grepBuf creates a grep string that matches any forbidden import pkgs.

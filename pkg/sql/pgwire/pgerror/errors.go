@@ -23,7 +23,11 @@ import (
 	"github.com/lib/pq"
 )
 
-var _ error = &Error{}
+var _ error = (*Error)(nil)
+var _ errors.ErrorHinter = (*Error)(nil)
+var _ errors.ErrorDetailer = (*Error)(nil)
+var _ errors.SafeDetailer = (*Error)(nil)
+var _ fmt.Formatter = (*Error)(nil)
 
 // Error implements the error interface.
 func (pg *Error) Error() string { return pg.Message }
@@ -119,7 +123,7 @@ var _ fmt.Formatter = &Error{}
 
 // Format implements the fmt.Formatter interface.
 //
-// %v/%s prints the rror as usual.
+// %v/%s prints the error as usual.
 // %#v adds the pg error code at the beginning.
 // %+v prints all the details, including the embedded stack traces.
 func (pg *Error) Format(s fmt.State, verb rune) {

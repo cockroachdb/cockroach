@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ScrubTypes is the schema for TableReaders that are doing a SCRUB
@@ -250,8 +250,8 @@ func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMeta
 		//
 		// NB: Cases 3 and 4 are handled further below, in the standard
 		// table scanning code path.
-		err = errors.Cause(err)
-		if v, ok := err.(*scrub.Error); ok {
+		var v *scrub.Error
+		if errors.As(err, &v) {
 			row, err = tr.generateScrubErrorRow(row, v)
 		} else if err == nil && row != nil {
 			continue
