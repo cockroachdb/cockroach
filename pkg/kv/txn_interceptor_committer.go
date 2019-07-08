@@ -106,7 +106,6 @@ var parallelCommitsEnabled = settings.RegisterBoolSetting(
 // If it is unknown whether all of the requests in the final batch succeeded
 // (e.g. due to a network error) then an AmbiguousResultError is returned. The
 // logic to enforce this is in DistSender.
-// TODO(nvanbenschoten): merge this logic.
 //
 // In all cases, the interceptor abstracts away the details of this from all
 // interceptors above it in the coordinator interceptor stack.
