@@ -469,19 +469,21 @@
 # conservative with the fetch columns.
 [PruneMutationReturnCols, Normalize]
 (Project
-    $input: (Insert | Update | Upsert | Delete
+    $input:(Insert | Update | Upsert | Delete
         $innerInput:*
         $checks:*
-        $mutationPrivate:* & (CanPruneMutationReturnCols $mutationPrivate))
+        $mutationPrivate:*)
     $projections:*
-    $passthrough:*
+    $passthrough:* &
+      (CanPruneMutationReturnCols
+        $mutationPrivate $needed: (NeededMutationReturnCols $mutationPrivate $projections $passthrough))
 )
 =>
 (Project
     ((OpName $input)
         $innerInput
         $checks
-        (PruneMutationReturnCols $mutationPrivate $projections $passthrough))
+        (PruneMutationReturnCols $mutationPrivate $needed))
     $projections
     $passthrough
 )

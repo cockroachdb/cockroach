@@ -1938,8 +1938,7 @@ update "family"
            └── a + 1 [type=int, outer=(6)]
 
 # Do not prune columns that must be returned.
-# TODO(justin): in order to prune e here we need a PruneMutationReturnCols rule.
-opt expect=PruneMutationFetchCols
+opt expect=(PruneMutationFetchCols, PruneMutationReturnCols)
 UPDATE family SET c=c+1 RETURNING b
 ----
 project
@@ -2375,6 +2374,35 @@ project
            │    └── fd: (16)-->(9-11), (9)~~>(10,11,16)
            └── projections
                 └── a + b [type=int, outer=(9,10)]
+
+
+# We apply the PruneMutationReturnCols rule multiple times, to get
+# the minimal set of columns which is (a, rowid). Notice how c and b
+# are pruned away.
+opt
+SELECT a FROM [SELECT a, b FROM [UPDATE returning_test SET a = a + 1 RETURNING a, b, c]]
+----
+project
+ ├── columns: a:1(int)
+ ├── side-effects, mutations
+ └── update returning_test
+      ├── columns: a:1(int) rowid:8(int!null)
+      ├── fetch columns: a:9(int) rowid:16(int)
+      ├── update-mapping:
+      │    └──  column17:17 => a:1
+      ├── side-effects, mutations
+      ├── key: (8)
+      ├── fd: (8)-->(1)
+      └── project
+           ├── columns: column17:17(int) a:9(int) rowid:16(int!null)
+           ├── key: (16)
+           ├── fd: (16)-->(9), (9)~~>(16), (9)-->(17)
+           ├── scan returning_test@secondary
+           │    ├── columns: a:9(int) rowid:16(int!null)
+           │    ├── key: (16)
+           │    └── fd: (16)-->(9), (9)~~>(16)
+           └── projections
+                └── a + 1 [type=int, outer=(9)]
 
 # Check if the rule works as desired for other mutations.
 opt
