@@ -1462,7 +1462,8 @@ func (c *cluster) doDestroy(ctx context.Context, l *logger) <-chan struct{} {
 			l.PrintfCtx(ctx, "destroying cluster %s...", c)
 			c.status("destroying cluster")
 			// We use a non-cancelable context for running this command. Once we got
-			// here, the cluster cannot be destroyed again, so we really want this command to succeed.
+			// here, the cluster cannot be destroyed again, so we really want this
+			// command to succeed.
 			if err := execCmd(context.Background(), l, roachprod, "destroy", c.name); err != nil {
 				l.ErrorfCtx(ctx, "error destroying cluster %s: %s", c, err)
 			} else {
