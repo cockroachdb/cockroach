@@ -66,7 +66,8 @@ $input
         $offsetOrdering:*
     )
     (Const $limit:* & (IsPositiveLimit $limit))
-    $limitOrdering:* & (IsSameOrdering $offsetOrdering $limitOrdering)
+    $limitOrdering:* & (IsSameOrdering $offsetOrdering $limitOrdering) &
+    ^(DoesSumOverflow $limit $offset)
 )
 =>
 (Offset

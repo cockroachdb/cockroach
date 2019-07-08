@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -1688,9 +1689,19 @@ func (c *CustomFuncs) EqualsNumber(datum tree.Datum, value int64) bool {
 	return false
 }
 
-// AddConsts adds the numeric constants together.
+// AddConsts adds the numeric constants together. AddConsts assumes the sum
+// will not overflow. Call DoesSumOverflow on the constants to guarantee this.
 func (c *CustomFuncs) AddConsts(first tree.Datum, second tree.Datum) tree.Datum {
 	firstVal := int64(*first.(*tree.DInt))
 	secondVal := int64(*second.(*tree.DInt))
-	return tree.NewDInt(tree.DInt(firstVal + secondVal))
+	sum, _ := arith.AddWithOverflow(firstVal, secondVal)
+	return tree.NewDInt(tree.DInt(sum))
+}
+
+// DoesSumOverflow returns true if the addition of the two integers overflows.
+func (c *CustomFuncs) DoesSumOverflow(first tree.Datum, second tree.Datum) bool {
+	firstVal := int64(*first.(*tree.DInt))
+	secondVal := int64(*second.(*tree.DInt))
+	_, ok := arith.AddWithOverflow(firstVal, secondVal)
+	return !ok
 }
