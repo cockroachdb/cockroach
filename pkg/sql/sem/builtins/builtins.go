@@ -2998,13 +2998,18 @@ may increase either contention or retry errors, or both.`,
 	// Returns the number of distinct inverted index entries that would be generated for a JSON value.
 	"crdb_internal.json_num_index_entries": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category:     categorySystemInfo,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Jsonb}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				n, err := json.NumInvertedIndexEntries(tree.MustBeDJSON(args[0]).JSON)
+				arg := args[0]
+				if arg == tree.DNull {
+					return tree.NewDInt(tree.DInt(1)), nil
+				}
+				n, err := json.NumInvertedIndexEntries(tree.MustBeDJSON(arg).JSON)
 				if err != nil {
 					return nil, err
 				}
