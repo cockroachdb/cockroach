@@ -795,7 +795,7 @@ func (f *Flow) setupVectorizedRouter(
 	outputTyps []types.T,
 	output *distsqlpb.OutputRouterSpec,
 	metadataSourcesQueue []distsqlpb.MetadataSource,
-	streamIDToInputOp map[distsqlpb.StreamID]exec.Operator,
+	streamIDToInputOp map[distsqlpb.StreamID]*exec.OperatorTreeNode,
 	recordingStats bool,
 ) error {
 	if output.Type == distsqlpb.OutputRouterSpec_PASS_THROUGH {
@@ -858,7 +858,7 @@ func (f *Flow) setupVectorizedRouter(
 					return err
 				}
 			}
-			streamIDToInputOp[stream.StreamID] = op
+			streamIDToInputOp[stream.StreamID] = &exec.OperatorTreeNode{Op: op}
 		}
 	}
 
@@ -877,10 +877,10 @@ func (f *Flow) setupVectorizedRouter(
 // that any remote metadata can be read through calling DrainMeta.
 func (f *Flow) setupVectorizedInputSynchronizer(
 	input distsqlpb.InputSyncSpec,
-	streamIDToInputOp map[distsqlpb.StreamID]exec.Operator,
+	streamIDToInputOp map[distsqlpb.StreamID]*exec.OperatorTreeNode,
 	recordingStats bool,
-) (exec.Operator, []distsqlpb.MetadataSource, error) {
-	inputStreamOps := make([]exec.Operator, 0, len(input.Streams))
+) (*exec.OperatorTreeNode, []distsqlpb.MetadataSource, error) {
+	inputStreamOps := make([]*exec.OperatorTreeNode, 0, len(input.Streams))
 	metaSources := make([]distsqlpb.MetadataSource, 0, len(input.Streams))
 	for _, inputStream := range input.Streams {
 		switch inputStream.Type {
@@ -917,20 +917,27 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 					return nil, nil, err
 				}
 			}
-			inputStreamOps = append(inputStreamOps, op)
+			inputStreamOps = append(inputStreamOps, &exec.OperatorTreeNode{Op: op})
 		default:
 			return nil, nil, errors.Errorf("unsupported input stream type %s", inputStream.Type)
 		}
 	}
-	op := inputStreamOps[0]
+	opTreeNode := inputStreamOps[0]
 	if len(inputStreamOps) > 1 {
-		statsInputs := inputStreamOps
+		inputOps := make([]exec.Operator, 0, len(input.Streams))
+		for _, o := range inputStreamOps {
+			inputOps = append(inputOps, o.Op)
+		}
+		statsInputs := inputOps
 		if input.Type == distsqlpb.InputSyncSpec_ORDERED {
-			op = exec.NewOrderedSynchronizer(
-				inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), distsqlpb.ConvertToColumnOrdering(input.Ordering),
+			syncOp := exec.NewOrderedSynchronizer(
+				inputOps, conv.FromColumnTypes(input.ColumnTypes), distsqlpb.ConvertToColumnOrdering(input.Ordering),
 			)
+			opTreeNode = &exec.OperatorTreeNode{Inputs: inputStreamOps, Op: syncOp}
 		} else {
-			op = exec.NewUnorderedSynchronizer(inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), &f.waitGroup)
+			syncOp := exec.NewUnorderedSynchronizer(inputOps, conv.FromColumnTypes(input.ColumnTypes), &f.waitGroup)
+			opTreeNode = &exec.OperatorTreeNode{Inputs: inputStreamOps, Op: syncOp}
+
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
 			// instead.
@@ -940,13 +947,13 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 			// TODO(asubiotto): Once we have IDs for synchronizers, plumb them into
 			// this stats collector to display stats.
 			var err error
-			op, err = wrapWithVectorizedStatsCollector(op, statsInputs, &distsqlpb.ProcessorSpec{ProcessorID: -1})
+			opTreeNode.Op, err = wrapWithVectorizedStatsCollector(opTreeNode.Op, statsInputs, &distsqlpb.ProcessorSpec{ProcessorID: -1})
 			if err != nil {
 				return nil, nil, err
 			}
 		}
 	}
-	return op, metaSources, nil
+	return opTreeNode, metaSources, nil
 }
 
 // VectorizedSetupError is a wrapper for any error that happens during
@@ -986,8 +993,8 @@ func init() {
 	errors.RegisterWrapperDecoder(errors.GetTypeKey((*VectorizedSetupError)(nil)), decodeVectorizedSetupError)
 }
 
-func (f *Flow) setupVectorized(ctx context.Context) error {
-	streamIDToInputOp := make(map[distsqlpb.StreamID]exec.Operator)
+func (f *Flow) setupVectorized(ctx context.Context) (*exec.OperatorTreeNode, error) {
+	streamIDToOpTreeNode := make(map[distsqlpb.StreamID]*exec.OperatorTreeNode)
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
 	// queue is a queue of indices into f.spec.Processors, for topologically
 	// ordered processing.
@@ -1013,6 +1020,8 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		queue = append(queue, i)
 	}
 
+	var opTreeNode *exec.OperatorTreeNode
+	inputNodes := make([]*exec.OperatorTreeNode, 0, 2)
 	inputs := make([]exec.Operator, 0, 2)
 	metadataSourcesQueue := make([]distsqlpb.MetadataSource, 0, 1)
 
@@ -1027,51 +1036,54 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		pspec := &f.spec.Processors[queue[0]]
 		queue = queue[1:]
 		if len(pspec.Output) > 1 {
-			return errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
+			return nil, errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
 		}
 		inputs = inputs[:0]
+		inputNodes = inputNodes[:0]
 		for i := range pspec.Input {
-			synchronizer, metadataSources, err := f.setupVectorizedInputSynchronizer(pspec.Input[i], streamIDToInputOp, recordingStats)
+			synchronizer, metadataSources, err := f.setupVectorizedInputSynchronizer(pspec.Input[i], streamIDToOpTreeNode, recordingStats)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
-			inputs = append(inputs, synchronizer)
+			inputs = append(inputs, synchronizer.Op)
+			inputNodes = append(inputNodes, synchronizer)
 		}
 
 		op, outputTypes, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
+		opTreeNode = &exec.OperatorTreeNode{Inputs: inputNodes, Op: op}
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if metaSource, ok := op.(distsqlpb.MetadataSource); ok {
+		if metaSource, ok := opTreeNode.Op.(distsqlpb.MetadataSource); ok {
 			metadataSourcesQueue = append(metadataSourcesQueue, metaSource)
 		}
 		if recordingStats {
-			vsc, err := wrapWithVectorizedStatsCollector(op, inputs, pspec)
+			vsc, err := wrapWithVectorizedStatsCollector(opTreeNode.Op, inputs, pspec)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			vectorizedStatsCollectorsQueue = append(vectorizedStatsCollectorsQueue, vsc)
 			procIDs = append(procIDs, pspec.ProcessorID)
-			op = vsc
+			opTreeNode.Op = vsc
 		}
 
 		output := &pspec.Output[0]
 		if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
 			if err := f.setupVectorizedRouter(
-				op,
+				opTreeNode.Op,
 				outputTypes,
 				output,
 				append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
-				streamIDToInputOp,
+				streamIDToOpTreeNode,
 				recordingStats,
 			); err != nil {
-				return err
+				return nil, err
 			}
 			metadataSourcesQueue = metadataSourcesQueue[:0]
 		} else {
 			if len(output.Streams) != 1 {
-				return errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
+				return nil, errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
 			}
 			outputStream := &output.Streams[0]
 			switch outputStream.Type {
@@ -1100,14 +1112,14 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 					)
 				}
 				if err := f.setupVectorizedRemoteOutputStream(
-					op, outputTypes, outputStream, append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
+					opTreeNode.Op, outputTypes, outputStream, append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
 				); err != nil {
-					return err
+					return nil, err
 				}
 				metadataSourcesQueue = metadataSourcesQueue[:0]
 			case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 				if f.syncFlowConsumer == nil {
-					return errors.New("syncFlowConsumer unset, unable to create materializer")
+					return nil, errors.New("syncFlowConsumer unset, unable to create materializer")
 				}
 				// Make the materializer, which will write to the given receiver.
 				columnTypes := f.syncFlowConsumer.Types()
@@ -1129,7 +1141,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				proc, err := newMaterializer(
 					&f.FlowCtx,
 					pspec.ProcessorID,
-					op,
+					opTreeNode.Op,
 					columnTypes,
 					outputToInputColIdx,
 					&distsqlpb.PostProcessSpec{},
@@ -1140,16 +1152,16 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 					outputStatsToTrace,
 				)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				metadataSourcesQueue = metadataSourcesQueue[:0]
 				vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
 				f.processors = make([]Processor, 1)
 				f.processors[0] = proc
 			default:
-				return errors.Errorf("unsupported output stream type %s", outputStream.Type)
+				return nil, errors.Errorf("unsupported output stream type %s", outputStream.Type)
 			}
-			streamIDToInputOp[outputStream.StreamID] = op
+			streamIDToOpTreeNode[outputStream.StreamID] = opTreeNode
 		}
 
 		// Now queue all outputs from this op whose inputs are already all
@@ -1163,7 +1175,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				}
 				procIdx, ok := streamIDToSpecIdx[stream.StreamID]
 				if !ok {
-					return errors.Errorf("Couldn't find stream %d", stream.StreamID)
+					return nil, errors.Errorf("Couldn't find stream %d", stream.StreamID)
 				}
 				outputSpec := &f.spec.Processors[procIdx]
 				for k := range outputSpec.Input {
@@ -1176,7 +1188,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 							// this input.
 							continue
 						}
-						if _, ok := streamIDToInputOp[stream.StreamID]; !ok {
+						if _, ok := streamIDToOpTreeNode[stream.StreamID]; !ok {
 							continue NEXTOUTPUT
 						}
 					}
@@ -1194,5 +1206,5 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 	if len(vectorizedStatsCollectorsQueue) > 0 {
 		panic("not all vectorized stats collectors have been processed")
 	}
-	return nil
+	return opTreeNode, nil
 }

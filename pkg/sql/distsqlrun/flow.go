@@ -497,7 +497,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
 	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
-		err := f.setupVectorized(ctx)
+		_, err := f.setupVectorized(ctx)
 		if err == nil {
 			log.VEventf(ctx, 1, "vectorized flow.")
 			return nil

@@ -16,6 +16,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 )
 
+// TODO: I'm not sure what is an appropriate place to put this struct + function.
+
+// OperatorTreeNode represents an operator within a vectorized flow.
+type OperatorTreeNode struct {
+	Inputs []*OperatorTreeNode
+	Op     Operator
+}
+
+// ForEachOperatorInTree applies the function f to each operator node within
+// the tree rooted at root.
+func ForEachOperatorInTree(root *OperatorTreeNode, f func(Operator) error) error {
+	if root == nil {
+		return nil
+	} else {
+		err := f(root.Op)
+		if err != nil {
+			return err
+		}
+		for _, child := range root.Inputs {
+			err := ForEachOperatorInTree(child, f)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
 // Operator is a column vector operator that produces a Batch as output.
 type Operator interface {
 	// Init initializes this operator. Will be called once at operator setup
