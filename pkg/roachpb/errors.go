@@ -12,12 +12,14 @@ package roachpb
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -189,6 +191,7 @@ func (e *Error) SetDetail(err error) {
 				panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
 			}
 		}
+		e.checkTxnStatusValid()
 	}
 }
 
@@ -215,6 +218,7 @@ func (e *Error) SetTxn(txn *Transaction) {
 		// Refresh the message as the txn is updated.
 		e.Message = sErr.message(e)
 	}
+	e.checkTxnStatusValid()
 }
 
 // GetTxn returns the txn.
@@ -234,6 +238,23 @@ func (e *Error) UpdateTxn(o *Transaction) {
 		e.UnexposedTxn = o.Clone()
 	} else {
 		e.UnexposedTxn.Update(o)
+	}
+	e.checkTxnStatusValid()
+}
+
+// checkTxnStatusValid verifies that the transaction status is in-sync with the
+// error detail.
+func (e *Error) checkTxnStatusValid() {
+	if e.UnexposedTxn == nil {
+		return
+	}
+	txnStatus := e.UnexposedTxn.Status
+	if r, ok := e.Detail.GetInner().(transactionRestartError); !ok {
+		return
+	} else if _, ok := r.(*TransactionAbortedError); !ok {
+		if txnStatus.IsFinalized() {
+			log.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", r, e)
+		}
 	}
 }
 
@@ -789,6 +810,11 @@ func (e *IntentMissingError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &IntentMissingError{}
+var _ transactionRestartError = &IntentMissingError{}
+
+func (*IntentMissingError) canRestartTransaction() TransactionRestart {
+	return TransactionRestart_IMMEDIATE
+}
 
 func (e *MergeInProgressError) Error() string {
 	return e.message(nil)
