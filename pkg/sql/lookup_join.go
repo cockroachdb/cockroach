@@ -29,8 +29,8 @@ type lookupJoinNode struct {
 	// are looking up into).
 	keyCols []int
 
-	// columns are the produced columns, namely the input clumns and the
-	// columns in the table scanNode.
+	// columns are the produced columns, namely the input columns and (unless the
+	// join type is semi or anti join) the columns in the table scanNode.
 	columns sqlbase.ResultColumns
 
 	// onCond is any ON condition to be used in conjunction with the implicit

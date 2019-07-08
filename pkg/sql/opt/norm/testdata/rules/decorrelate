@@ -3110,30 +3110,22 @@ semi-join (merge)
 opt expect=HoistSelectExists
 SELECT * FROM a WHERE s='foo' AND EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 ----
-semi-join (merge)
+semi-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
- ├── left ordering: +1
- ├── right ordering: +6
+ ├── key columns: [1] = [6]
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1 opt(4) [actual: +1]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(4) [actual: +1]
+ │    │    └── fd: (1)-->(2-5)
  │    └── filters
  │         ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
- ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
  └── filters (true)
 
 # Multiple Exists operators in same Select list.
@@ -3248,30 +3240,22 @@ anti-join (merge)
 opt expect=HoistSelectNotExists
 SELECT * FROM a WHERE s='foo' AND NOT EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 ----
-anti-join (merge)
+anti-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
- ├── left ordering: +1
- ├── right ordering: +6
+ ├── key columns: [1] = [6]
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
- │    ├── ordering: +1 opt(4) [actual: +1]
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1 opt(4) [actual: +1]
+ │    │    └── fd: (1)-->(2-5)
  │    └── filters
  │         ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
- ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    └── ordering: +6
  └── filters (true)
 
 # Multiple Not Exists operators in same Select list.
