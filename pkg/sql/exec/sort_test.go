@@ -124,7 +124,7 @@ func TestSort(t *testing.T) {
 
 func TestSortRandomized(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
-	nTups := 8
+	nTups := 1025
 	k := uint16(4)
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
