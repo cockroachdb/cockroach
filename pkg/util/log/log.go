@@ -19,14 +19,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/errors/errbase"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/petermattis/goid"
 )
 
 func init() {
 	copyStandardLogTo("INFO")
-	errbase.WarningFn = Warningf
+	errors.SetWarningFn(Warningf)
 }
 
 // FatalOnPanic recovers from a panic and exits the process with a

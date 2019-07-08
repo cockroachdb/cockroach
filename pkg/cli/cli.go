@@ -33,7 +33,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/movr"     // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"     // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"     // registers workloads
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -67,8 +67,9 @@ func Main() {
 	if err := Run(os.Args[1:]); err != nil {
 		fmt.Fprintf(stderr, "Failed running %q\n", cmdName)
 		errCode = 1
-		if ec, ok := errors.Cause(err).(*cliError); ok {
-			errCode = ec.exitCode
+		var cliErr *cliError
+		if errors.As(err, &cliErr) {
+			errCode = cliErr.exitCode
 		}
 	}
 	os.Exit(errCode)
@@ -95,6 +96,20 @@ type cliError struct {
 }
 
 func (e *cliError) Error() string { return e.cause.Error() }
+
+// Cause implements causer.
+func (e *cliError) Cause() error { return e.cause }
+
+// Format implements fmt.Formatter.
+func (e *cliError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+// FormatError implements errors.Formatter.
+func (e *cliError) FormatError(p errors.Printer) error {
+	if p.Detail() {
+		p.Printf("error with exit code: %d", e.exitCode)
+	}
+	return e.cause
+}
 
 // stderr aliases log.OrigStderr; we use an alias here so that tests
 // in this package can redirect the output of CLI commands to stdout

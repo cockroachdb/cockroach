@@ -413,6 +413,11 @@ x,,,
 			} else if !reflect.DeepEqual(out, tt.Output) {
 				t.Errorf("ReadAll() output:\ngot  %q\nwant %q", out, tt.Output)
 			}
+
+			// Check that the error can be rendered.
+			if err != nil {
+				_ = err.Error()
+			}
 		})
 	}
 }

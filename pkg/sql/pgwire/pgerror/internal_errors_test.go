@@ -94,7 +94,7 @@ func TestInternalError(t *testing.T) {
 				{"safedetail", func(t *testing.T, e *Error) {
 					m(t, e.SafeDetail[0].SafeMessage, `.*TestInternalError.*`)
 					m(t, e.SafeDetail[1].SafeMessage, `woo %s`)
-					m(t, e.SafeDetail[2].SafeMessage, `arg 0: string`)
+					m(t, e.SafeDetail[2].SafeMessage, `arg 1: <string>`)
 				}},
 
 				// Verify that formatting works.
@@ -109,7 +109,7 @@ func TestInternalError(t *testing.T) {
 							ie+"woo waa")
 					// Safe message.
 					m(t, vErr, "woo %s")
-					m(t, vErr, "arg 0: string")
+					m(t, vErr, "arg 1: <string>")
 				}},
 			},
 		},
@@ -119,7 +119,7 @@ func TestInternalError(t *testing.T) {
 				// Verify that safe details are preserved.
 				{"safedetail", func(t *testing.T, e *Error) {
 					m(t, e.SafeDetail[1].SafeMessage, `safe %s`)
-					m(t, e.SafeDetail[2].SafeMessage, `arg 0: waa`)
+					m(t, e.SafeDetail[2].SafeMessage, `arg 1: waa`)
 				}},
 			},
 		},
@@ -262,7 +262,7 @@ func TestInternalError(t *testing.T) {
 					)
 					m(t, e.SafeDetail[0].SafeMessage, pgcode.AdminShutdown)
 					m(t, e.SafeDetail[2].SafeMessage, `wrap %s`)
-					m(t, e.SafeDetail[3].SafeMessage, `arg 0: string`)
+					m(t, e.SafeDetail[3].SafeMessage, `arg 1: <string>`)
 					m(t, e.SafeDetail[5].SafeMessage, `boo`)
 				}},
 			},
@@ -292,7 +292,7 @@ func TestInternalError(t *testing.T) {
 					)
 					m(t, e.SafeDetail[0].SafeMessage, "TestInternalError")
 					m(t, e.SafeDetail[1].SafeMessage, `iewrap %s`)
-					m(t, e.SafeDetail[2].SafeMessage, `arg 0: string`)
+					m(t, e.SafeDetail[2].SafeMessage, `arg 1: <string>`)
 				}},
 			},
 		},

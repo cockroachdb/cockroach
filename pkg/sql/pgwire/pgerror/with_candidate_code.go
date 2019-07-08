@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors/errbase"
+	"github.com/cockroachdb/errors"
 )
 
 type withCandidateCode struct {
@@ -24,23 +24,23 @@ type withCandidateCode struct {
 	code  string
 }
 
+var _ error = (*withCandidateCode)(nil)
+var _ errors.SafeDetailer = (*withCandidateCode)(nil)
+var _ fmt.Formatter = (*withCandidateCode)(nil)
+var _ errors.Formatter = (*withCandidateCode)(nil)
+
 func (w *withCandidateCode) Error() string         { return w.cause.Error() }
 func (w *withCandidateCode) Cause() error          { return w.cause }
 func (w *withCandidateCode) Unwrap() error         { return w.cause }
 func (w *withCandidateCode) SafeDetails() []string { return []string{w.code} }
 
-func (w *withCandidateCode) Format(s fmt.State, verb rune) {
-	switch verb {
-	case 'v':
-		if s.Flag('+') {
-			fmt.Fprintf(s, "%+v", w.cause)
-			fmt.Fprintf(s, "\n-- candidate pg code: %s", w.code)
-			return
-		}
-		fallthrough
-	case 's', 'q':
-		errbase.FormatError(s, verb, w.cause)
+func (w *withCandidateCode) Format(s fmt.State, verb rune) { errors.FormatError(w, s, verb) }
+
+func (w *withCandidateCode) FormatError(p errors.Printer) (next error) {
+	if p.Detail() {
+		p.Printf("candidate pg code: %s", w.code)
 	}
+	return w.cause
 }
 
 func decodeWithCandidateCode(
@@ -54,5 +54,5 @@ func decodeWithCandidateCode(
 }
 
 func init() {
-	errbase.RegisterWrapperDecoder(errbase.GetTypeKey((*withCandidateCode)(nil)), decodeWithCandidateCode)
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*withCandidateCode)(nil)), decodeWithCandidateCode)
 }
