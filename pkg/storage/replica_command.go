@@ -843,7 +843,12 @@ func (r *Replica) ChangeReplicas(
 	reason storagepb.RangeLogEventReason,
 	details string,
 ) (updatedDesc *roachpb.RangeDescriptor, _ error) {
-	return r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE, reason, details)
+	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
+		var err error
+		updatedDesc, err = r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE, reason, details)
+		return err
+	})
+	return updatedDesc, err.GoError()
 }
 
 func (r *Replica) changeReplicas(
@@ -997,7 +1002,7 @@ func (r *Replica) changeReplicas(
 	}); err != nil {
 		log.Event(ctx, err.Error())
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			err = &benignError{errors.New(msg)}
+			err = &benignError{errors.Wrap(err, msg)}
 		}
 		return nil, errors.Wrapf(err, "change replicas of r%d failed", rangeID)
 	}
