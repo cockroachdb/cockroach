@@ -416,8 +416,10 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				distsqlpb.AggregatorSpec_COUNT,
 				distsqlpb.AggregatorSpec_SUM,
 				distsqlpb.AggregatorSpec_SUM_INT,
+				distsqlpb.AggregatorSpec_MIN,
+				distsqlpb.AggregatorSpec_MAX,
 			},
-			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}},
+			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}},
 			colTypes: []types.T{types.Int64, types.Decimal, types.Int64},
 			input: tuples{
 				{0, nil, nil},
@@ -426,8 +428,8 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				{1, nil, nil},
 			},
 			expected: tuples{
-				{0, 3.1, 2, 1, 3.1, 5},
-				{1, nil, 2, 0, nil, nil},
+				{0, 3.1, 2, 1, 3.1, 5, 5, 5},
+				{1, nil, 2, 0, nil, nil, nil, nil},
 			},
 			convToDecimal: true,
 		},
@@ -439,7 +441,12 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				if err := tc.init(); err != nil {
 					t.Fatal(err)
 				}
-				runTests(t, []tuples{tc.input}, tc.expected, orderedVerifier, []int{0, 1, 2, 3, 4, 5, 6}[:len(tc.expected[0])],
+				runTests(
+					t,
+					[]tuples{tc.input},
+					tc.expected,
+					orderedVerifier,
+					[]int{0, 1, 2, 3, 4, 5, 6, 7}[:len(tc.expected[0])],
 					func(input []Operator) (Operator, error) {
 						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
 					})
@@ -448,96 +455,132 @@ func TestAggregatorAllFunctions(t *testing.T) {
 	}
 }
 
-func TestAggregatorRandomCountSum(t *testing.T) {
-	// This test sums and counts random inputs, keeping track of the expected
-	// results to make sure the aggregations are correct.
+func TestAggregatorRandom(t *testing.T) {
+	// This test aggregates random inputs, keeping track of the expected results
+	// to make sure the aggregations are correct.
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 64} {
-			for _, agg := range aggTypes {
-				t.Run(fmt.Sprintf("%s/groupSize=%d/numInputBatches=%d", agg.name, groupSize, numInputBatches),
-					func(t *testing.T) {
-						nTuples := coldata.BatchSize * numInputBatches
-						typs := []types.T{types.Int64, types.Int64, types.Int64}
-						cols := []coldata.Vec{
-							coldata.NewMemColumn(typs[0], nTuples),
-							coldata.NewMemColumn(typs[1], nTuples),
-							coldata.NewMemColumn(typs[2], nTuples)}
-						groups, sumCol, countColNulls := cols[0].Int64(), cols[1].Int64(), cols[2].Nulls()
-						var expRowCounts, expSums, expCounts []int64
-						curGroup := -1
-						for i := range groups {
-							if i%groupSize == 0 {
-								expRowCounts = append(expRowCounts, int64(groupSize))
-								expSums = append(expSums, 0)
-								expCounts = append(expCounts, 0)
-								curGroup++
-							}
-							sumCol[i] = rng.Int63() % 1024
-							expSums[len(expSums)-1] += sumCol[i]
-							if rng.Float64() < 0.1 {
-								countColNulls.SetNull(uint16(i))
-							} else {
-								expCounts[len(expCounts)-1]++
-							}
-							groups[i] = int64(curGroup)
-						}
-
-						source := newChunkingBatchSource(typs, cols, uint64(nTuples))
-						a, err := agg.new(
-							source,
-							typs,
-							[]distsqlpb.AggregatorSpec_Func{
-								distsqlpb.AggregatorSpec_COUNT_ROWS,
-								distsqlpb.AggregatorSpec_SUM_INT,
-								distsqlpb.AggregatorSpec_COUNT},
-							[]uint32{0},
-							[][]uint32{{}, {1}, {2}},
-						)
-						if err != nil {
-							t.Fatal(err)
-						}
-						a.Init()
-
-						// Exhaust aggregator until all batches have been read.
-						i := 0
-						tupleIdx := 0
-						for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
-							rowCountCol := b.ColVec(0).Int64()
-							sumCol := b.ColVec(1).Int64()
-							countCol := b.ColVec(2).Int64()
-							for j := uint16(0); j < b.Length(); j++ {
-								rowCount := rowCountCol[j]
-								sum := sumCol[j]
-								count := countCol[j]
-								expRowCount := expRowCounts[tupleIdx]
-								if rowCount != expRowCount {
-									t.Fatalf("Found rowCount %d, expected %d, idx %d of batch %d", rowCount, expRowCount, j, i)
+			for _, hasNulls := range []bool{true, false} {
+				for _, agg := range aggTypes {
+					t.Run(fmt.Sprintf("%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls),
+						func(t *testing.T) {
+							nTuples := coldata.BatchSize * numInputBatches
+							typs := []types.T{types.Int64, types.Int64}
+							cols := []coldata.Vec{
+								coldata.NewMemColumn(typs[0], nTuples),
+								coldata.NewMemColumn(typs[1], nTuples)}
+							groups, aggCol, aggColNulls := cols[0].Int64(), cols[1].Int64(), cols[1].Nulls()
+							var expRowCounts, expCounts, expSums, expMins, expMaxs []int64
+							// SUM, MIN, MAX, and AVG aggregators can output null.
+							var expNulls []bool
+							curGroup := -1
+							for i := range groups {
+								if i%groupSize == 0 {
+									expRowCounts = append(expRowCounts, int64(groupSize))
+									expCounts = append(expCounts, 0)
+									expSums = append(expSums, 0)
+									expMins = append(expMins, 2048)
+									expMaxs = append(expMaxs, -2048)
+									expNulls = append(expNulls, true)
+									curGroup++
 								}
-								expSum := expSums[tupleIdx]
-								if sum != expSum {
-									t.Fatalf("Found sum %d, expected %d, idx %d of batch %d", sum, expSum, j, i)
+								if hasNulls && rng.Float64() < nullProbability {
+									aggColNulls.SetNull(uint16(i))
+								} else {
+									aggCol[i] = (rng.Int63() % 1024) - 1024
+									expNulls[curGroup] = false
+									expCounts[curGroup]++
+									expSums[curGroup] += aggCol[i]
+									expMins[curGroup] = min64(aggCol[i], expMins[curGroup])
+									expMaxs[curGroup] = max64(aggCol[i], expMaxs[curGroup])
 								}
-								expCount := expCounts[tupleIdx]
-								if count != expCount {
-									t.Fatalf("Found count %d, expected %d, idx %d of batch %d", count, expCount, j, i)
-
-								}
-								tupleIdx++
+								groups[i] = int64(curGroup)
 							}
-							i++
-						}
-						totalInputRows := numInputBatches * coldata.BatchSize
-						nOutputRows := totalInputRows / groupSize
-						expBatches := (nOutputRows / coldata.BatchSize)
-						if nOutputRows%coldata.BatchSize != 0 {
-							expBatches++
-						}
-						if i != expBatches {
-							t.Fatalf("expected %d batches, found %d", expBatches, i)
-						}
-					})
+
+							source := newChunkingBatchSource(typs, cols, uint64(nTuples))
+							a, err := agg.new(
+								source,
+								typs,
+								[]distsqlpb.AggregatorSpec_Func{
+									distsqlpb.AggregatorSpec_COUNT_ROWS,
+									distsqlpb.AggregatorSpec_COUNT,
+									distsqlpb.AggregatorSpec_SUM_INT,
+									distsqlpb.AggregatorSpec_MIN,
+									distsqlpb.AggregatorSpec_MAX},
+								[]uint32{0},
+								[][]uint32{{}, {1}, {1}, {1}, {1}},
+							)
+							if err != nil {
+								t.Fatal(err)
+							}
+							a.Init()
+
+							// Exhaust aggregator until all batches have been read.
+							i := 0
+							tupleIdx := 0
+							for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
+								rowCountCol := b.ColVec(0)
+								countCol := b.ColVec(1)
+								sumCol := b.ColVec(2)
+								minCol := b.ColVec(3)
+								maxCol := b.ColVec(4)
+								for j := uint16(0); j < b.Length(); j++ {
+									rowCount := rowCountCol.Int64()[j]
+									count := countCol.Int64()[j]
+									sum := sumCol.Int64()[j]
+									min := minCol.Int64()[j]
+									max := maxCol.Int64()[j]
+									expRowCount := expRowCounts[tupleIdx]
+									if rowCount != expRowCount {
+										t.Fatalf("Found rowCount %d, expected %d, idx %d of batch %d", rowCount, expRowCount, j, i)
+									}
+									expCount := expCounts[tupleIdx]
+									if count != expCount {
+										t.Fatalf("Found count %d, expected %d, idx %d of batch %d", count, expCount, j, i)
+									}
+
+									expNull := expNulls[tupleIdx]
+									if expNull {
+										if !sumCol.Nulls().NullAt(uint16(j)) {
+											t.Fatalf("Found non-null sum %d, expected null, idx %d of batch %d", sum, j, i)
+										}
+										if !minCol.Nulls().NullAt(uint16(j)) {
+											t.Fatalf("Found non-null min %d, expected null, idx %d of batch %d", sum, j, i)
+										}
+										if !maxCol.Nulls().NullAt(uint16(j)) {
+											t.Fatalf("Found non-null max %d, expected null, idx %d of batch %d", sum, j, i)
+										}
+									} else {
+										expSum := expSums[tupleIdx]
+										if sum != expSum {
+											t.Fatalf("Found sum %d, expected %d, idx %d of batch %d", sum, expSum, j, i)
+										}
+										expMin := expMins[tupleIdx]
+										if min != expMin {
+											t.Fatalf("Found min %d, expected %d, idx %d of batch %d", min, expMin, j, i)
+										}
+										expMax := expMaxs[tupleIdx]
+										if max != expMax {
+											t.Fatalf("Found max %d, expected %d, idx %d of batch %d", max, expMax, j, i)
+										}
+									}
+									tupleIdx++
+								}
+								i++
+							}
+							totalInputRows := numInputBatches * coldata.BatchSize
+							nOutputRows := totalInputRows / groupSize
+							expBatches := (nOutputRows / coldata.BatchSize)
+							if nOutputRows%coldata.BatchSize != 0 {
+								expBatches++
+							}
+							if i != expBatches {
+								t.Fatalf("expected %d batches, found %d", expBatches, i)
+							}
+						})
+				}
 			}
 		}
 	}
@@ -762,4 +805,18 @@ func TestHashAggregator(t *testing.T) {
 			return NewHashAggregator(sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
 		})
 	}
+}
+
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }
