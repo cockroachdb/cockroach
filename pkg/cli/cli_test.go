@@ -1859,8 +1859,11 @@ Use "cockroach [command] --help" for more information about a command.
 				done <- err
 			}()
 
-			if err := Run(test.flags); err != nil && !test.expErr {
-				t.Error(err)
+			if err := Run(test.flags); err != nil {
+				fmt.Fprintln(w, "Error:", err)
+				if !test.expErr {
+					t.Error(err)
+				}
 			}
 
 			// back to normal state
