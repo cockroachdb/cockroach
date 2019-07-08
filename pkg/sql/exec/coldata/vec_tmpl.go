@@ -66,17 +66,11 @@ func (m *memColumn) Append(args AppendArgs) {
 }
 
 func (m *memColumn) Copy(args CopyArgs) {
-	if args.DestIdx != 0 && m.HasNulls() {
-		panic("copying to non-zero dest index with nulls is not implemented yet (would overwrite nulls)")
-	}
 	if args.Nils != nil && args.Sel64 == nil {
 		panic("Nils set without Sel64")
 	}
-	// TODO(asubiotto): This is extremely wrong (we might be overwriting nulls
-	// past the end of where we are copying to that should be left alone).
-	// Previous code did this though so we won't be introducing new problems. We
-	// really have to fix and test this.
-	m.Nulls().UnsetNulls()
+
+	m.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
 
 	switch args.ColType {
 	// {{range .}}
@@ -152,21 +146,13 @@ func (m *memColumn) Copy(args CopyArgs) {
 		}
 		// No Sel or Sel64.
 		copy(toCol[args.DestIdx:], fromCol[args.SrcStartIdx:args.SrcEndIdx])
-		// We do not check for existence of nulls in m due to forcibly unsetting
-		// the bitmap at the start.
 		if args.Src.HasNulls() {
-			m.nulls.hasNulls = true
-			if args.DestIdx == 0 && args.SrcStartIdx == 0 {
-				// We can copy this bitmap indiscriminately.
-				copy(m.nulls.nulls, args.Src.Nulls().NullBitmap())
-			} else {
-				// TODO(asubiotto): This should use Extend but Extend only takes uint16
-				// arguments.
-				srcNulls := args.Src.Nulls()
-				for curDestIdx, curSrcIdx := args.DestIdx, args.SrcStartIdx; curSrcIdx < args.SrcEndIdx; curDestIdx, curSrcIdx = curDestIdx+1, curSrcIdx+1 {
-					if srcNulls.NullAt64(curSrcIdx) {
-						m.nulls.SetNull64(curDestIdx)
-					}
+			// TODO(asubiotto): This should use Extend but Extend only takes uint16
+			// arguments.
+			srcNulls := args.Src.Nulls()
+			for curDestIdx, curSrcIdx := args.DestIdx, args.SrcStartIdx; curSrcIdx < args.SrcEndIdx; curDestIdx, curSrcIdx = curDestIdx+1, curSrcIdx+1 {
+				if srcNulls.NullAt64(curSrcIdx) {
+					m.nulls.SetNull64(curDestIdx)
 				}
 			}
 		}
