@@ -99,6 +99,19 @@ func TestNullsTruncate(t *testing.T) {
 	}
 }
 
+func TestUnsetNullsAfter(t *testing.T) {
+	for _, size := range pos {
+		n := NewNulls(BatchSize)
+		n.SetNulls()
+		n.UnsetNullsAfter(uint16(size))
+		for i := uint16(0); i < BatchSize; i++ {
+			expected := uint64(i) < size
+			require.Equal(t, expected, n.NullAt(i),
+				"NullAt(%d) should be %t after UnsetNullsAfter(%d)", i, expected, size)
+		}
+	}
+}
+
 func TestSetAndUnsetNulls(t *testing.T) {
 	n := NewNulls(BatchSize)
 	for i := uint16(0); i < BatchSize; i++ {
@@ -218,7 +231,7 @@ func TestNullsOr(t *testing.T) {
 	n1 := nulls3.Slice(0, length1)
 	n2 := nulls5.Slice(0, length2)
 	or := n1.Or(&n2)
-	require.True(t, or.hasNulls)
+	require.True(t, or.maybeHasNulls)
 	for i := uint64(0); i < length2; i++ {
 		if i < length1 && n1.NullAt64(i) || i < length2 && n2.NullAt64(i) {
 			require.True(t, or.NullAt64(i), "or.NullAt64(%d) should be true", i)

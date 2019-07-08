@@ -73,7 +73,7 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
-	if !a.countRow && b.ColVec(int(inputIdxs[0])).HasNulls() {
+	if !a.countRow && b.ColVec(int(inputIdxs[0])).MaybeHasNulls() {
 		nulls := b.ColVec(int(inputIdxs[0])).Nulls()
 		if sel != nil {
 			sel = sel[:inputLen]

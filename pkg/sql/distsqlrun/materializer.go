@@ -134,7 +134,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 			col := m.batch.ColVec(cIdx)
 			// TODO(asubiotto): we shouldn't have to do this check. Figure out who's
 			// not setting nulls.
-			if col.HasNulls() {
+			if col.MaybeHasNulls() {
 				if col.Nulls().NullAt(rowIdx) {
 					m.row[outIdx].Datum = tree.DNull
 					continue
