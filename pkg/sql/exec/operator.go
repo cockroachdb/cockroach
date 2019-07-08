@@ -46,6 +46,16 @@ type resettableOperator interface {
 	resetter
 }
 
+// StaticMemOperator is an interface that operators can implement if they know
+// what their static memory usage is.
+type StaticMemOperator interface {
+	Operator
+
+	// DeclareStaticMemory can be used by operators to declare upfront
+	// their memory usage when it is known.
+	DeclareStaticMemoryUsage() int64
+}
+
 type noopOperator struct {
 	input Operator
 }
