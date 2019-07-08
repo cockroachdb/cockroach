@@ -1088,11 +1088,6 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// --------------
 	// Only non-mutation columns are output columns.
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		// TODO(ridwanmsharif): We shouldn't need the Insert cols as part
-		//  of the OutputCols. We should update mutationOutputColmap to increase
-		//  the ord on insert but not add it to the map. The reason we do is because
-		//  of the expectation that the opt output cols will match the key set of the
-		//  exec plans output col map.
 		if private.OutputOrd(i) || private.InsertOrd(i) {
 			colID := private.Table.ColumnID(i)
 			rel.OutputCols.Add(colID)
