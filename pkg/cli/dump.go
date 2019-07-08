@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -535,6 +535,20 @@ func dumpSequenceData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMet
 func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetadata) error {
 	md, err := getMetadataForTable(conn, bmd, clusterTS)
 	if err != nil {
+		return err
+	}
+
+	if strings.TrimSpace(md.columnNames) == "" {
+		// A table with no columns may still have one or more rows. In
+		// fact, it can have arbitrary many rows, each with a different
+		// (hidden) PK value. Unfortunately, the dump command today simply
+		// omits the hidden PKs from the dump, so it is not possible to
+		// restore the invisible values.
+		// Instead of failing with an incomprehensible error below, inform
+		// the user more clearly.
+		err := errors.Newf("table %q has no visible columns", tree.ErrString(bmd.name))
+		err = errors.WithHint(err, "To proceed with the dump, either omit this table from the list of tables to dump, drop the table, or add some visible columns.")
+		err = errors.WithIssueLink(err, errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/37768"})
 		return err
 	}
 
