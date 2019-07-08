@@ -715,7 +715,21 @@ func (p *PhysicalPlan) AddLimit(
 				count = 1
 				limitZero = true
 			}
+			// If we're collapsing an offset into a stage that already has a limit,
+			// we have to be careful, since offsets always are applied first, before
+			// limits. So, if the last stage already has a limit, we subtract the
+			// offset from that limit to preserve correctness.
+			//
+			// As an example, consider the requirement of applying an offset of 3 on
+			// top of a limit of 10. In this case, we need to emit 7 result rows. But
+			// just propagating the offset blindly would produce 10 result rows, an
+			// incorrect result.
 			post.Offset += uint64(offset)
+			if post.Limit > 0 {
+				// Note that this can't fall below 0 - we would have already caught this
+				// case above and returned an empty plan.
+				post.Limit -= uint64(offset)
+			}
 		}
 		if count != math.MaxInt64 && (post.Limit == 0 || post.Limit > uint64(count)) {
 			post.Limit = uint64(count)
