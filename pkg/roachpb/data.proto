@@ -322,12 +322,15 @@ message Transaction {
   // time-bound iterator used to resolve intents - i.e. there can be intents to
   // resolve up to the timestamp that the txn started with.
   util.hlc.Timestamp refreshed_timestamp = 15 [(gogoproto.nullable) = false];
-  // Epoch zero timestamp is used to keep track of the earliest timestamp
-  // that any epoch of the transaction used. This is set only if the
-  // transaction is restarted and the epoch is bumped. It is used during
+  // Deprecated min timestamp was used to keep track of the earliest timestamp
+  // that any epoch of the transaction used. This was set only if the
+  // transaction is restarted and the epoch is bumped. It was used during
   // intent resolution to more efficiently scan for intents.
-  // TODO(nvanbenschoten): Rename to deprecated_min_timestamp.
-  util.hlc.Timestamp epoch_zero_timestamp = 14 [(gogoproto.nullable) = false];
+  //
+  // The timestamp has since been replaced by TxnMeta.MinTimestamp.
+  //
+  // TODO(nvanbenschoten): remove in v20.1.
+  util.hlc.Timestamp deprecated_min_timestamp = 14 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn
   // retry error, unless the node being read is listed in observed_timestamps
