@@ -3338,7 +3338,7 @@ void Transaction::InitAsDefaultInstance() {
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->refreshed_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-  ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->epoch_zero_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+  ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->deprecated_min_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->max_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
@@ -3367,11 +3367,11 @@ void Transaction::clear_refreshed_timestamp() {
   }
   refreshed_timestamp_ = NULL;
 }
-void Transaction::clear_epoch_zero_timestamp() {
-  if (GetArenaNoVirtual() == NULL && epoch_zero_timestamp_ != NULL) {
-    delete epoch_zero_timestamp_;
+void Transaction::clear_deprecated_min_timestamp() {
+  if (GetArenaNoVirtual() == NULL && deprecated_min_timestamp_ != NULL) {
+    delete deprecated_min_timestamp_;
   }
-  epoch_zero_timestamp_ = NULL;
+  deprecated_min_timestamp_ = NULL;
 }
 void Transaction::clear_max_timestamp() {
   if (GetArenaNoVirtual() == NULL && max_timestamp_ != NULL) {
@@ -3387,7 +3387,7 @@ const int Transaction::kLastHeartbeatFieldNumber;
 const int Transaction::kOrigTimestampFieldNumber;
 const int Transaction::kOrigTimestampWasObservedFieldNumber;
 const int Transaction::kRefreshedTimestampFieldNumber;
-const int Transaction::kEpochZeroTimestampFieldNumber;
+const int Transaction::kDeprecatedMinTimestampFieldNumber;
 const int Transaction::kMaxTimestampFieldNumber;
 const int Transaction::kObservedTimestampsFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
@@ -3433,10 +3433,10 @@ Transaction::Transaction(const Transaction& from)
   } else {
     max_timestamp_ = NULL;
   }
-  if (from.has_epoch_zero_timestamp()) {
-    epoch_zero_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.epoch_zero_timestamp_);
+  if (from.has_deprecated_min_timestamp()) {
+    deprecated_min_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.deprecated_min_timestamp_);
   } else {
-    epoch_zero_timestamp_ = NULL;
+    deprecated_min_timestamp_ = NULL;
   }
   if (from.has_refreshed_timestamp()) {
     refreshed_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.refreshed_timestamp_);
@@ -3467,7 +3467,7 @@ void Transaction::SharedDtor() {
   if (this != internal_default_instance()) delete last_heartbeat_;
   if (this != internal_default_instance()) delete orig_timestamp_;
   if (this != internal_default_instance()) delete max_timestamp_;
-  if (this != internal_default_instance()) delete epoch_zero_timestamp_;
+  if (this != internal_default_instance()) delete deprecated_min_timestamp_;
   if (this != internal_default_instance()) delete refreshed_timestamp_;
 }
 
@@ -3506,10 +3506,10 @@ void Transaction::Clear() {
     delete max_timestamp_;
   }
   max_timestamp_ = NULL;
-  if (GetArenaNoVirtual() == NULL && epoch_zero_timestamp_ != NULL) {
-    delete epoch_zero_timestamp_;
+  if (GetArenaNoVirtual() == NULL && deprecated_min_timestamp_ != NULL) {
+    delete deprecated_min_timestamp_;
   }
-  epoch_zero_timestamp_ = NULL;
+  deprecated_min_timestamp_ = NULL;
   if (GetArenaNoVirtual() == NULL && refreshed_timestamp_ != NULL) {
     delete refreshed_timestamp_;
   }
@@ -3651,7 +3651,7 @@ bool Transaction::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(114u /* 114 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_epoch_zero_timestamp()));
+               input, mutable_deprecated_min_timestamp()));
         } else {
           goto handle_unusual;
         }
@@ -3777,9 +3777,9 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(12, this->write_too_old(), output);
   }
 
-  if (this->has_epoch_zero_timestamp()) {
+  if (this->has_deprecated_min_timestamp()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      14, this->_internal_epoch_zero_timestamp(), output);
+      14, this->_internal_deprecated_min_timestamp(), output);
   }
 
   if (this->has_refreshed_timestamp()) {
@@ -3872,10 +3872,10 @@ size_t Transaction::ByteSizeLong() const {
         *max_timestamp_);
   }
 
-  if (this->has_epoch_zero_timestamp()) {
+  if (this->has_deprecated_min_timestamp()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *epoch_zero_timestamp_);
+        *deprecated_min_timestamp_);
   }
 
   if (this->has_refreshed_timestamp()) {
@@ -3936,8 +3936,8 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.has_max_timestamp()) {
     mutable_max_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.max_timestamp());
   }
-  if (from.has_epoch_zero_timestamp()) {
-    mutable_epoch_zero_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.epoch_zero_timestamp());
+  if (from.has_deprecated_min_timestamp()) {
+    mutable_deprecated_min_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.deprecated_min_timestamp());
   }
   if (from.has_refreshed_timestamp()) {
     mutable_refreshed_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.refreshed_timestamp());
@@ -3979,7 +3979,7 @@ void Transaction::InternalSwap(Transaction* other) {
   swap(last_heartbeat_, other->last_heartbeat_);
   swap(orig_timestamp_, other->orig_timestamp_);
   swap(max_timestamp_, other->max_timestamp_);
-  swap(epoch_zero_timestamp_, other->epoch_zero_timestamp_);
+  swap(deprecated_min_timestamp_, other->deprecated_min_timestamp_);
   swap(refreshed_timestamp_, other->refreshed_timestamp_);
   swap(status_, other->status_);
   swap(orig_timestamp_was_observed_, other->orig_timestamp_was_observed_);

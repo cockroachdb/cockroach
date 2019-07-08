@@ -10522,7 +10522,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				// Restart the transaction at a higher timestamp. This will
 				// increment its OrigTimestamp as well. We used to check the GC
-				// threshold against this timestamp instead of its epoch zero
+				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now.Add(0, 1))
@@ -11021,7 +11021,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				// Restart the transaction at a higher timestamp. This will
 				// increment its OrigTimestamp as well. We used to check the GC
-				// threshold against this timestamp instead of its epoch zero
+				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now.Add(0, 1))
