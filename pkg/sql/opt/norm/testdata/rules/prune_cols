@@ -1882,20 +1882,16 @@ delete mutation
 opt expect=(PruneMutationFetchCols,PruneMutationInputCols)
 DELETE FROM a RETURNING k, s
 ----
-project
+delete a
  ├── columns: k:1(int!null) s:4(string)
+ ├── fetch columns: k:5(int) s:8(string)
  ├── side-effects, mutations
+ ├── key: (1)
  ├── fd: (1)-->(4)
- └── delete a
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
-      ├── fetch columns: k:5(int) s:8(string)
-      ├── side-effects, mutations
-      ├── key: (1-3)
-      ├── fd: (1)-->(4)
-      └── scan a
-           ├── columns: k:5(int!null) s:8(string)
-           ├── key: (5)
-           └── fd: (5)-->(8)
+ └── scan a
+      ├── columns: k:5(int!null) s:8(string)
+      ├── key: (5)
+      └── fd: (5)-->(8)
 
 # Prune secondary family column not needed for the update.
 opt expect=(PruneMutationFetchCols,PruneMutationInputCols)
@@ -1946,12 +1942,12 @@ project
  ├── columns: b:2(int)
  ├── side-effects, mutations
  └── update "family"
-      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
       ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int)
       ├── update-mapping:
       │    └──  column11:11 => c:3
       ├── side-effects, mutations
-      ├── key: (1,3-5)
+      ├── key: (1,3,4)
       ├── fd: (1)-->(2)
       └── project
            ├── columns: column11:11(int) a:6(int!null) b:7(int) c:8(int) d:9(int)
@@ -2303,12 +2299,12 @@ project
  ├── side-effects, mutations
  ├── fd: (1)~~>(4)
  └── update returning_test
-      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) f:6(int) g:7(int) rowid:8(int!null)
+      ├── columns: a:1(int) d:4(int) e:5(int) f:6(int) g:7(int) rowid:8(int!null)
       ├── fetch columns: a:9(int) d:12(int) e:13(int) f:14(int) g:15(int) rowid:16(int)
       ├── update-mapping:
       │    └──  column17:17 => d:4
       ├── side-effects, mutations
-      ├── key: (2,3,5-8)
+      ├── key: (5-8)
       ├── fd: (8)-->(1,4), (1)~~>(4,8)
       └── project
            ├── columns: column17:17(int) a:9(int) d:12(int) e:13(int) f:14(int) g:15(int) rowid:16(int!null)
@@ -2329,12 +2325,12 @@ project
  ├── columns: a:1(int)
  ├── side-effects, mutations
  └── update returning_test
-      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) f:6(int) g:7(int) rowid:8(int!null)
+      ├── columns: a:1(int) rowid:8(int!null)
       ├── fetch columns: a:9(int) rowid:16(int)
       ├── update-mapping:
       │    └──  column17:17 => a:1
       ├── side-effects, mutations
-      ├── key: (2-8)
+      ├── key: (8)
       ├── fd: (8)-->(1)
       └── project
            ├── columns: column17:17(int) a:9(int) rowid:16(int!null)
@@ -2354,15 +2350,16 @@ UPDATE returning_test SET (b, c) = (a, a + c) RETURNING a, b, c
 project
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── side-effects, mutations
+ ├── lax-key: (2,3)
  ├── fd: (1)==(2), (2)==(1), (1)~~>(2,3)
  └── update returning_test
-      ├── columns: a:1(int) b:2(int) c:3(int) d:4(int) e:5(int) f:6(int) g:7(int) rowid:8(int!null)
+      ├── columns: a:1(int) b:2(int) c:3(int) rowid:8(int!null)
       ├── fetch columns: a:9(int) b:10(int) c:11(int) rowid:16(int)
       ├── update-mapping:
       │    ├──  a:9 => b:2
       │    └──  column17:17 => c:3
       ├── side-effects, mutations
-      ├── key: (4-8)
+      ├── key: (8)
       ├── fd: (1)==(2), (2)==(1), (8)-->(1-3), (1)~~>(2,3,8)
       └── project
            ├── columns: column17:17(int) a:9(int) b:10(int) c:11(int) rowid:16(int!null)
