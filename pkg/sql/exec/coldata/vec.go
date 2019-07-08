@@ -133,8 +133,9 @@ type Vec interface {
 	// It uses the reflect package and is not suitable for calling in hot paths.
 	PrettyValueAt(idx uint16, colType types.T) string
 
-	// HasNulls returns true if the column has any null values.
-	HasNulls() bool
+	// MaybeHasNulls returns true if the column possibly has any null values, and
+	// returns false if the column definitely has no null values.
+	MaybeHasNulls() bool
 
 	// Nulls returns the nulls vector for the column.
 	Nulls() *Nulls
@@ -233,8 +234,8 @@ func (m *memColumn) _TemplateType() []interface{} {
 	panic("don't call this from non template code")
 }
 
-func (m *memColumn) HasNulls() bool {
-	return m.nulls.hasNulls
+func (m *memColumn) MaybeHasNulls() bool {
+	return m.nulls.maybeHasNulls
 }
 
 func (m *memColumn) Nulls() *Nulls {

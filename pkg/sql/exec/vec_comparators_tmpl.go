@@ -57,8 +57,8 @@ type _TYPEVecComparator struct {
 }
 
 func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint16) int {
-	n1 := c.nulls[vecIdx1].HasNulls() && c.nulls[vecIdx1].NullAt(valIdx1)
-	n2 := c.nulls[vecIdx2].HasNulls() && c.nulls[vecIdx2].NullAt(valIdx2)
+	n1 := c.nulls[vecIdx1].MaybeHasNulls() && c.nulls[vecIdx1].NullAt(valIdx1)
+	n2 := c.nulls[vecIdx2].MaybeHasNulls() && c.nulls[vecIdx2].NullAt(valIdx2)
 	if n1 && n2 {
 		return 0
 	} else if n1 {
@@ -79,7 +79,7 @@ func (c *_TYPEVecComparator) setVec(idx int, vec coldata.Vec) {
 }
 
 func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16) {
-	if c.nulls[srcVecIdx].HasNulls() && c.nulls[srcVecIdx].NullAt(srcIdx) {
+	if c.nulls[srcVecIdx].MaybeHasNulls() && c.nulls[srcVecIdx].NullAt(srcIdx) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)

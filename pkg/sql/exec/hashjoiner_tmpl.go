@@ -119,14 +119,14 @@ func _CHECK_COL_WITH_NULLS(
 	_SEL_STRING string,
 ) { // */}}
 	// {{define "checkColWithNulls"}}
-	if probeVec.HasNulls() {
-		if buildVec.HasNulls() {
+	if probeVec.MaybeHasNulls() {
+		if buildVec.MaybeHasNulls() {
 			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true)
 		} else {
 			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false)
 		}
 	} else {
-		if buildVec.HasNulls() {
+		if buildVec.MaybeHasNulls() {
 			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true)
 		} else {
 			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false)
