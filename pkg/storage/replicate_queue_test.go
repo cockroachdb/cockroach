@@ -395,7 +395,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 			return err
 		}
 		if repl != "{1,2,3,4,5}" {
-			return fmt.Errorf("not up-replicated yet")
+			return fmt.Errorf("not up-replicated yet. replicas: %s", repl)
 		}
 		return nil
 	})
