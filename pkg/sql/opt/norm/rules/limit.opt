@@ -66,13 +66,14 @@ $input
         $offsetOrdering:*
     )
     (Const $limit:* & (IsPositiveLimit $limit))
-    $limitOrdering:* & (IsSameOrdering $offsetOrdering $limitOrdering)
+    $limitOrdering:* & (IsSameOrdering $offsetOrdering $limitOrdering) &
+        (CanAddConstInts $limit $offset)
 )
 =>
 (Offset
     (Limit
         $input
-        (Const (AddConsts $offset $limit))
+        (Const (AddConstInts $offset $limit))
         $limitOrdering
      )
     (Const $offset)
