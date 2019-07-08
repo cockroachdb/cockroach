@@ -55,7 +55,7 @@ type rankInitFields struct {
 
 // {{range .}}
 
-type rankDense__DENSE_HasPartition__PARTITION_Op struct {
+type _RANK_STRINGOp struct {
 	rankInitFields
 
 	// rank indicates which rank should be assigned to the next tuple.
@@ -66,9 +66,9 @@ type rankDense__DENSE_HasPartition__PARTITION_Op struct {
 	rankIncrement int64
 }
 
-var _ exec.Operator = &rankDense__DENSE_HasPartition__PARTITION_Op{}
+var _ exec.Operator = &_RANK_STRINGOp{}
 
-func (r *rankDense__DENSE_HasPartition__PARTITION_Op) Init() {
+func (r *_RANK_STRINGOp) Init() {
 	r.input.Init()
 	// RANK and DENSE_RANK start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
@@ -77,7 +77,7 @@ func (r *rankDense__DENSE_HasPartition__PARTITION_Op) Init() {
 	r.rankIncrement = 1
 }
 
-func (r *rankDense__DENSE_HasPartition__PARTITION_Op) Next(ctx context.Context) coldata.Batch {
+func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.input.Next(ctx)
 	if batch.Length() == 0 {
 		return batch

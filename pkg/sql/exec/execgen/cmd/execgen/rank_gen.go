@@ -22,6 +22,7 @@ import (
 type rankTmplInfo struct {
 	Dense        bool
 	HasPartition bool
+	String       string
 }
 
 // UpdateRank is used to encompass the different logic between DENSE_RANK and
@@ -65,8 +66,7 @@ func genRankOps(wr io.Writer) error {
 
 	s := string(d)
 
-	s = strings.Replace(s, "_DENSE", "{{.Dense}}", -1)
-	s = strings.Replace(s, "_PARTITION", "{{.HasPartition}}", -1)
+	s = strings.Replace(s, "_RANK_STRING", "{{.String}}", -1)
 
 	updateRankRe := regexp.MustCompile(`_UPDATE_RANK_\(\)`)
 	s = updateRankRe.ReplaceAllString(s, "{{.UpdateRank}}")
@@ -80,10 +80,10 @@ func genRankOps(wr io.Writer) error {
 	}
 
 	rankTmplInfos := []rankTmplInfo{
-		{Dense: false, HasPartition: false},
-		{Dense: false, HasPartition: true},
-		{Dense: true, HasPartition: false},
-		{Dense: true, HasPartition: true},
+		{Dense: false, HasPartition: false, String: "rankNoPartition"},
+		{Dense: false, HasPartition: true, String: "rankWithPartition"},
+		{Dense: true, HasPartition: false, String: "denseRankNoPartition"},
+		{Dense: true, HasPartition: true, String: "denseRankWithPartition"},
 	}
 	return tmpl.Execute(wr, rankTmplInfos)
 }

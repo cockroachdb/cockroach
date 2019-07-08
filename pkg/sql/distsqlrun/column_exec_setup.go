@@ -408,8 +408,11 @@ func newColOperator(
 			return nil, nil, errors.Newf("only a single window function is currently supported")
 		}
 		wf := core.Windower.WindowFns[0]
-		if wf.Frame != nil {
-			return nil, nil, errors.Newf("window functions with window frames are not supported")
+		if wf.Frame != nil &&
+			(wf.Frame.Mode != distsqlpb.WindowerSpec_Frame_RANGE ||
+				wf.Frame.Bounds.Start.BoundType != distsqlpb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
+				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != distsqlpb.WindowerSpec_Frame_CURRENT_ROW)) {
+			return nil, nil, errors.Newf("window functions with non-default window frames are not supported")
 		}
 		if wf.Func.AggregateFunc != nil {
 			return nil, nil, errors.Newf("aggregate functions used as window functions are not supported")
@@ -417,27 +420,26 @@ func newColOperator(
 
 		input := inputs[0]
 		typs := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
-		var orderingCols []uint32
 		tempPartitionColOffset, partitionColIdx := 0, -1
 		if len(core.Windower.PartitionBy) > 0 {
 			// TODO(yuzefovich): add support for hashing partitioner (probably by
 			// leveraging hash routers once we can distribute). The decision about
 			// which kind of partitioner to use should come from the optimizer.
-			input, orderingCols, err = exec.NewWindowSortingPartitioner(input, typs, core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx))
+			input, err = exec.NewWindowSortingPartitioner(input, typs, core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx))
 			tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
 		} else {
 			if len(wf.Ordering.Columns) > 0 {
 				input, err = exec.NewSorter(input, typs, wf.Ordering.Columns)
-			}
-			orderingCols = make([]uint32, len(wf.Ordering.Columns))
-			for i, col := range wf.Ordering.Columns {
-				orderingCols[i] = col.ColIdx
 			}
 		}
 		if err != nil {
 			return nil, nil, err
 		}
 
+		orderingCols := make([]uint32, len(wf.Ordering.Columns))
+		for i, col := range wf.Ordering.Columns {
+			orderingCols[i] = col.ColIdx
+		}
 		switch *wf.Func.WindowFunc {
 		case distsqlpb.WindowerSpec_ROW_NUMBER:
 			op = vecbuiltins.NewRowNumberOperator(input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
