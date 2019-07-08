@@ -23,6 +23,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -55,6 +56,9 @@ func _ASSIGN_NE(_, _, _ string) bool {
 
 // */}}
 
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.GET
+
 // tuplesDiffer takes in two ColVecs as well as tuple indices to check whether
 // the tuples differ.
 func tuplesDiffer(
@@ -66,7 +70,9 @@ func tuplesDiffer(
 		aCol := aColVec._TemplateType()
 		bCol := bColVec._TemplateType()
 		var unique bool
-		_ASSIGN_NE("unique", "aCol[aTupleIdx]", "bCol[bTupleIdx]")
+		arg1 := execgen.GET(aCol, aTupleIdx)
+		arg2 := execgen.GET(bCol, bTupleIdx)
+		_ASSIGN_NE("unique", "arg1", "arg2")
 		*differ = *differ || unique
 		return nil
 	// {{end}}

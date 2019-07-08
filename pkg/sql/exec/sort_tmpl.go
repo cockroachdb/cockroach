@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -45,10 +46,10 @@ var _ apd.Decimal
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
 
-// _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in types.T, for example
-// int64 for types.Int64.
-type _GOTYPE interface{}
+// _GOTYPESLICE is the template Go type slice variable for this operator. It
+// will be replaced by the Go slice representation for each type in types.T, for
+// example []int64 for types.Int64.
+type _GOTYPESLICE interface{}
 
 // _TYPES_T is the template type variable for types.T. It will be replaced by
 // types.Foo for each type Foo in the types.T type.
@@ -61,6 +62,9 @@ func _ASSIGN_LT(_, _, _ string) bool {
 }
 
 // */}}
+
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.GET
 
 func newSingleSorter(t types.T, dir distsqlpb.Ordering_Column_Direction) (colSorter, error) {
 	switch t {
@@ -84,7 +88,7 @@ func newSingleSorter(t types.T, dir distsqlpb.Ordering_Column_Direction) (colSor
 // {{range .Overloads}} {{/* for each direction */}}
 
 type sort_TYPE_DIROp struct {
-	sortCol       []_GOTYPE
+	sortCol       _GOTYPESLICE
 	order         []uint64
 	workingSpace  []uint64
 	cancelChecker CancelChecker
@@ -97,7 +101,7 @@ func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64, workingSpace []u
 }
 
 func (s *sort_TYPE_DIROp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := execgen.LEN(s.sortCol)
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -118,7 +122,7 @@ func (s *sort_TYPE_DIROp) reorder() {
 	// the index array to an ordinal list in the process.
 	for i := range index {
 		for index[i] != uint64(i) {
-			s.sortCol[index[i]], s.sortCol[i] = s.sortCol[i], s.sortCol[index[i]]
+			execgen.SWAP(s.sortCol, int(index[i]), i)
 			index[i], index[index[i]] = index[index[i]], index[i]
 		}
 	}
@@ -138,7 +142,7 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 			partitionEnd = partitions[i+1]
 		}
 		s.order = order[partitionStart:partitionEnd]
-		s.sortCol = sortCol[partitionStart:partitionEnd]
+		s.sortCol = execgen.SLICE(sortCol, int(partitionStart), int(partitionEnd))
 		n := int(partitionEnd - partitionStart)
 		s.quickSort(ctx, 0, n, maxDepth(n))
 	}
@@ -146,7 +150,9 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 
 func (s *sort_TYPE_DIROp) Less(i, j int) bool {
 	var lt bool
-	_ASSIGN_LT("lt", "s.sortCol[i]", "s.sortCol[j]")
+	arg1 := execgen.GET(s.sortCol, i)
+	arg2 := execgen.GET(s.sortCol, j)
+	_ASSIGN_LT("lt", "arg1", "arg2")
 	return lt
 }
 
@@ -154,7 +160,7 @@ func (s *sort_TYPE_DIROp) Swap(i, j int) {
 	// Swap needs to swap the values in the column being sorted, as otherwise
 	// subsequent calls to Less would be incorrect.
 	// We also store the swap order in s.order to swap all the other columns.
-	s.sortCol[i], s.sortCol[j] = s.sortCol[j], s.sortCol[i]
+	execgen.SWAP(s.sortCol, i, j)
 	s.order[i], s.order[j] = s.order[j], s.order[i]
 }
 

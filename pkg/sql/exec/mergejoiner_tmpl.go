@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -89,6 +90,9 @@ const _MJ_OVERLOAD = 0
 
 // */}}
 
+// Use execgen package to remove unused import warning.
+var _ interface{} = execgen.GET
+
 // {{ range $joinType := .JoinTypes }}
 type mergeJoin_JOIN_TYPE_STRINGOp struct {
 	mergeJoinBase
@@ -136,8 +140,10 @@ func _PROBE_SWITCH(
 				}
 				// {{ end }}
 
-				lVal := lKeys[_L_SEL_IND]
-				rVal := rKeys[_R_SEL_IND]
+				lSelIdx := _L_SEL_IND
+				lVal := execgen.GET(lKeys, int(lSelIdx))
+				rSelIdx := _R_SEL_IND
+				rVal := execgen.GET(rKeys, int(rSelIdx))
 
 				var match bool
 				_ASSIGN_EQ("match", "lVal", "rVal")
@@ -159,7 +165,8 @@ func _PROBE_SWITCH(
 								break
 							}
 							// {{ end }}
-							newLVal := lKeys[_L_SEL_IND]
+							lSelIdx := _L_SEL_IND
+							newLVal := execgen.GET(lKeys, int(lSelIdx))
 							_ASSIGN_EQ("match", "newLVal", "lVal")
 							if !match {
 								lComplete = true
@@ -182,7 +189,8 @@ func _PROBE_SWITCH(
 								break
 							}
 							// {{ end }}
-							newRVal := rKeys[_R_SEL_IND]
+							rSelIdx := _R_SEL_IND
+							newRVal := execgen.GET(rKeys, int(rSelIdx))
 							_ASSIGN_EQ("match", "newRVal", "rVal")
 							if !match {
 								rComplete = true
@@ -403,7 +411,8 @@ func _INCREMENT_LEFT_SWITCH(
 			break
 		}
 		// {{ end }}
-		newLVal := lKeys[_L_SEL_IND]
+		lSelIdx = _L_SEL_IND
+		newLVal := execgen.GET(lKeys, int(lSelIdx))
 		// {{with $mjOverload}}
 		_ASSIGN_EQ("match", "newLVal", "lVal")
 		// {{end}}
@@ -457,7 +466,8 @@ func _INCREMENT_RIGHT_SWITCH(
 			break
 		}
 		// {{ end }}
-		newRVal := rKeys[_R_SEL_IND]
+		rSelIdx = _R_SEL_IND
+		newRVal := execgen.GET(rKeys, int(rSelIdx))
 		// {{with $mjOverload}}
 		_ASSIGN_EQ("match", "newRVal", "rVal")
 		// {{end}}
@@ -626,9 +636,9 @@ func _LEFT_SWITCH(joinType joinTypeInfo, isSel bool, hasNulls bool) { // */}}
 					// {{ end }}
 
 					if !isNull {
-						val = srcCol[srcStartIdx]
+						val = execgen.GET(srcCol, srcStartIdx)
 						for i := 0; i < toAppend; i++ {
-							outCol[outStartIdx] = val
+							execgen.SET(outCol, outStartIdx, val)
 							outStartIdx++
 						}
 					}
@@ -763,17 +773,20 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 					// instead of copy.
 					if toAppend == 1 {
 						// {{ if $.IsSel }}
-						outCol[outStartIdx] = srcCol[sel[o.builderState.right.curSrcStartIdx]]
+						v := execgen.GET(srcCol, int(sel[o.builderState.right.curSrcStartIdx]))
+						execgen.SET(outCol, outStartIdx, v)
 						// {{ else }}
-						outCol[outStartIdx] = srcCol[o.builderState.right.curSrcStartIdx]
+						v := execgen.GET(srcCol, o.builderState.right.curSrcStartIdx)
+						execgen.SET(outCol, outStartIdx, v)
 						// {{ end }}
 					} else {
 						// {{ if $.IsSel }}
 						for i := 0; i < toAppend; i++ {
-							outCol[i+outStartIdx] = srcCol[sel[i+o.builderState.right.curSrcStartIdx]]
+							v := execgen.GET(srcCol, int(sel[i+o.builderState.right.curSrcStartIdx]))
+							execgen.SET(outCol, i+outStartIdx, v)
 						}
 						// {{ else }}
-						copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
+						execgen.COPYSLICE(outCol, srcCol, outStartIdx, o.builderState.right.curSrcStartIdx, o.builderState.right.curSrcStartIdx+toAppend)
 						// {{ end }}
 					}
 				}
@@ -901,12 +914,14 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
 				return true
 			}
-			prevVal := bufferedGroup.ColVec(int(colIdx))._TemplateType()[lastBufferedTupleIdx]
+			bufferedCol := bufferedGroup.ColVec(int(colIdx))._TemplateType()
+			prevVal := execgen.GET(bufferedCol, int(lastBufferedTupleIdx))
 			var curVal _GOTYPE
 			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(tupleToLookAtIdx) {
 				return true
 			}
-			curVal = batch.ColVec(int(colIdx))._TemplateType()[tupleToLookAtIdx]
+			col := batch.ColVec(int(colIdx))._TemplateType()
+			curVal = execgen.GET(col, int(tupleToLookAtIdx))
 			var match bool
 			_ASSIGN_EQ("match", "prevVal", "curVal")
 			if !match {

@@ -145,6 +145,24 @@ func runTestsWithFixedSel(
 	}
 }
 
+// setColVal is a test helper function to set the given value at the equivalent
+// col[idx]. This function is slow due to reflection.
+func setColVal(vec coldata.Vec, idx int, val interface{}) {
+	if vec.Type() == types.Bytes {
+		var (
+			bytesVal []byte
+			ok       bool
+		)
+		bytesVal, ok = val.([]byte)
+		if !ok {
+			bytesVal = []byte(val.(string))
+		}
+		vec.Bytes().Set(idx, bytesVal)
+		return
+	}
+	reflect.ValueOf(vec.Col()).Index(idx).Set(reflect.ValueOf(val).Convert(reflect.TypeOf(vec.Col()).Elem()))
+}
+
 // opTestInput is an Operator that columnarizes test input in the form of tuples
 // of arbitrary Go types. It's meant to be used in Operator unit tests in
 // conjunction with opTestOutput like the following:
@@ -273,17 +291,15 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
-		// Automatically convert the Go values into exec.Type slice elements using
-		// reflection. This is slow, but acceptable for tests.
-		col := reflect.ValueOf(vec.Col())
 		for j := uint16(0); j < batchSize; j++ {
 			outputIdx := s.selection[j]
 			if tups[j][i] == nil {
 				vec.Nulls().SetNull(outputIdx)
-			} else {
-				col.Index(int(outputIdx)).Set(
-					reflect.ValueOf(tups[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
+				continue
 			}
+			// Automatically convert the Go values into exec.Type slice elements using
+			// reflection. This is slow, but acceptable for tests.
+			setColVal(vec, int(outputIdx), tups[j][i])
 		}
 	}
 
@@ -360,13 +376,11 @@ func (s *opFixedSelTestInput) Init() {
 			vec := s.batch.ColVec(i)
 			// Automatically convert the Go values into exec.Type slice elements using
 			// reflection. This is slow, but acceptable for tests.
-			col := reflect.ValueOf(vec.Col())
 			for j := 0; j < len(s.tuples); j++ {
 				if s.tuples[j][i] == nil {
 					vec.Nulls().SetNull(uint16(j))
 				} else {
-					col.Index(j).Set(
-						reflect.ValueOf(s.tuples[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
+					setColVal(vec, j, s.tuples[j][i])
 				}
 			}
 		}
@@ -386,15 +400,13 @@ func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
 		for i := range s.typs {
 			vec := s.batch.ColVec(i)
 			vec.Nulls().UnsetNulls()
-			// Automatically convert the Go values into exec.Type slice elements using
-			// reflection. This is slow, but acceptable for tests.
-			col := reflect.ValueOf(vec.Col())
 			for j := uint16(0); j < batchSize; j++ {
 				if s.tuples[s.idx+j][i] == nil {
 					vec.Nulls().SetNull(j)
 				} else {
-					col.Index(int(j)).Set(
-						reflect.ValueOf(s.tuples[s.idx+j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
+					// Automatically convert the Go values into exec.Type slice elements using
+					// reflection. This is slow, but acceptable for tests.
+					setColVal(vec, int(j), s.tuples[s.idx+j][i])
 				}
 			}
 		}
@@ -460,8 +472,13 @@ func (r *opTestOutput) next(ctx context.Context) tuple {
 		if vec.Nulls().NullAt(curIdx) {
 			ret[outIdx] = nil
 		} else {
-			col := reflect.ValueOf(vec.Col())
-			out.Index(outIdx).Set(col.Index(int(curIdx)))
+			var val reflect.Value
+			if colBytes, ok := vec.Col().(coldata.Bytes); ok {
+				val = reflect.ValueOf(colBytes.Get(int(curIdx)))
+			} else {
+				val = reflect.ValueOf(vec.Col()).Index(int(curIdx))
+			}
+			out.Index(outIdx).Set(val)
 		}
 	}
 	r.curIdx++
