@@ -383,7 +383,7 @@ project
 # PushLimitIntoOffset
 # --------------------------------------------------
 
-opt expect=(PushLimitIntoOffset)
+opt expect=PushLimitIntoOffset
 SELECT k, i FROM a LIMIT 10 OFFSET 10
 ----
 offset
@@ -414,7 +414,7 @@ offset
  └── const: 10 [type=int]
 
 # Limit can be pushed into the ordering if they have the same ordering.
-opt expect=(PushLimitIntoOffset)
+opt expect=PushLimitIntoOffset
 SELECT k, i FROM (SELECT k, i FROM a ORDER BY i OFFSET 20) ORDER BY i LIMIT 10
 ----
 offset
@@ -443,7 +443,7 @@ offset
  │    └── const: 30 [type=int]
  └── const: 20 [type=int]
 
-opt expect-not=(PushLimitIntoOffset)
+opt expect-not=PushLimitIntoOffset
 SELECT k, i FROM (SELECT k, i FROM a ORDER BY i OFFSET 20) ORDER BY i DESC LIMIT 10
 ----
 limit
@@ -474,3 +474,22 @@ limit
  │         │         └── fd: (1)-->(2)
  │         └── const: 20 [type=int]
  └── const: 10 [type=int]
+
+# Using MaxInt64. Do not apply rule when sum overflows.
+opt expect-not=PushLimitIntoOffset
+SELECT k, i FROM a LIMIT 9223372036854775807 OFFSET 9223372036854775807
+----
+limit
+ ├── columns: k:1(int!null) i:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── offset
+ │    ├── columns: k:1(int!null) i:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── const: 9223372036854775807 [type=int]
+ └── const: 9223372036854775807 [type=int]
