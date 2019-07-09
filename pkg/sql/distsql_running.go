@@ -177,8 +177,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// Generate a new flow ID so that any remote nodes that successfully set
 			// up a vectorized flow will not be connected to by a non-vectorized flow.
 			newFlowID := uuid.MakeV4()
+			// TODO(yuzefovich): use firstErr to improve the message. At the moment,
+			// we don't support many types, so detailed messages with a stack trace
+			// become quite distracting.
 			log.Infof(
-				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %+v", flows[thisNodeID].FlowID, newFlowID, firstErr,
+				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s", flows[thisNodeID].FlowID, newFlowID,
 			)
 			for i := range flows {
 				flows[i].FlowID.UUID = newFlowID
