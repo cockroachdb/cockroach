@@ -392,7 +392,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.SessionData.Vectorize.String()
+			return evalCtx.SessionData.VectorizeMode.String()
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.VectorizeExecMode(
