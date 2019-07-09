@@ -359,6 +359,7 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	r := &roachpb.QueryTxnRequest{}
 	r.Key = desc.StartKey.AsRawKey()
 	r.Txn.Key = r.Key
+	r.Txn.MinTimestamp = ts
 	baQueryTxn.Add(r)
 	baQueryTxn.Timestamp = ts
 

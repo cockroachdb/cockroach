@@ -230,6 +230,17 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::cockroach::util::hlc::Timestamp* mutable_timestamp();
   void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
 
+  bool has_min_timestamp() const;
+  void clear_min_timestamp();
+  static const int kMinTimestampFieldNumber = 9;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_min_timestamp() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& min_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* release_min_timestamp();
+  ::cockroach::util::hlc::Timestamp* mutable_min_timestamp();
+  void set_allocated_min_timestamp(::cockroach::util::hlc::Timestamp* min_timestamp);
+
   void clear_epoch();
   static const int kEpochFieldNumber = 4;
   ::google::protobuf::int32 epoch() const;
@@ -252,6 +263,7 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::internal::ArenaStringPtr id_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
+  ::cockroach::util::hlc::Timestamp* min_timestamp_;
   ::google::protobuf::int32 epoch_;
   ::google::protobuf::int32 priority_;
   ::google::protobuf::int32 sequence_;
@@ -1863,6 +1875,53 @@ inline void TxnMeta::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* 
   }
   timestamp_ = timestamp;
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
+}
+
+inline bool TxnMeta::has_min_timestamp() const {
+  return this != internal_default_instance() && min_timestamp_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& TxnMeta::_internal_min_timestamp() const {
+  return *min_timestamp_;
+}
+inline const ::cockroach::util::hlc::Timestamp& TxnMeta::min_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = min_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.min_timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* TxnMeta::release_min_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.min_timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = min_timestamp_;
+  min_timestamp_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* TxnMeta::mutable_min_timestamp() {
+  
+  if (min_timestamp_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    min_timestamp_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.min_timestamp)
+  return min_timestamp_;
+}
+inline void TxnMeta::set_allocated_min_timestamp(::cockroach::util::hlc::Timestamp* min_timestamp) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(min_timestamp_);
+  }
+  if (min_timestamp) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      min_timestamp = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, min_timestamp, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  min_timestamp_ = min_timestamp;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.min_timestamp)
 }
 
 inline void TxnMeta::clear_priority() {
