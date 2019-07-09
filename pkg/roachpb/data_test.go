@@ -508,6 +508,7 @@ func TestTransactionUpdate(t *testing.T) {
 	var txn3 Transaction
 	txn3.ID = uuid.MakeV4()
 	txn3.Name = "carl"
+	txn3.Priority = 123
 	txn3.Update(&txn)
 
 	if err := zerofields.NoZeroField(txn3); err != nil {
