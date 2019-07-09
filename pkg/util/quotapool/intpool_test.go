@@ -462,6 +462,7 @@ func BenchmarkConcurrentIntQuotaPool(b *testing.B) {
 		{128, 4},
 		{512, 128},
 		{512, 513},
+		{512, 511},
 	} {
 		b.Run(test(c.workers, c.quota))
 	}
