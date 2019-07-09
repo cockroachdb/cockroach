@@ -31,6 +31,17 @@ const DefaultSucceedsSoonDuration = 45 * time.Second
 // function is invoked immediately at first and then successively with
 // an exponential backoff starting at 1ns and ending at around 1s.
 func SucceedsSoon(t testing.TB, fn func() error) {
+	if err := SucceedsSoonError(t, fn); err != nil {
+		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
+			DefaultSucceedsSoonDuration, err, string(debug.Stack()))
+	}
+}
+
+// SucceedsSoonError returns an error unless the supplied function runs without
+// error within a preset maximum duration. The function is invoked immediately
+// at first and then successively with an exponential backoff starting at 1ns
+// and ending at around 1s.
+func SucceedsSoonError(t testing.TB, fn func() error) error {
 	t.Helper()
 	tBegin := timeutil.Now()
 	wrappedFn := func() error {
@@ -40,8 +51,5 @@ func SucceedsSoon(t testing.TB, fn func() error) {
 		}
 		return err
 	}
-	if err := retry.ForDuration(DefaultSucceedsSoonDuration, wrappedFn); err != nil {
-		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
-			DefaultSucceedsSoonDuration, err, string(debug.Stack()))
-	}
+	return retry.ForDuration(DefaultSucceedsSoonDuration, wrappedFn)
 }
