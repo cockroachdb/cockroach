@@ -98,10 +98,13 @@ func trimIssueRequestBody(message string, usedCharacters int) string {
 
 // If the assignee would be the key in this map, assign to the value instead.
 // Helpful to avoid pinging former employees.
+// An "" value means that issues that would have gone to the key are left
+// unassigned.
 var oldFriendsMap = map[string]string{
-	"a-robinson": "andreimatei",
-	"benesch":    "nvanbenschoten",
-	"tamird":     "tschottdorf",
+	"a-robinson":   "andreimatei",
+	"benesch":      "nvanbenschoten",
+	"tamird":       "tbg",
+	"vivekmenezes": "",
 }
 
 func getAssignee(
@@ -132,6 +135,9 @@ func getAssignee(
 	assignee := *commits[0].Author.Login
 
 	if newAssignee, ok := oldFriendsMap[assignee]; ok {
+		if newAssignee == "" {
+			return "", fmt.Errorf("old friend %s is friendless", assignee)
+		}
 		assignee = newAssignee
 	}
 	return assignee, nil
@@ -300,9 +306,6 @@ Failed test: %[3]s`
 
 	assignee, err := getAssignee(ctx, authorEmail, p.listCommits)
 	if err != nil {
-		// if we *can't* assign anyone, sigh, feel free to hard-code me.
-		// -- tbg, 11/3/2017
-		assignee = "tbg"
 		message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
 	}
 
