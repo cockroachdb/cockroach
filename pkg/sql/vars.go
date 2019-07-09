@@ -382,11 +382,11 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_vectorize`: {
+	`vectorize`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.VectorizeExecModeFromString(s)
 			if !ok {
-				return newVarValueError(`experimental_vectorize`, s, "off", "on", "always")
+				return newVarValueError(`vectorize`, s, "off", "on", "always")
 			}
 			m.SetVectorize(mode)
 			return nil

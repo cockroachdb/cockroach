@@ -2,9 +2,9 @@
 
 # Temporary until #38458 is fixed. This test fails under stress with the
 # 5node-dist-vec config, but not with the 5node-dist config and then setting
-# experimental_vectorize=on, which should be equivalent.
+# vectorize=on, which should be equivalent.
 statement ok
-SET experimental_vectorize=on;
+SET vectorize=on;
 
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
@@ -68,7 +68,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl89vm0oQx-_vr0Bzek9ZP9
 
 # Verify execution.
 statement ok
-SET experimental_vectorize = always;
+SET vectorize = always;
 
 query I rowsort
 SELECT kv.k FROM kv JOIN kw ON kv.k = kw.k
@@ -80,4 +80,4 @@ SELECT kv.k FROM kv JOIN kw ON kv.k = kw.k
 5
 
 statement ok
-RESET experimental_vectorize;
+RESET vectorize;
