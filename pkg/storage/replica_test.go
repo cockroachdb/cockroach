@@ -5714,9 +5714,9 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	expMS = baseStats
 	expMS.Add(enginepb.MVCCStats{
-		LiveBytes:   95,
+		LiveBytes:   101,
 		KeyBytes:    28,
-		ValBytes:    67,
+		ValBytes:    73,
 		IntentBytes: 23,
 		LiveCount:   2,
 		KeyCount:    2,
@@ -8623,8 +8623,10 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 
 			// Update the transaction's timestamps so that it
 			// doesn't run into issues with the new cluster.
-			txn.Timestamp = tc.Clock().Now()
-			txn.OrigTimestamp = txn.Timestamp
+			now := tc.Clock().Now()
+			txn.Timestamp = now
+			txn.MinTimestamp = now
+			txn.OrigTimestamp = now
 
 			if c.setup != nil {
 				if pErr := c.setup(ctx, repl); pErr != nil {

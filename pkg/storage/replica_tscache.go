@@ -81,7 +81,7 @@ func (r *Replica) updateTimestampCache(
 			//
 			// It inserts the timestamp of the final batch in the transaction.
 			// This timestamp must necessarily be equal to or greater than the
-			// transaction's OrigTimestamp, which is consulted in
+			// transaction's MinTimestamp, which is consulted in
 			// CanCreateTxnRecord.
 			if br.Txn.Status.IsFinalized() {
 				key := keys.TransactionKey(start, txnID)
@@ -97,7 +97,7 @@ func (r *Replica) updateTimestampCache(
 			//
 			// Insert the timestamp of the batch, which we asserted during
 			// command evaluation was equal to or greater than the transaction's
-			// OrigTimestamp.
+			// MinTimestamp.
 			recovered := br.Responses[i].GetInner().(*roachpb.RecoverTxnResponse).RecoveredTxn
 			if recovered.Status.IsFinalized() {
 				key := keys.TransactionKey(start, recovered.ID)
@@ -294,22 +294,9 @@ func (r *Replica) applyTimestampCache(
 }
 
 // CanCreateTxnRecord determines whether a transaction record can be created
-// for the provided transaction information. Callers should provide an upper
-// bound on the transaction's minimum timestamp across all epochs (typically
-// the original timestamp of its first epoch). If this is not exact then the
-// method may return false positives (i.e. it determines that the record could
-// be created when it actually couldn't) but will never return false negatives
-// (i.e. it will never determine that the record could not be created when it
-// actually could).
-//
-// Because of this, callers who intend to write the transaction record should
-// always provide an exact minimum timestamp. They can't provide their
-// provisional commit timestamp because it may have moved forward over the
-// course of a single epoch and they can't provide their (current epoch's)
-// OrigTimestamp because it may have moved forward over a series of prior
-// epochs. Either of these timestamps might be above the timestamp that a
-// successful aborter might have used when aborting the transaction. Instead,
-// they should provide their epoch-zero original timestamp.
+// for the provided transaction information. Callers should provide the
+// transaction's minimum timestamp across all epochs, along with its ID and
+// its key.
 //
 // If the method return true, it also returns the minimum provisional commit
 // timestamp that the record can be created with. If the method returns false,
@@ -430,7 +417,7 @@ func (r *Replica) applyTimestampCache(
 // system.
 //
 func (r *Replica) CanCreateTxnRecord(
-	txnID uuid.UUID, txnKey []byte, txnMinTSUpperBound hlc.Timestamp,
+	txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
 ) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason) {
 	// Consult the timestamp cache with the transaction's key. The timestamp
 	// cache is used in two ways for transactions without transaction records.
@@ -460,7 +447,7 @@ func (r *Replica) CanCreateTxnRecord(
 	wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
-	if !wTS.Less(txnMinTSUpperBound) {
+	if !wTS.Less(txnMinTS) {
 		switch wTxnID {
 		case txnID:
 			// If we find our own transaction ID then an EndTransaction request

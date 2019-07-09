@@ -322,14 +322,14 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	require.EqualValues(t, mVal1Size, 44)
+	require.EqualValues(t, mVal1Size, 46)
 
 	m1ValSize := int64((&enginepb.MVCCMetadata{
 		Timestamp: hlc.LegacyTimestamp(ts2),
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	require.EqualValues(t, m1ValSize, 44)
+	require.EqualValues(t, m1ValSize, 46)
 
 	vKeySize := mvccVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
@@ -368,7 +368,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			{Sequence: 0, Value: value.RawBytes},
 		},
 	}).Size())
-	require.EqualValues(t, m2ValSize, 62)
+	require.EqualValues(t, m2ValSize, 64)
 
 	if err := MVCCDelete(ctx, engine, aggMS, key, txn.OrigTimestamp, txn); err != nil {
 		t.Fatal(err)
@@ -431,14 +431,14 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	require.EqualValues(t, mVal1Size, 44)
+	require.EqualValues(t, mVal1Size, 46)
 
 	m1ValSize := int64((&enginepb.MVCCMetadata{
 		Timestamp: hlc.LegacyTimestamp(ts2),
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	require.EqualValues(t, m1ValSize, 44)
+	require.EqualValues(t, m1ValSize, 46)
 
 	vKeySize := mvccVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
@@ -478,7 +478,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			{Sequence: 0, Value: []byte{}},
 		},
 	}).Size())
-	require.EqualValues(t, m2ValSize, 52)
+	require.EqualValues(t, m2ValSize, 54)
 
 	if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, value, txn); err != nil {
 		t.Fatal(err)
@@ -559,7 +559,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 		Deleted:   true,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	require.EqualValues(t, mValSize, 44)
+	require.EqualValues(t, mValSize, 46)
 
 	expMS = enginepb.MVCCStats{
 		LastUpdateNanos: 2E9,
@@ -701,7 +701,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 		Deleted:   true,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	require.EqualValues(t, mValSize, 44)
+	require.EqualValues(t, mValSize, 46)
 
 	expMS = enginepb.MVCCStats{
 		LastUpdateNanos: 2E9,
@@ -730,7 +730,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 		Txn:       &txn.TxnMeta,
 	}).Size())
 
-	require.EqualValues(t, m2ValSize, 46)
+	require.EqualValues(t, m2ValSize, 48)
 
 	t.Run("Abort", func(t *testing.T) {
 		aggMS := *aggMS
@@ -785,7 +785,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			},
 		}).Size())
 
-		require.EqualValues(t, m2ValSizeWithHistory, 52)
+		require.EqualValues(t, m2ValSizeWithHistory, 54)
 
 		expAggMS := enginepb.MVCCStats{
 			LastUpdateNanos: 3E9,
@@ -1085,7 +1085,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 		Deleted:   false,
 		Txn:       &txn.TxnMeta,
 	}).Size())
-	require.EqualValues(t, mValSize, 44)
+	require.EqualValues(t, mValSize, 46)
 
 	vKeySize := mvccVersionTimestampSize
 	require.EqualValues(t, vKeySize, 12)
@@ -1119,7 +1119,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 			{Sequence: 0, Value: val1.RawBytes},
 		},
 	}).Size())
-	require.EqualValues(t, mVal2Size, 62)
+	require.EqualValues(t, mVal2Size, 64)
 
 	if err := MVCCPut(ctx, engine, aggMS, key, txn.OrigTimestamp, val2, txn); err != nil {
 		t.Fatal(err)
