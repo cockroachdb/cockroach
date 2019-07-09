@@ -80,7 +80,7 @@ func verifyColOperator(
 		columnarizers[i] = c
 	}
 
-	colOp, _, _, err := newColOperator(ctx, flowCtx, pspec, columnarizers)
+	colOp, _, _, _, err := newColOperator(ctx, flowCtx, pspec, columnarizers)
 	if err != nil {
 		return err
 	}

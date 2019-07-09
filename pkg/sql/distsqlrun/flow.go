@@ -501,10 +501,18 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	if f.EvalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
-		err := f.setupVectorized(ctx, f.vectorizedBoundAccount)
+		streaming, err := f.setupVectorized(ctx, f.vectorizedBoundAccount)
 		if err == nil {
-			log.VEventf(ctx, 1, "vectorized flow.")
-			return nil
+			abandonVectorizedFlow := !streaming && f.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeStreaming
+			if !abandonVectorizedFlow {
+				log.VEventf(ctx, 1, "vectorized flow.")
+				return nil
+			}
+			// Non-streaming operator is present in the vectorized flow which doesn't
+			// match the desired vectorize mode, so we need to replan with row
+			// execution branch.
+			log.VEventf(ctx, 1, "non-streaming vectorized flow abandoned")
+			err = errors.Errorf("non-streaming vectorized flow abandoned")
 		}
 		// Vectorization attempt failed with an error.
 		// We won't run this flow through vectorized, so clear the memory account

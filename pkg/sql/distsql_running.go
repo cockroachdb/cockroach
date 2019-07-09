@@ -106,7 +106,8 @@ func (dsp *DistSQLPlanner) initRunners() {
 // vectorized setup error and the VectorizeExecMode semantics support falling
 // back to distsql.
 func shouldFallbackOnVectorizedSetupError(mode sessiondata.VectorizeExecMode, err error) bool {
-	return mode == sessiondata.VectorizeOn && distsqlrun.IsVectorizedSetupError(err)
+	return (mode == sessiondata.VectorizeOn || mode == sessiondata.VectorizeStreaming) &&
+		distsqlrun.IsVectorizedSetupError(err)
 }
 
 // prepareVectorizedFlowsForReplanning prepares evalCtx and flows to be reused
@@ -215,8 +216,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 			oldFlowID := flows[thisNodeID].FlowID
 			newFlowID, reset := prepareVectorizedFlowsForReplanning(evalCtx, oldFlowID, flows)
 			defer reset()
+			// TODO(yuzefovich): use firstErr to improve the message. At the moment,
+			// we don't support many types, so detailed messages with a stack trace
+			// become quite distracting.
 			log.Infof(
-				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %+v", oldFlowID, newFlowID, firstErr,
+				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s", flows[thisNodeID].FlowID, newFlowID,
 			)
 			// Recurse once with sessiondata.VectorizeOff, note that this branch will
 			// not be hit again due to prepareVectorizedFlowsForReplanning turning off
