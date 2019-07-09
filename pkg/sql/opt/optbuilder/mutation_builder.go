@@ -228,7 +228,7 @@ func (mb *mutationBuilder) addTargetColsByName(names tree.NameList) {
 			mb.addTargetCol(ord)
 			continue
 		}
-		panic(builderError{sqlbase.NewUndefinedColumnError(string(name))})
+		panic(sqlbase.NewUndefinedColumnError(string(name)))
 	}
 }
 
@@ -240,12 +240,12 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 
 	// Don't allow targeting of mutation columns.
 	if cat.IsMutationColumn(mb.tab, ord) {
-		panic(builderError{makeBackfillError(tabCol.ColName())})
+		panic(makeBackfillError(tabCol.ColName()))
 	}
 
 	// Computed columns cannot be targeted with input values.
 	if tabCol.IsComputed() {
-		panic(builderError{sqlbase.CannotWriteToComputedColError(string(tabCol.ColName()))})
+		panic(sqlbase.CannotWriteToComputedColError(string(tabCol.ColName())))
 	}
 
 	// Ensure that the name list does not contain duplicates.
@@ -521,7 +521,7 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
 			expr, err := parser.ParseExpr(string(mb.tab.Check(i).Constraint))
 			if err != nil {
-				panic(builderError{err})
+				panic(err)
 			}
 
 			alias := fmt.Sprintf("check%d", i+1)
@@ -732,7 +732,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	mb.parsedExprs[ord] = expr
@@ -765,7 +765,7 @@ func (mb *mutationBuilder) buildFKChecks() {
 
 		refTab, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, fk.ReferencedTableID())
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		refOrdinals := make([]int, numCols)
 		for j := range refOrdinals {

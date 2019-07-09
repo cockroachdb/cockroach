@@ -430,3 +430,59 @@ Final best expression
         │         └── filters
         │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
         └── const: 5 [type=int]
+
+# --------------------------------------------------
+# PushLimitIntoOffset + GenerateLimitedScans
+# --------------------------------------------------
+
+# Regression testing for #30416.
+# The limit is pushed down the offset and so an appropriate index scan is used
+# over a primary key scan.
+opt
+SELECT * from a ORDER BY s LIMIT 10 OFFSET 10
+----
+offset
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── internal-ordering: +4
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── ordering: +4
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── cardinality: [0 - 20]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── ordering: +4
+ │    └── scan a@s_idx
+ │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │         ├── limit: 20
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2-4)
+ │         └── ordering: +4
+ └── const: 10 [type=int]
+
+# The right index is used for the limited scan based on the order.
+opt
+SELECT * from a ORDER BY s DESC LIMIT 10 OFFSET 10
+----
+offset
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── internal-ordering: -4
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── ordering: -4
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── cardinality: [0 - 20]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── ordering: -4
+ │    └── scan a@si_idx
+ │         ├── columns: k:1(int!null) i:2(int) s:4(string) j:5(jsonb)
+ │         ├── limit: 20
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2,4,5)
+ │         └── ordering: -4
+ └── const: 10 [type=int]

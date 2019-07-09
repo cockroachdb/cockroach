@@ -116,7 +116,7 @@ func (b *Builder) analyzeOrderByIndex(
 	tab, _ := b.resolveTable(&order.Table, privilege.SELECT)
 	index, err := b.findIndexByName(tab, order.Index)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	// Append each key column from the index (including the implicit primary key
@@ -125,7 +125,7 @@ func (b *Builder) analyzeOrderByIndex(
 		// Columns which are indexable are always orderable.
 		col := index.Column(i)
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 
 		desc := col.Descending

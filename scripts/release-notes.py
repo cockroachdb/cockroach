@@ -290,6 +290,13 @@ def find_commits(from_commit_ref, until_commit_ref):
 
     return firstCommit, commit
 
+if not options.until_commit:
+    print("no value specified with --until, try --until=xxxxx (without space after =)", file=sys.stderr)
+    exit(1)
+if not options.from_commit:
+    print("no value specified with --from, try --from=xxxx (without space after =)", file=sys.stderr)
+    exit(1)
+
 firstCommit, commit = find_commits(options.from_commit, options.until_commit)
 if commit == firstCommit:
     print("Commit range is empty!", file=sys.stderr)

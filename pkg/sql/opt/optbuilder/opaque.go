@@ -39,7 +39,7 @@ func (b *Builder) tryBuildOpaque(stmt tree.Statement, inScope *scope) (outScope 
 	}
 	obj, cols, err := fn(b.ctx, b.semaCtx, b.evalCtx, stmt)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	outScope = inScope.push()
 	b.synthesizeResultColumns(outScope, cols)
