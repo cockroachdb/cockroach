@@ -194,10 +194,7 @@ func (p *IntPool) Len() int {
 }
 
 // ApproximateQuota will report approximately the amount of quota available in
-// the pool. It is precise if there are no ongoing acquisitions. If there are,
-// the return value can be up to 'v' less than actual available quota where 'v'
-// is the value the acquisition goroutine first in line is attempting to
-// acquire.
+// the pool.
 func (p *IntPool) ApproximateQuota() (q uint64) {
 	p.qp.ApproximateQuota(func(r Resource) {
 		if ia, ok := r.(*intAlloc); ok {
