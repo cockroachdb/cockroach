@@ -33588,6 +33588,7 @@ const int Header::kReturnRangeInfoFieldNumber;
 const int Header::kGatewayNodeIdFieldNumber;
 const int Header::kScanOptionsFieldNumber;
 const int Header::kAsyncConsensusFieldNumber;
+const int Header::kDeferWriteTooOldErrorFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Header::Header()
@@ -33622,15 +33623,15 @@ Header::Header(const Header& from)
     scan_options_ = NULL;
   }
   ::memcpy(&range_id_, &from.range_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&gateway_node_id_) -
-    reinterpret_cast<char*>(&range_id_)) + sizeof(gateway_node_id_));
+    static_cast<size_t>(reinterpret_cast<char*>(&defer_write_too_old_error_) -
+    reinterpret_cast<char*>(&range_id_)) + sizeof(defer_write_too_old_error_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Header)
 }
 
 void Header::SharedCtor() {
   ::memset(&timestamp_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&gateway_node_id_) -
-      reinterpret_cast<char*>(&timestamp_)) + sizeof(gateway_node_id_));
+      reinterpret_cast<char*>(&defer_write_too_old_error_) -
+      reinterpret_cast<char*>(&timestamp_)) + sizeof(defer_write_too_old_error_));
 }
 
 Header::~Header() {
@@ -33677,8 +33678,8 @@ void Header::Clear() {
   }
   scan_options_ = NULL;
   ::memset(&range_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&gateway_node_id_) -
-      reinterpret_cast<char*>(&range_id_)) + sizeof(gateway_node_id_));
+      reinterpret_cast<char*>(&defer_write_too_old_error_) -
+      reinterpret_cast<char*>(&range_id_)) + sizeof(defer_write_too_old_error_));
   _internal_metadata_.Clear();
 }
 
@@ -33854,6 +33855,20 @@ bool Header::MergePartialFromCodedStream(
         break;
       }
 
+      // bool defer_write_too_old_error = 14;
+      case 14: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(112u /* 112 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &defer_write_too_old_error_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -33940,6 +33955,11 @@ void Header::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(13, this->async_consensus(), output);
   }
 
+  // bool defer_write_too_old_error = 14;
+  if (this->defer_write_too_old_error() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(14, this->defer_write_too_old_error(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Header)
@@ -34000,6 +34020,12 @@ size_t Header::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->read_consistency());
   }
 
+  if (this->gateway_node_id() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->gateway_node_id());
+  }
+
   // bool distinct_spans = 9;
   if (this->distinct_spans() != 0) {
     total_size += 1 + 1;
@@ -34015,10 +34041,9 @@ size_t Header::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
-  if (this->gateway_node_id() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int32Size(
-        this->gateway_node_id());
+  // bool defer_write_too_old_error = 14;
+  if (this->defer_write_too_old_error() != 0) {
+    total_size += 1 + 1;
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -34062,6 +34087,9 @@ void Header::MergeFrom(const Header& from) {
   if (from.read_consistency() != 0) {
     set_read_consistency(from.read_consistency());
   }
+  if (from.gateway_node_id() != 0) {
+    set_gateway_node_id(from.gateway_node_id());
+  }
   if (from.distinct_spans() != 0) {
     set_distinct_spans(from.distinct_spans());
   }
@@ -34071,8 +34099,8 @@ void Header::MergeFrom(const Header& from) {
   if (from.async_consensus() != 0) {
     set_async_consensus(from.async_consensus());
   }
-  if (from.gateway_node_id() != 0) {
-    set_gateway_node_id(from.gateway_node_id());
+  if (from.defer_write_too_old_error() != 0) {
+    set_defer_write_too_old_error(from.defer_write_too_old_error());
   }
 }
 
@@ -34101,10 +34129,11 @@ void Header::InternalSwap(Header* other) {
   swap(user_priority_, other->user_priority_);
   swap(max_span_request_keys_, other->max_span_request_keys_);
   swap(read_consistency_, other->read_consistency_);
+  swap(gateway_node_id_, other->gateway_node_id_);
   swap(distinct_spans_, other->distinct_spans_);
   swap(return_range_info_, other->return_range_info_);
   swap(async_consensus_, other->async_consensus_);
-  swap(gateway_node_id_, other->gateway_node_id_);
+  swap(defer_write_too_old_error_, other->defer_write_too_old_error_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

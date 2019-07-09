@@ -1195,12 +1195,12 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 	findTargetIndex := func(tableID ID, indexID IndexID) (*TableDescriptor, *IndexDescriptor, error) {
 		targetTable, err := getTable(tableID)
 		if err != nil {
-			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			return nil, nil, errors.Wrapf(err,
 				"missing table=%d index=%d", errors.Safe(tableID), errors.Safe(indexID))
 		}
 		targetIndex, err := targetTable.FindIndexByID(indexID)
 		if err != nil {
-			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			return nil, nil, errors.Wrapf(err,
 				"missing table=%s index=%d", targetTable.Name, errors.Safe(indexID))
 		}
 		return targetTable, targetIndex, nil
@@ -1212,7 +1212,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 			targetTable, targetIndex, err := findTargetIndex(
 				index.ForeignKey.Table, index.ForeignKey.Index)
 			if err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err, "invalid foreign key")
+				return errors.Wrapf(err, "invalid foreign key")
 			}
 			found := false
 			for _, backref := range targetIndex.ReferencedBy {
@@ -1234,12 +1234,12 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 			fkBackrefs[backref] = struct{}{}
 			targetTable, err := getTable(backref.Table)
 			if err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err, "invalid fk backreference table=%d index=%d",
+				return errors.Wrapf(err, "invalid fk backreference table=%d index=%d",
 					backref.Table, errors.Safe(backref.Index))
 			}
 			targetIndex, err := targetTable.FindIndexByID(backref.Index)
 			if err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err, "invalid fk backreference table=%s index=%d",
+				return errors.Wrapf(err, "invalid fk backreference table=%s index=%d",
 					targetTable.Name, errors.Safe(backref.Index))
 			}
 			if fk := targetIndex.ForeignKey; fk.Table != desc.ID || fk.Index != index.ID {
@@ -1255,7 +1255,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 			ancestor := index.Interleave.Ancestors[len(index.Interleave.Ancestors)-1]
 			targetTable, targetIndex, err := findTargetIndex(ancestor.TableID, ancestor.IndexID)
 			if err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err, "invalid interleave")
+				return errors.Wrapf(err, "invalid interleave")
 			}
 			found := false
 			for _, backref := range targetIndex.InterleavedBy {
@@ -1278,13 +1278,13 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 			interleaveBackrefs[backref] = struct{}{}
 			targetTable, err := getTable(backref.Table)
 			if err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
+				return errors.Wrapf(err,
 					"invalid interleave backreference table=%d index=%d",
 					backref.Table, backref.Index)
 			}
 			targetIndex, err := targetTable.FindIndexByID(backref.Index)
 			if err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
+				return errors.Wrapf(err,
 					"invalid interleave backreference table=%s index=%d",
 					targetTable.Name, backref.Index)
 			}

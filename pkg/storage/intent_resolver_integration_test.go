@@ -387,7 +387,9 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 			// Write keyB to create a cycle with txn3.
 			putB := putArgs(keyB, []byte("value"))
 			assignSeqNumsForReqs(txn1, &putB)
-			repl, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &putB)
+			repl, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+				Txn: txn1, DeferWriteTooOldError: true,
+			}, &putB)
 			if pErr != nil {
 				txnCh1 <- pErr.GoError()
 				return
@@ -455,7 +457,9 @@ func TestContendedIntentPushedByHighPriorityScan(t *testing.T) {
 	go func() {
 		put := putArgs(keyA, []byte("value"))
 		assignSeqNumsForReqs(txn2, &put)
-		if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &put); pErr != nil {
+		if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+			Txn: txn2, DeferWriteTooOldError: true,
+		}, &put); pErr != nil {
 			txnCh2 <- pErr.GoError()
 			return
 		}

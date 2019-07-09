@@ -406,7 +406,7 @@ func (p *planner) initiateDropTable(
 		}
 
 		if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(err,
+			return errors.Wrapf(err,
 				"failed to mark job %d as as successful", errors.Safe(jobID))
 		}
 	}
