@@ -4168,9 +4168,17 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 		t.Errorf("unexpected error reading key: %s", pErr)
 	}
 
-	// Send a put for keyB; this currently succeeds as there's nothing to detect
-	// the retry.
-	if _, pErr = tc.SendWrappedWith(roachpb.Header{Txn: putTxn}, &putB); pErr != nil {
+	// Send a put for keyB; by default this fails with a WriteTooOldError.
+	_, pErr = tc.SendWrappedWith(roachpb.Header{Txn: putTxn}, &putB)
+	if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
+		t.Errorf("expected WriteTooOldError, got: %v", pErr)
+	}
+
+	// Try again with DeferWriteTooOldError. This currently succeeds
+	// (with a pushed timestamp) as there's nothing to detect the retry.
+	if _, pErr = tc.SendWrappedWith(roachpb.Header{
+		Txn: putTxn, DeferWriteTooOldError: true,
+	}, &putB); pErr != nil {
 		t.Error(pErr)
 	}
 
@@ -4186,7 +4194,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 		t.Errorf("expected %s; got %v", expErr, pErr)
 	}
 
-	// Expect that keyB intent did not get written!
+	// Expect that keyB intent got written!
 	gArgs = getArgs(keyB)
 	_, pErr = tc.SendWrapped(&gArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {

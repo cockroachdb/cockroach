@@ -417,7 +417,7 @@ func (sc *SchemaChanger) DropTableDesc(
 					b.DelRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 					return nil
 				}); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
+				return errors.Wrapf(err,
 					"failed to update job %d", errors.Safe(tableDesc.GetDropJobID()))
 			}
 		}
@@ -1067,7 +1067,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 				ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 					return runStatus, nil
 				}); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
+				return errors.Wrapf(err,
 					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
 			}
 		}
@@ -1170,7 +1170,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return runStatus, nil
 			}); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
+				return errors.Wrapf(err,
 					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
 			}
 		}
@@ -1261,14 +1261,14 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	}, func(txn *client.Txn) error {
 		if jobSucceeded {
 			if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
+				return errors.Wrapf(err,
 					"failed to mark job %d as successful", errors.Safe(*sc.job.ID()))
 			}
 		} else {
 			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return RunningStatusWaitingGC, nil
 			}); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err,
+				return errors.Wrapf(err,
 					"failed to update running status of job %d", errors.Safe(*sc.job.ID()))
 			}
 		}
