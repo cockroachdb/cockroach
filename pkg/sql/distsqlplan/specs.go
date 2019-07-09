@@ -35,9 +35,7 @@ func NewFlowSpec(flowID distsqlpb.FlowID, gateway roachpb.NodeID) *distsqlpb.Flo
 // ReleaseFlowSpec returns this FlowSpec back to the pool of FlowSpecs. It may
 // not be used again after this call.
 func ReleaseFlowSpec(spec *distsqlpb.FlowSpec) {
-	*spec = distsqlpb.FlowSpec{
-		Processors: spec.Processors[:0],
-	}
+	spec.Reset()
 	flowSpecPool.Put(spec)
 }
 
