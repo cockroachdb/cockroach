@@ -681,3 +681,17 @@ SELECT * from update_cascade_test ORDER BY update_cascade;
 2  {"a": "b", "c": "d"}
 3  ["b", "c"]
 5  ["a", "b"]
+
+# Test that inverted index validation correctly handles NULL values on creation (#38714)
+
+statement ok
+CREATE TABLE table_with_nulls (a JSON)
+
+statement ok
+INSERT INTO table_with_nulls VALUES (NULL)
+
+statement ok
+CREATE INVERTED INDEX ON table_with_nulls (a)
+
+statement ok
+DROP TABLE table_with_nulls
