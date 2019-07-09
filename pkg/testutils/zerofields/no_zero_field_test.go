@@ -14,17 +14,29 @@ import "testing"
 
 func TestNoZeroField(t *testing.T) {
 	type foo struct {
-		X, Y int
+		A int
+		B int
 	}
-	testFoo := foo{1, 2}
+	type bar struct {
+		X, Y int
+		Z    foo
+	}
+	testFooNonZero := bar{1, 2, foo{3, 4}}
+	testFoo := testFooNonZero
 	if err := NoZeroField(&testFoo); err != nil {
 		t.Fatal(err)
 	}
 	if err := NoZeroField(interface{}(testFoo)); err != nil {
 		t.Fatal(err)
 	}
+	testFoo = testFooNonZero
 	testFoo.Y = 0
-	if err := NoZeroField(&testFoo); err == nil {
-		t.Fatal("expected an error")
+	if err, exp := NoZeroField(&testFoo), (zeroFieldErr{"Y"}); err != exp {
+		t.Fatalf("expected error %v, found %v", exp, err)
+	}
+	testFoo = testFooNonZero
+	testFoo.Z.B = 0
+	if err, exp := NoZeroField(&testFoo), (zeroFieldErr{"Z.B"}); err != exp {
+		t.Fatalf("expected error %v, found %v", exp, err)
 	}
 }
