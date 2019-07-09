@@ -169,16 +169,16 @@ statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
 
 statement ok
-SET experimental_vectorize = on
+SET vectorize = on
 
 statement ok
-SET experimental_vectorize = always
+SET vectorize = always
 
 statement ok
-SET experimental_vectorize = off
+SET vectorize = off
 
-statement error invalid value for parameter "experimental_vectorize": "bogus"
-SET experimental_vectorize = bogus
+statement error invalid value for parameter "vectorize": "bogus"
+SET vectorize = bogus
 
 statement ok
 SET optimizer = on
