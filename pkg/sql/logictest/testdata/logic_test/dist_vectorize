@@ -62,7 +62,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl89vm0oQx-_vr0Bzek9ZP9
 
 # Verify execution.
 statement ok
-SET vectorize = always
+SET vectorize = experimental_always
 
 query I rowsort
 SELECT kv.k FROM kv JOIN kw ON kv.k = kw.k
