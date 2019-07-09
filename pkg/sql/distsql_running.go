@@ -208,7 +208,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// into the local flow.
 	}
 	if firstErr != nil {
-		if shouldFallbackOnVectorizedSetupError(evalCtx.SessionData.Vectorize, firstErr) {
+		if shouldFallbackOnVectorizedSetupError(evalCtx.SessionData.VectorizeMode, firstErr) {
 			// Error vectorizing remote flows, try again with off.
 			// Generate a new flow ID so that any remote nodes that successfully set
 			// up a vectorized flow will not be connected to by a non-vectorized flow.
@@ -238,7 +238,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	parentMonitor := evalCtx.Mon
 	setupCtx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
-		if shouldFallbackOnVectorizedSetupError(evalCtx.SessionData.Vectorize, err) {
+		if shouldFallbackOnVectorizedSetupError(evalCtx.SessionData.VectorizeMode, err) {
 			// Error vectorizing only the gateway flow.
 			oldFlowID := flows[thisNodeID].FlowID
 			newFlowID, reset := prepareVectorizedFlowsForReplanning(evalCtx, oldFlowID, flows)

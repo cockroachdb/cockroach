@@ -498,7 +498,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
-	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
+	if f.EvalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
 		err := f.setupVectorized(ctx, f.vectorizedBoundAccount)
@@ -516,7 +516,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 		f.startables = nil
 
 		var isException bool
-		if f.EvalCtx.SessionData.Vectorize == sessiondata.VectorizeAlways {
+		if f.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAlways {
 			// If running with always, this check makes sure that we can still run
 			// SET statements (mostly to set experimental_vectorize=off) and the like.
 			if len(spec.Processors) == 1 &&
