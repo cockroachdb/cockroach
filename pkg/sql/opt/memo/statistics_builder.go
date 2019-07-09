@@ -2767,14 +2767,16 @@ func (sb *statisticsBuilder) selectivityFromNullCounts(
 		}
 		if colStat.NullCount < inputStat.NullCount {
 			nullsRemoved := inputStat.NullCount - colStat.NullCount
+			selectivityFromNullsRemoved := 1 - nullsRemoved/rowCount
 
-			// We want to avoid setting selectivity to zero because the stats may be
-			// stale, and we can end up with weird and inefficient plans if we
-			// estimate zero rows. Multiply by a small number instead.
-			if nullsRemoved == rowCount {
-				selectivity *= 1e-7
+			const epsilon = 1e-10
+			if selectivityFromNullsRemoved < epsilon {
+				// We want to avoid setting selectivity to zero because the stats may be
+				// stale, and we can end up with weird and inefficient plans if we
+				// estimate zero rows. Multiply by a small number instead.
+				selectivity *= epsilon
 			} else {
-				selectivity *= 1 - nullsRemoved/rowCount
+				selectivity *= selectivityFromNullsRemoved
 			}
 		}
 	}
