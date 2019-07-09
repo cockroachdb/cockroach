@@ -326,6 +326,7 @@ message Transaction {
   // that any epoch of the transaction used. This is set only if the
   // transaction is restarted and the epoch is bumped. It is used during
   // intent resolution to more efficiently scan for intents.
+  // TODO(nvanbenschoten): Rename to deprecated_min_timestamp.
   util.hlc.Timestamp epoch_zero_timestamp = 14 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn

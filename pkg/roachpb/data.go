@@ -770,11 +770,12 @@ func MakeTransaction(
 
 	return Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Key:       baseKey,
-			ID:        u,
-			Timestamp: now,
-			Priority:  MakePriority(userPriority),
-			Sequence:  0, // 1-indexed, incremented before each Request
+			Key:          baseKey,
+			ID:           u,
+			Timestamp:    now,
+			MinTimestamp: now,
+			Priority:     MakePriority(userPriority),
+			Sequence:     0, // 1-indexed, incremented before each Request
 		},
 		Name:          name,
 		LastHeartbeat: now,
@@ -949,13 +950,18 @@ func (t *Transaction) BumpEpoch() {
 // InclusiveTimeBounds returns start and end timestamps such that all intents written as
 // part of this transaction have a timestamp in the interval [start, end].
 func (t *Transaction) InclusiveTimeBounds() (hlc.Timestamp, hlc.Timestamp) {
-	min := t.OrigTimestamp
+	min := t.MinTimestamp
 	max := t.Timestamp
-	if t.Epoch != 0 && t.EpochZeroTimestamp != (hlc.Timestamp{}) {
-		if min.Less(t.EpochZeroTimestamp) {
-			panic(fmt.Sprintf("orig timestamp %s less than epoch zero %s", min, t.EpochZeroTimestamp))
+	if min.IsEmpty() {
+		// Backwards compatibility with pre-v19.2 nodes.
+		// TODO(nvanbenschoten): Remove in v20.1.
+		min = t.OrigTimestamp
+		if t.Epoch != 0 && t.EpochZeroTimestamp != (hlc.Timestamp{}) {
+			if min.Less(t.EpochZeroTimestamp) {
+				panic(fmt.Sprintf("orig timestamp %s less than epoch zero %s", min, t.EpochZeroTimestamp))
+			}
+			min = t.EpochZeroTimestamp
 		}
-		min = t.EpochZeroTimestamp
 	}
 	return min, max
 }
@@ -1001,6 +1007,20 @@ func (t *Transaction) Update(o *Transaction) {
 	t.MaxTimestamp.Forward(o.MaxTimestamp)
 	t.RefreshedTimestamp.Forward(o.RefreshedTimestamp)
 
+	// On update, set lower bound timestamps to the minimum seen by either txn.
+	// These shouldn't differ unless one of them is empty, but we're careful
+	// anyway.
+	if t.MinTimestamp == (hlc.Timestamp{}) {
+		t.MinTimestamp = o.MinTimestamp
+	} else if o.MinTimestamp != (hlc.Timestamp{}) {
+		t.MinTimestamp.Backward(o.MinTimestamp)
+	}
+	if t.EpochZeroTimestamp == (hlc.Timestamp{}) {
+		t.EpochZeroTimestamp = o.EpochZeroTimestamp
+	} else if o.EpochZeroTimestamp != (hlc.Timestamp{}) {
+		t.EpochZeroTimestamp.Backward(o.EpochZeroTimestamp)
+	}
+
 	// Absorb the collected clock uncertainty information.
 	for _, v := range o.ObservedTimestamps {
 		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
@@ -1015,12 +1035,6 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	if len(o.InFlightWrites) > 0 {
 		t.InFlightWrites = o.InFlightWrites
-	}
-	// On update, set epoch zero timestamp to the minimum seen by either txn.
-	if o.EpochZeroTimestamp != (hlc.Timestamp{}) {
-		if t.EpochZeroTimestamp == (hlc.Timestamp{}) || o.EpochZeroTimestamp.Less(t.EpochZeroTimestamp) {
-			t.EpochZeroTimestamp = o.EpochZeroTimestamp
-		}
 	}
 }
 
@@ -1051,9 +1065,9 @@ func (t Transaction) String() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s key=%s rw=%t pri=%.8f stat=%s epo=%d "+
-		"ts=%s orig=%s max=%s wto=%t seq=%d",
+		"ts=%s orig=%s min=%s max=%s wto=%t seq=%d",
 		t.Short(), Key(t.Key), t.IsWriting(), floatPri, t.Status, t.Epoch, t.Timestamp,
-		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
+		t.OrigTimestamp, t.MinTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
@@ -1075,9 +1089,9 @@ func (t Transaction) SafeMessage() string {
 		fmt.Fprintf(&buf, "%q ", t.Name)
 	}
 	fmt.Fprintf(&buf, "id=%s rw=%t pri=%.8f stat=%s epo=%d "+
-		"ts=%s orig=%s max=%s wto=%t seq=%d",
+		"ts=%s orig=%s min=%s max=%s wto=%t seq=%d",
 		t.Short(), t.IsWriting(), floatPri, t.Status, t.Epoch, t.Timestamp,
-		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
+		t.OrigTimestamp, t.MinTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.IntentSpans); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}

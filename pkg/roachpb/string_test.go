@@ -29,12 +29,13 @@ func TestTransactionString(t *testing.T) {
 	}
 	txn := roachpb.Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Key:       roachpb.Key("foo"),
-			ID:        txnID,
-			Epoch:     2,
-			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 21},
-			Priority:  957356782,
-			Sequence:  15,
+			Key:          roachpb.Key("foo"),
+			ID:           txnID,
+			Epoch:        2,
+			Timestamp:    hlc.Timestamp{WallTime: 20, Logical: 21},
+			MinTimestamp: hlc.Timestamp{WallTime: 10, Logical: 11},
+			Priority:     957356782,
+			Sequence:     15,
 		},
 		Name:          "name",
 		Status:        roachpb.COMMITTED,
@@ -43,7 +44,7 @@ func TestTransactionString(t *testing.T) {
 		MaxTimestamp:  hlc.Timestamp{WallTime: 40, Logical: 41},
 	}
 	expStr := `"name" id=d7aa0f5e key="foo" rw=true pri=44.58039917 stat=COMMITTED ` +
-		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41 wto=false seq=15`
+		`epo=2 ts=0.000000020,21 orig=0.000000030,31 min=0.000000010,11 max=0.000000040,41 wto=false seq=15`
 
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
