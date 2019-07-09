@@ -466,51 +466,16 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 	// descriptor as a pointer. If not, then likely some other caller
 	// already evicted previously, and we can save work by not doing it
 	// again (which would prompt another expensive lookup).
+	// TODO(jeffreyxiao): This is an interaction that can be improved by
+	// comparing RangeDescriptor generations.
 	if seenDesc != nil && seenDesc != cachedDesc {
 		return nil
 	}
 
-	for {
-		if log.V(2) {
-			log.Infof(ctx, "evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
-		}
-		rdc.rangeCache.cache.DelEntry(entry)
-
-		// Retrieve the metadata range key for the next level of metadata, and
-		// evict that key as well. This loop ends after the meta1 range, which
-		// returns KeyMin as its metadata key.
-		//
-		// Evicting 'meta(descKey)' instead of 'meta(cachedDesc.EndKey)' could be
-		// incorrect here because it could result in us evicting the wrong meta2
-		// descriptor. Imagine that descriptors are in the configuration:
-		//
-		// meta2 descs:  [/meta2/a,/meta2/m),  [/meta2/m,/meta2/z)
-		// user  descs:  [a,f),   [f,k),   [k,p),   [p,u),   [u,z)
-		//
-		// A lookup for the key 'l' would return the third user-space descriptor
-		// [k,p), after a continuation lookup. This descriptor is stored on the
-		// second meta2 range because its end key is p, which maps to /meta2/p.
-		// If we later want to evict this user-space descriptor, we also want to
-		// evict the meta2 descriptor for the range that contains it. However,
-		// if we naively evicted meta('l'), we'd end up evicting the first meta2
-		// descriptor. Instead, we want to evict meta('p'), since 'p' is the end
-		// key of the user-space descriptor.
-		//
-		// This is also why we pass inverted=false down below.
-		descKey = keys.RangeMetaKey(cachedDesc.EndKey)
-		// TODO(tschottdorf): write a test that verifies that the first descriptor
-		// can also be evicted. This is necessary since the initial range
-		// [KeyMin,KeyMax) may turn into [KeyMin, "something"), after which
-		// larger ranges don't fit into it any more.
-		if bytes.Equal(descKey, roachpb.RKeyMin) {
-			break
-		}
-
-		cachedDesc, entry, err = rdc.getCachedRangeDescriptorLocked(descKey, false /* inverted */)
-		if err != nil || cachedDesc == nil {
-			return err
-		}
+	if log.V(2) {
+		log.Infof(ctx, "evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
 	}
+	rdc.rangeCache.cache.DelEntry(entry)
 	return nil
 }
 
