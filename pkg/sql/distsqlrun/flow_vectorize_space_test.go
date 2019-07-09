@@ -37,7 +37,7 @@ func TestVectorizeSpaceError(t *testing.T) {
 		EvalCtx:  &evalCtx,
 	}
 
-	// Without a limit, the default sorter creates a vectorized operater
+	// Without a limit, the default sorter creates a vectorized operator
 	// that we don't know memory usage of statically.
 	sorterCore := &distsqlpb.SorterSpec{
 		OutputOrdering: distsqlpb.Ordering{
@@ -126,7 +126,7 @@ func TestVectorizeSpaceError(t *testing.T) {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
 				}
 				acc := memMon.MakeBoundAccount()
-				_, _, memUsed, err := newColOperator(ctx, flowCtx, tc.spec, inputs)
+				_, _, _, memUsed, err := newColOperator(ctx, flowCtx, tc.spec, inputs)
 				if err != nil {
 					t.Fatal(err)
 				}
