@@ -96,6 +96,10 @@ type joinReader struct {
 	finalLookupBatch        bool
 	toEmit                  sqlbase.EncDatumRows
 
+	// neededFamilies maintains what families we need to query from if our
+	// needed columns span multiple queries
+	neededFamilies []sqlbase.FamilyID
+
 	// A few scratch buffers, to avoid re-allocating.
 	lookupRows  []lookupRow
 	indexKeyRow sqlbase.EncDatumRow
@@ -207,6 +211,12 @@ func newJoinReader(
 
 	jr.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
+	jr.neededFamilies = sqlbase.NeededColumnFamilyIDs(
+		spec.Table.ColumnIdxMap(),
+		spec.Table.Families,
+		jr.neededRightCols(),
+	)
+
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
 }
@@ -275,6 +285,21 @@ func (jr *joinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error
 	return sqlbase.MakeSpanFromEncDatums(
 		jr.indexKeyPrefix, jr.indexKeyRow, jr.indexTypes[:numLookupCols], jr.indexDirs, &jr.desc,
 		jr.index, &jr.alloc)
+}
+
+func (jr *joinReader) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {
+	// check the following:
+	// - we have more than one needed family
+	// - we are looking at a unique index
+	// - our table has more than the default family
+	// - we have all the columns of the index
+	if len(jr.neededFamilies) > 0 &&
+		jr.index.Unique &&
+		len(jr.lookupCols) == len(jr.index.ColumnIDs) &&
+		len(jr.neededFamilies) < len(jr.desc.Families) {
+		return sqlbase.SplitSpanIntoSeparateFamilies(span, jr.neededFamilies)
+	}
+	return roachpb.Spans{span}
 }
 
 // Next is part of the RowSource interface.
@@ -367,7 +392,7 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 		}
 		inputRowIndices := jr.keyToInputRowIndices[string(span.Key)]
 		if inputRowIndices == nil {
-			spans = append(spans, span)
+			spans = append(spans, jr.maybeSplitSpanIntoSeparateFamilies(span)...)
 		}
 		jr.keyToInputRowIndices[string(span.Key)] = append(inputRowIndices, i)
 	}
