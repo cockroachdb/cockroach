@@ -735,20 +735,22 @@ query TTTTT
 EXPLAIN (VERBOSE)
 SELECT k FROM kv JOIN (VALUES (1,2), (3,4)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
 ----
-render                      ·              ·                 (k)              ·
- │                          render 0       k                 ·                ·
- └── sort                   ·              ·                 (k, v)           -v,+k
-      │                     order          -v,+k             ·                ·
-      └── render            ·              ·                 (k, v)           ·
-           │                render 0       k                 ·                ·
-           │                render 1       v                 ·                ·
-           └── lookup-join  ·              ·                 (column1, k, v)  ·
-                │           table          kv@primary        ·                ·
-                │           type           inner             ·                ·
-                └── values  ·              ·                 (column1)        ·
-·                           size           1 column, 2 rows  ·                ·
-·                           row 0, expr 0  1                 ·                ·
-·                           row 1, expr 0  3                 ·                ·
+render                      ·                      ·                 (k)              ·
+ │                          render 0               k                 ·                ·
+ └── sort                   ·                      ·                 (k, v)           -v,+k
+      │                     order                  -v,+k             ·                ·
+      └── render            ·                      ·                 (k, v)           ·
+           │                render 0               k                 ·                ·
+           │                render 1               v                 ·                ·
+           └── lookup-join  ·                      ·                 (column1, k, v)  ·
+                │           table                  kv@primary        ·                ·
+                │           type                   inner             ·                ·
+                │           equality               (column1) = (k)   ·                ·
+                │           equality cols are key  ·                 ·                ·
+                └── values  ·                      ·                 (column1)        ·
+·                           size                   1 column, 2 rows  ·                ·
+·                           row 0, expr 0          1                 ·                ·
+·                           row 1, expr 0          3                 ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo

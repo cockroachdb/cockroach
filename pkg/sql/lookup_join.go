@@ -24,17 +24,20 @@ type lookupJoinNode struct {
 	// joinType is either INNER or LEFT_OUTER.
 	joinType sqlbase.JoinType
 
-	// keyCols identifies the columns from the input which are used for the
+	// eqCols identifies the columns from the input which are used for the
 	// lookup. These correspond to a prefix of the index columns (of the index we
 	// are looking up into).
-	keyCols []int
+	eqCols []int
+
+	// eqColsAreKey is true when each lookup can return at most one row.
+	eqColsAreKey bool
 
 	// columns are the produced columns, namely the input columns and (unless the
 	// join type is semi or anti join) the columns in the table scanNode.
 	columns sqlbase.ResultColumns
 
 	// onCond is any ON condition to be used in conjunction with the implicit
-	// equality condition on keyCols.
+	// equality condition on eqCols.
 	onCond tree.TypedExpr
 
 	props physicalProps

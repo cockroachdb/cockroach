@@ -182,6 +182,10 @@ message JoinReaderSpec {
   // don't output any table columns).
   repeated uint32 lookup_columns = 3 [packed = true];
 
+  // If set, the lookup columns form a key in the target table and thus each
+  // lookup has at most one result.
+  optional bool lookup_columns_are_key = 8 [(gogoproto.nullable) = false];
+
   // "ON" expression (in addition to the equality constraints captured by the
   // orderings). Assuming that the left stream has N columns and the right
   // stream has M columns, in this expression variables @1 to @N refer to

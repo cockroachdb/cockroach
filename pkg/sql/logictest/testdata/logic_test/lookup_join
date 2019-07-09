@@ -53,6 +53,12 @@ SELECT * FROM abc JOIN def ON f = b
 2  1  1  NULL  2  1
 
 query IIIIII rowsort
+SELECT * FROM abc JOIN def ON f = b AND e = c
+----
+1  1  2  NULL  2  1
+2  1  1  2     1  1
+
+query IIIIII rowsort
 SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 ----
 2  1  1  NULL  2  1
