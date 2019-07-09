@@ -24,6 +24,20 @@ type Option interface {
 	apply(*config)
 }
 
+// AcquisitionFunc is used to configure a quotapool to call a function after
+// an acquisition has occurred.
+type AcquisitionFunc func(
+	ctx context.Context, poolName string, r Request, start time.Time,
+)
+
+// OnAcquisition creates an Option to configure a callback upon acquisition.
+// It is often useful for recording metrics.
+func OnAcquisition(f AcquisitionFunc) Option {
+	return optionFunc(func(cfg *config) {
+		cfg.onAcquisition = f
+	})
+}
+
 // OnSlowAcquisition creates an Option to configure a callback upon slow
 // acquisitions. Only one OnSlowAcquisition may be used. If multiple are
 // specified only the last will be used.
@@ -58,7 +72,7 @@ type optionFunc func(cfg *config)
 func (f optionFunc) apply(cfg *config) { f(cfg) }
 
 type config struct {
-	name                     string
+	onAcquisition            AcquisitionFunc
 	onSlowAcquisition        SlowAcquisitionFunc
 	slowAcquisitionThreshold time.Duration
 }

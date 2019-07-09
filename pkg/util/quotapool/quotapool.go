@@ -86,6 +86,10 @@ func (ec *ErrClosed) Error() string {
 type QuotaPool struct {
 	config
 
+	// name is used for logging purposes and is passed to functions used to report
+	// acquistions or slow acqusitions.
+	name string
+
 	// chanSyncPool is used to pool allocations of the channels used to notify
 	// goroutines waiting in Acquire.
 	chanSyncPool sync.Pool
@@ -118,6 +122,11 @@ type QuotaPool struct {
 		// channel buffer.
 		q notifyQueue
 
+		// numCanceled is the number of members of q which have been canceled.
+		// It is used to determine the current number of active waiters in the queue
+		// which is q.len() less this value.
+		numCanceled int
+
 		// closed is set to true when the quota pool is closed (see
 		// QuotaPool.Close).
 		closed bool
@@ -129,6 +138,7 @@ type QuotaPool struct {
 // acquired without ever making more than the quota capacity available.
 func New(name string, initialResource Resource, options ...Option) *QuotaPool {
 	qp := &QuotaPool{
+		name:  name,
 		quota: make(chan Resource, 1),
 		done:  make(chan struct{}),
 		chanSyncPool: sync.Pool{
@@ -186,12 +196,20 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 	if closeErr != nil {
 		return closeErr
 	}
+	start := timeutil.Now()
+	// Set up onAcquisition if we have one.
+	if qp.config.onAcquisition != nil {
+		defer func() {
+			if err == nil {
+				qp.config.onAcquisition(ctx, qp.name, r, start)
+			}
+		}()
+	}
+
 	// Set up the infrastructure to report slow requests.
 	var slowTimer *timeutil.Timer
 	var slowTimerC <-chan time.Time
-	var start time.Time
 	if qp.onSlowAcquisition != nil {
-		start = timeutil.Now()
 		slowTimer = timeutil.NewTimer()
 		defer slowTimer.Stop()
 		// Intentionally reset only once, for we care more about the select duration in
@@ -230,8 +248,8 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 				// Goroutines are not a risk of getting notified and finding
 				// out they're not first in line.
 				notifyCh <- struct{}{}
+				qp.mu.numCanceled++
 			}
-
 			qp.mu.Unlock()
 			return ctx.Err()
 		case <-qp.done:
@@ -312,6 +330,7 @@ func (qp *QuotaPool) notifyNextLocked() {
 			// shifting the queue.
 			<-ch
 			qp.chanSyncPool.Put(qp.mu.q.dequeue())
+			qp.mu.numCanceled--
 			continue
 		}
 		break
@@ -334,6 +353,13 @@ func (qp *QuotaPool) ApproximateQuota(f func(Resource)) {
 	default:
 		f(nil)
 	}
+}
+
+// Len returns the current length of the queue for this QuotaPool.
+func (qp *QuotaPool) Len() int {
+	qp.mu.Lock()
+	defer qp.mu.Unlock()
+	return int(qp.mu.q.len) - qp.mu.numCanceled
 }
 
 // Close signals to all ongoing and subsequent acquisitions that they are
