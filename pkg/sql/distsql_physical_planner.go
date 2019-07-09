@@ -1919,13 +1919,14 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
-	joinReaderSpec.LookupColumns = make([]uint32, len(n.keyCols))
-	for i, col := range n.keyCols {
+	joinReaderSpec.LookupColumns = make([]uint32, len(n.eqCols))
+	for i, col := range n.eqCols {
 		if plan.PlanToStreamColMap[col] == -1 {
 			panic("lookup column not in planToStreamColMap")
 		}
 		joinReaderSpec.LookupColumns[i] = uint32(plan.PlanToStreamColMap[col])
 	}
+	joinReaderSpec.LookupColumnsAreKey = n.eqColsAreKey
 
 	// The n.table node can be configured with an arbitrary set of columns. Apply
 	// the corresponding projection.

@@ -78,27 +78,29 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
 ]
 ----
-count                                    ·         ·
- └── upsert                              ·         ·
-      │                                  into      kv(k, v)
-      │                                  strategy  opt upserter
-      └── render                         ·         ·
-           │                             render 0  k
-           │                             render 1  column5
-           │                             render 2  k
-           └── lookup-join               ·         ·
-                │                        table     kv@primary
-                │                        type      inner
-                └── render               ·         ·
-                     │                   render 0  CAST(NULL AS INT8)
-                     │                   render 1  k
-                     └── limit           ·         ·
-                          │              count     2
-                          └── sort       ·         ·
-                               │         order     -v
-                               └── scan  ·         ·
-·                                        table     kv@primary
-·                                        spans     ALL
+count                                    ·                      ·
+ └── upsert                              ·                      ·
+      │                                  into                   kv(k, v)
+      │                                  strategy               opt upserter
+      └── render                         ·                      ·
+           │                             render 0               k
+           │                             render 1               column5
+           │                             render 2               k
+           └── lookup-join               ·                      ·
+                │                        table                  kv@primary
+                │                        type                   inner
+                │                        equality               (k) = (k)
+                │                        equality cols are key  ·
+                └── render               ·                      ·
+                     │                   render 0               CAST(NULL AS INT8)
+                     │                   render 1               k
+                     └── limit           ·                      ·
+                          │              count                  2
+                          └── sort       ·                      ·
+                               │         order                  -v
+                               └── scan  ·                      ·
+·                                        table                  kv@primary
+·                                        spans                  ALL
 
 # Use Upsert with indexed table, default columns, computed columns, and check
 # columns.

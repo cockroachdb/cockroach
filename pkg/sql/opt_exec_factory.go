@@ -601,7 +601,8 @@ func (ef *execFactory) ConstructLookupJoin(
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
-	keyCols []exec.ColumnOrdinal,
+	eqCols []exec.ColumnOrdinal,
+	eqColsAreKey bool,
 	lookupCols exec.ColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
@@ -619,9 +620,10 @@ func (ef *execFactory) ConstructLookupJoin(
 	tableScan.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 
 	n := &lookupJoinNode{
-		input:    input.(planNode),
-		table:    tableScan,
-		joinType: joinType,
+		input:        input.(planNode),
+		table:        tableScan,
+		joinType:     joinType,
+		eqColsAreKey: eqColsAreKey,
 		props: physicalProps{
 			ordering: sqlbase.ColumnOrdering(reqOrdering),
 		},
@@ -629,9 +631,9 @@ func (ef *execFactory) ConstructLookupJoin(
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onCond = onCond
 	}
-	n.keyCols = make([]int, len(keyCols))
-	for i, c := range keyCols {
-		n.keyCols[i] = int(c)
+	n.eqCols = make([]int, len(eqCols))
+	for i, c := range eqCols {
+		n.eqCols[i] = int(c)
 	}
 	// Build the result columns.
 	inputCols := planColumns(input.(planNode))
