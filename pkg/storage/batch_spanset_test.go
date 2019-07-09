@@ -42,10 +42,10 @@ func TestSpanSetBatch(t *testing.T) {
 
 	// Write values outside the range that we can try to read later.
 	if err := eng.Put(outsideKey, []byte("value")); err != nil {
-		t.Fatalf("direct write failed: %s", err)
+		t.Fatalf("direct write failed: %+v", err)
 	}
 	if err := eng.Put(outsideKey3, []byte("value")); err != nil {
-		t.Fatalf("direct write failed: %s", err)
+		t.Fatalf("direct write failed: %+v", err)
 	}
 
 	batch := spanset.NewBatch(eng.NewBatch(), &ss)
@@ -53,10 +53,10 @@ func TestSpanSetBatch(t *testing.T) {
 
 	// Writes inside the range work. Write twice for later read testing.
 	if err := batch.Put(insideKey, []byte("value")); err != nil {
-		t.Fatalf("failed to write inside the range: %s", err)
+		t.Fatalf("failed to write inside the range: %+v", err)
 	}
 	if err := batch.Put(insideKey2, []byte("value2")); err != nil {
-		t.Fatalf("failed to write inside the range: %s", err)
+		t.Fatalf("failed to write inside the range: %+v", err)
 	}
 
 	// Writes outside the range fail. We try to cover all write methods
@@ -90,7 +90,7 @@ func TestSpanSetBatch(t *testing.T) {
 	// Reads inside the range work.
 	//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
 	if value, err := batch.Get(insideKey); err != nil {
-		t.Errorf("failed to read inside the range: %s", err)
+		t.Errorf("failed to read inside the range: %+v", err)
 	} else if !bytes.Equal(value, []byte("value")) {
 		t.Errorf("failed to read previously written value, got %q", value)
 	}
@@ -145,7 +145,7 @@ func TestSpanSetBatch(t *testing.T) {
 			t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
 		} else if err != nil {
 			// Scanning out of bounds sets Valid() to false but is not an error.
-			t.Errorf("unexpected error on iterator: %s", err)
+			t.Errorf("unexpected error on iterator: %+v", err)
 		}
 	}()
 
@@ -181,7 +181,7 @@ func TestSpanSetBatch(t *testing.T) {
 	if ok, err := iter.Valid(); ok {
 		t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
 	} else if err != nil {
-		t.Errorf("unexpected error on iterator: %s", err)
+		t.Errorf("unexpected error on iterator: %+v", err)
 	}
 	// Seeking back in bounds restores validity.
 	iter.SeekReverse(insideKey)

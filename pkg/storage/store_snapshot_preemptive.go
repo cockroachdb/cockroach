@@ -202,7 +202,7 @@ func (s *Store) processPreemptiveSnapshotRequest(
 				// Replica.handleRaftReady. Note that we can only get here if the
 				// replica doesn't exist or is uninitialized.
 				if err := s.addPlaceholderLocked(placeholder); err != nil {
-					log.Fatalf(ctx, "could not add vetted placeholder %s: %s", placeholder, err)
+					log.Fatalf(ctx, "could not add vetted placeholder %s: %+v", placeholder, err)
 				}
 				addedPlaceholder = true
 			}

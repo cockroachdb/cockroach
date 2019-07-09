@@ -632,7 +632,7 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 	// with WriteTooOldError).
 	incVal, err := MVCCIncrement(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, nil, 1)
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
-		t.Fatalf("unexpectedly not WriteTooOld: %s", err)
+		t.Fatalf("unexpectedly not WriteTooOld: %+v", err)
 	} else if expTS := (hlc.Timestamp{WallTime: 3, Logical: 1}); wtoErr.ActualTimestamp != (expTS) {
 		t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, wtoErr.ActualTimestamp)
 	}
@@ -1030,7 +1030,7 @@ func TestMVCCInlineWithTxn(t *testing.T) {
 	// Verify inline put with txn is an error.
 	err = MVCCPut(ctx, engine, nil, testKey2, hlc.Timestamp{}, value2, txn2)
 	if !testutils.IsError(err, "writes not allowed within transactions") {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf("unexpected error: %+v", err)
 	}
 }
 
@@ -1046,7 +1046,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 	}
 	// Verify nothing is written to the engine.
 	if val, err := engine.Get(mvccKey(testKey1)); err != nil || val != nil {
-		t.Fatalf("expected no mvcc metadata after delete of a missing key; got %q: %s", val, err)
+		t.Fatalf("expected no mvcc metadata after delete of a missing key; got %q: %+v", val, err)
 	}
 }
 
@@ -1232,7 +1232,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn})
 		wiErr, _ := err.(*roachpb.WriteIntentError)
 		if (err == nil) != (wiErr == nil) {
-			t.Errorf("%s(%d): unexpected error: %s", cStr, i, err)
+			t.Errorf("%s(%d): unexpected error: %+v", cStr, i, err)
 		}
 
 		if wiErr == nil != !scan.consistent {
@@ -2277,7 +2277,7 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 		{testKey5, value5},
 	} {
 		if err := MVCCPut(ctx, engine, nil, kv.key, hlc.Timestamp{Logical: 0}, kv.value, nil); err != nil {
-			t.Fatalf("%d: %s", i, err)
+			t.Fatalf("%d: %+v", i, err)
 		}
 	}
 
@@ -2323,7 +2323,7 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 	if _, _, _, err := MVCCDeleteRange(
 		ctx, engine, nil, testKey2, testKey6, 2, hlc.Timestamp{Logical: 0}, txn1, true,
 	); !testutils.IsError(err, "writes not allowed within transactions") {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf("unexpected error: %+v", err)
 	}
 
 	// Verify final state of the engine.
@@ -2403,7 +2403,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	// Do a conditional put with expectation that the value is completely missing; will succeed.
 	err = MVCCConditionalPut(ctx, engine, nil, testKey1, clock.Now(), value1, nil, CPutFailIfMissing, nil)
 	if err != nil {
-		t.Fatalf("expected success with condition that key doesn't yet exist: %v", err)
+		t.Fatalf("expected success with condition that key doesn't yet exist: %+v", err)
 	}
 
 	// Another conditional put expecting value missing will fail, now that value1 is written.
@@ -2751,12 +2751,12 @@ func TestMVCCIncrementWriteTooOld(t *testing.T) {
 	// Start with an increment.
 	val, err := MVCCIncrement(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 10}, nil, 1)
 	if val != 1 || err != nil {
-		t.Fatalf("expected val=1 (got %d): %s", val, err)
+		t.Fatalf("expected val=1 (got %d): %+v", val, err)
 	}
 	// Try a non-transactional increment @t=1ns.
 	val, err = MVCCIncrement(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, nil, 1)
 	if val != 2 || err == nil {
-		t.Fatalf("expected val=2 (got %d) and nil error: %s", val, err)
+		t.Fatalf("expected val=2 (got %d) and nil error: %+v", val, err)
 	}
 	expTS := hlc.Timestamp{WallTime: 10, Logical: 1}
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
@@ -2766,7 +2766,7 @@ func TestMVCCIncrementWriteTooOld(t *testing.T) {
 	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
 	val, err = MVCCIncrement(ctx, engine, nil, testKey1, txn.OrigTimestamp, txn, 1)
 	if val != 1 || err == nil {
-		t.Fatalf("expected val=1 (got %d) and nil error: %s", val, err)
+		t.Fatalf("expected val=1 (got %d) and nil error: %+v", val, err)
 	}
 	expTS = hlc.Timestamp{WallTime: 10, Logical: 2}
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
@@ -3130,7 +3130,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 		t.Errorf("unexpected success on conditional put")
 	}
 	if _, ok := err.(*roachpb.ConditionFailedError); !ok {
-		t.Errorf("unexpected error on conditional put: %s", err)
+		t.Errorf("unexpected error on conditional put: %+v", err)
 	}
 
 	// But if value does match the most recently written version, we'll get
@@ -3140,7 +3140,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 		t.Errorf("unexpected success on conditional put")
 	}
 	if _, ok := err.(*roachpb.WriteTooOldError); !ok {
-		t.Errorf("unexpected error on conditional put: %s", err)
+		t.Errorf("unexpected error on conditional put: %+v", err)
 	}
 	// Verify new value was actually written at (3, 1).
 	ts := hlc.Timestamp{WallTime: 3, Logical: 1}
@@ -3535,7 +3535,7 @@ func TestMVCCGetWithDiffEpochsAndTimestamps(t *testing.T) {
 			// Expected to hit WriteTooOld error but to still lay down intent.
 			err := MVCCPut(ctx, engine, nil, testKey1, txn1ts.OrigTimestamp, value3, txn1ts)
 			if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
-				t.Fatalf("unexpectedly not WriteTooOld: %s", err)
+				t.Fatalf("unexpectedly not WriteTooOld: %+v", err)
 			} else if expTS, actTS := txn1ts.Timestamp, wtoErr.ActualTimestamp; expTS != actTS {
 				t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, actTS)
 			}
@@ -3650,10 +3650,10 @@ func TestMVCCWriteWithSequence(t *testing.T) {
 			err := MVCCPut(ctx, batch, nil, key, txn.Timestamp, tc.value, &txn)
 			if tc.expErr != "" && err != nil {
 				if !testutils.IsError(err, tc.expErr) {
-					t.Fatalf("unexpected error: %s", err)
+					t.Fatalf("unexpected error: %+v", err)
 				}
 			} else if err != nil {
-				t.Fatalf("unexpected error: %s", err)
+				t.Fatalf("unexpected error: %+v", err)
 			}
 
 			write := !batch.Empty()
@@ -3720,10 +3720,10 @@ func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 			)
 			if tc.expErr != "" && err != nil {
 				if !testutils.IsError(err, tc.expErr) {
-					t.Fatalf("unexpected error: %s", err)
+					t.Fatalf("unexpected error: %+v", err)
 				}
 			} else if err != nil {
-				t.Fatalf("unexpected error: %s", err)
+				t.Fatalf("unexpected error: %+v", err)
 			}
 
 			// If at the same sequence as the initial DeleteRange.
@@ -4164,7 +4164,7 @@ func TestFindSplitKey(t *testing.T) {
 		}
 		ind, err := strconv.Atoi(string(humanSplitKey))
 		if err != nil {
-			t.Fatalf("%d: could not parse key %s as int: %v", i, humanSplitKey, err)
+			t.Fatalf("%d: could not parse key %s as int: %+v", i, humanSplitKey, err)
 		}
 		if ind == 0 {
 			t.Fatalf("%d: should never select first key as split key", i)
@@ -4511,12 +4511,12 @@ func TestFindValidSplitKeys(t *testing.T) {
 			splitKey, err := MVCCFindSplitKey(ctx, engine, rangeStartAddr, rangeEndAddr, targetSize)
 			if test.expError {
 				if !testutils.IsError(err, "has no valid splits") {
-					t.Fatalf("%d: unexpected error: %v", i, err)
+					t.Fatalf("%d: unexpected error: %+v", i, err)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("%d; unexpected error: %s", i, err)
+				t.Fatalf("%d; unexpected error: %+v", i, err)
 			}
 			if !splitKey.Equal(test.expSplit) {
 				t.Errorf("%d: expected split key %q; got %q", i, test.expSplit, splitKey)
@@ -4593,7 +4593,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
 			splitKey, err := MVCCFindSplitKey(ctx, engine, roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize)
 			if err != nil {
-				t.Fatalf("unexpected error: %s", err)
+				t.Fatalf("unexpected error: %+v", err)
 			}
 			if !splitKey.Equal(expKey) {
 				t.Errorf("%d: expected split key %q; got %q", i, expKey, splitKey)
@@ -4926,14 +4926,14 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 	// on a separate key, start an increment.
 	val, err := MVCCIncrement(ctx, engine, nil, testKey1, txn.OrigTimestamp, txn, 1)
 	if val != 1 || err != nil {
-		t.Fatalf("expected val=1 (got %d): %s", val, err)
+		t.Fatalf("expected val=1 (got %d): %+v", val, err)
 	}
 	// As long as the sequence in unchanged, replaying the increment doesn't
 	// increase the value.
 	for i := 0; i < 10; i++ {
 		val, err = MVCCIncrement(ctx, engine, nil, testKey1, txn.OrigTimestamp, txn, 1)
 		if val != 1 || err != nil {
-			t.Fatalf("expected val=1 (got %d): %s", val, err)
+			t.Fatalf("expected val=1 (got %d): %+v", val, err)
 		}
 	}
 
@@ -4941,14 +4941,14 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 	txn.Sequence++
 	val, err = MVCCIncrement(ctx, engine, nil, testKey1, txn.OrigTimestamp, txn, 1)
 	if val != 2 || err != nil {
-		t.Fatalf("expected val=2 (got %d): %s", val, err)
+		t.Fatalf("expected val=2 (got %d): %+v", val, err)
 	}
 	txn.Sequence--
 	// Replaying an older increment doesn't increase the value.
 	for i := 0; i < 10; i++ {
 		val, err = MVCCIncrement(ctx, engine, nil, testKey1, txn.OrigTimestamp, txn, 1)
 		if val != 1 || err != nil {
-			t.Fatalf("expected val=1 (got %d): %s", val, err)
+			t.Fatalf("expected val=1 (got %d): %+v", val, err)
 		}
 	}
 }
@@ -5118,7 +5118,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	// Assert that the latest read should find the latest write.
 	foundVal, _, err := MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
 	if err != nil {
-		t.Fatalf("MVCCGet failed with error: %v", err)
+		t.Fatalf("MVCCGet failed with error: %+v", err)
 	}
 	if !bytes.Equal(foundVal.RawBytes, value.RawBytes) {
 		t.Fatalf("MVCCGet failed: expected %v but got %v", value.RawBytes, foundVal.RawBytes)
@@ -5128,7 +5128,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	txn.Sequence = 3
 	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
 	if err != nil {
-		t.Fatalf("MVCCGet failed with error: %v", err)
+		t.Fatalf("MVCCGet failed with error: %+v", err)
 	}
 	if !bytes.Equal(foundVal.RawBytes, newValue.RawBytes) {
 		t.Fatalf("MVCCGet failed: expected %v but got %v", newValue.RawBytes, foundVal.RawBytes)
@@ -5137,7 +5137,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	// Assert than an older scan sequence gets an older versioned intent.
 	kvs, _, _, err := MVCCScan(ctx, engine, key, key.Next(), math.MaxInt64, ts2, MVCCScanOptions{Txn: txn})
 	if err != nil {
-		t.Fatalf("MVCCScan failed with error: %v", err)
+		t.Fatalf("MVCCScan failed with error: %+v", err)
 	}
 	if len(kvs) != 1 {
 		t.Fatalf("MVCCScan did not find exactly 1 key: %+v", kvs)
@@ -5150,7 +5150,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	txn.Sequence = 4
 	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
 	if err != nil {
-		t.Fatalf("MVCCGet failed with error: %v", err)
+		t.Fatalf("MVCCGet failed with error: %+v", err)
 	}
 	if foundVal != nil {
 		t.Fatalf("MVCCGet at sequence %d found unexpected value", txn.Sequence)
@@ -5159,7 +5159,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	// Assert than an older scan sequence gets no value if the value was deleted.
 	kvs, _, _, err = MVCCScan(ctx, engine, key, key.Next(), math.MaxInt64, ts2, MVCCScanOptions{Txn: txn})
 	if err != nil {
-		t.Fatalf("MVCCScan failed with error: %v", err)
+		t.Fatalf("MVCCScan failed with error: %+v", err)
 	}
 	if len(kvs) != 0 {
 		t.Fatalf("MVCCScan at sequence %d found unexpected values: %+v", txn.Sequence, kvs)
@@ -5169,7 +5169,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	// but we're including tombstones in our search.
 	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn, Tombstones: true})
 	if err != nil {
-		t.Fatalf("MVCCGet failed with error: %v", err)
+		t.Fatalf("MVCCGet failed with error: %+v", err)
 	}
 	if foundVal == nil || foundVal.IsPresent() {
 		t.Fatalf("MVCCGet at sequence %d did not find tombstone", txn.Sequence)
@@ -5179,7 +5179,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	// but we're including tombstones in our search.
 	kvs, _, _, err = MVCCScan(ctx, engine, key, key.Next(), math.MaxInt64, ts2, MVCCScanOptions{Txn: txn, Tombstones: true})
 	if err != nil {
-		t.Fatalf("MVCCScan failed with error: %v", err)
+		t.Fatalf("MVCCScan failed with error: %+v", err)
 	}
 	if len(kvs) != 1 || kvs[0].Value.IsPresent() {
 		t.Fatalf("MVCCScan at sequence %d did not find tombstone: %+v", txn.Sequence, kvs)
@@ -5190,7 +5190,7 @@ func TestMVCCIntentHistory(t *testing.T) {
 	txn.Sequence = 0
 	foundVal, _, err = MVCCGet(ctx, engine, key, ts2, MVCCGetOptions{Txn: txn})
 	if err != nil {
-		t.Fatalf("MVCCGet failed with error: %v", err)
+		t.Fatalf("MVCCGet failed with error: %+v", err)
 	}
 	if !bytes.Equal(foundVal.RawBytes, defaultValue.RawBytes) {
 		t.Fatalf("MVCCGet failed: expected %v but got %v", defaultValue.RawBytes, foundVal.RawBytes)

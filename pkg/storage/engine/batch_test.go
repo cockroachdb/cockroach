@@ -528,7 +528,7 @@ func TestBatchProto(t *testing.T) {
 	getVal := &roachpb.Value{}
 	ok, keySize, valSize, err := b.GetProto(mvccKey("proto"), getVal)
 	if !ok || err != nil {
-		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
+		t.Fatalf("expected GetProto to success ok=%t: %+v", ok, err)
 	}
 	if keySize != 6 {
 		t.Errorf("expected key size 6; got %d", keySize)
@@ -545,14 +545,14 @@ func TestBatchProto(t *testing.T) {
 	}
 	// Before commit, proto will not be available via engine.
 	if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); ok || err != nil {
-		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
+		t.Fatalf("expected GetProto to fail ok=%t: %+v", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
 	if err := b.Commit(false /* sync */); err != nil {
 		t.Fatal(err)
 	}
 	if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); !ok || err != nil {
-		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
+		t.Fatalf("expected GetProto to success ok=%t: %+v", ok, err)
 	}
 	if !proto.Equal(getVal, &val) {
 		t.Errorf("expected %v; got %v", &val, getVal)

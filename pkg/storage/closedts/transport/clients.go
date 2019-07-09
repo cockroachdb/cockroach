@@ -121,7 +121,7 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 		c, err := pr.cfg.Dialer.Dial(ctx, nodeID)
 		if err != nil {
 			if log.V(1) {
-				log.Warningf(ctx, "error opening closed timestamp stream to n%d: %s", nodeID, err)
+				log.Warningf(ctx, "error opening closed timestamp stream to n%d: %+v", nodeID, err)
 			}
 			return
 		}

@@ -106,7 +106,7 @@ func (ia *Allocator) start() {
 					break
 				}
 
-				log.Warningf(ctx, "unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
+				log.Warningf(ctx, "unable to allocate %d ids from %s: %+v", ia.blockSize, idKey, err)
 			}
 			if err != nil {
 				panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))

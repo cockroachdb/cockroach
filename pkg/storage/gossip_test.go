@@ -186,7 +186,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 		}
 		kvClient := server.DB()
 		if err := kvClient.Put(ctx, fmt.Sprintf("%d", i), i); err != nil {
-			t.Errorf("failed Put to node %d: %s", i, err)
+			t.Errorf("failed Put to node %d: %+v", i, err)
 		}
 	}
 }

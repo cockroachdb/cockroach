@@ -570,7 +570,7 @@ func (t *RaftTransport) startProcessNewQueue(
 
 		stream, err := client.RaftMessageBatch(batchCtx) // closed via cancellation
 		if err != nil {
-			log.Warningf(ctx, "creating batch client for node %d failed: %s", toNodeID, err)
+			log.Warningf(ctx, "creating batch client for node %d failed: %+v", toNodeID, err)
 			return
 		}
 
@@ -633,7 +633,7 @@ func (t *RaftTransport) SendSnapshot(
 
 	defer func() {
 		if err := stream.CloseSend(); err != nil {
-			log.Warningf(ctx, "failed to close snapshot stream: %s", err)
+			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
 	return sendSnapshot(ctx, raftCfg, t.st, stream, storePool, header, snap, newBatch, sent)

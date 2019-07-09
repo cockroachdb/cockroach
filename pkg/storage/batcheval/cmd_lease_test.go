@@ -60,7 +60,7 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 					defer func() {
 						if tx != nil {
 							if err := tx.Rollback(); err != nil {
-								log.Warningf(ctx, "error rolling back: %s", err)
+								log.Warningf(ctx, "error rolling back: %+v", err)
 							}
 						}
 					}()
@@ -99,7 +99,7 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 			t.Fatal("timed out")
 		case err := <-workerErrCh:
 			if err != nil {
-				t.Fatalf("worker failed: %s", err)
+				t.Fatalf("worker failed: %+v", err)
 			}
 		}
 	}

@@ -1391,7 +1391,7 @@ func (s *Store) AdminRelocateRange(
 		if err := s.DB().AdminTransferLease(
 			ctx, startKey, targets[0].StoreID,
 		); err != nil {
-			log.Warningf(ctx, "while transferring lease: %s", err)
+			log.Warningf(ctx, "while transferring lease: %+v", err)
 		}
 	}
 
@@ -1529,7 +1529,7 @@ func (s *Store) AdminRelocateRange(
 			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, roachpb.REMOVE_REPLICA,
 				[]roachpb.ReplicationTarget{target}, *rangeInfo.Desc)
 			if err != nil {
-				log.Warningf(ctx, "while removing target %v: %s", target, err)
+				log.Warningf(ctx, "while removing target %v: %+v", target, err)
 				if !canRetry(err) {
 					return err
 				}
@@ -1616,7 +1616,7 @@ func (r *Replica) adminScatter(
 		targetStoreID := desc.Replicas().Unwrap()[newLeaseholderIdx].StoreID
 		if targetStoreID != r.store.StoreID() {
 			if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
-				log.Warningf(ctx, "failed to scatter lease to s%d: %s", targetStoreID, err)
+				log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
 			}
 		}
 	}

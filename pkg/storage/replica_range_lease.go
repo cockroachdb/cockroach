@@ -551,7 +551,7 @@ func (r *Replica) leaseStatus(
 			// use the lease nor do we want to attempt to acquire it.
 			if err != nil {
 				if leaseStatusLogLimiter.ShouldLog() {
-					log.Warningf(context.TODO(), "can't determine lease status due to node liveness error: %s", err)
+					log.Warningf(context.TODO(), "can't determine lease status due to node liveness error: %+v", err)
 				}
 			}
 			status.State = storagepb.LeaseState_ERROR
