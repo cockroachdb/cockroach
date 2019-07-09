@@ -498,8 +498,8 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
-	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
-		log.VEventf(ctx, 1, "setting up vectorize flow %d with setting %s", f.id, f.EvalCtx.SessionData.Vectorize)
+	if f.EvalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
+		log.VEventf(ctx, 1, "setting up vectorize flow %d with setting %s", f.id, f.EvalCtx.SessionData.VectorizeMode)
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
 		err := f.setupVectorizedFlow(ctx, f.vectorizedBoundAccount)
