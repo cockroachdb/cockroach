@@ -1645,6 +1645,50 @@ func TestDrainRangeRejection(t *testing.T) {
 	}
 }
 
+func TestChangeReplicasGeneration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	repl, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oldGeneration := repl.Desc().GetGeneration()
+	if _, err := repl.ChangeReplicas(
+		context.Background(),
+		roachpb.ADD_REPLICA,
+		roachpb.ReplicationTarget{
+			NodeID:  mtc.idents[1].NodeID,
+			StoreID: mtc.idents[1].StoreID,
+		},
+		repl.Desc(),
+		storagepb.ReasonRangeUnderReplicated,
+		"",
+	); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+1)
+
+	oldGeneration = repl.Desc().GetGeneration()
+	if _, err := repl.ChangeReplicas(
+		context.Background(),
+		roachpb.REMOVE_REPLICA,
+		roachpb.ReplicationTarget{
+			NodeID:  mtc.idents[1].NodeID,
+			StoreID: mtc.idents[1].StoreID,
+		},
+		repl.Desc(),
+		storagepb.ReasonRangeOverReplicated,
+		"",
+	); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+1)
+}
+
 func TestSystemZoneConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
