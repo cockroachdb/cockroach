@@ -67,7 +67,7 @@ SELECT avg(k) OVER () FROM kv
 
 # Verify execution.
 statement ok
-SET experimental_vectorize = always;
+SET vectorize = always;
 
 query I rowsort
 SELECT kv.k FROM kv JOIN kw ON kv.k = kw.k
@@ -79,4 +79,4 @@ SELECT kv.k FROM kv JOIN kw ON kv.k = kw.k
 5
 
 statement ok
-RESET experimental_vectorize;
+RESET vectorize;

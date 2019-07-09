@@ -518,7 +518,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 		var isException bool
 		if f.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAlways {
 			// If running with always, this check makes sure that we can still run
-			// SET statements (mostly to set experimental_vectorize=off) and the like.
+			// SET statements (mostly to set vectorize=off) and the like.
 			if len(spec.Processors) == 1 &&
 				spec.Processors[0].Core.LocalPlanNode != nil {
 				rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx

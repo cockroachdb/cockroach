@@ -121,8 +121,8 @@ func prepareVectorizedFlowsForReplanning(
 	oldFlowID distsqlpb.FlowID,
 	flows map[roachpb.NodeID]*distsqlpb.FlowSpec,
 ) (distsqlpb.FlowID, func()) {
-	origMode := evalCtx.SessionData.Vectorize
-	evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
+	origMode := evalCtx.SessionData.VectorizeMode
+	evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
 	var newFlowID distsqlpb.FlowID
 	if !(len(flows) == 1 && oldFlowID == newFlowID) {
 		// Only reassign the flowID if these flows are distributed.
@@ -131,7 +131,7 @@ func prepareVectorizedFlowsForReplanning(
 			flows[i].FlowID = newFlowID
 		}
 	}
-	return newFlowID, func() { evalCtx.SessionData.Vectorize = origMode }
+	return newFlowID, func() { evalCtx.SessionData.VectorizeMode = origMode }
 }
 
 // setupFlows sets up all the flows specified in flows using the provided state.
