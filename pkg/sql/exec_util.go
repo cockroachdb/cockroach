@@ -1800,7 +1800,7 @@ func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
 }
 
 func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {
-	m.data.Vectorize = val
+	m.data.VectorizeMode = val
 }
 
 func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
