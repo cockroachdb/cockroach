@@ -150,11 +150,12 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"sql.defaults.vectorize",
 	"default vectorize mode",
-	"off",
+	"streaming",
 	map[int64]string{
-		int64(sessiondata.VectorizeOff):    "off",
-		int64(sessiondata.VectorizeOn):     "on",
-		int64(sessiondata.VectorizeAlways): "always",
+		int64(sessiondata.VectorizeOff):       "off",
+		int64(sessiondata.VectorizeOn):        "on",
+		int64(sessiondata.VectorizeAlways):    "always",
+		int64(sessiondata.VectorizeStreaming): "streaming",
 	},
 )
 
