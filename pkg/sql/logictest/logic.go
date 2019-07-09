@@ -383,8 +383,8 @@ type testClusterConfig struct {
 	overrideOptimizerMode string
 	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
-	// if non-empty, overrides the default experimental_vectorize mode.
-	overrideExpVectorize string
+	// if non-empty, overrides the default vectorize mode.
+	overrideVectorize string
 	// if non-empty, overrides the default automatic statistics mode.
 	overrideAutoStats string
 	// if set, queries using distSQL processors that can fall back to disk do
@@ -422,7 +422,7 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade: true,
 	},
 	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "on", overrideAutoStats: "false"},
-	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "off", overrideExpVectorize: "on"},
+	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "off", overrideVectorize: "on"},
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
 	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
@@ -431,7 +431,7 @@ var logicTestConfigs = []testClusterConfig{
 		distSQLUseDisk: true, skipShort: true},
 	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
 	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
-	{name: "5node-dist-vec", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off", overrideExpVectorize: "on", overrideAutoStats: "false"},
+	{name: "5node-dist-vec", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off", overrideVectorize: "on", overrideAutoStats: "false"},
 	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
 	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "on", distSQLMetadataTestEnabled: true,
 		skipShort: true, overrideOptimizerMode: "off"},
@@ -1037,9 +1037,9 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 			return nil
 		})
 	}
-	if cfg.overrideExpVectorize != "" {
+	if cfg.overrideVectorize != "" {
 		if _, err := t.cluster.ServerConn(0).Exec(
-			"SET CLUSTER SETTING sql.defaults.experimental_vectorize = $1::string", cfg.overrideExpVectorize,
+			"SET CLUSTER SETTING sql.defaults.vectorize = $1::string", cfg.overrideVectorize,
 		); err != nil {
 			t.Fatal(err)
 		}
