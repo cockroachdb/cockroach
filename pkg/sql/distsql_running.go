@@ -171,23 +171,27 @@ func (dsp *DistSQLPlanner) setupFlows(
 		if _, ok := errors.If(firstErr, func(err error) (v interface{}, ok bool) {
 			v, ok = err.(*distsqlrun.VectorizedSetupError)
 			return v, ok
-		}); ok && evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeOn {
+		}); ok && (evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeOn ||
+			evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeStreaming) {
 			// Error vectorizing remote flows, try again with off.
 			// Generate a new flow ID so that any remote nodes that successfully set
 			// up a vectorized flow will not be connected to by a non-vectorized flow.
 			newFlowID := uuid.MakeV4()
+			// TODO(yuzefovich): use firstErr to improve the message. At the moment,
+			// we don't support many types, so detailed messages with a stack trace
+			// become quite distracting.
 			log.Infof(
-				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %+v", flows[thisNodeID].FlowID, newFlowID, firstErr,
+				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s", flows[thisNodeID].FlowID, newFlowID,
 			)
 			for i := range flows {
 				flows[i].FlowID.UUID = newFlowID
 			}
-			evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
 			// Reset vectorize setting after returning.
-			defer func() { evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOn }()
+			defer func(mode sessiondata.VectorizeExecMode) { evalCtx.SessionData.VectorizeMode = mode }(evalCtx.SessionData.VectorizeMode)
+			evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
 			// Recurse once with sessiondata.VectorizeOff, note that this branch will
-			// not be hit again due to the condition above that
-			// evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeOn.
+			// not be hit again due to the condition above that the vectorize mode is
+			// either "on" or "streaming."
 			return dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
 		}
 		return nil, nil, firstErr

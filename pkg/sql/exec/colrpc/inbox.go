@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // flowStreamServer is a utility interface used to mock out the RPC layer.
@@ -87,6 +89,9 @@ var _ exec.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(typs []types.T) (*Inbox, error) {
+	if conv.ContainsUnhandledType(typs) {
+		return nil, errors.Newf("type unhandled by vectorized engine is seen")
+	}
 	s, err := colserde.NewRecordBatchSerializer(typs)
 	if err != nil {
 		return nil, err
