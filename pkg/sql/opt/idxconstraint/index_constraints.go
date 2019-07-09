@@ -794,14 +794,14 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			// First, check if there's more than one path through the datum.
 			paths, err := json.AllPaths(rd)
 			if err != nil {
-				log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
+				log.Errorf(context.TODO(), "unexpected JSON error: %+v", err)
 				c.unconstrained(0 /* offset */, out)
 				return false, append(constraints, out)
 			}
 			for i := range paths {
 				hasContainerLeaf, err := paths[i].HasContainerLeaf()
 				if err != nil {
-					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
+					log.Errorf(context.TODO(), "unexpected JSON error: %+v", err)
 					c.unconstrained(0 /* offset */, out)
 					return false, append(constraints, out)
 				}
@@ -811,7 +811,7 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 				}
 				pathDatum, err := tree.MakeDJSON(paths[i])
 				if err != nil {
-					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
+					log.Errorf(context.TODO(), "unexpected JSON error: %+v", err)
 					c.unconstrained(0 /* offset */, out)
 					return false, append(constraints, out)
 				}

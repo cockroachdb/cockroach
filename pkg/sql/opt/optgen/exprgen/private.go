@@ -178,7 +178,7 @@ func (eg *exprGen) cardinalityFromStr(str string) props.Cardinality {
 func (eg *exprGen) intFromStr(str string) int {
 	val, err := strconv.Atoi(str)
 	if err != nil {
-		panic(errorf("expected number: %s (error: %v)", str, err))
+		panic(wrapf(err, "expected number: %s", str))
 	}
 	return val
 }
@@ -186,7 +186,7 @@ func (eg *exprGen) intFromStr(str string) int {
 func (eg *exprGen) statsFromStr(str string) props.Statistics {
 	var stats []stats.JSONStatistic
 	if err := json.Unmarshal([]byte(str), &stats); err != nil {
-		panic(errorf("error unmarshaling statistics: %v", err))
+		panic(wrapf(err, "error unmarshaling statistics"))
 	}
 	var result props.Statistics
 	if len(stats) == 0 {

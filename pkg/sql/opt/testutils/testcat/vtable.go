@@ -11,11 +11,10 @@
 package testcat
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/errors"
 )
 
 var informationSchemaMap = map[string]*tree.CreateTable{}
@@ -35,12 +34,12 @@ func init() {
 	for _, table := range informationSchemaTables {
 		parsed, err := parser.ParseOne(table)
 		if err != nil {
-			panic(fmt.Sprintf("error initializing virtual table map: %s", err))
+			panic(errors.Wrap(err, "error initializing virtual table map"))
 		}
 
 		ct, ok := parsed.AST.(*tree.CreateTable)
 		if !ok {
-			panic("virtual table schemas must be CREATE TABLE statements")
+			panic(errors.New("virtual table schemas must be CREATE TABLE statements"))
 		}
 
 		ct.Table.SchemaName = tree.Name("information_schema")
