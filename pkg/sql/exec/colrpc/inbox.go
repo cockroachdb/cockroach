@@ -269,12 +269,12 @@ func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 
 	defer i.close()
 	if err := i.maybeInit(ctx); err != nil {
-		log.Warningf(ctx, "Inbox unable to initialize stream while draining metadata: %s", err)
+		log.Warningf(ctx, "Inbox unable to initialize stream while draining metadata: %+v", err)
 		return allMeta
 	}
 	log.VEvent(ctx, 2, "Inbox sending drain signal to Outbox")
 	if err := i.stream.Send(&distsqlpb.ConsumerSignal{DrainRequest: &distsqlpb.DrainRequest{}}); err != nil {
-		log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %s", err)
+		log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", err)
 		return allMeta
 	}
 	for {
@@ -283,7 +283,7 @@ func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 			if err == io.EOF {
 				break
 			}
-			log.Warningf(ctx, "Inbox Recv connection error while draining metadata: %s", err)
+			log.Warningf(ctx, "Inbox Recv connection error while draining metadata: %+v", err)
 			return allMeta
 		}
 		for _, remoteMeta := range msg.Data.Metadata {

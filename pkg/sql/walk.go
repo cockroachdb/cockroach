@@ -233,6 +233,37 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.table.desc.Name, n.table.index.Name))
 			v.observer.attr(name, "type", joinTypeStr(n.joinType))
 		}
+		var b bytes.Buffer
+		b.WriteByte('(')
+		inputCols := planColumns(n.input)
+		for i, c := range n.eqCols {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(inputCols[c].Name)
+		}
+		b.WriteString(") = (")
+		for i := range n.eqCols {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			if i < len(n.table.index.ColumnNames) {
+				b.WriteString(n.table.index.ColumnNames[i])
+			} else {
+				id := n.table.index.ExtraColumnIDs[i-len(n.table.index.ColumnNames)]
+				col, err := n.table.desc.FindColumnByID(id)
+				if err != nil {
+					fmt.Fprintf(&b, "<error: %v>", err)
+				} else {
+					b.WriteString(col.Name)
+				}
+			}
+		}
+		b.WriteByte(')')
+		v.observer.attr(name, "equality", b.String())
+		if n.eqColsAreKey {
+			v.observer.attr(name, "equality cols are key", "")
+		}
 		if v.observer.expr != nil && n.onCond != nil && n.onCond != tree.DBoolTrue {
 			v.expr(name, "pred", -1, n.onCond)
 		}

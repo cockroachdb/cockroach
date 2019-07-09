@@ -67,9 +67,11 @@ CREATE STATISTICS s FROM ab
 query TTT retry
 EXECUTE change_stats
 ----
-lookup-join  ·      ·
- │           table  cd@primary
- │           type   inner
- └── scan    ·      ·
-·            table  ab@primary
-·            spans  ALL
+lookup-join  ·                      ·
+ │           table                  cd@primary
+ │           type                   inner
+ │           equality               (a) = (c)
+ │           equality cols are key  ·
+ └── scan    ·                      ·
+·            table                  ab@primary
+·            spans                  ALL

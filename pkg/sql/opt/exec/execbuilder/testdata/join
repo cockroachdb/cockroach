@@ -1390,36 +1390,40 @@ zigzag-join  ·          ·
 query TTT
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ----
-lookup-join       ·          ·
- │                table      zigzag@primary
- │                type       inner
- └── zigzag-join  ·          ·
-      │           type       inner
-      │           pred       (@2 = 5) AND (@3 = 6.0)
-      ├── scan    ·          ·
-      │           table      zigzag@b_idx
-      │           fixedvals  1 column
-      └── scan    ·          ·
-·                 table      zigzag@c_idx
-·                 fixedvals  1 column
+lookup-join       ·                      ·
+ │                table                  zigzag@primary
+ │                type                   inner
+ │                equality               (a) = (a)
+ │                equality cols are key  ·
+ └── zigzag-join  ·                      ·
+      │           type                   inner
+      │           pred                   (@2 = 5) AND (@3 = 6.0)
+      ├── scan    ·                      ·
+      │           table                  zigzag@b_idx
+      │           fixedvals              1 column
+      └── scan    ·                      ·
+·                 table                  zigzag@c_idx
+·                 fixedvals              1 column
 
 # Zigzag join nested inside a lookup, with an on condition on lookup join.
 query TTT
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ----
-lookup-join       ·          ·
- │                table      zigzag@primary
- │                type       inner
- │                pred       @4 > 4.0
- └── zigzag-join  ·          ·
-      │           type       inner
-      │           pred       (@2 = 5) AND (@3 = 6.0)
-      ├── scan    ·          ·
-      │           table      zigzag@b_idx
-      │           fixedvals  1 column
-      └── scan    ·          ·
-·                 table      zigzag@c_idx
-·                 fixedvals  1 column
+lookup-join       ·                      ·
+ │                table                  zigzag@primary
+ │                type                   inner
+ │                equality               (a) = (a)
+ │                equality cols are key  ·
+ │                pred                   @4 > 4.0
+ └── zigzag-join  ·                      ·
+      │           type                   inner
+      │           pred                   (@2 = 5) AND (@3 = 6.0)
+      ├── scan    ·                      ·
+      │           table                  zigzag@b_idx
+      │           fixedvals              1 column
+      └── scan    ·                      ·
+·                 table                  zigzag@c_idx
+·                 fixedvals              1 column
 
 
 # Regression test for part of #34695.

@@ -91,7 +91,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		// Initialize key FD's from the table schema, including constant columns from
 		// the constraint, minus any columns that are not projected by the Scan
 		// operator.
-		rel.FuncDeps.CopyFrom(makeTableFuncDep(md, scan.Table))
+		rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, scan.Table))
 		if scan.Constraint != nil {
 			rel.FuncDeps.AddConstants(scan.Constraint.ExtractConstCols(b.evalCtx))
 		}
@@ -443,7 +443,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 	// -----------------------
 	// Start with the input FD set, and join that with the table's FD.
 	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	rel.FuncDeps.AddFrom(makeTableFuncDep(md, indexJoin.Table))
+	rel.FuncDeps.AddFrom(MakeTableFuncDep(md, indexJoin.Table))
 	rel.FuncDeps.MakeNotNull(rel.NotNullCols)
 	rel.FuncDeps.ProjectCols(rel.OutputCols)
 
@@ -1300,11 +1300,11 @@ func hasOuterCols(mem *Memo, e opt.Expr) bool {
 	return false
 }
 
-// makeTableFuncDep returns the set of functional dependencies derived from the
+// MakeTableFuncDep returns the set of functional dependencies derived from the
 // given base table. The set is derived lazily and is cached in the metadata,
 // since it may be accessed multiple times during query optimization. For more
 // details, see Relational.FuncDepSet.
-func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
+func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	fd, ok := md.TableAnnotation(tabID, fdAnnID).(*props.FuncDepSet)
 	if ok {
 		// Already made.
@@ -1440,7 +1440,7 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 		relational.NotNullCols = tableNotNullCols(md, join.Table)
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
 		relational.Cardinality = props.AnyCardinality
-		relational.FuncDeps.CopyFrom(makeTableFuncDep(md, join.Table))
+		relational.FuncDeps.CopyFrom(MakeTableFuncDep(md, join.Table))
 		relational.FuncDeps.ProjectCols(relational.OutputCols)
 		relational.Stats = *sb.makeTableStatistics(join.Table)
 	}
@@ -1485,7 +1485,7 @@ func ensureInputPropsForIndex(
 		relProps.NotNullCols = tableNotNullCols(md, tabID)
 		relProps.NotNullCols.IntersectionWith(relProps.OutputCols)
 		relProps.Cardinality = props.AnyCardinality
-		relProps.FuncDeps.CopyFrom(makeTableFuncDep(md, tabID))
+		relProps.FuncDeps.CopyFrom(MakeTableFuncDep(md, tabID))
 		relProps.FuncDeps.ProjectCols(relProps.OutputCols)
 		relProps.Stats = *sb.makeTableStatistics(tabID)
 	}

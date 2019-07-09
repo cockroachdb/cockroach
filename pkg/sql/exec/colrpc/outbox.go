@@ -109,7 +109,7 @@ func (o *Outbox) Run(
 	if err != nil {
 		log.Warningf(
 			ctx,
-			"Outbox Dial connection error, distributed query will fail: %s",
+			"Outbox Dial connection error, distributed query will fail: %+v",
 			err,
 		)
 		return
@@ -120,7 +120,7 @@ func (o *Outbox) Run(
 	if err != nil {
 		log.Warningf(
 			ctx,
-			"Outbox FlowStream connection error, distributed query will fail: %s",
+			"Outbox FlowStream connection error, distributed query will fail: %+v",
 			err,
 		)
 		return
@@ -133,7 +133,7 @@ func (o *Outbox) Run(
 	); err != nil {
 		log.Warningf(
 			ctx,
-			"Outbox Send header error, distributed query will fail: %s",
+			"Outbox Send header error, distributed query will fail: %+v",
 			err,
 		)
 		return
@@ -153,7 +153,7 @@ func (o *Outbox) handleStreamErr(
 		log.Infof(ctx, "Outbox calling cancelFn after %s EOF", opName)
 		cancelFn()
 	} else {
-		log.Errorf(ctx, "Outbox %s connection error: %s", opName, err)
+		log.Errorf(ctx, "Outbox %s connection error: %+v", opName, err)
 	}
 }
 
@@ -190,7 +190,7 @@ func (o *Outbox) sendBatches(
 		}
 		var b coldata.Batch
 		if err := exec.CatchVectorizedRuntimeError(func() { b = o.input.Next(ctx) }); err != nil {
-			log.Errorf(ctx, "Outbox Next error: %s", err)
+			log.Errorf(ctx, "Outbox Next error: %+v", err)
 			return false, err
 		}
 		if b.Length() == 0 {
@@ -200,11 +200,11 @@ func (o *Outbox) sendBatches(
 		o.scratch.buf.Reset()
 		d, err := o.converter.BatchToArrow(b)
 		if err != nil {
-			log.Errorf(ctx, "Outbox BatchToArrow data serialization error: %s", err)
+			log.Errorf(ctx, "Outbox BatchToArrow data serialization error: %+v", err)
 			return false, err
 		}
 		if err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
-			log.Errorf(ctx, "Outbox Serialize data error: %s", err)
+			log.Errorf(ctx, "Outbox Serialize data error: %+v", err)
 			return false, err
 		}
 		o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
@@ -255,7 +255,7 @@ func (o *Outbox) runWithStream(
 			msg, err := stream.Recv()
 			if err != nil {
 				if err != io.EOF {
-					log.Errorf(ctx, "Outbox Recv connection error: %s", err)
+					log.Errorf(ctx, "Outbox Recv connection error: %+v", err)
 				}
 				break
 			}
