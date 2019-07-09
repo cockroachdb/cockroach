@@ -92,10 +92,11 @@ func wrapRowSource(
 }
 
 // newColOperator creates a new columnar operator according to the given spec.
-// The operator and its output types are returned if there was no error.
+// The operator, its output types, and an indicator whether it is a streaming
+// one are returned if there was no error.
 func newColOperator(
 	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
-) (exec.Operator, []types.T, error) {
+) (_ exec.Operator, _ []types.T, isStreamingOp bool, _ error) {
 	core := &spec.Core
 	post := &spec.Post
 	var err error
@@ -108,16 +109,19 @@ func newColOperator(
 	// interface.
 	var columnTypes []semtypes.T
 
+	// By default, we safely assume that an operator is not streaming.
+	isStreamingOp = false
 	switch {
 	case core.Noop != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 		op = exec.NewNoop(inputs[0])
 		columnTypes = spec.Input[0].ColumnTypes
+		isStreamingOp = true
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 		op, err = newColBatchScan(flowCtx, core.TableReader, post)
 		// We want to check for cancellation once per input batch, and wrapping
@@ -129,9 +133,10 @@ func newColOperator(
 		op = exec.NewCancelChecker(op)
 		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
+		isStreamingOp = true
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 		aggSpec := core.Aggregator
 		if len(aggSpec.GroupCols) == 0 &&
@@ -139,7 +144,7 @@ func newColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			return exec.NewCountOp(inputs[0]), []types.T{types.Int64}, nil
+			return exec.NewCountOp(inputs[0]), []types.T{types.Int64}, true /* isStreamingOp */, nil
 		}
 
 		var groupCols, orderedCols util.FastIntSet
@@ -156,7 +161,7 @@ func newColOperator(
 			groupCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(groupCols) {
-			return nil, nil, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
+			return nil, nil, isStreamingOp, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
 		}
 
 		aggTyps := make([][]semtypes.T, len(aggSpec.Aggregations))
@@ -165,13 +170,13 @@ func newColOperator(
 		columnTypes = make([]semtypes.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
-				return nil, nil, errors.Newf("distinct aggregation not supported")
+				return nil, nil, isStreamingOp, errors.Newf("distinct aggregation not supported")
 			}
 			if agg.FilterColIdx != nil {
-				return nil, nil, errors.Newf("filtering aggregation not supported")
+				return nil, nil, isStreamingOp, errors.Newf("filtering aggregation not supported")
 			}
 			if len(agg.Arguments) > 0 {
-				return nil, nil, errors.Newf("aggregates with arguments not supported")
+				return nil, nil, isStreamingOp, errors.Newf("aggregates with arguments not supported")
 			}
 			aggTyps[i] = make([]semtypes.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
@@ -186,12 +191,12 @@ func newColOperator(
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
-					return nil, nil, errors.Newf("sum on int cols not supported (use sum_int)")
+					return nil, nil, isStreamingOp, errors.Newf("sum on int cols not supported (use sum_int)")
 				}
 			}
 			_, retType, err := GetAggregateInfo(agg.Func, aggTyps[i]...)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, isStreamingOp, err
 			}
 			columnTypes[i] = *retType
 		}
@@ -203,11 +208,12 @@ func newColOperator(
 			op, err = exec.NewOrderedAggregator(
 				inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols,
 			)
+			isStreamingOp = true
 		}
 
 	case core.Distinct != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 
 		var distinctCols, orderedCols util.FastIntSet
@@ -217,32 +223,34 @@ func newColOperator(
 		}
 		for _, col := range core.Distinct.DistinctColumns {
 			if !orderedCols.Contains(int(col)) {
-				return nil, nil, errors.Newf("unsorted distinct not supported")
+				return nil, nil, isStreamingOp, errors.Newf("unsorted distinct not supported")
 			}
 			distinctCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(distinctCols) {
-			return nil, nil, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
+			return nil, nil, isStreamingOp, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
 		typs := conv.FromColumnTypes(columnTypes)
 		op, err = exec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
+		isStreamingOp = true
 
 	case core.Ordinality != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
 		op = exec.NewOrdinalityOp(inputs[0])
+		isStreamingOp = true
 
 	case core.HashJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 
 		if !core.HashJoiner.OnExpr.Empty() {
-			return nil, nil, errors.Newf("can't plan hash join with on expressions")
+			return nil, nil, isStreamingOp, errors.Newf("can't plan hash join with on expressions")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -291,15 +299,18 @@ func newColOperator(
 		)
 
 	case core.MergeJoiner != nil:
+		// TODO(yuzefovich): merge joiner is streaming when both input sources are
+		// unique. We probably need to propagate that information from the
+		// optimizer.
 		if err := checkNumIn(inputs, 2); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 
 		if !core.MergeJoiner.OnExpr.Empty() {
-			return nil, nil, errors.Newf("can't plan merge join with on expressions")
+			return nil, nil, isStreamingOp, errors.Newf("can't plan merge join with on expressions")
 		}
 		if core.MergeJoiner.Type != sqlbase.InnerJoin && core.MergeJoiner.Type != sqlbase.LeftOuterJoin {
-			return nil, nil, errors.Newf("can plan only inner and left outer merge join")
+			return nil, nil, isStreamingOp, errors.Newf("can plan only inner and left outer merge join")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -347,7 +358,7 @@ func newColOperator(
 
 	case core.JoinReader != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 
 		op, err = wrapRowSource(flowCtx, inputs[0], spec.Input[0].ColumnTypes, func(input RowSource) (RowSource, error) {
@@ -375,10 +386,11 @@ func newColOperator(
 			columnTypes = jr.OutputTypes()
 			return jr, nil
 		})
+		isStreamingOp = true
 
 	case core.Sorter != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 		input := inputs[0]
 		inputTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -394,6 +406,7 @@ func newColOperator(
 			// which uses a heap to avoid storing more rows than necessary.
 			k := uint16(post.Limit + post.Offset)
 			op = exec.NewTopKSorter(input, inputTypes, orderingCols, k)
+			isStreamingOp = true
 		} else {
 			// No optimizations possible. Default to the standard sort operator.
 			op, err = exec.NewSorter(input, inputTypes, orderingCols)
@@ -402,20 +415,20 @@ func newColOperator(
 
 	case core.Windower != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 		if len(core.Windower.WindowFns) != 1 {
-			return nil, nil, errors.Newf("only a single window function is currently supported")
+			return nil, nil, isStreamingOp, errors.Newf("only a single window function is currently supported")
 		}
 		wf := core.Windower.WindowFns[0]
 		if wf.Frame != nil &&
 			(wf.Frame.Mode != distsqlpb.WindowerSpec_Frame_RANGE ||
 				wf.Frame.Bounds.Start.BoundType != distsqlpb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
 				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != distsqlpb.WindowerSpec_Frame_CURRENT_ROW)) {
-			return nil, nil, errors.Newf("window functions with non-default window frames are not supported")
+			return nil, nil, isStreamingOp, errors.Newf("window functions with non-default window frames are not supported")
 		}
 		if wf.Func.AggregateFunc != nil {
-			return nil, nil, errors.Newf("aggregate functions used as window functions are not supported")
+			return nil, nil, isStreamingOp, errors.Newf("aggregate functions used as window functions are not supported")
 		}
 
 		input := inputs[0]
@@ -433,7 +446,7 @@ func newColOperator(
 			}
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 
 		orderingCols := make([]uint32, len(wf.Ordering.Columns))
@@ -448,7 +461,7 @@ func newColOperator(
 		case distsqlpb.WindowerSpec_DENSE_RANK:
 			op, err = vecbuiltins.NewRankOperator(input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		default:
-			return nil, nil, errors.Newf("window function %s is not supported", wf.String())
+			return nil, nil, isStreamingOp, errors.Newf("window function %s is not supported", wf.String())
 		}
 
 		if partitionColIdx != -1 {
@@ -465,29 +478,29 @@ func newColOperator(
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
 
 	default:
-		return nil, nil, errors.Newf("unsupported processor core %s", core)
+		return nil, nil, isStreamingOp, errors.Newf("unsupported processor core %s", core)
 	}
 	log.VEventf(ctx, 1, "Made op %T\n", op)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, isStreamingOp, err
 	}
 
 	if columnTypes == nil {
-		return nil, nil, errors.AssertionFailedf("output columnTypes unset after planning %T", op)
+		return nil, nil, isStreamingOp, errors.AssertionFailedf("output columnTypes unset after planning %T", op)
 	}
 
 	if !post.Filter.Empty() {
 		var helper exprHelper
 		err := helper.init(post.Filter, columnTypes, flowCtx.EvalCtx)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, isStreamingOp, err
 		}
 		var filterColumnTypes []semtypes.T
 		op, _, filterColumnTypes, err = planSelectionOperators(
 			flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
+			return nil, nil, isStreamingOp, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
 		}
 		if len(filterColumnTypes) > len(columnTypes) {
 			// Additional columns were appended to store projection results while
@@ -513,16 +526,16 @@ func newColOperator(
 			var helper exprHelper
 			err := helper.init(expr, columnTypes, flowCtx.EvalCtx)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, isStreamingOp, err
 			}
 			var outputIdx int
 			op, outputIdx, columnTypes, err = planProjectionOperators(
 				flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 			if err != nil {
-				return nil, nil, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
+				return nil, nil, isStreamingOp, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
 			if outputIdx < 0 {
-				return nil, nil, errors.AssertionFailedf("missing outputIdx")
+				return nil, nil, isStreamingOp, errors.AssertionFailedf("missing outputIdx")
 			}
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
@@ -534,7 +547,10 @@ func newColOperator(
 	if post.Limit != 0 {
 		op = exec.NewLimitOp(op, post.Limit)
 	}
-	return op, conv.FromColumnTypes(columnTypes), nil
+	// Note that all post-processing operators (projections, selections, etc) do
+	// not change the fact whether the "core" operator is streaming or not, so we
+	// keep isStreamingOp as it was set in the switch on the processor core type.
+	return op, conv.FromColumnTypes(columnTypes), isStreamingOp, nil
 }
 
 func planSelectionOperators(
@@ -988,7 +1004,9 @@ func init() {
 	errors.RegisterWrapperDecoder(errors.GetTypeKey((*VectorizedSetupError)(nil)), decodeVectorizedSetupError)
 }
 
-func (f *Flow) setupVectorized(ctx context.Context) error {
+// setupVectorized attempts to set a vectorized flow. It returns an indicator
+// whether only streaming operators are planned and an error if unsuccessful.
+func (f *Flow) setupVectorized(ctx context.Context) (streaming bool, _ error) {
 	streamIDToInputOp := make(map[distsqlpb.StreamID]exec.Operator)
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
 	// queue is a queue of indices into f.spec.Processors, for topologically
@@ -1025,33 +1043,35 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 	vectorizedStatsCollectorsQueue := make([]*exec.VectorizedStatsCollector, 0, 2)
 	procIDs := make([]int32, 0, 2)
 
+	streaming = true
 	for len(queue) > 0 {
 		pspec := &f.spec.Processors[queue[0]]
 		queue = queue[1:]
 		if len(pspec.Output) > 1 {
-			return errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
+			return streaming, errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
 		}
 		inputs = inputs[:0]
 		for i := range pspec.Input {
 			synchronizer, metadataSources, err := f.setupVectorizedInputSynchronizer(pspec.Input[i], streamIDToInputOp, recordingStats)
 			if err != nil {
-				return err
+				return streaming, err
 			}
 			metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
 			inputs = append(inputs, synchronizer)
 		}
 
-		op, outputTypes, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
+		op, outputTypes, isStreamingOp, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
 		if err != nil {
-			return err
+			return streaming, err
 		}
+		streaming = streaming && isStreamingOp
 		if metaSource, ok := op.(distsqlpb.MetadataSource); ok {
 			metadataSourcesQueue = append(metadataSourcesQueue, metaSource)
 		}
 		if recordingStats {
 			vsc, err := wrapWithVectorizedStatsCollector(op, inputs, pspec)
 			if err != nil {
-				return err
+				return streaming, err
 			}
 			vectorizedStatsCollectorsQueue = append(vectorizedStatsCollectorsQueue, vsc)
 			procIDs = append(procIDs, pspec.ProcessorID)
@@ -1068,12 +1088,12 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				streamIDToInputOp,
 				recordingStats,
 			); err != nil {
-				return err
+				return streaming, err
 			}
 			metadataSourcesQueue = metadataSourcesQueue[:0]
 		} else {
 			if len(output.Streams) != 1 {
-				return errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
+				return streaming, errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
 			}
 			outputStream := &output.Streams[0]
 			switch outputStream.Type {
@@ -1104,12 +1124,12 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				if err := f.setupVectorizedRemoteOutputStream(
 					op, outputTypes, outputStream, append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
 				); err != nil {
-					return err
+					return streaming, err
 				}
 				metadataSourcesQueue = metadataSourcesQueue[:0]
 			case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 				if f.syncFlowConsumer == nil {
-					return errors.New("syncFlowConsumer unset, unable to create materializer")
+					return streaming, errors.New("syncFlowConsumer unset, unable to create materializer")
 				}
 				// Make the materializer, which will write to the given receiver.
 				columnTypes := f.syncFlowConsumer.Types()
@@ -1142,14 +1162,14 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 					outputStatsToTrace,
 				)
 				if err != nil {
-					return err
+					return streaming, err
 				}
 				metadataSourcesQueue = metadataSourcesQueue[:0]
 				vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
 				f.processors = make([]Processor, 1)
 				f.processors[0] = proc
 			default:
-				return errors.Errorf("unsupported output stream type %s", outputStream.Type)
+				return streaming, errors.Errorf("unsupported output stream type %s", outputStream.Type)
 			}
 			streamIDToInputOp[outputStream.StreamID] = op
 		}
@@ -1165,7 +1185,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				}
 				procIdx, ok := streamIDToSpecIdx[stream.StreamID]
 				if !ok {
-					return errors.Errorf("Couldn't find stream %d", stream.StreamID)
+					return streaming, errors.Errorf("Couldn't find stream %d", stream.StreamID)
 				}
 				outputSpec := &f.spec.Processors[procIdx]
 				for k := range outputSpec.Input {
@@ -1196,5 +1216,5 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 	if len(vectorizedStatsCollectorsQueue) > 0 {
 		panic("not all vectorized stats collectors have been processed")
 	}
-	return nil
+	return streaming, nil
 }

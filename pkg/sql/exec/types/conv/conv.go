@@ -60,6 +60,17 @@ func FromColumnTypes(cts []semtypes.T) []types.T {
 	return typs
 }
 
+// ContainsUnhandledType returns whether an unhandled type is present among
+// typs.
+func ContainsUnhandledType(typs []types.T) bool {
+	for _, t := range typs {
+		if t == types.Unhandled {
+			return true
+		}
+	}
+	return false
+}
+
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
 func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) {
