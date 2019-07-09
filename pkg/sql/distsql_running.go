@@ -137,18 +137,18 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// TODO(yuzefovich): this is a safe but quite inefficient way of setting up
 	// vectorized flows since the flows will effectively be planned twice. Remove
 	// this once logic of falling back to DistSQL is bullet-proof.
-	if evalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
+	if evalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
 		for _, spec := range flows {
 			if err := distsqlrun.SupportsVectorized(
 				ctx, &distsqlrun.FlowCtx{EvalCtx: &evalCtx.EvalContext, NodeID: -1}, spec.Processors,
 			); err != nil {
 				// Vectorization attempt failed with an error.
 				returnVectorizationSetupError := false
-				if evalCtx.SessionData.Vectorize == sessiondata.VectorizeAlways {
+				if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAlways {
 					returnVectorizationSetupError = true
 					// If running with VectorizeAlways, this check makes sure that we can
-					// still run SET statements (mostly to set experimental_vectorize to
-					// off) and the like.
+					// still run SET statements (mostly to set vectorize to off) and the
+					// like.
 					if len(spec.Processors) == 1 &&
 						spec.Processors[0].Core.LocalPlanNode != nil {
 						rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
@@ -171,9 +171,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 				// it can be used in the future, but setupReq is used only once, so we
 				// don't need to restore it.
 				setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
-				origMode := evalCtx.SessionData.Vectorize
-				evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
-				defer func() { evalCtx.SessionData.Vectorize = origMode }()
+				origMode := evalCtx.SessionData.VectorizeMode
+				evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
+				defer func() { evalCtx.SessionData.VectorizeMode = origMode }()
 				break
 			}
 		}
