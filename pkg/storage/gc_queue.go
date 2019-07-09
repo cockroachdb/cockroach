@@ -732,7 +732,7 @@ func RunGC(
 		if len(keys) > 1 {
 			meta := &enginepb.MVCCMetadata{}
 			if err := protoutil.Unmarshal(vals[0], meta); err != nil {
-				log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
+				log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", keys[0], err)
 			} else {
 				// In the event that there's an active intent, send for
 				// intent resolution if older than the threshold.

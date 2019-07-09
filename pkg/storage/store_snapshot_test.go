@@ -91,7 +91,7 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 			err = ss.Send(ctx, stream, header, outSnap)
 			if snapType == SnapshotRequest_PREEMPTIVE {
 				if !testutils.IsError(err, "aborting snapshot because raft log is too large") {
-					t.Fatalf("unexpected error: %v", err)
+					t.Fatalf("unexpected error: %+v", err)
 				}
 			} else {
 				if err != nil {

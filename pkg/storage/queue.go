@@ -596,7 +596,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		return
 	}
 	if _, err := bq.addInternal(ctx, repl.Desc(), priority); !isExpectedQueueError(err) {
-		log.Errorf(ctx, "unable to add: %s", err)
+		log.Errorf(ctx, "unable to add: %+v", err)
 	}
 }
 

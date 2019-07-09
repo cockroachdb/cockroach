@@ -554,7 +554,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 			wg.Done()
 			<-blocker
 		}); err != nil {
-			t.Fatalf("Failed to run blocking async task: %v", err)
+			t.Fatalf("Failed to run blocking async task: %+v", err)
 		}
 	}
 	wg.Wait()

@@ -100,7 +100,7 @@ func optimizePuts(
 	if ok, err := iter.Valid(); err != nil {
 		// TODO(bdarnell): return an error here instead of silently
 		// running without the optimization?
-		log.Errorf(context.TODO(), "Seek returned error; disabling blind-put optimization: %s", err)
+		log.Errorf(context.TODO(), "Seek returned error; disabling blind-put optimization: %+v", err)
 		return origReqs
 	} else if ok && bytes.Compare(iter.Key().Key, maxKey) <= 0 {
 		iterKey = iter.Key().Key

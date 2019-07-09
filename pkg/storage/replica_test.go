@@ -637,7 +637,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	// Try consistent read and verify success.
 
 	if _, err := tc.SendWrapped(&gArgs); err != nil {
-		t.Errorf("expected success on consistent read: %s", err)
+		t.Errorf("expected success on consistent read: %+v", err)
 	}
 
 	// Try a read commmitted read and an inconsistent read, both within a
@@ -987,7 +987,7 @@ func TestReplicaLease(t *testing.T) {
 					Lease: lease,
 				},
 			}, &roachpb.RequestLeaseResponse{}); !testutils.IsError(err, "illegal lease") {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatalf("unexpected error: %+v", err)
 		}
 	}
 
@@ -2777,7 +2777,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 			iter.Seek(mvccKey)
 			var keyMeta enginepb.MVCCMetadata
 			if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
-				t.Fatalf("missing mvcc metadata for %q: %v", mvccKey, err)
+				t.Fatalf("missing mvcc metadata for %q: %+v", mvccKey, err)
 			} else if err := iter.ValueProto(&keyMeta); err != nil {
 				t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
 			}
@@ -4151,7 +4151,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey,
 		hlc.Timestamp{}, &readTxn, engine.MVCCGetOptions{})
 	if err != nil || ok {
-		t.Errorf("expected transaction record to be cleared (%t): %s", ok, err)
+		t.Errorf("expected transaction record to be cleared (%t): %+v", ok, err)
 	}
 
 	// Now replay begin & put. BeginTransaction should fail with a
@@ -4502,7 +4502,7 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			ba.Add(&bt, &put, &et)
 			br, err := tc.Sender().Send(context.Background(), ba)
 			if err != nil {
-				t.Fatalf("commit=%t: %s", commit, err)
+				t.Fatalf("commit=%t: %+v", commit, err)
 			}
 			etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
 			if !ok || (!etArgs.OnePhaseCommit && commit) {
@@ -5204,13 +5204,13 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	h := roachpb.Header{Txn: txn, Timestamp: tc.Clock().Now()}
 	// Should not be able to push or resolve in a transaction.
 	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: h, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
-		t.Fatalf("transactional PushTxn returned unexpected error: %v", err)
+		t.Fatalf("transactional PushTxn returned unexpected error: %+v", err)
 	}
 	if _, err := batcheval.ResolveIntent(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: h, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
-		t.Fatalf("transactional ResolveIntent returned unexpected error: %v", err)
+		t.Fatalf("transactional ResolveIntent returned unexpected error: %+v", err)
 	}
 	if _, err := batcheval.ResolveIntentRange(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: h, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
-		t.Fatalf("transactional ResolveIntentRange returned unexpected error: %v", err)
+		t.Fatalf("transactional ResolveIntentRange returned unexpected error: %+v", err)
 	}
 
 	// Should not get a transaction back from PushTxn. It used to erroneously
@@ -7740,7 +7740,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	if resp, pErr := client.SendWrapped(ctx, tc.Sender(), &get); pErr != nil {
 		t.Fatal(pErr)
 	} else if x, err := resp.(*roachpb.GetResponse).Value.GetInt(); err != nil {
-		t.Fatalf("returned non-int: %s", err)
+		t.Fatalf("returned non-int: %+v", err)
 	} else if x != 3 {
 		t.Fatalf("expected 3, got %d", x)
 	}
@@ -7825,7 +7825,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	if resp, pErr := client.SendWrapped(ctx, tc.Sender(), &get); pErr != nil {
 		t.Fatal(pErr)
 	} else if x, err := resp.(*roachpb.GetResponse).Value.GetInt(); err != nil {
-		t.Fatalf("returned non-int: %s", err)
+		t.Fatalf("returned non-int: %+v", err)
 	} else if x != 4 {
 		t.Fatalf("expected 4, got %d", x)
 	}
@@ -7883,7 +7883,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 					Args:    &gc,
 					EvalCtx: NewReplicaEvalContext(tc.repl, &spans),
 				}, &resp); err != nil {
-					t.Fatalf("at (%s,%s): %s", keyThresh, txnThresh, err)
+					t.Fatalf("at (%s,%s): %+v", keyThresh, txnThresh, err)
 				}
 			}()
 		}
@@ -7985,13 +7985,13 @@ func TestCommandTimeThreshold(t *testing.T) {
 	if _, err := tc.SendWrappedWith(roachpb.Header{
 		Timestamp: ts1,
 	}, &gArgs); err != nil {
-		t.Fatalf("could not get data: %s", err)
+		t.Fatalf("could not get data: %+v", err)
 	}
 	// Verify a later Get works.
 	if _, err := tc.SendWrappedWith(roachpb.Header{
 		Timestamp: ts3,
 	}, &gArgs); err != nil {
-		t.Fatalf("could not get data: %s", err)
+		t.Fatalf("could not get data: %+v", err)
 	}
 
 	// Put some data for use with CP later on.
@@ -7999,7 +7999,7 @@ func TestCommandTimeThreshold(t *testing.T) {
 	if _, err := tc.SendWrappedWith(roachpb.Header{
 		Timestamp: ts1,
 	}, &pArgs); err != nil {
-		t.Fatalf("could not put data: %s", err)
+		t.Fatalf("could not put data: %+v", err)
 	}
 
 	// Do a GC.
@@ -9651,7 +9651,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	tc.manualClock.Increment(10)
 	ts2 := tc.Clock().Now()
 	if err := engine.MVCCPut(ctx, tc.engine, nil, k, ts2, roachpb.MakeValueFromString("one"), nil); err != nil {
-		t.Fatalf("writing interfering value: %s", err)
+		t.Fatalf("writing interfering value: %+v", err)
 	}
 
 	// Push the transaction's timestamp. In real-world situations,
@@ -11394,7 +11394,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			runTs := tc.Clock().Now()
 			if c.setup != nil {
 				if err := c.setup(txn, runTs); err != nil {
-					t.Fatalf("failed during test setup: %v", err)
+					t.Fatalf("failed during test setup: %+v", err)
 				}
 			}
 

@@ -575,7 +575,7 @@ func TestCompactorThresholds(t *testing.T) {
 					func(kv engine.MVCCKeyValue) (bool, error) {
 						start, end, err := keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
 						if err != nil {
-							t.Fatalf("failed to decode suggested compaction key: %s", err)
+							t.Fatalf("failed to decode suggested compaction key: %+v", err)
 						}
 						if idx >= len(test.expUncompacted) {
 							return true, fmt.Errorf("found unexpected uncompacted span %s-%s", start, end)

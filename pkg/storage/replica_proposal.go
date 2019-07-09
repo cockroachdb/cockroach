@@ -200,7 +200,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 		// NB: the names here will match on all nodes, which is nice for debugging.
 		checkpointDir := filepath.Join(checkpointBase, fmt.Sprintf("r%d_at_%d", r.RangeID, rai))
 		if err := r.store.engine.CreateCheckpoint(checkpointDir); err != nil {
-			log.Warningf(ctx, "unable to create checkpoint %s: %s", checkpointDir, err)
+			log.Warningf(ctx, "unable to create checkpoint %s: %+v", checkpointDir, err)
 		} else {
 			log.Infof(ctx, "created checkpoint %s", checkpointDir)
 		}
@@ -514,18 +514,18 @@ func addSSTablePreApply(
 			// command as committed). Just unlink the file (RocksDB created a
 			// hard link); after that we're free to write it again.
 			if err := os.Remove(path); err != nil {
-				log.Fatalf(ctx, "while removing existing file during ingestion of %s: %s", path, err)
+				log.Fatalf(ctx, "while removing existing file during ingestion of %s: %+v", path, err)
 			}
 		}
 
 		if err := writeFileSyncing(ctx, path, sst.Data, eng, 0600, st, limiter); err != nil {
-			log.Fatalf(ctx, "while ingesting %s: %s", path, err)
+			log.Fatalf(ctx, "while ingesting %s: %+v", path, err)
 		}
 		copied = true
 	}
 
 	if err := eng.IngestExternalFiles(ctx, []string{path}, canSkipSeqNo, modify); err != nil {
-		log.Fatalf(ctx, "while ingesting %s: %s", path, err)
+		log.Fatalf(ctx, "while ingesting %s: %+v", path, err)
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, path)
 	return copied
@@ -611,7 +611,7 @@ func (r *Replica) handleReplicatedEvalResult(
 				if size, _, err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
 					// We don't *have* to remove these entries for correctness. Log a
 					// loud error, but keep humming along.
-					log.Errorf(ctx, "while removing sideloaded files during log truncation: %s", err)
+					log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
 				} else {
 					rResult.RaftLogDelta -= size
 				}
@@ -706,7 +706,7 @@ func (r *Replica) handleReplicatedEvalResult(
 			ctx, r, rResult.Merge.LeftDesc, rResult.Merge.RightDesc, rResult.Merge.FreezeStart,
 		); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
-			log.Fatalf(ctx, "failed to update store after merging range: %s", err)
+			log.Fatalf(ctx, "failed to update store after merging range: %+v", err)
 		}
 		rResult.Merge = nil
 	}

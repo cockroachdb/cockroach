@@ -128,7 +128,7 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 					// A new suggestion was made. Examine the compaction queue,
 					// which returns the number of bytes queued.
 					if bytesQueued, err := c.examineQueue(ctx); err != nil {
-						log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
+						log.Warningf(ctx, "failed check whether compaction suggestions exist: %+v", err)
 					} else if bytesQueued > 0 {
 						log.VEventf(ctx, 3, "compactor starting in %s as there are suggested compactions pending", c.minInterval())
 					} else {
@@ -145,7 +145,7 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 					timer.Read = true
 					ok, err := c.processSuggestions(ctx)
 					if err != nil {
-						log.Warningf(ctx, "failed processing suggested compactions: %s", err)
+						log.Warningf(ctx, "failed processing suggested compactions: %+v", err)
 					}
 					if ok {
 						// The queue was processed, so either it's empty or contains suggestions
@@ -262,7 +262,7 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 		if done := c.aggregateCompaction(ctx, ssti, &aggr, sc); done {
 			processedBytes, err := c.processCompaction(ctx, aggr, capacity)
 			if err != nil {
-				log.Errorf(ctx, "failed processing suggested compactions %+v: %s", aggr, err)
+				log.Errorf(ctx, "failed processing suggested compactions %+v: %+v", aggr, err)
 			} else if err := updateBytesQueued(processedBytes); err != nil {
 				log.Errorf(ctx, "failed updating bytes queued metric %+v", err)
 			}
@@ -340,7 +340,7 @@ func (c *Compactor) fetchSuggestions(
 		return nil, 0, err
 	}
 	if err := delBatch.Commit(true); err != nil {
-		log.Warningf(ctx, "unable to delete suggested compaction records: %s", err)
+		log.Warningf(ctx, "unable to delete suggested compaction records: %+v", err)
 	}
 	return suggestions, totalBytes, nil
 }
@@ -408,7 +408,7 @@ func (c *Compactor) processCompaction(
 	}
 
 	if err := delBatch.Commit(true); err != nil {
-		log.Warningf(ctx, "unable to delete suggested compaction records: %s", err)
+		log.Warningf(ctx, "unable to delete suggested compaction records: %+v", err)
 	}
 	delBatch.Close()
 
@@ -507,7 +507,7 @@ func (c *Compactor) Suggest(ctx context.Context, sc storagepb.SuggestedCompactio
 	// Store the new compaction.
 	//lint:ignore SA1019 historical usage of deprecated engine.PutProto is OK
 	if _, _, err = engine.PutProto(c.eng, engine.MVCCKey{Key: key}, &sc.Compaction); err != nil {
-		log.Warningf(ctx, "unable to record suggested compaction: %s", err)
+		log.Warningf(ctx, "unable to record suggested compaction: %+v", err)
 	}
 
 	// Poke the compactor goroutine to reconsider compaction in light of

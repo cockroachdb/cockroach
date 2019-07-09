@@ -828,7 +828,7 @@ func splitMsgApps(msgs []raftpb.Message) (msgApps, otherMsgs []raftpb.Message) {
 
 func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
 	// Mimic the behavior in processRaft.
-	log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
+	log.Fatalf(ctx, "%s: %+v", log.Safe(expl), err) // TODO(bdarnell)
 }
 
 // tick the Raft group, returning true if the raft group exists and is
@@ -1835,7 +1835,7 @@ func (r *Replica) processRaftCommand(
 			// corruption/out-of-space issue. Make sure that these fail with
 			// descriptive message so that we can differentiate the root causes.
 			if err != nil {
-				log.Errorf(ctx, "unable to update the state machine: %s", err)
+				log.Errorf(ctx, "unable to update the state machine: %+v", err)
 				// Report the fatal error separately and only with the error, as that
 				// triggers an optimization for which we directly report the error to
 				// sentry (which in turn allows sentry to distinguish different error
@@ -2167,7 +2167,7 @@ func (r *Replica) applyRaftCommand(
 		// intentionally doesn't track the origin of the writes.
 		mutationCount, err := engine.RocksDBBatchCount(writeBatch.Data)
 		if err != nil {
-			log.Errorf(ctx, "unable to read header of committed WriteBatch: %s", err)
+			log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
 		} else {
 			r.writeStats.recordCount(float64(mutationCount), 0 /* nodeID */)
 		}

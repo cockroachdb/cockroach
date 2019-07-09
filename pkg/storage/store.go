@@ -1087,7 +1087,7 @@ func (s *Store) SetDraining(drain bool) {
 					}
 				}); err != nil {
 				if log.V(1) {
-					log.Errorf(ctx, "error running draining task: %s", err)
+					log.Errorf(ctx, "error running draining task: %+v", err)
 				}
 				wg.Done()
 				return false
@@ -1122,7 +1122,7 @@ func (s *Store) SetDraining(drain bool) {
 		}); err != nil {
 		// You expect this message when shutting down a server in an unhealthy
 		// cluster. If we see it on healthy ones, there's likely something to fix.
-		log.Warningf(ctx, "unable to drain cleanly within %s, service might briefly deteriorate: %s", raftLeadershipTransferWait, err)
+		log.Warningf(ctx, "unable to drain cleanly within %s, service might briefly deteriorate: %+v", raftLeadershipTransferWait, err)
 	}
 }
 
@@ -1532,7 +1532,7 @@ func (s *Store) startGossip() {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
-							log.Warningf(annotatedCtx, "could not gossip %s: %s", gossipFn.description, err)
+							log.Warningf(annotatedCtx, "could not gossip %s: %+v", gossipFn.description, err)
 							if err != errPeriodicGossipsDisabled {
 								continue
 							}
@@ -1718,10 +1718,10 @@ func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached b
 		ctx, fmt.Sprintf("storage.Store: gossip on %s", reason),
 		func(ctx context.Context) {
 			if err := s.GossipStore(ctx, useCached); err != nil {
-				log.Warningf(ctx, "error gossiping on %s: %s", reason, err)
+				log.Warningf(ctx, "error gossiping on %s: %+v", reason, err)
 			}
 		}); err != nil {
-		log.Warningf(ctx, "unable to gossip on %s: %s", reason, err)
+		log.Warningf(ctx, "unable to gossip on %s: %+v", reason, err)
 	}
 }
 
@@ -2115,7 +2115,7 @@ func splitPostApply(
 	// acquired) in Replica.acquireSplitLock. It must be present here.
 	rightRng, err := r.store.GetReplica(split.RightDesc.RangeID)
 	if err != nil {
-		log.Fatalf(ctx, "unable to find RHS replica: %s", err)
+		log.Fatalf(ctx, "unable to find RHS replica: %+v", err)
 	}
 	{
 		rightRng.mu.Lock()
@@ -2162,7 +2162,7 @@ func splitPostApply(
 	if err := rightRng.withRaftGroup(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
 		return true, nil
 	}); err != nil {
-		log.Fatalf(ctx, "unable to create raft group for right-hand range in split: %s", err)
+		log.Fatalf(ctx, "unable to create raft group for right-hand range in split: %+v", err)
 	}
 
 	// Invoke the leasePostApply method to ensure we properly initialize
@@ -2175,7 +2175,7 @@ func splitPostApply(
 	// to the store's replica map.
 	if err := r.store.SplitRange(ctx, r, rightRng, split.LeftDesc); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
-		log.Fatalf(ctx, "%s: failed to update Store after split: %s", r, err)
+		log.Fatalf(ctx, "%s: failed to update Store after split: %+v", r, err)
 	}
 
 	// Update store stats with difference in stats before and after split.
@@ -3393,7 +3393,7 @@ func (s *Store) processRaftSnapshotRequest(
 				// Replica.handleRaftReady. Note that we can only get here if the
 				// replica doesn't exist or is uninitialized.
 				if err := s.addPlaceholderLocked(placeholder); err != nil {
-					log.Fatalf(ctx, "could not add vetted placeholder %s: %s", placeholder, err)
+					log.Fatalf(ctx, "could not add vetted placeholder %s: %+v", placeholder, err)
 				}
 				addedPlaceholder = true
 			}
@@ -3601,7 +3601,7 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	start := timeutil.Now()
 	stats, expl, err := r.handleRaftReady(ctx, noSnap)
 	if err != nil {
-		log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
+		log.Fatalf(ctx, "%s: %+v", log.Safe(expl), err) // TODO(bdarnell)
 	}
 	elapsed := timeutil.Since(start)
 	s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())

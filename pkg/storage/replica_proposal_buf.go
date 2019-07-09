@@ -514,7 +514,7 @@ func proposeBatch(raftGroup *raft.RawNode, replID roachpb.ReplicaID, ents []raft
 // into the proposals map before canceling all proposals.
 func (b *propBuf) FlushLockedWithoutProposing() {
 	if err := b.FlushLockedWithRaftGroup(nil /* raftGroup */); err != nil {
-		log.Fatalf(context.Background(), "unexpected error: %v", err)
+		log.Fatalf(context.Background(), "unexpected error: %+v", err)
 	}
 }
 

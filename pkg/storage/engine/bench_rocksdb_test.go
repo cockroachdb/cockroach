@@ -36,7 +36,7 @@ func setupMVCCRocksDB(b testing.TB, dir string) Engine {
 		cache,
 	)
 	if err != nil {
-		b.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
+		b.Fatalf("could not create new rocksdb db instance at %s: %+v", dir, err)
 	}
 	return rocksdb
 }

@@ -210,17 +210,17 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	// Manually split the table to have easier access to descriptors.
 	tableID, err := getTableID(db0, "cttest", "kv")
 	if err != nil {
-		t.Fatalf("failed to lookup ids: %v", err)
+		t.Fatalf("failed to lookup ids: %+v", err)
 	}
 	// Split the table at key 2.
 	k, err := sqlbase.EncodeTableKey(sqlbase.EncodeTableIDIndexID(nil, tableID, 1),
 		tree.NewDInt(2), encoding.Ascending)
 	if err != nil {
-		t.Fatalf("failed to encode key: %v", err)
+		t.Fatalf("failed to encode key: %+v", err)
 	}
 	lr, rr, err := tc.Server(0).SplitRange(k)
 	if err != nil {
-		t.Fatalf("failed to split range at key %v: %v", roachpb.Key(k), err)
+		t.Fatalf("failed to split range at key %v: %+v", roachpb.Key(k), err)
 	}
 
 	// Ensure that we can perform follower reads from all replicas.
