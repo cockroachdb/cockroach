@@ -372,7 +372,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 		if _, _, err := engine.MVCCGet(
 			context.Background(), store.Engine(), key, store.Clock().Now(), engine.MVCCGetOptions{},
 		); err != nil {
-			t.Errorf("failed to read consistent range descriptor for key %s: %s", key, err)
+			t.Errorf("failed to read consistent range descriptor for key %s: %+v", key, err)
 		}
 	}
 
@@ -714,7 +714,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := verifyRecomputedStats(snap, repl.Desc(), ms, manual.UnixNano()); err != nil {
-		t.Fatalf("failed to verify range's stats before split: %v", err)
+		t.Fatalf("failed to verify range's stats before split: %+v", err)
 	}
 	if inMemMS := repl.GetMVCCStats(); inMemMS != ms {
 		t.Fatalf("in-memory and on-disk diverged:\n%+v\n!=\n%+v", inMemMS, ms)
@@ -770,10 +770,10 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Stats should agree with recomputation.
 	if err := verifyRecomputedStats(snap, repl.Desc(), msLeft, now); err != nil {
-		t.Fatalf("failed to verify left range's stats after split: %v", err)
+		t.Fatalf("failed to verify left range's stats after split: %+v", err)
 	}
 	if err := verifyRecomputedStats(snap, replRight.Desc(), msRight, now); err != nil {
-		t.Fatalf("failed to verify right range's stats after split: %v", err)
+		t.Fatalf("failed to verify right range's stats after split: %+v", err)
 	}
 }
 
@@ -938,10 +938,10 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 
 	// Stats should agree with recomputation.
 	if err := verifyRecomputedStats(snap, repl.Desc(), msLeft, now); err != nil {
-		t.Fatalf("failed to verify left range's stats after split: %v", err)
+		t.Fatalf("failed to verify left range's stats after split: %+v", err)
 	}
 	if err := verifyRecomputedStats(snap, replRight.Desc(), msRight, now); err != nil {
-		t.Fatalf("failed to verify right range's stats after split: %v", err)
+		t.Fatalf("failed to verify right range's stats after split: %+v", err)
 	}
 }
 
@@ -1721,7 +1721,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	}
 
 	if err := txnOld.Commit(ctx); err != nil {
-		t.Fatalf("unexpected txn commit err: %s", err)
+		t.Fatalf("unexpected txn commit err: %+v", err)
 	}
 
 	// Verify that the txn's safe timestamp was set.
@@ -1850,7 +1850,7 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 	// where it will succeed.
 	close(finishBlockingSplit)
 	if err = <-splitRes; err != nil {
-		t.Errorf("AdminSplit returned error: %v", err)
+		t.Errorf("AdminSplit returned error: %+v", err)
 	}
 }
 
@@ -1917,7 +1917,7 @@ func TestStoreSplitFailsAfterMaxRetries(t *testing.T) {
 	// retry a few times before exiting unsuccessfully.
 	_, _, err := tc.SplitRange(splitKey)
 	if !testutils.IsError(err, "split at key .* failed: result is ambiguous") {
-		t.Errorf("unexpected error from SplitRange: %v", err)
+		t.Errorf("unexpected error from SplitRange: %+v", err)
 	}
 
 	const expAttempts = 11 // 10 retries
@@ -2768,7 +2768,7 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 		// Verify that both complete.
 		for i, ch := range []chan error{txnACh, txnBCh} {
 			if err := <-ch; err != nil {
-				t.Fatalf("%d: txn failure: %v", i, err)
+				t.Fatalf("%d: txn failure: %+v", i, err)
 			}
 		}
 	})

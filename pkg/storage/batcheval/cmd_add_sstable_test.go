@@ -124,7 +124,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			// The on-disk paths have `.ingested` appended unlike in-memory.
 			suffix := ".ingested"
 			if _, err := os.Stat(strings.TrimSuffix(match[1], suffix)); err != nil {
-				t.Fatalf("%q file missing after ingest: %v", match[1], err)
+				t.Fatalf("%q file missing after ingest: %+v", match[1], err)
 			}
 		}
 		if r, err := db.Get(ctx, "bb"); err != nil {

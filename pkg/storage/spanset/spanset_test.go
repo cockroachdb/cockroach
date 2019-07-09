@@ -70,7 +70,7 @@ func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 	}
 	for _, span := range allowed {
 		if err := ss.CheckAllowed(SpanReadOnly, span); err != nil {
-			t.Errorf("expected %s to be allowed, but got error: %s", span, err)
+			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
 		}
 	}
 
@@ -116,15 +116,15 @@ func TestSpanSetWriteImpliesRead(t *testing.T) {
 	ss.Add(SpanReadWrite, rwSpan)
 
 	if err := ss.CheckAllowed(SpanReadOnly, roSpan); err != nil {
-		t.Errorf("expected to be allowed to read roSpan, error: %s", err)
+		t.Errorf("expected to be allowed to read roSpan, error: %+v", err)
 	}
 	if err := ss.CheckAllowed(SpanReadWrite, roSpan); err == nil {
 		t.Errorf("expected not to be allowed to write roSpan")
 	}
 	if err := ss.CheckAllowed(SpanReadOnly, rwSpan); err != nil {
-		t.Errorf("expected to be allowed to read rwSpan, error: %s", err)
+		t.Errorf("expected to be allowed to read rwSpan, error: %+v", err)
 	}
 	if err := ss.CheckAllowed(SpanReadWrite, rwSpan); err != nil {
-		t.Errorf("expected to be allowed to read rwSpan, error: %s", err)
+		t.Errorf("expected to be allowed to read rwSpan, error: %+v", err)
 	}
 }

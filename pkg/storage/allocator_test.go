@@ -402,7 +402,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 		firstRangeInfo,
 	)
 	if err != nil {
-		t.Fatalf("Unable to perform allocation: %v", err)
+		t.Fatalf("Unable to perform allocation: %+v", err)
 	}
 	if result.Node.NodeID != 1 || result.StoreID != 1 {
 		t.Errorf("expected NodeID 1 and StoreID 1: %+v", result)
@@ -442,7 +442,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		firstRangeInfo,
 	)
 	if err != nil {
-		t.Fatalf("Unable to perform allocation: %v", err)
+		t.Fatalf("Unable to perform allocation: %+v", err)
 	}
 	result2, _, err := a.AllocateTarget(
 		ctx,
@@ -454,7 +454,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		firstRangeInfo,
 	)
 	if err != nil {
-		t.Fatalf("Unable to perform allocation: %v", err)
+		t.Fatalf("Unable to perform allocation: %+v", err)
 	}
 	ids := []int{int(result1.Node.NodeID), int(result2.Node.NodeID)}
 	sort.Ints(ids)
@@ -510,7 +510,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 		firstRangeInfo,
 	)
 	if err != nil {
-		t.Fatalf("Unable to perform allocation: %v", err)
+		t.Fatalf("Unable to perform allocation: %+v", err)
 	}
 	if !(result.StoreID == 3 || result.StoreID == 4) {
 		t.Errorf("expected result to have store ID 3 or 4: %+v", result)
@@ -5080,7 +5080,7 @@ func TestAllocatorThrottled(t *testing.T) {
 		firstRangeInfo,
 	)
 	if _, ok := err.(purgatoryError); !ok {
-		t.Fatalf("expected a purgatory error, got: %v", err)
+		t.Fatalf("expected a purgatory error, got: %+v", err)
 	}
 
 	// Second, test the normal case in which we can allocate to the store.
@@ -5092,7 +5092,7 @@ func TestAllocatorThrottled(t *testing.T) {
 		firstRangeInfo,
 	)
 	if err != nil {
-		t.Fatalf("unable to perform allocation: %v", err)
+		t.Fatalf("unable to perform allocation: %+v", err)
 	}
 	if result.Node.NodeID != 1 || result.StoreID != 1 {
 		t.Errorf("expected NodeID 1 and StoreID 1: %+v", result)
@@ -5114,7 +5114,7 @@ func TestAllocatorThrottled(t *testing.T) {
 		firstRangeInfo,
 	)
 	if _, ok := err.(purgatoryError); ok {
-		t.Fatalf("expected a non purgatory error, got: %v", err)
+		t.Fatalf("expected a non purgatory error, got: %+v", err)
 	}
 }
 

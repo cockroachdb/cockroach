@@ -27,7 +27,7 @@ func TestNewTempEngine(t *testing.T) {
 
 	engine, err := NewTempEngine(base.TempStorageConfig{Path: tempDir}, base.StoreSpec{Path: tempDir})
 	if err != nil {
-		t.Fatalf("error encountered when invoking NewTempEngine: %v", err)
+		t.Fatalf("error encountered when invoking NewTempEngine: %+v", err)
 	}
 	defer engine.Close()
 

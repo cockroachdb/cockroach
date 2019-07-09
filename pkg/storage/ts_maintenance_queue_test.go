@@ -325,7 +325,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	storeID := roachpb.StoreID(1)
 	store, err := tsrv.Stores().GetStore(roachpb.StoreID(1))
 	if err != nil {
-		t.Fatalf("error retrieving store %d: %s", storeID, err)
+		t.Fatalf("error retrieving store %d: %+v", storeID, err)
 	}
 	if err := store.ForceTimeSeriesMaintenanceQueueProcess(); err != nil {
 		t.Fatal(err)

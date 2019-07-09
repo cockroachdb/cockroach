@@ -244,7 +244,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 			Reverse: opts.reverse,
 		})
 		if err != nil {
-			b.Fatalf("failed scan: %s", err)
+			b.Fatalf("failed scan: %+v", err)
 		}
 		if len(kvs) != opts.numRows {
 			b.Fatalf("failed to scan: %d != %d", len(kvs), opts.numRows)
@@ -280,7 +280,7 @@ func runMVCCGet(ctx context.Context, b *testing.B, emk engineMaker, opts benchDa
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
 		if v, _, err := MVCCGet(ctx, eng, key, ts, MVCCGetOptions{}); err != nil {
-			b.Fatalf("failed get: %s", err)
+			b.Fatalf("failed get: %+v", err)
 		} else if v == nil {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
 		} else if valueBytes, err := v.GetBytes(); err != nil {
@@ -308,7 +308,7 @@ func runMVCCPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize in
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if err := MVCCPut(ctx, eng, nil, key, ts, value, nil); err != nil {
-			b.Fatalf("failed put: %s", err)
+			b.Fatalf("failed put: %+v", err)
 		}
 	}
 
@@ -330,7 +330,7 @@ func runMVCCBlindPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if err := MVCCBlindPut(ctx, eng, nil, key, ts, value, nil); err != nil {
-			b.Fatalf("failed put: %s", err)
+			b.Fatalf("failed put: %+v", err)
 		}
 	}
 
@@ -354,7 +354,7 @@ func runMVCCConditionalPut(
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			if err := MVCCPut(ctx, eng, nil, key, ts, value, nil); err != nil {
-				b.Fatalf("failed put: %s", err)
+				b.Fatalf("failed put: %+v", err)
 			}
 		}
 		expected = &value
@@ -366,7 +366,7 @@ func runMVCCConditionalPut(
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if err := MVCCConditionalPut(ctx, eng, nil, key, ts, value, expected, CPutFailIfMissing, nil); err != nil {
-			b.Fatalf("failed put: %s", err)
+			b.Fatalf("failed put: %+v", err)
 		}
 	}
 
@@ -388,7 +388,7 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if err := MVCCBlindConditionalPut(ctx, eng, nil, key, ts, value, nil, CPutFailIfMissing, nil); err != nil {
-			b.Fatalf("failed put: %s", err)
+			b.Fatalf("failed put: %+v", err)
 		}
 	}
 
@@ -410,7 +410,7 @@ func runMVCCInitPut(ctx context.Context, b *testing.B, emk engineMaker, valueSiz
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if err := MVCCInitPut(ctx, eng, nil, key, ts, value, false, nil); err != nil {
-			b.Fatalf("failed put: %s", err)
+			b.Fatalf("failed put: %+v", err)
 		}
 	}
 
@@ -432,7 +432,7 @@ func runMVCCBlindInitPut(ctx context.Context, b *testing.B, emk engineMaker, val
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if err := MVCCBlindInitPut(ctx, eng, nil, key, ts, value, false, nil); err != nil {
-			b.Fatalf("failed put: %s", err)
+			b.Fatalf("failed put: %+v", err)
 		}
 	}
 
@@ -462,7 +462,7 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			if err := MVCCPut(ctx, batch, nil, key, ts, value, nil); err != nil {
-				b.Fatalf("failed put: %s", err)
+				b.Fatalf("failed put: %+v", err)
 			}
 		}
 
@@ -513,7 +513,7 @@ func runMVCCBatchTimeSeries(ctx context.Context, b *testing.B, emk engineMaker, 
 		for j := 0; j < batchSize; j++ {
 			ts.Logical++
 			if err := MVCCMerge(ctx, batch, nil, keys[j], ts, value); err != nil {
-				b.Fatalf("failed put: %s", err)
+				b.Fatalf("failed put: %+v", err)
 			}
 		}
 

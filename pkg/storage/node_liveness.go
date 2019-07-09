@@ -231,7 +231,7 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		liveness, err := nl.Self()
 		if err != nil && err != ErrNoLivenessRecord {
-			log.Errorf(ctx, "unexpected error getting liveness: %s", err)
+			log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 		}
 		if err := nl.setDrainingInternal(ctx, liveness, drain); err == nil {
 			return
@@ -467,7 +467,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 						liveness, err := nl.Self()
 						if err != nil && err != ErrNoLivenessRecord {
-							log.Errorf(ctx, "unexpected error getting liveness: %v", err)
+							log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 						}
 						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
 							if err == ErrEpochIncremented {
@@ -481,7 +481,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 					}
 					return nil
 				}); err != nil {
-				log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
+				log.Warningf(ctx, "failed node liveness heartbeat: %+v", err)
 			}
 
 			nl.heartbeatToken <- struct{}{}
@@ -1001,7 +1001,7 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 		return 0
 	}
 	if err != nil {
-		log.Warningf(ctx, "looking up own liveness: %s", err)
+		log.Warningf(ctx, "looking up own liveness: %+v", err)
 		return 0
 	}
 	// If this node isn't live, we don't want to report its view of node liveness

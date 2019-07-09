@@ -94,7 +94,7 @@ func TestLogSplits(t *testing.T) {
 		}
 		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
-			t.Errorf("error unmarshalling info string for split of range %d: %s", rangeID, err)
+			t.Errorf("error unmarshalling info string for split of range %d: %+v", rangeID, err)
 			continue
 		}
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
@@ -218,7 +218,7 @@ func TestLogMerges(t *testing.T) {
 		}
 		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
-			t.Errorf("error unmarshalling info string for merge of range %d: %s", rangeID, err)
+			t.Errorf("error unmarshalling info string for merge of range %d: %+v", rangeID, err)
 			continue
 		}
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
@@ -315,7 +315,7 @@ func TestLogRebalances(t *testing.T) {
 		}
 		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
-			t.Errorf("error unmarshalling info string for add replica %d: %s", rangeID, err)
+			t.Errorf("error unmarshalling info string for add replica %d: %+v", rangeID, err)
 			continue
 		}
 		if int64(info.UpdatedDesc.RangeID) != rangeID {
@@ -367,7 +367,7 @@ func TestLogRebalances(t *testing.T) {
 		}
 		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
-			t.Errorf("error unmarshalling info string for remove replica %d: %s", rangeID, err)
+			t.Errorf("error unmarshalling info string for remove replica %d: %+v", rangeID, err)
 			continue
 		}
 		if int64(info.UpdatedDesc.RangeID) != rangeID {

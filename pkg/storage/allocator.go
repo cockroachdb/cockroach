@@ -441,7 +441,7 @@ func (a *Allocator) allocateTargetFromList(
 		details := decisionDetails{Target: target.compactString(options)}
 		detailsBytes, err := json.Marshal(details)
 		if err != nil {
-			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %s", err)
+			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %+v", err)
 		}
 		return &target.store, string(detailsBytes)
 	}
@@ -509,7 +509,7 @@ func (a Allocator) RemoveTarget(
 				details := decisionDetails{Target: bad.compactString(options)}
 				detailsBytes, err := json.Marshal(details)
 				if err != nil {
-					log.Warningf(ctx, "failed to marshal details for choosing remove target: %s", err)
+					log.Warningf(ctx, "failed to marshal details for choosing remove target: %+v", err)
 				}
 				return exist, string(detailsBytes), nil
 			}
@@ -643,7 +643,7 @@ func (a Allocator) RebalanceTarget(
 			replicaCandidates,
 			rangeInfo)
 		if err != nil {
-			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
+			log.Warningf(ctx, "simulating RemoveTarget failed: %+v", err)
 			return nil, ""
 		}
 		if target.store.StoreID != removeReplica.StoreID {
@@ -663,7 +663,7 @@ func (a Allocator) RebalanceTarget(
 	}
 	detailsBytes, err := json.Marshal(details)
 	if err != nil {
-		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
+		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %+v", err)
 	}
 
 	return &target.store, string(detailsBytes)
@@ -949,7 +949,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 	for requestLocalityStr, qps := range qpsStats {
 		var requestLocality roachpb.Locality
 		if err := requestLocality.Set(requestLocalityStr); err != nil {
-			log.Errorf(ctx, "unable to parse locality string %q: %s", requestLocalityStr, err)
+			log.Errorf(ctx, "unable to parse locality string %q: %+v", requestLocalityStr, err)
 			continue
 		}
 		for nodeID, replicaLocality := range replicaLocalities {
@@ -979,7 +979,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 		}
 		addr, err := a.storePool.gossip.GetNodeIDAddress(repl.NodeID)
 		if err != nil {
-			log.Errorf(ctx, "missing address for n%d: %s", repl.NodeID, err)
+			log.Errorf(ctx, "missing address for n%d: %+v", repl.NodeID, err)
 			continue
 		}
 		remoteLatency, ok := a.nodeLatencyFn(addr.String())

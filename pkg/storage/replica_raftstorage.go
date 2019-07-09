@@ -433,7 +433,7 @@ func (r *Replica) GetSnapshot(
 		snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
 	)
 	if err != nil {
-		log.Errorf(ctx, "error generating snapshot: %s", err)
+		log.Errorf(ctx, "error generating snapshot: %+v", err)
 		return nil, err
 	}
 	snapData.onClose = release
@@ -943,7 +943,7 @@ func (r *Replica) applySnapshot(
 		// We removed sr's data when we committed the batch. Finish subsumption by
 		// updating the in-memory bookkeping.
 		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
-			log.Fatalf(ctx, "unable to finish destroying %s while applying snapshot: %s", sr, err)
+			log.Fatalf(ctx, "unable to finish destroying %s while applying snapshot: %+v", sr, err)
 		}
 		// We already hold sr's raftMu, so we must call removeReplicaImpl directly.
 		// Note that it's safe to update the store's metadata for sr's removal
@@ -955,7 +955,7 @@ func (r *Replica) applySnapshot(
 		if err := r.store.removeReplicaImpl(ctx, sr, subsumedNextReplicaID, RemoveOptions{
 			DestroyData: false, // data is already destroyed
 		}); err != nil {
-			log.Fatalf(ctx, "unable to remove %s while applying snapshot: %s", sr, err)
+			log.Fatalf(ctx, "unable to remove %s while applying snapshot: %+v", sr, err)
 		}
 	}
 
@@ -967,7 +967,7 @@ func (r *Replica) applySnapshot(
 	}
 	r.setDesc(ctx, s.Desc)
 	if err := r.store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
-		log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %s", err)
+		log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 	}
 	r.store.mu.Unlock()
 
@@ -1013,7 +1013,7 @@ func (r *Replica) applySnapshot(
 	// config is not available, in which case we rely on the next gossip update
 	// to perform the update.
 	if err := r.updateRangeInfo(s.Desc); err != nil {
-		log.Fatalf(ctx, "unable to update range info while applying snapshot: %s", err)
+		log.Fatalf(ctx, "unable to update range info while applying snapshot: %+v", err)
 	}
 
 	return nil

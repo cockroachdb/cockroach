@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // Build generates an expression from an optgen string (the kind of expression
@@ -122,6 +123,10 @@ type exprGenErr struct {
 
 func errorf(format string, a ...interface{}) error {
 	return exprGenErr{fmt.Errorf(format, a...)}
+}
+
+func wrapf(err error, format string, a ...interface{}) error {
+	return exprGenErr{errors.WrapWithDepthf(1, err, format, a...)}
 }
 
 // Parses the input (with replace-side rule syntax) into an optgen expression

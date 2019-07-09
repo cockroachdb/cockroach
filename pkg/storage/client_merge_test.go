@@ -930,10 +930,10 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 	// Stats should agree with recomputation.
 	if err := verifyRecomputedStats(snap, lhsDesc, msA, mtc.manualClock.UnixNano()); err != nil {
-		t.Fatalf("failed to verify range A's stats before split: %v", err)
+		t.Fatalf("failed to verify range A's stats before split: %+v", err)
 	}
 	if err := verifyRecomputedStats(snap, rhsDesc, msB, mtc.manualClock.UnixNano()); err != nil {
-		t.Fatalf("failed to verify range B's stats before split: %v", err)
+		t.Fatalf("failed to verify range B's stats before split: %+v", err)
 	}
 
 	mtc.manualClock.Increment(100)
@@ -957,7 +957,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	nowNanos := mtc.manualClock.UnixNano()
 	msMerged.AgeTo(nowNanos)
 	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, nowNanos); err != nil {
-		t.Errorf("failed to verify range's stats after merge: %v", err)
+		t.Errorf("failed to verify range's stats after merge: %+v", err)
 	}
 }
 

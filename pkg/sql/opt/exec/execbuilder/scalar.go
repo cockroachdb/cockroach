@@ -142,7 +142,7 @@ func (b *Builder) indexedVar(
 		if b.nullifyMissingVarExprs > 0 {
 			expr, err := tree.ReType(tree.DNull, md.ColumnMeta(colID).Type)
 			if err != nil {
-				panic(errors.AssertionFailedf("unexpected failure during ReType: %v", err))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected failure during ReType"))
 			}
 			return expr
 		}

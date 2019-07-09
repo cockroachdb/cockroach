@@ -280,13 +280,13 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	}
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(
 		context.Background(), oldLiveness); !testutils.IsError(err, "cannot increment epoch on live node") {
-		t.Fatalf("expected error incrementing a live node: %v", err)
+		t.Fatalf("expected error incrementing a live node: %+v", err)
 	}
 
 	// Advance clock past liveness threshold & increment epoch.
 	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != nil {
-		t.Fatalf("unexpected error incrementing a non-live node: %s", err)
+		t.Fatalf("unexpected error incrementing a non-live node: %+v", err)
 	}
 
 	// Verify that the epoch has been advanced.
@@ -314,14 +314,14 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 
 	// Verify error on incrementing an already-incremented epoch.
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != storage.ErrEpochAlreadyIncremented {
-		t.Fatalf("unexpected error incrementing a non-live node: %s", err)
+		t.Fatalf("unexpected error incrementing a non-live node: %+v", err)
 	}
 
 	// Verify error incrementing with a too-high expectation for liveness epoch.
 	oldLiveness.Epoch = 3
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(
 		context.Background(), oldLiveness); !testutils.IsError(err, "unexpected liveness epoch 2; expected >= 3") {
-		t.Fatalf("expected error incrementing with a too-high expected epoch: %v", err)
+		t.Fatalf("expected error incrementing with a too-high expected epoch: %+v", err)
 	}
 }
 
@@ -574,7 +574,7 @@ func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
 	}
 	for i := 0; i < concurrency; i++ {
 		if err := <-errCh; err != nil {
-			t.Fatalf("concurrent heartbeat %d failed: %s", i, err)
+			t.Fatalf("concurrent heartbeat %d failed: %+v", i, err)
 		}
 	}
 }
@@ -607,7 +607,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 	}
 	for i := 0; i < concurrency; i++ {
 		if err := <-errCh; err != nil && err != storage.ErrEpochAlreadyIncremented {
-			t.Fatalf("concurrent increment epoch %d failed: %s", i, err)
+			t.Fatalf("concurrent increment epoch %d failed: %+v", i, err)
 		}
 	}
 }

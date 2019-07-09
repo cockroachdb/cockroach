@@ -452,7 +452,7 @@ func TestGCQueueProcess(t *testing.T) {
 				Timestamp: datum.ts,
 				Txn:       txn,
 			}, &dArgs); err != nil {
-				t.Fatalf("%d: could not delete data: %s", i, err)
+				t.Fatalf("%d: could not delete data: %+v", i, err)
 			}
 		} else {
 			pArgs := putArgs(datum.key, []byte("value"))
@@ -467,7 +467,7 @@ func TestGCQueueProcess(t *testing.T) {
 				Timestamp: datum.ts,
 				Txn:       txn,
 			}, &pArgs); err != nil {
-				t.Fatalf("%d: could not put data: %s", i, err)
+				t.Fatalf("%d: could not put data: %+v", i, err)
 			}
 		}
 	}
@@ -498,7 +498,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 		zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
-			t.Fatalf("could not find zone config for range %s: %s", tc.repl, err)
+			t.Fatalf("could not find zone config for range %s: %+v", tc.repl, err)
 		}
 
 		now := tc.Clock().Now()
@@ -869,7 +869,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 			if _, err := tc.SendWrappedWith(roachpb.Header{
 				Txn: txns[i],
 			}, &pArgs); err != nil {
-				t.Fatalf("%d: could not put data: %s", i, err)
+				t.Fatalf("%d: could not put data: %+v", i, err)
 			}
 		}
 	}

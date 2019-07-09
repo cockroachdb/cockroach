@@ -197,7 +197,7 @@ func TestGoMerge(t *testing.T) {
 	for i, c := range testCasesAppender {
 		result, err := goMerge(c.existing, c.update)
 		if err != nil {
-			t.Errorf("goMerge error: %d: %v", i, err)
+			t.Errorf("goMerge error: %d: %+v", i, err)
 			continue
 		}
 		var resultV, expectedV enginepb.MVCCMetadata
