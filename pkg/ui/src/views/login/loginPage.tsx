@@ -101,6 +101,10 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
             <img className="logo" alt="CockroachDB" src={logo} />
             <InfoBox>
               <h4 className="login-note-box__heading">Note:</h4>
+              <p>
+                A user with a password is required to log in to the UI
+                on secure clusters.
+              </p>
               <p className="login-note-box__blurb">
                 Create a user with this SQL command:
               </p>
