@@ -169,13 +169,13 @@ statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
 
 statement ok
-SET vectorize = streaming
+SET vectorize = auto
 
 statement ok
-SET vectorize = on
+SET vectorize = experimental_on
 
 statement ok
-SET vectorize = always
+SET vectorize = experimental_always
 
 statement ok
 SET vectorize = off

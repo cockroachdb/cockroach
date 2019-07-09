@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/vecbuiltins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -98,6 +99,7 @@ type newColOperatorResult struct {
 	outputTypes     []types.T
 	memUsage        int
 	metadataSources []distsqlpb.MetadataSource
+	isStreaming     bool
 }
 
 // newColOperator creates a new columnar operator according to the given spec.
@@ -116,12 +118,18 @@ func newColOperator(
 	// interface.
 	var columnTypes []semtypes.T
 
+	// By default, we safely assume that an operator is not streaming. Note that
+	// projections, renders, filters, limits, offsets as well as all internal
+	// operators (like stats collectors and cancel checkers) are streaming, so in
+	// order to determine whether the resulting chain of operators is streaming,
+	// it is sufficient to look only at the "core" operator.
+	result.isStreaming = false
 	switch {
 	case core.Noop != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
 			return result, err
 		}
-		result.op = exec.NewNoop(inputs[0])
+		result.op, result.isStreaming = exec.NewNoop(inputs[0]), true
 		columnTypes = spec.Input[0].ColumnTypes
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
@@ -144,7 +152,7 @@ func newColOperator(
 		// However, some of the long-running operators (for example, sorter) are
 		// still responsible for doing the cancellation check on their own while
 		// performing long operations.
-		result.op = exec.NewCancelChecker(result.op)
+		result.op, result.isStreaming = exec.NewCancelChecker(result.op), true
 		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
@@ -248,6 +256,7 @@ func newColOperator(
 			result.op, err = exec.NewOrderedAggregator(
 				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, isScalarAggregate(aggSpec),
 			)
+			result.isStreaming = true
 		}
 
 	case core.Distinct != nil:
@@ -277,13 +286,14 @@ func newColOperator(
 			return result, err
 		}
 		result.op, err = exec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
+		result.isStreaming = true
 
 	case core.Ordinality != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
 			return result, err
 		}
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
-		result.op = exec.NewOrdinalityOp(inputs[0])
+		result.op, result.isStreaming = exec.NewOrdinalityOp(inputs[0]), true
 
 	case core.HashJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
@@ -353,6 +363,9 @@ func newColOperator(
 		}
 
 	case core.MergeJoiner != nil:
+		// TODO(yuzefovich): merge joiner is streaming when both input sources are
+		// unique. We probably need to propagate that information from the
+		// optimizer.
 		if err := checkNumIn(inputs, 2); err != nil {
 			return result, err
 		}
@@ -461,7 +474,7 @@ func newColOperator(
 			columnTypes = jr.OutputTypes()
 			return jr, nil
 		})
-		result.op = c
+		result.op, result.isStreaming = c, true
 		result.metadataSources = append(result.metadataSources, c)
 
 	case core.Sorter != nil:
@@ -485,7 +498,7 @@ func newColOperator(
 			// exactly how many rows the sorter should output. Choose a top K sorter,
 			// which uses a heap to avoid storing more rows than necessary.
 			k := uint16(post.Limit + post.Offset)
-			result.op = exec.NewTopKSorter(input, inputTypes, orderingCols, k)
+			result.op, result.isStreaming = exec.NewTopKSorter(input, inputTypes, orderingCols, k), true
 		} else {
 			// No optimizations possible. Default to the standard sort operator.
 			result.op, err = exec.NewSorter(input, inputTypes, orderingCols)
@@ -527,6 +540,8 @@ func newColOperator(
 			if len(wf.Ordering.Columns) > 0 {
 				input, err = exec.NewSorter(input, typs, wf.Ordering.Columns)
 			}
+			// TODO(yuzefovich): when both PARTITION BY and ORDER BY clauses are
+			// omitted, the window function operator is actually streaming.
 		}
 		if err != nil {
 			return result, err
@@ -1335,6 +1350,10 @@ func (s *vectorizedFlowCreator) setupFlow(
 		result, err := newColOperator(ctx, flowCtx, pspec, inputs)
 		if err != nil {
 			return errors.Wrapf(err, "unable to vectorize execution plan")
+		}
+		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
+			!result.isStreaming {
+			return errors.Errorf("non-streaming operator encountered when vectorize=auto")
 		}
 		if err = acc.Grow(ctx, int64(result.memUsage)); err != nil {
 			return errors.Wrapf(err, "not enough memory to setup vectorized plan")

@@ -143,11 +143,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 			); err != nil {
 				// Vectorization attempt failed with an error.
 				returnVectorizationSetupError := false
-				if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAlways {
+				if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeExperimentalAlways {
 					returnVectorizationSetupError = true
-					// If running with VectorizeAlways, this check makes sure that we can
-					// still run SET statements (mostly to set vectorize to off) and the
-					// like.
+					// If running with VectorizeExperimentalAlways, this check makes sure
+					// that we can still run SET statements (mostly to set vectorize to
+					// off) and the like.
 					if len(spec.Processors) == 1 &&
 						spec.Processors[0].Core.LocalPlanNode != nil {
 						rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
