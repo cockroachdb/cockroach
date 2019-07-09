@@ -1047,7 +1047,6 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		}
 
 		if staticMemOp, ok := op.(exec.StaticMemOperator); ok {
-			fmt.Println("GOT SOME STATIC MEMORY USAGE", staticMemOp.DeclareStaticMemoryUsage())
 			if err := vectorizedFlowAcct.Grow(ctx, staticMemOp.DeclareStaticMemoryUsage()); err != nil {
 				return errors.Wrap(err, "not enough memory to construct vectorized operator")
 			}
