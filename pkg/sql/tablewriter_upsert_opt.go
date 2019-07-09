@@ -207,18 +207,18 @@ func (tu *optTableUpserter) updateConflictingRow(
 		return nil
 	}
 
-	// We now need a row that has the shape of the result row.
+	// We now need a row that has the shape of the result row with
+	// the appropriate return columns. Make sure all the fetch columns
+	// are present.
+	tu.resultRow = tu.makeResultFromRow(fetchRow, tu.ru.FetchColIDtoRowIndex)
+
+	// Make sure all the updated columns are present.
 	for colID, returnIndex := range tu.colIDToReturnIndex {
 		// If an update value for a given column exists, use that; else use the
 		// existing value of that column if it has been fetched.
 		rowIndex, ok := tu.ru.UpdateColIDtoRowIndex[colID]
 		if ok {
 			tu.resultRow[returnIndex] = updateValues[rowIndex]
-		} else {
-			rowIndex, ok = tu.ru.FetchColIDtoRowIndex[colID]
-			if ok {
-				tu.resultRow[returnIndex] = fetchRow[rowIndex]
-			}
 		}
 	}
 

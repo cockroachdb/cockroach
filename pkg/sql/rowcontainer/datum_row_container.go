@@ -195,9 +195,7 @@ func (c *RowContainer) allocChunks(ctx context.Context, numChunks int) error {
 func (c *RowContainer) rowSize(row tree.Datums) int64 {
 	rsz := c.fixedColsSize
 	for _, i := range c.varSizedColumns {
-		if i < len(row) && row[i] != nil {
-			rsz += int64(row[i].Size())
-		}
+		rsz += int64(row[i].Size())
 	}
 	return rsz
 }
