@@ -200,7 +200,7 @@ type Factory interface {
 	) (Node, error)
 
 	// ConstructLookupJoin returns a node that preforms a lookup join.
-	// The keyCols are columns from the input used as keys for the columns of the
+	// The eqCols are columns from the input used as keys for the columns of the
 	// index (or a prefix of them); lookupCols are ordinals for the table columns
 	// we are retrieving.
 	//
@@ -212,7 +212,8 @@ type Factory interface {
 		input Node,
 		table cat.Table,
 		index cat.Index,
-		keyCols []ColumnOrdinal,
+		eqCols []ColumnOrdinal,
+		eqColsAreKey bool,
 		lookupCols ColumnOrdinalSet,
 		onCond tree.TypedExpr,
 		reqOrdering OutputOrdering,

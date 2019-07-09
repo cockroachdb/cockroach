@@ -58,7 +58,8 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 						retErr = e
 					} else {
 						// Not an error object. Definitely unexpected.
-						retErr = errors.AssertionFailedf("unexpected error from the vectorized runtime: %v", err)
+						surprisingObject := err
+						retErr = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", surprisingObject)
 					}
 				} else {
 					// Do not recover from the panic not related to the vectorized
