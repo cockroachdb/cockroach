@@ -386,7 +386,8 @@ var varGen = map[string]sessionVar{
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.VectorizeExecModeFromString(s)
 			if !ok {
-				return newVarValueError(`vectorize`, s, "off", "on", "always")
+				return newVarValueError(`vectorize`, s,
+					"off", "auto", "experimental_on", "experimental_always")
 			}
 			m.SetVectorize(mode)
 			return nil
