@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -110,15 +112,17 @@ func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 // the provided transaction. If not, the function will return an error. If so,
 // the function may modify the provided transaction.
 func CanCreateTxnRecord(rec EvalContext, txn *roachpb.Transaction) error {
-	// Provide the transaction's epoch zero original timestamp as its minimum
-	// timestamp. The transaction could not have written a transaction record
-	// previously with a timestamp below this.
-	epochZeroOrigTS, _ := txn.InclusiveTimeBounds()
-	ok, minTS, reason := rec.CanCreateTxnRecord(txn.ID, txn.Key, epochZeroOrigTS)
+	// Provide the transaction's minimum timestamp. The transaction could not
+	// have written a transaction record previously with a timestamp below this.
+	txnMinTS := txn.MinTimestamp
+	if txnMinTS.IsEmpty() {
+		return errors.Errorf("no minimum transaction timestamp provided: %v", txn)
+	}
+	ok, minCommitTS, reason := rec.CanCreateTxnRecord(txn.ID, txn.Key, txnMinTS)
 	if !ok {
 		return roachpb.NewTransactionAbortedError(reason)
 	}
-	txn.Timestamp.Forward(minTS)
+	txn.Timestamp.Forward(minCommitTS)
 	return nil
 }
 
@@ -140,18 +144,38 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 	}
 
 	// Determine whether the transaction record could ever actually be written
-	// in the future. We provide the TxnMeta's timestamp (which we read from an
-	// intent) as the upper bound on the transaction's minimum timestamp. This
-	// may be greater than the transaction's actually original epoch-zero
-	// timestamp, in which case we're subjecting ourselves to false positives
-	// where we don't discover that a transaction is uncommittable, but never
-	// false negatives where we think that a transaction is uncommittable even
-	// when it's not and could later complete.
-	ok, minTS, _ := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.Timestamp)
+	// in the future.
+	txnMinTS := txn.MinTimestamp
+	if txnMinTS.IsEmpty() {
+		// If the transaction metadata's min timestamp is empty then provide its
+		// provisional commit timestamp to CanCreateTxnRecord. If this timestamp
+		// is larger than the transaction's real minimum timestamp then
+		// CanCreateTxnRecord may return false positives (i.e. it determines
+		// that the record could eventually be created when it actually
+		// couldn't) but will never return false negatives (i.e. it will never
+		// determine that the record could not be created when it actually
+		// could). This is important, because it means that we may end up
+		// failing to push a finalized transaction but will never determine that
+		// a transaction is finalized when it still could end up committing.
+		//
+		// TODO(nvanbenschoten): This case is only possible for intents that
+		// were written by a transaction coordinator before v19.2, which means
+		// that we can remove it in v20.1 and replace it with:
+		//
+		//  synthTxnRecord.Status = roachpb.ABORTED
+		//
+		txnMinTS = txn.Timestamp
+
+		// If we don't need to worry about compatibility, disallow this case.
+		if util.RaceEnabled {
+			log.Fatalf(context.TODO(), "no minimum transaction timestamp provided: %v", txn)
+		}
+	}
+	ok, minCommitTS, _ := rec.CanCreateTxnRecord(txn.ID, txn.Key, txnMinTS)
 	if ok {
 		// Forward the provisional commit timestamp by the minimum timestamp that
 		// the transaction would be able to create a transaction record at.
-		synthTxnRecord.Timestamp.Forward(minTS)
+		synthTxnRecord.Timestamp.Forward(minCommitTS)
 	} else {
 		// Mark the transaction as ABORTED because it is uncommittable.
 		synthTxnRecord.Status = roachpb.ABORTED

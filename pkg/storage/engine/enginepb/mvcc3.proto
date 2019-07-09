@@ -88,6 +88,22 @@ message TxnMeta {
   //       transaction commits.
   //
   util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
+  // The timestamp that the transaction was assigned by its gateway when it
+  // began its first epoch. This is the earliest timestamp that the transaction
+  // could have written any of its intents at.
+  //
+  // The timestamp is currently used in two places:
+  // 1. by the transaction itself and by concurrent transactions when
+  //    determining whether this transaction's record can be initially
+  //    written. The timestamp is compared against the transaction's
+  //    corresponding write timestamp cache entry to ensure that a
+  //    finalized transaction can never commit, either after a replay
+  //    or a transaction abort. See CanCreateTxnRecord.
+  // 2. by intent resolution to efficiently scan for intents while
+  //    using a time-bound iterator - i.e. there can be intents to
+  //    resolve up to the timestamp that the txn started with.
+  util.hlc.Timestamp min_timestamp = 9 [(gogoproto.nullable) = false];
+  // The transaction's priority, ratcheted on transaction pushes.
   int32 priority = 6 [(gogoproto.casttype) = "TxnPriority"];
   // A zero-indexed sequence number which is increased on each request
   // sent as part of the transaction. When set in the header of a batch of
@@ -95,6 +111,7 @@ message TxnMeta {
   // last request. Used to provide idempotency and to protect against
   // out-of-order application (by means of a transaction retry).
   int32 sequence = 7 [(gogoproto.casttype) = "TxnSeq"];
+
   reserved 8;
 }
 

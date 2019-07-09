@@ -259,6 +259,17 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 							ID:        txn.txnID,
 							Key:       txn.txnKey,
 							Timestamp: txn.timestamp,
+							// Pass the transaction's current provisional commit timestamp
+							// as its minimum timestamp. This may be an overestimate of the
+							// transaction's real MinTimestamp, but will never be an
+							// underestimate. The effect of this is that the push may have
+							// false positives where it considers the transaction to be
+							// "still eventually committable" (and thus not immediately
+							// pushable) even when in reality it will never be able to
+							// create its transaction record and commit. This is generally
+							// harmless, especially because the txnPushAttempt performs a
+							// high-priority push.
+							MinTimestamp: txn.timestamp,
 						}
 					}
 

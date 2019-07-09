@@ -582,27 +582,36 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 func TestProcessorTxnPushAttempt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ts10 := hlc.Timestamp{WallTime: 10}
+	ts20 := hlc.Timestamp{WallTime: 20}
+	ts25 := hlc.Timestamp{WallTime: 25}
+	ts30 := hlc.Timestamp{WallTime: 30}
+	ts50 := hlc.Timestamp{WallTime: 50}
+	ts60 := hlc.Timestamp{WallTime: 60}
+	ts70 := hlc.Timestamp{WallTime: 70}
+	ts90 := hlc.Timestamp{WallTime: 90}
+
 	// Create a set of transactions.
 	txn1, txn2, txn3 := uuid.MakeV4(), uuid.MakeV4(), uuid.MakeV4()
-	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: hlc.Timestamp{WallTime: 10}}
-	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: hlc.Timestamp{WallTime: 20}}
-	txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: hlc.Timestamp{WallTime: 30}}
+	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts10, MinTimestamp: ts10}
+	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts20, MinTimestamp: ts20}
+	txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts30, MinTimestamp: ts30}
 	txn1Proto := roachpb.Transaction{TxnMeta: txn1Meta, Status: roachpb.PENDING}
 	txn2Proto := roachpb.Transaction{TxnMeta: txn2Meta, Status: roachpb.PENDING}
 	txn3Proto := roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.PENDING}
 
 	// Modifications for test 2.
-	txn1MetaT2Pre := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: hlc.Timestamp{WallTime: 25}}
-	txn1MetaT2Post := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: hlc.Timestamp{WallTime: 50}}
-	txn2MetaT2Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: hlc.Timestamp{WallTime: 60}}
-	txn3MetaT2Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: hlc.Timestamp{WallTime: 70}}
+	txn1MetaT2Pre := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts25, MinTimestamp: ts25}
+	txn1MetaT2Post := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts50, MinTimestamp: ts50}
+	txn2MetaT2Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts60, MinTimestamp: ts60}
+	txn3MetaT2Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts70, MinTimestamp: ts70}
 	txn1ProtoT2 := roachpb.Transaction{TxnMeta: txn1MetaT2Post, Status: roachpb.COMMITTED}
 	txn2ProtoT2 := roachpb.Transaction{TxnMeta: txn2MetaT2Post, Status: roachpb.PENDING}
 	txn3ProtoT2 := roachpb.Transaction{TxnMeta: txn3MetaT2Post, Status: roachpb.PENDING}
 
 	// Modifications for test 3.
-	txn2MetaT3Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: hlc.Timestamp{WallTime: 60}}
-	txn3MetaT3Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: hlc.Timestamp{WallTime: 90}}
+	txn2MetaT3Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts60, MinTimestamp: ts60}
+	txn3MetaT3Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts90, MinTimestamp: ts90}
 	txn2ProtoT3 := roachpb.Transaction{TxnMeta: txn2MetaT3Post, Status: roachpb.ABORTED}
 	txn3ProtoT3 := roachpb.Transaction{TxnMeta: txn3MetaT3Post, Status: roachpb.PENDING}
 

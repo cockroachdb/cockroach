@@ -471,12 +471,13 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Key:       Key("foo"),
-		ID:        uuid.MakeV4(),
-		Epoch:     2,
-		Timestamp: makeTS(20, 21),
-		Priority:  957356782,
-		Sequence:  123,
+		Key:          Key("foo"),
+		ID:           uuid.MakeV4(),
+		Epoch:        2,
+		Timestamp:    makeTS(20, 21),
+		MinTimestamp: makeTS(10, 11),
+		Priority:     957356782,
+		Sequence:     123,
 	},
 	Name:                     "name",
 	Status:                   COMMITTED,
@@ -516,21 +517,28 @@ func TestTransactionUpdate(t *testing.T) {
 	}
 }
 
-func TestTransactionUpdateEpochZero(t *testing.T) {
+func TestTransactionUpdateMinTimestamp(t *testing.T) {
 	txn := nonZeroTxn
 	var txn2 Transaction
 	txn2.Update(&txn)
 
+	if a, e := txn2.MinTimestamp, txn.MinTimestamp; a != e {
+		t.Errorf("expected min timestamp %s; got %s", e, a)
+	}
 	if a, e := txn2.EpochZeroTimestamp, txn.EpochZeroTimestamp; a != e {
-		t.Errorf("expected epoch zero %s; got %s", e, a)
+		t.Errorf("expected epoch zero timestamp %s; got %s", e, a)
 	}
 
 	txn3 := nonZeroTxn
+	txn3.MinTimestamp = nonZeroTxn.MinTimestamp.Prev()
 	txn3.EpochZeroTimestamp = nonZeroTxn.EpochZeroTimestamp.Prev()
 	txn.Update(&txn3)
 
+	if a, e := txn.MinTimestamp, txn3.MinTimestamp; a != e {
+		t.Errorf("expected min timestamp %s; got %s", e, a)
+	}
 	if a, e := txn.EpochZeroTimestamp, txn3.EpochZeroTimestamp; a != e {
-		t.Errorf("expected epoch zero %s; got %s", e, a)
+		t.Errorf("expected epoch zero timestamp %s; got %s", e, a)
 	}
 }
 

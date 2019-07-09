@@ -283,6 +283,8 @@ namespace enginepb {
 void TxnMeta::InitAsDefaultInstance() {
   ::cockroach::storage::engine::enginepb::_TxnMeta_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  ::cockroach::storage::engine::enginepb::_TxnMeta_default_instance_._instance.get_mutable()->min_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
 void TxnMeta::clear_timestamp() {
   if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
@@ -290,11 +292,18 @@ void TxnMeta::clear_timestamp() {
   }
   timestamp_ = NULL;
 }
+void TxnMeta::clear_min_timestamp() {
+  if (GetArenaNoVirtual() == NULL && min_timestamp_ != NULL) {
+    delete min_timestamp_;
+  }
+  min_timestamp_ = NULL;
+}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TxnMeta::kIdFieldNumber;
 const int TxnMeta::kKeyFieldNumber;
 const int TxnMeta::kEpochFieldNumber;
 const int TxnMeta::kTimestampFieldNumber;
+const int TxnMeta::kMinTimestampFieldNumber;
 const int TxnMeta::kPriorityFieldNumber;
 const int TxnMeta::kSequenceFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -323,6 +332,11 @@ TxnMeta::TxnMeta(const TxnMeta& from)
   } else {
     timestamp_ = NULL;
   }
+  if (from.has_min_timestamp()) {
+    min_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.min_timestamp_);
+  } else {
+    min_timestamp_ = NULL;
+  }
   ::memcpy(&epoch_, &from.epoch_,
     static_cast<size_t>(reinterpret_cast<char*>(&sequence_) -
     reinterpret_cast<char*>(&epoch_)) + sizeof(sequence_));
@@ -346,6 +360,7 @@ void TxnMeta::SharedDtor() {
   id_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete timestamp_;
+  if (this != internal_default_instance()) delete min_timestamp_;
 }
 
 void TxnMeta::SetCachedSize(int size) const {
@@ -369,6 +384,10 @@ void TxnMeta::Clear() {
     delete timestamp_;
   }
   timestamp_ = NULL;
+  if (GetArenaNoVirtual() == NULL && min_timestamp_ != NULL) {
+    delete min_timestamp_;
+  }
+  min_timestamp_ = NULL;
   ::memset(&epoch_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&sequence_) -
       reinterpret_cast<char*>(&epoch_)) + sizeof(sequence_));
@@ -464,6 +483,17 @@ bool TxnMeta::MergePartialFromCodedStream(
         break;
       }
 
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(74u /* 74 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_min_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -518,6 +548,11 @@ void TxnMeta::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(7, this->sequence(), output);
   }
 
+  if (this->has_min_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      9, this->_internal_min_timestamp(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.TxnMeta)
@@ -546,6 +581,12 @@ size_t TxnMeta::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *timestamp_);
+  }
+
+  if (this->has_min_timestamp()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *min_timestamp_);
   }
 
   if (this->epoch() != 0) {
@@ -594,6 +635,9 @@ void TxnMeta::MergeFrom(const TxnMeta& from) {
   if (from.has_timestamp()) {
     mutable_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.timestamp());
   }
+  if (from.has_min_timestamp()) {
+    mutable_min_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.min_timestamp());
+  }
   if (from.epoch() != 0) {
     set_epoch(from.epoch());
   }
@@ -627,6 +671,7 @@ void TxnMeta::InternalSwap(TxnMeta* other) {
   key_.Swap(&other->key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(timestamp_, other->timestamp_);
+  swap(min_timestamp_, other->min_timestamp_);
   swap(epoch_, other->epoch_);
   swap(priority_, other->priority_);
   swap(sequence_, other->sequence_);
