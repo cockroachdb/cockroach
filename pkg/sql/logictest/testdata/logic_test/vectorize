@@ -388,3 +388,9 @@ query T
 SELECT ARRAY(SELECT 1) FROM a LIMIT 1
 ----
 {1}
+
+# Regression test for #38752.
+query IIBB
+SELECT count(*), count(*) + 1, count(*) > 4, count(*) + 1 > 4 FROM b
+----
+4  5  false  true
