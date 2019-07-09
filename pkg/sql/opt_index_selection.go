@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -681,23 +680,9 @@ func appendSpansFromConstraintSpan(
 		len(tableDesc.Families) > 1 &&
 		cs.StartKey().Length() == len(tableDesc.PrimaryIndex.ColumnIDs) &&
 		s.Key.Equal(s.EndKey) {
-		neededFamilyIDs := neededColumnFamilyIDs(tableDesc, needed)
+		neededFamilyIDs := sqlbase.NeededColumnFamilyIDs(tableDesc.ColumnIdxMap(), tableDesc.Families, needed)
 		if len(neededFamilyIDs) < len(tableDesc.Families) {
-			for i, familyID := range neededFamilyIDs {
-				var span roachpb.Span
-				span.Key = make(roachpb.Key, len(s.Key))
-				copy(span.Key, s.Key)
-				span.Key = keys.MakeFamilyKey(span.Key, uint32(familyID))
-				span.EndKey = span.Key.PrefixEnd()
-				if i > 0 && familyID == neededFamilyIDs[i-1]+1 {
-					// This column family is adjacent to the previous one. We can merge
-					// the two spans into one.
-					spans[len(spans)-1].EndKey = span.EndKey
-				} else {
-					spans = append(spans, span)
-				}
-			}
-			return spans, nil
+			return sqlbase.SplitSpanIntoSeparateFamilies(s, neededFamilyIDs), nil
 		}
 	}
 
@@ -710,29 +695,4 @@ func appendSpansFromConstraintSpan(
 		return nil, err
 	}
 	return append(spans, s), nil
-}
-
-func neededColumnFamilyIDs(
-	tableDesc *sqlbase.ImmutableTableDescriptor, neededCols exec.ColumnOrdinalSet,
-) []sqlbase.FamilyID {
-	colIdxMap := tableDesc.ColumnIdxMap()
-
-	var needed []sqlbase.FamilyID
-	for i := range tableDesc.Families {
-		family := &tableDesc.Families[i]
-		for _, columnID := range family.ColumnIDs {
-			columnOrdinal := colIdxMap[columnID]
-			if neededCols.Contains(columnOrdinal) {
-				needed = append(needed, family.ID)
-				break
-			}
-		}
-	}
-
-	// TODO(solon): There is a further optimization possible here: if there is at
-	// least one non-nullable column in the needed column families, we can
-	// potentially omit the primary family, since the primary keys are encoded
-	// in all families. (Note that composite datums are an exception.)
-
-	return needed
 }
