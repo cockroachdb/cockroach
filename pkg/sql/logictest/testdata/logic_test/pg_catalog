@@ -1554,7 +1554,7 @@ transaction_isolation                serializable        NULL      NULL        N
 transaction_priority                 normal              NULL      NULL        NULL        string
 transaction_read_only                off                 NULL      NULL        NULL        string
 transaction_status                   NoTxn               NULL      NULL        NULL        string
-vectorize                            off                 NULL      NULL        NULL        string
+vectorize                            auto                NULL      NULL        NULL        string
 
 query TTTTTTT colnames
 SELECT
@@ -1607,7 +1607,7 @@ transaction_isolation                serializable        NULL  user     NULL    
 transaction_priority                 normal              NULL  user     NULL      normal              normal
 transaction_read_only                off                 NULL  user     NULL      off                 off
 transaction_status                   NoTxn               NULL  user     NULL      NoTxn               NoTxn
-vectorize                            off                 NULL  user     NULL      off                 off
+vectorize                            auto                NULL  user     NULL      auto                auto
 
 query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings

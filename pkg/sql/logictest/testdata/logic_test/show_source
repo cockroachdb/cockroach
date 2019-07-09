@@ -68,7 +68,7 @@ transaction_isolation                serializable
 transaction_priority                 normal
 transaction_read_only                off
 transaction_status                   NoTxn
-vectorize                            off
+vectorize                            auto
 
 query T colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]

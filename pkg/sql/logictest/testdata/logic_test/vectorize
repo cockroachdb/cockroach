@@ -225,7 +225,7 @@ SELECT count(*) FROM [EXPLAIN SELECT c.a FROM c JOIN d ON d.b = c.b] WHERE tree 
 1
 
 statement ok
-SET vectorize = always
+SET vectorize = experimental_always
 
 # Simple lookup join.
 query I
@@ -282,7 +282,7 @@ statement ok
 INSERT INTO e VALUES ('abc'), ('xyz')
 
 statement ok
-SET vectorize = always
+SET vectorize = experimental_always
 
 query T
 SELECT * FROM e WHERE x LIKE ''
@@ -336,7 +336,7 @@ xyz
 
 # Test that vectorized stats are collected correctly.
 statement ok
-SET vectorize = on
+SET vectorize = experimental_on
 
 statement ok
 SET distsql = on
@@ -464,7 +464,7 @@ statement ok
 INSERT INTO t38908 VALUES (1)
 
 statement ok
-SET vectorize=always
+SET vectorize=experimental_always
 
 query I
 SELECT * FROM t38908 WHERE x IN (1, 2)
