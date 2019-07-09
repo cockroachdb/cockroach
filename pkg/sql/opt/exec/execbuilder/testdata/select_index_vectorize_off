@@ -4,7 +4,7 @@
 # execution engine.
 
 statement ok
-SET experimental_vectorize=off
+SET vectorize=off
 
 # Check that no extraneous rows are fetched due to excessive batching (#15910)
 # The test is composed of three parts: populate a table, check
