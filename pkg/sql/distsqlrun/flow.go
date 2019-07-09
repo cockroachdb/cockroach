@@ -498,7 +498,7 @@ func (f *Flow) setupProcessors(ctx context.Context, inputSyncs [][]RowSource) er
 func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
-	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
+	if f.EvalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
 		err := f.setupVectorized(ctx, f.vectorizedBoundAccount)
@@ -524,7 +524,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 		f.inboundStreams = nil
 		f.startables = nil
 
-		if f.EvalCtx.SessionData.Vectorize == sessiondata.VectorizeAlways {
+		if f.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAlways {
 			// Only return the error if we are running a local planNode that is an
 			// exception to the rule that failures to set up a vectorized flow when
 			// experimental_vectorize=always should return an error.
