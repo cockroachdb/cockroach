@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -130,38 +129,15 @@ func evalExport(
 
 	e := getDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
 
-	data, dataSize, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
+	data, summary, err := engine.ExportToSst(ctx, e, start, end, exportAllRevisions, io)
 
 	if err != nil {
 		return result.Result{}, err
 	}
 
-	if dataSize == 0 {
+	if summary.DataSize == 0 {
 		reply.Files = []roachpb.ExportResponse_File{}
 		return result.Result{}, nil
-	}
-
-	// TODO(adityamaru): Not the most efficient solution, move RowCounter to C++.
-	// Iterate over the returned SSTable to update the RowCounter.
-	var rows bulk.RowCounter
-	it, err := engine.NewMemSSTIterator(data, false /* verify */)
-	if err != nil {
-		return result.Result{}, err
-	}
-	defer it.Close()
-
-	for it.Seek(start); ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
-			return result.Result{}, err
-		} else if !ok || it.UnsafeKey().Key.Compare(args.EndKey) >= 0 {
-			break
-		}
-
-		if err := rows.Count(it.UnsafeKey().Key); err != nil {
-			return result.Result{}, errors.Wrapf(err, "decoding %s", it.UnsafeKey())
-		}
-
-		rows.BulkOpSummary.DataSize += int64(len(it.UnsafeKey().Key)) + int64(len(it.UnsafeValue()))
 	}
 
 	var checksum []byte
@@ -175,7 +151,7 @@ func evalExport(
 
 	exported := roachpb.ExportResponse_File{
 		Span:     args.Span(),
-		Exported: rows.BulkOpSummary,
+		Exported: summary,
 		Sha512:   checksum,
 	}
 
