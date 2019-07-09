@@ -582,12 +582,5 @@ func (c *CustomFuncs) NeededMutationReturnCols(
 		returningColSet.Add(tabID.ColumnID(primaryIndex.Column(i).Ordinal))
 	}
 
-	// Deal with the the RETURNING * case.
-	if len(projections) == 0 && passthrough.Len() == 0 {
-		for i, n := 0, primaryIndex.ColumnCount(); i < n; i++ {
-			returningColSet.Add(tabID.ColumnID(primaryIndex.Column(i).Ordinal))
-		}
-	}
-
 	return returningColSet
 }
