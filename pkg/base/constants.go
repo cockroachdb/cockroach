@@ -37,4 +37,7 @@ const (
 	// ChunkRaftCommandThresholdBytes is the threshold in bytes at which
 	// to chunk or otherwise limit commands being sent to Raft.
 	ChunkRaftCommandThresholdBytes = 256 * 1000
+
+	// MinRangeMaxBytes is the minimum value for range max bytes.
+	MinRangeMaxBytes = 64 << 10 // 64 KB
 )
