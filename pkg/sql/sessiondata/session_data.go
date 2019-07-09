@@ -260,6 +260,10 @@ const (
 	// VectorizeAlways means that we attempt to vectorize all queries; unsupported
 	// queries will fail. Mostly used for testing.
 	VectorizeAlways
+	// VectorizeStreaming means that that any supported queries that use only
+	// streaming operators (i.e. those that do not require any buffering) will be
+	// run using the columnar execution.
+	VectorizeStreaming
 )
 
 func (m VectorizeExecMode) String() string {
@@ -270,6 +274,8 @@ func (m VectorizeExecMode) String() string {
 		return "on"
 	case VectorizeAlways:
 		return "always"
+	case VectorizeStreaming:
+		return "streaming"
 	default:
 		return fmt.Sprintf("invalid (%d)", m)
 	}
@@ -286,6 +292,8 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 		m = VectorizeOn
 	case "ALWAYS":
 		m = VectorizeAlways
+	case "STREAMING":
+		m = VectorizeStreaming
 	default:
 		return 0, false
 	}
