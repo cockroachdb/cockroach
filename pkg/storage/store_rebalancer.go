@@ -247,7 +247,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 		if err := contextutil.RunWithTimeout(ctx, "transfer lease", sr.rq.processTimeout, func(ctx context.Context) error {
 			return sr.rq.transferLease(ctx, replWithStats.repl, target, replWithStats.qps)
 		}); err != nil {
-			log.Errorf(ctx, "unable to transfer lease to s%d: %v", target.StoreID, err)
+			log.Errorf(ctx, "unable to transfer lease to s%d: %+v", target.StoreID, err)
 			continue
 		}
 		sr.metrics.LeaseTransferCount.Inc(1)
@@ -306,7 +306,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", sr.rq.processTimeout, func(ctx context.Context) error {
 			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, targets)
 		}); err != nil {
-			log.Errorf(ctx, "unable to relocate range to %v: %v", targets, err)
+			log.Errorf(ctx, "unable to relocate range to %v: %+v", targets, err)
 			continue
 		}
 		sr.metrics.RangeRebalanceCount.Inc(1)

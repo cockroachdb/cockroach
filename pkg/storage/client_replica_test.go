@@ -237,7 +237,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	initVal := []byte("initVal")
 	err := store.DB().Put(context.TODO(), key, initVal)
 	if err != nil {
-		t.Fatalf("failed to put: %s", err)
+		t.Fatalf("failed to put: %+v", err)
 	}
 
 	waitPut := make(chan struct{})
@@ -268,7 +268,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 			updatedVal := []byte("updatedVal")
 			if err := txn.CPut(ctx, key, updatedVal, "initVal"); err != nil {
-				log.Errorf(context.TODO(), "failed put value: %s", err)
+				log.Errorf(context.TODO(), "failed put value: %+v", err)
 				return err
 			}
 
@@ -319,7 +319,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	if _, err := client.SendWrappedWith(
 		context.Background(), store.TestSender(), h, &roachpb.GetRequest{RequestHeader: requestHeader},
 	); err != nil {
-		t.Fatalf("failed to get: %s", err)
+		t.Fatalf("failed to get: %+v", err)
 	}
 	// Write to the restart key so that the Writer's txn must restart.
 	putReq := &roachpb.PutRequest{
@@ -327,7 +327,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		Value:         roachpb.MakeValueFromBytes([]byte("restart-value")),
 	}
 	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), h, putReq); err != nil {
-		t.Fatalf("failed to put: %s", err)
+		t.Fatalf("failed to put: %+v", err)
 	}
 
 	// Wait until the writer restarts the txn.
@@ -347,7 +347,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		t.Fatal("unexpected success of get")
 	}
 	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), h, putReq); err != nil {
-		t.Fatalf("failed to put: %s", err)
+		t.Fatalf("failed to put: %+v", err)
 	}
 
 	close(waitSecondGet)
@@ -475,7 +475,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 			rs, preRs, err := client.RangeLookup(context.Background(), store.TestSender(),
 				test.key.AsRawKey(), roachpb.READ_UNCOMMITTED, test.maxResults-1, true /* prefetchReverse */)
 			if err != nil {
-				t.Fatalf("LookupRange error: %s", err)
+				t.Fatalf("LookupRange error: %+v", err)
 			}
 
 			// Checks the results count.
@@ -805,10 +805,10 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		l.setFilter(false, nil)
 
 		if err := <-renewalErrCh; err != nil {
-			t.Errorf("unexpected error from lease renewal: %s", err)
+			t.Errorf("unexpected error from lease renewal: %+v", err)
 		}
 		if err := <-transferErrCh; err != nil {
-			t.Errorf("unexpected error from lease transfer: %s", err)
+			t.Errorf("unexpected error from lease transfer: %+v", err)
 		}
 	})
 
@@ -879,7 +879,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		l.setFilter(false, nil)
 
 		if err := <-renewalErrCh; err != nil {
-			t.Errorf("unexpected error from lease renewal: %s", err)
+			t.Errorf("unexpected error from lease renewal: %+v", err)
 		}
 	})
 }
@@ -1009,7 +1009,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	if err := mtc.dbs[0].AdminTransferLease(
 		context.TODO(), keyMinReplica0.Desc().StartKey.AsRawKey(), mtc.stores[1].StoreID(),
 	); err != nil {
-		t.Fatalf("unable to transfer lease to replica 1: %s", err)
+		t.Fatalf("unable to transfer lease to replica 1: %+v", err)
 	}
 	// Wait for all replicas to process.
 	testutils.SucceedsSoon(t, func() error {
@@ -1588,7 +1588,7 @@ func TestRangeInfo(t *testing.T) {
 		}
 		if err = mtc.dbs[0].AdminTransferLease(context.TODO(),
 			r.Desc().StartKey.AsRawKey(), replDesc.StoreID); err != nil {
-			t.Fatalf("unable to transfer lease to replica %s: %s", r, err)
+			t.Fatalf("unable to transfer lease to replica %s: %+v", r, err)
 		}
 	}
 	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
@@ -1641,7 +1641,7 @@ func TestDrainRangeRejection(t *testing.T) {
 		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); !testutils.IsError(err, "store is draining") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("unexpected error: %+v", err)
 	}
 }
 

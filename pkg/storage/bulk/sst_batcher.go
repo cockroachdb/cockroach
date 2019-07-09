@@ -136,7 +136,7 @@ func (b *SSTBatcher) shouldFlush(ctx context.Context, nextKey roachpb.Key) bool 
 		} else {
 			r, err := b.rc.GetCachedRangeDescriptor(k, false /* inverted */)
 			if err != nil {
-				log.Warningf(ctx, "failed to determine where to split SST: %v", err)
+				log.Warningf(ctx, "failed to determine where to split SST: %+v", err)
 			} else if r != nil {
 				b.flushKey = r.EndKey.AsRawKey()
 				log.VEventf(ctx, 3, "building sstable that will flush before %v", b.flushKey)

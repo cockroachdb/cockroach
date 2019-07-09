@@ -49,7 +49,7 @@ func TestRocksDBErrorSafeMessage(t *testing.T) {
 	}
 	rErr, ok := errors.Cause(err).(*RocksDBError)
 	if !ok {
-		t.Fatalf("unexpected error of cause %T: %s", errors.Cause(err), err)
+		t.Fatalf("unexpected error of cause %T: %+v", errors.Cause(err), err)
 	}
 
 	for _, test := range []struct {

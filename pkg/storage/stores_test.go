@@ -143,7 +143,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 
 		replica, err := NewReplica(desc, store, 0)
 		if err != nil {
-			t.Fatalf("unexpected error when creating replica: %v", err)
+			t.Fatalf("unexpected error when creating replica: %+v", err)
 		}
 		err2 := store.AddReplica(replica)
 		if err2 != nil {
@@ -518,7 +518,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := ls.SynthesizeClusterVersion(ctx); !testutils.IsError(err, expErr) {
-				t.Fatalf("unexpected error: %v", err)
+				t.Fatalf("unexpected error: %+v", err)
 			}
 		})
 	}

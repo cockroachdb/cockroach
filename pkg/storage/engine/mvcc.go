@@ -2553,7 +2553,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 			)
 		}
 		if err != nil {
-			log.Warningf(ctx, "failed to resolve intent for key %q: %v", key.Key, err)
+			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", key.Key, err)
 		} else if ok {
 			num++
 		}

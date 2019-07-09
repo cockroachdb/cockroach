@@ -147,7 +147,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 		next.WallTime -= int64(targetDuration)
 		if err != nil {
 			if p.everyClockLog.ShouldLog() {
-				log.Warningf(ctx, "unable to move closed timestamp forward: %s", err)
+				log.Warningf(ctx, "unable to move closed timestamp forward: %+v", err)
 			}
 			// Broadcast even if nothing new was queued, so that the subscribers
 			// loop to check their client's context.

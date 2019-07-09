@@ -470,7 +470,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); !testutils.IsError(err, "boom") {
-		t.Fatalf("did not get expected error: %v", err)
+		t.Fatalf("did not get expected error: %+v", err)
 	}
 
 	// After the aborted transaction, r.Desc was not updated.
@@ -1621,7 +1621,7 @@ func getRangeMetadata(
 	rs, _, err := client.RangeLookup(context.TODO(), sender, key.AsRawKey(),
 		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
-		t.Fatalf("error getting range metadata: %s", err)
+		t.Fatalf("error getting range metadata: %+v", err)
 	}
 	return rs[0]
 }
@@ -1709,7 +1709,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	// This should fail because the descriptor is stale.
 	expectedErr := `change replicas of r1 failed: descriptor changed: \[expected\]`
 	if err := addReplica(2, origDesc); !testutils.IsError(err, expectedErr) {
-		t.Fatalf("got unexpected error: %v", err)
+		t.Fatalf("got unexpected error: %+v", err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
@@ -3793,7 +3793,7 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 	); !testutils.IsError(err, expErr) {
 		t.Fatalf("expected %s; got %v", expErr, err)
 	} else if !storage.IsSnapshotError(err) {
-		t.Fatalf("expected preemptive snapshot failed error; got %T: %v", err, err)
+		t.Fatalf("expected preemptive snapshot failed error; got %T: %+v", err, err)
 	}
 }
 
@@ -4212,7 +4212,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 			LeaseIndex:         leaseIndex0,
 		})
 		if err != nil {
-			t.Fatalf("%d: %s", i, err)
+			t.Fatalf("%d: %+v", i, err)
 		}
 	}
 
@@ -4259,7 +4259,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	}
 	for i, errCh := range errChs {
 		if err := <-errCh; err != nil {
-			t.Fatalf("%d: %s", i, err)
+			t.Fatalf("%d: %+v", i, err)
 		}
 	}
 

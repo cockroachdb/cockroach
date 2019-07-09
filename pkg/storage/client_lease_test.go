@@ -102,7 +102,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	// re-acquire, then check types again.
 	mtc.advanceClock(context.TODO())
 	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
-		t.Fatalf("failed to increment: %s", err)
+		t.Fatalf("failed to increment: %+v", err)
 	}
 
 	// We started with epoch ranges enabled, so verify we have an epoch lease.
@@ -119,7 +119,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 
 	mtc.advanceClock(context.TODO())
 	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
-		t.Fatalf("failed to increment: %s", err)
+		t.Fatalf("failed to increment: %+v", err)
 	}
 
 	// Verify we end up with an expiration lease on restart.
@@ -136,7 +136,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 
 	mtc.advanceClock(context.TODO())
 	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
-		t.Fatalf("failed to increment: %s", err)
+		t.Fatalf("failed to increment: %+v", err)
 	}
 
 	// Verify we end up with an epoch lease on restart.
@@ -164,7 +164,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
-		t.Fatalf("failed to increment: %s", err)
+		t.Fatalf("failed to increment: %+v", err)
 	}
 
 	mtc.stopStore(0)

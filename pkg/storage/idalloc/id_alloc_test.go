@@ -48,7 +48,7 @@ func newTestAllocator(t testing.TB) (*localtestcluster.LocalTestCluster, *idallo
 	)
 	if err != nil {
 		s.Stop()
-		t.Errorf("failed to create idAllocator: %v", err)
+		t.Errorf("failed to create idAllocator: %+v", err)
 	}
 	return s, idAlloc
 }
@@ -110,7 +110,7 @@ func TestNewAllocatorInvalidBlockSize(t *testing.T) {
 		nil /* idKey */, nil, /* db */
 		0 /* blockSize */, nil, /* stopper */
 	); !testutils.IsError(err, expErr) {
-		t.Errorf("expected err: %s, got: %v", expErr, err)
+		t.Errorf("expected err: %s, got: %+v", expErr, err)
 	}
 }
 
@@ -225,6 +225,6 @@ func TestAllocateWithStopper(t *testing.T) {
 	s.Stop() // not deferred.
 
 	if _, err := idAlloc.Allocate(context.Background()); !testutils.IsError(err, "system is draining") {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf("unexpected error: %+v", err)
 	}
 }

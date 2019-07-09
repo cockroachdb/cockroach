@@ -607,7 +607,7 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 			intents := roachpb.AsIntents(et.Txn.IntentSpans, &et.Txn)
 			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, &et.Txn, intents, now, et.Poison, nil); err != nil {
 				if ir.every.ShouldLog() {
-					log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
+					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
 				}
 			}
 		}); err != nil {
@@ -722,7 +722,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			err := ir.cleanupFinishedTxnIntents(ctx, rangeID, txn, intents, now, false /* poison */, onCleanupComplete)
 			if err != nil {
 				if ir.every.ShouldLog() {
-					log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
+					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
 				}
 			}
 		},
@@ -815,7 +815,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 			}
 			if err != nil {
 				if ir.every.ShouldLog() {
-					log.Warningf(ctx, "failed to gc transaction record: %v", err)
+					log.Warningf(ctx, "failed to gc transaction record: %+v", err)
 				}
 			}
 		})
@@ -846,14 +846,14 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 	rKey, err := keys.Addr(key)
 	if err != nil {
 		if ir.every.ShouldLog() {
-			log.Warningf(ctx, "failed to resolve addr for key %q: %v", key, err)
+			log.Warningf(ctx, "failed to resolve addr for key %q: %+v", key, err)
 		}
 		return 0
 	}
 	rDesc, err := ir.rdc.LookupRangeDescriptor(ctx, rKey)
 	if err != nil {
 		if ir.every.ShouldLog() {
-			log.Warningf(ctx, "failed to look up range descriptor for key %q: %v", key, err)
+			log.Warningf(ctx, "failed to look up range descriptor for key %q: %+v", key, err)
 		}
 		return 0
 	}

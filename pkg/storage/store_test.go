@@ -422,7 +422,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 		// Bootstrap with a fake ident.
 		if err := InitEngine(ctx, eng, testIdent, cfg.Settings.Version.BootstrapVersion()); err != nil {
-			t.Errorf("error bootstrapping store: %s", err)
+			t.Errorf("error bootstrapping store: %+v", err)
 		}
 
 		// Verify we can read the store ident after a flush.
@@ -430,7 +430,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := ReadStoreIdent(ctx, eng); err != nil {
-			t.Fatalf("unable to read store ident: %s", err)
+			t.Fatalf("unable to read store ident: %+v", err)
 		}
 
 		// Bootstrap the system ranges.
@@ -446,27 +446,27 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 			ctx, eng, kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
 			1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 		); err != nil {
-			t.Errorf("failure to create first range: %s", err)
+			t.Errorf("failure to create first range: %+v", err)
 		}
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped range.
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	if err := store.Start(ctx, stopper); err != nil {
-		t.Fatalf("failure initializing bootstrapped store: %s", err)
+		t.Fatalf("failure initializing bootstrapped store: %+v", err)
 	}
 
 	for i := 1; i <= store.ReplicaCount(); i++ {
 		r, err := store.GetReplica(roachpb.RangeID(i))
 		if err != nil {
-			t.Fatalf("failure fetching range %d: %s", i, err)
+			t.Fatalf("failure fetching range %d: %+v", i, err)
 		}
 		rs := r.GetMVCCStats()
 
 		// Stats should agree with a recomputation.
 		now := r.store.Clock().Now()
 		if ms, err := rditer.ComputeStatsForRange(r.Desc(), eng, now.WallTime); err != nil {
-			t.Errorf("failure computing range's stats: %s", err)
+			t.Errorf("failure computing range's stats: %+v", err)
 		} else if ms != rs {
 			t.Errorf("expected range's stats to agree with recomputation: %s", pretty.Diff(ms, rs))
 		}
@@ -485,7 +485,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 
 	// Put some random garbage into the engine.
 	if err := eng.Put(engine.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
-		t.Errorf("failure putting key foo into engine: %s", err)
+		t.Errorf("failure putting key foo into engine: %+v", err)
 	}
 	cfg := TestStoreConfig(nil)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
@@ -495,14 +495,14 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	switch err := errors.Cause(store.Start(ctx, stopper)); err.(type) {
 	case *NotBootstrappedError:
 	default:
-		t.Errorf("unexpected error initializing un-bootstrapped store: %v", err)
+		t.Errorf("unexpected error initializing un-bootstrapped store: %+v", err)
 	}
 
 	// Bootstrap should fail on non-empty engine.
 	switch err := errors.Cause(InitEngine(ctx, eng, testIdent, cfg.Settings.Version.BootstrapVersion())); err.(type) {
 	case *NotBootstrappedError:
 	default:
-		t.Errorf("unexpected error bootstrapping non-empty store: %v", err)
+		t.Errorf("unexpected error bootstrapping non-empty store: %+v", err)
 	}
 }
 
@@ -1892,7 +1892,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	if ok, err := engine.MVCCGetProto(
 		context.Background(), store.Engine(), txnKey, hlc.Timestamp{}, &txn, engine.MVCCGetOptions{},
 	); !ok || err != nil {
-		t.Fatalf("not found or err: %s", err)
+		t.Fatalf("not found or err: %+v", err)
 	}
 	if txn.Status != roachpb.ABORTED {
 		t.Errorf("expected pushee to be aborted; got %s", txn.Status)
@@ -2756,7 +2756,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 		t.Fatalf("could not re-add placeholder after removal, got %s", err)
 	}
 	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing KeyRange") {
-		t.Fatalf("should not be able to add ReplicaPlaceholder for the same key twice, got: %v", err)
+		t.Fatalf("should not be able to add ReplicaPlaceholder for the same key twice, got: %+v", err)
 	}
 
 	// Test cannot double delete a placeholder.
@@ -2778,7 +2778,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 
 	// Test that placeholder cannot clobber existing replica.
 	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing KeyRange") {
-		t.Fatalf("should not be able to add ReplicaPlaceholder when Replica already exists, got: %v", err)
+		t.Fatalf("should not be able to add ReplicaPlaceholder when Replica already exists, got: %+v", err)
 	}
 
 	// Test that Placeholder deletion doesn't delete replicas.

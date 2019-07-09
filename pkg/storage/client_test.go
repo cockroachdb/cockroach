@@ -1239,7 +1239,7 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 		} else {
 			results[i], err = val.GetInt()
 			if err != nil {
-				log.Errorf(context.TODO(), "engine %d: error decoding %s from key %s: %s", i, val, key, err)
+				log.Errorf(context.TODO(), "engine %d: error decoding %s from key %s: %+v", i, val, key, err)
 			}
 		}
 	}

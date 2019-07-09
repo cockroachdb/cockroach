@@ -543,7 +543,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	}
 	replica, err := NewReplica(&rg, store, roachpb.ReplicaID(0))
 	if err != nil {
-		t.Fatalf("make replica error : %s", err)
+		t.Fatalf("make replica error : %+v", err)
 	}
 	replica.leaseholderStats = newReplicaStats(store.Clock(), nil)
 

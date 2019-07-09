@@ -654,7 +654,7 @@ func TestConcurrentBatch(t *testing.T) {
 		RocksDBCache{},
 	)
 	if err != nil {
-		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
+		t.Fatalf("could not create new rocksdb db instance at %s: %+v", dir, err)
 	}
 	defer db.Close()
 
@@ -848,7 +848,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 		RocksDBCache{},
 	)
 	if err != nil {
-		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
+		t.Fatalf("could not create new rocksdb db instance at %s: %+v", dir, err)
 	}
 	defer rocksdb.Close()
 
@@ -1040,7 +1040,7 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 		RocksDBCache{},
 	)
 	if err != nil {
-		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
+		t.Fatalf("could not create new rocksdb db instance at %s: %+v", dir, err)
 	}
 	defer db.Close()
 
@@ -1254,7 +1254,7 @@ func TestRocksDBFileNotFoundError(t *testing.T) {
 		RocksDBCache{},
 	)
 	if err != nil {
-		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
+		t.Fatalf("could not create new rocksdb db instance at %s: %+v", dir, err)
 	}
 	defer db.Close()
 

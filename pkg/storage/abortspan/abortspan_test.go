@@ -70,7 +70,7 @@ func TestAbortSpanPutGetClearData(t *testing.T) {
 		Priority:  testTxnPriority,
 	}
 	if err := sc.Put(context.Background(), e, nil, testTxnID, &entry); err != nil {
-		t.Errorf("unexpected error putting response: %s", err)
+		t.Errorf("unexpected error putting response: %+v", err)
 	}
 
 	tryHit := func(expAbort bool, expEntry roachpb.AbortSpanEntry) {
@@ -105,6 +105,6 @@ func TestAbortSpanEmptyParams(t *testing.T) {
 	}
 	// Put value for test response.
 	if err := sc.Put(context.Background(), e, nil, testTxnID, &entry); err != nil {
-		t.Errorf("unexpected error putting response: %s", err)
+		t.Errorf("unexpected error putting response: %+v", err)
 	}
 }

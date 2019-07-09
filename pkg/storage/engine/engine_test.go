@@ -274,7 +274,7 @@ func TestEngineBatch(t *testing.T) {
 			// Run it once with individual operations and remember the result.
 			for i, op := range currentBatch {
 				if err := apply(engine, op); err != nil {
-					t.Errorf("%d: op %v: %v", i, op, err)
+					t.Errorf("%d: op %v: %+v", i, op, err)
 					continue
 				}
 			}
@@ -320,7 +320,7 @@ func TestEngineBatch(t *testing.T) {
 			iter.Close()
 			// Commit the batch and try getting the value from the engine.
 			if err := b.Commit(false /* sync */); err != nil {
-				t.Errorf("%d: %v", i, err)
+				t.Errorf("%d: %+v", i, err)
 				continue
 			}
 			actualValue = get(engine, key)
@@ -448,7 +448,7 @@ func TestEngineMerge(t *testing.T) {
 		for _, tc := range testcases {
 			for i, update := range tc.merges {
 				if err := engine.Merge(tc.testKey, update); err != nil {
-					t.Fatalf("%d: %v", i, err)
+					t.Fatalf("%d: %+v", i, err)
 				}
 			}
 			result, _ := engine.Get(tc.testKey)
@@ -483,7 +483,7 @@ func TestEngineScan1(t *testing.T) {
 		keyMap := map[string][]byte{}
 		for _, c := range testCases {
 			if err := engine.Put(c.key, c.value); err != nil {
-				t.Errorf("could not put key %q: %v", c.key, err)
+				t.Errorf("could not put key %q: %+v", c.key, err)
 			}
 			keyMap[string(c.key.Key)] = c.value
 		}
@@ -495,20 +495,20 @@ func TestEngineScan1(t *testing.T) {
 
 		keyvals, err := Scan(engine, mvccKey("chinese"), mvccKey("german"), 0)
 		if err != nil {
-			t.Fatalf("could not run scan: %v", err)
+			t.Fatalf("could not run scan: %+v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
 
 		// Check an end of range which does not equal an existing key.
 		keyvals, err = Scan(engine, mvccKey("chinese"), mvccKey("german1"), 0)
 		if err != nil {
-			t.Fatalf("could not run scan: %v", err)
+			t.Fatalf("could not run scan: %+v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:5], keyMap, keyvals)
 
 		keyvals, err = Scan(engine, mvccKey("chinese"), mvccKey("german"), 2)
 		if err != nil {
-			t.Fatalf("could not run scan: %v", err)
+			t.Fatalf("could not run scan: %+v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:3], keyMap, keyvals)
 
@@ -519,7 +519,7 @@ func TestEngineScan1(t *testing.T) {
 		for _, startKey := range startKeys {
 			keyvals, err = Scan(engine, startKey, mvccKey(roachpb.RKeyMax), 0)
 			if err != nil {
-				t.Fatalf("could not run scan: %v", err)
+				t.Fatalf("could not run scan: %+v", err)
 			}
 			ensureRangeEqual(t, sortedKeys, keyMap, keyvals)
 		}

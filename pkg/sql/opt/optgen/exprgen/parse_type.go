@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // ParseType parses a string describing a type.
@@ -32,7 +33,7 @@ func ParseType(typeStr string) (*types.T, error) {
 		// some special syntax.
 		parsed, err := parser.ParseOne(fmt.Sprintf("PREPARE x ( %s ) AS SELECT 1", s))
 		if err != nil {
-			return nil, fmt.Errorf("cannot parse %s as a type: %s", typeStr, err)
+			return nil, errors.Wrapf(err, "cannot parse %s as a type", typeStr)
 		}
 		colTypes := parsed.AST.(*tree.Prepare).Types
 		contents := make([]types.T, len(colTypes))
