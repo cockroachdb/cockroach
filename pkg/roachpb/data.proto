@@ -321,6 +321,15 @@ message Transaction {
   // orig_timestamp needs to be used as a lower bound timestamp for the
   // time-bound iterator used to resolve intents - i.e. there can be intents to
   // resolve up to the timestamp that the txn started with.
+  //
+  // TODO(nvanbenschoten): this second paragraph is no longer true. The only
+  // place that relies on orig_timestamp being fixed over an entire epoch is
+  // v19.1 nodes use of Transaction.InclusiveTimeBounds. In v20.1 we can remove
+  // this field and update orig_timestamp in place, removing a lot of awkward
+  // code where we forward orig_timestamp by refreshed_timestamp. Doing so will
+  // also address the TODOs in cmd_refresh.go and cmd_refresh_range.go.
+  // Additionally, it will present a good opportunity to rename the field to
+  // read_timestamp.
   util.hlc.Timestamp refreshed_timestamp = 15 [(gogoproto.nullable) = false];
   // Deprecated min timestamp was used to keep track of the earliest timestamp
   // that any epoch of the transaction used. This was set only if the
