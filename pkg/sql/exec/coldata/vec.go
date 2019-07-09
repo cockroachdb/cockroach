@@ -142,6 +142,9 @@ type Vec interface {
 
 	// SetNulls sets the nulls vector for this column.
 	SetNulls(*Nulls)
+
+	// SizeBytes returns how many bytes of memory are used to store this object.
+	SizeBytes() int64
 }
 
 var _ Vec = &memColumn{}
@@ -244,4 +247,34 @@ func (m *memColumn) Nulls() *Nulls {
 
 func (m *memColumn) SetNulls(n *Nulls) {
 	m.nulls = *n
+}
+
+func (m *memColumn) SizeBytes() int64 {
+	switch m.t {
+	case types.Bool:
+		return int64(1 * len(m.Bool()))
+	case types.Bytes:
+		// We don't know without looking at the data in the batch to see how
+		// much space each byte array takes up. Use some default value as a
+		// heuristic right now.
+		return int64(100 * len(m.Bytes()))
+	case types.Int8:
+		return int64(1 * len(m.Int8()))
+	case types.Int16:
+		return int64(2 * len(m.Int16()))
+	case types.Int32:
+		return int64(4 * len(m.Int32()))
+	case types.Int64:
+		return int64(8 * len(m.Int64()))
+	case types.Float32:
+		return int64(4 * len(m.Float32()))
+	case types.Float64:
+		return int64(8 * len(m.Float64()))
+	case types.Decimal:
+		// Similar to byte arrays, we can't tell how much space is used
+		// to hold the arbitrary precision decimal objects.
+		return int64(50 * len(m.Decimal()))
+	default:
+		panic(fmt.Sprintf("unhandled type %s", m.t))
+	}
 }

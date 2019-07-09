@@ -226,6 +226,12 @@ func (bg *mjBufferedGroup) Reset(types []types.T, length int) {
 	panic("Reset([]types.T, int) should not be called on mjBufferedGroup")
 }
 
+// SizeBytes is not implemented because it is not being used right now
+// on mjBufferedGroups.
+func (bg *mjBufferedGroup) SizeBytes() int64 {
+	panic("SizeBytes() should not be called on mjBufferedGroup")
+}
+
 // reset resets the state of the buffered group so that we can reuse the
 // underlying memory.
 func (bg *mjBufferedGroup) reset() {
