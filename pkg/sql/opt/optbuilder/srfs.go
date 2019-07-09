@@ -87,14 +87,14 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		// checking.
 		_, alias, err := tree.ComputeColNameInternal(b.semaCtx.SearchPath, expr)
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		texpr := inScope.resolveType(expr, types.Any)
 
 		var def *tree.FunctionDefinition
 		if funcExpr, ok := texpr.(*tree.FuncExpr); ok {
 			if def, err = funcExpr.Func.Resolve(b.semaCtx.SearchPath); err != nil {
-				panic(builderError{err})
+				panic(err)
 			}
 		}
 

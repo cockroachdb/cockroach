@@ -155,7 +155,7 @@ func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 		if err != nil {
 			wrapped := pgerror.Wrapf(err, pgcode.Syntax,
 				"failed to parse underlying query from view %q", view.Name())
-			panic(builderError{wrapped})
+			panic(wrapped)
 		}
 
 		sel, ok = stmt.AST.(*tree.Select)
@@ -387,7 +387,7 @@ func (b *Builder) buildScan(
 					} else {
 						err = errors.Errorf("index [%d] not found", indexFlags.IndexID)
 					}
-					panic(builderError{err})
+					panic(err)
 				}
 				private.Flags.ForceIndex = true
 				private.Flags.Index = idx
@@ -417,7 +417,7 @@ func (b *Builder) addCheckConstraintsToScan(scope *scope, tabMeta *opt.TableMeta
 		}
 		expr, err := parser.ParseExpr(string(checkConstraint.Constraint))
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 
 		texpr := scope.resolveAndRequireType(expr, types.Bool)
@@ -755,13 +755,11 @@ func (b *Builder) processWindowDefs(sel *tree.SelectClause, fromScope *scope) {
 	for i := range sel.Window {
 		for j := i + 1; j < len(sel.Window); j++ {
 			if sel.Window[i].Name == sel.Window[j].Name {
-				panic(builderError{
-					pgerror.Newf(
-						pgcode.Windowing,
-						"window %q is already defined",
-						sel.Window[i].Name,
-					),
-				})
+				panic(pgerror.Newf(
+					pgcode.Windowing,
+					"window %q is already defined",
+					sel.Window[i].Name,
+				))
 			}
 		}
 	}
@@ -900,7 +898,7 @@ func (b *Builder) buildFromWithLateral(tables tree.TableExprs, inScope *scope) (
 func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
 	ts, err := tree.EvalAsOfTimestamp(asOf, b.semaCtx, b.evalCtx)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	if b.semaCtx.AsOfTimestamp == nil {

@@ -304,14 +304,14 @@ func (s *scope) resolveCTE(name *tree.TableName) *cteSource {
 //
 // The desired type is a suggestion, but resolveType does not throw an error if
 // the resolved type turns out to be different from desired (in contrast to
-// resolveAndRequireType, which panics with a builderError). If the result
-// type is types.Unknown, then resolveType will wrap the expression in a type
-// cast in order to produce the desired type.
+// resolveAndRequireType, which throws an error). If the result type is
+// types.Unknown, then resolveType will wrap the expression in a type cast in
+// order to produce the desired type.
 func (s *scope) resolveType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheck(expr, s.builder.semaCtx, desired)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	return s.ensureNullType(texpr, desired)
 }
@@ -322,15 +322,15 @@ func (s *scope) resolveType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 // structs.
 //
 // If the resolved type does not match the desired type, resolveAndRequireType
-// panics with a builderError (in contrast to resolveType, which returns the
-// typed expression with no error). If the result type is types.Unknown, then
+// throws an error (in contrast to resolveType, which returns the typed
+// expression with no error). If the result type is types.Unknown, then
 // resolveType will wrap the expression in a type cast in order to produce the
 // desired type.
 func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, s.context)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	return s.ensureNullType(texpr, desired)
 }
@@ -540,7 +540,7 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 // will be transferred to the correct scope by buildAggregateFunction.
 func (s *scope) startAggFunc() *scope {
 	if s.groupby.inAgg {
-		panic(builderError{sqlbase.NewAggInAggError()})
+		panic(sqlbase.NewAggInAggError())
 	}
 	s.groupby.inAgg = true
 
@@ -837,21 +837,21 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		return s.VisitPre(vn)
 
 	case *tree.ColumnItem:
 		colI, err := t.Resolve(s.builder.ctx, s)
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		return false, colI.(*scopeColumn)
 
 	case *tree.FuncExpr:
 		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 
 		if isGenerator(def) && s.replaceSRFs {
@@ -948,7 +948,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 	expr := f.Walk(s)
 	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	srfScope := s.push()
@@ -1004,14 +1004,14 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 			s.builder.semaCtx.Properties.Require("FILTER", tree.RejectSpecial)
 			_, err := tree.TypeCheck(expr.(*tree.FuncExpr).Filter, s.builder.semaCtx, types.Any)
 			if err != nil {
-				panic(builderError{err})
+				panic(err)
 			}
 		}()
 	}
 
 	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	if typedFunc == tree.DNull {
 		return tree.DNull
@@ -1034,7 +1034,7 @@ func (s *scope) lookupWindowDef(name tree.Name) *tree.WindowDef {
 			return s.windowDefs[i]
 		}
 	}
-	panic(builderError{pgerror.Newf(pgcode.UndefinedObject, "window %q does not exist", name)})
+	panic(pgerror.Newf(pgcode.UndefinedObject, "window %q does not exist", name))
 }
 
 func (s *scope) constructWindowDef(def tree.WindowDef) *tree.WindowDef {
@@ -1044,7 +1044,7 @@ func (s *scope) constructWindowDef(def tree.WindowDef) *tree.WindowDef {
 		// We copy the referenced window specification, and modify it if necessary.
 		result, err := tree.OverrideWindowDef(s.lookupWindowDef(def.RefName), def)
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		return &result
 	case def.Name != "":
@@ -1061,7 +1061,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 	f, def = s.replaceCount(f, def)
 
 	if err := tree.CheckIsWindowOrAgg(def); err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 
 	// We need to save and restore the previous value of the field in
@@ -1078,7 +1078,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 
 	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	if typedFunc == tree.DNull {
 		return tree.DNull
@@ -1105,14 +1105,14 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 	}
 	for i, e := range f.WindowDef.OrderBy {
 		if e.OrderType != tree.OrderByColumn {
-			panic(builderError{errOrderByIndexInWindow})
+			panic(errOrderByIndexInWindow)
 		}
 		typedExpr := s.resolveType(e.Expr, types.Any)
 		f.WindowDef.OrderBy[i].Expr = typedExpr
 	}
 	if f.WindowDef.Frame != nil {
 		if err := analyzeWindowFrame(s, f.WindowDef); err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 	}
 
@@ -1225,7 +1225,7 @@ func (s *scope) replaceCount(
 	}
 	vn, err := vn.NormalizeVarName()
 	if err != nil {
-		panic(builderError{err})
+		panic(err)
 	}
 	f.Exprs[0] = vn
 
@@ -1245,7 +1245,7 @@ func (s *scope) replaceCount(
 
 				newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
 				if err != nil {
-					panic(builderError{err})
+					panic(err)
 				}
 
 				return e, newDef
@@ -1266,11 +1266,11 @@ func (s *scope) replaceCount(
 			// We call TypeCheck to fill in FuncExpr internals. This is a fixed
 			// expression; we should not hit an error here.
 			if _, err := e.TypeCheck(&tree.SemaContext{}, types.Any); err != nil {
-				panic(builderError{err})
+				panic(err)
 			}
 			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
 			if err != nil {
-				panic(builderError{err})
+				panic(err)
 			}
 			e.Filter = f.Filter
 			e.WindowDef = f.WindowDef

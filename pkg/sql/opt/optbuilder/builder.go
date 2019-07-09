@@ -12,8 +12,6 @@ package optbuilder
 
 import (
 	"context"
-	"fmt"
-	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -21,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/errors"
 )
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -134,24 +132,20 @@ func New(
 // Builder.factory from the parsed SQL statement in Builder.stmt. See the
 // comment above the Builder type declaration for details.
 //
-// If any subroutines panic with a builderError or pgerror.Error as part of the
-// build process, the panic is caught here and returned as an error.
+// If any subroutines panic with a non-runtime error as part of the build
+// process, the panic is caught here and returned as an error.
 func (b *Builder) Build() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			// This code allows us to propagate semantic and internal errors without
-			// adding lots of checks for `if err != nil` throughout the code. This is
-			// only possible because the code does not update shared state and does
-			// not manipulate locks.
-			if e, ok := r.(error); ok {
-				if _, x := r.(runtime.Error); !x {
-					err = e
-					return
-				}
+			// This code allows us to propagate errors without adding lots of checks
+			// for `if err != nil` throughout the construction code. This is only
+			// possible because the code does not update shared state and does not
+			// manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+			} else {
+				panic(r)
 			}
-			// Other panic objects can't be considered "safe" and thus are
-			// propagated as crashes that terminate the session.
-			panic(r)
 		}
 	}()
 
@@ -170,27 +164,9 @@ func (b *Builder) Build() (err error) {
 	return nil
 }
 
-// builderError is used to wrap errors returned by various external APIs that
-// occur during the build process. It exists for us to be able to panic on these
-// errors and then catch them inside Builder.Build.
-type builderError struct {
-	error error
-}
-
-// builderError are errors.
-func (b builderError) Error() string { return b.error.Error() }
-
-// Cause implements the causer interface. This is used so that builderErrors
-// can be peeked through by the common error facilities.
-func (b builderError) Cause() error { return b.error }
-
-// Format implements the fmt.Formatter interface.
-func (b builderError) Format(s fmt.State, verb rune) { errors.FormatError(b, s, verb) }
-
 // unimplementedWithIssueDetailf formats according to a format
 // specifier and returns a Postgres error with the
-// pg code FeatureNotSupported, wrapped in a
-// builderError.
+// pg code FeatureNotSupported.
 func unimplementedWithIssueDetailf(issue int, detail, format string, args ...interface{}) error {
 	return unimplemented.NewWithIssueDetailf(issue, detail, format, args...)
 }
@@ -254,7 +230,7 @@ func (b *Builder) buildStmt(
 		// delegate functionality.
 		newStmt, err := delegate.TryDelegate(b.ctx, b.catalog, b.evalCtx, stmt)
 		if err != nil {
-			panic(builderError{err})
+			panic(err)
 		}
 		if newStmt != nil {
 			// Many delegate implementations resolve objects. It would be tedious to

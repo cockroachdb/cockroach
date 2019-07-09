@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -70,17 +71,15 @@ func (b *Builder) DisableTelemetry() {
 func (b *Builder) Build() (_ exec.Plan, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if e, ok := r.(error); ok {
+			// This code allows us to propagate errors without adding lots of checks
+			// for `if err != nil` throughout the construction code. This is only
+			// possible because the code does not update shared state and does not
+			// manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
 				err = e
-				return
+			} else {
+				panic(r)
 			}
-			// Other panic objects can't be considered "safe" and thus are
-			// propagated as crashes that terminate the session.
-			panic(r)
 		}
 	}()
 

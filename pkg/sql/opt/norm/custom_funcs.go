@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -1063,12 +1064,25 @@ func (c *CustomFuncs) IsUnorderedGrouping(grouping *memo.GroupingPrivate) bool {
 //
 // ----------------------------------------------------------------------
 
+// IsPositiveLimit is true if the given limit value is greater than zero.
+func (c *CustomFuncs) IsPositiveLimit(limit tree.Datum) bool {
+	limitVal := int64(*limit.(*tree.DInt))
+	return limitVal > 0
+}
+
 // LimitGeMaxRows returns true if the given constant limit value is greater than
 // or equal to the max number of rows returned by the input expression.
 func (c *CustomFuncs) LimitGeMaxRows(limit tree.Datum, input memo.RelExpr) bool {
 	limitVal := int64(*limit.(*tree.DInt))
 	maxRows := input.Relational().Cardinality.Max
 	return limitVal >= 0 && maxRows < math.MaxUint32 && limitVal >= int64(maxRows)
+}
+
+// IsSameOrdering evaluates whether the two orderings are equal.
+func (c *CustomFuncs) IsSameOrdering(
+	first physical.OrderingChoice, other physical.OrderingChoice,
+) bool {
+	return first.Equals(&other)
 }
 
 // ----------------------------------------------------------------------
@@ -1673,4 +1687,24 @@ func (c *CustomFuncs) EqualsNumber(datum tree.Datum, value int64) bool {
 		return *t == tree.DInt(value)
 	}
 	return false
+}
+
+// AddConstInts adds the numeric constants together. AddConstInts assumes the sum
+// will not overflow. Call CanAddConstInts on the constants to guarantee this.
+func (c *CustomFuncs) AddConstInts(first tree.Datum, second tree.Datum) tree.Datum {
+	firstVal := int64(*first.(*tree.DInt))
+	secondVal := int64(*second.(*tree.DInt))
+	sum, ok := arith.AddWithOverflow(firstVal, secondVal)
+	if !ok {
+		panic(errors.AssertionFailedf("addition of %d and %d overflowed", firstVal, secondVal))
+	}
+	return tree.NewDInt(tree.DInt(sum))
+}
+
+// CanAddConstInts returns true if the addition of the two integers overflows.
+func (c *CustomFuncs) CanAddConstInts(first tree.Datum, second tree.Datum) bool {
+	firstVal := int64(*first.(*tree.DInt))
+	secondVal := int64(*second.(*tree.DInt))
+	_, ok := arith.AddWithOverflow(firstVal, secondVal)
+	return ok
 }
