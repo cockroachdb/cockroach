@@ -203,7 +203,7 @@ func (o *Outbox) sendBatches(
 			log.Errorf(ctx, "Outbox BatchToArrow data serialization error: %+v", err)
 			return false, err
 		}
-		if err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
+		if _, _, err := o.serializer.Serialize(o.scratch.buf, d); err != nil {
 			log.Errorf(ctx, "Outbox Serialize data error: %+v", err)
 			return false, err
 		}
