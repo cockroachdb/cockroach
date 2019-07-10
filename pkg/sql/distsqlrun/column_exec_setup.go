@@ -123,6 +123,9 @@ func newColOperator(
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, nil, isStreamingOp, err
 		}
+		if core.TableReader.IsCheck {
+			return nil, nil, isStreamingOp, errors.Newf("scrub table reader is unsupported in vectorized")
+		}
 		op, err = newColBatchScan(flowCtx, core.TableReader, post)
 		// We want to check for cancellation once per input batch, and wrapping
 		// only colBatchScan with an exec.CancelChecker allows us to do just that.
