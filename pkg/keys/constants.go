@@ -128,6 +128,7 @@ var (
 	LocalRangeStatsLegacySuffix = []byte("stat")
 	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
 	// threshold.
+	// No longer used; exists only to reserve the key so we don't use it.
 	LocalTxnSpanGCThresholdSuffix = []byte("tst-")
 
 	// localRangeIDUnreplicatedInfix is the post-Range ID specifier for all

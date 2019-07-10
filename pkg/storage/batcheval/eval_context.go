@@ -89,9 +89,6 @@ type EvalContext interface {
 	GetSplitQPS() float64
 
 	GetGCThreshold() hlc.Timestamp
-	// TODO(nvanbenschoten): Remove this in 2.3, at which point no request type
-	// will ever need to consult the threshold.
-	GetTxnSpanGCThreshold() hlc.Timestamp
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
 }
