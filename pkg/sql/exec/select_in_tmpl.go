@@ -177,7 +177,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 		}
 
 		vec := batch.ColVec(si.colIdx)
-		col := vec._TemplateType()[:coldata.BatchSize]
+		col := vec._TemplateType()
 		var idx uint16
 		n := batch.Length()
 
@@ -247,10 +247,10 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	}
 
 	vec := batch.ColVec(pi.colIdx)
-	col := vec._TemplateType()[:coldata.BatchSize]
+	col := vec._TemplateType()
 
 	projVec := batch.ColVec(pi.outputIdx)
-	projCol := projVec.Bool()[:coldata.BatchSize]
+	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
 
 	n := batch.Length()
