@@ -1345,11 +1345,10 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	}
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
+	clusterVersion := store.ClusterSettings().Version.Version().Version
 	if _, err := stateloader.WriteInitialState(
-		context.Background(), store.engine, enginepb.MVCCStats{},
-		*desc, roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
-		store.ClusterSettings().Version.Version().Version,
-		stateloader.TruncatedStateUnreplicated,
+		context.Background(), store.engine, enginepb.MVCCStats{}, *desc, roachpb.Lease{},
+		hlc.Timestamp{}, clusterVersion, stateloader.TruncatedStateUnreplicated,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -2888,11 +2887,10 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	clusterVersion := s.ClusterSettings().Version.Version().Version
 	if _, err := stateloader.WriteInitialState(
-		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(),
-		roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{},
-		s.ClusterSettings().Version.Version().Version,
-		stateloader.TruncatedStateUnreplicated,
+		ctx, s.Engine(), enginepb.MVCCStats{}, *repl1.Desc(), roachpb.Lease{},
+		hlc.Timestamp{}, clusterVersion, stateloader.TruncatedStateUnreplicated,
 	); err != nil {
 		t.Fatal(err)
 	}

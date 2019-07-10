@@ -733,15 +733,6 @@ func (r *Replica) handleReplicatedEvalResult(
 			rResult.State.GCThreshold = nil
 		}
 
-		if newThresh := rResult.State.TxnSpanGCThreshold; newThresh != nil {
-			if (*newThresh != hlc.Timestamp{}) {
-				r.mu.Lock()
-				r.mu.state.TxnSpanGCThreshold = newThresh
-				r.mu.Unlock()
-			}
-			rResult.State.TxnSpanGCThreshold = nil
-		}
-
 		if rResult.State.UsingAppliedStateKey {
 			r.mu.Lock()
 			r.mu.state.UsingAppliedStateKey = true
