@@ -805,7 +805,6 @@ namespace roachpb {
 bool TransactionStatusError_Reason_IsValid(int value) {
   switch (value) {
     case 0:
-    case 1:
     case 2:
       return true;
     default:
@@ -815,7 +814,6 @@ bool TransactionStatusError_Reason_IsValid(int value) {
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const TransactionStatusError_Reason TransactionStatusError::REASON_UNKNOWN;
-const TransactionStatusError_Reason TransactionStatusError::REASON_TXN_NOT_FOUND;
 const TransactionStatusError_Reason TransactionStatusError::REASON_TXN_COMMITTED;
 const TransactionStatusError_Reason TransactionStatusError::Reason_MIN;
 const TransactionStatusError_Reason TransactionStatusError::Reason_MAX;
