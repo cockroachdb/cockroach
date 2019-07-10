@@ -62,7 +62,12 @@ const (
 )
 
 func GetInProjectionOperator(
-	ct *semtypes.T, input Operator, colIdx int, resultIdx int, datumTuple *tree.DTuple, negate bool,
+	ct *semtypes.T,
+	input Operator,
+	colIdx int,
+	resultIdx int,
+	datumTuple *tree.DTuple,
+	negate bool,
 ) (Operator, error) {
 	var err error
 	switch t := conv.FromColumnType(ct); t {
@@ -125,6 +130,12 @@ type projectInOp_TYPE struct {
 	filterRow []_GOTYPE
 	hasNulls  bool
 	negate    bool
+}
+
+var _ StaticMemoryOperator = &projectInOp_TYPE{}
+
+func (p *projectInOp_TYPE) EstimateStaticMemoryUsage() int {
+	return EstimateBatchSizeBytes([]types.T{types.Bool}, coldata.BatchSize)
 }
 
 func fillDatumRow_TYPE(ct *semtypes.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {

@@ -28,6 +28,7 @@ import (
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -94,12 +95,16 @@ func wrapRowSource(
 // newColOperator creates a new columnar operator according to the given spec.
 // The operator and its output types are returned if there was no error.
 func newColOperator(
-	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
-) (exec.Operator, []types.T, error) {
+	ctx context.Context,
+	flowCtx *FlowCtx,
+	spec *distsqlpb.ProcessorSpec,
+	inputs []exec.Operator,
+) (exec.Operator, []types.T, int, error) {
 	core := &spec.Core
 	post := &spec.Post
 	var err error
 	var op exec.Operator
+	var memUsage int
 
 	// Planning additional operators for the PostProcessSpec (filters and render
 	// expressions) requires knowing the operator's output column types. Currently
@@ -111,13 +116,13 @@ func newColOperator(
 	switch {
 	case core.Noop != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 		op = exec.NewNoop(inputs[0])
 		columnTypes = spec.Input[0].ColumnTypes
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 		op, err = newColBatchScan(flowCtx, core.TableReader, post)
 		// We want to check for cancellation once per input batch, and wrapping
@@ -131,7 +136,7 @@ func newColOperator(
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 		aggSpec := core.Aggregator
 		if len(aggSpec.GroupCols) == 0 &&
@@ -139,7 +144,8 @@ func newColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			return exec.NewCountOp(inputs[0]), []types.T{types.Int64}, nil
+			op = exec.NewCountOp(inputs[0])
+			return op, []types.T{types.Int64}, memUsage + op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage(), nil
 		}
 
 		var groupCols, orderedCols util.FastIntSet
@@ -156,7 +162,7 @@ func newColOperator(
 			groupCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(groupCols) {
-			return nil, nil, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
+			return nil, nil, memUsage, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
 		}
 
 		aggTyps := make([][]semtypes.T, len(aggSpec.Aggregations))
@@ -165,13 +171,13 @@ func newColOperator(
 		columnTypes = make([]semtypes.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
-				return nil, nil, errors.Newf("distinct aggregation not supported")
+				return nil, nil, memUsage, errors.Newf("distinct aggregation not supported")
 			}
 			if agg.FilterColIdx != nil {
-				return nil, nil, errors.Newf("filtering aggregation not supported")
+				return nil, nil, memUsage, errors.Newf("filtering aggregation not supported")
 			}
 			if len(agg.Arguments) > 0 {
-				return nil, nil, errors.Newf("aggregates with arguments not supported")
+				return nil, nil, memUsage, errors.Newf("aggregates with arguments not supported")
 			}
 			aggTyps[i] = make([]semtypes.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
@@ -186,12 +192,12 @@ func newColOperator(
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
-					return nil, nil, errors.Newf("sum on int cols not supported (use sum_int)")
+					return nil, nil, memUsage, errors.Newf("sum on int cols not supported (use sum_int)")
 				}
 			}
 			_, retType, err := GetAggregateInfo(agg.Func, aggTyps[i]...)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, memUsage, err
 			}
 			columnTypes[i] = *retType
 		}
@@ -207,7 +213,7 @@ func newColOperator(
 
 	case core.Distinct != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 
 		var distinctCols, orderedCols util.FastIntSet
@@ -217,12 +223,12 @@ func newColOperator(
 		}
 		for _, col := range core.Distinct.DistinctColumns {
 			if !orderedCols.Contains(int(col)) {
-				return nil, nil, errors.Newf("unsorted distinct not supported")
+				return nil, nil, memUsage, errors.Newf("unsorted distinct not supported")
 			}
 			distinctCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(distinctCols) {
-			return nil, nil, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
+			return nil, nil, memUsage, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
@@ -231,18 +237,18 @@ func newColOperator(
 
 	case core.Ordinality != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
 		op = exec.NewOrdinalityOp(inputs[0])
 
 	case core.HashJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 
 		if !core.HashJoiner.OnExpr.Empty() {
-			return nil, nil, errors.Newf("can't plan hash join with on expressions")
+			return nil, nil, memUsage, errors.Newf("can't plan hash join with on expressions")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -292,14 +298,14 @@ func newColOperator(
 
 	case core.MergeJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 
 		if !core.MergeJoiner.OnExpr.Empty() {
-			return nil, nil, errors.Newf("can't plan merge join with on expressions")
+			return nil, nil, memUsage, errors.Newf("can't plan merge join with on expressions")
 		}
 		if core.MergeJoiner.Type != sqlbase.InnerJoin && core.MergeJoiner.Type != sqlbase.LeftOuterJoin {
-			return nil, nil, errors.Newf("can plan only inner and left outer merge join")
+			return nil, nil, memUsage, errors.Newf("can plan only inner and left outer merge join")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -347,7 +353,7 @@ func newColOperator(
 
 	case core.JoinReader != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 
 		op, err = wrapRowSource(flowCtx, inputs[0], spec.Input[0].ColumnTypes, func(input RowSource) (RowSource, error) {
@@ -378,7 +384,7 @@ func newColOperator(
 
 	case core.Sorter != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 		input := inputs[0]
 		inputTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -402,20 +408,20 @@ func newColOperator(
 
 	case core.Windower != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 		if len(core.Windower.WindowFns) != 1 {
-			return nil, nil, errors.Newf("only a single window function is currently supported")
+			return nil, nil, memUsage, errors.Newf("only a single window function is currently supported")
 		}
 		wf := core.Windower.WindowFns[0]
 		if wf.Frame != nil &&
 			(wf.Frame.Mode != distsqlpb.WindowerSpec_Frame_RANGE ||
 				wf.Frame.Bounds.Start.BoundType != distsqlpb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
 				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != distsqlpb.WindowerSpec_Frame_CURRENT_ROW)) {
-			return nil, nil, errors.Newf("window functions with non-default window frames are not supported")
+			return nil, nil, memUsage, errors.Newf("window functions with non-default window frames are not supported")
 		}
 		if wf.Func.AggregateFunc != nil {
-			return nil, nil, errors.Newf("aggregate functions used as window functions are not supported")
+			return nil, nil, memUsage, errors.Newf("aggregate functions used as window functions are not supported")
 		}
 
 		input := inputs[0]
@@ -433,7 +439,7 @@ func newColOperator(
 			}
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 
 		orderingCols := make([]uint32, len(wf.Ordering.Columns))
@@ -448,7 +454,7 @@ func newColOperator(
 		case distsqlpb.WindowerSpec_DENSE_RANK:
 			op, err = vecbuiltins.NewRankOperator(input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		default:
-			return nil, nil, errors.Newf("window function %s is not supported", wf.String())
+			return nil, nil, memUsage, errors.Newf("window function %s is not supported", wf.String())
 		}
 
 		if partitionColIdx != -1 {
@@ -465,30 +471,38 @@ func newColOperator(
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
 
 	default:
-		return nil, nil, errors.Newf("unsupported processor core %s", core)
+		return nil, nil, memUsage, errors.Newf("unsupported processor core %s", core)
 	}
+
+	// After constructing the base operator, calculate the memory usage
+	// of the operator.
+	if sMemOp, ok := op.(exec.StaticMemoryOperator); ok {
+		memUsage += sMemOp.EstimateStaticMemoryUsage()
+	}
+
 	log.VEventf(ctx, 1, "Made op %T\n", op)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, memUsage, err
 	}
 
 	if columnTypes == nil {
-		return nil, nil, errors.AssertionFailedf("output columnTypes unset after planning %T", op)
+		return nil, nil, memUsage, errors.AssertionFailedf("output columnTypes unset after planning %T", op)
 	}
 
 	if !post.Filter.Empty() {
 		var helper exprHelper
+		var memUsed int
 		err := helper.init(post.Filter, columnTypes, flowCtx.EvalCtx)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, memUsage, err
 		}
 		var filterColumnTypes []semtypes.T
-		op, _, filterColumnTypes, err = planSelectionOperators(
-			flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
+		op, _, filterColumnTypes, memUsed, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
+			return nil, nil, memUsage, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
 		}
+		memUsage += memUsed
 		if len(filterColumnTypes) > len(columnTypes) {
 			// Additional columns were appended to store projection results while
 			// evaluating the filter. Project them away.
@@ -511,19 +525,20 @@ func newColOperator(
 		var renderedCols []uint32
 		for _, expr := range post.RenderExprs {
 			var helper exprHelper
+			var memUsed int
 			err := helper.init(expr, columnTypes, flowCtx.EvalCtx)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, memUsage, err
 			}
 			var outputIdx int
-			op, outputIdx, columnTypes, err = planProjectionOperators(
-				flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
+			op, outputIdx, columnTypes, memUsed, err = planProjectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 			if err != nil {
-				return nil, nil, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
+				return nil, nil, memUsage, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
 			if outputIdx < 0 {
-				return nil, nil, errors.AssertionFailedf("missing outputIdx")
+				return nil, nil, memUsage, errors.AssertionFailedf("missing outputIdx")
 			}
+			memUsage += memUsed
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
 		op = exec.NewSimpleProjectOp(op, renderedCols)
@@ -534,26 +549,29 @@ func newColOperator(
 	if post.Limit != 0 {
 		op = exec.NewLimitOp(op, post.Limit)
 	}
-	return op, conv.FromColumnTypes(columnTypes), nil
+	return op, conv.FromColumnTypes(columnTypes), memUsage, nil
 }
 
 func planSelectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
+	ctx *tree.EvalContext,
+	expr tree.TypedExpr,
+	columnTypes []semtypes.T,
+	input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
-		return exec.NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, nil
+		return exec.NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, memUsed, nil
 	case *tree.AndExpr:
-		leftOp, _, ct, err := planSelectionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		leftOp, _, ct, memUsage, err := planSelectionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
-			return nil, resultIdx, ct, err
+			return nil, resultIdx, ct, memUsage, err
 		}
 		return planSelectionOperators(ctx, t.TypedRight(), ct, leftOp)
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
-		leftOp, leftIdx, ct, err := planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		leftOp, leftIdx, ct, memUsageLeft, err := planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
-			return nil, resultIdx, ct, err
+			return nil, resultIdx, ct, memUsageLeft, err
 		}
 		typ := &ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
@@ -561,35 +579,35 @@ func planSelectionOperators(
 				negate := t.Operator == tree.NotLike
 				op, err := exec.GetLikeOperator(
 					ctx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate)
-				return op, resultIdx, ct, err
+				return op, resultIdx, ct, memUsageLeft, err
 			}
 			if t.Operator == tree.In || t.Operator == tree.NotIn {
 				negate := t.Operator == tree.NotIn
 				datumTuple, ok := tree.AsDTuple(constArg)
 				if !ok {
 					err = errors.Errorf("IN is only supported for constant expressions")
-					return nil, resultIdx, ct, err
+					return nil, resultIdx, ct, memUsed, err
 				}
 				op, err := exec.GetInOperator(typ, leftOp, leftIdx, datumTuple, negate)
-				return op, resultIdx, ct, err
+				return op, resultIdx, ct, memUsageLeft + op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage(), err
 			}
 			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
-			return op, resultIdx, ct, err
+			return op, resultIdx, ct, memUsageLeft, err
 		}
-		rightOp, rightIdx, ct, err := planProjectionOperators(ctx, t.TypedRight(), ct, leftOp)
+		rightOp, rightIdx, ct, memUsageRight, err := planProjectionOperators(ctx, t.TypedRight(), ct, leftOp)
 		if err != nil {
-			return nil, resultIdx, ct, err
+			return nil, resultIdx, ct, memUsageLeft + memUsageRight, err
 		}
 		if !ct[leftIdx].Identical(&ct[rightIdx]) {
 			err = errors.Errorf(
 				"comparison between %s and %s is unhandled", ct[leftIdx].Family(),
 				ct[rightIdx].Family())
-			return nil, resultIdx, ct, err
+			return nil, resultIdx, ct, memUsageLeft + memUsageRight, err
 		}
 		op, err := exec.GetSelectionOperator(typ, cmpOp, rightOp, leftIdx, rightIdx)
-		return op, resultIdx, ct, err
+		return op, resultIdx, ct, memUsageLeft + memUsageRight, err
 	default:
-		return nil, resultIdx, nil, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
+		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
 	}
 }
 
@@ -598,12 +616,15 @@ func planSelectionOperators(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planProjectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
+	ctx *tree.EvalContext,
+	expr tree.TypedExpr,
+	columnTypes []semtypes.T,
+	input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
-		return input, t.Idx, columnTypes, nil
+		return input, t.Idx, columnTypes, memUsed, nil
 	case *tree.ComparisonExpr:
 		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
 	case *tree.BinaryExpr:
@@ -614,20 +635,20 @@ func planProjectionOperators(
 		resultIdx = len(ct)
 		ct = append(ct, *datumType)
 		if datumType.Family() == semtypes.UnknownFamily {
-			return exec.NewConstNullOp(input, resultIdx), resultIdx, ct, nil
+			return exec.NewConstNullOp(input, resultIdx), resultIdx, ct, memUsed, nil
 		}
 		typ := conv.FromColumnType(datumType)
 		constVal, err := conv.GetDatumToPhysicalFn(datumType)(t)
 		if err != nil {
-			return nil, resultIdx, ct, err
+			return nil, resultIdx, ct, memUsed, err
 		}
 		op, err := exec.NewConstOp(input, typ, constVal, resultIdx)
 		if err != nil {
-			return nil, resultIdx, ct, err
+			return nil, resultIdx, ct, memUsed, err
 		}
-		return op, resultIdx, ct, nil
+		return op, resultIdx, ct, memUsed, nil
 	default:
-		return nil, resultIdx, nil, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
+		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
 }
 
@@ -637,7 +658,7 @@ func planProjectionExpr(
 	left, right tree.TypedExpr,
 	columnTypes []semtypes.T,
 	input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
+) (op exec.Operator, resultIdx int, ct []semtypes.T, memUsed int, err error) {
 	resultIdx = -1
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
@@ -649,9 +670,9 @@ func planProjectionExpr(
 		// operators such as - and /, though, so we still need this case.
 		var rightOp exec.Operator
 		var rightIdx int
-		rightOp, rightIdx, ct, err = planProjectionOperators(ctx, right, columnTypes, input)
+		rightOp, rightIdx, ct, memUsed, err = planProjectionOperators(ctx, right, columnTypes, input)
 		if err != nil {
-			return nil, resultIdx, ct, err
+			return nil, resultIdx, ct, memUsed, err
 		}
 		resultIdx = len(ct)
 		typ := &ct[rightIdx]
@@ -659,11 +680,11 @@ func planProjectionExpr(
 		// to the input batch.
 		op, err = exec.GetProjectionLConstOperator(typ, binOp, rightOp, rightIdx, lConstArg, resultIdx)
 		ct = append(ct, *typ)
-		return op, resultIdx, ct, err
+		return op, resultIdx, ct, memUsed + op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage(), err
 	}
-	leftOp, leftIdx, ct, err := planProjectionOperators(ctx, left, columnTypes, input)
+	leftOp, leftIdx, ct, leftMem, err := planProjectionOperators(ctx, left, columnTypes, input)
 	if err != nil {
-		return nil, resultIdx, ct, err
+		return nil, resultIdx, ct, leftMem, err
 	}
 	typ := &ct[leftIdx]
 	if rConstArg, rConst := right.(tree.Datum); rConst {
@@ -676,30 +697,30 @@ func planProjectionExpr(
 			datumTuple, ok := tree.AsDTuple(rConstArg)
 			if !ok {
 				err = errors.Errorf("IN operator supported only on constant expressions")
-				return nil, resultIdx, ct, err
+				return nil, resultIdx, ct, leftMem, err
 			}
 			op, err = exec.GetInProjectionOperator(typ, leftOp, leftIdx, resultIdx, datumTuple, negate)
 		} else {
 			op, err = exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
 		}
 		ct = append(ct, *typ)
-		return op, resultIdx, ct, err
+		return op, resultIdx, ct, leftMem + op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage(), err
 	}
 	// Case 3: neither are constant.
-	rightOp, rightIdx, ct, err := planProjectionOperators(ctx, right, ct, leftOp)
+	rightOp, rightIdx, ct, rightMem, err := planProjectionOperators(ctx, right, ct, leftOp)
 	if err != nil {
-		return nil, resultIdx, nil, err
+		return nil, resultIdx, nil, leftMem + rightMem, err
 	}
 	if !ct[leftIdx].Identical(&ct[rightIdx]) {
 		err = errors.Errorf(
 			"projection on %s and %s is unhandled", ct[leftIdx].Family(),
 			ct[rightIdx].Family())
-		return nil, resultIdx, ct, err
+		return nil, resultIdx, ct, leftMem + rightMem, err
 	}
 	resultIdx = len(ct)
 	op, err = exec.GetProjectionOperator(typ, binOp, rightOp, leftIdx, rightIdx, resultIdx)
 	ct = append(ct, *typ)
-	return op, resultIdx, ct, err
+	return op, resultIdx, ct, leftMem + rightMem + op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage(), err
 }
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector
@@ -881,7 +902,8 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 	input distsqlpb.InputSyncSpec,
 	streamIDToInputOp map[distsqlpb.StreamID]exec.Operator,
 	recordingStats bool,
-) (exec.Operator, []distsqlpb.MetadataSource, error) {
+) (exec.Operator, []distsqlpb.MetadataSource, int, error) {
+	var memUsed int
 	inputStreamOps := make([]exec.Operator, 0, len(input.Streams))
 	metaSources := make([]distsqlpb.MetadataSource, 0, len(input.Streams))
 	for _, inputStream := range input.Streams {
@@ -892,11 +914,11 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 			// If the input is remote, the input operator does not exist in
 			// streamIDToInputOp. Create an inbox.
 			if err := f.checkInboundStreamID(inputStream.StreamID); err != nil {
-				return nil, nil, err
+				return nil, nil, memUsed, err
 			}
 			inbox, err := colrpc.NewInbox(conv.FromColumnTypes(input.ColumnTypes))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, memUsed, err
 			}
 			f.inboundStreams[inputStream.StreamID] = &inboundStreamInfo{
 				receiver:  vectorizedInboundStreamHandler{inbox},
@@ -916,12 +938,12 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 					},
 				)
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, memUsed, err
 				}
 			}
 			inputStreamOps = append(inputStreamOps, op)
 		default:
-			return nil, nil, errors.Errorf("unsupported input stream type %s", inputStream.Type)
+			return nil, nil, memUsed, errors.Errorf("unsupported input stream type %s", inputStream.Type)
 		}
 	}
 	op := inputStreamOps[0]
@@ -931,6 +953,7 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 			op = exec.NewOrderedSynchronizer(
 				inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), distsqlpb.ConvertToColumnOrdering(input.Ordering),
 			)
+			memUsed += op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {
 			op = exec.NewUnorderedSynchronizer(inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), &f.waitGroup)
 			// Don't use the unordered synchronizer's inputs for stats collection
@@ -944,11 +967,11 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 			var err error
 			op, err = wrapWithVectorizedStatsCollector(op, statsInputs, &distsqlpb.ProcessorSpec{ProcessorID: -1})
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, memUsed, err
 			}
 		}
 	}
-	return op, metaSources, nil
+	return op, metaSources, memUsed, nil
 }
 
 // VectorizedSetupError is a wrapper for any error that happens during
@@ -988,7 +1011,7 @@ func init() {
 	errors.RegisterWrapperDecoder(errors.GetTypeKey((*VectorizedSetupError)(nil)), decodeVectorizedSetupError)
 }
 
-func (f *Flow) setupVectorized(ctx context.Context) error {
+func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error {
 	streamIDToInputOp := make(map[distsqlpb.StreamID]exec.Operator)
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
 	// queue is a queue of indices into f.spec.Processors, for topologically
@@ -1033,17 +1056,23 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		}
 		inputs = inputs[:0]
 		for i := range pspec.Input {
-			synchronizer, metadataSources, err := f.setupVectorizedInputSynchronizer(pspec.Input[i], streamIDToInputOp, recordingStats)
+			synchronizer, metadataSources, memUsed, err := f.setupVectorizedInputSynchronizer(pspec.Input[i], streamIDToInputOp, recordingStats)
 			if err != nil {
 				return err
+			}
+			if err = acc.Grow(ctx, int64(memUsed)); err != nil {
+				return errors.Wrapf(err, "Not enough memory to setup vectorized plan.")
 			}
 			metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
 			inputs = append(inputs, synchronizer)
 		}
 
-		op, outputTypes, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
+		op, outputTypes, memUsage, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "Unable to vectorize execution plan.")
+		}
+		if err = acc.Grow(ctx, int64(memUsage)); err != nil {
+			return errors.Wrapf(err, "Not enough memory to setup vectorized plan.")
 		}
 		if metaSource, ok := op.(distsqlpb.MetadataSource); ok {
 			metadataSourcesQueue = append(metadataSourcesQueue, metaSource)

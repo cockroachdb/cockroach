@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
+var _ StaticMemoryOperator = &OrderedSynchronizer{}
+
 // OrderedSynchronizer receives rows from multiple inputs and produces a single
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
@@ -38,14 +40,17 @@ type OrderedSynchronizer struct {
 }
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
-func NewOrderedSynchronizer(
-	inputs []Operator, typs []types.T, ordering sqlbase.ColumnOrdering,
-) *OrderedSynchronizer {
+func NewOrderedSynchronizer(inputs []Operator, typs []types.T, ordering sqlbase.ColumnOrdering) *OrderedSynchronizer {
 	return &OrderedSynchronizer{
 		inputs:      inputs,
 		ordering:    ordering,
 		columnTypes: typs,
 	}
+}
+
+// EstimateStaticMemoryUsage implements the StaticMemoryOperator interface.
+func (o *OrderedSynchronizer) EstimateStaticMemoryUsage() int {
+	return EstimateBatchSizeBytes(o.columnTypes, coldata.BatchSize)
 }
 
 // Next is part of the Operator interface.
