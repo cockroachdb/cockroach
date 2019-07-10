@@ -32,7 +32,10 @@ func genAnyNotNullAgg(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPE", "{{.}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.}}", -1)
 
-	tmpl, err := template.New("any_not_null_agg").Parse(s)
+	findAnyNotNull := makeFunctionRegex("_FIND_ANY_NOT_NULL", 4)
+	s = findAnyNotNull.ReplaceAllString(s, `{{template "findAnyNotNull" buildDict "Global" . "HasNulls" $4}}`)
+
+	tmpl, err := template.New("any_not_null_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}

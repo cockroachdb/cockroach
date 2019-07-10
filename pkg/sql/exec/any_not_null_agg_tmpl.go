@@ -59,23 +59,28 @@ const _TYPES_T = types.Unhandled
 
 // anyNotNull_TYPEAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
-// TODO(jordan): this needs to have null handling when it's added!
 type anyNotNull_TYPEAgg struct {
-	done   bool
-	groups []bool
-	vec    []_GOTYPE
-	curIdx int
+	done                        bool
+	groups                      []bool
+	vec                         []_GOTYPE
+	nulls                       *coldata.Nulls
+	curIdx                      int
+	foundNonNullForCurrentGroup bool
 }
 
 func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
 	a.vec = vec._TemplateType()
+	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *anyNotNull_TYPEAgg) Reset() {
+	copy(a.vec, zero_TYPEColumn)
 	a.curIdx = -1
 	a.done = false
+	a.foundNonNullForCurrentGroup = false
+	a.nulls.UnsetNulls()
 }
 
 func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
@@ -85,6 +90,8 @@ func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
 func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
+		copy(a.vec[idx+1:], zero_TYPEColumn)
+		a.nulls.UnsetNullsAfter(uint16(idx + 1))
 	}
 }
 
@@ -94,28 +101,80 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
+		// If we haven't found any non-nulls for this group so far, the output for
+		// this group should be null. If a.curIdx is negative, it means the input
+		// has zero rows, and there should be no output at all.
+		if !a.foundNonNullForCurrentGroup && a.curIdx >= 0 {
+			a.nulls.SetNull(uint16(a.curIdx))
+		}
 		a.curIdx++
 		a.done = true
 		return
 	}
-	col, sel := b.ColVec(int(inputIdxs[0]))._TemplateType(), b.Selection()
-	if sel != nil {
-		sel = sel[:inputLen]
-		for _, i := range sel {
-			if a.groups[i] {
-				a.curIdx++
-				a.vec[a.curIdx] = col[i]
+	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	col, nulls := vec._TemplateType(), vec.Nulls()
+
+	if nulls.MaybeHasNulls() {
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_FIND_ANY_NOT_NULL(a, nulls, i, true)
+			}
+		} else {
+			col = col[:inputLen]
+			for i := range col {
+				_FIND_ANY_NOT_NULL(a, nulls, i, true)
 			}
 		}
 	} else {
-		col = col[:inputLen]
-		for i := range col {
-			if a.groups[i] {
-				a.curIdx++
-				a.vec[a.curIdx] = col[i]
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_FIND_ANY_NOT_NULL(a, nulls, i, false)
+			}
+		} else {
+			col = col[:inputLen]
+			for i := range col {
+				_FIND_ANY_NOT_NULL(a, nulls, i, false)
 			}
 		}
 	}
 }
 
 // {{end}}
+
+// {{/*
+// _FIND_ANY_NOT_NULL finds a non-null value for the group that contains the ith
+// row. If a non-null value was already found, then it does nothing. If this is
+// the first row of a new group, and no non-nulls have been found for the
+// current group, then the output for the current group is set to null.
+func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+
+	// {{define "findAnyNotNull"}}
+	if a.groups[i] {
+		// If this is a new group, check if any non-nulls have been found for the
+		// current group. The `a.curIdx` check is necessary because for the first
+		// group in the result set there is no "current group."
+		if !a.foundNonNullForCurrentGroup && a.curIdx >= 0 {
+			a.nulls.SetNull(uint16(a.curIdx))
+		}
+		a.curIdx++
+		a.foundNonNullForCurrentGroup = false
+	}
+	var isNull bool
+	// {{ if .HasNulls }}
+	isNull = nulls.NullAt(uint16(i))
+	// {{ else }}
+	isNull = false
+	// {{ end }}
+	if !a.foundNonNullForCurrentGroup && !isNull {
+		// If we haven't seen any non-nulls for the current group yet, and the
+		// current value is non-null, then we can pick the current value to be the
+		// output.
+		a.vec[a.curIdx] = col[i]
+		a.foundNonNullForCurrentGroup = true
+	}
+	// {{end}}
+
+	// {{/*
+} // */}}
