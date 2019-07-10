@@ -406,6 +406,29 @@ func TestAggregatorAllFunctions(t *testing.T) {
 			},
 			convToDecimal: true,
 		},
+
+		// Test case for null handling.
+		{
+			aggFns: []distsqlpb.AggregatorSpec_Func{
+				distsqlpb.AggregatorSpec_ANY_NOT_NULL,
+				distsqlpb.AggregatorSpec_ANY_NOT_NULL,
+				distsqlpb.AggregatorSpec_COUNT_ROWS,
+				distsqlpb.AggregatorSpec_COUNT,
+			},
+			aggCols:  [][]uint32{{0}, {1}, {}, {1}},
+			colTypes: []types.T{types.Int64, types.Decimal},
+			input: tuples{
+				{0, nil},
+				{0, 3.1},
+				{1, nil},
+				{1, nil},
+			},
+			expected: tuples{
+				{0, 3.1, 2, 1},
+				{1, nil, 2, 0},
+			},
+			convToDecimal: true,
+		},
 	}
 
 	for _, agg := range aggTypes {
@@ -414,7 +437,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				if err := tc.init(); err != nil {
 					t.Fatal(err)
 				}
-				runTests(t, []tuples{tc.input}, tc.expected, orderedVerifier, []int{0, 1, 2, 3, 4, 5, 6},
+				runTests(t, []tuples{tc.input}, tc.expected, orderedVerifier, []int{0, 1, 2, 3, 4, 5, 6}[:len(tc.expected[0])],
 					func(input []Operator) (Operator, error) {
 						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
 					})
@@ -536,10 +559,10 @@ func BenchmarkAggregator(b *testing.B) {
 			for _, agg := range aggTypes {
 				for _, typ := range []types.T{types.Int64, types.Decimal} {
 					for _, groupSize := range []int{1, 2, coldata.BatchSize / 2, coldata.BatchSize} {
-						for _, nullProbability := range []float64{0, 0.3} {
+						for _, hasNulls := range []bool{false, true} {
 							for _, numInputBatches := range []int{64} {
-								b.Run(fmt.Sprintf("%s/%s/groupSize=%d/nullProbability=%.1f/numInputBatches=%d", agg.name, typ.String(),
-									groupSize, nullProbability, numInputBatches),
+								b.Run(fmt.Sprintf("%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d", agg.name, typ.String(),
+									groupSize, hasNulls, numInputBatches),
 									func(b *testing.B) {
 										colTypes := []types.T{types.Int64, typ}
 										nTuples := numInputBatches * coldata.BatchSize
@@ -552,10 +575,12 @@ func BenchmarkAggregator(b *testing.B) {
 											}
 											groups[i] = int64(curGroup)
 										}
-										nulls := cols[1].Nulls()
-										for i := 0; i < nTuples; i++ {
-											if rng.Float64() < nullProbability {
-												nulls.SetNull(uint16(i))
+										if hasNulls {
+											nulls := cols[1].Nulls()
+											for i := 0; i < nTuples; i++ {
+												if rng.Float64() < nullProbability {
+													nulls.SetNull(uint16(i))
+												}
 											}
 										}
 										switch typ {
