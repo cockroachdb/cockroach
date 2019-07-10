@@ -133,6 +133,12 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	} else if !tab.IsVirtual {
 		tab.addPrimaryColumnIndex("rowid")
 	}
+	if stmt.PartitionBy != nil {
+		if len(tab.Indexes) == 0 {
+			panic("cannot partition virtual table")
+		}
+		tab.Indexes[0].partitionBy = stmt.PartitionBy
+	}
 
 	// Add check constraints.
 	for _, def := range stmt.Defs {
@@ -368,11 +374,12 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	idx := &Index{
-		IdxName:  tt.makeIndexName(def.Name, typ),
-		Unique:   typ != nonUniqueIndex,
-		Inverted: def.Inverted,
-		IdxZone:  &config.ZoneConfig{},
-		table:    tt,
+		IdxName:     tt.makeIndexName(def.Name, typ),
+		Unique:      typ != nonUniqueIndex,
+		Inverted:    def.Inverted,
+		IdxZone:     &config.ZoneConfig{},
+		table:       tt,
+		partitionBy: def.PartitionBy,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.
