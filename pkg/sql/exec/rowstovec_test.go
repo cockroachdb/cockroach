@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/stretchr/testify/require"
 )
 
 var alloc = sqlbase.DatumAlloc{}
@@ -82,8 +83,8 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDString("foo")}},
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDString("bar")}},
 	}
-	vec := coldata.NewMemColumn(types.Bytes, 2)
 	for _, width := range []int32{0, 25} {
+		vec := coldata.NewMemColumn(types.Bytes, 2)
 		ct := semtypes.MakeString(width)
 		if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
 			t.Fatal(err)
@@ -91,9 +92,19 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 		expected := coldata.NewMemColumn(types.Bytes, 2)
 		expected.Bytes().Set(0, []byte("foo"))
 		expected.Bytes().Set(1, []byte("bar"))
+
+		// Extract column to check for equality separately.
+		// TODO(asubiotto): Why does reflect.DeepEqual not follow the pointer?
+		vecBytes := vec.Bytes()
+		expectedBytes := expected.Bytes()
+		vec.SetCol(nil)
+		expected.SetCol(nil)
+
 		if !reflect.DeepEqual(vec, expected) {
 			t.Errorf("expected vector %+v, got %+v", expected, vec)
 		}
+
+		require.Equal(t, expectedBytes, vecBytes)
 	}
 }
 
