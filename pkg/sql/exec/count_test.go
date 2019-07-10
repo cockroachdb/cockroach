@@ -10,9 +10,13 @@
 
 package exec
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestCount(t *testing.T) {
+	ctx := context.Background()
 	tcs := []struct {
 		tuples   tuples
 		expected tuples
@@ -28,7 +32,7 @@ func TestCount(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, []int{0}, func(input []Operator) (Operator, error) {
-			return NewCountOp(input[0]), nil
+			return NewCountOp(ctx, input[0], nil)
 		})
 	}
 }

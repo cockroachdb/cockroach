@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // OrderedSynchronizer receives rows from multiple inputs and produces a single
@@ -39,13 +40,26 @@ type OrderedSynchronizer struct {
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
 func NewOrderedSynchronizer(
-	inputs []Operator, typs []types.T, ordering sqlbase.ColumnOrdering,
-) *OrderedSynchronizer {
+	ctx context.Context,
+	inputs []Operator,
+	typs []types.T,
+	ordering sqlbase.ColumnOrdering,
+	acc *mon.BoundAccount,
+) (*OrderedSynchronizer, error) {
+
+	if acc != nil {
+		// The ordered synchronizer holds onto one batch internally.
+		err := acc.Grow(ctx, EstimateBatchSizeBytes(typs, coldata.BatchSize))
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &OrderedSynchronizer{
 		inputs:      inputs,
 		ordering:    ordering,
 		columnTypes: typs,
-	}
+	}, nil
 }
 
 // Next is part of the Operator interface.

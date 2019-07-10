@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // coalescerOp consumes the input operator and coalesces the resulting batches
@@ -31,11 +32,22 @@ var _ Operator = &coalescerOp{}
 
 // NewCoalescerOp creates a new coalescer operator on the given input operator
 // with the given column types.
-func NewCoalescerOp(input Operator, colTypes []types.T) Operator {
+func NewCoalescerOp(
+	ctx context.Context, input Operator, colTypes []types.T, acc *mon.BoundAccount,
+) (Operator, error) {
+
+	if acc != nil {
+		amt := 2 * EstimateBatchSizeBytes(colTypes, coldata.BatchSize)
+		err := acc.Grow(ctx, amt)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &coalescerOp{
 		input:      input,
 		inputTypes: colTypes,
-	}
+	}, nil
 }
 
 func (p *coalescerOp) Init() {

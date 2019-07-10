@@ -24,6 +24,8 @@ import (
 	"bytes"
   "context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -185,12 +187,14 @@ func (p {{template "opName" .}}) Init() {
 // GetProjectionConstOperator returns the appropriate constant projection
 // operator for the given column type and comparison.
 func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
+	ctx context.Context,
 	ct *semtypes.T,
 	op tree.Operator,
 	input Operator,
 	colIdx int,
 	constArg tree.Datum,
   outputIdx int,
+  acc *mon.BoundAccount,
 ) (Operator, error) {
 	c, err := conv.GetDatumToPhysicalFn(ct)(constArg)
 	if err != nil {
@@ -205,6 +209,13 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 			{{range $overloads}}
 			{{if .IsBinOp}}
 			case tree.{{.Name}}:
+				if acc != nil {
+					// Account for the column added by the projection operation
+					err := acc.Grow(ctx, EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize))
+					if err != nil {
+						return nil, err
+					}
+				}
 				return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
 					input:    input,
 					colIdx:   colIdx,
@@ -221,6 +232,13 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 			{{range $overloads}}
 			{{if .IsCmpOp}}
 			case tree.{{.Name}}:
+				if acc != nil {
+					// Account for the column added by the projection operation
+					err := acc.Grow(ctx, EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize))
+					if err != nil {
+						return nil, err
+					}
+				}
 				return &{{if $left}}{{template "opLConstName" .}}{{else}}{{template "opRConstName" .}}{{end}}{
 					input:    input,
 					colIdx:   colIdx,
@@ -245,12 +263,14 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 // GetProjectionOperator returns the appropriate projection operator for the
 // given column type and comparison.
 func GetProjectionOperator(
+	ctx context.Context,
 	ct *semtypes.T,
 	op tree.Operator,
 	input Operator,
 	col1Idx int,
 	col2Idx int,
   outputIdx int,
+  acc *mon.BoundAccount,
 ) (Operator, error) {
 	switch t := conv.FromColumnType(ct); t {
 	{{range $typ, $overloads := .TypToOverloads}}
@@ -261,6 +281,13 @@ func GetProjectionOperator(
 			{{range $overloads}}
 			{{if .IsBinOp}}
 			case tree.{{.Name}}:
+				if acc != nil {
+					// Account for the column added by the projection operation
+					err := acc.Grow(ctx, EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize))
+					if err != nil {
+						return nil, err
+					}
+				}
 				return &{{template "opName" .}}{
 					input:    input,
 					col1Idx:   col1Idx,
@@ -277,6 +304,13 @@ func GetProjectionOperator(
 			{{range $overloads}}
 			{{if .IsCmpOp}}
 			case tree.{{.Name}}:
+				if acc != nil {
+					// Account for the column added by the projection operation
+					err := acc.Grow(ctx, EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize))
+					if err != nil {
+						return nil, err
+					}
+				}
 				return &{{template "opName" .}}{
 					input:    input,
 					col1Idx:   col1Idx,

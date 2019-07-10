@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // countOp is an operator that counts the number of input rows it receives,
@@ -32,12 +33,20 @@ type countOp struct {
 var _ Operator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
-func NewCountOp(input Operator) Operator {
+func NewCountOp(ctx context.Context, input Operator, acc *mon.BoundAccount) (Operator, error) {
 	c := &countOp{
 		input: input,
 	}
 	c.internalBatch = coldata.NewMemBatchWithSize([]types.T{types.Int64}, 1)
-	return c
+
+	if acc != nil {
+		err := acc.Grow(ctx, EstimateBatchSizeBytes([]types.T{types.Int64}, 1))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return c, nil
 }
 
 func (c *countOp) Init() {

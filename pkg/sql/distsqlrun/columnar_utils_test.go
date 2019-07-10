@@ -73,14 +73,14 @@ func verifyColOperator(
 
 	columnarizers := make([]exec.Operator, len(inputs))
 	for i, input := range inputsColOp {
-		c, err := newColumnarizer(flowCtx, int32(i)+1, input)
+		c, err := newColumnarizer(ctx, flowCtx, int32(i)+1, input, nil)
 		if err != nil {
 			return err
 		}
 		columnarizers[i] = c
 	}
 
-	colOp, _, err := newColOperator(ctx, flowCtx, pspec, columnarizers)
+	colOp, _, err := newColOperator(ctx, flowCtx, pspec, columnarizers, nil)
 	if err != nil {
 		return err
 	}

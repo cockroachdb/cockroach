@@ -28,6 +28,7 @@ import (
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -45,9 +46,11 @@ func checkNumIn(inputs []exec.Operator, numIn int) error {
 // wrapRowSource, given an input exec.Operator, integrates toWrap into a
 // columnar execution flow and returns toWrap's output as an exec.Operator.
 func wrapRowSource(
+	ctx context.Context,
 	flowCtx *FlowCtx,
 	input exec.Operator,
 	inputTypes []semtypes.T,
+	acc *mon.BoundAccount,
 	newToWrap func(RowSource) (RowSource, error),
 ) (exec.Operator, error) {
 	var (
@@ -88,13 +91,17 @@ func wrapRowSource(
 		return nil, err
 	}
 
-	return newColumnarizer(flowCtx, processorID, toWrap)
+	return newColumnarizer(ctx, flowCtx, processorID, toWrap, acc)
 }
 
 // newColOperator creates a new columnar operator according to the given spec.
 // The operator and its output types are returned if there was no error.
 func newColOperator(
-	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
+	ctx context.Context,
+	flowCtx *FlowCtx,
+	spec *distsqlpb.ProcessorSpec,
+	inputs []exec.Operator,
+	acc *mon.BoundAccount,
 ) (exec.Operator, []types.T, error) {
 	core := &spec.Core
 	post := &spec.Post
@@ -139,7 +146,12 @@ func newColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			return exec.NewCountOp(inputs[0]), []types.T{types.Int64}, nil
+			var err error
+			op, err = exec.NewCountOp(ctx, inputs[0], acc)
+			if err != nil {
+				return nil, nil, err
+			}
+			return op, []types.T{types.Int64}, nil
 		}
 
 		var groupCols, orderedCols util.FastIntSet
@@ -201,7 +213,7 @@ func newColOperator(
 			)
 		} else {
 			op, err = exec.NewOrderedAggregator(
-				inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols,
+				ctx, inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols, acc,
 			)
 		}
 
@@ -350,7 +362,7 @@ func newColOperator(
 			return nil, nil, err
 		}
 
-		op, err = wrapRowSource(flowCtx, inputs[0], spec.Input[0].ColumnTypes, func(input RowSource) (RowSource, error) {
+		op, err = wrapRowSource(ctx, flowCtx, inputs[0], spec.Input[0].ColumnTypes, acc, func(input RowSource) (RowSource, error) {
 			var (
 				jr  RowSource
 				err error
@@ -393,7 +405,7 @@ func newColOperator(
 			// exactly how many rows the sorter should output. Choose a top K sorter,
 			// which uses a heap to avoid storing more rows than necessary.
 			k := uint16(post.Limit + post.Offset)
-			op = exec.NewTopKSorter(input, inputTypes, orderingCols, k)
+			op, err = exec.NewTopKSorter(ctx, input, inputTypes, orderingCols, k, acc)
 		} else {
 			// No optimizations possible. Default to the standard sort operator.
 			op, err = exec.NewSorter(input, inputTypes, orderingCols)
@@ -485,7 +497,7 @@ func newColOperator(
 		}
 		var filterColumnTypes []semtypes.T
 		op, _, filterColumnTypes, err = planSelectionOperators(
-			flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
+			ctx, flowCtx.NewEvalCtx(), helper.expr, columnTypes, op, acc)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
 		}
@@ -517,7 +529,7 @@ func newColOperator(
 			}
 			var outputIdx int
 			op, outputIdx, columnTypes, err = planProjectionOperators(
-				flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
+				ctx, flowCtx.NewEvalCtx(), helper.expr, columnTypes, op, acc)
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
@@ -538,20 +550,25 @@ func newColOperator(
 }
 
 func planSelectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
+	ctx context.Context,
+	tctx *tree.EvalContext,
+	expr tree.TypedExpr,
+	columnTypes []semtypes.T,
+	input exec.Operator,
+	acc *mon.BoundAccount,
 ) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
 		return exec.NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, nil
 	case *tree.AndExpr:
-		leftOp, _, ct, err := planSelectionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		leftOp, _, ct, err := planSelectionOperators(ctx, tctx, t.TypedLeft(), columnTypes, input, acc)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		return planSelectionOperators(ctx, t.TypedRight(), ct, leftOp)
+		return planSelectionOperators(ctx, tctx, t.TypedRight(), ct, leftOp, acc)
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
-		leftOp, leftIdx, ct, err := planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		leftOp, leftIdx, ct, err := planProjectionOperators(ctx, tctx, t.TypedLeft(), columnTypes, input, acc)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
@@ -560,7 +577,7 @@ func planSelectionOperators(
 			if t.Operator == tree.Like || t.Operator == tree.NotLike {
 				negate := t.Operator == tree.NotLike
 				op, err := exec.GetLikeOperator(
-					ctx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate)
+					tctx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate)
 				return op, resultIdx, ct, err
 			}
 			if t.Operator == tree.In || t.Operator == tree.NotIn {
@@ -576,7 +593,7 @@ func planSelectionOperators(
 			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
 			return op, resultIdx, ct, err
 		}
-		rightOp, rightIdx, ct, err := planProjectionOperators(ctx, t.TypedRight(), ct, leftOp)
+		rightOp, rightIdx, ct, err := planProjectionOperators(ctx, tctx, t.TypedRight(), ct, leftOp, acc)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
@@ -598,16 +615,21 @@ func planSelectionOperators(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planProjectionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
+	ctx context.Context,
+	tctx *tree.EvalContext,
+	expr tree.TypedExpr,
+	columnTypes []semtypes.T,
+	input exec.Operator,
+	acc *mon.BoundAccount,
 ) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
 		return input, t.Idx, columnTypes, nil
 	case *tree.ComparisonExpr:
-		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
+		return planProjectionExpr(ctx, tctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input, acc)
 	case *tree.BinaryExpr:
-		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
+		return planProjectionExpr(ctx, tctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input, acc)
 	case tree.Datum:
 		datumType := t.ResolvedType()
 		ct := columnTypes
@@ -632,11 +654,13 @@ func planProjectionOperators(
 }
 
 func planProjectionExpr(
-	ctx *tree.EvalContext,
+	ctx context.Context,
+	tctx *tree.EvalContext,
 	binOp tree.Operator,
 	left, right tree.TypedExpr,
 	columnTypes []semtypes.T,
 	input exec.Operator,
+	acc *mon.BoundAccount,
 ) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
 	resultIdx = -1
 	// There are 3 cases. Either the left is constant, the right is constant,
@@ -649,7 +673,7 @@ func planProjectionExpr(
 		// operators such as - and /, though, so we still need this case.
 		var rightOp exec.Operator
 		var rightIdx int
-		rightOp, rightIdx, ct, err = planProjectionOperators(ctx, right, columnTypes, input)
+		rightOp, rightIdx, ct, err = planProjectionOperators(ctx, tctx, right, columnTypes, input, acc)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
@@ -657,11 +681,11 @@ func planProjectionExpr(
 		typ := &ct[rightIdx]
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
-		op, err = exec.GetProjectionLConstOperator(typ, binOp, rightOp, rightIdx, lConstArg, resultIdx)
+		op, err = exec.GetProjectionLConstOperator(ctx, typ, binOp, rightOp, rightIdx, lConstArg, resultIdx, acc)
 		ct = append(ct, *typ)
 		return op, resultIdx, ct, err
 	}
-	leftOp, leftIdx, ct, err := planProjectionOperators(ctx, left, columnTypes, input)
+	leftOp, leftIdx, ct, err := planProjectionOperators(ctx, tctx, left, columnTypes, input, acc)
 	if err != nil {
 		return nil, resultIdx, ct, err
 	}
@@ -678,15 +702,15 @@ func planProjectionExpr(
 				err = errors.Errorf("IN operator supported only on constant expressions")
 				return nil, resultIdx, ct, err
 			}
-			op, err = exec.GetInProjectionOperator(typ, leftOp, leftIdx, resultIdx, datumTuple, negate)
+			op, err = exec.GetInProjectionOperator(ctx, typ, leftOp, leftIdx, resultIdx, datumTuple, negate, acc)
 		} else {
-			op, err = exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
+			op, err = exec.GetProjectionRConstOperator(ctx, typ, binOp, leftOp, leftIdx, rConstArg, resultIdx, acc)
 		}
 		ct = append(ct, *typ)
 		return op, resultIdx, ct, err
 	}
 	// Case 3: neither are constant.
-	rightOp, rightIdx, ct, err := planProjectionOperators(ctx, right, ct, leftOp)
+	rightOp, rightIdx, ct, err := planProjectionOperators(ctx, tctx, right, ct, leftOp, acc)
 	if err != nil {
 		return nil, resultIdx, nil, err
 	}
@@ -697,7 +721,7 @@ func planProjectionExpr(
 		return nil, resultIdx, ct, err
 	}
 	resultIdx = len(ct)
-	op, err = exec.GetProjectionOperator(typ, binOp, rightOp, leftIdx, rightIdx, resultIdx)
+	op, err = exec.GetProjectionOperator(ctx, typ, binOp, rightOp, leftIdx, rightIdx, resultIdx, acc)
 	ct = append(ct, *typ)
 	return op, resultIdx, ct, err
 }
@@ -878,9 +902,11 @@ func (f *Flow) setupVectorizedRouter(
 // Inboxes that are created are also returned as []distqlpb.MetadataSource, so
 // that any remote metadata can be read through calling DrainMeta.
 func (f *Flow) setupVectorizedInputSynchronizer(
+	ctx context.Context,
 	input distsqlpb.InputSyncSpec,
 	streamIDToInputOp map[distsqlpb.StreamID]exec.Operator,
 	recordingStats bool,
+	acc *mon.BoundAccount,
 ) (exec.Operator, []distsqlpb.MetadataSource, error) {
 	inputStreamOps := make([]exec.Operator, 0, len(input.Streams))
 	metaSources := make([]distsqlpb.MetadataSource, 0, len(input.Streams))
@@ -928,9 +954,13 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 	if len(inputStreamOps) > 1 {
 		statsInputs := inputStreamOps
 		if input.Type == distsqlpb.InputSyncSpec_ORDERED {
-			op = exec.NewOrderedSynchronizer(
-				inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), distsqlpb.ConvertToColumnOrdering(input.Ordering),
+			var err error
+			op, err = exec.NewOrderedSynchronizer(
+				ctx, inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), distsqlpb.ConvertToColumnOrdering(input.Ordering), acc,
 			)
+			if err != nil {
+				return nil, nil, err
+			}
 		} else {
 			op = exec.NewUnorderedSynchronizer(inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), &f.waitGroup)
 			// Don't use the unordered synchronizer's inputs for stats collection
@@ -988,7 +1018,7 @@ func init() {
 	errors.RegisterWrapperDecoder(errors.GetTypeKey((*VectorizedSetupError)(nil)), decodeVectorizedSetupError)
 }
 
-func (f *Flow) setupVectorized(ctx context.Context) error {
+func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error {
 	streamIDToInputOp := make(map[distsqlpb.StreamID]exec.Operator)
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
 	// queue is a queue of indices into f.spec.Processors, for topologically
@@ -1033,7 +1063,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		}
 		inputs = inputs[:0]
 		for i := range pspec.Input {
-			synchronizer, metadataSources, err := f.setupVectorizedInputSynchronizer(pspec.Input[i], streamIDToInputOp, recordingStats)
+			synchronizer, metadataSources, err := f.setupVectorizedInputSynchronizer(ctx, pspec.Input[i], streamIDToInputOp, recordingStats, acc)
 			if err != nil {
 				return err
 			}
@@ -1041,9 +1071,9 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 			inputs = append(inputs, synchronizer)
 		}
 
-		op, outputTypes, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
+		op, outputTypes, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs, acc)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "Unable to vectorize execution plan.")
 		}
 		if metaSource, ok := op.(distsqlpb.MetadataSource); ok {
 			metadataSourcesQueue = append(metadataSourcesQueue, metaSource)

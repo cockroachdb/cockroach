@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
@@ -112,11 +113,13 @@ var _ Operator = &orderedAggregator{}
 // function. The slice at that index specifies the columns of the input batch
 // that the aggregate function should work on.
 func NewOrderedAggregator(
+	ctx context.Context,
 	input Operator,
 	colTypes []types.T,
 	aggFns []distsqlpb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
+	acc *mon.BoundAccount,
 ) (Operator, error) {
 	if len(aggFns) != len(aggCols) {
 		return nil,
@@ -167,6 +170,14 @@ func NewOrderedAggregator(
 
 	if err != nil {
 		return nil, err
+	}
+
+	if acc != nil {
+		// Mirror the space usage used in Init().
+		err = acc.Grow(ctx, EstimateBatchSizeBytes(a.outputTypes, coldata.BatchSize*2))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return a, nil

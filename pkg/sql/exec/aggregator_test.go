@@ -68,7 +68,14 @@ var aggTypes = []aggType{
 		name: "hash",
 	},
 	{
-		new:  NewOrderedAggregator,
+		new: func(input Operator,
+			colTypes []types.T,
+			aggFns []distsqlpb.AggregatorSpec_Func,
+			groupCols []uint32,
+			aggCols [][]uint32,
+		) (Operator, error) {
+			return NewOrderedAggregator(context.Background(), input, colTypes, aggFns, groupCols, aggCols, nil)
+		},
 		name: "ordered",
 	},
 }
@@ -122,6 +129,7 @@ func (tc *aggregatorTestCase) init() error {
 }
 
 func TestAggregatorOneFunc(t *testing.T) {
+	ctx := context.Background()
 	testCases := []aggregatorTestCase{
 		{
 			input: tuples{
@@ -263,11 +271,13 @@ func TestAggregatorOneFunc(t *testing.T) {
 
 			tupleSource := newOpTestInput(uint16(tc.batchSize), tc.input)
 			a, err := NewOrderedAggregator(
+				ctx,
 				tupleSource,
 				tc.colTypes,
 				tc.aggFns,
 				tc.groupCols,
 				tc.aggCols,
+				nil,
 			)
 			if err != nil {
 				t.Fatal(err)

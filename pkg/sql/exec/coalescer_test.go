@@ -20,6 +20,7 @@ import (
 )
 
 func TestCoalescer(t *testing.T) {
+	ctx := context.Background()
 	// Large tuple number for coalescing.
 	nRows := coldata.BatchSize*3 + 7
 	large := make(tuples, nRows)
@@ -56,7 +57,7 @@ func TestCoalescer(t *testing.T) {
 			colIndices[i] = i
 		}
 		runTests(t, []tuples{tc.tuples}, tc.tuples, orderedVerifier, colIndices, func(input []Operator) (Operator, error) {
-			return NewCoalescerOp(input[0], tc.colTypes), nil
+			return NewCoalescerOp(ctx, input[0], tc.colTypes, nil)
 		})
 	}
 }

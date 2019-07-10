@@ -99,13 +99,14 @@ func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 }
 
 func TestGetProjectionConstOperator(t *testing.T) {
+	ctx := context.Background()
 	binOp := tree.Mult
 	var input Operator
 	colIdx := 3
 	constVal := float64(31.37)
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(semtypes.Float, binOp, input, colIdx, constArg, outputIdx)
+	op, err := GetProjectionRConstOperator(ctx, semtypes.Float, binOp, input, colIdx, constArg, outputIdx, nil)
 	if err != nil {
 		t.Error(err)
 	}
@@ -121,13 +122,14 @@ func TestGetProjectionConstOperator(t *testing.T) {
 }
 
 func TestGetProjectionOperator(t *testing.T) {
+	ctx := context.Background()
 	ct := semtypes.Int2
 	binOp := tree.Mult
 	var input Operator
 	col1Idx := 5
 	col2Idx := 7
 	outputIdx := 9
-	op, err := GetProjectionOperator(ct, binOp, input, col1Idx, col2Idx, outputIdx)
+	op, err := GetProjectionOperator(ctx, ct, binOp, input, col1Idx, col2Idx, outputIdx, nil)
 	if err != nil {
 		t.Error(err)
 	}

@@ -44,7 +44,7 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := newColumnarizer(&flowCtx, 0 /* processorID */, input)
+	col, err := newColumnarizer(ctx, &flowCtx, 0 /* processorID */, input, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := newColumnarizer(&flowCtx, 0 /* processorID */, input)
+	col, err := newColumnarizer(ctx, &flowCtx, 0 /* processorID */, input, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

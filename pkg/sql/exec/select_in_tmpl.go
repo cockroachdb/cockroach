@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
@@ -62,9 +63,25 @@ const (
 )
 
 func GetInProjectionOperator(
-	ct *semtypes.T, input Operator, colIdx int, resultIdx int, datumTuple *tree.DTuple, negate bool,
+	ctx context.Context,
+	ct *semtypes.T,
+	input Operator,
+	colIdx int,
+	resultIdx int,
+	datumTuple *tree.DTuple,
+	negate bool,
+	acc *mon.BoundAccount,
 ) (Operator, error) {
 	var err error
+
+	if acc != nil {
+		// Account for the column that we add when projecting
+		err = acc.Grow(ctx, EstimateBatchSizeBytes([]types.T{types.Bool}, coldata.BatchSize))
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	switch t := conv.FromColumnType(ct); t {
 	// {{range .}}
 	case types._TYPE:

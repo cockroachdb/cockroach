@@ -11,6 +11,7 @@
 package exec
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -20,6 +21,8 @@ import (
 
 func TestTopKSorter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
 
 	tcs := []struct {
 		name     string
@@ -72,7 +75,7 @@ func TestTopKSorter(t *testing.T) {
 				cols[i] = i
 			}
 			runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
-				return NewTopKSorter(input[0], tc.typ, tc.ordCols, tc.k), nil
+				return NewTopKSorter(ctx, input[0], tc.typ, tc.ordCols, tc.k, nil)
 			})
 		})
 	}

@@ -60,7 +60,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal("MetadataTestSender is not a RowSource")
 	}
 
-	col, err := newColumnarizer(&flowCtx, 1, mtsAsRowSource)
+	col, err := newColumnarizer(ctx, &flowCtx, 1, mtsAsRowSource, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

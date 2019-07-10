@@ -123,6 +123,7 @@ func TestSort(t *testing.T) {
 }
 
 func TestSortRandomized(t *testing.T) {
+	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
 	nTups := 1025
 	k := uint16(4)
@@ -164,7 +165,7 @@ func TestSortRandomized(t *testing.T) {
 					}
 					runTests(t, []tuples{tups}, expected, orderedVerifier, cols, func(input []Operator) (Operator, error) {
 						if topK {
-							return NewTopKSorter(input[0], typs[:nCols], ordCols, k), nil
+							return NewTopKSorter(ctx, input[0], typs[:nCols], ordCols, k, nil)
 						}
 						return NewSorter(input[0], typs[:nCols], ordCols)
 					})
@@ -275,7 +276,7 @@ func BenchmarkSort(b *testing.B) {
 						var sorter Operator
 						var resultBatches int
 						if topK {
-							sorter = NewTopKSorter(source, typs, ordCols, k)
+							sorter, _ = NewTopKSorter(ctx, source, typs, ordCols, k, nil)
 							resultBatches = 1
 						} else {
 							var err error

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // columnarizer turns a RowSource input into an exec.Operator output, by
@@ -37,7 +38,9 @@ type columnarizer struct {
 var _ exec.Operator = &columnarizer{}
 
 // newColumnarizer returns a new columnarizer.
-func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*columnarizer, error) {
+func newColumnarizer(
+	ctx context.Context, flowCtx *FlowCtx, processorID int32, input RowSource, acc *mon.BoundAccount,
+) (*columnarizer, error) {
 	c := &columnarizer{
 		input: input,
 	}
@@ -54,6 +57,15 @@ func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*col
 		return nil, err
 	}
 	c.Init()
+
+	if acc != nil {
+		amt := exec.EstimateBatchSizeBytes(conv.FromColumnTypes(c.OutputTypes()), coldata.BatchSize)
+		err := acc.Grow(ctx, amt)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return c, nil
 }
 

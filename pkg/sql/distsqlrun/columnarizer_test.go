@@ -39,7 +39,7 @@ func BenchmarkColumnarize(b *testing.B) {
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 
-	c, err := newColumnarizer(flowCtx, 0, input)
+	c, err := newColumnarizer(ctx, flowCtx, 0, input, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
