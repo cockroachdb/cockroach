@@ -12,6 +12,7 @@ package distsqlrun
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -23,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // TODO(radu): we currently create one batch at a time and run the KV operations
@@ -401,8 +402,13 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 		jr.finalLookupBatch = true
 		return jrCollectingOutputRows, nil
 	}
+	// Sort the spans so that we can rely upon the fetcher to limit the number of
+	// results per batch. It's safe to reorder the spans here because we already
+	// restore the original order of the output during the output collection
+	// phase.
+	sort.Sort(spans)
 	err := jr.fetcher.StartScan(
-		jr.Ctx, jr.flowCtx.txn, spans, false /* limitBatches */, 0, /* limitHint */
+		jr.Ctx, jr.flowCtx.txn, spans, true /* limitBatches */, 0, /* limitHint */
 		jr.flowCtx.traceKV)
 	if err != nil {
 		jr.MoveToDraining(err)
