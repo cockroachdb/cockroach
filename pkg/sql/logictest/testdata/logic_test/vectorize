@@ -434,3 +434,13 @@ query ITI
 SELECT * FROM system.namespace LIMIT 1
 ----
 0  defaultdb  50
+
+# Regression test for issue with fetching from unique indexes with embedded
+# nulls.
+statement ok
+CREATE TABLE t38753 (x INT PRIMARY KEY, y INT, UNIQUE INDEX (y)); INSERT INTO t38753 VALUES (0, NULL)
+
+query II
+SELECT * FROM t38753 ORDER BY y;
+----
+0  NULL

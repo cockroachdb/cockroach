@@ -840,6 +840,7 @@ func (rf *CFetcher) processValue(
 				table.extraValColOrdinals,
 				table.extraTypes,
 				nil,
+				&rf.machine.remainingValueColsByIdx,
 				valueBytes,
 			)
 			if err != nil {
