@@ -114,7 +114,7 @@ func (t T) GoTypeName() string {
 // GoTypeSliceName returns how a slice of the receiver type is represented.
 func (t T) GoTypeSliceName() string {
 	if t == Bytes {
-		return "coldata.Bytes"
+		return "*coldata.Bytes"
 	}
 	return "[]" + t.GoTypeName()
 }

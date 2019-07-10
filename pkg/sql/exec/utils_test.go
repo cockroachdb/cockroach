@@ -473,7 +473,7 @@ func (r *opTestOutput) next(ctx context.Context) tuple {
 			ret[outIdx] = nil
 		} else {
 			var val reflect.Value
-			if colBytes, ok := vec.Col().(coldata.Bytes); ok {
+			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
 				val = reflect.ValueOf(colBytes.Get(int(curIdx)))
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(int(curIdx))
