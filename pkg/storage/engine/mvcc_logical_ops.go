@@ -111,9 +111,10 @@ func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 		}
 
 		ol.recordOp(&enginepb.MVCCWriteIntentOp{
-			TxnID:     details.Txn.ID,
-			TxnKey:    details.Txn.Key,
-			Timestamp: details.Timestamp,
+			TxnID:           details.Txn.ID,
+			TxnKey:          details.Txn.Key,
+			TxnMinTimestamp: details.Txn.MinTimestamp,
+			Timestamp:       details.Timestamp,
 		})
 	case MVCCUpdateIntentOpType:
 		ol.recordOp(&enginepb.MVCCUpdateIntentOp{

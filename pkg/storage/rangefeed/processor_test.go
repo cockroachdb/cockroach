@@ -51,12 +51,19 @@ func writeValueOp(ts hlc.Timestamp) enginepb.MVCCLogicalOp {
 	return writeValueOpWithKV(roachpb.Key("a"), ts, nil /* val */)
 }
 
-func writeIntentOpWithKey(txnID uuid.UUID, key []byte, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
+func writeIntentOpWithDetails(
+	txnID uuid.UUID, key []byte, minTS, ts hlc.Timestamp,
+) enginepb.MVCCLogicalOp {
 	return makeLogicalOp(&enginepb.MVCCWriteIntentOp{
-		TxnID:     txnID,
-		TxnKey:    key,
-		Timestamp: ts,
+		TxnID:           txnID,
+		TxnKey:          key,
+		TxnMinTimestamp: minTS,
+		Timestamp:       ts,
 	})
+}
+
+func writeIntentOpWithKey(txnID uuid.UUID, key []byte, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
+	return writeIntentOpWithDetails(txnID, key, ts /* minTS */, ts)
 }
 
 func writeIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
@@ -601,17 +608,17 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 	txn3Proto := roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.PENDING}
 
 	// Modifications for test 2.
-	txn1MetaT2Pre := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts25, MinTimestamp: ts25}
-	txn1MetaT2Post := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts50, MinTimestamp: ts50}
-	txn2MetaT2Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts60, MinTimestamp: ts60}
-	txn3MetaT2Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts70, MinTimestamp: ts70}
+	txn1MetaT2Pre := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts25, MinTimestamp: ts10}
+	txn1MetaT2Post := enginepb.TxnMeta{ID: txn1, Key: keyA, Timestamp: ts50, MinTimestamp: ts10}
+	txn2MetaT2Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts60, MinTimestamp: ts20}
+	txn3MetaT2Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts70, MinTimestamp: ts30}
 	txn1ProtoT2 := roachpb.Transaction{TxnMeta: txn1MetaT2Post, Status: roachpb.COMMITTED}
 	txn2ProtoT2 := roachpb.Transaction{TxnMeta: txn2MetaT2Post, Status: roachpb.PENDING}
 	txn3ProtoT2 := roachpb.Transaction{TxnMeta: txn3MetaT2Post, Status: roachpb.PENDING}
 
 	// Modifications for test 3.
-	txn2MetaT3Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts60, MinTimestamp: ts60}
-	txn3MetaT3Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts90, MinTimestamp: ts90}
+	txn2MetaT3Post := enginepb.TxnMeta{ID: txn2, Key: keyB, Timestamp: ts60, MinTimestamp: ts20}
+	txn3MetaT3Post := enginepb.TxnMeta{ID: txn3, Key: keyC, Timestamp: ts90, MinTimestamp: ts30}
 	txn2ProtoT3 := roachpb.Transaction{TxnMeta: txn2MetaT3Post, Status: roachpb.ABORTED}
 	txn3ProtoT3 := roachpb.Transaction{TxnMeta: txn3MetaT3Post, Status: roachpb.PENDING}
 
@@ -681,11 +688,14 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 	defer stopper.Stop(context.Background())
 
 	// Add a few intents and move the closed timestamp forward.
+	writeIntentOpFromMeta := func(txn enginepb.TxnMeta) enginepb.MVCCLogicalOp {
+		return writeIntentOpWithDetails(txn.ID, txn.Key, txn.MinTimestamp, txn.Timestamp)
+	}
 	p.ConsumeLogicalOps(
-		writeIntentOpWithKey(txn1Meta.ID, txn1Meta.Key, txn1Meta.Timestamp),
-		writeIntentOpWithKey(txn2Meta.ID, txn2Meta.Key, txn2Meta.Timestamp),
-		writeIntentOpWithKey(txn2Meta.ID, txn2Meta.Key, txn2Meta.Timestamp),
-		writeIntentOpWithKey(txn3Meta.ID, txn3Meta.Key, txn3Meta.Timestamp),
+		writeIntentOpFromMeta(txn1Meta),
+		writeIntentOpFromMeta(txn2Meta),
+		writeIntentOpFromMeta(txn2Meta),
+		writeIntentOpFromMeta(txn3Meta),
 	)
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 40})
 	p.syncEventC()
@@ -700,9 +710,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Write another intent for one of the txns. This moves the resolved
 	// timestamp forward.
-	p.ConsumeLogicalOps(
-		writeIntentOpWithKey(txn1MetaT2Pre.ID, txn1MetaT2Pre.Key, txn1MetaT2Pre.Timestamp),
-	)
+	p.ConsumeLogicalOps(writeIntentOpFromMeta(txn1MetaT2Pre))
 	p.syncEventC()
 	require.Equal(t, hlc.Timestamp{WallTime: 19}, p.rts.Get())
 

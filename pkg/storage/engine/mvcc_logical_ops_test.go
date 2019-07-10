@@ -123,18 +123,20 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			Timestamp: hlc.Timestamp{Logical: 1},
 		}),
 		makeOp(&enginepb.MVCCWriteIntentOp{
-			TxnID:     txn1.ID,
-			TxnKey:    txn1.Key,
-			Timestamp: hlc.Timestamp{Logical: 2},
+			TxnID:           txn1.ID,
+			TxnKey:          txn1.Key,
+			TxnMinTimestamp: txn1.MinTimestamp,
+			Timestamp:       hlc.Timestamp{Logical: 2},
 		}),
 		makeOp(&enginepb.MVCCUpdateIntentOp{
 			TxnID:     txn1.ID,
 			Timestamp: hlc.Timestamp{Logical: 3},
 		}),
 		makeOp(&enginepb.MVCCWriteIntentOp{
-			TxnID:     txn1.ID,
-			TxnKey:    txn1.Key,
-			Timestamp: hlc.Timestamp{Logical: 4},
+			TxnID:           txn1.ID,
+			TxnKey:          txn1.Key,
+			TxnMinTimestamp: txn1.MinTimestamp,
+			Timestamp:       hlc.Timestamp{Logical: 4},
 		}),
 		makeOp(&enginepb.MVCCCommitIntentOp{
 			TxnID:     txn1.ID,
@@ -147,9 +149,10 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			Timestamp: hlc.Timestamp{Logical: 4},
 		}),
 		makeOp(&enginepb.MVCCWriteIntentOp{
-			TxnID:     txn2.ID,
-			TxnKey:    txn2.Key,
-			Timestamp: hlc.Timestamp{Logical: 5},
+			TxnID:           txn2.ID,
+			TxnKey:          txn2.Key,
+			TxnMinTimestamp: txn2.MinTimestamp,
+			Timestamp:       hlc.Timestamp{Logical: 5},
 		}),
 		makeOp(&enginepb.MVCCUpdateIntentOp{
 			TxnID:     txn2.ID,

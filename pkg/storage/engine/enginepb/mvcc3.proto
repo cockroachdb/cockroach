@@ -199,6 +199,7 @@ message MVCCWriteIntentOp {
     (gogoproto.customname) = "TxnID",
     (gogoproto.nullable) = false];
   bytes txn_key = 2;
+  util.hlc.Timestamp txn_min_timestamp = 4 [(gogoproto.nullable) = false];
   util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
 }
 
