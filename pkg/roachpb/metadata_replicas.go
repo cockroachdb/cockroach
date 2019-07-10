@@ -24,9 +24,9 @@ type ReplicaDescriptors struct {
 // All construction of ReplicaDescriptors is required to go through this method
 // so we can guarantee sortedness, which is used to speed up accessor
 // operations.
-func MakeReplicaDescriptors(replicas []ReplicaDescriptor) ReplicaDescriptors {
-	sort.Sort(byTypeThenReplicaID(replicas))
-	return ReplicaDescriptors{wrapped: replicas}
+func MakeReplicaDescriptors(replicas *[]ReplicaDescriptor) ReplicaDescriptors {
+	sort.Sort((*byTypeThenReplicaID)(replicas))
+	return ReplicaDescriptors{wrapped: *replicas}
 }
 
 // Unwrap returns every replica in the set. It is a placeholder for code that
@@ -107,7 +107,7 @@ func (d *ReplicaDescriptors) RemoveReplica(
 	removed := d.wrapped[len(d.wrapped)-1]
 	d.wrapped = d.wrapped[:len(d.wrapped)-1]
 	// The swap may have broken our sortedness invariant, so re-sort.
-	sort.Sort(byTypeThenReplicaID(d.wrapped))
+	sort.Sort((*byTypeThenReplicaID)(&d.wrapped))
 	return removed, true
 }
 
@@ -119,11 +119,11 @@ func (d ReplicaDescriptors) QuorumSize() int {
 
 type byTypeThenReplicaID []ReplicaDescriptor
 
-func (x byTypeThenReplicaID) Len() int      { return len(x) }
-func (x byTypeThenReplicaID) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
-func (x byTypeThenReplicaID) Less(i, j int) bool {
-	if x[i].GetType() == x[j].GetType() {
-		return x[i].ReplicaID < x[j].ReplicaID
+func (x *byTypeThenReplicaID) Len() int      { return len(*x) }
+func (x *byTypeThenReplicaID) Swap(i, j int) { (*x)[i], (*x)[j] = (*x)[j], (*x)[i] }
+func (x *byTypeThenReplicaID) Less(i, j int) bool {
+	if (*x)[i].GetType() == (*x)[j].GetType() {
+		return (*x)[i].ReplicaID < (*x)[j].ReplicaID
 	}
-	return x[i].GetType() < x[j].GetType()
+	return (*x)[i].GetType() < (*x)[j].GetType()
 }

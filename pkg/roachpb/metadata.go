@@ -125,8 +125,8 @@ func (r RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
 
 // Replicas returns the set of nodes/stores on which replicas of this range are
 // stored.
-func (r RangeDescriptor) Replicas() ReplicaDescriptors {
-	return MakeReplicaDescriptors(r.InternalReplicas)
+func (r *RangeDescriptor) Replicas() ReplicaDescriptors {
+	return MakeReplicaDescriptors(&r.InternalReplicas)
 }
 
 // SetReplicas overwrites the set of nodes/stores on which replicas of this
@@ -155,7 +155,7 @@ func (r *RangeDescriptor) RemoveReplica(nodeID NodeID, storeID StoreID) (Replica
 
 // GetReplicaDescriptor returns the replica which matches the specified store
 // ID.
-func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
+func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
 	for _, repDesc := range r.Replicas().Unwrap() {
 		if repDesc.StoreID == storeID {
 			return repDesc, true
@@ -166,7 +166,7 @@ func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescripto
 
 // GetReplicaDescriptorByID returns the replica which matches the specified store
 // ID.
-func (r RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
+func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
 	for _, repDesc := range r.Replicas().Unwrap() {
 		if repDesc.ReplicaID == replicaID {
 			return repDesc, true
