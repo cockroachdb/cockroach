@@ -28,9 +28,16 @@ type ReplicaDescriptors struct {
 // All construction of ReplicaDescriptors is required to go through this method
 // so we can guarantee sortedness, which is used to speed up accessor
 // operations.
-func MakeReplicaDescriptors(replicas []ReplicaDescriptor) ReplicaDescriptors {
-	sort.Sort(byTypeThenReplicaID(replicas))
-	return ReplicaDescriptors{wrapped: replicas}
+//
+// The function accepts a pointer to a slice instead of a slice directly to
+// avoid an allocation when boxing the argument as a sort.Interface. This may
+// cause the argument to escape to the heap for some callers, at which point
+// we're trading one allocation for another. However, if the caller already has
+// the slice header on the heap (which is the common case for *RangeDescriptors)
+// then this is a net win.
+func MakeReplicaDescriptors(replicas *[]ReplicaDescriptor) ReplicaDescriptors {
+	sort.Sort((*byTypeThenReplicaID)(replicas))
+	return ReplicaDescriptors{wrapped: *replicas}
 }
 
 func (d ReplicaDescriptors) String() string {
@@ -122,7 +129,7 @@ func (d *ReplicaDescriptors) RemoveReplica(
 	removed := d.wrapped[len(d.wrapped)-1]
 	d.wrapped = d.wrapped[:len(d.wrapped)-1]
 	// The swap may have broken our sortedness invariant, so re-sort.
-	sort.Sort(byTypeThenReplicaID(d.wrapped))
+	sort.Sort((*byTypeThenReplicaID)(&d.wrapped))
 	return removed, true
 }
 
@@ -134,11 +141,11 @@ func (d ReplicaDescriptors) QuorumSize() int {
 
 type byTypeThenReplicaID []ReplicaDescriptor
 
-func (x byTypeThenReplicaID) Len() int      { return len(x) }
-func (x byTypeThenReplicaID) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
-func (x byTypeThenReplicaID) Less(i, j int) bool {
-	if x[i].GetType() == x[j].GetType() {
-		return x[i].ReplicaID < x[j].ReplicaID
+func (x *byTypeThenReplicaID) Len() int      { return len(*x) }
+func (x *byTypeThenReplicaID) Swap(i, j int) { (*x)[i], (*x)[j] = (*x)[j], (*x)[i] }
+func (x *byTypeThenReplicaID) Less(i, j int) bool {
+	if (*x)[i].GetType() == (*x)[j].GetType() {
+		return (*x)[i].ReplicaID < (*x)[j].ReplicaID
 	}
-	return x[i].GetType() < x[j].GetType()
+	return (*x)[i].GetType() < (*x)[j].GetType()
 }

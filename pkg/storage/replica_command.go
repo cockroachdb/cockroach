@@ -1422,7 +1422,7 @@ func (s *Store) AdminRelocateRange(
 			desc.NextReplicaID++
 		case roachpb.REMOVE_REPLICA:
 			newReplicas := removeTargetFromSlice(desc.Replicas().Unwrap(), target)
-			desc.SetReplicas(roachpb.MakeReplicaDescriptors(newReplicas))
+			desc.SetReplicas(roachpb.MakeReplicaDescriptors(&newReplicas))
 		default:
 			panic(errors.Errorf("unknown ReplicaChangeType %v", changeType))
 		}

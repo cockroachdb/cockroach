@@ -2086,7 +2086,7 @@ func (s *Store) NewRangeDescriptor(
 		EndKey:        end,
 		NextReplicaID: roachpb.ReplicaID(len(replicas) + 1),
 	}
-	desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
+	desc.SetReplicas(roachpb.MakeReplicaDescriptors(&replicas))
 	return desc, nil
 }
 

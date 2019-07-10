@@ -125,8 +125,8 @@ func (r RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
 
 // Replicas returns the set of nodes/stores on which replicas of this range are
 // stored.
-func (r RangeDescriptor) Replicas() ReplicaDescriptors {
-	return MakeReplicaDescriptors(r.InternalReplicas)
+func (r *RangeDescriptor) Replicas() ReplicaDescriptors {
+	return MakeReplicaDescriptors(&r.InternalReplicas)
 }
 
 // SetReplicas overwrites the set of nodes/stores on which replicas of this
@@ -191,7 +191,7 @@ func (r RangeDescriptor) GetGeneration() int64 {
 }
 
 // IncrementGeneration increments the generation of this RangeDescriptor.
-func (r *RangeDescriptor) IncrementGeneration() {
+func (r RangeDescriptor) IncrementGeneration() {
 	// Create a new *int64 for the new generation. We permit shallow copies of
 	// RangeDescriptors, so we need to be careful not to mutate the
 	// potentially-shared generation counter.
@@ -236,7 +236,7 @@ func (r RangeDescriptor) Validate() error {
 	return nil
 }
 
-func (r RangeDescriptor) String() string {
+func (r *RangeDescriptor) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "r%d:", r.RangeID)
 
