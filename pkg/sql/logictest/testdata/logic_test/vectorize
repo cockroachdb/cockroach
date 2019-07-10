@@ -422,3 +422,15 @@ INSERT INTO t38626 VALUES (1, 'hello')
 
 statement ok
 EXPERIMENTAL SCRUB TABLE t38626
+
+# Regression test for issue with reading from system tables that have no
+# sentinel keys.
+query T
+SELECT "hashedPassword" FROM system.users LIMIT 1
+----
+·
+
+query ITI
+SELECT * FROM system.namespace LIMIT 1
+----
+0  defaultdb  50
