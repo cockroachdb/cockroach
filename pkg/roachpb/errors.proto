@@ -126,14 +126,6 @@ enum TransactionAbortedReason {
   // priority) considered us abandoned and pushed us.
   ABORT_REASON_ABORTED_RECORD_FOUND = 1;
 
-  // The request attempting to create a transaction record has a timestamp below
-  // the TxnSpanGCThreshold, so there might have been an ABORTED txn record that
-  // got GCed (so, we might be in the ABORT_REASON_ABORTED_RECORD_FOUND case and
-  // not know).
-  // TODO(nvanbenschoten): Remove this error reason in 2.3, at which point no
-  // nodes in the cluster will ever return it.
-  ABORT_REASON_NEW_TXN_RECORD_TOO_OLD = 2;
-
   // The client is trying to use a transaction that's already been aborted. The
   // TxnCoordSender detects this. Either the client is misusing a txn, or the
   // TxnCoordSender found out about the transaction being aborted async through
@@ -163,6 +155,8 @@ enum TransactionAbortedReason {
   // lease transfer. As above, if the error has not been converted by the time
   // it reaches a client, then it's not a replay.
   ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY= 7;
+  
+  reserved 2;
 }
 
 // A TransactionAbortedError indicates that the client should retry the
