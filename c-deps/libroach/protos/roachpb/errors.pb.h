@@ -196,7 +196,6 @@ namespace roachpb {
 
 enum TransactionStatusError_Reason {
   TransactionStatusError_Reason_REASON_UNKNOWN = 0,
-  TransactionStatusError_Reason_REASON_TXN_NOT_FOUND = 1,
   TransactionStatusError_Reason_REASON_TXN_COMMITTED = 2
 };
 bool TransactionStatusError_Reason_IsValid(int value);
@@ -1524,8 +1523,6 @@ class TransactionStatusError : public ::google::protobuf::MessageLite /* @@proto
   typedef TransactionStatusError_Reason Reason;
   static const Reason REASON_UNKNOWN =
     TransactionStatusError_Reason_REASON_UNKNOWN;
-  static const Reason REASON_TXN_NOT_FOUND =
-    TransactionStatusError_Reason_REASON_TXN_NOT_FOUND;
   static const Reason REASON_TXN_COMMITTED =
     TransactionStatusError_Reason_REASON_TXN_COMMITTED;
   static inline bool Reason_IsValid(int value) {
