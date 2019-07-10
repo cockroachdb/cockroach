@@ -629,6 +629,8 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 	olAmountCol := cb.ColVec(8).Float64()
 	olDistInfoCol := cb.ColVec(9).Bytes()
 
+	olDeliveryDCol.Reset()
+	olDistInfoCol.Reset()
 	for rowIdx := 0; rowIdx < numOrderLines; rowIdx++ {
 		olNumber := rowIdx + 1
 
