@@ -159,6 +159,7 @@ func (w *bulkingest) Tables() []workload.Table {
 				var payload []byte
 				payload, *alloc = alloc.Alloc(w.cCount*w.payloadBytes, 0 /* extraCap */)
 				randutil.ReadTestdataBytes(rng, payload)
+				payloadCol.Reset()
 				for rowIdx := 0; rowIdx < w.cCount; rowIdx++ {
 					c := rowIdx
 					off := c * w.payloadBytes

@@ -164,4 +164,9 @@ func (m *MemBatch) Reset(types []coltypes.T, length int) {
 // ResetInternalBatch implements the Batch interface.
 func (m *MemBatch) ResetInternalBatch() {
 	m.SetSelection(false)
+	for _, v := range m.b {
+		if v.Type() == coltypes.Bytes {
+			v.Bytes().Reset()
+		}
+	}
 }

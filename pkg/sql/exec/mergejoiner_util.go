@@ -276,7 +276,13 @@ func (bg *mjBufferedGroup) Reset(types []coltypes.T, length int) {
 }
 
 // ResetInternalBatch implements the Batch interface.
-func (bg *mjBufferedGroup) ResetInternalBatch() {}
+func (bg *mjBufferedGroup) ResetInternalBatch() {
+	for _, v := range bg.colVecs {
+		if v.Type() == coltypes.Bytes {
+			v.Bytes().Reset()
+		}
+	}
+}
 
 // reset resets the state of the buffered group so that we can reuse the
 // underlying memory.
