@@ -389,6 +389,7 @@ SELECT ARRAY(SELECT 1) FROM a LIMIT 1
 ----
 {1}
 
+<<<<<<< HEAD
 # Regression test for decoding OID type.
 statement ok
 CREATE TABLE t38754 (a OID PRIMARY KEY)
@@ -451,3 +452,14 @@ query III
 SELECT 0, 1 + 2, 3 * 4 FROM a HAVING true
 ----
 0 3 12
+
+# Regression test for #38752.
+query IIBB
+SELECT count(*), count(*) + 1, count(*) > 4, count(*) + 1 > 4 FROM b
+----
+4  5  false  true
+
+query I
+SELECT * FROM (SELECT count(*) AS x FROM b) WHERE x > 0;
+----
+4
