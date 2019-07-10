@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/execerror"
 	// */}}
