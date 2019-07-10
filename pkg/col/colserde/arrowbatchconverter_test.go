@@ -160,16 +160,22 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		}
 		if typ == coltypes.Bytes {
 			// This type has variable length elements, fit all of them to be fixedLen
-			// bytes long.
+			// bytes long so that we can compare results of one benchmark with
+			// another. Since we can't overwrite elements in a Bytes, create a new
+			// one.
+			// TODO(asubiotto): We should probably create some random spec struct that
+			//  we pass in to RandomBatch.
 			bytes := batch.ColVec(0).Bytes()
+			newBytes := coldata.NewBytes(bytes.Len())
 			for i := 0; i < bytes.Len(); i++ {
 				diff := len(bytes.Get(i)) - fixedLen
 				if diff < 0 {
-					bytes.Set(i, append(bytes.Get(i), make([]byte, -diff)...))
-				} else if diff > 0 {
-					bytes.Set(i, bytes.Get(i)[:fixedLen])
+					newBytes.Set(i, append(bytes.Get(i), make([]byte, -diff)...))
+				} else if diff >= 0 {
+					newBytes.Set(i, bytes.Get(i)[:fixedLen])
 				}
 			}
+			batch.ColVec(0).SetCol(newBytes)
 		}
 		c, err := NewArrowBatchConverter([]coltypes.T{typ})
 		require.NoError(b, err)
