@@ -28,6 +28,7 @@ type coalescerOp struct {
 }
 
 var _ Operator = &coalescerOp{}
+var _ StaticMemoryOperator = &coalescerOp{}
 
 // NewCoalescerOp creates a new coalescer operator on the given input operator
 // with the given column types.
@@ -36,6 +37,10 @@ func NewCoalescerOp(input Operator, colTypes []types.T) Operator {
 		input:      input,
 		inputTypes: colTypes,
 	}
+}
+
+func (p *coalescerOp) EstimateStaticMemoryUsage() int {
+	return 2 * EstimateBatchSizeBytes(p.inputTypes, coldata.BatchSize)
 }
 
 func (p *coalescerOp) Init() {

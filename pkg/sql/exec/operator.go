@@ -34,6 +34,14 @@ type Operator interface {
 	Next(context.Context) coldata.Batch
 }
 
+// StaticMemoryOperator is an interface that streaming operators can implement
+// if they are able to declare their memory usage upfront.
+type StaticMemoryOperator interface {
+	// EstimateStaticMemoryUsage estimates the memory usage (in bytes)
+	// of an operator.
+	EstimateStaticMemoryUsage() int
+}
+
 // resetter is an interface that operators can implement if they can be reset
 // either for reusing (to keep the already allocated memory) or during tests.
 type resetter interface {

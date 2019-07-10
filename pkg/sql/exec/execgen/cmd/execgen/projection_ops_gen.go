@@ -51,6 +51,10 @@ type {{template "opRConstName" .}} struct {
 	outputIdx int
 }
 
+func (p {{template "opRConstName" .}}) EstimateStaticMemoryUsage() int {
+	return EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize)
+}
+
 func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	n := batch.Length()
@@ -95,6 +99,10 @@ type {{template "opLConstName" .}} struct {
 	outputIdx int
 }
 
+func (p {{template "opLConstName" .}}) EstimateStaticMemoryUsage() int {
+	return EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize)
+}
+
 func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	n := batch.Length()
@@ -137,6 +145,10 @@ type {{template "opName" .}} struct {
 	col2Idx int
 
 	outputIdx int
+}
+
+func (p {{template "opName" .}}) EstimateStaticMemoryUsage() int {
+	return EstimateBatchSizeBytes([]types.T{types.{{.RetTyp}}}, coldata.BatchSize)
 }
 
 func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
