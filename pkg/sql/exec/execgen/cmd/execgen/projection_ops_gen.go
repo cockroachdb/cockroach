@@ -61,15 +61,20 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
 	vec := batch.ColVec(p.colIdx)
-	col := vec.{{.LTyp}}()[:coldata.BatchSize]
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec.{{.RetTyp}}()[:coldata.BatchSize]
 	if sel := batch.Selection(); sel != nil {
+		col := vec.{{.LTyp}}()
+		if cap(col) < coldata.BatchSize {
+			col = col[:cap(col)]
+		} else {
+			col = col[:coldata.BatchSize]
+		}
 		for _, i := range sel {
 			{{(.Assign "projCol[i]" "col[i]" "p.constArg")}}
 		}
 	} else {
-		col = col[:n]
+		col := vec.{{.LTyp}}()[:n]
 		_ = projCol[len(col)-1]
 		for i := range col {
 			{{(.Assign "projCol[i]" "col[i]" "p.constArg")}}
@@ -105,15 +110,20 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
 	vec := batch.ColVec(p.colIdx)
-	col := vec.{{.RTyp}}()[:coldata.BatchSize]
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec.{{.RetTyp}}()[:coldata.BatchSize]
 	if sel := batch.Selection(); sel != nil {
+		col := vec.{{.RTyp}}()
+		if cap(col) < coldata.BatchSize {
+			col = col[:cap(col)]
+		} else {
+			col = col[:coldata.BatchSize]
+		}
 		for _, i := range sel {
 			{{(.Assign "projCol[i]" "p.constArg" "col[i]")}}
 		}
 	} else {
-		col = col[:n]
+		col := vec.{{.RTyp}}()[:n]
 		_ = projCol[len(col)-1]
 		for i := range col {
 			{{(.Assign "projCol[i]" "p.constArg" "col[i]")}}
@@ -152,14 +162,25 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 	projCol := projVec.{{.RetTyp}}()[:coldata.BatchSize]
 	vec1 := batch.ColVec(p.col1Idx)
 	vec2 := batch.ColVec(p.col2Idx)
-	col1 := vec1.{{.LTyp}}()[:coldata.BatchSize]
-	col2 := vec2.{{.RTyp}}()[:coldata.BatchSize]
 	if sel := batch.Selection(); sel != nil {
+		col1 := vec1.{{.LTyp}}()
+		col2 := vec2.{{.RTyp}}()
+		if cap(col1) < coldata.BatchSize {
+			col1 = col1[:cap(col1)]
+		} else {
+			col1 = col1[:coldata.BatchSize]
+		}
+		if cap(col2) < coldata.BatchSize {
+			col2 = col2[:cap(col2)]
+		} else {
+			col2 = col2[:coldata.BatchSize]
+		}
 		for _, i := range sel {
 			{{(.Assign "projCol[i]" "col1[i]" "col2[i]")}}
 		}
 	} else {
-		col1 = col1[:n]
+		col1 := vec1.{{.LTyp}}()[:n]
+		col2 := vec2.{{.RTyp}}()[:n]
 		_ = projCol[len(col1)-1]
 		_ = col2[len(col1)-1]
 		for i := range col1 {

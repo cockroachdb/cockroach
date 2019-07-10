@@ -139,7 +139,9 @@ func newColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			return exec.NewCountOp(inputs[0]), []types.T{types.Int64}, nil
+			op, err = exec.NewCountOp(inputs[0]), nil
+			columnTypes = []semtypes.T{*semtypes.Int}
+			break
 		}
 
 		var groupCols, orderedCols util.FastIntSet
