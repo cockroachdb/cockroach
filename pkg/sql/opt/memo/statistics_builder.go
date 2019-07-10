@@ -2499,9 +2499,9 @@ func (sb *statisticsBuilder) selectivityFromNullCounts(
 
 		inputStat := sb.colStatFromInput(colStat.Cols, e)
 		if inputStat.NullCount > rowCount {
-			panic(pgerror.NewAssertionErrorf("rowCount passed in was too small"))
-		}
-		if colStat.NullCount < inputStat.NullCount {
+			// Avoid setting selectivity to a negative number.
+			selectivity *= 1e-10
+		} else if colStat.NullCount < inputStat.NullCount {
 			selectivity *= (1 - (inputStat.NullCount-colStat.NullCount)/rowCount)
 		}
 	}
@@ -2550,12 +2550,12 @@ func (sb *statisticsBuilder) joinSelectivityFromNullCounts(
 		crossJoinNullCount := leftNullCount*rightRowCount + rightNullCount*leftRowCount
 
 		if crossJoinNullCount > inputRowCount {
-			panic(pgerror.NewAssertionErrorf("row count passed in was too small"))
-		}
-		// We make the assumption that colStat.NullCount is either 0 or equal
-		// to / greater than crossJoinNullCount. In the zero case, account
-		// for this null elimination in the returned selectivity.
-		if colStat.NullCount == 0 {
+			// Avoid setting selectivity to a negative number.
+			selectivity *= 1e-10
+		} else if colStat.NullCount == 0 {
+			// We make the assumption that colStat.NullCount is either 0 or equal
+			// to / greater than crossJoinNullCount. In the zero case, account
+			// for this null elimination in the returned selectivity.
 			selectivity *= (1 - crossJoinNullCount/inputRowCount)
 		}
 	}
