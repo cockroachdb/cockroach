@@ -645,7 +645,6 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 				record := *abortedRecord
 				record.Epoch++
 				record.Timestamp.Forward(ts2)
-				record.OrigTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -665,7 +664,6 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 				record := *stagingRecord
 				record.Epoch++
 				record.Timestamp.Forward(ts2)
-				record.OrigTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -684,7 +682,6 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 				record := *committedRecord
 				record.Epoch++
 				record.Timestamp.Forward(ts2)
-				record.OrigTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -798,7 +795,6 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 				record := *abortedRecord
 				record.Epoch++
 				record.Timestamp.Forward(ts2)
-				record.OrigTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -818,7 +814,6 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 				record := *stagingRecord
 				record.Epoch++
 				record.Timestamp.Forward(ts2)
-				record.OrigTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},
@@ -837,7 +832,6 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 				record := *committedRecord
 				record.Epoch++
 				record.Timestamp.Forward(ts2)
-				record.OrigTimestamp.Forward(ts2)
 				return &record
 			}(),
 		},

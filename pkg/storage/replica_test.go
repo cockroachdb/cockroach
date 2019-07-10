@@ -10011,7 +10011,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -10040,7 +10039,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -10294,7 +10292,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record.InFlightWrites = otherInFlightWrites
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11145,7 +11142,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11240,7 +11236,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11310,7 +11305,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
