@@ -61,9 +61,9 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
 	vec := batch.ColVec(p.colIdx)
-	col := vec.{{.LTyp}}()[:coldata.BatchSize]
+	col := vec.{{.LTyp}}()
 	projVec := batch.ColVec(p.outputIdx)
-	projCol := projVec.{{.RetTyp}}()[:coldata.BatchSize]
+	projCol := projVec.{{.RetTyp}}()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
 			{{(.Assign "projCol[i]" "col[i]" "p.constArg")}}
@@ -105,9 +105,9 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
 	vec := batch.ColVec(p.colIdx)
-	col := vec.{{.RTyp}}()[:coldata.BatchSize]
+	col := vec.{{.RTyp}}()
 	projVec := batch.ColVec(p.outputIdx)
-	projCol := projVec.{{.RetTyp}}()[:coldata.BatchSize]
+	projCol := projVec.{{.RetTyp}}()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
 			{{(.Assign "projCol[i]" "p.constArg" "col[i]")}}
@@ -149,11 +149,11 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
 	projVec := batch.ColVec(p.outputIdx)
-	projCol := projVec.{{.RetTyp}}()[:coldata.BatchSize]
+	projCol := projVec.{{.RetTyp}}()
 	vec1 := batch.ColVec(p.col1Idx)
 	vec2 := batch.ColVec(p.col2Idx)
-	col1 := vec1.{{.LTyp}}()[:coldata.BatchSize]
-	col2 := vec2.{{.RTyp}}()[:coldata.BatchSize]
+	col1 := vec1.{{.LTyp}}()
+	col2 := vec2.{{.RTyp}}()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
 			{{(.Assign "projCol[i]" "col1[i]" "col2[i]")}}

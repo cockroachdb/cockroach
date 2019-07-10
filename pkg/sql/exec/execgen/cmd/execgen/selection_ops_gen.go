@@ -105,7 +105,7 @@ func (p *{{template "opConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		}
 
 		vec := batch.ColVec(p.colIdx)
-		col := vec.{{.LTyp}}()[:coldata.BatchSize]
+		col := vec.{{.LTyp}}()
 		var idx uint16
 		n := batch.Length()
 		if vec.MaybeHasNulls() {
@@ -143,8 +143,8 @@ func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 
 		vec1 := batch.ColVec(p.col1Idx)
 		vec2 := batch.ColVec(p.col2Idx)
-		col1 := vec1.{{.LTyp}}()[:coldata.BatchSize]
-		col2 := vec2.{{.RTyp}}()[:coldata.BatchSize]
+		col1 := vec1.{{.LTyp}}()
+		col2 := vec2.{{.RTyp}}()
 		n := batch.Length()
 
 		var idx uint16
