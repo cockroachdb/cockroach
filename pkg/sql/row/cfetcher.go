@@ -578,7 +578,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateDecodeFirstKVOfRow:
 			if rf.mustDecodeIndexKey {
 				if debugState {
-					log.Infof(ctx, "Decoding key %s", rf.machine.nextKV.Key)
+					log.Infof(ctx, "Decoding first key %s", rf.machine.nextKV.Key)
 				}
 				key, matches, err := colencoding.DecodeIndexKeyToCols(
 					rf.machine.colvecs,
@@ -607,9 +607,13 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				prefix := rf.machine.nextKV.Key[:len(rf.machine.nextKV.Key)-len(key)]
 				rf.machine.lastRowPrefix = prefix
 			}
+			familyID, err := rf.getCurrentColumnFamilyID()
+			if err != nil {
+				return nil, err
+			}
 			rf.machine.remainingValueColsByIdx.CopyFrom(rf.table.neededValueColsByIdx)
 			// Process the current KV's value component.
-			if _, _, err := rf.processValue(ctx, sqlbase.FamilyID(0)); err != nil {
+			if _, _, err := rf.processValue(ctx, familyID); err != nil {
 				return nil, err
 			}
 			if rf.table.isSecondaryIndex || len(rf.table.desc.Families) == 1 {
@@ -657,6 +661,10 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// prefix and indicate that it needs decoding.
 			rf.machine.nextKV = kv
 
+			if debugState {
+				log.Infof(ctx, "Decoding next key %s", rf.machine.nextKV.Key)
+			}
+
 			// TODO(jordan): optimize this prefix check by skipping span prefix.
 			if !bytes.HasPrefix(kv.Key, rf.machine.lastRowPrefix) {
 				// The kv we just found is from a different row.
@@ -677,14 +685,12 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				continue
 			}
 
-			var id uint64
-			_, id, err = encoding.DecodeUvarintAscending(key)
-			familyID := sqlbase.FamilyID(id)
+			familyID, err := rf.getCurrentColumnFamilyID()
 			if err != nil {
-				return nil, scrub.WrapError(scrub.IndexKeyDecodingError, err)
+				return nil, err
 			}
 
-			// Process the current KV'rf value component.
+			// Process the current KV's value component.
 			if _, _, err := rf.processValue(ctx, familyID); err != nil {
 				return nil, err
 			}
@@ -1043,4 +1049,38 @@ func (rf *CFetcher) fillNulls() error {
 // The RangeInfo's are deduped and not ordered.
 func (rf *CFetcher) GetRangesInfo() []roachpb.RangeInfo {
 	return rf.fetcher.getRangesInfo()
+}
+
+// getCurrentColumnFamilyID returns the column family id of the key in
+// rf.machine.nextKV.Key.
+func (rf *CFetcher) getCurrentColumnFamilyID() (sqlbase.FamilyID, error) {
+	// If the table only has 1 column family, and its ID is 0, we know that the
+	// key has to be the 0th column family.
+	if rf.table.maxColumnFamilyID == 0 {
+		return 0, nil
+	}
+	// The column family is encoded in the final bytes of the key. The last
+	// byte of the key is the length of the column family id encoding
+	// itself. See encoding.md for more details, and see MakeFamilyKey for
+	// the routine that performs this encoding.
+	keyLen := len(rf.machine.nextKV.Key)
+	_, columnFamilyIDLength, err := encoding.DecodeUvarintAscending(
+		rf.machine.nextKV.Key[keyLen-1:])
+	if err != nil {
+		return 0, err
+	}
+	if columnFamilyIDLength == 0 {
+		// A 0 length indicates that the column family id is 0. Nothing more
+		// to do.
+		return 0, nil
+	}
+	if keyLen-1 < int(columnFamilyIDLength) {
+		return 0, errors.AssertionFailedf("insufficient bytes to decode column family id %s", rf.machine.nextKV.Key)
+	}
+	_, columnFamilyID, err := encoding.DecodeUvarintAscending(
+		rf.machine.nextKV.Key[keyLen-1-int(columnFamilyIDLength) : keyLen-1])
+	if err != nil {
+		return 0, err
+	}
+	return sqlbase.FamilyID(columnFamilyID), nil
 }
