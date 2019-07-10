@@ -2253,6 +2253,10 @@ const (
 	// Since the generator row count is so small, we need a larger distinct count
 	// ratio for generator functions.
 	unknownGeneratorDistinctCountRatio = 0.7
+
+	// When subtracting floating point numbers, avoid precision errors by making
+	// sure the result is greater than or equal to epsilon.
+	epsilon = 1e-10
 )
 
 // countJSONPaths returns the number of JSON paths in the specified
@@ -2769,7 +2773,6 @@ func (sb *statisticsBuilder) selectivityFromNullCounts(
 			nullsRemoved := inputStat.NullCount - colStat.NullCount
 			selectivityFromNullsRemoved := 1 - nullsRemoved/rowCount
 
-			const epsilon = 1e-10
 			if selectivityFromNullsRemoved < epsilon {
 				// We want to avoid setting selectivity to zero because the stats may be
 				// stale, and we can end up with weird and inefficient plans if we
@@ -2831,13 +2834,14 @@ func (sb *statisticsBuilder) joinSelectivityFromNullCounts(
 		// to / greater than crossJoinNullCount. In the zero case, account
 		// for this null elimination in the returned selectivity.
 		if colStat.NullCount == 0 {
-			// We want to avoid setting selectivity to zero because the stats may be
-			// stale, and we can end up with weird and inefficient plans if we
-			// estimate zero rows. Multiply by a small number instead.
-			if crossJoinNullCount == inputRowCount {
-				selectivity *= 1e-7
+			selectivityFromNullsRemoved := 1 - crossJoinNullCount/inputRowCount
+			if selectivityFromNullsRemoved < epsilon {
+				// We want to avoid setting selectivity to zero because the stats may be
+				// stale, and we can end up with weird and inefficient plans if we
+				// estimate zero rows. Multiply by a small number instead.
+				selectivity *= epsilon
 			} else {
-				selectivity *= 1 - crossJoinNullCount/inputRowCount
+				selectivity *= selectivityFromNullsRemoved
 			}
 		}
 	}
