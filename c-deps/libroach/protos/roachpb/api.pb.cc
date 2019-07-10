@@ -14222,8 +14222,6 @@ void GCRequest::InitAsDefaultInstance() {
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
   ::cockroach::roachpb::_GCRequest_default_instance_._instance.get_mutable()->threshold_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-  ::cockroach::roachpb::_GCRequest_default_instance_._instance.get_mutable()->txn_span_gc_threshold_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
-      ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
 void GCRequest::clear_threshold() {
   if (GetArenaNoVirtual() == NULL && threshold_ != NULL) {
@@ -14231,17 +14229,10 @@ void GCRequest::clear_threshold() {
   }
   threshold_ = NULL;
 }
-void GCRequest::clear_txn_span_gc_threshold() {
-  if (GetArenaNoVirtual() == NULL && txn_span_gc_threshold_ != NULL) {
-    delete txn_span_gc_threshold_;
-  }
-  txn_span_gc_threshold_ = NULL;
-}
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int GCRequest::kHeaderFieldNumber;
 const int GCRequest::kKeysFieldNumber;
 const int GCRequest::kThresholdFieldNumber;
-const int GCRequest::kTxnSpanGcThresholdFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 GCRequest::GCRequest()
@@ -14266,18 +14257,13 @@ GCRequest::GCRequest(const GCRequest& from)
   } else {
     threshold_ = NULL;
   }
-  if (from.has_txn_span_gc_threshold()) {
-    txn_span_gc_threshold_ = new ::cockroach::util::hlc::Timestamp(*from.txn_span_gc_threshold_);
-  } else {
-    txn_span_gc_threshold_ = NULL;
-  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.GCRequest)
 }
 
 void GCRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&txn_span_gc_threshold_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(txn_span_gc_threshold_));
+      reinterpret_cast<char*>(&threshold_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(threshold_));
 }
 
 GCRequest::~GCRequest() {
@@ -14288,7 +14274,6 @@ GCRequest::~GCRequest() {
 void GCRequest::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
   if (this != internal_default_instance()) delete threshold_;
-  if (this != internal_default_instance()) delete txn_span_gc_threshold_;
 }
 
 void GCRequest::SetCachedSize(int size) const {
@@ -14315,10 +14300,6 @@ void GCRequest::Clear() {
     delete threshold_;
   }
   threshold_ = NULL;
-  if (GetArenaNoVirtual() == NULL && txn_span_gc_threshold_ != NULL) {
-    delete txn_span_gc_threshold_;
-  }
-  txn_span_gc_threshold_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -14371,17 +14352,6 @@ bool GCRequest::MergePartialFromCodedStream(
         break;
       }
 
-      case 5: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_txn_span_gc_threshold()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -14426,11 +14396,6 @@ void GCRequest::SerializeWithCachedSizes(
       4, this->_internal_threshold(), output);
   }
 
-  if (this->has_txn_span_gc_threshold()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      5, this->_internal_txn_span_gc_threshold(), output);
-  }
-
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.GCRequest)
@@ -14464,12 +14429,6 @@ size_t GCRequest::ByteSizeLong() const {
         *threshold_);
   }
 
-  if (this->has_txn_span_gc_threshold()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *txn_span_gc_threshold_);
-  }
-
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -14494,9 +14453,6 @@ void GCRequest::MergeFrom(const GCRequest& from) {
   if (from.has_threshold()) {
     mutable_threshold()->::cockroach::util::hlc::Timestamp::MergeFrom(from.threshold());
   }
-  if (from.has_txn_span_gc_threshold()) {
-    mutable_txn_span_gc_threshold()->::cockroach::util::hlc::Timestamp::MergeFrom(from.txn_span_gc_threshold());
-  }
 }
 
 void GCRequest::CopyFrom(const GCRequest& from) {
@@ -14519,7 +14475,6 @@ void GCRequest::InternalSwap(GCRequest* other) {
   CastToBase(&keys_)->InternalSwap(CastToBase(&other->keys_));
   swap(header_, other->header_);
   swap(threshold_, other->threshold_);
-  swap(txn_span_gc_threshold_, other->txn_span_gc_threshold_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

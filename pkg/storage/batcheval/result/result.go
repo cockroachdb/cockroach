@@ -224,14 +224,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			}
 			q.Replicated.State.GCThreshold = nil
 		}
-		if q.Replicated.State.TxnSpanGCThreshold != nil {
-			if p.Replicated.State.TxnSpanGCThreshold == nil {
-				p.Replicated.State.TxnSpanGCThreshold = q.Replicated.State.TxnSpanGCThreshold
-			} else {
-				p.Replicated.State.TxnSpanGCThreshold.Forward(*q.Replicated.State.TxnSpanGCThreshold)
-			}
-			q.Replicated.State.TxnSpanGCThreshold = nil
-		}
 
 		if q.Replicated.State.Stats != nil {
 			return errors.New("must not specify Stats")

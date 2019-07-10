@@ -238,7 +238,6 @@ func WriteInitialClusterData(
 			*desc,
 			lease,
 			hlc.Timestamp{}, /* gcThreshold */
-			hlc.Timestamp{}, /* txnSpanGCThreshold */
 			bootstrapVersion,
 			truncStateType,
 		)

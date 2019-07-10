@@ -946,14 +946,6 @@ func splitTriggerHelper(
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
 
-		txnSpanGCThreshold, err := MakeStateLoader(rec).LoadTxnSpanGCThreshold(ctx, rec.Engine())
-		if err != nil {
-			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load TxnSpanGCThreshold")
-		}
-		if (*txnSpanGCThreshold == hlc.Timestamp{}) {
-			log.VEventf(ctx, 1, "LHS's TxnSpanGCThreshold of split is not set")
-		}
-
 		// We're about to write the initial state for the replica. We migrated
 		// the formerly replicated truncated state into unreplicated keyspace
 		// in 2.2., but this range may still be using the replicated version
@@ -1008,10 +1000,8 @@ func splitTriggerHelper(
 		// only.
 
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
-			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc,
-			rightLease, *gcThreshold, *txnSpanGCThreshold,
-			rec.ClusterSettings().Version.Version().Version,
-			truncStateType,
+			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
+			*gcThreshold, rec.ClusterSettings().Version.Version().Version, truncStateType,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")

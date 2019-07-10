@@ -111,9 +111,6 @@ func (m *mockEvalCtx) CanCreateTxnRecord(
 func (m *mockEvalCtx) GetGCThreshold() hlc.Timestamp {
 	return m.gcThreshold
 }
-func (m *mockEvalCtx) GetTxnSpanGCThreshold() hlc.Timestamp {
-	panic("unimplemented")
-}
 func (m *mockEvalCtx) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
 	panic("unimplemented")
 }

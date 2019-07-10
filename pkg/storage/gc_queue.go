@@ -511,7 +511,6 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh GCThreshold) error {
 	req := r.template()
 	req.Threshold = thresh.Key
-	req.TxnSpanGCThreshold = thresh.Txn
 	return r.send(ctx, req)
 }
 
@@ -610,9 +609,6 @@ type GCInfo struct {
 	// potentially necessary intent resolutions did not fail).
 	TransactionSpanGCAborted, TransactionSpanGCCommitted int
 	TransactionSpanGCStaging, TransactionSpanGCPending   int
-	// TxnSpanGCThreshold is the cutoff for transaction span GC. Transactions
-	// with a smaller LastActive() were considered for GC.
-	TxnSpanGCThreshold hlc.Timestamp
 	// AbortSpanTotal is the total number of transactions present in the AbortSpan.
 	AbortSpanTotal int
 	// AbortSpanConsidered is the number of AbortSpan entries old enough to be
@@ -702,7 +698,6 @@ func RunGC(
 
 	gc := engine.MakeGarbageCollector(now, policy)
 	infoMu.Threshold = gc.Threshold
-	infoMu.TxnSpanGCThreshold = txnExp
 
 	if err := gcer.SetGCThreshold(ctx, GCThreshold{
 		Key: gc.Threshold,

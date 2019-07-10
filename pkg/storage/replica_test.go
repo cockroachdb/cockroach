@@ -253,7 +253,6 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 				*testDesc,
 				roachpb.BootstrapLease(),
 				hlc.Timestamp{},
-				hlc.Timestamp{},
 				bootstrapVersion.Version,
 				stateloader.TruncatedStateUnreplicated,
 			); err != nil {
@@ -3387,7 +3386,7 @@ func TestSerializableDeadline(t *testing.T) {
 // original transaction's subsequent attempt to create its initial record fails.
 //
 // See #9265 for context.
-func TestTxnRecordUnderTxnSpanGCThreshold(t *testing.T) {
+func TestCreateTxnRecordAfterPushAndGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -3429,7 +3428,6 @@ func TestTxnRecordUnderTxnSpanGCThreshold(t *testing.T) {
 			Keys: []roachpb.GCRequest_GCKey{
 				{Key: keys.TransactionKey(pushee.Key, pushee.ID)},
 			},
-			TxnSpanGCThreshold: tc.Clock().Now(),
 		}
 		if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &gcReq); pErr != nil {
 			t.Fatal(pErr)
@@ -7848,8 +7846,8 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 }
 
 // TestGCWithoutThreshold validates that GCRequest only declares the threshold
-// keys which are subject to change, and that it does not access these keys if
-// it does not declare them.
+// key if it is subject to change, and that it does not access this key if it
+// does not declare them.
 func TestGCWithoutThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -7861,41 +7859,39 @@ func TestGCWithoutThreshold(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
-	options := []hlc.Timestamp{{}, hlc.Timestamp{}.Add(1, 0)}
+	for _, keyThresh := range []hlc.Timestamp{{}, {Logical: 1}} {
+		t.Run(fmt.Sprintf("thresh=%s", keyThresh), func(t *testing.T) {
+			var gc roachpb.GCRequest
+			var spans spanset.SpanSet
 
-	for i, keyThresh := range options {
-		for j, txnThresh := range options {
-			func() {
-				var gc roachpb.GCRequest
-				var spans spanset.SpanSet
+			gc.Threshold = keyThresh
+			cmd, _ := batcheval.LookupCommand(roachpb.GC)
+			cmd.DeclareKeys(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans)
 
-				gc.Threshold = keyThresh
-				gc.TxnSpanGCThreshold = txnThresh
-				cmd, _ := batcheval.LookupCommand(roachpb.GC)
-				cmd.DeclareKeys(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans)
+			expSpans := 1
+			if !keyThresh.IsEmpty() {
+				expSpans++
+			}
+			if numSpans := spans.Len(); numSpans != expSpans {
+				t.Fatalf("expected %d declared keys, found %d", expSpans, numSpans)
+			}
 
-				if num, exp := spans.Len(), i+j+1; num != exp {
-					t.Fatalf("(%s,%s): expected %d declared keys, found %d",
-						keyThresh, txnThresh, exp, num)
-				}
+			eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+			defer eng.Close()
 
-				eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
-				defer eng.Close()
+			batch := eng.NewBatch()
+			defer batch.Close()
+			rw := spanset.NewBatch(batch, &spans)
 
-				batch := eng.NewBatch()
-				defer batch.Close()
-				rw := spanset.NewBatch(batch, &spans)
+			var resp roachpb.GCResponse
 
-				var resp roachpb.GCResponse
-
-				if _, err := batcheval.GC(ctx, rw, batcheval.CommandArgs{
-					Args:    &gc,
-					EvalCtx: NewReplicaEvalContext(tc.repl, &spans),
-				}, &resp); err != nil {
-					t.Fatalf("at (%s,%s): %+v", keyThresh, txnThresh, err)
-				}
-			}()
-		}
+			if _, err := batcheval.GC(ctx, rw, batcheval.CommandArgs{
+				Args:    &gc,
+				EvalCtx: NewReplicaEvalContext(tc.repl, &spans),
+			}, &resp); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -10018,34 +10014,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 		},
 		{
-			// Even if the TxnSpanGCThreshold (or the write timestamp cache low
-			// water mark) has been bumped above the epoch-zero orig timestamp
-			// of a transaction, a second begin transaction that bumps the epoch
-			// should not be rejected.
-			name: "begin transaction with epoch bump after begin transaction and gc",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				bt, btH := beginTxnArgs(txn.Key, txn)
-				if err := sendWrappedWithErr(btH, &bt); err != nil {
-					return err
-				}
-				gc := gcArgs([]byte("a"), []byte("z"))
-				gc.TxnSpanGCThreshold = now
-				return sendWrappedWithErr(roachpb.Header{}, &gc)
-			},
-			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				clone := txn.Clone()
-				clone.Restart(-1, 0, now)
-				bt, btH := beginTxnArgs(clone.Key, clone)
-				return sendWrappedWithErr(btH, &bt)
-			},
-			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
-				record := txn.AsRecord()
-				record.Epoch = txn.Epoch + 1
-				record.Timestamp.Forward(now)
-				return record
-			},
-		},
-		{
 			name: "heartbeat transaction after begin transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				bt, btH := beginTxnArgs(txn.Key, txn)
@@ -11376,19 +11344,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			expTxn:           txnWithStatus(roachpb.COMMITTED),
 			disableTxnAutoGC: true,
-		},
-		{
-			name: "end transaction (abort) after gc",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				gc := gcArgs([]byte("a"), []byte("z"))
-				gc.TxnSpanGCThreshold = now
-				return sendWrappedWithErr(roachpb.Header{}, &gc)
-			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, false /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			expTxn: noTxnRecord,
 		},
 	}
 	for _, c := range testCases {
