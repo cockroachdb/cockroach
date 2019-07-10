@@ -61,6 +61,7 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 			log.Infof(context.TODO(), "setting the soft limit for open file descriptors from %d to %d",
 				rLimit.Cur, newCurrent)
 		}
+		oldCurrent := rLimit.Cur
 		rLimit.Cur = newCurrent
 		if err := setRlimitNoFile(&rLimit); err != nil {
 			// It is surprising if setrlimit fails, because we were careful to check
@@ -70,7 +71,21 @@ func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 			// want to fail hard if setrlimit fails. Instead we log a warning and
 			// carry on. If the rlimit is really too low, we'll bail out later in this
 			// function.
-			log.Warningf(context.TODO(), "adjusting the limit for open file descriptors failed: %s", err)
+			log.Warningf(context.TODO(), "adjusting the limit for open file descriptors to %d failed: %s",
+				rLimit.Cur, err)
+
+			// Setting the limit to our "recommended" level failed. This may
+			// be because getRlimitNoFile gave us the wrong answer (on some
+			// platforms there are limits that are not reflected by
+			// getrlimit()). If the previous limit is below our minimum, try
+			// one more time to increase it to the minimum.
+			if oldCurrent < minimumOpenFileLimit {
+				rLimit.Cur = minimumOpenFileLimit
+				if err := setRlimitNoFile(&rLimit); err != nil {
+					log.Warningf(context.TODO(), "adjusting the limit for open file descriptors to %d failed: %s",
+						rLimit.Cur, err)
+				}
+			}
 		}
 		// Sadly, even when setrlimit returns successfully, the new limit is not
 		// always set as expected (e.g. on macOS), so fetch the limit again to see
