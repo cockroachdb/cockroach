@@ -388,3 +388,15 @@ query T
 SELECT ARRAY(SELECT 1) FROM a LIMIT 1
 ----
 {1}
+
+# Regression test for decoding OID type.
+statement ok
+CREATE TABLE t38754 (a OID PRIMARY KEY)
+
+statement ok
+INSERT INTO t38754 VALUES (1)
+
+query O
+SELECT * FROM t38754
+----
+1
