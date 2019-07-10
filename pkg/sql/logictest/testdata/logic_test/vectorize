@@ -410,3 +410,15 @@ query II
 SELECT * FROM t38753 ORDER BY y;
 ----
 0  NULL
+
+# Regression test for decoding OID type.
+statement ok
+CREATE TABLE t38754 (a OID PRIMARY KEY)
+
+statement ok
+INSERT INTO t38754 VALUES (1)
+
+query O
+SELECT * FROM t38754
+----
+1
