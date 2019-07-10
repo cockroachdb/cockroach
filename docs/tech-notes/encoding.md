@@ -126,6 +126,13 @@ the KV value has other data, to guarantee that primary keys appear in at
 least one KV pair. (Even if there are other column families, their KV
 pairs may be suppressed; see subsection NULL below.)
 
+Note that in system tables that use multiple column families, such as
+system.zones or system.namespace, there may not be any sentinel KV pair at all.
+This is because of the fact that the database writes to these system tables
+using raw KV puts and does not include the logic to write a sentinel KV. KV
+decoding code that needs to understand system tables must be aware of this
+possibility.
+
 ### Single-column column families
 
 Before column families (i.e., in format version 1), non-sentinel KV keys
