@@ -34,11 +34,13 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	txn1 := uuid.MakeV4()
 	txn1Key := roachpb.Key("key1")
 	txn1TS := hlc.Timestamp{WallTime: 1}
-	adv := uiq.IncRef(txn1, txn1Key, txn1TS)
+	txn1MinTS := hlc.Timestamp{WallTime: 0, Logical: 4}
+	adv := uiq.IncRef(txn1, txn1Key, txn1MinTS, txn1TS)
 	require.False(t, adv)
 	require.Equal(t, 1, uiq.Len())
 	require.Equal(t, txn1, uiq.Oldest().txnID)
 	require.Equal(t, txn1Key, uiq.Oldest().txnKey)
+	require.Equal(t, txn1MinTS, uiq.Oldest().txnMinTimestamp)
 	require.Equal(t, txn1TS, uiq.Oldest().timestamp)
 	require.Equal(t, 1, uiq.Oldest().refCount)
 	require.Equal(t, 0, len(uiq.Before(hlc.Timestamp{WallTime: 0})))
@@ -112,7 +114,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 
 	// Increase txn1's ref count while increasing timestamp.
 	newTxn1TS = hlc.Timestamp{WallTime: 5}
-	adv = uiq.IncRef(txn1, nil, newTxn1TS)
+	adv = uiq.IncRef(txn1, txn1Key, txn1MinTS, newTxn1TS)
 	require.False(t, adv)
 	require.Equal(t, 2, uiq.Len())
 	require.Equal(t, 2, uiq.txns[txn1].refCount)
@@ -128,7 +130,8 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 
 	// Add new txn at much higher timestamp. Immediately delete.
 	txn5 := uuid.MakeV4()
-	adv = uiq.IncRef(txn5, nil, hlc.Timestamp{WallTime: 10})
+	txn5TS := hlc.Timestamp{WallTime: 10}
+	adv = uiq.IncRef(txn5, nil, txn5TS, txn5TS)
 	require.False(t, adv)
 	require.Equal(t, 3, uiq.Len())
 	require.Equal(t, txn2, uiq.Oldest().txnID)
@@ -137,7 +140,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.Equal(t, 2, uiq.Len())
 
 	// Increase txn2's ref count, which results in deletion. txn1 new oldest.
-	adv = uiq.IncRef(txn2, nil, txn2TS)
+	adv = uiq.IncRef(txn2, nil, txn2TS, txn2TS)
 	require.True(t, adv)
 	require.Equal(t, 1, uiq.Len())
 	require.Equal(t, txn1, uiq.Oldest().txnID)
@@ -151,7 +154,8 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 
 	// Add new txn. Immediately decrement ref count. Should be empty again.
 	txn6 := uuid.MakeV4()
-	adv = uiq.IncRef(txn6, nil, hlc.Timestamp{WallTime: 20})
+	txn6TS := hlc.Timestamp{WallTime: 20}
+	adv = uiq.IncRef(txn6, nil, txn6TS, txn6TS)
 	require.False(t, adv)
 	require.Equal(t, 1, uiq.Len())
 	require.Equal(t, txn6, uiq.Oldest().txnID)
