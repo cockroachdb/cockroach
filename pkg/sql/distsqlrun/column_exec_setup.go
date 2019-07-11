@@ -647,6 +647,30 @@ func planProjectionOperators(
 		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
 	case *tree.BinaryExpr:
 		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
+	case *tree.FuncExpr:
+		var (
+			inputCols     []int
+			projectionMem int
+		)
+		ct = columnTypes
+		op = input
+		for _, e := range t.Exprs {
+			var err error
+			// TODO(rohany): This could be done better, especially in the case of
+			// constant arguments, because the vectorized engine right now
+			// creates a new column full of the constant value.
+			op, resultIdx, ct, projectionMem, err = planProjectionOperators(ctx, e.(tree.TypedExpr), ct, op)
+			if err != nil {
+				return nil, resultIdx, nil, memUsed, err
+			}
+			inputCols = append(inputCols, resultIdx)
+			memUsed += projectionMem
+		}
+		funcOutputType := t.ResolvedType()
+		resultIdx = len(ct)
+		ct = append(ct, *funcOutputType)
+		op = exec.NewBuiltinFunctionOperator(ctx, t, ct, inputCols, resultIdx, op)
+		return op, resultIdx, ct, memUsed, nil
 	case tree.Datum:
 		datumType := t.ResolvedType()
 		ct := columnTypes
