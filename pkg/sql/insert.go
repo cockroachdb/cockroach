@@ -286,10 +286,12 @@ func (p *planner) Insert(
 		columns = sqlbase.ResultColumnsFromColDescs(desc.Columns)
 	}
 
+	// Since all columns are being returned, use the 1:1 mapping.
 	tabIdxToRetIdx := make([]int, len(desc.Columns))
 	for i := range tabIdxToRetIdx {
 		tabIdxToRetIdx[i] = i
 	}
+
 	// At this point, everything is ready for either an insertNode or an upserNode.
 
 	var node batchedPlanNode
@@ -377,11 +379,16 @@ type insertRun struct {
 	// insertCols to the ordering in the rows in the table, used when
 	// rowsNeeded is set to populate resultRowBuffer and the row
 	// container. The return index is -1 if the column for the row
-	// index is not public. This is used in conjuction with tabIdxToRetIdx
+	// index is not public. This is used in conjunction with tabIdxToRetIdx
 	// to populate the resultRowBuffer.
 	rowIdxToTabColIdx []int
 
-	// TODO(ridwanmsharif): Elaborate.
+	// tabIdxToRetIdx is the mapping from the columns in the table to the
+	// columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the table column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value an the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column of the table is
+	// to be returned.
 	tabIdxToRetIdx []int
 
 	// traceKV caches the current KV tracing flag.

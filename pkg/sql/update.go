@@ -382,6 +382,7 @@ func (p *planner) Update(
 		updateColsIdx[id] = i
 	}
 
+	// Since all columns are being returned, use the 1:1 mapping.
 	rowIdxToRetIdx := make([]int, len(desc.Columns))
 	for i := range rowIdxToRetIdx {
 		rowIdxToRetIdx[i] = i
@@ -487,7 +488,11 @@ type updateRun struct {
 	//
 	updateColsIdx map[sqlbase.ColumnID]int
 
-	// TODO(ridwanmsharif): Elaborate.
+	// rowIdxToRetIdx is the mapping from the columns in ru.FetchCols to the
+	// columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value an the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column is to be returned.
 	rowIdxToRetIdx []int
 }
 

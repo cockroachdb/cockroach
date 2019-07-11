@@ -53,6 +53,7 @@ type optTableUpserter struct {
 	// updateCols indicate which columns need an update during a conflict.
 	updateCols []sqlbase.ColumnDescriptor
 
+	// returnCols indicate which columns need to be returned by the Upsert.
 	returnCols []sqlbase.ColumnDescriptor
 
 	// canaryOrdinal is the ordinal position of the column within the input row
@@ -70,7 +71,12 @@ type optTableUpserter struct {
 	// ru is used when updating rows.
 	ru row.Updater
 
-	// TODO(ridwanmsharif): Elaborate.
+	// tabIdxToRetIdx is the mapping from the columns in the table to the
+	// columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the table column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value an the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column of the table is
+	// to be returned.
 	tabIdxToRetIdx []int
 }
 
@@ -173,7 +179,9 @@ func (tu *optTableUpserter) insertNonConflictingRow(
 	if tu.insertReorderingRequired {
 		tableRow := tu.makeResultFromRow(insertRow, tu.ri.InsertColIDtoRowIndex)
 
-		// TODO(ridwanmsharif): Why didn't they use this before?
+		// TODO(ridwanmsharif): Why didn't they update the value of tu.resultRow
+		//  before? Is it safe to be doing it now?
+		// Map the upserted columns into the result row before adding it.
 		for tabIdx := range tableRow {
 			if retIdx := tu.tabIdxToRetIdx[tabIdx]; retIdx >= 0 {
 				tu.resultRow[retIdx] = tableRow[tabIdx]
@@ -183,6 +191,7 @@ func (tu *optTableUpserter) insertNonConflictingRow(
 		return err
 	}
 
+	// Map the upserted columns into the result row before adding it.
 	for tabIdx := range insertRow {
 		if retIdx := tu.tabIdxToRetIdx[tabIdx]; retIdx >= 0 {
 			tu.resultRow[retIdx] = insertRow[tabIdx]
@@ -245,6 +254,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 		}
 	}
 
+	// Map the upserted columns into the result row before adding it.
 	for tabIdx := range tableRow {
 		if retIdx := tu.tabIdxToRetIdx[tabIdx]; retIdx >= 0 {
 			tu.resultRow[retIdx] = tableRow[tabIdx]
