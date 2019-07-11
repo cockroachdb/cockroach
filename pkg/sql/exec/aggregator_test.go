@@ -414,18 +414,20 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				distsqlpb.AggregatorSpec_ANY_NOT_NULL,
 				distsqlpb.AggregatorSpec_COUNT_ROWS,
 				distsqlpb.AggregatorSpec_COUNT,
+				distsqlpb.AggregatorSpec_SUM,
+				distsqlpb.AggregatorSpec_SUM_INT,
 			},
-			aggCols:  [][]uint32{{0}, {1}, {}, {1}},
-			colTypes: []types.T{types.Int64, types.Decimal},
+			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}},
+			colTypes: []types.T{types.Int64, types.Decimal, types.Int64},
 			input: tuples{
-				{0, nil},
-				{0, 3.1},
-				{1, nil},
-				{1, nil},
+				{0, nil, nil},
+				{0, 3.1, 5},
+				{1, nil, nil},
+				{1, nil, nil},
 			},
 			expected: tuples{
-				{0, 3.1, 2, 1},
-				{1, nil, 2, 0},
+				{0, 3.1, 2, 1, 3.1, 5},
+				{1, nil, 2, 0, nil, nil},
 			},
 			convToDecimal: true,
 		},
@@ -587,12 +589,12 @@ func BenchmarkAggregator(b *testing.B) {
 										case types.Int64:
 											vals := cols[1].Int64()
 											for i := range vals {
-												vals[i] = rng.Int63()
+												vals[i] = rng.Int63() % 1024
 											}
 										case types.Decimal:
 											vals := cols[1].Decimal()
 											for i := range vals {
-												vals[i].SetInt64(rng.Int63())
+												vals[i].SetInt64(rng.Int63() % 1024)
 											}
 										}
 										source := newChunkingBatchSource(colTypes, cols, uint64(nTuples))
