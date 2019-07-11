@@ -255,11 +255,7 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 				if len(oldTxns) > 0 {
 					toPush := make([]enginepb.TxnMeta, len(oldTxns))
 					for i, txn := range oldTxns {
-						toPush[i] = enginepb.TxnMeta{
-							ID:        txn.txnID,
-							Key:       txn.txnKey,
-							Timestamp: txn.timestamp,
-						}
+						toPush[i] = txn.asTxnMeta()
 					}
 
 					// Set the ticker channel to nil so that it can't trigger a

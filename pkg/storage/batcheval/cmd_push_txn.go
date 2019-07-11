@@ -155,14 +155,6 @@ func PushTxn(
 		// written. If a transaction record for the transaction could be written in
 		// the future then we must be in the first case. If one could not be written
 		// then we know we're in either the second or the third case.
-		//
-		// Performing this detection could have false positives where we determine
-		// that a record could still be written and conclude that we're in the first
-		// case. However, it cannot have false negatives where we determine that a
-		// record can not be written and conclude that we're in the second or third
-		// case. This is important, because it means that we may end up failing to
-		// push a finalized transaction but will never determine that a transaction
-		// is finalized when it still could end up committing.
 		reply.PusheeTxn = SynthesizeTxnFromMeta(cArgs.EvalCtx, args.PusheeTxn)
 		if reply.PusheeTxn.Status == roachpb.ABORTED {
 			// If the transaction is uncommittable, we don't even need to
