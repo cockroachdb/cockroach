@@ -533,9 +533,10 @@ func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
 // Start is part of the RowSource interface.
 func (jr *joinReader) Start(ctx context.Context) context.Context {
 	jr.input.Start(ctx)
+	ctx = jr.StartInternal(ctx, joinReaderProcName)
 	jr.fetcher.Start(ctx)
 	jr.runningState = jrReadingInput
-	return jr.StartInternal(ctx, joinReaderProcName)
+	return ctx
 }
 
 // ConsumerClosed is part of the RowSource interface.
