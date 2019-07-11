@@ -200,15 +200,18 @@ message ChangefeedProgress {
 // collects table statistics, which contain info such as the number of rows in
 // the table or the number of distinct values in a column.
 message CreateStatsDetails {
-  message ColList {
-    repeated uint32 ids = 1 [
-      (gogoproto.customname) = "IDs",
+  message ColStat {
+    repeated uint32 column_ids = 1 [
+      (gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
     ];
+
+    // Indicates whether this column stat should include a histogram.
+    bool has_histogram = 2;
   }
   string name = 1;
   sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
-  repeated ColList column_lists = 3 [(gogoproto.nullable) = false];
+  repeated ColStat column_stats = 3 [(gogoproto.nullable) = false];
   string statement = 4;
   util.hlc.Timestamp as_of = 5;
   double max_fraction_idle = 7;
