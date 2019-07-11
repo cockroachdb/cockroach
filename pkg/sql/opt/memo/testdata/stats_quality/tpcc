@@ -2251,7 +2251,7 @@ scalar-group-by
  │    ├── stats: [rows=1000000, distinct(1)=2999.92032, null(1)=920000, distinct(2)=10, null(2)=920000, distinct(3)=10, null(3)=920000, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
  │    ├── cost: 3905160.1
  │    ├── interesting orderings: (+11,+10,-9) (+3,+2,-1)
- │    ├── full-join
+ │    ├── full-join (hash)
  │    │    ├── save-table-name: consistency_12_full_join_3
  │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
  │    │    ├── stats: [rows=3000000, distinct(1)=2999.92032, null(1)=2760000, distinct(2)=10, null(2)=2760000, distinct(3)=10, null(3)=2760000, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]

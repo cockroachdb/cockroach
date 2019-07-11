@@ -899,13 +899,13 @@ project
       │         │    ├── stats: [rows=1487.22799, distinct(1)=1487.22799, null(1)=0, distinct(3)=1487.22799, null(3)=0, distinct(11)=1487.22799, null(11)=0, distinct(12)=1487.22799, null(12)=0, distinct(14)=1487.22799, null(14)=0, distinct(15)=1487.22799, null(15)=0, distinct(16)=1487.22799, null(16)=0, distinct(17)=1174.55443, null(17)=0, distinct(18)=1411.92479, null(18)=0, distinct(20)=1487.22799, null(20)=0, distinct(23)=1487.22799, null(23)=0, distinct(48)=1487.22799, null(48)=0, distinct(17,18)=1487.22799, null(17,18)=0]
       │         │    ├── key: (17,18)
       │         │    ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23)
-      │         │    ├── inner-join
+      │         │    ├── inner-join (hash)
       │         │    │    ├── save-table-name: q2_inner_join_6
       │         │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:10(int!null) s_name:11(char!null) s_address:12(varchar!null) s_nationkey:13(int!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_nationkey:22(int!null) n_name:23(char!null) n_regionkey:24(int!null) r_regionkey:26(int!null) r_name:27(char!null) ps_partkey:29(int!null) ps_suppkey:30(int!null) ps_supplycost:32(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
       │         │    │    ├── stats: [rows=2837.30948, distinct(1)=1333.31636, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=149.999649, null(5)=0, distinct(6)=1, null(6)=0, distinct(10)=1411.92479, null(10)=0, distinct(11)=1412.48485, null(11)=0, distinct(12)=1412.56423, null(12)=0, distinct(13)=5, null(13)=0, distinct(14)=1412.56423, null(14)=0, distinct(15)=1412.30169, null(15)=0, distinct(16)=1412.03742, null(16)=0, distinct(17)=1174.55443, null(17)=0, distinct(18)=1411.92479, null(18)=0, distinct(20)=1482.68691, null(20)=0, distinct(22)=5, null(22)=0, distinct(23)=5, null(23)=0, distinct(24)=1, null(24)=0, distinct(26)=1, null(26)=0, distinct(27)=0.996222107, null(27)=0, distinct(29)=1333.31636, null(29)=0, distinct(30)=1448.52495, null(30)=0, distinct(32)=2787.75127, null(32)=0, distinct(34)=1448.52495, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0, distinct(17,18)=1487.22799, null(17,18)=0]
       │         │    │    ├── key: (18,29,34)
       │         │    │    ├── fd: ()-->(6,27,46), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13), (1)==(17,29), (17)==(1,29), (29,30)-->(32), (34)-->(37), (41)-->(43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (30)==(34), (34)==(30), (29)==(1,17)
-      │         │    │    ├── inner-join
+      │         │    │    ├── inner-join (hash)
       │         │    │    │    ├── save-table-name: q2_inner_join_7
       │         │    │    │    ├── columns: ps_partkey:29(int!null) ps_suppkey:30(int!null) ps_supplycost:32(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
       │         │    │    │    ├── stats: [rows=161290.323, distinct(29)=110568.431, null(29)=0, distinct(30)=1844.80594, null(30)=0, distinct(32)=80252.0719, null(32)=0, distinct(34)=1844.80594, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0]
@@ -949,13 +949,13 @@ project
       │         │    │    │    │    └── filters (true)
       │         │    │    │    └── filters
       │         │    │    │         └── s_suppkey = ps_suppkey [type=bool, outer=(30,34), constraints=(/30: (/NULL - ]; /34: (/NULL - ]), fd=(30)==(34), (34)==(30)]
-      │         │    │    ├── inner-join
+      │         │    │    ├── inner-join (hash)
       │         │    │    │    ├── save-table-name: q2_inner_join_13
       │         │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:10(int!null) s_name:11(char!null) s_address:12(varchar!null) s_nationkey:13(int!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_nationkey:22(int!null) n_name:23(char!null) n_regionkey:24(int!null) r_regionkey:26(int!null) r_name:27(char!null)
       │         │    │    │    ├── stats: [rows=1945.04451, distinct(1)=1333.31636, null(1)=0, distinct(3)=5, null(3)=0, distinct(5)=149.99965, null(5)=0, distinct(6)=1, null(6)=0, distinct(10)=1766.2414, null(10)=0, distinct(11)=1767.4156, null(11)=0, distinct(12)=1767.58209, null(12)=0, distinct(13)=5, null(13)=0, distinct(14)=1767.58209, null(14)=0, distinct(15)=1767.03149, null(15)=0, distinct(16)=1766.47747, null(16)=0, distinct(17)=1333.31636, null(17)=0, distinct(18)=1766.2414, null(18)=0, distinct(20)=1921.6712, null(20)=0, distinct(22)=5, null(22)=0, distinct(23)=5, null(23)=0, distinct(24)=1, null(24)=0, distinct(26)=1, null(26)=0, distinct(27)=0.996222107, null(27)=0, distinct(17,18)=1932.16064, null(17,18)=0]
       │         │    │    │    ├── key: (17,18)
       │         │    │    │    ├── fd: ()-->(6,27), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13), (1)==(17), (17)==(1)
-      │         │    │    │    ├── inner-join
+      │         │    │    │    ├── inner-join (hash)
       │         │    │    │    │    ├── save-table-name: q2_inner_join_14
       │         │    │    │    │    ├── columns: s_suppkey:10(int!null) s_name:11(char!null) s_address:12(varchar!null) s_nationkey:13(int!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) ps_partkey:17(int!null) ps_suppkey:18(int!null) ps_supplycost:20(float!null) n_nationkey:22(int!null) n_name:23(char!null) n_regionkey:24(int!null) r_regionkey:26(int!null) r_name:27(char!null)
       │         │    │    │    │    ├── stats: [rows=161290.323, distinct(10)=9920, null(10)=0, distinct(11)=9989.99903, null(11)=0, distinct(12)=9999.99901, null(12)=0, distinct(13)=5, null(13)=0, distinct(14)=9999.99901, null(14)=0, distinct(15)=9966.99907, null(15)=0, distinct(16)=9933.99912, null(16)=0, distinct(17)=110564.957, null(17)=0, distinct(18)=9920, null(18)=0, distinct(20)=80250.5069, null(20)=0, distinct(22)=5, null(22)=0, distinct(23)=5, null(23)=0, distinct(24)=1, null(24)=0, distinct(26)=1, null(26)=0, distinct(27)=0.996222107, null(27)=0, distinct(17,18)=146071.239, null(17,18)=0]
@@ -967,7 +967,7 @@ project
       │         │    │    │    │    │    ├── stats: [rows=800000, distinct(17)=199241, null(17)=0, distinct(18)=9920, null(18)=0, distinct(20)=100379, null(20)=0, distinct(17,18)=800000, null(17,18)=0]
       │         │    │    │    │    │    ├── key: (17,18)
       │         │    │    │    │    │    └── fd: (17,18)-->(20)
-      │         │    │    │    │    ├── inner-join
+      │         │    │    │    │    ├── inner-join (hash)
       │         │    │    │    │    │    ├── save-table-name: q2_inner_join_16
       │         │    │    │    │    │    ├── columns: s_suppkey:10(int!null) s_name:11(char!null) s_address:12(varchar!null) s_nationkey:13(int!null) s_phone:14(char!null) s_acctbal:15(float!null) s_comment:16(varchar!null) n_nationkey:22(int!null) n_name:23(char!null) n_regionkey:24(int!null) r_regionkey:26(int!null) r_name:27(char!null)
       │         │    │    │    │    │    ├── stats: [rows=2000, distinct(10)=1844.80594, null(10)=0, distinct(11)=1846.09084, null(11)=0, distinct(12)=1846.27302, null(12)=0, distinct(13)=5, null(13)=0, distinct(14)=1846.27302, null(14)=0, distinct(15)=1845.67052, null(15)=0, distinct(16)=1845.06427, null(16)=0, distinct(22)=5, null(22)=0, distinct(23)=5, null(23)=0, distinct(24)=1, null(24)=0, distinct(26)=1, null(26)=0, distinct(27)=0.996222107, null(27)=0]
@@ -979,7 +979,7 @@ project
       │         │    │    │    │    │    │    ├── stats: [rows=10000, distinct(10)=9920, null(10)=0, distinct(11)=9990, null(11)=0, distinct(12)=10000, null(12)=0, distinct(13)=25, null(13)=0, distinct(14)=10000, null(14)=0, distinct(15)=9967, null(15)=0, distinct(16)=9934, null(16)=0]
       │         │    │    │    │    │    │    ├── key: (10)
       │         │    │    │    │    │    │    └── fd: (10)-->(11-16)
-      │         │    │    │    │    │    ├── inner-join
+      │         │    │    │    │    │    ├── inner-join (hash)
       │         │    │    │    │    │    │    ├── save-table-name: q2_inner_join_18
       │         │    │    │    │    │    │    ├── columns: n_nationkey:22(int!null) n_name:23(char!null) n_regionkey:24(int!null) r_regionkey:26(int!null) r_name:27(char!null)
       │         │    │    │    │    │    │    ├── stats: [rows=5, distinct(22)=5, null(22)=0, distinct(23)=5, null(23)=0, distinct(24)=1, null(24)=0, distinct(26)=1, null(26)=0, distinct(27)=0.996222107, null(27)=0]
@@ -1635,7 +1635,7 @@ limit
  │         │    │    ├── key columns: [9] = [18]
  │         │    │    ├── stats: [rows=247598.539, distinct(1)=29974.3087, null(1)=0, distinct(7)=1, null(7)=0, distinct(9)=195275.364, null(9)=0, distinct(10)=29974.3087, null(10)=0, distinct(13)=802, null(13)=0, distinct(16)=1, null(16)=0, distinct(18)=195275.364, null(18)=0, distinct(23)=197736.715, null(23)=0, distinct(24)=11, null(24)=0, distinct(28)=842, null(28)=0, distinct(23,24)=207215.808, null(23,24)=0]
  │         │    │    ├── fd: ()-->(7), (9)-->(10,13,16), (9)==(18), (18)==(9), (1)==(10), (10)==(1)
- │         │    │    ├── inner-join
+ │         │    │    ├── inner-join (hash)
  │         │    │    │    ├── save-table-name: q3_inner_join_6
  │         │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(char!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) o_shippriority:16(int!null)
  │         │    │    │    ├── stats: [rows=150572.001, distinct(1)=29974.3087, null(1)=0, distinct(7)=1, null(7)=0, distinct(9)=130014.955, null(9)=0, distinct(10)=29974.3087, null(10)=0, distinct(13)=802, null(13)=0, distinct(16)=1, null(16)=0]
@@ -1880,7 +1880,7 @@ sort
       ├── stats: [rows=5, distinct(6)=5, null(6)=0, distinct(26)=5, null(26)=0]
       ├── key: (6)
       ├── fd: (6)-->(26)
-      ├── semi-join
+      ├── semi-join (hash)
       │    ├── save-table-name: q4_semi_join_3
       │    ├── columns: o_orderkey:1(int!null) o_orderdate:5(date!null) o_orderpriority:6(char!null)
       │    ├── stats: [rows=57356.6085, distinct(1)=57356.6085, null(1)=0, distinct(5)=92, null(5)=0, distinct(6)=5, null(6)=0]
@@ -2043,17 +2043,17 @@ sort
       │    ├── save-table-name: q5_project_3
       │    ├── columns: column48:48(float) n_name:42(char!null)
       │    ├── stats: [rows=13283.5233, distinct(42)=5, null(42)=0, distinct(48)=12978.2343, null(48)=0]
-      │    ├── inner-join
+      │    ├── inner-join (hash)
       │    │    ├── save-table-name: q5_inner_join_4
       │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(char!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
       │    │    ├── stats: [rows=13283.5233, distinct(1)=13283.5233, null(1)=0, distinct(4)=5, null(4)=0, distinct(9)=12903.2494, null(9)=0, distinct(10)=13283.5233, null(10)=0, distinct(13)=365, null(13)=0, distinct(18)=12903.2494, null(18)=0, distinct(20)=1843.42933, null(20)=0, distinct(23)=12950.7961, null(23)=0, distinct(24)=11, null(24)=0, distinct(34)=1843.42933, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(42)=5, null(42)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0, distinct(23,24)=12978.2343, null(23,24)=0]
       │    │    ├── fd: ()-->(46), (1)-->(4), (9)-->(10,13), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(4,41), (41)==(4,37), (20)==(34), (34)==(20), (9)==(18), (18)==(9), (1)==(10), (10)==(1), (4)==(37,41)
-      │    │    ├── inner-join
+      │    │    ├── inner-join (hash)
       │    │    │    ├── save-table-name: q5_inner_join_5
       │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(char!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
       │    │    │    ├── stats: [rows=329460.16, distinct(9)=227556.11, null(9)=0, distinct(10)=88927.0358, null(10)=0, distinct(13)=365, null(13)=0, distinct(18)=227556.11, null(18)=0, distinct(20)=1844.80594, null(20)=0, distinct(23)=260712.179, null(23)=0, distinct(24)=11, null(24)=0, distinct(34)=1844.80594, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(42)=5, null(42)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0, distinct(23,24)=284545.02, null(23,24)=0]
       │    │    │    ├── fd: ()-->(46), (9)-->(10,13), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (20)==(34), (34)==(20), (9)==(18), (18)==(9)
-      │    │    │    ├── inner-join
+      │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q5_inner_join_6
       │    │    │    │    ├── columns: l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(char!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
       │    │    │    │    ├── stats: [rows=1209922.38, distinct(18)=835685.959, null(18)=0, distinct(20)=1844.80594, null(20)=0, distinct(23)=675298.21, null(23)=0, distinct(24)=11, null(24)=0, distinct(34)=1844.80594, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(42)=5, null(42)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0, distinct(23,24)=1095803.99, null(23,24)=0]
@@ -2069,7 +2069,7 @@ sort
       │    │    │    │    │    ├── stats: [rows=2000, distinct(34)=1844.80594, null(34)=0, distinct(37)=5, null(37)=0, distinct(41)=5, null(41)=0, distinct(42)=5, null(42)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0]
       │    │    │    │    │    ├── key: (34)
       │    │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37)
-      │    │    │    │    │    ├── inner-join
+      │    │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    │    ├── save-table-name: q5_inner_join_9
       │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_name:42(char!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
       │    │    │    │    │    │    ├── stats: [rows=5, distinct(41)=5, null(41)=0, distinct(42)=5, null(42)=0, distinct(43)=1, null(43)=0, distinct(45)=1, null(45)=0, distinct(46)=0.996222107, null(46)=0]
@@ -2542,17 +2542,17 @@ sort
       │    ├── save-table-name: q7_project_3
       │    ├── columns: l_year:49(int) volume:50(float) n1.n_name:42(char!null) n2.n_name:46(char!null)
       │    ├── stats: [rows=588464.689, distinct(42)=24.9990099, null(42)=0, distinct(46)=24.9990099, null(46)=0, distinct(49)=731, null(49)=0, distinct(50)=499117.299, null(50)=0, distinct(42,46,49)=149096.222, null(42,46,49)=0]
-      │    ├── inner-join
+      │    ├── inner-join (hash)
       │    │    ├── save-table-name: q7_inner_join_4
       │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float!null) l_discount:14(float!null) l_shipdate:18(date!null) o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null) n1.n_nationkey:41(int!null) n1.n_name:42(char!null) n2.n_nationkey:45(int!null) n2.n_name:46(char!null)
       │    │    ├── stats: [rows=588464.689, distinct(1)=9920, null(1)=0, distinct(4)=24.9990099, null(4)=0, distinct(8)=458543.889, null(8)=0, distinct(10)=9920, null(10)=0, distinct(13)=420694.205, null(13)=0, distinct(14)=11, null(14)=0, distinct(18)=731, null(18)=0, distinct(24)=458543.889, null(24)=0, distinct(25)=99570.7584, null(25)=0, distinct(33)=99570.7584, null(33)=0, distinct(36)=24.9990099, null(36)=0, distinct(41)=24.9990099, null(41)=0, distinct(42)=24.9990099, null(42)=0, distinct(45)=24.9990099, null(45)=0, distinct(46)=24.9990099, null(46)=0, distinct(13,14)=499117.299, null(13,14)=0, distinct(18,42,46)=149096.222, null(18,42,46)=0]
       │    │    ├── fd: (1)-->(4), (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8), (1)==(10), (10)==(1), (4)==(41), (41)==(4)
-      │    │    ├── inner-join
+      │    │    ├── inner-join (hash)
       │    │    │    ├── save-table-name: q7_inner_join_5
       │    │    │    ├── columns: l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float!null) l_discount:14(float!null) l_shipdate:18(date!null) o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null) n1.n_nationkey:41(int!null) n1.n_name:42(char!null) n2.n_nationkey:45(int!null) n2.n_name:46(char!null)
       │    │    │    ├── stats: [rows=14593924.3, distinct(8)=1128319.56, null(8)=0, distinct(10)=9920, null(10)=0, distinct(13)=824798.212, null(13)=0, distinct(14)=11, null(14)=0, distinct(18)=731, null(18)=0, distinct(24)=1128319.56, null(24)=0, distinct(25)=99846, null(25)=0, distinct(33)=99846, null(33)=0, distinct(36)=24.9990099, null(36)=0, distinct(41)=24.9990099, null(41)=0, distinct(42)=24.9990099, null(42)=0, distinct(45)=24.9990099, null(45)=0, distinct(46)=24.9990099, null(46)=0, distinct(13,14)=1736304.41, null(13,14)=0, distinct(18,42,46)=152291.667, null(18,42,46)=0]
       │    │    │    ├── fd: (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8)
-      │    │    │    ├── inner-join
+      │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q7_inner_join_6
       │    │    │    │    ├── columns: o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null) n1.n_nationkey:41(int!null) n1.n_name:42(char!null) n2.n_nationkey:45(int!null) n2.n_name:46(char!null)
       │    │    │    │    ├── stats: [rows=12602090.7, distinct(24)=1499663.18, null(24)=0, distinct(25)=99846, null(25)=0, distinct(33)=99846, null(33)=0, distinct(36)=24.9990099, null(36)=0, distinct(41)=24.9990099, null(41)=0, distinct(42)=24.9990099, null(42)=0, distinct(45)=24.9990099, null(45)=0, distinct(46)=24.9990099, null(46)=0, distinct(42,46)=208.333333, null(42,46)=0]
@@ -2586,7 +2586,7 @@ sort
       │    │    │    │    │    │    ├── key: (41,45)
       │    │    │    │    │    │    ├── fd: (41)-->(42), (45)-->(46)
       │    │    │    │    │    │    ├── ordering: +45
-      │    │    │    │    │    │    └── inner-join
+      │    │    │    │    │    │    └── inner-join (hash)
       │    │    │    │    │    │         ├── save-table-name: q7_inner_join_11
       │    │    │    │    │    │         ├── columns: n1.n_nationkey:41(int!null) n1.n_name:42(char!null) n2.n_nationkey:45(int!null) n2.n_name:46(char!null)
       │    │    │    │    │    │         ├── stats: [rows=208.333333, distinct(41)=24.9990099, null(41)=0, distinct(42)=24.9990099, null(42)=0, distinct(45)=24.9990099, null(45)=0, distinct(46)=24.9990099, null(46)=0, distinct(42,46)=208.333333, null(42,46)=0]
@@ -2982,17 +2982,17 @@ sort
       │    │    │    ├── save-table-name: q8_project_5
       │    │    │    ├── columns: o_year:61(int) volume:62(float) n2.n_name:55(char!null)
       │    │    │    ├── stats: [rows=2913.68612, distinct(55)=24.9055527, null(55)=0, distinct(61)=717.421185, null(61)=0, distinct(62)=2901.67246, null(62)=0, distinct(55,62)=2901.89538, null(55,62)=0]
-      │    │    │    ├── inner-join
+      │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q8_inner_join_6
       │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(varchar!null) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float!null) l_discount:23(float!null) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) n1.n_nationkey:50(int!null) n1.n_regionkey:52(int!null) n2.n_nationkey:54(int!null) n2.n_name:55(char!null) r_regionkey:58(int!null) r_name:59(char!null)
       │    │    │    │    ├── stats: [rows=2913.68612, distinct(1)=1333.31636, null(1)=0, distinct(5)=1, null(5)=0, distinct(10)=2524.78118, null(10)=0, distinct(13)=24.9055527, null(13)=0, distinct(17)=2896.85285, null(17)=0, distinct(18)=1333.31636, null(18)=0, distinct(19)=2524.78118, null(19)=0, distinct(22)=2899.70087, null(22)=0, distinct(23)=11, null(23)=0, distinct(33)=2896.85285, null(33)=0, distinct(34)=2870.3294, null(34)=0, distinct(37)=717.421185, null(37)=0, distinct(42)=2870.3294, null(42)=0, distinct(45)=24.9055527, null(45)=0, distinct(50)=24.9055527, null(50)=0, distinct(52)=1, null(52)=0, distinct(54)=24.9055527, null(54)=0, distinct(55)=24.9055527, null(55)=0, distinct(58)=1, null(58)=0, distinct(59)=1, null(59)=0, distinct(22,23)=2901.67246, null(22,23)=0, distinct(22,23,55)=2901.89538, null(22,23,55)=0]
       │    │    │    │    ├── fd: ()-->(5,59), (10)-->(13), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34), (17)==(33), (33)==(17), (10)==(19), (19)==(10), (13)==(54), (54)==(13), (1)==(18), (18)==(1)
-      │    │    │    │    ├── inner-join
+      │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    ├── save-table-name: q8_inner_join_7
       │    │    │    │    │    ├── columns: s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float!null) l_discount:23(float!null) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) n1.n_nationkey:50(int!null) n1.n_regionkey:52(int!null) n2.n_nationkey:54(int!null) n2.n_name:55(char!null) r_regionkey:58(int!null) r_name:59(char!null)
       │    │    │    │    │    ├── stats: [rows=366056.156, distinct(10)=9920, null(10)=0, distinct(13)=24.9055527, null(13)=0, distinct(17)=251065.484, null(17)=0, distinct(18)=167511.137, null(18)=0, distinct(19)=9920, null(19)=0, distinct(22)=302359.731, null(22)=0, distinct(23)=11, null(23)=0, distinct(33)=251065.484, null(33)=0, distinct(34)=96910.9844, null(34)=0, distinct(37)=731, null(37)=0, distinct(42)=96910.9844, null(42)=0, distinct(45)=24.9055527, null(45)=0, distinct(50)=24.9055527, null(50)=0, distinct(52)=1, null(52)=0, distinct(54)=24.9055527, null(54)=0, distinct(55)=24.9055527, null(55)=0, distinct(58)=1, null(58)=0, distinct(59)=1, null(59)=0, distinct(22,23)=352104.347, null(22,23)=0, distinct(22,23,55)=358774.904, null(22,23,55)=0]
       │    │    │    │    │    ├── fd: ()-->(59), (10)-->(13), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34), (17)==(33), (33)==(17), (10)==(19), (19)==(10), (13)==(54), (54)==(13)
-      │    │    │    │    │    ├── inner-join
+      │    │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    │    ├── save-table-name: q8_inner_join_8
       │    │    │    │    │    │    ├── columns: l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float!null) l_discount:23(float!null) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) n1.n_nationkey:50(int!null) n1.n_regionkey:52(int!null) n2.n_nationkey:54(int!null) n2.n_name:55(char!null) r_regionkey:58(int!null) r_name:59(char!null)
       │    │    │    │    │    │    ├── stats: [rows=9078192.67, distinct(17)=452871.085, null(17)=0, distinct(18)=199241, null(18)=0, distinct(19)=9920, null(19)=0, distinct(22)=925903.867, null(22)=0, distinct(23)=11, null(23)=0, distinct(33)=452871.085, null(33)=0, distinct(34)=99413.0082, null(34)=0, distinct(37)=731, null(37)=0, distinct(42)=99413.0082, null(42)=0, distinct(45)=24.9055527, null(45)=0, distinct(50)=24.9055527, null(50)=0, distinct(52)=1, null(52)=0, distinct(54)=24.9055527, null(54)=0, distinct(55)=24.9055527, null(55)=0, distinct(58)=1, null(58)=0, distinct(59)=1, null(59)=0, distinct(22,23)=4679096.11, null(22,23)=0, distinct(22,23,55)=9078192.67, null(22,23,55)=0]
@@ -3001,13 +3001,13 @@ sort
       │    │    │    │    │    │    │    ├── save-table-name: q8_scan_9
       │    │    │    │    │    │    │    ├── columns: l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float!null) l_discount:23(float!null)
       │    │    │    │    │    │    │    └── stats: [rows=6001215, distinct(17)=1527270, null(17)=0, distinct(18)=199241, null(18)=0, distinct(19)=9920, null(19)=0, distinct(22)=925955, null(22)=0, distinct(23)=11, null(23)=0, distinct(22,23)=6001215, null(22,23)=0]
-      │    │    │    │    │    │    ├── inner-join
+      │    │    │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    │    │    ├── save-table-name: q8_inner_join_10
       │    │    │    │    │    │    │    ├── columns: o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) n1.n_nationkey:50(int!null) n1.n_regionkey:52(int!null) n2.n_nationkey:54(int!null) n2.n_name:55(char!null) r_regionkey:58(int!null) r_name:59(char!null)
       │    │    │    │    │    │    │    ├── stats: [rows=2310340.71, distinct(33)=452871.085, null(33)=0, distinct(34)=99413.0082, null(34)=0, distinct(37)=731, null(37)=0, distinct(42)=99413.0082, null(42)=0, distinct(45)=24.9055527, null(45)=0, distinct(50)=24.9055527, null(50)=0, distinct(52)=1, null(52)=0, distinct(54)=24.9055527, null(54)=0, distinct(55)=24.9055527, null(55)=0, distinct(58)=1, null(58)=0, distinct(59)=1, null(59)=0]
       │    │    │    │    │    │    │    ├── key: (33,54)
       │    │    │    │    │    │    │    ├── fd: ()-->(59), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34)
-      │    │    │    │    │    │    │    ├── inner-join
+      │    │    │    │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    │    │    │    ├── save-table-name: q8_inner_join_11
       │    │    │    │    │    │    │    │    ├── columns: c_custkey:42(int!null) c_nationkey:45(int!null) n1.n_nationkey:50(int!null) n1.n_regionkey:52(int!null) n2.n_nationkey:54(int!null) n2.n_name:55(char!null) r_regionkey:58(int!null) r_name:59(char!null)
       │    │    │    │    │    │    │    │    ├── stats: [rows=750000, distinct(42)=147944.303, null(42)=0, distinct(45)=24.9055527, null(45)=0, distinct(50)=24.9055527, null(50)=0, distinct(52)=1, null(52)=0, distinct(54)=24.9055527, null(54)=0, distinct(55)=24.9055527, null(55)=0, distinct(58)=1, null(58)=0, distinct(59)=1, null(59)=0]
@@ -3547,12 +3547,12 @@ sort
       │    │    ├── key columns: [18] = [1]
       │    │    ├── stats: [rows=2406.66318, distinct(1)=2357.09397, null(1)=0, distinct(2)=2363.75844, null(2)=0, distinct(10)=1520.84987, null(10)=0, distinct(13)=25, null(13)=0, distinct(17)=1508.01915, null(17)=0, distinct(18)=2357.09397, null(18)=0, distinct(19)=1520.84987, null(19)=0, distinct(21)=50, null(21)=0, distinct(22)=1507.67014, null(22)=0, distinct(23)=11, null(23)=0, distinct(33)=1508.01915, null(33)=0, distinct(34)=1443.61652, null(34)=0, distinct(36)=1503.89598, null(36)=0, distinct(38)=1508.01915, null(38)=0, distinct(42)=1208.19298, null(42)=0, distinct(47)=25, null(47)=0, distinct(48)=25, null(48)=0, distinct(42,48)=1500.68104, null(42,48)=0, distinct(21-23,36)=1508.01915, null(21-23,36)=0]
       │    │    ├── fd: (1)-->(2), (10)-->(13), (33,34)-->(36), (38)-->(42), (47)-->(48), (19)==(10,34), (34)==(10,19), (18)==(1,33), (33)==(1,18), (17)==(38), (38)==(17), (10)==(19,34), (13)==(47), (47)==(13), (1)==(18,33)
-      │    │    ├── inner-join
+      │    │    ├── inner-join (hash)
       │    │    │    ├── save-table-name: q9_inner_join_5
       │    │    │    ├── columns: s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float!null) l_extendedprice:22(float!null) l_discount:23(float!null) ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float!null) o_orderkey:38(int!null) o_orderdate:42(date!null) n_nationkey:47(int!null) n_name:48(char!null)
       │    │    │    ├── stats: [rows=2404.93063, distinct(10)=2404.93063, null(10)=0, distinct(13)=25, null(13)=0, distinct(17)=2357.09397, null(17)=0, distinct(18)=2357.09397, null(18)=0, distinct(19)=2404.93063, null(19)=0, distinct(21)=50, null(21)=0, distinct(22)=2355.81122, null(22)=0, distinct(23)=11, null(23)=0, distinct(33)=2357.09397, null(33)=0, distinct(34)=2135.61418, null(34)=0, distinct(36)=2342.00113, null(36)=0, distinct(38)=2357.09397, null(38)=0, distinct(42)=1520.49036, null(42)=0, distinct(47)=25, null(47)=0, distinct(48)=25, null(48)=0, distinct(42,48)=2330.3251, null(42,48)=0, distinct(21-23,36)=2357.09397, null(21-23,36)=0]
       │    │    │    ├── fd: (10)-->(13), (33,34)-->(36), (38)-->(42), (47)-->(48), (19)==(10,34), (34)==(10,19), (18)==(33), (33)==(18), (17)==(38), (38)==(17), (10)==(19,34), (13)==(47), (47)==(13)
-      │    │    │    ├── inner-join
+      │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q9_inner_join_6
       │    │    │    │    ├── columns: l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float!null) l_extendedprice:22(float!null) l_discount:23(float!null) ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float!null) o_orderkey:38(int!null) o_orderdate:42(date!null) n_nationkey:47(int!null) n_name:48(char!null)
       │    │    │    │    ├── stats: [rows=59642.2797, distinct(17)=59642.2797, null(17)=0, distinct(18)=59642.2797, null(18)=0, distinct(19)=9920, null(19)=0, distinct(21)=50, null(21)=0, distinct(22)=58063.808, null(22)=0, distinct(23)=11, null(23)=0, distinct(33)=59642.2797, null(33)=0, distinct(34)=9920, null(34)=0, distinct(36)=45145.1912, null(36)=0, distinct(38)=59642.2797, null(38)=0, distinct(42)=2406, null(42)=0, distinct(47)=25, null(47)=0, distinct(48)=25, null(48)=0, distinct(42,48)=37953.5881, null(42,48)=0, distinct(21-23,36)=59642.2797, null(21-23,36)=0]
@@ -3934,12 +3934,12 @@ limit
  │         │    ├── columns: column38:38(float) c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:35(char!null)
  │         │    ├── stats: [rows=95043.9237, distinct(1)=44261.346, null(1)=0, distinct(2)=70400.4013, null(2)=0, distinct(3)=70392.0136, null(3)=0, distinct(5)=70400.4013, null(5)=0, distinct(6)=69087.4422, null(6)=0, distinct(8)=70309.9705, null(8)=0, distinct(35)=25, null(35)=0, distinct(38)=91855.5595, null(38)=0]
  │         │    ├── fd: (1)-->(2,3,5,6,8,35)
- │         │    ├── inner-join
+ │         │    ├── inner-join (hash)
  │         │    │    ├── save-table-name: q10_inner_join_5
  │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_nationkey:4(int!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) l_returnflag:26(char!null) n_nationkey:34(int!null) n_name:35(char!null)
  │         │    │    ├── stats: [rows=95043.9237, distinct(1)=44261.346, null(1)=0, distinct(2)=70400.4013, null(2)=0, distinct(3)=70392.0136, null(3)=0, distinct(4)=25, null(4)=0, distinct(5)=70400.4013, null(5)=0, distinct(6)=69087.4422, null(6)=0, distinct(8)=70309.9705, null(8)=0, distinct(9)=46418.8849, null(9)=0, distinct(10)=44261.346, null(10)=0, distinct(13)=92, null(13)=0, distinct(18)=46418.8849, null(18)=0, distinct(23)=89640.0074, null(23)=0, distinct(24)=11, null(24)=0, distinct(26)=1, null(26)=0, distinct(34)=25, null(34)=0, distinct(35)=25, null(35)=0, distinct(23,24)=91855.5595, null(23,24)=0]
  │         │    │    ├── fd: ()-->(26), (1)-->(2-6,8), (9)-->(10,13), (34)-->(35), (9)==(18), (18)==(9), (1)==(10), (10)==(1), (4)==(34), (34)==(4)
- │         │    │    ├── inner-join
+ │         │    │    ├── inner-join (hash)
  │         │    │    │    ├── save-table-name: q10_inner_join_6
  │         │    │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_nationkey:4(int!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) l_returnflag:26(char!null)
  │         │    │    │    ├── stats: [rows=95043.9237, distinct(1)=39003.2512, null(1)=0, distinct(2)=70400.564, null(2)=0, distinct(3)=70392.1763, null(3)=0, distinct(4)=25, null(4)=0, distinct(5)=70400.564, null(5)=0, distinct(6)=69087.5981, null(6)=0, distinct(8)=70310.1327, null(8)=0, distinct(9)=46418.9433, null(9)=0, distinct(10)=39003.2512, null(10)=0, distinct(13)=92, null(13)=0, distinct(18)=46418.9433, null(18)=0, distinct(23)=58495.4099, null(23)=0, distinct(24)=11, null(24)=0, distinct(26)=1, null(26)=0]
@@ -4843,7 +4843,7 @@ sort
       │    ├── stats: [rows=148813, distinct(1)=148813, null(1)=0, distinct(18)=148813, null(18)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(18)
-      │    ├── right-join
+      │    ├── right-join (hash)
       │    │    ├── save-table-name: q13_right_join_4
       │    │    ├── columns: c_custkey:1(int!null) o_orderkey:9(int) o_custkey:10(int) o_comment:17(varchar)
       │    │    ├── stats: [rows=503988.227, distinct(1)=148813, null(1)=0, distinct(9)=317522.248, null(9)=0, distinct(10)=99620.1148, null(10)=0, distinct(17)=317522.248, null(17)=0]
@@ -4997,7 +4997,7 @@ project
  │    │    ├── save-table-name: q14_project_3
  │    │    ├── columns: column26:26(float) column28:28(float)
  │    │    ├── stats: [rows=71544.85, distinct(26)=71544.85, null(26)=0, distinct(28)=45153.1015, null(28)=0]
- │    │    ├── inner-join
+ │    │    ├── inner-join (hash)
  │    │    │    ├── save-table-name: q14_inner_join_4
  │    │    │    ├── columns: l_partkey:2(int!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipdate:11(date!null) p_partkey:17(int!null) p_type:21(varchar!null)
  │    │    │    ├── stats: [rows=71544.85, distinct(2)=60216.5699, null(2)=0, distinct(6)=44533.9293, null(6)=0, distinct(7)=11, null(7)=0, distinct(11)=30, null(11)=0, distinct(17)=60216.5699, null(17)=0, distinct(21)=150, null(21)=0, distinct(6,7)=45153.1015, null(6,7)=0, distinct(6,7,21)=71544.85, null(6,7,21)=0]
@@ -5458,7 +5458,7 @@ sort
       ├── stats: [rows=3489.49147, distinct(9)=8.33333333, null(9)=0, distinct(10)=150, null(10)=0, distinct(11)=8, null(11)=0, distinct(22)=3489.49147, null(22)=0, distinct(9-11)=3489.49147, null(9-11)=0]
       ├── key: (9-11)
       ├── fd: (9-11)-->(22)
-      ├── inner-join
+      ├── inner-join (hash)
       │    ├── save-table-name: q16_inner_join_3
       │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:6(int!null) p_brand:9(char!null) p_type:10(varchar!null) p_size:11(int!null)
       │    ├── stats: [rows=14276.4012, distinct(1)=3555.43444, null(1)=0, distinct(2)=7567.69437, null(2)=0, distinct(6)=3555.43444, null(6)=0, distinct(9)=8.33333333, null(9)=0, distinct(10)=150, null(10)=0, distinct(11)=8, null(11)=0, distinct(9-11)=3489.49147, null(9-11)=0]
@@ -5951,7 +5951,7 @@ limit
  │         ├── stats: [rows=1471426.19, distinct(1)=1471426.19, null(1)=0, distinct(2)=1471426.19, null(2)=0, distinct(9)=1471426.19, null(9)=0, distinct(12)=1471426.19, null(12)=0, distinct(13)=1471426.19, null(13)=0, distinct(51)=1471426.19, null(51)=0]
  │         ├── key: (9)
  │         ├── fd: (1)-->(2), (9)-->(1,2,12,13,51)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── save-table-name: q18_inner_join_4
  │         │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_quantity:22(float!null)
  │         │    ├── stats: [rows=5941074.68, distinct(1)=99846, null(1)=0, distinct(2)=150000, null(2)=0, distinct(9)=1471426.19, null(9)=0, distinct(10)=99846, null(10)=0, distinct(12)=1410750.85, null(12)=0, distinct(13)=2406, null(13)=0, distinct(18)=1471426.19, null(18)=0, distinct(22)=50, null(22)=0]
@@ -5960,7 +5960,7 @@ limit
  │         │    │    ├── save-table-name: q18_scan_5
  │         │    │    ├── columns: l_orderkey:18(int!null) l_quantity:22(float!null)
  │         │    │    └── stats: [rows=6001215, distinct(18)=1527270, null(18)=0, distinct(22)=50, null(22)=0]
- │         │    ├── inner-join
+ │         │    ├── inner-join (hash)
  │         │    │    ├── save-table-name: q18_inner_join_6
  │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null)
  │         │    │    ├── stats: [rows=1511964.68, distinct(1)=99846, null(1)=0, distinct(2)=149993.712, null(2)=0, distinct(9)=952566.744, null(9)=0, distinct(10)=99846, null(10)=0, distinct(12)=941447.245, null(12)=0, distinct(13)=2406, null(13)=0]
@@ -6262,7 +6262,7 @@ scalar-group-by
  │    ├── save-table-name: q19_project_2
  │    ├── columns: column26:26(float)
  │    ├── stats: [rows=53556.554, distinct(26)=50346.0112, null(26)=0]
- │    ├── inner-join
+ │    ├── inner-join (hash)
  │    │    ├── save-table-name: q19_inner_join_3
  │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:17(int!null) p_brand:20(char!null) p_size:22(int!null) p_container:23(char!null)
  │    │    ├── stats: [rows=53556.554, distinct(2)=53556.554, null(2)=0, distinct(5)=50, null(5)=0, distinct(6)=49693.434, null(6)=0, distinct(7)=11, null(7)=0, distinct(14)=1, null(14)=0, distinct(15)=2, null(15)=0, distinct(17)=53556.554, null(17)=0, distinct(20)=25, null(20)=0, distinct(22)=16.6666667, null(22)=0, distinct(23)=40, null(23)=0, distinct(6,7)=50346.0112, null(6,7)=0]
@@ -6470,13 +6470,13 @@ sort
       ├── save-table-name: q20_project_2
       ├── columns: s_name:2(char!null) s_address:3(varchar!null)
       ├── stats: [rows=400, distinct(2)=399.991883, null(2)=0, distinct(3)=400, null(3)=0]
-      └── inner-join
+      └── inner-join (hash)
            ├── save-table-name: q20_inner_join_3
            ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null) n_nationkey:8(int!null) n_name:9(char!null)
            ├── stats: [rows=400, distinct(1)=399.934613, null(1)=0, distinct(2)=399.991883, null(2)=0, distinct(3)=400, null(3)=0, distinct(4)=1, null(4)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0]
            ├── key: (1)
            ├── fd: ()-->(9), (1)-->(2-4), (4)==(8), (8)==(4)
-           ├── semi-join
+           ├── semi-join (hash)
            │    ├── save-table-name: q20_semi_join_4
            │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null)
            │    ├── stats: [rows=10000, distinct(1)=9920, null(1)=0, distinct(2)=9990, null(2)=0, distinct(3)=10000, null(3)=0, distinct(4)=25, null(4)=0]
@@ -6488,7 +6488,7 @@ sort
            │    │    ├── stats: [rows=10000, distinct(1)=9920, null(1)=0, distinct(2)=9990, null(2)=0, distinct(3)=10000, null(3)=0, distinct(4)=25, null(4)=0]
            │    │    ├── key: (1)
            │    │    └── fd: (1)-->(2-4)
-           │    ├── semi-join
+           │    ├── semi-join (hash)
            │    │    ├── save-table-name: q20_semi_join_6
            │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null)
            │    │    ├── stats: [rows=266666.667, distinct(12)=160127.162, null(12)=0, distinct(13)=9920, null(13)=0]
@@ -6511,7 +6511,7 @@ sort
            │    │    │         │    ├── stats: [rows=800000, distinct(12)=199241, null(12)=0, distinct(13)=9920, null(13)=0, distinct(14)=800000, null(14)=0, distinct(42)=800000, null(42)=0, distinct(12,13)=800000, null(12,13)=0]
            │    │    │         │    ├── key: (12,13)
            │    │    │         │    ├── fd: (12,13)-->(14,42)
-           │    │    │         │    ├── right-join
+           │    │    │         │    ├── right-join (hash)
            │    │    │         │    │    ├── save-table-name: q20_right_join_10
            │    │    │         │    │    ├── columns: ps_partkey:12(int!null) ps_suppkey:13(int!null) ps_availqty:14(int!null) l_partkey:27(int) l_suppkey:28(int) l_quantity:30(float) l_shipdate:36(date)
            │    │    │         │    │    ├── stats: [rows=800000, distinct(12)=199241, null(12)=0, distinct(13)=9920, null(13)=0, distinct(14)=9920, null(14)=0, distinct(27)=350.99288, null(27)=799649.007, distinct(28)=350.99288, null(28)=799649.007, distinct(30)=49.9553024, null(30)=799649.007, distinct(36)=225.470934, null(36)=799649.007, distinct(12,13)=800000, null(12,13)=0]
@@ -6859,7 +6859,7 @@ limit
  │         │    ├── key columns: [8] = [24]
  │         │    ├── stats: [rows=33144.2984, distinct(1)=9920, null(1)=0, distinct(2)=9628.02122, null(2)=0, distinct(4)=1, null(4)=0, distinct(8)=32069.6931, null(8)=0, distinct(10)=9920, null(10)=0, distinct(19)=2465.99641, null(19)=0, distinct(20)=2553.9941, null(20)=0, distinct(24)=32069.6931, null(24)=0, distinct(26)=1, null(26)=0, distinct(33)=1, null(33)=0, distinct(34)=1, null(34)=0]
  │         │    ├── fd: ()-->(26,34), (1)-->(2,4), (8)==(24), (24)==(8), (1)==(10), (10)==(1), (4)==(33), (33)==(4)
- │         │    ├── inner-join
+ │         │    ├── inner-join (hash)
  │         │    │    ├── save-table-name: q21_inner_join_5
  │         │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:8(int!null) l1.l_suppkey:10(int!null) l1.l_commitdate:19(date!null) l1.l_receiptdate:20(date!null) n_nationkey:33(int!null) n_name:34(char!null)
  │         │    │    ├── stats: [rows=80661.4919, distinct(1)=9920, null(1)=0, distinct(2)=9986.88851, null(2)=0, distinct(4)=1, null(4)=0, distinct(8)=78046.2829, null(8)=0, distinct(10)=9920, null(10)=0, distinct(19)=2466, null(19)=0, distinct(20)=2554, null(20)=0, distinct(33)=1, null(33)=0, distinct(34)=1, null(34)=0]

@@ -883,7 +883,7 @@ SELECT count(*) FROM kv a, kv b
 scalar-group-by
  ├── columns: count:9(int)
  ├── project
- │    └── inner-join
+ │    └── inner-join (hash)
  │         ├── columns: a.k:1(int!null) a.v:2(int) a.w:3(int) a.s:4(string) b.k:5(int!null) b.v:6(int) b.w:7(int) b.s:8(string)
  │         ├── scan a
  │         │    └── columns: a.k:1(int!null) a.v:2(int) a.w:3(int) a.s:4(string)
@@ -1970,7 +1970,7 @@ project
  │    ├── grouping columns: a:1(int!null) b:2(int) x:3(string)
  │    ├── project
  │    │    ├── columns: a:1(int!null) b:2(int) x:3(string) y:4(string)
- │    │    └── inner-join
+ │    │    └── inner-join (hash)
  │    │         ├── columns: a:1(int!null) b:2(int) x:3(string) y:4(string) rowid:5(int!null)
  │    │         ├── scan ab
  │    │         │    └── columns: a:1(int!null) b:2(int)
@@ -2119,11 +2119,11 @@ project
  │    ├── grouping columns: b2.b:3(bool) column9:9(bool)
  │    └── project
  │         ├── columns: column9:9(bool) b2.b:3(bool)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: b1.b:1(bool) b1.rowid:2(int!null) b2.b:3(bool) b2.rowid:4(int!null) a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    ├── scan b1
  │         │    │    └── columns: b1.b:1(bool) b1.rowid:2(int!null)
- │         │    ├── inner-join
+ │         │    ├── inner-join (hash)
  │         │    │    ├── columns: b2.b:3(bool) b2.rowid:4(int!null) a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan b2
  │         │    │    │    └── columns: b2.b:3(bool) b2.rowid:4(int!null)
@@ -2155,11 +2155,11 @@ project
  │    ├── grouping columns: b2.b:3(bool) column9:9(bool)
  │    └── project
  │         ├── columns: column9:9(bool) b2.b:3(bool)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: b1.b:1(bool) b1.rowid:2(int!null) b2.b:3(bool) b2.rowid:4(int!null) a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    ├── scan b1
  │         │    │    └── columns: b1.b:1(bool) b1.rowid:2(int!null)
- │         │    ├── inner-join
+ │         │    ├── inner-join (hash)
  │         │    │    ├── columns: b2.b:3(bool) b2.rowid:4(int!null) a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan b2
  │         │    │    │    └── columns: b2.b:3(bool) b2.rowid:4(int!null)
@@ -2212,7 +2212,7 @@ project
  │    ├── grouping columns: a:5(char!null) column9:9(string)
  │    └── project
  │         ├── columns: column9:9(string) a:5(char!null)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) a:5(char!null) b:6(float) c:7(bool) d:8(decimal)
  │         │    ├── scan kv
  │         │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
@@ -2275,7 +2275,7 @@ project
  │    ├── grouping columns: b.baz:5(jsonb) column7:7(bool)
  │    └── project
  │         ├── columns: column7:7(bool) b.baz:5(jsonb)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: a.bar:1(jsonb) a.baz:2(jsonb) a.rowid:3(int!null) b.bar:4(jsonb) b.baz:5(jsonb) b.rowid:6(int!null)
  │         │    ├── scan a
  │         │    │    └── columns: a.bar:1(jsonb) a.baz:2(jsonb) a.rowid:3(int!null)
@@ -2308,7 +2308,7 @@ project
  │    ├── grouping columns: b.baz:5(jsonb) column7:7(bool)
  │    └── project
  │         ├── columns: column7:7(bool) b.baz:5(jsonb)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: a.bar:1(jsonb) a.baz:2(jsonb) a.rowid:3(int!null) b.bar:4(jsonb) b.baz:5(jsonb) b.rowid:6(int!null)
  │         │    ├── scan a
  │         │    │    └── columns: a.bar:1(jsonb) a.baz:2(jsonb) a.rowid:3(int!null)
@@ -2341,7 +2341,7 @@ project
  │    ├── grouping columns: column3:3(interval) column4:4(interval)
  │    └── project
  │         ├── columns: column3:3(interval) column4:4(interval)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: a.t:1(time!null) b.t:2(time!null)
  │         │    ├── scan a
  │         │    │    └── columns: a.t:1(time!null)
@@ -2530,7 +2530,7 @@ project
       ├── grouping columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       ├── project
       │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) d:8(decimal!null)
-      │    └── inner-join
+      │    └── inner-join (hash)
       │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) a:5(char!null) b:6(float) c:7(bool) d:8(decimal!null)
       │         ├── scan kv
       │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
