@@ -13,6 +13,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/apd"
@@ -418,8 +419,9 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				distsqlpb.AggregatorSpec_SUM_INT,
 				distsqlpb.AggregatorSpec_MIN,
 				distsqlpb.AggregatorSpec_MAX,
+				distsqlpb.AggregatorSpec_AVG,
 			},
-			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}},
+			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}},
 			colTypes: []types.T{types.Int64, types.Decimal, types.Int64},
 			input: tuples{
 				{0, nil, nil},
@@ -428,8 +430,8 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				{1, nil, nil},
 			},
 			expected: tuples{
-				{0, 3.1, 2, 1, 3.1, 5, 5, 5},
-				{1, nil, 2, 0, nil, nil, nil, nil},
+				{0, 3.1, 2, 1, 3.1, 5, 5, 5, 3.1},
+				{1, nil, 2, 0, nil, nil, nil, nil, nil},
 			},
 			convToDecimal: true,
 		},
@@ -446,7 +448,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 					[]tuples{tc.input},
 					tc.expected,
 					orderedVerifier,
-					[]int{0, 1, 2, 3, 4, 5, 6, 7}[:len(tc.expected[0])],
+					[]int{0, 1, 2, 3, 4, 5, 6, 7, 8}[:len(tc.expected[0])],
 					func(input []Operator) (Operator, error) {
 						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
 					})
@@ -467,12 +469,13 @@ func TestAggregatorRandom(t *testing.T) {
 					t.Run(fmt.Sprintf("%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls),
 						func(t *testing.T) {
 							nTuples := coldata.BatchSize * numInputBatches
-							typs := []types.T{types.Int64, types.Int64}
+							typs := []types.T{types.Int64, types.Float64}
 							cols := []coldata.Vec{
 								coldata.NewMemColumn(typs[0], nTuples),
 								coldata.NewMemColumn(typs[1], nTuples)}
-							groups, aggCol, aggColNulls := cols[0].Int64(), cols[1].Int64(), cols[1].Nulls()
-							var expRowCounts, expCounts, expSums, expMins, expMaxs []int64
+							groups, aggCol, aggColNulls := cols[0].Int64(), cols[1].Float64(), cols[1].Nulls()
+							var expRowCounts, expCounts []int64
+							var expSums, expMins, expMaxs []float64
 							// SUM, MIN, MAX, and AVG aggregators can output null.
 							var expNulls []bool
 							curGroup := -1
@@ -489,10 +492,10 @@ func TestAggregatorRandom(t *testing.T) {
 								if hasNulls && rng.Float64() < nullProbability {
 									aggColNulls.SetNull(uint16(i))
 								} else {
-									// Keep the inputs small so they are a realistic size. Using
-									// values in the range [0, 2^63) is not realistic and makes
-									// decimal operations slower.
-									aggCol[i] = rng.Int63()%2048 - 1024
+									// Keep the inputs small so they are a realistic size. Using a
+									// large range is not realistic and makes decimal operations
+									// slower.
+									aggCol[i] = 2048 * (rng.Float64() - 0.5)
 									expNulls[curGroup] = false
 									expCounts[curGroup]++
 									expSums[curGroup] += aggCol[i]
@@ -511,9 +514,10 @@ func TestAggregatorRandom(t *testing.T) {
 									distsqlpb.AggregatorSpec_COUNT,
 									distsqlpb.AggregatorSpec_SUM_INT,
 									distsqlpb.AggregatorSpec_MIN,
-									distsqlpb.AggregatorSpec_MAX},
+									distsqlpb.AggregatorSpec_MAX,
+									distsqlpb.AggregatorSpec_AVG},
 								[]uint32{0},
-								[][]uint32{{}, {1}, {1}, {1}, {1}},
+								[][]uint32{{}, {1}, {1}, {1}, {1}, {1}},
 							)
 							if err != nil {
 								t.Fatal(err)
@@ -529,12 +533,14 @@ func TestAggregatorRandom(t *testing.T) {
 								sumCol := b.ColVec(2)
 								minCol := b.ColVec(3)
 								maxCol := b.ColVec(4)
+								avgCol := b.ColVec(5)
 								for j := uint16(0); j < b.Length(); j++ {
 									rowCount := rowCountCol.Int64()[j]
 									count := countCol.Int64()[j]
-									sum := sumCol.Int64()[j]
-									min := minCol.Int64()[j]
-									max := maxCol.Int64()[j]
+									sum := sumCol.Float64()[j]
+									min := minCol.Float64()[j]
+									max := maxCol.Float64()[j]
+									avg := avgCol.Float64()[j]
 									expRowCount := expRowCounts[tupleIdx]
 									if rowCount != expRowCount {
 										t.Fatalf("Found rowCount %d, expected %d, idx %d of batch %d", rowCount, expRowCount, j, i)
@@ -547,26 +553,33 @@ func TestAggregatorRandom(t *testing.T) {
 									expNull := expNulls[tupleIdx]
 									if expNull {
 										if !sumCol.Nulls().NullAt(uint16(j)) {
-											t.Fatalf("Found non-null sum %d, expected null, idx %d of batch %d", sum, j, i)
+											t.Fatalf("Found non-null sum %f, expected null, idx %d of batch %d", sum, j, i)
 										}
 										if !minCol.Nulls().NullAt(uint16(j)) {
-											t.Fatalf("Found non-null min %d, expected null, idx %d of batch %d", sum, j, i)
+											t.Fatalf("Found non-null min %f, expected null, idx %d of batch %d", sum, j, i)
 										}
 										if !maxCol.Nulls().NullAt(uint16(j)) {
-											t.Fatalf("Found non-null max %d, expected null, idx %d of batch %d", sum, j, i)
+											t.Fatalf("Found non-null max %f, expected null, idx %d of batch %d", sum, j, i)
+										}
+										if !avgCol.Nulls().NullAt(uint16(j)) {
+											t.Fatalf("Found non-null avg %f, expected null, idx %d of batch %d", sum, j, i)
 										}
 									} else {
 										expSum := expSums[tupleIdx]
-										if sum != expSum {
-											t.Fatalf("Found sum %d, expected %d, idx %d of batch %d", sum, expSum, j, i)
+										if math.Abs(sum-expSum) > 1e-6 {
+											t.Fatalf("Found sum %f, expected %f, idx %d of batch %d", sum, expSum, j, i)
 										}
 										expMin := expMins[tupleIdx]
 										if min != expMin {
-											t.Fatalf("Found min %d, expected %d, idx %d of batch %d", min, expMin, j, i)
+											t.Fatalf("Found min %f, expected %f, idx %d of batch %d", min, expMin, j, i)
 										}
 										expMax := expMaxs[tupleIdx]
 										if max != expMax {
-											t.Fatalf("Found max %d, expected %d, idx %d of batch %d", max, expMax, j, i)
+											t.Fatalf("Found max %f, expected %f, idx %d of batch %d", max, expMax, j, i)
+										}
+										expAvg := expSum / float64(expCount)
+										if math.Abs(avg-expAvg) > 1e-6 {
+											t.Fatalf("Found avg %f, expected %f, idx %d of batch %d", avg, expAvg, j, i)
 										}
 									}
 									tupleIdx++
@@ -810,14 +823,14 @@ func TestHashAggregator(t *testing.T) {
 	}
 }
 
-func min64(a, b int64) int64 {
+func min64(a, b float64) float64 {
 	if a < b {
 		return a
 	}
 	return b
 }
 
-func max64(a, b int64) int64 {
+func max64(a, b float64) float64 {
 	if a > b {
 		return a
 	}
