@@ -543,6 +543,9 @@ func newColOperator(
 func planSelectionOperators(
 	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
 ) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
+	if err := assertHomogeneousTypes(expr); err != nil {
+		return op, resultIdx, ct, err
+	}
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
 		return exec.NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, nil
@@ -603,6 +606,9 @@ func planSelectionOperators(
 func planProjectionOperators(
 	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
 ) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
+	if err := assertHomogeneousTypes(expr); err != nil {
+		return op, resultIdx, ct, err
+	}
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
@@ -703,6 +709,32 @@ func planProjectionExpr(
 	op, err = exec.GetProjectionOperator(typ, binOp, rightOp, leftIdx, rightIdx, resultIdx)
 	ct = append(ct, *typ)
 	return op, resultIdx, ct, err
+}
+
+// assertHomogeneousTypes checks that the left and right sides of an expression
+// have identical types. (Vectorized execution does not yet handle mixed types.)
+// For BinaryExprs, it also checks that the result type matches, since this is
+// not the case for certain operations like integer division.
+func assertHomogeneousTypes(expr tree.TypedExpr) error {
+	switch t := expr.(type) {
+	case *tree.BinaryExpr:
+		left := t.TypedLeft().ResolvedType()
+		right := t.TypedRight().ResolvedType()
+		result := t.ResolvedType()
+		if !left.Identical(right) {
+			return errors.Errorf("BinaryExpr on %s and %s is unhandled", left, right)
+		}
+		if !left.Identical(result) {
+			return errors.Errorf("BinaryExpr on %s with %s result is unhandled", left, result)
+		}
+	case *tree.ComparisonExpr:
+		left := t.TypedLeft().ResolvedType()
+		right := t.TypedRight().ResolvedType()
+		if !left.Identical(right) {
+			return errors.Errorf("ComparisonExpr on %s and %s is unhandled", left, right)
+		}
+	}
+	return nil
 }
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector
