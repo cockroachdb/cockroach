@@ -30,6 +30,28 @@ scan  ·      ·
 ·     table  t@secondary
 ·     spans  /10-/11
 
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc2]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc1]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           └── constraints: [+region=test,+dc=dc2]
+scan t@secondary
+
 # ------------------------------------------------------------------------------
 # Move secondary to dc3 and put tertiary in dc1 and ensure that gateway matches
 # tertiary instead of secondary. Regression for #35546.
@@ -47,6 +69,28 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·      ·
 ·     table  t@tertiary
 ·     spans  /10-/11
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc2]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc3]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           └── constraints: [+region=test,+dc=dc1]
+scan t@tertiary
 
 # ------------------------------------------------------------------------------
 # Swap secondary and tertiary localities and ensure invalidation occurs.
@@ -83,6 +127,28 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·      ·
 ·     table  t@primary
 ·     spans  /10-/10/#
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc1]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         └── constraints: [+region=test,+dc=dc2]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           └── constraints: [+region=test,+dc=dc3]
+scan t
 
 # ------------------------------------------------------------------------------
 # Use PREPARE to make sure that the prepared plan is invalidated when the
@@ -155,6 +221,31 @@ scan  ·      ·
 ·     table  t@tertiary
 ·     spans  /10-/11
 
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc2]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc3]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           ├── constraints: [+region=test]
+           └── lease preference: [+region=test,+dc=dc1]
+scan t@tertiary
+
 # ------------------------------------------------------------------------------
 # Ensure that an index constrained to a region is preferred over an index that
 # merely has a lease preference in that region (since lease preferences can
@@ -179,6 +270,31 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·      ·
 ·     table  t@secondary
 ·     spans  /10-/11
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc1]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         ├── constraints: [+region=test,+dc=dc1]
+ │         └── lease preference: [+region=test,+dc=dc3]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           ├── constraints: [+region=test]
+           └── lease preference: [+region=test,+dc=dc1]
+scan t@secondary
 
 # ------------------------------------------------------------------------------
 # Use PREPARE to make sure that the prepared plan is invalidated when the
@@ -245,6 +361,31 @@ EXPLAIN SELECT * FROM t36642 WHERE k=10
 scan  ·      ·
 ·     table  t36642@tertiary
 ·     spans  /10-/11
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── k int not null
+ ├── v string
+ ├── INDEX primary
+ │    ├── k int not null
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc1]
+ ├── INDEX secondary
+ │    ├── k int not null
+ │    ├── v string (storing)
+ │    └── ZONE
+ │         ├── constraints: [+region=test]
+ │         └── lease preference: [+region=test,+dc=dc2]
+ └── INDEX tertiary
+      ├── k int not null
+      ├── v string (storing)
+      └── ZONE
+           ├── constraints: [+region=test]
+           └── lease preference: [+region=test,+dc=dc1]
+scan t
 
 
 # ------------------------------------------------------------------------------

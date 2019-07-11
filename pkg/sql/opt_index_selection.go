@@ -249,7 +249,7 @@ func (p *planner) selectIndex(
 		if rem.IsTrue() {
 			s.filter = nil
 		} else {
-			execBld := execbuilder.New(nil /* execFactory */, optimizer.Memo(), &rem, nil /* evalCtx */)
+			execBld := execbuilder.New(nil /* execFactory */, optimizer.Memo(), nil /* catalog */, &rem, nil /* evalCtx */)
 			s.filter, err = execBld.BuildScalar(&s.filterVars)
 			if err != nil {
 				return nil, err
