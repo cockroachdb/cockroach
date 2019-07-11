@@ -12,8 +12,6 @@ package distsqlrun
 
 import (
 	"context"
-	"fmt"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
@@ -21,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
-	"github.com/lib/pq/oid"
 )
 
 // materializer converts an exec.Operator input into a RowSource.
@@ -140,46 +136,9 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 					continue
 				}
 			}
-
 			ct := typs[outIdx]
-			switch ct.Family() {
-			case types.BoolFamily:
-				if col.Bool()[rowIdx] {
-					m.row[outIdx].Datum = tree.DBoolTrue
-				} else {
-					m.row[outIdx].Datum = tree.DBoolFalse
-				}
-			case types.IntFamily:
-				switch ct.Width() {
-				case 8:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
-				case 16:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int16()[rowIdx]))
-				case 32:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int32()[rowIdx]))
-				default:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int64()[rowIdx]))
-				}
-			case types.FloatFamily:
-				m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
-			case types.DecimalFamily:
-				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
-			case types.DateFamily:
-				m.row[outIdx].Datum = tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
-			case types.StringFamily:
-				b := col.Bytes()[rowIdx]
-				if ct.Oid() == oid.T_name {
-					m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
-				} else {
-					m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
-				}
-			case types.BytesFamily:
-				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
-			case types.OidFamily:
-				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
-			default:
-				panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
-			}
+
+			m.row[outIdx].Datum = exec.PhysicalTypeColElemToDatum(col, rowIdx, m.da, ct)
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}
