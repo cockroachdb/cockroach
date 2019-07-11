@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestConstantEvalArrayComparison(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	defer tree.MockNameTypes(map[string]*types.T{"a": types.MakeArray(types.Int)})()
 
 	expr, err := parser.ParseExpr("a = ARRAY[1:::INT,2:::INT]")
