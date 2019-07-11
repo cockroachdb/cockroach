@@ -63,8 +63,16 @@ type sum_TYPEAgg struct {
 	groups  []bool
 	scratch struct {
 		curIdx int
+		// curAgg holds the running total, so we can index into the slice once per
+		// group, instead of on each iteration.
+		curAgg _GOTYPE
 		// vec points to the output vector we are updating.
 		vec []_GOTYPE
+		// nulls points to the output null vector that we are updating.
+		nulls *coldata.Nulls
+		// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+		// for the group that is currently being aggregated.
+		foundNonNullForCurrentGroup bool
 	}
 }
 
@@ -73,12 +81,16 @@ var _ aggregateFunc = &sum_TYPEAgg{}
 func (a *sum_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
 	a.scratch.vec = v._TemplateType()
+	a.scratch.nulls = v.Nulls()
 	a.Reset()
 }
 
 func (a *sum_TYPEAgg) Reset() {
 	copy(a.scratch.vec, zero_TYPEColumn)
+	a.scratch.curAgg = a.scratch.vec[0]
 	a.scratch.curIdx = -1
+	a.scratch.foundNonNullForCurrentGroup = false
+	a.scratch.nulls.UnsetNulls()
 	a.done = false
 }
 
@@ -90,6 +102,7 @@ func (a *sum_TYPEAgg) SetOutputIndex(idx int) {
 	if a.scratch.curIdx != -1 {
 		a.scratch.curIdx = idx
 		copy(a.scratch.vec[idx+1:], zero_TYPEColumn)
+		a.scratch.nulls.UnsetNullsAfter(uint16(idx + 1))
 	}
 }
 
@@ -99,33 +112,95 @@ func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
-		// The aggregation is finished. Flush the last value.
+		// The aggregation is finished. Flush the last value. If we haven't found
+		// any non-nulls for this group so far, the output for this group should be
+		// null. If a.scratch.curIdx is negative, it means the input has zero rows,
+		// and there should be no output at all.
+		if a.scratch.curIdx >= 0 {
+			if !a.scratch.foundNonNullForCurrentGroup {
+				a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
+			}
+			a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
+		}
 		a.scratch.curIdx++
 		a.done = true
 		return
 	}
-	col, sel := b.ColVec(int(inputIdxs[0]))._TYPE(), b.Selection()
-	if sel != nil {
-		sel = sel[:inputLen]
-		for _, i := range sel {
-			x := 0
-			if a.groups[i] {
-				x = 1
+	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	col, nulls := vec._TemplateType(), vec.Nulls()
+	if nulls.MaybeHasNulls() {
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_ACCUMULATE_SUM(a, nulls, i, true)
 			}
-			a.scratch.curIdx += x
-			_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
+		} else {
+			col = col[:inputLen]
+			for i := range col {
+				_ACCUMULATE_SUM(a, nulls, i, true)
+			}
 		}
 	} else {
-		col = col[:inputLen]
-		for i := range col {
-			x := 0
-			if a.groups[i] {
-				x = 1
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_ACCUMULATE_SUM(a, nulls, i, false)
 			}
-			a.scratch.curIdx += x
-			_ASSIGN_ADD("a.scratch.vec[a.scratch.curIdx]", "a.scratch.vec[a.scratch.curIdx]", "col[i]")
+		} else {
+			col = col[:inputLen]
+			for i := range col {
+				_ACCUMULATE_SUM(a, nulls, i, false)
+			}
 		}
 	}
 }
 
 // {{end}}
+
+// {{/*
+// _ACCUMULATE_SUM adds the value of the ith row to the output for the current
+// group. If this is the first row of a new group, and no non-nulls have been
+// found for the current group, then the output for the current group is set to
+// null.
+func _ACCUMULATE_SUM(a *sum_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+
+	// {{define "accumulateSum"}}
+	if a.groups[i] {
+		// If we encounter a new group, and we haven't found any non-nulls for the
+		// current group, the output for this group should be null. If
+		// a.scratch.curIdx is negative, it means that this is the first group.
+		if a.scratch.curIdx >= 0 {
+			if !a.scratch.foundNonNullForCurrentGroup {
+				a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
+			}
+			a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
+		}
+		a.scratch.curIdx++
+
+		// The next element of vec is guaranteed  to be initialized to the zero
+		// value. We can't use zero_TYPEColumn here because this is outside of
+		// the earlier template block.
+		a.scratch.curAgg = a.scratch.vec[a.scratch.curIdx]
+
+		// {{/*
+		// We only need to reset this flag if there are nulls. If there are no
+		// nulls, this will be updated unconditionally below.
+		// */}}
+		// {{ if .HasNulls }}
+		a.scratch.foundNonNullForCurrentGroup = false
+		// {{ end }}
+	}
+	var isNull bool
+	// {{ if .HasNulls }}
+	isNull = nulls.NullAt(uint16(i))
+	// {{ else }}
+	isNull = false
+	// {{ end }}
+	if !isNull {
+		_ASSIGN_ADD("a.scratch.curAgg", "a.scratch.curAgg", "col[i]")
+		a.scratch.foundNonNullForCurrentGroup = true
+	}
+	// {{end}}
+
+	// {{/*
+} // */}}
