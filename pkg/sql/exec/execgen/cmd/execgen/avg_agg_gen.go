@@ -73,9 +73,12 @@ func genAvgAgg(wr io.Writer) error {
 	assignDivRe := regexp.MustCompile(`_ASSIGN_DIV_INT64\((.*),(.*),(.*)\)`)
 	s = assignDivRe.ReplaceAllString(s, "{{.AssignDivInt64 $1 $2 $3}}")
 	assignAddRe := regexp.MustCompile(`_ASSIGN_ADD\((.*),(.*),(.*)\)`)
-	s = assignAddRe.ReplaceAllString(s, "{{.AssignAdd $1 $2 $3}}")
+	s = assignAddRe.ReplaceAllString(s, "{{.Global.AssignAdd $1 $2 $3}}")
 
-	tmpl, err := template.New("avg_agg").Parse(s)
+	accumulateAvg := makeFunctionRegex("_ACCUMULATE_AVG", 4)
+	s = accumulateAvg.ReplaceAllString(s, `{{template "accumulateAvg" buildDict "Global" . "HasNulls" $4}}`)
+
+	tmpl, err := template.New("avg_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}

@@ -56,8 +56,8 @@ func genMinMaxAgg(wr io.Writer) error {
 	assignCmpRe := regexp.MustCompile(`_ASSIGN_CMP\((.*),(.*),(.*)\)`)
 	s = assignCmpRe.ReplaceAllString(s, "{{.Global.Assign $1 $2 $3}}")
 
-	accumulateSum := makeFunctionRegex("_ACCUMULATE_MINMAX", 4)
-	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "HasNulls" $4}}`)
+	accumulateMinMax := makeFunctionRegex("_ACCUMULATE_MINMAX", 4)
+	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "HasNulls" $4}}`)
 
 	tmpl, err := template.New("min_max_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
