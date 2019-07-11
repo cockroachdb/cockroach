@@ -325,7 +325,7 @@ $(YARN_INSTALLED_TARGET): $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	# Additionally pin a known-good version of jsdoc.
 	# See: https://github.com/dcodeIO/protobuf.js/issues/716.
 	cp $(UI_ROOT)/node_modules/protobufjs/cli/{package.standalone.json,package.json}
-	$(NODE_RUN) -C $(UI_ROOT)/node_modules/protobufjs/cli yarn add jsdoc@3.4.3
+	$(NODE_RUN) -C $(UI_ROOT)/node_modules/protobufjs/cli yarn add --ignore-engines jsdoc@3.4.3
 	$(NODE_RUN) -C $(UI_ROOT)/node_modules/protobufjs/cli yarn install
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
