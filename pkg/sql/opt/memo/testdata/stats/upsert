@@ -73,7 +73,7 @@ select
  │         │    ├── columns: column12:12(int!null) a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
  │         │    ├── stats: [rows=200, distinct(5,9)=181.351171, null(5,9)=0, distinct(4,9,12)=200, null(4,9,12)=0]
  │         │    ├── fd: ()-->(5,8,12), (9)-->(10,11)
- │         │    ├── left-join
+ │         │    ├── left-join (hash)
  │         │    │    ├── columns: a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
  │         │    │    ├── stats: [rows=200, distinct(9)=1, null(9)=0, distinct(4,9)=200, null(4,9)=0, distinct(5,9)=181.351171, null(5,9)=0]
  │         │    │    ├── fd: ()-->(5,8), (9)-->(10,11)

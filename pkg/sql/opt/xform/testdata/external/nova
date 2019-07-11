@@ -347,7 +347,7 @@ sort
       ├── side-effects, has-placeholder
       ├── key: (1,34)
       ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), (34)-->(35-39), (35,37)-->(34,36,38,39)
-      └── right-join
+      └── right-join (hash)
            ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:32(bool) flavor_extra_specs_1.id:34(int) key:35(string) value:36(string) flavor_extra_specs_1.flavor_id:37(int) flavor_extra_specs_1.created_at:38(timestamp) flavor_extra_specs_1.updated_at:39(timestamp)
            ├── side-effects, has-placeholder
            ├── key: (1,34)
@@ -602,7 +602,7 @@ sort
       ├── side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
-      └── right-join
+      └── right-join (hash)
            ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool) instance_type_extra_specs_1.id:28(int) key:29(string) value:30(string) instance_type_extra_specs_1.instance_type_id:31(int) instance_type_extra_specs_1.deleted:32(bool) instance_type_extra_specs_1.deleted_at:33(timestamp) instance_type_extra_specs_1.created_at:34(timestamp) instance_type_extra_specs_1.updated_at:35(timestamp)
            ├── side-effects, has-placeholder
            ├── key: (1,28)
@@ -779,7 +779,7 @@ sort
       ├── has-placeholder
       ├── key: (1,17)
       ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (17)-->(18-24), (18,20,21)~~>(17,19,22-24)
-      └── right-join
+      └── right-join (hash)
            ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_extra_specs_1.id:17(int) key:18(string) value:19(string) instance_type_extra_specs_1.instance_type_id:20(int) instance_type_extra_specs_1.deleted:21(bool) instance_type_extra_specs_1.deleted_at:22(timestamp) instance_type_extra_specs_1.created_at:23(timestamp) instance_type_extra_specs_1.updated_at:24(timestamp) true_agg:34(bool)
            ├── has-placeholder
            ├── key: (1,17)
@@ -1295,7 +1295,7 @@ project
  ├── side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
- └── right-join
+ └── right-join (hash)
       ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool) flavor_extra_specs_1.id:25(int) key:26(string) value:27(string) flavor_extra_specs_1.flavor_id:28(int) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
       ├── side-effects, has-placeholder
       ├── key: (1,25)
@@ -1454,7 +1454,7 @@ project
  ├── side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
- └── right-join
+ └── right-join (hash)
       ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool) flavor_extra_specs_1.id:25(int) key:26(string) value:27(string) flavor_extra_specs_1.flavor_id:28(int) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
       ├── side-effects, has-placeholder
       ├── key: (1,25)
@@ -1623,7 +1623,7 @@ sort
       ├── side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
-      └── right-join
+      └── right-join (hash)
            ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool) flavor_extra_specs_1.id:25(int) key:26(string) value:27(string) flavor_extra_specs_1.flavor_id:28(int) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
            ├── side-effects, has-placeholder
            ├── key: (1,25)
@@ -1808,7 +1808,7 @@ sort
       ├── side-effects, has-placeholder
       ├── key: (1,28)
       ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), (28)-->(29-35), (29,31,32)~~>(28,30,33-35)
-      └── right-join
+      └── right-join (hash)
            ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool) instance_type_extra_specs_1.id:28(int) key:29(string) value:30(string) instance_type_extra_specs_1.instance_type_id:31(int) instance_type_extra_specs_1.deleted:32(bool) instance_type_extra_specs_1.deleted_at:33(timestamp) instance_type_extra_specs_1.created_at:34(timestamp) instance_type_extra_specs_1.updated_at:35(timestamp)
            ├── side-effects, has-placeholder
            ├── key: (1,28)
@@ -2155,7 +2155,7 @@ sort
       ├── has-placeholder
       ├── key: (1,16)
       ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (16)-->(17-21), (17,19)-->(16,18,20,21)
-      └── right-join
+      └── right-join (hash)
            ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) flavor_extra_specs_1.id:16(int) key:17(string) value:18(string) flavor_extra_specs_1.flavor_id:19(int) flavor_extra_specs_1.created_at:20(timestamp) flavor_extra_specs_1.updated_at:21(timestamp) true_agg:29(bool)
            ├── has-placeholder
            ├── key: (1,16)
@@ -2497,7 +2497,7 @@ sort
       ├── side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
-      └── right-join
+      └── right-join (hash)
            ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool) flavor_extra_specs_1.id:25(int) key:26(string) value:27(string) flavor_extra_specs_1.flavor_id:28(int) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
            ├── side-effects, has-placeholder
            ├── key: (1,25)
@@ -3128,7 +3128,7 @@ project
  ├── side-effects, has-placeholder
  ├── key: (1,25)
  ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), (25)-->(26-30), (26,28)-->(25,27,29,30)
- └── right-join
+ └── right-join (hash)
       ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool) flavor_extra_specs_1.id:25(int) key:26(string) value:27(string) flavor_extra_specs_1.flavor_id:28(int) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
       ├── side-effects, has-placeholder
       ├── key: (1,25)
@@ -3296,7 +3296,7 @@ sort
       ├── side-effects, has-placeholder
       ├── key: (1,25)
       ├── fd: (1)-->(2-15), (7)-->(1-6,8-15), (2)-->(1,3-15), (25)-->(26-30), (26,28)-->(25,27,29,30)
-      └── right-join
+      └── right-join (hash)
            ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool) flavor_extra_specs_1.id:25(int) key:26(string) value:27(string) flavor_extra_specs_1.flavor_id:28(int) flavor_extra_specs_1.created_at:29(timestamp) flavor_extra_specs_1.updated_at:30(timestamp)
            ├── side-effects, has-placeholder
            ├── key: (1,25)

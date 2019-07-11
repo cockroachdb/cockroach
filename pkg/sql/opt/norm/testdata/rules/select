@@ -211,7 +211,7 @@ project
 norm expect=ConsolidateSelectFilters
 SELECT * FROM (SELECT * FROM a WHERE k = 5) AS a, e WHERE a.k = e.k AND a.k > 1 AND e.k < 10
 ----
-inner-join
+inner-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) k:6(int!null) i:7(int) t:8(timestamp) tz:9(timestamptz) d:10(date)
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -567,7 +567,7 @@ select
 norm expect=PushSelectIntoJoinLeft
 SELECT * FROM a LEFT JOIN xy ON True WHERE a.i=100 AND $1>'2000-01-01T1:00:00'
 ----
-left-join
+left-join (hash)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── has-placeholder
  ├── key: (1,6)
@@ -866,7 +866,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
- ├── left-join
+ ├── left-join (hash)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
@@ -890,7 +890,7 @@ select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
- ├── right-join
+ ├── right-join (hash)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
@@ -914,7 +914,7 @@ select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
- ├── full-join
+ ├── full-join (hash)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
@@ -1085,7 +1085,7 @@ distinct-on
  ├── grouping columns: k:1(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2,3,6), (6)-->(2)
- ├── inner-join
+ ├── inner-join (hash)
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) x:6(int!null) y:7(int!null)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2,3), (6)-->(7), (2)==(7), (7)==(2)

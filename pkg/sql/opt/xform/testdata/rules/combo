@@ -29,7 +29,7 @@ SELECT * FROM abc, xyz WHERE a=x AND b=y
 GenerateIndexScans
 ================================================================================
 Source expression:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan abc
@@ -41,7 +41,7 @@ Source expression:
         └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
 New expression 1 of 1:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan abc@ab
@@ -56,7 +56,7 @@ New expression 1 of 1:
 GenerateIndexScans
 ================================================================================
 Source expression:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan abc
@@ -68,7 +68,7 @@ Source expression:
         └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
 New expression 1 of 1:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan abc
@@ -83,7 +83,7 @@ New expression 1 of 1:
 CommuteJoin
 ================================================================================
 Source expression:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan abc
@@ -95,7 +95,7 @@ Source expression:
         └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
 New expression 1 of 1:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan xyz
@@ -110,7 +110,7 @@ New expression 1 of 1:
 GenerateMergeJoins
 ================================================================================
 Source expression:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan abc
@@ -139,7 +139,7 @@ New expression 1 of 1:
 GenerateLookupJoins
 ================================================================================
 Source expression:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan abc
@@ -163,7 +163,7 @@ New expression 1 of 1:
 CommuteJoin
 ================================================================================
 Source expression:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan xyz
@@ -180,7 +180,7 @@ No new expressions.
 GenerateMergeJoins
 ================================================================================
 Source expression:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan xyz
@@ -209,7 +209,7 @@ New expression 1 of 1:
 GenerateLookupJoins
 ================================================================================
 Source expression:
-  inner-join
+  inner-join (hash)
    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan xyz

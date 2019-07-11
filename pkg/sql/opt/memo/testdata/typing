@@ -370,7 +370,7 @@ project
  │    ├── group-by
  │    │    ├── columns: a.x:1(int!null) y:2(int) max:6(string)
  │    │    ├── grouping columns: a.x:1(int!null)
- │    │    ├── inner-join
+ │    │    ├── inner-join (hash)
  │    │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:4(string!null) column7:7(int!null)
  │    │    │    ├── scan a
  │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
@@ -401,7 +401,7 @@ project
  ├── group-by
  │    ├── columns: true_agg:8(bool) rownum:10(int!null)
  │    ├── grouping columns: rownum:10(int!null)
- │    ├── left-join
+ │    ├── left-join (hash)
  │    │    ├── columns: expr:3(int) true:7(bool) rownum:10(int!null)
  │    │    ├── ordinality
  │    │    │    ├── columns: expr:3(int) rownum:10(int!null)

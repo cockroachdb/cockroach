@@ -665,7 +665,7 @@ union-all
 build
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
 ----
-left-join
+left-join (hash)
  ├── columns: column1:1(int!null) column1:4(int)
  ├── values
  │    ├── columns: column1:1(int!null)
@@ -691,7 +691,7 @@ left-join
 build
 SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1;
 ----
-left-join
+left-join (hash)
  ├── columns: column1:1(int!null) column1:4(int)
  ├── values
  │    ├── columns: column1:1(int!null)
