@@ -17,12 +17,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TestParseDatumStringAs tests that datums are roundtrippable between
 // printing with FmtExport and ParseDatumStringAs.
 func TestParseDatumStringAs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	tests := map[*types.T][]string{
 		types.Bool: {
 			"true",

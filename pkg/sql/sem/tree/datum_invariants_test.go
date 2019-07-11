@@ -14,9 +14,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestAllTypesCastableToString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for _, typ := range types.Scalar {
 		if ok, _ := isCastDeepValid(typ, types.String); !ok {
 			t.Errorf("%s is not castable to STRING, all types should be", typ)
@@ -25,6 +27,7 @@ func TestAllTypesCastableToString(t *testing.T) {
 }
 
 func TestAllTypesCastableFromString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for _, typ := range types.Scalar {
 		if ok, _ := isCastDeepValid(types.String, typ); !ok {
 			t.Errorf("%s is not castable from STRING, all types should be", typ)

@@ -10,9 +10,14 @@
 
 package tree
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+)
 
 func TestValidSQLIntervalSyntax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		input  string
 		output string
@@ -108,6 +113,7 @@ func TestValidSQLIntervalSyntax(t *testing.T) {
 }
 
 func TestInvalidSQLIntervalSyntax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		input  string
 		output string
@@ -165,6 +171,7 @@ func TestInvalidSQLIntervalSyntax(t *testing.T) {
 }
 
 func TestPGIntervalSyntax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		input  string
 		output string

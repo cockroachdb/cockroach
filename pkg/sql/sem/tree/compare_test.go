@@ -16,9 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestEvalComparisonExprCaching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testExprs := []struct {
 		op          ComparisonOperator
 		left, right string
