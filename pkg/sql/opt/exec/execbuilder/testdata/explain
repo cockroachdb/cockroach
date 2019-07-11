@@ -705,6 +705,58 @@ sort
            └── fd: ()-->(1)
 
 query T
+EXPLAIN (OPT,CATALOG) SELECT * FROM tc WHERE a = 10 ORDER BY b
+----
+TABLE tc
+ ├── a int
+ ├── b int
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX primary
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INDEX c
+      ├── a int
+      └── rowid int not null default (unique_rowid()) [hidden]
+sort
+ └── index-join tc
+      └── scan tc@c
+           └── constraint: /1/3: [/10 - /10]
+
+query T
+EXPLAIN (OPT,VERBOSE,CATALOG) SELECT * FROM tc WHERE a = 10 ORDER BY b
+----
+TABLE tc
+ ├── a int
+ ├── b int
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX primary
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INDEX c
+      ├── a int
+      └── rowid int not null default (unique_rowid()) [hidden]
+sort
+ ├── columns: a:1 b:2
+ ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
+ ├── cost: 52.2638708
+ ├── fd: ()-->(1)
+ ├── ordering: +2 opt(1) [actual: +2]
+ ├── prune: (2)
+ ├── interesting orderings: (+1)
+ └── index-join tc
+      ├── columns: a:1 b:2
+      ├── stats: [rows=9.9, distinct(1)=1, null(1)=0]
+      ├── cost: 51.401
+      ├── fd: ()-->(1)
+      ├── prune: (2)
+      ├── interesting orderings: (+1)
+      └── scan tc@c
+           ├── columns: a:1 rowid:3
+           ├── constraint: /1/3: [/10 - /10]
+           ├── stats: [rows=9.9, distinct(1)=1, null(1)=0, distinct(3)=9.9, null(3)=0]
+           ├── cost: 10.702
+           ├── key: (3)
+           └── fd: ()-->(1)
+
+query T
 EXPLAIN (OPT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 ----
 sort

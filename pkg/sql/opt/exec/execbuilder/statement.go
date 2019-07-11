@@ -12,9 +12,11 @@ package execbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
@@ -60,9 +62,20 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		}
 
 		// Format the plan here and pass it through to the exec factory.
+
+		// If catalog option was passed, show catalog object details for all tables.
+		var planText string
+		if explain.Options.Flags.Contains(tree.ExplainFlagCatalog) {
+			tp := treeprinter.New()
+			for _, t := range b.mem.Metadata().AllTables() {
+				cat.FormatTable(b.catalog, t.Table, tp)
+			}
+			planText = tp.String()
+		}
+
 		f := memo.MakeExprFmtCtx(fmtFlags, b.mem)
 		f.FormatExpr(explain.Input)
-		planText := f.Buffer.String()
+		planText += f.Buffer.String()
 
 		// If we're going to display the environment, there's a bunch of queries we
 		// need to run to get that information, and we can't run them from here, so
