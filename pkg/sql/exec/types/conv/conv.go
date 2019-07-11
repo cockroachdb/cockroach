@@ -14,6 +14,15 @@ import (
 	"fmt"
 	"reflect"
 	"unsafe"
+<<<<<<< HEAD
+=======
+
+	"github.com/lib/pq/oid"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+>>>>>>> exec: Refactor colvec element to datum conversion in materialize.
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -22,7 +31,10 @@ import (
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+<<<<<<< HEAD
 	"github.com/lib/pq/oid"
+=======
+>>>>>>> exec: Refactor colvec element to datum conversion in materialize.
 	"github.com/pkg/errors"
 )
 
@@ -178,9 +190,13 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 }
 
 // PhysicalTypeColElemToDatum converts an element in a colvec to a datum of semtype ct.
+<<<<<<< HEAD
 func PhysicalTypeColElemToDatum(
 	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct semtypes.T,
 ) tree.Datum {
+=======
+func PhysicalTypeColElemToDatum(col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct semtypes.T) tree.Datum {
+>>>>>>> exec: Refactor colvec element to datum conversion in materialize.
 	switch ct.Family() {
 	case semtypes.BoolFamily:
 		if col.Bool()[rowIdx] {
