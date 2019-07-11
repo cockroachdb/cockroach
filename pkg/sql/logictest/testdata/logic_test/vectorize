@@ -400,3 +400,10 @@ query O
 SELECT * FROM t38754
 ----
 1
+
+# Test that an aggregate with no aggregate functions is handled correctly (by
+# falling back to distsql).
+query III
+SELECT 0, 1 + 2, 3 * 4 FROM a HAVING true
+----
+0 3 12

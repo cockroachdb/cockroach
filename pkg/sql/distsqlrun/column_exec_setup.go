@@ -134,6 +134,13 @@ func newColOperator(
 			return nil, nil, err
 		}
 		aggSpec := core.Aggregator
+		if len(aggSpec.Aggregations) == 0 {
+			// We can get an aggregator when no aggregate functions are present if
+			// HAVING clause is present, for example, with a query as follows:
+			// SELECT 1 FROM t HAVING true. This breaks some of the assumptions, so
+			// we'll kick the query back to DistSQL.
+			return nil, nil, errors.Newf("aggregator with no aggregate functions is unsupported in vectorized")
+		}
 		if len(aggSpec.GroupCols) == 0 &&
 			len(aggSpec.Aggregations) == 1 &&
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
