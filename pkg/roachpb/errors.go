@@ -207,29 +207,15 @@ func (e *Error) GetDetail() ErrorDetailInterface {
 	return (*internalError)(e)
 }
 
-// SetTxn sets the txn and resets the error message. txn is cloned before being
-// stored in the Error.
+// SetTxn sets the error transaction and resets the error message.
+// The argument is cloned before being stored in the Error.
 func (e *Error) SetTxn(txn *Transaction) {
-	e.UnexposedTxn = txn
-	if txn != nil {
-		e.UnexposedTxn = txn.Clone()
-	}
-	if sErr, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
-		// Refresh the message as the txn is updated.
-		e.Message = sErr.message(e)
-	}
-	e.checkTxnStatusValid()
+	e.UnexposedTxn = nil
+	e.UpdateTxn(txn)
 }
 
-// GetTxn returns the txn.
-func (e *Error) GetTxn() *Transaction {
-	if e == nil {
-		return nil
-	}
-	return e.UnexposedTxn
-}
-
-// UpdateTxn updates the error transaction.
+// UpdateTxn updates the error transaction and resets the error message.
+// The argument is cloned before being stored in the Error.
 func (e *Error) UpdateTxn(o *Transaction) {
 	if o == nil {
 		return
@@ -238,6 +224,10 @@ func (e *Error) UpdateTxn(o *Transaction) {
 		e.UnexposedTxn = o.Clone()
 	} else {
 		e.UnexposedTxn.Update(o)
+	}
+	if sErr, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
+		// Refresh the message as the txn is updated.
+		e.Message = sErr.message(e)
 	}
 	e.checkTxnStatusValid()
 }
@@ -256,6 +246,14 @@ func (e *Error) checkTxnStatusValid() {
 			log.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", r, e)
 		}
 	}
+}
+
+// GetTxn returns the txn.
+func (e *Error) GetTxn() *Transaction {
+	if e == nil {
+		return nil
+	}
+	return e.UnexposedTxn
 }
 
 // SetErrorIndex sets the index of the error.
