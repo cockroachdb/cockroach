@@ -5714,9 +5714,9 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	expMS = baseStats
 	expMS.Add(enginepb.MVCCStats{
-		LiveBytes:   95,
+		LiveBytes:   101,
 		KeyBytes:    28,
-		ValBytes:    67,
+		ValBytes:    73,
 		IntentBytes: 23,
 		LiveCount:   2,
 		KeyCount:    2,
@@ -8623,8 +8623,10 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 
 			// Update the transaction's timestamps so that it
 			// doesn't run into issues with the new cluster.
-			txn.Timestamp = tc.Clock().Now()
-			txn.OrigTimestamp = txn.Timestamp
+			now := tc.Clock().Now()
+			txn.Timestamp = now
+			txn.MinTimestamp = now
+			txn.OrigTimestamp = now
 
 			if c.setup != nil {
 				if pErr := c.setup(ctx, repl); pErr != nil {
@@ -10011,7 +10013,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -10040,7 +10041,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -10294,7 +10294,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record.InFlightWrites = otherInFlightWrites
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -10520,7 +10519,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				// Restart the transaction at a higher timestamp. This will
 				// increment its OrigTimestamp as well. We used to check the GC
-				// threshold against this timestamp instead of its epoch zero
+				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now.Add(0, 1))
@@ -11019,7 +11018,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				// Restart the transaction at a higher timestamp. This will
 				// increment its OrigTimestamp as well. We used to check the GC
-				// threshold against this timestamp instead of its epoch zero
+				// threshold against this timestamp instead of its minimum
 				// timestamp.
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now.Add(0, 1))
@@ -11145,7 +11144,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11240,7 +11238,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
@@ -11310,7 +11307,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txnWithStagingStatusAndInFlightWrites(txn, now)
 				record.Epoch = txn.Epoch + 1
 				record.Timestamp.Forward(now)
-				record.OrigTimestamp.Forward(now)
 				return record
 			},
 		},
