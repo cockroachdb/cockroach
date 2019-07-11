@@ -202,6 +202,8 @@ func NewMergeJoinOp(
 		return &mergeJoinLeftOuterOp{base}, err
 	case sqlbase.JoinType_RIGHT_OUTER:
 		return &mergeJoinRightOuterOp{base}, err
+	case sqlbase.JoinType_FULL_OUTER:
+		return &mergeJoinFullOuterOp{base}, err
 	default:
 		panic("unsupported join type")
 	}
