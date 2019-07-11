@@ -282,6 +282,15 @@ func (w *framableAggregateWindowFunc) Compute(
 	if !wfr.FirstInPeerGroup() {
 		return w.agg.peerRes, nil
 	}
+	if wfr.FullPartitionIsInWindow() {
+		// Full partition is always inside of the window, and aggregations will
+		// return the same result for all of the rows, so we're actually performing
+		// the aggregation once, on the first row, and reuse the result for all
+		// other rows.
+		if wfr.RowIdx > 0 {
+			return w.agg.peerRes, nil
+		}
+	}
 	if !w.shouldReset {
 		// We should not reset, so we will use the same aggregateWindowFunc.
 		return w.agg.Compute(ctx, evalCtx, wfr)
