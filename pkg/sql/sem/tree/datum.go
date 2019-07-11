@@ -3570,6 +3570,15 @@ func DatumTypeSize(t *types.T) (uintptr, bool) {
 	panic(errors.AssertionFailedf("unknown type: %T", t))
 }
 
+func MakeDatum(t *types.T, d interface{}) (Datum, error) {
+	if d == nil {
+		return DNull, nil
+	}
+	switch t.Family() {
+
+	}
+}
+
 const (
 	fixedSize    = false
 	variableSize = true

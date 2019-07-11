@@ -177,16 +177,16 @@ func (m *memColumn) Slice(colType types.T, start uint64, end uint64) Vec {
 	}
 }
 
-func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
+func (m *memColumn) ValueAt(colIdx uint16) interface{} {
 	if m.nulls.NullAt(colIdx) {
-		return "NULL"
+		return nil
 	}
-	switch colType {
+	switch m.t {
 	// {{range .}}
 	case _TYPES_T:
-		return fmt.Sprintf("%v", m._TemplateType()[colIdx])
+		return m._TemplateType()[colIdx]
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
+		panic(fmt.Sprintf("unhandled type %d", m.t))
 	}
 }

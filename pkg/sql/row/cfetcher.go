@@ -505,7 +505,7 @@ const (
 	// state[1] must be set, and stateFinalizeRow will transition to that state
 	// once it finishes finalizing the row.
 	//   1. fill missing nulls
-	//   2. bump rowIDX
+	//   2. bump rowIdx
 	//   -> nextState and optionally return if row-by-row or batch full
 	stateFinalizeRow
 
@@ -720,6 +720,22 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// state.
 			if err := rf.fillNulls(); err != nil {
 				return nil, err
+			}
+			if rf.traceKV {
+				var buf strings.Builder
+				buf.WriteByte('/')
+				buf.WriteString(rf.table.desc.Name)
+				buf.WriteByte('/')
+				buf.WriteString(rf.table.index.Name)
+				for _, idx := range rf.table.indexColOrdinals {
+					buf.WriteByte('/')
+					if idx != -1 {
+						buf.WriteString(fmt.Sprintf("%v", rf.machine.colvecs[idx].ValueAt(rf.machine.rowIdx)))
+					} else {
+						buf.WriteByte('?')
+					}
+				}
+				log.VEventf(ctx, 2, "fetched: %s -> %s", buf.String(), "")
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
@@ -1041,7 +1057,7 @@ func (rf *CFetcher) fillNulls() error {
 			for _, idx := range table.indexColOrdinals {
 				if idx != -1 {
 					indexColValues = append(indexColValues,
-						rf.machine.colvecs[idx].PrettyValueAt(rf.machine.rowIdx, rf.table.typs[idx]))
+						fmt.Sprintf("%v", rf.machine.colvecs[idx].ValueAt(rf.machine.rowIdx)))
 				} else {
 					indexColValues = append(indexColValues, "?")
 				}

@@ -129,9 +129,9 @@ type Vec interface {
 	// [start, end).
 	Slice(colType types.T, start uint64, end uint64) Vec
 
-	// PrettyValueAt returns a "pretty"value for the idx'th value in this Vec.
-	// It uses the reflect package and is not suitable for calling in hot paths.
-	PrettyValueAt(idx uint16, colType types.T) string
+	// ValueAt returns the value for the idx'th value in this Vec. It isn't
+	// suitable for calling in hot paths.
+	ValueAt(idx uint16) interface{}
 
 	// MaybeHasNulls returns true if the column possibly has any null values, and
 	// returns false if the column definitely has no null values.
