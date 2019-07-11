@@ -205,10 +205,9 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 ) (PhysicalPlan, error) {
 	details := job.Details().(jobspb.CreateStatsDetails)
 	reqStats := make([]requestedStat, len(details.ColumnLists))
+	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
 	for i := 0; i < len(reqStats); i++ {
-		// Currently we do not use histograms, so don't bother creating one.
-		// When this changes, we can only use it for single-column stats.
-		histogram := false
+		histogram := details.HasHistogram[i] && histogramCollectionEnabled
 		reqStats[i] = requestedStat{
 			columns:             details.ColumnLists[i].IDs,
 			histogram:           histogram,

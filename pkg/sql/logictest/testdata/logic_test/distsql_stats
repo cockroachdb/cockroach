@@ -5,6 +5,9 @@ statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 statement ok
+SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false
+
+statement ok
 CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d), INDEX c_idx (c, d))
 
 # Split into ten parts.
@@ -43,41 +46,54 @@ NULL       /1       {1}       1
 statement ok
 CREATE STATISTICS s1 ON a FROM data
 
-query TTIII colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+query TTIIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, histogram_id
+FROM [SHOW STATISTICS FOR TABLE data]
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
+statistics_name  column_names  row_count  distinct_count  null_count  histogram_id
+s1               {a}           10000      10              0           NULL
 
-# TODO(radu): reenable when we support histograms.
-#
-# let $hist_id_1
-# SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
-# 
-# query TII colnames
-# SHOW HISTOGRAM $hist_id_1
-# ----
-# upper_bound  range_rows  equal_rows
-# 1            0           1000
-# 2            0           1000
-# 3            0           1000
-# 4            0           1000
-# 5            0           1000
-# 6            0           1000
-# 7            0           1000
-# 8            0           1000
-# 9            0           1000
-# 10           0           1000
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_collection.enabled = true
+
+statement ok
+CREATE STATISTICS s1 ON a FROM data
+
+query TTIIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, histogram_id
+FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count  histogram_id
+s1               {a}           10000      10              0           467868969717039105
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
+
+query TII colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  equal_rows
+1            0           1000
+2            0           1000
+3            0           1000
+4            0           1000
+5            0           1000
+6            0           1000
+7            0           1000
+8            0           1000
+9            0           1000
+10           0           1000
 
 statement ok
 CREATE STATISTICS "" ON b FROM data
 
-query TTIII colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+query TTIIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, histogram_id
+FROM [SHOW STATISTICS FOR TABLE data]
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
-NULL             {b}           10000      10              0
+statistics_name  column_names  row_count  distinct_count  null_count  histogram_id
+s1               {a}           10000      10              0           467868969717039105
+NULL             {b}           10000      10              0           467868969856401409
 
 # Verify that we can package statistics into a json object and later restore them.
 let $json_stats
@@ -89,12 +105,13 @@ DELETE FROM system.table_statistics
 statement ok
 ALTER TABLE data INJECT STATISTICS '$json_stats'
 
-query TTIII colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+query TTIIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, histogram_id
+FROM [SHOW STATISTICS FOR TABLE data]
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
-NULL             {b}           10000      10              0
+statistics_name  column_names  row_count  distinct_count  null_count  histogram_id
+s1               {a}           10000      10              0           467868969897099265
+NULL             {b}           10000      10              0           467868969899458561
 
 # Verify that any other statistics are blown away when we INJECT.
 statement ok
@@ -140,16 +157,18 @@ s2               {a}           10000      10              0
 statement ok
 CREATE STATISTICS s3 FROM data
 
-query TIII colnames
-SELECT column_names, row_count, distinct_count, null_count
+# With default column statistics, only index columns have a histogram_id
+# (specifically the first column in each index).
+query TIIII colnames
+SELECT column_names, row_count, distinct_count, null_count, histogram_id
 FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = 's3'
 ----
-column_names  row_count  distinct_count  null_count
-{a}           10000      10              0
-{c}           10000      10              0
-{b}           10000      10              0
-{d}           10000      10              0
+column_names  row_count  distinct_count  null_count  histogram_id
+{a}           10000      10              0           467868970463166465
+{c}           10000      10              0           467868970474373121
+{b}           10000      10              0           NULL
+{d}           10000      10              0           NULL
 
 # Add indexes, including duplicate index on column c.
 statement ok

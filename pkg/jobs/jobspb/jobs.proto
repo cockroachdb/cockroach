@@ -215,6 +215,10 @@ message CreateStatsDetails {
 
   // Fully qualified table name.
   string fq_table_name = 6 [(gogoproto.customname) = "FQTableName"];
+
+  // This should be a slice of the same length as the column lists slice above.
+  // It indicates whether each column stat should include a histogram.
+  repeated bool has_histogram = 8;
 }
 
 message CreateStatsProgress {
