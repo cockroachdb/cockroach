@@ -33,11 +33,10 @@ type group struct {
 	// nullGroup indicates whether the output corresponding to the group should
 	// consist of all nulls.
 	nullGroup bool
-	// unmatched indicates that the row in the group does not have matching rows
+	// unmatched indicates that the rows in the group do not have matching rows
 	// from the other side (i.e. other side's group will be a null group).
-	// NOTE: at the moment, the assumption is that such group will consist of a
-	// single row.
-	// TODO(yuzefovich): update the logic if the assumption ever changes.
+	// NOTE: during the probing phase, the assumption is that such group will
+	// consist of a single row.
 	unmatched bool
 }
 
@@ -174,9 +173,6 @@ var _ Operator = &feedOperator{}
 // The second pass is where the groups and their associated cross products are
 // materialized into the full output.
 
-// TODO(georgeutsin): Add outer joins functionality and templating to support
-// different equality types.
-
 // Two buffers are used, one for the group on the left table and one for the
 // group on the right table. These buffers are only used if the group ends with
 // a batch, to make sure that we don't miss any cross product entries while
@@ -204,6 +200,8 @@ func NewMergeJoinOp(
 		return &mergeJoinInnerOp{base}, err
 	case sqlbase.JoinType_LEFT_OUTER:
 		return &mergeJoinLeftOuterOp{base}, err
+	case sqlbase.JoinType_RIGHT_OUTER:
+		return &mergeJoinRightOuterOp{base}, err
 	default:
 		panic("unsupported join type")
 	}
@@ -457,35 +455,6 @@ func (o *mergeJoinBase) setBuilderSourceToBufferedGroup() {
 	// initProberState().
 	o.proberState.lBufferedGroup.needToReset = true
 	o.proberState.rBufferedGroup.needToReset = true
-}
-
-// exhaustLeftSourceForLeftOuter sets up the builder state for emitting
-// remaining tuples on the left with nulls for the right side of output. It
-// should only be called once the right source has been exhausted, and if
-// we're doing LEFT OUTER join.
-func (o *mergeJoinBase) exhaustLeftSourceForLeftOuter() {
-	// The capacity of builder state lGroups and rGroups is always at least 1
-	// given the init.
-	o.builderState.lGroups = o.builderState.lGroups[:1]
-	o.builderState.lGroups[0] = group{
-		rowStartIdx: o.proberState.lIdx,
-		rowEndIdx:   o.proberState.lLength,
-		numRepeats:  1,
-		toBuild:     o.proberState.lLength - o.proberState.lIdx,
-		unmatched:   true,
-	}
-	o.builderState.rGroups = o.builderState.rGroups[:1]
-	o.builderState.rGroups[0] = group{
-		rowStartIdx: o.proberState.lIdx,
-		rowEndIdx:   o.proberState.lLength,
-		numRepeats:  1,
-		toBuild:     o.proberState.lLength - o.proberState.lIdx,
-		nullGroup:   true,
-	}
-	o.builderState.lBatch = o.proberState.lBatch
-	o.builderState.rBatch = o.proberState.rBatch
-
-	o.proberState.lIdx = o.proberState.lLength
 }
 
 // build creates the cross product, and writes it to the output member.
