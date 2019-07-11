@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -52,12 +53,14 @@ const (
 	restoreOptIntoDB               = "into_db"
 	restoreOptSkipMissingFKs       = "skip_missing_foreign_keys"
 	restoreOptSkipMissingSequences = "skip_missing_sequences"
+	restoreOptSkipMissingViews     = "skip_missing_views"
 )
 
 var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
 	restoreOptIntoDB:               sql.KVStringOptRequireValue,
 	restoreOptSkipMissingFKs:       sql.KVStringOptRequireNoValue,
 	restoreOptSkipMissingSequences: sql.KVStringOptRequireNoValue,
+	restoreOptSkipMissingViews:     sql.KVStringOptRequireNoValue,
 }
 
 func loadBackupDescs(
@@ -182,6 +185,45 @@ func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error
 	return nil
 }
 
+// maybeFilterMissingViews filters the set of tables to restore to exclude views
+// whose dependencies are either missing or are themselves unrestorable due to
+// missing dependencies, and returns the resulting set of tables. If the
+// restoreOptSkipMissingViews option is not set, an error is returned if any
+// unrestorable views are found.
+func maybeFilterMissingViews(
+	tablesByID map[sqlbase.ID]*sqlbase.TableDescriptor, opts map[string]string,
+) (map[sqlbase.ID]*sqlbase.TableDescriptor, error) {
+	// Function that recursively determines whether a given table, if it is a
+	// view, has valid dependencies. Dependencies are looked up in tablesByID.
+	var hasValidViewDependencies func(*sqlbase.TableDescriptor) bool
+	hasValidViewDependencies = func(desc *sqlbase.TableDescriptor) bool {
+		if !desc.IsView() {
+			return true
+		}
+		for _, id := range desc.DependsOn {
+			if desc, ok := tablesByID[id]; !ok || !hasValidViewDependencies(desc) {
+				return false
+			}
+		}
+		return true
+	}
+
+	filteredTablesByID := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	for id, table := range tablesByID {
+		if hasValidViewDependencies(table) {
+			filteredTablesByID[id] = table
+		} else {
+			if _, ok := opts[restoreOptSkipMissingViews]; !ok {
+				return nil, errors.Errorf(
+					"cannot restore view %q without restoring referenced table (or %q option)",
+					table.Name, restoreOptSkipMissingViews,
+				)
+			}
+		}
+	}
+	return filteredTablesByID, nil
+}
+
 // allocateTableRewrites determines the new ID and parentID (a "TableRewrite")
 // for each table in sqlDescs and returns a mapping from old ID to said
 // TableRewrite. It first validates that the provided sqlDescs can be restored
@@ -190,7 +232,8 @@ func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error
 func allocateTableRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
-	sqlDescs []sqlbase.Descriptor,
+	databasesByID map[sqlbase.ID]*sql.DatabaseDescriptor,
+	tablesByID map[sqlbase.ID]*sql.TableDescriptor,
 	restoreDBs []*sqlbase.DatabaseDescriptor,
 	opts map[string]string,
 ) (TableRewriteMap, error) {
@@ -206,23 +249,13 @@ func allocateTableRewrites(
 		return nil, errors.Errorf("cannot use %q option when restoring database(s)", restoreOptIntoDB)
 	}
 
-	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
-	tablesByID := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-	for _, desc := range sqlDescs {
-		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			databasesByID[dbDesc.ID] = dbDesc
-		} else if tableDesc := desc.GetTable(); tableDesc != nil {
-			tablesByID[tableDesc.ID] = tableDesc
-		}
-	}
-
 	// The logic at the end of this function leaks table IDs, so fail fast if
 	// we can be certain the restore will fail.
 
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
-	// Check that foreign key targets exist.
 	for _, table := range tablesByID {
+		// Check that foreign key targets exist.
 		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 			if index.ForeignKey.IsSet() {
 				to := index.ForeignKey.Table
@@ -473,8 +506,10 @@ func RewriteTableDescs(
 			if depRewrite, ok := tableRewrites[dest]; ok {
 				table.DependsOn[i] = depRewrite.TableID
 			} else {
-				return errors.Errorf(
-					"cannot restore %q without restoring referenced table %d in same operation",
+				// Views with missing dependencies should have been filtered out
+				// or have caused an error in maybeFilterMissingViews().
+				return pgerror.NewAssertionErrorf(
+					"cannot restore %q because referenced table %d was not found",
 					table.Name, dest)
 			}
 		}
@@ -1359,7 +1394,23 @@ func doRestorePlan(
 		return err
 	}
 
-	tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, restoreDBs, opts)
+	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+	tablesByID := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	for _, desc := range sqlDescs {
+		if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			databasesByID[dbDesc.ID] = dbDesc
+		} else if tableDesc := desc.GetTable(); tableDesc != nil {
+			tablesByID[tableDesc.ID] = tableDesc
+		}
+	}
+	filteredTablesByID, err := maybeFilterMissingViews(tablesByID, opts)
+	if err != nil {
+		return err
+	}
+	if len(filteredTablesByID) == 0 {
+		return errors.Errorf("no tables to restore: %s", tree.ErrString(&restoreStmt.Targets))
+	}
+	tableRewrites, err := allocateTableRewrites(ctx, p, databasesByID, filteredTablesByID, restoreDBs, opts)
 	if err != nil {
 		return err
 	}
@@ -1369,10 +1420,8 @@ func doRestorePlan(
 	}
 
 	var tables []*sqlbase.TableDescriptor
-	for _, desc := range sqlDescs {
-		if tableDesc := desc.GetTable(); tableDesc != nil {
-			tables = append(tables, tableDesc)
-		}
+	for _, desc := range filteredTablesByID {
+		tables = append(tables, desc)
 	}
 	if err := RewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
 		return err
