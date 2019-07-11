@@ -147,6 +147,17 @@ func makeLookupRequestKey(key roachpb.RKey, evictToken *EvictionToken, useRevers
 	ret.Write(key)
 	ret.WriteString(":")
 	ret.WriteString(strconv.FormatBool(useReverseScan))
+	// Add the generation of the previous descriptor to the lookup request key to
+	// decrease the number of lookups in the rare double split case. Suppose we
+	// have a range [a, e) that gets split into [a, c) and [c, e). The requests
+	// on [c, e) will fail and will have to retry the lookup. If [a, c) gets
+	// split again into [a, b) and [b, c), we don't want to the requests on [a,
+	// b) to be coalesced with the retried requests on [c, e). To distinguish the
+	// two cases, we can use the generation of the previous descriptor.
+	if evictToken != nil && evictToken.prevDesc.GetGenerationComparable() {
+		ret.WriteString(":")
+		ret.WriteString(strconv.FormatInt(evictToken.prevDesc.GetGeneration(), 10))
+	}
 	return ret.String()
 }
 
@@ -475,15 +486,27 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 		return err
 	}
 
-	// Note that we're doing a "compare-and-erase": If seenDesc is not nil,
-	// we want to clean the cache only if it equals the cached range
-	// descriptor as a pointer. If not, then likely some other caller
-	// already evicted previously, and we can save work by not doing it
-	// again (which would prompt another expensive lookup).
-	// TODO(jeffreyxiao): This is an interaction that can be improved by
-	// comparing RangeDescriptor generations.
-	if seenDesc != nil && seenDesc != cachedDesc {
-		return nil
+	// Note that we're doing a "compare-and-erase": If seenDesc is not nil, we
+	// want to clean the cache only if it equals the cached range descriptor. We
+	// try to use Generation and GenerationComparable to determine if the range
+	// descriptors are equal, but if we cannot, we fallback to
+	// pointer-comparison. If the range descriptors are not equal, then likely
+	// some other caller already evicted previously, and we can save work by not
+	// doing it again (which would prompt another expensive lookup).
+	if seenDesc != nil {
+		if seenDesc.GetGenerationComparable() && cachedDesc.GetGenerationComparable() {
+			if seenDesc.GetGeneration() != cachedDesc.GetGeneration() {
+				return nil
+			}
+		} else if !seenDesc.GetGenerationComparable() && !cachedDesc.GetGenerationComparable() {
+			if seenDesc != cachedDesc {
+				return nil
+			}
+		} else {
+			// One descriptor's generation is comparable, while the other is
+			// incomparable, so the descriptors are guaranteed to be different.
+			return nil
+		}
 	}
 
 	if log.V(2) {
