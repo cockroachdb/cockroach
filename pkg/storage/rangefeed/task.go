@@ -96,9 +96,10 @@ func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
 		if meta.Txn != nil {
 			var ops [1]enginepb.MVCCLogicalOp
 			ops[0].SetValue(&enginepb.MVCCWriteIntentOp{
-				TxnID:     meta.Txn.ID,
-				TxnKey:    meta.Txn.Key,
-				Timestamp: meta.Txn.Timestamp,
+				TxnID:           meta.Txn.ID,
+				TxnKey:          meta.Txn.Key,
+				TxnMinTimestamp: meta.Txn.MinTimestamp,
+				Timestamp:       meta.Txn.Timestamp,
 			})
 			s.p.sendEvent(event{ops: ops[:]}, 0 /* timeout */)
 		}

@@ -293,24 +293,21 @@ message Transaction {
   // coordinator to indicate client activity. Concurrent transactions will
   // avoid aborting a transaction if it observes recent-enough activity.
   util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
-  // The original timestamp at which the transaction started. For serializable
-  // transactions, if the timestamp drifts from the original timestamp, the
-  // transaction will retry unless we manage to "refresh the reads" - see
-  // refreshed_timestamp.
+  // The timestamp at which the transaction's current epoch started. For
+  // serializable transactions, if the timestamp drifts from the original
+  // timestamp, the transaction will retry unless we manage to "refresh the
+  // reads" - see refreshed_timestamp.
   //
   // This timestamp is the one at which all reads occur, unless
-  // refreshed_timestamp is set.
-  //
-  // Note that writes do not occur at this timestamp; they instead occur at the
-  // provisional commit timestamp, meta.Timestamp.
+  // refreshed_timestamp is set. Intent writes do not occur at this timestamp;
+  // they instead occur at the provisional commit timestamp, meta.Timestamp.
   util.hlc.Timestamp orig_timestamp = 6 [(gogoproto.nullable) = false];
-  // Initial Timestamp + clock skew. Reads which encounter values with
-  // timestamps between timestamp and max_timestamp trigger a txn
-  // retry error, unless the node being read is listed in observed_timestamps
-  // (in which case no more read uncertainty can occur).
-  // The case max_timestamp < timestamp is possible for transactions which have
-  // been pushed; in this case, max_timestamp should be ignored.
-  util.hlc.Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
+  // This flag is set if the transaction's original timestamp was
+  // "leaked" beyond the transaction (i.e. if returned via NOW() or
+  // transaction_timestamp()). If true, this prevents optimizations
+  // which commit at a higher timestamp without resorting to a
+  // client-side retry.
+  bool orig_timestamp_was_observed = 16;
   // The refreshed timestamp is the timestamp at which the transaction
   // can commit without necessitating a serializable restart. This
   // value is forwarded to the transaction's current timestamp (meta.timestamp)
@@ -324,7 +321,32 @@ message Transaction {
   // orig_timestamp needs to be used as a lower bound timestamp for the
   // time-bound iterator used to resolve intents - i.e. there can be intents to
   // resolve up to the timestamp that the txn started with.
+  //
+  // TODO(nvanbenschoten): this second paragraph is no longer true. The only
+  // place that relies on orig_timestamp being fixed over an entire epoch is
+  // v19.1 nodes use of Transaction.InclusiveTimeBounds. In v20.1 we can remove
+  // this field and update orig_timestamp in place, removing a lot of awkward
+  // code where we forward orig_timestamp by refreshed_timestamp. Doing so will
+  // also address the TODOs in cmd_refresh.go and cmd_refresh_range.go.
+  // Additionally, it will present a good opportunity to rename the field to
+  // read_timestamp.
   util.hlc.Timestamp refreshed_timestamp = 15 [(gogoproto.nullable) = false];
+  // Deprecated min timestamp was used to keep track of the earliest timestamp
+  // that any epoch of the transaction used. This was set only if the
+  // transaction is restarted and the epoch is bumped. It was used during
+  // intent resolution to more efficiently scan for intents.
+  //
+  // The timestamp has since been replaced by TxnMeta.MinTimestamp.
+  //
+  // TODO(nvanbenschoten): remove in v20.1.
+  util.hlc.Timestamp deprecated_min_timestamp = 14 [(gogoproto.nullable) = false];
+  // Initial Timestamp + clock skew. Reads which encounter values with
+  // timestamps between timestamp and max_timestamp trigger a txn
+  // retry error, unless the node being read is listed in observed_timestamps
+  // (in which case no more read uncertainty can occur).
+  // The case max_timestamp < timestamp is possible for transactions which have
+  // been pushed; in this case, max_timestamp should be ignored.
+  util.hlc.Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
   // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
   // as observed from their local clock during this transaction. The purpose of
   // this list is to avoid uncertainty related restarts which normally occur
@@ -430,17 +452,6 @@ message Transaction {
   // treated as immutable and all updates should be performed on a copy of the
   // slice.
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
-  // Epoch zero timestamp is used to keep track of the earliest timestamp
-  // that any epoch of the transaction used. This is set only if the
-  // transaction is restarted and the epoch is bumped. It is used during
-  // intent resolution to more efficiently scan for intents.
-  util.hlc.Timestamp epoch_zero_timestamp = 14 [(gogoproto.nullable) = false];
-  // This flag is set if the transaction's original timestamp was
-  // "leaked" beyond the transaction (i.e. if returned via NOW() or
-  // transaction_timestamp()). If true, this prevents optimizations
-  // which commit at a higher timestamp without resorting to a
-  // client-side retry.
-  bool orig_timestamp_was_observed = 16;
 
   reserved 3, 9, 13;
 }
@@ -462,19 +473,14 @@ message TransactionRecord {
   option (gogoproto.populate) = true;
 
   // See comments on Transaction proto.
-  storage.engine.enginepb.TxnMeta meta = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  TransactionStatus status             = 4;
-  util.hlc.Timestamp last_heartbeat    = 5  [(gogoproto.nullable) = false];
-  // TODO(nvanbenschoten): We can't accurately determine this value from
-  // intents, so we'd like to avoid ever needing to synthesize it. 2.1 nodes
-  // will assert that it is set, so we set it for now, but we should stop doing
-  // that in the future. Removing this in 2.3 shouldn't cause any issues.
-  util.hlc.Timestamp orig_timestamp        = 6  [(gogoproto.nullable) = false];
+  storage.engine.enginepb.TxnMeta meta     = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  TransactionStatus status                 = 4;
+  util.hlc.Timestamp last_heartbeat        = 5  [(gogoproto.nullable) = false];
   repeated Span intent_spans               = 11 [(gogoproto.nullable) = false];
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
 
   // Fields on Transaction that are not present in a transaction record.
-  reserved 2, 3, 7, 8, 9, 10, 12, 13, 14, 15, 16;
+  reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
 }
 
 // A Intent is a Span together with a Transaction metadata and its status.
