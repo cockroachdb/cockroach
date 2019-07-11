@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -103,7 +102,6 @@ func TestMemoIsStale(t *testing.T) {
 
 	var o xform.Optimizer
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT a, b+1 FROM abcview WHERE c='foo'")
-	o.Memo().Metadata().AddSchemaDependency(catalog.Schema().Name(), catalog.Schema(), privilege.CREATE)
 	o.Memo().Metadata().AddSchema(catalog.Schema())
 
 	ctx := context.Background()
@@ -212,20 +210,6 @@ func TestMemoIsStale(t *testing.T) {
 	catalog.Table(tree.NewTableName("t", "abc")).TabVersion = 1
 	stale()
 	catalog.Table(tree.NewTableName("t", "abc")).TabVersion = 0
-	notStale()
-
-	// Schema ID changes.
-	catalog.Schema().SchemaID = 2
-	stale()
-	catalog.Schema().SchemaID = 1
-	notStale()
-
-	// User no longer has access to schema.
-	catalog.Schema().Revoked = true
-	if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err == nil || !isStale {
-		t.Errorf("expected user not to have CREATE privilege on schema")
-	}
-	catalog.Schema().Revoked = false
 	notStale()
 }
 
