@@ -80,8 +80,8 @@ type Metadata struct {
 	// values is the highest id for a Values clause that has been assigned.
 	values ValuesID
 
-	// deps stores information about all catalog objects depended on by the query,
-	// as well as the privileges required to access those objects. The objects are
+	// deps stores information about all data sources depended on by the query, as
+	// well as the privileges required to access them. The objects are
 	// deduplicated: any name/object pair shows up at most once.
 	// Note: the same object can appear multiple times if different names were
 	// used. For example, in the query `SELECT * from t, db.t` the two tables
@@ -97,12 +97,11 @@ type Metadata struct {
 }
 
 type mdDep struct {
-	object cat.Object
+	ds cat.DataSource
 
 	// name is the unresolved name from the query that was used to resolve the
-	// object. It stores either a cat.DataSourceName, or cat.SchemaName in its
-	// TablePrefix portion, depending on the type of the object.
-	name tree.TableName
+	// object.
+	name cat.DataSourceName
 
 	// privileges is the union of all required privileges.
 	privileges privilegeBitmap
@@ -171,41 +170,23 @@ func (md *Metadata) AddDataSourceDependency(
 ) {
 	// Search for the same name / object pair.
 	for i := range md.deps {
-		if md.deps[i].object == ds && md.deps[i].dsName().Equals(name) {
+		if md.deps[i].ds == ds && md.deps[i].dsName().Equals(name) {
 			md.deps[i].privileges |= (1 << priv)
 			return
 		}
 	}
 	md.deps = append(md.deps, mdDep{
-		object:     ds,
+		ds:         ds,
 		name:       *name,
 		privileges: (1 << priv),
 	})
 }
 
-// AddSchemaDependency tracks one of the catalog schemas on which the query depends,
-// as well as the privilege required to access that schema. If the Memo using
-// this metadata is cached, then a call to CheckDependencies can detect if
-// the name resolves to a different schema, or if the permissions on the schema
-// are no longer sufficient.
-func (md *Metadata) AddSchemaDependency(name *cat.SchemaName, s cat.Schema, priv privilege.Kind) {
-	// Search for the same name / object pair.
-	for i := range md.deps {
-		if md.deps[i].object == s && md.deps[i].schemaName().Equals(name) {
-			md.deps[i].privileges |= (1 << priv)
-			return
-		}
-	}
-	d := mdDep{object: s, privileges: (1 << priv)}
-	d.name.TableNamePrefix = *name
-	md.deps = append(md.deps, d)
-}
-
-// CheckDependencies resolves each data source and schema on which this metadata
-// depends, in order to check that the fully qualified object names still
-// resolve to the same version of the same objects, and that the user still has
-// sufficient privileges to access the objects. If the dependencies are no
-// longer up-to-date, then CheckDependencies returns false.
+// CheckDependencies resolves each data source on which this metadata depends,
+// in order to check that the fully qualified object names still resolve to the
+// same version of the same objects, and that the user still has sufficient
+// privileges to access the objects. If the dependencies are no longer
+// up-to-date, then CheckDependencies returns false.
 //
 // This function cannot swallow errors and return only a boolean, as it may
 // perform KV operations on behalf of the transaction associated with the
@@ -214,34 +195,16 @@ func (md *Metadata) CheckDependencies(
 	ctx context.Context, catalog cat.Catalog,
 ) (upToDate bool, err error) {
 	for i := range md.deps {
-		obj := md.deps[i].object
-		var toCheck cat.Object
-		switch obj.(type) {
-		case cat.DataSource:
-			name := *md.deps[i].dsName()
-			// Resolve data source object.
-			new, _, err := catalog.ResolveDataSource(ctx, cat.Flags{}, &name)
-			if err != nil {
-				return false, err
-			}
-			toCheck = new
-
-		case cat.Schema:
-			name := *md.deps[i].schemaName()
-			// Resolve schema object.
-			new, _, err := catalog.ResolveSchema(ctx, cat.Flags{}, &name)
-			if err != nil {
-				return false, err
-			}
-			toCheck = new
-
-		default:
-			return false, errors.AssertionFailedf("unknown dependency type: %v", obj)
+		name := *md.deps[i].dsName()
+		// Resolve data source object.
+		toCheck, _, err := catalog.ResolveDataSource(ctx, cat.Flags{}, &name)
+		if err != nil {
+			return false, err
 		}
 
 		// Ensure that it's the same object, and there were no schema or table
 		// statistics changes.
-		if !toCheck.Equals(obj) {
+		if !toCheck.Equals(md.deps[i].ds) {
 			return false, nil
 		}
 

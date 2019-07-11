@@ -25,6 +25,7 @@ import (
 // buildCreateTable constructs a CreateTable operator based on the CREATE TABLE
 // statement.
 func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outScope *scope) {
+	b.DisableMemoReuse = true
 	sch, resName := b.resolveSchemaForCreate(&ct.Table)
 	// TODO(radu): we are modifying the AST in-place here. We should be storing
 	// the resolved name separately.
