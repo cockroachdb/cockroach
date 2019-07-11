@@ -174,6 +174,11 @@ func genMergeJoinOps(wr io.Writer) error {
 			IsRightOuter: true,
 			String:       "RightOuter",
 		},
+		{
+			IsLeftOuter:  true,
+			IsRightOuter: true,
+			String:       "FullOuter",
+		},
 	}
 
 	return tmpl.Execute(wr, struct {
