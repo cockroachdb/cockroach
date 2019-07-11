@@ -262,7 +262,7 @@ CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z), UNIQUE INDEX(x,y))
 opt
 SELECT * FROM abc JOIN xyz ON a=x 
 ----
-inner-join
+inner-join (hash)
  ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
  ├── lax-key: (2,3,5-7)
  ├── fd: (3)~~>(1,2), (5,6)~~>(7), (1)==(5), (5)==(1)

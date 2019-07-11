@@ -14,7 +14,7 @@ project
  ├── stats: [rows=100]
  ├── cost: 2124.745
  ├── fd: (1)==(5), (5)==(1)
- └── inner-join
+ └── inner-join (hash)
       ├── columns: k:1(int!null) d:4(decimal!null) x:5(int!null)
       ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0, distinct(5)=10, null(5)=0]
       ├── cost: 2123.735
@@ -93,7 +93,7 @@ inner-join (lookup a)
 opt
 SELECT k, x FROM a INNER LOOKUP JOIN b ON k=x
 ----
-inner-join
+inner-join (hash)
  ├── columns: k:1(int!null) x:5(int!null)
  ├── flags: no-merge-join;no-hash-join
  ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]

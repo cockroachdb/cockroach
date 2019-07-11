@@ -115,7 +115,7 @@ SELECT CASE WHEN i<0 THEN (SELECT y FROM xy WHERE x=i LIMIT 1) ELSE 5 END FROM a
 ----
 project
  ├── columns: case:8(int)
- ├── left-join
+ ├── left-join (hash)
  │    ├── columns: i:2(int) x:6(int) y:7(int)
  │    ├── fd: (6)-->(7)
  │    ├── scan a
@@ -140,7 +140,7 @@ project
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
       ├── key: (1,6)
       ├── fd: (1)-->(2-5), (6)-->(7)
-      ├── left-join
+      ├── left-join (hash)
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
       │    ├── key: (1,6)
       │    ├── fd: (1)-->(2-5), (6)-->(7)
@@ -303,7 +303,7 @@ project
       ├── side-effects
       ├── key: (1,6)
       ├── fd: (1)-->(2-5), (6)-->(8)
-      ├── left-join
+      ├── left-join (hash)
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:8(decimal)
       │    ├── key: (1,6)
       │    ├── fd: (1)-->(2-5), (6)-->(8)

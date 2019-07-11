@@ -306,7 +306,7 @@ JOIN
   (SELECT unnest(ARRAY[1]) AS filter_id) AS ab
 ON uq.filter_id2 = ab.filter_id
 ----
-inner-join
+inner-join (hash)
  ├── columns: filter_id2:1(int!null) filter_id:2(int!null)
  ├── project-set
  │    ├── columns: unnest:1(int)
@@ -787,9 +787,9 @@ SELECT a.*, b.*, c.* FROM upper('abc') a
 JOIN ROWS FROM (upper('def'), generate_series(1, 3)) b ON true
 JOIN generate_series(1, 4) c ON true
 ----
-inner-join
+inner-join (hash)
  ├── columns: a:1(string) upper:2(string) generate_series:3(int) c:4(int)
- ├── inner-join
+ ├── inner-join (hash)
  │    ├── columns: upper:1(string) upper:2(string) generate_series:3(int)
  │    ├── project-set
  │    │    ├── columns: upper:1(string)
@@ -892,7 +892,7 @@ project
                 │              ├── columns: generate_subscripts:7(int)
                 │              └── project-set
                 │                   ├── columns: a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null) generate_subscripts:7(int)
-                │                   ├── inner-join
+                │                   ├── inner-join (hash)
                 │                   │    ├── columns: a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null)
                 │                   │    ├── scan t
                 │                   │    │    └── columns: a:3(string) t.rowid:4(int!null)

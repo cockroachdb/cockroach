@@ -729,7 +729,7 @@ insert check_test.public.alias_test
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(2,3)
-      │    ├── left-join
+      │    ├── left-join (hash)
       │    │    ├── columns: column1:2(int!null) a:3(int)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()

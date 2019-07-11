@@ -14,7 +14,7 @@ expr
   [ ]
 )
 ----
-inner-join
+inner-join (hash)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:5(int!null) t.public.def.e:6(int) t.public.def.f:7(int)
  ├── stats: [rows=10000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
  ├── cost: 2270.05

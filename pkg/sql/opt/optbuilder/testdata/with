@@ -12,7 +12,7 @@ WITH t AS (SELECT a FROM y WHERE a < 3)
 ----
 project
  ├── columns: a:3(int!null)
- └── inner-join
+ └── inner-join (hash)
       ├── columns: y.a:1(int!null) x.a:3(int!null) x.rowid:4(int!null)
       ├── scan x
       │    └── columns: x.a:3(int) x.rowid:4(int!null)
@@ -110,7 +110,7 @@ SELECT * FROM t3 NATURAL JOIN t4
 ----
 project
  ├── columns: a:1(int!null)
- └── inner-join
+ └── inner-join (hash)
       ├── columns: a:1(int!null) a:3(int!null)
       ├── select
       │    ├── columns: a:1(int!null)
@@ -185,11 +185,11 @@ SELECT * FROM t2 NATURAL JOIN x
 ----
 project
  ├── columns: a:3(int!null)
- └── inner-join
+ └── inner-join (hash)
       ├── columns: a:3(int!null) a:5(int!null) rowid:6(int!null)
       ├── project
       │    ├── columns: a:3(int!null)
-      │    └── inner-join
+      │    └── inner-join (hash)
       │         ├── columns: a:1(int!null) a:3(int!null) rowid:4(int!null)
       │         ├── scan x
       │         │    └── columns: a:3(int) rowid:4(int!null)
