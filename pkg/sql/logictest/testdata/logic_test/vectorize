@@ -412,3 +412,13 @@ query I
 SELECT b FROM a WHERE b < 0.5
 ----
 0
+
+# Test unsupported scrub (should fall back to distsql).
+statement ok
+CREATE TABLE t38626 (id int PRIMARY KEY, name STRING, CONSTRAINT abc CHECK (name > 'he'))
+
+statement ok
+INSERT INTO t38626 VALUES (1, 'hello')
+
+statement ok
+EXPERIMENTAL SCRUB TABLE t38626
