@@ -121,7 +121,29 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	seed := rand.Int()
 	rng := rand.New(rand.NewSource(int64(seed)))
 
-	nRuns := 10
+	type mjTestSpec struct {
+		joinType sqlbase.JoinType
+		anyOrder bool
+	}
+	testSpecs := []mjTestSpec{
+		{
+			joinType: sqlbase.JoinType_INNER,
+		},
+		{
+			joinType: sqlbase.JoinType_LEFT_OUTER,
+		},
+		{
+			joinType: sqlbase.JoinType_RIGHT_OUTER,
+		},
+		{
+			joinType: sqlbase.JoinType_FULL_OUTER,
+			// FULL OUTER JOIN doesn't guarantee any ordering on its output (since it
+			// is ambiguous), so we're comparing the outputs as sets.
+			anyOrder: true,
+		},
+	}
+
+	nRuns := 5
 	nRows := 10
 	maxCols := 3
 	maxNum := 5
@@ -132,11 +154,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		typs[i] = *types.Int
 	}
 	for run := 1; run < nRuns; run++ {
-		for _, joinType := range []sqlbase.JoinType{
-			sqlbase.JoinType_INNER,
-			sqlbase.JoinType_LEFT_OUTER,
-			sqlbase.JoinType_RIGHT_OUTER,
-		} {
+		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
 					inputTypes := typs[:nCols]
@@ -169,14 +187,14 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 					mjSpec := &distsqlpb.MergeJoinerSpec{
 						LeftOrdering:  distsqlpb.Ordering{Columns: lOrderingCols},
 						RightOrdering: distsqlpb.Ordering{Columns: rOrderingCols},
-						Type:          joinType,
+						Type:          testSpec.joinType,
 					}
 					pspec := &distsqlpb.ProcessorSpec{
 						Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
 						Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
 					}
-					if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
-						fmt.Printf("--- seed = %d run = %d ---\n", seed, run)
+					if err := verifyColOperator(testSpec.anyOrder, [][]types.T{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
+						fmt.Printf("--- join type = %s seed = %d run = %d ---\n", testSpec.joinType.String(), seed, run)
 						t.Fatal(err)
 					}
 				}

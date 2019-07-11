@@ -111,7 +111,7 @@ func TestLint(t *testing.T) {
 		}
 
 		cmd, stderr, filter, err := dirCmd(crdb.Dir,
-			"git", "grep", "-nE", fmt.Sprintf(`[^a-zA-Z](%s)\(`, strings.Join(names, "|")),
+			"git", "grep", "-nE", fmt.Sprintf(`[^_a-zA-Z](%s)\(`, strings.Join(names, "|")),
 			"--", "pkg")
 		if err != nil {
 			t.Fatal(err)
