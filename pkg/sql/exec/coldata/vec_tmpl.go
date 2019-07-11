@@ -190,3 +190,14 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}
 }
+
+func (m *memColumn) SetValueAt(elem interface{}, rowIdx uint16, colType types.T) {
+	switch colType {
+	// {{range .}}
+	case _TYPES_T:
+		m._TemplateType()[rowIdx] = elem.(_GOTYPE)
+		// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}

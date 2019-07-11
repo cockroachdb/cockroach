@@ -105,6 +105,10 @@ type Vec interface {
 	// SetCol sets the member column (in the case of mutable columns).
 	SetCol(interface{})
 
+	// SetValueAt writes the datum element into the column of the appropriate
+	// type at the desired input index.
+	SetValueAt(elem interface{}, rowIdx uint16, colType types.T)
+
 	// TemplateType returns an []interface{} and is used for operator templates.
 	// Do not call this from normal code - it'll always panic.
 	_TemplateType() []interface{}
