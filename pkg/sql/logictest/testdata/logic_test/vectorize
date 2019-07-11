@@ -388,3 +388,22 @@ query T
 SELECT ARRAY(SELECT 1) FROM a LIMIT 1
 ----
 {1}
+
+# Testing some builtin functions.
+statement ok
+CREATE TABLE builtin_test (x STRING, y INT)
+
+statement ok
+INSERT INTO builtin_test VALUES ('Hello', 3), ('There', 2)
+
+query T
+SELECT substring(x, 1, y) FROM builtin_test
+----
+Hel
+Th
+
+query I
+SELECT abs(y) FROM builtin_test
+----
+3
+2

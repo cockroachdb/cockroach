@@ -608,6 +608,8 @@ func planProjectionOperators(
 		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
 	case *tree.BinaryExpr:
 		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
+	case *tree.FuncExpr:
+		return planBuiltinFunctionExpr(ctx, t, columnTypes, input)
 	case tree.Datum:
 		datumType := t.ResolvedType()
 		ct := columnTypes
@@ -629,6 +631,17 @@ func planProjectionOperators(
 	default:
 		return nil, resultIdx, nil, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
+}
+
+func planBuiltinFunctionExpr(
+	ctx *tree.EvalContext, f *tree.FuncExpr, columnTypes []semtypes.T, input exec.Operator,
+) (exec.Operator, int, []semtypes.T, error) {
+	funcOutputType := f.ResolvedType()
+	ct := columnTypes
+	resultIdx := len(ct)
+	ct = append(ct, *funcOutputType)
+	op, err := exec.NewBuiltinFunctionOperator(ctx, ct, input, f, resultIdx)
+	return op, resultIdx, ct, err
 }
 
 func planProjectionExpr(
