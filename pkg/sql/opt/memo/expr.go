@@ -384,16 +384,7 @@ func (m *MutationPrivate) NeedResults() bool {
 // OutputOrd returns true if the i-th ordinal column should be part of the
 // mutations output columns.
 func (m *MutationPrivate) OutputOrd(i int) bool {
-	return (i < len(m.UpdateCols) && m.UpdateCols[i] != 0) ||
-		(i < len(m.FetchCols) && m.FetchCols[i] != 0) ||
-		(i < len(m.ReturnCols) && m.ReturnCols[i] != 0)
-
-}
-
-// InsertOrd returns true if the i-th ordinal column is being inserted by
-// the mutation.
-func (m *MutationPrivate) InsertOrd(i int) bool {
-	return i < len(m.InsertCols) && m.InsertCols[i] != 0
+	return i < len(m.ReturnCols) && m.ReturnCols[i] != 0
 }
 
 // MapToInputID maps from the ID of a returned column to the ID of the

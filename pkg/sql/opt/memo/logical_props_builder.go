@@ -1088,7 +1088,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// --------------
 	// Only non-mutation columns are output columns.
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		if private.OutputOrd(i) || private.InsertOrd(i) {
+		if private.OutputOrd(i) {
 			colID := private.Table.ColumnID(i)
 			rel.OutputCols.Add(colID)
 		}

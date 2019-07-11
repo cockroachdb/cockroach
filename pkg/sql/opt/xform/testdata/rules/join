@@ -2116,15 +2116,15 @@ project
  ├── side-effects, mutations
  ├── fd: ()-->(21)
  ├── inner-join
- │    ├── columns: abc.a:5(int) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
+ │    ├── columns: abc.rowid:8(int!null)
  │    ├── cardinality: [0 - 0]
  │    ├── side-effects, mutations
  │    ├── select
- │    │    ├── columns: abc.a:5(int) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
+ │    │    ├── columns: abc.rowid:8(int!null)
  │    │    ├── cardinality: [0 - 0]
  │    │    ├── side-effects, mutations
  │    │    ├── insert abc
- │    │    │    ├── columns: abc.a:5(int) abc.b:6(int) abc.c:7(int) abc.rowid:8(int!null)
+ │    │    │    ├── columns: abc.rowid:8(int!null)
  │    │    │    ├── insert-mapping:
  │    │    │    │    ├──  "?column?":13 => abc.a:5
  │    │    │    │    ├──  column14:14 => abc.b:6

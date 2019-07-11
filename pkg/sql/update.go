@@ -382,6 +382,11 @@ func (p *planner) Update(
 		updateColsIdx[id] = i
 	}
 
+	rowIdxToRetIdx := make([]int, len(desc.Columns))
+	for i := range rowIdxToRetIdx {
+		rowIdxToRetIdx[i] = i
+	}
+
 	un := updateNodePool.Get().(*updateNode)
 	*un = updateNode{
 		source:  rows,
@@ -397,9 +402,10 @@ func (p *planner) Update(
 				Cols:         desc.Columns,
 				Mapping:      ru.FetchColIDtoRowIndex,
 			},
-			sourceSlots:   sourceSlots,
-			updateValues:  make(tree.Datums, len(ru.UpdateCols)),
-			updateColsIdx: updateColsIdx,
+			sourceSlots:    sourceSlots,
+			updateValues:   make(tree.Datums, len(ru.UpdateCols)),
+			updateColsIdx:  updateColsIdx,
+			rowIdxToRetIdx: rowIdxToRetIdx,
 		},
 	}
 
@@ -480,6 +486,9 @@ type updateRun struct {
 	// This provides the inverse mapping of sourceSlots.
 	//
 	updateColsIdx map[sqlbase.ColumnID]int
+
+	// TODO(ridwanmsharif): Elaborate.
+	rowIdxToRetIdx []int
 }
 
 // maxUpdateBatchSize is the max number of entries in the KV batch for
@@ -701,7 +710,14 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		//
 		// MakeUpdater guarantees that the first columns of the new values
 		// are those specified u.columns.
-		resultValues := newValues[:len(u.columns)]
+		resultValues := make([]tree.Datum, len(u.columns))
+		for i := range u.run.rowIdxToRetIdx {
+			retIdx := u.run.rowIdxToRetIdx[i]
+			if retIdx >= 0 {
+				resultValues[retIdx] = newValues[i]
+			}
+		}
+
 		if _, err := u.run.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}

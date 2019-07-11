@@ -304,8 +304,8 @@ type Factory interface {
 		input Node,
 		table cat.Table,
 		insertCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
-		rowsNeeded bool,
 		skipFKChecks bool,
 	) (Node, error)
 
@@ -326,8 +326,8 @@ type Factory interface {
 		table cat.Table,
 		fetchCols ColumnOrdinalSet,
 		updateCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
-		rowsNeeded bool,
 	) (Node, error)
 
 	// ConstructUpsert creates a node that implements an INSERT..ON CONFLICT or
@@ -360,8 +360,8 @@ type Factory interface {
 		insertCols ColumnOrdinalSet,
 		fetchCols ColumnOrdinalSet,
 		updateCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
-		rowsNeeded bool,
 	) (Node, error)
 
 	// ConstructDelete creates a node that implements a DELETE statement. The
@@ -373,7 +373,7 @@ type Factory interface {
 	// as they appear in the table schema. The rowsNeeded parameter is true if a
 	// RETURNING clause needs the deleted row(s) as output.
 	ConstructDelete(
-		input Node, table cat.Table, fetchCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node, table cat.Table, fetchCols ColumnOrdinalSet, returnCols ColumnOrdinalSet,
 	) (Node, error)
 
 	// ConstructDeleteRange creates a node that efficiently deletes contiguous

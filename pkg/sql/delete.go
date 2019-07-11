@@ -166,6 +166,8 @@ func (p *planner) Delete(
 		columns = columns[:len(requestedCols)]
 	}
 
+	rowIdxToRetIdx := mutationRowIdxToReturnIdx(requestedCols, requestedCols)
+
 	// Now make a delete node. We use a pool.
 	dn := deleteNodePool.Get().(*deleteNode)
 	*dn = deleteNode{
@@ -175,6 +177,7 @@ func (p *planner) Delete(
 			td:                  tableDeleter{rd: rd, alloc: &p.alloc},
 			rowsNeeded:          rowsNeeded,
 			fastPathInterleaved: canDeleteFastInterleaved(desc, fkTables),
+			rowIdxToRetIdx:      rowIdxToRetIdx,
 		},
 	}
 
@@ -208,6 +211,9 @@ type deleteRun struct {
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
+
+	// TODO(ridwanmsharif): Elaborate.
+	rowIdxToRetIdx []int
 }
 
 // maxDeleteBatchSize is the max number of entries in the KV batch for
@@ -334,8 +340,11 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// d.run.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
 		resultValues := make(tree.Datums, d.run.rows.NumCols())
-		for i := 0; i < d.run.rows.NumCols(); i++ {
-			resultValues[i] = sourceVals[i]
+		for i := range d.run.rowIdxToRetIdx {
+			retIdx := d.run.rowIdxToRetIdx[i]
+			if retIdx >= 0 {
+				resultValues[retIdx] = sourceVals[i]
+			}
 		}
 
 		if _, err := d.run.rows.AddRow(params.ctx, resultValues); err != nil {

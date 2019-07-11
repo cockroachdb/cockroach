@@ -146,12 +146,11 @@ count           ·         ·
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-render               ·         ·
- └── run             ·         ·
-      └── delete     ·         ·
-           │         from      indexed
-           │         strategy  deleter
-           └── scan  ·         ·
-·                    table     indexed@indexed_value_idx
-·                    spans     /5-/6
-·                    limit     10
+run             ·         ·
+ └── delete     ·         ·
+      │         from      indexed
+      │         strategy  deleter
+      └── scan  ·         ·
+·               table     indexed@indexed_value_idx
+·               spans     /5-/6
+·               limit     10

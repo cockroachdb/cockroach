@@ -483,8 +483,8 @@ EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDE
 ----
 render                 ·              ·                   (b)              ·
  │                     render 0       b                   ·                ·
- └── run               ·              ·                   (a, b, c)        ·
-      └── insert       ·              ·                   (a, b, c)        ·
+ └── run               ·              ·                   (a, b)           ·
+      └── insert       ·              ·                   (a, b)           ·
            │           into           t(a, b, c)          ·                ·
            │           strategy       inserter            ·                ·
            └── values  ·              ·                   (x, y, column6)  ·
@@ -511,8 +511,8 @@ EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
 render                    ·         ·          (b)                 ·
  │                        render 0  b          ·                   ·
- └── run                  ·         ·          (a, b, c)           ·
-      └── update          ·         ·          (a, b, c)           ·
+ └── run                  ·         ·          (a, b)              ·
+      └── update          ·         ·          (a, b)              ·
            │              table     t          ·                   ·
            │              set       c          ·                   ·
            │              strategy  updater    ·                   ·
