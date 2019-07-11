@@ -414,7 +414,7 @@ select
  │         ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(2)=432.339125, null(2)=0, distinct(6)=100, null(6)=0, distinct(8)=632.138954, null(8)=0]
  │         ├── key: (8)
  │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
  │         │    ├── stats: [rows=10000000, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=0, distinct(6)=100, null(6)=100000, distinct(8)=1000, null(8)=0]
  │         │    ├── key: (1,8)
@@ -462,7 +462,7 @@ select
  │         ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(2)=432.339125, null(2)=0, distinct(6)=100, null(6)=0, distinct(8)=632.138954, null(8)=0]
  │         ├── key: (8)
  │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
  │         │    ├── stats: [rows=10000000, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=0, distinct(6)=100, null(6)=100000, distinct(8)=1000, null(8)=0]
  │         │    ├── key: (1,8)
@@ -1082,7 +1082,7 @@ select
  │         ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(2)=432.339125, null(2)=200, distinct(6)=100, null(6)=0, distinct(8)=632.138954, null(8)=0]
  │         ├── key: (8)
  │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
  │         │    ├── stats: [rows=10000000, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=2000000, distinct(6)=100, null(6)=100000, distinct(8)=1000, null(8)=0]
  │         │    ├── key: (1,8)
@@ -1130,7 +1130,7 @@ select
  │         ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(2)=432.339125, null(2)=200, distinct(6)=100, null(6)=0, distinct(8)=632.138954, null(8)=0]
  │         ├── key: (8)
  │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
- │         ├── inner-join
+ │         ├── inner-join (hash)
  │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
  │         │    ├── stats: [rows=10000000, distinct(1)=10000, null(1)=0, distinct(2)=500, null(2)=2000000, distinct(6)=100, null(6)=100000, distinct(8)=1000, null(8)=0]
  │         │    ├── key: (1,8)
@@ -1374,7 +1374,7 @@ select
  ├── project
  │    ├── columns: x:5(bool)
  │    ├── stats: [rows=4e+20, distinct(5)=1, null(5)=4e+20]
- │    ├── left-join
+ │    ├── left-join (hash)
  │    │    ├── columns: t1.x:1(bool) t2.x:3(bool)
  │    │    ├── stats: [rows=4e+20, distinct(1,3)=1, null(1,3)=4e+20]
  │    │    ├── scan t1

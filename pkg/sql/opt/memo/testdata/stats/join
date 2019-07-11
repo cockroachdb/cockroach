@@ -49,7 +49,7 @@ ALTER TABLE uv INJECT STATISTICS '[
 norm
 SELECT * FROM xysd JOIN uv ON true
 ----
-inner-join
+inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=50000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -66,7 +66,7 @@ inner-join
 norm colstat=1 colstat=2 colstat=3 colstat=4 colstat=5 colstat=6 colstat=(2,5,6)
 SELECT * FROM xysd JOIN uv ON true
 ----
-inner-join
+inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=50000000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=500, null(3)=500000, distinct(4)=500, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(2,5,6)=4000000, null(2,5,6)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -93,7 +93,7 @@ values
 build colstat=2
 SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
-inner-join
+inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=0, distinct(4)=499.999999, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=6321.5735, null(7)=0]
  ├── key: (7)
@@ -114,7 +114,7 @@ inner-join
 build
 SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
 ----
-left-join
+left-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=10000, distinct(5)=500, null(5)=0]
  ├── key: (1,7)
@@ -135,7 +135,7 @@ left-join
 build
 SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 ----
-right-join
+right-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0]
  ├── key: (1,7)
@@ -156,7 +156,7 @@ right-join
 build
 SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
 ----
-full-join
+full-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=10000]
  ├── key: (1,7)
@@ -181,7 +181,7 @@ project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=50000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- └── inner-join
+ └── inner-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       ├── stats: [rows=50000000]
       ├── key: (1,7)
@@ -201,7 +201,7 @@ project
 build
 SELECT * FROM xysd, xysd AS xysd
 ----
-inner-join
+inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  ├── stats: [rows=25000000]
  ├── key: (1,5)
@@ -230,7 +230,7 @@ project
       ├── stats: [rows=500000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0, distinct(6)=1, null(6)=0, distinct(7)=10000, null(7)=0]
       ├── key: (1,7)
       ├── fd: ()-->(6), (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5)
-      ├── inner-join
+      ├── inner-join (hash)
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       │    ├── stats: [rows=50000000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0, distinct(6)=100, null(6)=0, distinct(7)=10000, null(7)=0]
       │    ├── key: (1,7)
@@ -263,7 +263,7 @@ group-by
  ├── project
  │    ├── columns: x:1(int!null) v:6(int!null)
  │    ├── stats: [rows=50000000, distinct(1,6)=500000, null(1,6)=0]
- │    └── inner-join
+ │    └── inner-join (hash)
  │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
  │         ├── stats: [rows=50000000, distinct(1,6)=500000, null(1,6)=0]
  │         ├── key: (1,7)
@@ -293,7 +293,7 @@ group-by
  ├── stats: [rows=10000, distinct(1,6)=10000, null(1,6)=0]
  ├── key: (1,6)
  ├── fd: (1,6)-->(8)
- ├── inner-join
+ ├── inner-join (hash)
  │    ├── columns: x:1(int!null) u:5(int!null) v:6(int!null)
  │    ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(1,6)=10000, null(1,6)=0]
  │    ├── fd: (1)==(5), (5)==(1)
@@ -314,7 +314,7 @@ group-by
 norm
 SELECT * FROM xysd WHERE EXISTS (SELECT * FROM uv WHERE x=u)
 ----
-semi-join
+semi-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=5000]
  ├── key: (1)
@@ -334,7 +334,7 @@ semi-join
 norm
 SELECT * FROM xysd WHERE NOT EXISTS (SELECT * FROM uv WHERE x=u)
 ----
-anti-join
+anti-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── stats: [rows=5000]
  ├── key: (1)
@@ -354,7 +354,7 @@ anti-join
 norm
 SELECT * FROM xysd JOIN uv ON x=u AND y=v
 ----
-inner-join
+inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null)
  ├── stats: [rows=25, distinct(1)=25, null(1)=0, distinct(2)=25, null(2)=0, distinct(4)=24.3852937, null(4)=0, distinct(5)=25, null(5)=0, distinct(6)=25, null(6)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1), (2)==(6), (6)==(2)
@@ -374,7 +374,7 @@ inner-join
 norm
 SELECT * FROM xysd JOIN uv ON x=u AND y+v=5 AND y > 0 AND y < 300
 ----
-inner-join
+inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null)
  ├── stats: [rows=3333.33333, distinct(1)=500, null(1)=0, distinct(2)=298.995696, null(2)=0, distinct(4)=499.363351, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
@@ -412,7 +412,7 @@ project
       ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(8)
-      ├── semi-join
+      ├── semi-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0]
       │    ├── key: (1)
@@ -446,7 +446,7 @@ project
       ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(8)
-      ├── anti-join
+      ├── anti-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0]
       │    ├── key: (1)
@@ -480,7 +480,7 @@ project
       ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(8)
-      ├── left-join
+      ├── left-join (hash)
       │    ├── columns: x:1(int!null) y:2(int) u:5(int) v:6(int)
       │    ├── stats: [rows=5000, distinct(2)=400, null(2)=0, distinct(5)=500, null(5)=1666.66667]
       │    ├── fd: (1)-->(2)
@@ -513,7 +513,7 @@ project
       ├── stats: [rows=399.903879, distinct(2)=399.903879, null(2)=399.903879]
       ├── key: (2)
       ├── fd: (2)-->(8)
-      ├── right-join
+      ├── right-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:5(int) v:6(int!null)
       │    ├── stats: [rows=10000, distinct(1)=500, null(1)=6666.66667, distinct(2)=399.903879, null(2)=6666.66667]
       │    ├── fd: (1)-->(2)
@@ -546,7 +546,7 @@ project
       ├── stats: [rows=400, distinct(2)=400, null(2)=400]
       ├── key: (2)
       ├── fd: (2)-->(8)
-      ├── full-join
+      ├── full-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:5(int) v:6(int)
       │    ├── stats: [rows=11666.6667, distinct(2)=400, null(2)=6666.66667]
       │    ├── fd: (1)-->(2)
@@ -580,7 +580,7 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 norm disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN (SELECT * FROM xyz WHERE x=10) ON u=x
 ----
-inner-join
+inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:5(int!null) y:6(int) z:7(int)
  ├── stats: [rows=10.3490885, distinct(1)=1, null(1)=0, distinct(3)=0.999982217, null(3)=0, distinct(5)=1, null(5)=0]
  ├── fd: ()-->(1,3,5), (1)==(5), (5)==(1)
@@ -608,7 +608,7 @@ inner-join
 norm disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN xyz ON u=x AND x=10
 ----
-inner-join
+inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:5(int!null) y:6(int) z:7(int)
  ├── stats: [rows=10.4536248, distinct(1)=1, null(1)=0, distinct(3)=0.999971315, null(3)=0, distinct(5)=1, null(5)=0]
  ├── fd: ()-->(1,3,5), (1)==(5), (5)==(1)
@@ -674,7 +674,7 @@ ALTER TABLE uv INJECT STATISTICS '[
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
-inner-join
+inner-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=499.999999, null(3)=100, distinct(4)=499.999999, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=6321.5735, null(7)=0, distinct(2,3)=4323.45892, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
  ├── key: (7)
@@ -695,7 +695,7 @@ inner-join
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
 ----
-left-join
+left-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=0, distinct(2,3)=5000, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
  ├── key: (1,7)
@@ -716,7 +716,7 @@ left-join
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 ----
-right-join
+right-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=499.999999, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=4323.45892, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
  ├── key: (1,7)
@@ -737,7 +737,7 @@ right-join
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 SELECT *, rowid FROM xysd FULL JOIN uv ON x=u
 ----
-full-join
+full-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=5000, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
  ├── key: (1,7)
@@ -764,7 +764,7 @@ select
  ├── stats: [rows=9900, distinct(2)=400, null(2)=4950, distinct(3)=500, null(3)=0, distinct(5)=500, null(5)=4950, distinct(2,3)=4999.5, null(2,3)=4999.5, distinct(3,5)=9900, null(3,5)=4999.5, distinct(1,2,7)=9900, null(1,2,7)=4950]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
- ├── full-join
+ ├── full-join (hash)
  │    ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
  │    ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(5)=500, null(5)=5000, distinct(2,3)=5000, null(2,3)=5050, distinct(3,5)=10000, null(3,5)=5050, distinct(1,2,7)=10000, null(1,2,7)=5000]
  │    ├── key: (1,7)
@@ -789,7 +789,7 @@ select
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 SELECT *, rowid FROM xysd FULL JOIN uv ON u > 4 AND u < 2
 ----
-full-join
+full-join (hash)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(3)=500, null(3)=500000, distinct(5)=500, null(5)=25000000, distinct(2,3)=5000, null(2,3)=25250000, distinct(3,5)=250000, null(3,5)=25250000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
  ├── key: (1,7)
@@ -814,7 +814,7 @@ project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- └── inner-join
+ └── inner-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
       ├── key: (1,7)
@@ -928,7 +928,7 @@ values
 norm
 SELECT * FROM (SELECT 1) LEFT JOIN (SELECT 1 WHERE false) ON true
 ----
-left-join
+left-join (hash)
  ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -962,7 +962,7 @@ values
 norm
 SELECT * FROM (SELECT 1) FULL JOIN (SELECT 1 WHERE false) ON true
 ----
-left-join
+left-join (hash)
  ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -1006,7 +1006,7 @@ values
 norm
 SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
 ----
-right-join
+right-join (hash)
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -1030,7 +1030,7 @@ right-join
 norm
 SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
 ----
-right-join
+right-join (hash)
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -1054,7 +1054,7 @@ right-join
 norm
 SELECT * FROM (SELECT 1) FULL JOIN (VALUES (1), (2)) ON true
 ----
-inner-join
+inner-join (hash)
  ├── columns: "?column?":1(int!null) column1:2(int!null)
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
@@ -1120,7 +1120,7 @@ project
  │    │         ├── outer: (2)
  │    │         ├── stats: [rows=1000]
  │    │         ├── fd: ()-->(15)
- │    │         ├── left-join
+ │    │         ├── left-join (hash)
  │    │         │    ├── outer: (2)
  │    │         │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
  │    │         │    ├── scan table1
@@ -1140,7 +1140,7 @@ project
 norm colstat=1 colstat=2
 SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
 ----
-left-join
+left-join (hash)
  ├── columns: x:1(int!null) x:2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1]

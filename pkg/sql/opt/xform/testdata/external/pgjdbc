@@ -86,7 +86,7 @@ project
  ├── left-join-apply
  │    ├── columns: t.oid:1(oid) t.typname:2(name!null) t.typnamespace:3(oid!null) t.typtype:7(string) t.typbasetype:25(oid) n.oid:33(oid!null) nspname:34(name!null) case:70(string)
  │    ├── fd: (3)==(33), (33)==(3)
- │    ├── inner-join
+ │    ├── inner-join (hash)
  │    │    ├── columns: t.oid:1(oid) t.typname:2(name!null) t.typnamespace:3(oid!null) t.typtype:7(string) t.typbasetype:25(oid) n.oid:33(oid!null) nspname:34(name!null)
  │    │    ├── fd: (3)==(33), (33)==(3)
  │    │    ├── scan t
