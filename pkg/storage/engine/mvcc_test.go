@@ -42,9 +42,6 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
-	txn1ID = uuid.MakeV4()
-	txn2ID = uuid.MakeV4()
-
 	keyMin       = roachpb.KeyMin
 	keyMax       = roachpb.KeyMax
 	testKey1     = roachpb.Key("/db1")
@@ -53,13 +50,17 @@ var (
 	testKey4     = roachpb.Key("/db4")
 	testKey5     = roachpb.Key("/db5")
 	testKey6     = roachpb.Key("/db6")
-	txn1         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: hlc.Timestamp{Logical: 1}}, OrigTimestamp: hlc.Timestamp{Logical: 1}}
-	txn1Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: hlc.Timestamp{Logical: 1}}, OrigTimestamp: hlc.Timestamp{Logical: 1}, Status: roachpb.COMMITTED}
-	txn1Abort    = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1}, Status: roachpb.ABORTED}
-	txn1e2       = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 2, Timestamp: hlc.Timestamp{Logical: 1}}, OrigTimestamp: hlc.Timestamp{Logical: 1}}
-	txn1e2Commit = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 2, Timestamp: hlc.Timestamp{Logical: 1}}, OrigTimestamp: hlc.Timestamp{Logical: 1}, Status: roachpb.COMMITTED}
-	txn2         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, Timestamp: hlc.Timestamp{Logical: 1}}, OrigTimestamp: hlc.Timestamp{Logical: 1}}
-	txn2Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, Timestamp: hlc.Timestamp{Logical: 1}}, OrigTimestamp: hlc.Timestamp{Logical: 1}, Status: roachpb.COMMITTED}
+	txn1ID       = uuid.MakeV4()
+	txn2ID       = uuid.MakeV4()
+	txn1TS       = hlc.Timestamp{Logical: 1}
+	txn2TS       = hlc.Timestamp{Logical: 2}
+	txn1         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: txn1TS, MinTimestamp: txn1TS}, OrigTimestamp: txn1TS}
+	txn1Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: txn1TS, MinTimestamp: txn1TS}, OrigTimestamp: txn1TS, Status: roachpb.COMMITTED}
+	txn1Abort    = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, Timestamp: txn1TS, MinTimestamp: txn1TS}, Status: roachpb.ABORTED}
+	txn1e2       = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 2, Timestamp: txn1TS, MinTimestamp: txn1TS}, OrigTimestamp: txn1TS}
+	txn1e2Commit = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 2, Timestamp: txn1TS, MinTimestamp: txn1TS}, OrigTimestamp: txn1TS, Status: roachpb.COMMITTED}
+	txn2         = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, Timestamp: txn2TS, MinTimestamp: txn2TS}, OrigTimestamp: txn2TS}
+	txn2Commit   = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, Timestamp: txn2TS, MinTimestamp: txn2TS}, OrigTimestamp: txn2TS, Status: roachpb.COMMITTED}
 	value1       = roachpb.MakeValueFromString("testValue1")
 	value2       = roachpb.MakeValueFromString("testValue2")
 	value3       = roachpb.MakeValueFromString("testValue3")

@@ -152,7 +152,6 @@ func registerKV(r *testRegistry) {
 func registerKVContention(r *testRegistry) {
 	const nodes = 4
 	r.Add(testSpec{
-		Skip:    "https://github.com/cockroachdb/cockroach/issues/36089",
 		Name:    fmt.Sprintf("kv/contention/nodes=%d", nodes),
 		Cluster: makeClusterSpec(nodes + 1),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -161,9 +160,9 @@ func registerKVContention(r *testRegistry) {
 
 			// Start the cluster with an extremely high txn liveness threshold.
 			// If requests ever get stuck on a transaction that was abandoned
-			// then it will take 10m for them to get unstuck, at which point the
-			// QPS threshold check in the test is guaranteed to fail.
-			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
+			// then it will take 2m for them to get unstuck, at which point the
+			// QPS threshold check in the test is likely to fail.
+			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=120")
 			c.Start(ctx, t, args, c.Range(1, nodes))
 
 			// Enable request tracing, which is a good tool for understanding
@@ -197,8 +196,8 @@ func registerKVContention(r *testRegistry) {
 
 				// Assert that the average throughput stayed above a certain
 				// threshold. In this case, assert that max throughput only
-				// dipped below 10 qps for 5% of the time.
-				const minQPS = 10
+				// dipped below 100 qps for 5% of the time.
+				const minQPS = 100
 				verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.05)
 				return nil
 			})
