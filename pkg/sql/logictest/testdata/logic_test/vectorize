@@ -400,3 +400,15 @@ query O
 SELECT * FROM t38754
 ----
 1
+
+# Test integer division. (Should fall back due to decimal result.)
+query T
+SELECT a/b FROM a WHERE b = 2
+----
+0.5
+
+# Test mixed types comparison. (Should also fall back.)
+query I
+SELECT b FROM a WHERE b < 0.5
+----
+0
