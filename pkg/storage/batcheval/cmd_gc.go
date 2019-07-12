@@ -41,17 +41,6 @@ func declareKeysGC(
 	if gcr.Threshold != (hlc.Timestamp{}) {
 		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 	}
-	if gcr.TxnSpanGCThreshold != (hlc.Timestamp{}) {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{
-			// TODO(bdarnell): since this must be checked by all
-			// reads, this should be factored out into a separate
-			// waiter which blocks only those reads far enough in the
-			// past to be affected by the in-flight GCRequest (i.e.
-			// normally none). This means this key would be special
-			// cased and would not acquire latches.
-			Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
-		})
-	}
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
@@ -94,13 +83,6 @@ func GC(
 		newThreshold.Forward(args.Threshold)
 	}
 
-	var newTxnSpanGCThreshold hlc.Timestamp
-	if args.TxnSpanGCThreshold != (hlc.Timestamp{}) {
-		oldTxnSpanGCThreshold := cArgs.EvalCtx.GetTxnSpanGCThreshold()
-		newTxnSpanGCThreshold = oldTxnSpanGCThreshold
-		newTxnSpanGCThreshold.Forward(args.TxnSpanGCThreshold)
-	}
-
 	var pd result.Result
 	stateLoader := MakeStateLoader(cArgs.EvalCtx)
 
@@ -112,13 +94,6 @@ func GC(
 	if newThreshold != (hlc.Timestamp{}) {
 		replState.GCThreshold = &newThreshold
 		if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
-			return result.Result{}, err
-		}
-	}
-
-	if newTxnSpanGCThreshold != (hlc.Timestamp{}) {
-		replState.TxnSpanGCThreshold = &newTxnSpanGCThreshold
-		if err := stateLoader.SetTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
 			return result.Result{}, err
 		}
 	}

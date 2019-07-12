@@ -1952,16 +1952,12 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 	specifiedGCThreshold := hlc.Timestamp{
 		WallTime: 2E9,
 	}
-	specifiedTxnSpanGCThreshold := hlc.Timestamp{
-		WallTime: 3E9,
-	}
 	gcArgs := &roachpb.GCRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    leftKey,
 			EndKey: rightKey,
 		},
-		Threshold:          specifiedGCThreshold,
-		TxnSpanGCThreshold: specifiedTxnSpanGCThreshold,
+		Threshold: specifiedGCThreshold,
 	}
 	if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), gcArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -1974,13 +1970,9 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 
 	repl := store.LookupReplica(roachpb.RKey(splitKey))
 	gcThreshold := repl.GetGCThreshold()
-	txnSpanGCThreshold := repl.GetTxnSpanGCThreshold()
 
 	if !reflect.DeepEqual(gcThreshold, specifiedGCThreshold) {
 		t.Fatalf("expected RHS's GCThreshold is equal to %v, but got %v", specifiedGCThreshold, gcThreshold)
-	}
-	if !reflect.DeepEqual(txnSpanGCThreshold, specifiedTxnSpanGCThreshold) {
-		t.Fatalf("expected RHS's TxnSpanGCThreshold is equal to %v, but got %v", specifiedTxnSpanGCThreshold, txnSpanGCThreshold)
 	}
 
 	repl.AssertState(context.TODO(), store.Engine())

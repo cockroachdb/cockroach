@@ -6511,17 +6511,6 @@ class GCRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   ::cockroach::util::hlc::Timestamp* mutable_threshold();
   void set_allocated_threshold(::cockroach::util::hlc::Timestamp* threshold);
 
-  bool has_txn_span_gc_threshold() const;
-  void clear_txn_span_gc_threshold();
-  static const int kTxnSpanGcThresholdFieldNumber = 5;
-  private:
-  const ::cockroach::util::hlc::Timestamp& _internal_txn_span_gc_threshold() const;
-  public:
-  const ::cockroach::util::hlc::Timestamp& txn_span_gc_threshold() const;
-  ::cockroach::util::hlc::Timestamp* release_txn_span_gc_threshold();
-  ::cockroach::util::hlc::Timestamp* mutable_txn_span_gc_threshold();
-  void set_allocated_txn_span_gc_threshold(::cockroach::util::hlc::Timestamp* txn_span_gc_threshold);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.GCRequest)
  private:
 
@@ -6529,7 +6518,6 @@ class GCRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::GCRequest_GCKey > keys_;
   ::cockroach::roachpb::RequestHeader* header_;
   ::cockroach::util::hlc::Timestamp* threshold_;
-  ::cockroach::util::hlc::Timestamp* txn_span_gc_threshold_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -20784,53 +20772,6 @@ inline void GCRequest::set_allocated_threshold(::cockroach::util::hlc::Timestamp
   }
   threshold_ = threshold;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.GCRequest.threshold)
-}
-
-inline bool GCRequest::has_txn_span_gc_threshold() const {
-  return this != internal_default_instance() && txn_span_gc_threshold_ != NULL;
-}
-inline const ::cockroach::util::hlc::Timestamp& GCRequest::_internal_txn_span_gc_threshold() const {
-  return *txn_span_gc_threshold_;
-}
-inline const ::cockroach::util::hlc::Timestamp& GCRequest::txn_span_gc_threshold() const {
-  const ::cockroach::util::hlc::Timestamp* p = txn_span_gc_threshold_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.GCRequest.txn_span_gc_threshold)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
-      &::cockroach::util::hlc::_Timestamp_default_instance_);
-}
-inline ::cockroach::util::hlc::Timestamp* GCRequest::release_txn_span_gc_threshold() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.GCRequest.txn_span_gc_threshold)
-  
-  ::cockroach::util::hlc::Timestamp* temp = txn_span_gc_threshold_;
-  txn_span_gc_threshold_ = NULL;
-  return temp;
-}
-inline ::cockroach::util::hlc::Timestamp* GCRequest::mutable_txn_span_gc_threshold() {
-  
-  if (txn_span_gc_threshold_ == NULL) {
-    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
-    txn_span_gc_threshold_ = p;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.GCRequest.txn_span_gc_threshold)
-  return txn_span_gc_threshold_;
-}
-inline void GCRequest::set_allocated_txn_span_gc_threshold(::cockroach::util::hlc::Timestamp* txn_span_gc_threshold) {
-  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
-  if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(txn_span_gc_threshold_);
-  }
-  if (txn_span_gc_threshold) {
-    ::google::protobuf::Arena* submessage_arena = NULL;
-    if (message_arena != submessage_arena) {
-      txn_span_gc_threshold = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, txn_span_gc_threshold, submessage_arena);
-    }
-    
-  } else {
-    
-  }
-  txn_span_gc_threshold_ = txn_span_gc_threshold;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.GCRequest.txn_span_gc_threshold)
 }
 
 // -------------------------------------------------------------------

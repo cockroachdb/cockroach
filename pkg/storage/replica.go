@@ -727,14 +727,6 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
-// GetTxnSpanGCThreshold returns the time of the replica's last transaction span
-// GC.
-func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return *r.mu.state.TxnSpanGCThreshold
-}
-
 func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 	if desc == nil || !desc.IsInitialized() {
 		return 0
