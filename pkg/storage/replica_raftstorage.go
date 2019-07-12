@@ -479,10 +479,8 @@ func (s *OutgoingSnapshot) Close() {
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
 type IncomingSnapshot struct {
 	SnapUUID uuid.UUID
-	// The RocksDB BatchReprs that make up this snapshot.
-	Batches [][]byte
-	// The Raft log entries for this snapshot.
-	LogEntries [][]byte
+	// The snapshotStrategy being used to receive the incoming snapshot.
+	Strategy snapshotStrategy
 	// The replica state at the time the snapshot was generated (never nil).
 	State *storagepb.ReplicaState
 	//
@@ -790,192 +788,198 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "found empty HardState for non-empty Snapshot %+v", snap)
 	}
 
-	var stats struct {
-		clear   time.Time
-		batch   time.Time
-		entries time.Time
-		commit  time.Time
-	}
-
-	var size int
-	for _, b := range inSnap.Batches {
-		size += len(b)
-	}
-	for _, e := range inSnap.LogEntries {
-		size += len(e)
-	}
-
-	log.Infof(ctx, "applying %s snapshot at index %d "+
-		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
-		snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
-		size, len(inSnap.Batches), len(inSnap.LogEntries))
-	defer func(start time.Time) {
-		now := timeutil.Now()
-		log.Infof(ctx, "applied %s snapshot in %0.0fms [clear=%0.0fms batch=%0.0fms entries=%0.0fms commit=%0.0fms]",
-			snapType, now.Sub(start).Seconds()*1000,
-			stats.clear.Sub(start).Seconds()*1000,
-			stats.batch.Sub(stats.clear).Seconds()*1000,
-			stats.entries.Sub(stats.batch).Seconds()*1000,
-			stats.commit.Sub(stats.entries).Seconds()*1000)
-	}(timeutil.Now())
-
-	// Use a more efficient write-only batch because we don't need to do any
-	// reads from the batch.
-	batch := r.store.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
-
-	// If we're subsuming a replica below, we don't have its last NextReplicaID,
-	// nor can we obtain it. That's OK: we can just be conservative and use the
-	// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
-	// tombstone using this maximum possible replica ID, which would normally be
-	// problematic, as it would prevent this store from ever having a new replica
-	// of the removed range. In this case, however, it's copacetic, as subsumed
-	// ranges _can't_ have new replicas.
-	const subsumedNextReplicaID = math.MaxInt32
-
-	// As part of applying the snapshot, we may need to subsume replicas that have
-	// been merged into this range. Destroy their data in the same batch in which
-	// we apply the snapshot.
-	for _, sr := range subsumedRepls {
-		if err := sr.preDestroyRaftMuLocked(
-			ctx, r.store.Engine(), batch, subsumedNextReplicaID, true, /* destroyData */
-		); err != nil {
-			return err
-		}
-	}
-
-	// Delete everything in the range and recreate it from the snapshot.
-	// We need to delete any old Raft log entries here because any log entries
-	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	if err := clearRangeData(ctx, s.Desc, r.store.Engine(), batch, true /* destroyData */); err != nil {
-		return err
-	}
-	// Clear the cached raft log entries to ensure that old or uncommitted
-	// entries don't impact the in-memory state.
-	r.store.raftEntryCache.Drop(r.RangeID)
-	stats.clear = timeutil.Now()
-
-	// Write the snapshot into the range.
-	for _, batchRepr := range inSnap.Batches {
-		if err := batch.ApplyBatchRepr(batchRepr, false); err != nil {
-			return err
-		}
-	}
-
-	// The log entries are all written to distinct keys so we can use a
-	// distinct batch.
-	distinctBatch := batch.Distinct()
-	stats.batch = timeutil.Now()
-
-	if inSnap.UsesUnreplicatedTruncatedState {
-		// We're using the unreplicated truncated state, which we need to
-		// manually persist to disk. If we're not taking this branch, the
-		// snapshot contains a legacy TruncatedState and we don't need to do
-		// anything (in fact, must not -- the invariant is that exactly one of
-		// them exists at any given point in the state machine).
-		if err := stateloader.Make(s.Desc.RangeID).SetRaftTruncatedState(
-			ctx, distinctBatch, s.TruncatedState,
-		); err != nil {
-			return err
-		}
-	}
-
-	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
-	for i, bytes := range inSnap.LogEntries {
-		if err := protoutil.Unmarshal(bytes, &logEntries[i]); err != nil {
-			return err
-		}
-	}
-	// If this replica doesn't know its ReplicaID yet, we're applying a
-	// preemptive snapshot. In this case, we're going to have to write the
-	// sideloaded proposals into the Raft log. Otherwise, sideload.
+	var lastTerm uint64
 	var raftLogSize int64
-	thinEntries := logEntries
-	if replicaID != 0 {
-		var err error
-		var sideloadedEntriesSize int64
-		thinEntries, sideloadedEntriesSize, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
+	switch ss := inSnap.Strategy.(type) {
+	case *kvBatchSnapshotStrategy:
+		var stats struct {
+			clear   time.Time
+			batch   time.Time
+			entries time.Time
+			commit  time.Time
+		}
+
+		var size int
+		for _, b := range ss.batches {
+			size += len(b)
+		}
+		for _, e := range ss.logEntries {
+			size += len(e)
+		}
+
+		log.Infof(ctx, "applying %s snapshot at index %d "+
+			"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
+			snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
+			size, len(ss.batches), len(ss.logEntries))
+		defer func(start time.Time) {
+			now := timeutil.Now()
+			log.Infof(ctx, "applied %s snapshot in %0.0fms [clear=%0.0fms batch=%0.0fms entries=%0.0fms commit=%0.0fms]",
+				snapType, now.Sub(start).Seconds()*1000,
+				stats.clear.Sub(start).Seconds()*1000,
+				stats.batch.Sub(stats.clear).Seconds()*1000,
+				stats.entries.Sub(stats.batch).Seconds()*1000,
+				stats.commit.Sub(stats.entries).Seconds()*1000)
+		}(timeutil.Now())
+
+		// Use a more efficient write-only batch because we don't need to do any
+		// reads from the batch.
+		batch := r.store.Engine().NewWriteOnlyBatch()
+		defer batch.Close()
+
+		// If we're subsuming a replica below, we don't have its last NextReplicaID,
+		// nor can we obtain it. That's OK: we can just be conservative and use the
+		// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
+		// tombstone using this maximum possible replica ID, which would normally be
+		// problematic, as it would prevent this store from ever having a new replica
+		// of the removed range. In this case, however, it's copacetic, as subsumed
+		// ranges _can't_ have new replicas.
+		const subsumedNextReplicaID = math.MaxInt32
+
+		// As part of applying the snapshot, we may need to subsume replicas that have
+		// been merged into this range. Destroy their data in the same batch in which
+		// we apply the snapshot.
+		for _, sr := range subsumedRepls {
+			if err := sr.preDestroyRaftMuLocked(
+				ctx, r.store.Engine(), batch, subsumedNextReplicaID, true, /* destroyData */
+			); err != nil {
+				return err
+			}
+		}
+
+		// Delete everything in the range and recreate it from the snapshot.
+		// We need to delete any old Raft log entries here because any log entries
+		// that predate the snapshot will be orphaned and never truncated or GC'd.
+		if err := clearRangeData(ctx, s.Desc, r.store.Engine(), batch, true /* destroyData */); err != nil {
+			return err
+		}
+		// Clear the cached raft log entries to ensure that old or uncommitted
+		// entries don't impact the in-memory state.
+		r.store.raftEntryCache.Drop(r.RangeID)
+		stats.clear = timeutil.Now()
+
+		// Write the snapshot into the range.
+		for _, batchRepr := range ss.batches {
+			if err := batch.ApplyBatchRepr(batchRepr, false); err != nil {
+				return err
+			}
+		}
+
+		// The log entries are all written to distinct keys so we can use a
+		// distinct batch.
+		distinctBatch := batch.Distinct()
+		stats.batch = timeutil.Now()
+
+		if inSnap.UsesUnreplicatedTruncatedState {
+			// We're using the unreplicated truncated state, which we need to
+			// manually persist to disk. If we're not taking this branch, the
+			// snapshot contains a legacy TruncatedState and we don't need to do
+			// anything (in fact, must not -- the invariant is that exactly one of
+			// them exists at any given point in the state machine).
+			if err := stateloader.Make(s.Desc.RangeID).SetRaftTruncatedState(
+				ctx, distinctBatch, s.TruncatedState,
+			); err != nil {
+				return err
+			}
+		}
+
+		logEntries := make([]raftpb.Entry, len(ss.logEntries))
+		for i, bytes := range ss.logEntries {
+			if err := protoutil.Unmarshal(bytes, &logEntries[i]); err != nil {
+				return err
+			}
+		}
+		// If this replica doesn't know its ReplicaID yet, we're applying a
+		// preemptive snapshot. In this case, we're going to have to write the
+		// sideloaded proposals into the Raft log. Otherwise, sideload.
+		thinEntries := logEntries
+		if replicaID != 0 {
+			var err error
+			var sideloadedEntriesSize int64
+			thinEntries, sideloadedEntriesSize, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
+			if err != nil {
+				return err
+			}
+			raftLogSize += sideloadedEntriesSize
+		}
+
+		// Write the snapshot's Raft log into the range.
+		_, lastTerm, raftLogSize, err = r.append(
+			ctx, distinctBatch, 0, invalidLastTerm, raftLogSize, thinEntries,
+		)
 		if err != nil {
 			return err
 		}
-		raftLogSize += sideloadedEntriesSize
-	}
+		stats.entries = timeutil.Now()
 
-	// Write the snapshot's Raft log into the range.
-	var lastTerm uint64
-	_, lastTerm, raftLogSize, err = r.append(
-		ctx, distinctBatch, 0, invalidLastTerm, raftLogSize, thinEntries,
-	)
-	if err != nil {
-		return err
-	}
-	stats.entries = timeutil.Now()
-
-	// Note that since this snapshot comes from Raft, we don't have to synthesize
-	// the HardState -- Raft wouldn't ask us to update the HardState in incorrect
-	// ways.
-	if err := r.raftMu.stateLoader.SetHardState(ctx, distinctBatch, hs); err != nil {
-		return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
-	}
-
-	// We need to close the distinct batch and start using the normal batch for
-	// the read below.
-	distinctBatch.Close()
-
-	// As outlined above, last and applied index are the same after applying
-	// the snapshot (i.e. the snapshot has no uncommitted tail).
-	if s.RaftAppliedIndex != snap.Metadata.Index {
-		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
-			s.RaftAppliedIndex, snap.Metadata.Index)
-	}
-
-	// We've written Raft log entries, so we need to sync the WAL.
-	if err := batch.Commit(!disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
-		return err
-	}
-	stats.commit = timeutil.Now()
-
-	// The on-disk state is now committed, but the corresponding in-memory state
-	// has not yet been updated. Any errors past this point must therefore be
-	// treated as fatal.
-
-	for _, sr := range subsumedRepls {
-		// We removed sr's data when we committed the batch. Finish subsumption by
-		// updating the in-memory bookkeping.
-		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
-			log.Fatalf(ctx, "unable to finish destroying %s while applying snapshot: %+v", sr, err)
+		// Note that since this snapshot comes from Raft, we don't have to synthesize
+		// the HardState -- Raft wouldn't ask us to update the HardState in incorrect
+		// ways.
+		if err := r.raftMu.stateLoader.SetHardState(ctx, distinctBatch, hs); err != nil {
+			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
-		// We already hold sr's raftMu, so we must call removeReplicaImpl directly.
-		// Note that it's safe to update the store's metadata for sr's removal
-		// separately from updating the store's metadata for r's new descriptor
-		// (i.e., under a different store.mu acquisition). Each store.mu acquisition
-		// leaves the store in a consistent state, and access to the replicas
-		// themselves is protected by their raftMus, which are held from start to
-		// finish.
-		if err := r.store.removeReplicaImpl(ctx, sr, subsumedNextReplicaID, RemoveOptions{
-			DestroyData: false, // data is already destroyed
-		}); err != nil {
-			log.Fatalf(ctx, "unable to remove %s while applying snapshot: %+v", sr, err)
+
+		// We need to close the distinct batch and start using the normal batch for
+		// the read below.
+		distinctBatch.Close()
+
+		// As outlined above, last and applied index are the same after applying
+		// the snapshot (i.e. the snapshot has no uncommitted tail).
+		if s.RaftAppliedIndex != snap.Metadata.Index {
+			log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
+				s.RaftAppliedIndex, snap.Metadata.Index)
 		}
-	}
 
-	// Atomically swap the placeholder, if any, for the replica, and update the
-	// replica's descriptor.
-	r.store.mu.Lock()
-	if r.store.removePlaceholderLocked(ctx, r.RangeID) {
-		atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
-	}
-	r.setDesc(ctx, s.Desc)
-	if err := r.store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
-		log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
-	}
-	r.store.mu.Unlock()
+		// We've written Raft log entries, so we need to sync the WAL.
+		if err := batch.Commit(!disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
+			return err
+		}
+		stats.commit = timeutil.Now()
 
-	// Invoke the leasePostApply method to ensure we properly initialize the
-	// replica according to whether it holds the lease. We allow jumps in the
-	// lease sequence because there may be multiple lease changes accounted for
-	// in the snapshot.
-	r.leasePostApply(ctx, *s.Lease, true /* permitJump */)
+		// The on-disk state is now committed, but the corresponding in-memory state
+		// has not yet been updated. Any errors past this point must therefore be
+		// treated as fatal.
+
+		for _, sr := range subsumedRepls {
+			// We removed sr's data when we committed the batch. Finish subsumption by
+			// updating the in-memory bookkeping.
+			if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
+				log.Fatalf(ctx, "unable to finish destroying %s while applying snapshot: %+v", sr, err)
+			}
+			// We already hold sr's raftMu, so we must call removeReplicaImpl directly.
+			// Note that it's safe to update the store's metadata for sr's removal
+			// separately from updating the store's metadata for r's new descriptor
+			// (i.e., under a different store.mu acquisition). Each store.mu acquisition
+			// leaves the store in a consistent state, and access to the replicas
+			// themselves is protected by their raftMus, which are held from start to
+			// finish.
+			if err := r.store.removeReplicaImpl(ctx, sr, subsumedNextReplicaID, RemoveOptions{
+				DestroyData: false, // data is already destroyed
+			}); err != nil {
+				log.Fatalf(ctx, "unable to remove %s while applying snapshot: %+v", sr, err)
+			}
+		}
+
+		// Atomically swap the placeholder, if any, for the replica, and update the
+		// replica's descriptor.
+		r.store.mu.Lock()
+		if r.store.removePlaceholderLocked(ctx, r.RangeID) {
+			atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
+		}
+		r.setDesc(ctx, s.Desc)
+		if err := r.store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
+			log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
+		}
+		r.store.mu.Unlock()
+
+		// Invoke the leasePostApply method to ensure we properly initialize the
+		// replica according to whether it holds the lease. We allow jumps in the
+		// lease sequence because there may be multiple lease changes accounted for
+		// in the snapshot.
+		r.leasePostApply(ctx, *s.Lease, true /* permitJump */)
+
+	default:
+		log.Fatalf(ctx, "unknown snapshot strategy: %v", ss)
+	}
 
 	r.mu.Lock()
 	// We set the persisted last index to the last applied index. This is
