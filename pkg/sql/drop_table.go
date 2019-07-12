@@ -29,8 +29,10 @@ import (
 )
 
 type dropTableNode struct {
-	n  *tree.DropTable
-	td []toDelete
+	n *tree.DropTable
+	// td is a map from table descriptor to toDelete struct, indicating which
+	// tables this operation should delete.
+	td map[sqlbase.ID]toDelete
 }
 
 type toDelete struct {
@@ -43,7 +45,7 @@ type toDelete struct {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
-	td := make([]toDelete, 0, len(n.Names))
+	td := make(map[sqlbase.ID]toDelete, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]
 		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, ResolveRequireTableDesc)
@@ -54,26 +56,21 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 			continue
 		}
 
-		td = append(td, toDelete{tn, droppedDesc})
-	}
-
-	dropping := make(map[sqlbase.ID]bool)
-	for _, d := range td {
-		dropping[d.desc.ID] = true
+		td[droppedDesc.ID] = toDelete{tn, droppedDesc}
 	}
 
 	for _, toDel := range td {
 		droppedDesc := toDel.desc
-		for _, idx := range droppedDesc.AllNonDropIndexes() {
-			for _, ref := range idx.ReferencedBy {
-				if !dropping[ref.Table] {
-					if _, err := p.canRemoveFK(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
-						return nil, err
-					}
+		for _, ref := range droppedDesc.InboundFKs {
+			if _, ok := td[ref.OriginTableID]; !ok {
+				if err := p.canRemoveFKBackreference(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
+					return nil, err
 				}
 			}
+		}
+		for _, idx := range droppedDesc.AllNonDropIndexes() {
 			for _, ref := range idx.InterleavedBy {
-				if !dropping[ref.Table] {
+				if _, ok := td[ref.Table]; !ok {
 					if err := p.canRemoveInterleave(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
 						return nil, err
 					}
@@ -81,7 +78,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 			}
 		}
 		for _, ref := range droppedDesc.DependedOnBy {
-			if !dropping[ref.ID] {
+			if _, ok := td[ref.ID]; !ok {
 				if err := p.canRemoveDependentView(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
 					return nil, err
 				}
@@ -174,20 +171,30 @@ func (p *planner) prepareDrop(
 	return tableDesc, nil
 }
 
-func (p *planner) canRemoveFK(
-	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
-) (*sqlbase.MutableTableDescriptor, error) {
-	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
+// canRemoveFKBackReference returns an error if the input backreference isn't
+// allowed to be removed. There are 2 reasons why this could happen:
+// 1. if there are no longer
+// to see whether a foreign key backreference
+// has
+func (p *planner) canRemoveFKBackreference(
+	ctx context.Context,
+	from string,
+	ref *sqlbase.ForeignKeyBackreference,
+	behavior tree.DropBehavior,
+) error {
+	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if behavior != tree.DropCascade {
-		return nil, fmt.Errorf("%q is referenced by foreign key from table %q", from, table.Name)
+		return fmt.Errorf("%q is referenced by foreign key from table %q", from, table.Name)
 	}
+	// Check to see whether we're allowed to edit the table that has a
+	// foreign key constraint on the table that we're dropping right now.
 	if err := p.CheckPrivilege(ctx, table, privilege.CREATE); err != nil {
-		return nil, err
+		return err
 	}
-	return table, nil
+	return nil
 }
 
 func (p *planner) canRemoveInterleave(
@@ -198,7 +205,7 @@ func (p *planner) canRemoveInterleave(
 		return err
 	}
 	// TODO(dan): It's possible to DROP a table that has a child interleave, but
-	// some loose ends would have to be addresssed. The zone would have to be
+	// some loose ends would have to be addressed. The zone would have to be
 	// kept and deleted when the last table in it is removed. Also, the dropped
 	// table's descriptor would have to be kept around in some Dropped but
 	// non-public state for referential integrity of the `InterleaveDescriptor`
@@ -208,28 +215,6 @@ func (p *planner) canRemoveInterleave(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
 	return p.CheckPrivilege(ctx, table, privilege.CREATE)
-}
-
-func (p *planner) removeFK(
-	ctx context.Context, ref sqlbase.ForeignKeyReference, table *sqlbase.MutableTableDescriptor,
-) error {
-	if table == nil {
-		var err error
-		table, err = p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
-		if err != nil {
-			return err
-		}
-	}
-	if table.Dropped() {
-		// The referenced table is being dropped. No need to modify it further.
-		return nil
-	}
-	idx, err := table.FindIndexByID(ref.Index)
-	if err != nil {
-		return err
-	}
-	idx.ForeignKey = sqlbase.ForeignKeyReference{}
-	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
@@ -259,21 +244,28 @@ func (p *planner) dropTableImpl(
 
 	var droppedViews []string
 
-	// Remove FK and interleave relationships.
-	for _, idx := range tableDesc.AllNonDropIndexes() {
-		if idx.ForeignKey.IsSet() {
-			if err := p.removeFKBackReference(ctx, tableDesc, idx); err != nil {
-				return droppedViews, err
-			}
+	// Remove foreign key back references from tables that this table has foreign
+	// keys to.
+	for _, ref := range tableDesc.OutboundFKs {
+		if err := p.removeFKBackReference(ctx, tableDesc, ref); err != nil {
+			return droppedViews, err
 		}
+	}
+	tableDesc.OutboundFKs = nil
+
+	// Remove foreign key forward references from tables that have foreign keys
+	// to this table.
+	for _, ref := range tableDesc.InboundFKs {
+		if err := p.removeFKForBackReference(ctx, tableDesc, ref); err != nil {
+			return droppedViews, err
+		}
+	}
+	tableDesc.InboundFKs = nil
+
+	// Remove interleave relationships.
+	for _, idx := range tableDesc.AllNonDropIndexes() {
 		if len(idx.Interleave.Ancestors) > 0 {
 			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
-				return droppedViews, err
-			}
-		}
-		for _, ref := range idx.ReferencedBy {
-			// Nil forces re-fetching tables, since they may have been modified.
-			if err := p.removeFK(ctx, ref, nil); err != nil {
 				return droppedViews, err
 			}
 		}
@@ -420,45 +412,127 @@ func (p *planner) initiateDropTable(
 	return p.writeDropTable(ctx, tableDesc)
 }
 
-func (p *planner) removeFKBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor,
+func (p *planner) removeFKForBackReference(
+	ctx context.Context,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	ref *sqlbase.ForeignKeyBackreference,
 ) error {
-	var t *sqlbase.MutableTableDescriptor
+	var originTableDesc *sqlbase.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
-	if tableDesc.ID == idx.ForeignKey.Table {
-		t = tableDesc
+	if tableDesc.ID == ref.OriginTableID {
+		originTableDesc = tableDesc
 	} else {
-		lookup, err := p.Tables().getMutableTableVersionByID(ctx, idx.ForeignKey.Table, p.txn)
+		lookup, err := p.Tables().getMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 		if err != nil {
-			return errors.Errorf("error resolving referenced table ID %d: %v", idx.ForeignKey.Table, err)
+			return errors.Errorf("error resolving origin table ID %d: %v", ref.OriginTableID, err)
 		}
-		t = lookup
+		originTableDesc = lookup
 	}
-	if t.Dropped() {
+	if originTableDesc.Dropped() {
+		// The origin table is being dropped. No need to modify it further.
+		return nil
+	}
+
+	if err := removeFKForBackReferenceFromTable(originTableDesc, ref, tableDesc.TableDesc()); err != nil {
+		return err
+	}
+	return p.writeSchemaChange(ctx, originTableDesc, sqlbase.InvalidMutationID)
+}
+
+// removeFKBackReferenceFromTable edits the supplied originTableDesc to
+// remove the foreign key constraint that corresponds to the supplied
+// backreference, which is a member of the supplied referencedTableDesc.
+func removeFKForBackReferenceFromTable(
+	originTableDesc *sqlbase.MutableTableDescriptor,
+	backref *sqlbase.ForeignKeyBackreference,
+	referencedTableDesc *sqlbase.TableDescriptor,
+) error {
+	matchIdx := -1
+	for i, fk := range originTableDesc.OutboundFKs {
+		if fk.ReferencedTableID != referencedTableDesc.ID {
+			// This constraint is to another table.
+			continue
+		}
+
+		if sqlbase.ColumnIDs(fk.ReferencedColumnIDs).Equal(backref.ReferencedColumnIDs) &&
+			sqlbase.ColumnIDs(fk.OriginColumnIDs).Equal(backref.OriginColumnIDs) {
+			// We found a match! We want to delete it from the list now.
+			matchIdx = i
+			break
+		}
+	}
+	if matchIdx == -1 {
+		// There was no match: no back reference in the referenced table that
+		// matched the foreign key constraint that we were trying to delete.
+		// This really shouldn't happen...
+		return errors.AssertionFailedf("there was no foreign key constraint "+
+			"for backreference %v on table %q", backref, originTableDesc.Name)
+	}
+	// Delete our match.
+	originTableDesc.OutboundFKs = append(
+		originTableDesc.OutboundFKs[:matchIdx],
+		originTableDesc.OutboundFKs[matchIdx+1:]...)
+	return nil
+}
+
+// removeFKBackReference removes the FK back reference from the table that is
+// referenced by the input constraint.
+func (p *planner) removeFKBackReference(
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint,
+) error {
+	var referencedTableDesc *sqlbase.MutableTableDescriptor
+	// We don't want to lookup/edit a second copy of the same table.
+	if tableDesc.ID == ref.ReferencedTableID {
+		referencedTableDesc = tableDesc
+	} else {
+		lookup, err := p.Tables().getMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
+		if err != nil {
+			return errors.Errorf("error resolving referenced table ID %d: %v", ref.ReferencedTableID, err)
+		}
+		referencedTableDesc = lookup
+	}
+	if referencedTableDesc.Dropped() {
 		// The referenced table is being dropped. No need to modify it further.
 		return nil
 	}
-	if err := removeFKBackReferenceFromTable(t, idx.ForeignKey.Index, tableDesc.ID, idx.ID); err != nil {
+
+	if err := removeFKBackReferenceFromTable(referencedTableDesc, ref, tableDesc.TableDesc()); err != nil {
 		return err
 	}
-	return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
+	return p.writeSchemaChange(ctx, referencedTableDesc, sqlbase.InvalidMutationID)
 }
 
+// removeFKBackReferenceFromTable edits the supplied referencedTableDesc to
+// remove the foreign key backreference that corresponds to the supplied fk,
+// which is a member of the supplied originTableDesc.
 func removeFKBackReferenceFromTable(
-	targetDesc *sqlbase.MutableTableDescriptor,
-	referencedIdx sqlbase.IndexID,
-	source sqlbase.ID,
-	sourceIdx sqlbase.IndexID,
+	referencedTableDesc *sqlbase.MutableTableDescriptor,
+	fk *sqlbase.ForeignKeyConstraint,
+	originTableDesc *sqlbase.TableDescriptor,
 ) error {
-	targetIdx, err := targetDesc.FindIndexByID(referencedIdx)
-	if err != nil {
-		return err
-	}
-	for k, ref := range targetIdx.ReferencedBy {
-		if ref.Table == source && ref.Index == sourceIdx {
-			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
+	matchIdx := -1
+	for i, backref := range referencedTableDesc.InboundFKs {
+		if backref.OriginTableID != originTableDesc.ID {
+			// This back reference is to another table, so we don't care about it.
+			continue
+		}
+
+		if sqlbase.ColumnIDs(backref.ReferencedColumnIDs).Equal(fk.ReferencedColumnIDs) &&
+			sqlbase.ColumnIDs(backref.OriginColumnIDs).Equal(fk.OriginColumnIDs) {
+			// We found a match! We want to delete it from the list now.
+			matchIdx = i
+			break
 		}
 	}
+	if matchIdx == -1 {
+		// There was no match: no back reference in the referenced table that
+		// matched the foreign key constraint that we were trying to delete.
+		// This really shouldn't happen...
+		return errors.AssertionFailedf("there was no foreign key backreference "+
+			"for constraint %q on table %q", fk.Name, originTableDesc.Name)
+	}
+	// Delete our match.
+	referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs[:matchIdx], referencedTableDesc.InboundFKs[matchIdx+1:]...)
 	return nil
 }
 

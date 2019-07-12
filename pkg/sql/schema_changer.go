@@ -676,12 +676,9 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	ctx context.Context, table *sqlbase.TableDescriptor,
 ) error {
 	if table.Adding() {
-		fks, err := table.AllActiveAndInactiveForeignKeys()
-		if err != nil {
-			return err
-		}
+		fks := table.AllActiveAndInactiveForeignKeys()
 		for _, fk := range fks {
-			if err := sc.waitToUpdateLeases(ctx, fk.Table); err != nil {
+			if err := sc.waitToUpdateLeases(ctx, fk.ReferencedTableID); err != nil {
 				return err
 			}
 		}
@@ -1376,8 +1373,8 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
 				mutation.Direction == sqlbase.DescriptorMutation_ADD {
 				fk := &constraint.ForeignKey
-				if fk.Table != desc.ID {
-					fksByBackrefTable[constraint.ForeignKey.Table] = append(fksByBackrefTable[constraint.ForeignKey.Table], constraint)
+				if fk.ReferencedTableID != desc.ID {
+					fksByBackrefTable[constraint.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[constraint.ForeignKey.ReferencedTableID], constraint)
 				}
 			}
 		}
@@ -1431,14 +1428,14 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				if err := sc.maybeDropValidatingConstraint(ctx, scDesc, constraint); err != nil {
 					return err
 				}
-				// Get the foreign key backreferences to remove, and remove them immediately if they're on the same table
+				// Get the foreign key backreferences to remove
 				if constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY {
 					fk := &constraint.ForeignKey
-					backrefTable, ok := descs[fk.Table]
+					backrefTable, ok := descs[fk.ReferencedTableID]
 					if !ok {
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 					}
-					if err := removeFKBackReferenceFromTable(backrefTable, fk.Index, sc.tableID, constraint.ForeignKeyIndex); err != nil {
+					if err := removeFKBackReferenceFromTable(backrefTable, fk, scDesc.TableDesc()); err != nil {
 						return err
 					}
 				}
@@ -1625,23 +1622,17 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			)
 		}
 	case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
-		if constraint.ForeignKey.Validity == sqlbase.ConstraintValidity_Unvalidated {
-			return nil
-		}
-		idx, err := desc.FindIndexByID(constraint.ForeignKeyIndex)
-		if err != nil {
-			return err
-		}
-		if idx.ForeignKey.IsSet() {
-			idx.ForeignKey = sqlbase.ForeignKeyReference{}
-		} else {
-			if log.V(2) {
-				log.Infof(
-					ctx,
-					"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
-					constraint.Name,
-				)
+		for i, fk := range desc.OutboundFKs {
+			if fk.Name == constraint.ForeignKey.Name {
+				desc.OutboundFKs = append(desc.OutboundFKs[:i], desc.OutboundFKs[i+1:]...)
 			}
+		}
+		if log.V(2) {
+			log.Infof(
+				ctx,
+				"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
+				constraint.ForeignKey.Name,
+			)
 		}
 	default:
 		return errors.AssertionFailedf("unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
@@ -2037,7 +2028,9 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					switch union := descriptor.Union.(type) {
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
-						table.MaybeFillInDescriptor()
+						if err := table.MaybeFillInDescriptor(ctx, nil); err != nil {
+							return
+						}
 						if err := table.ValidateTable(s.execCfg.Settings); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v",
 								kv.Key, err, table,

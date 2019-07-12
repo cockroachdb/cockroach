@@ -72,6 +72,69 @@ func (c ColumnIDs) Len() int           { return len(c) }
 func (c ColumnIDs) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 func (c ColumnIDs) Less(i, j int) bool { return c[i] < c[j] }
 
+// Equal returns true if this column ids slice is identical to the other column
+// ids slice.
+func (c ColumnIDs) Equal(other ColumnIDs) bool {
+	if len(c) != len(other) {
+		return false
+	}
+
+	for i := range c {
+		if c[i] != other[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// EqualSets returns true if this column ids slice contains all of the same ids
+// as the other column ids slice, order agnostic.
+func (c ColumnIDs) EqualSets(other ColumnIDs) bool {
+	if len(c) != len(other) {
+		return false
+	}
+	return c.HasPrefix(other)
+	/*
+		for i := range c {
+			if c[i]
+		}
+		thisCopy := make(ColumnIDs, len(c))
+		otherCopy := make(ColumnIDs, len(other))
+		copy(thisCopy, c)
+		copy(otherCopy, other)
+		sort.Sort(thisCopy)
+		sort.Sort(otherCopy)
+		for i := range thisCopy {
+			if c[i] != otherCopy[i] {
+				return false
+			}
+		}
+		return true
+	*/
+}
+
+// Contains returns true if needle is contained within the input list.
+func (c ColumnIDs) Contains(needle ColumnID) bool {
+	for i := range c {
+		if needle == c[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func (c ColumnIDs) HasPrefix(other ColumnIDs) bool {
+	if len(other) > len(c) {
+		return false
+	}
+	for i := range other {
+		if other[i] != c[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
 
@@ -135,6 +198,9 @@ type ImmutableTableDescriptor struct {
 	// are all set to nullable while column backfilling is still in
 	// progress, as mutation columns may have NULL values.
 	ReadableColumns []ColumnDescriptor
+
+	inboundFKs  []*ForeignKeyBackreference
+	outboundFKs []*ForeignKeyConstraint
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -293,6 +359,11 @@ func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDesc
 	if table == nil {
 		return nil, ErrDescriptorNotFound
 	}
+
+	if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+		return nil, err
+	}
+
 	return table, nil
 }
 
@@ -624,8 +695,12 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 	// including it twice. (Note that even though unvalidated check constraints
 	// cannot be added as of 19.1, they can still exist if they were created under
 	// previous versions.)
-	checks := make([]*TableDescriptor_CheckConstraint, 0, len(desc.Checks)+len(desc.Mutations))
+	checks := make([]*TableDescriptor_CheckConstraint, 0, len(desc.Checks))
 	for _, c := range desc.Checks {
+		// While a check constraint is being validated for existing rows, the
+		// check constraint is present both on the table descriptor and in the
+		// mutations list in the Validating state, so those constraints are excluded
+		// here to avoid double-counting.
 		if c.Validity != ConstraintValidity_Validating {
 			checks = append(checks, c)
 		}
@@ -643,34 +718,23 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 // writes, and "inactive" ones queued in the mutations list. An error is
 // returned if multiple foreign keys (including mutations) are found for the
 // same index.
-func (desc *TableDescriptor) AllActiveAndInactiveForeignKeys() (
-	map[IndexID]*ForeignKeyReference,
-	error,
-) {
-	fks := make(map[IndexID]*ForeignKeyReference)
-	// While a foreign key constraint is being validated for existing rows, the
-	// foreign key reference is present both on the index descriptor and in the
-	// mutations list in the Validating state, so those FKs are excluded here to
-	// avoid double-counting.
-	if desc.PrimaryIndex.ForeignKey.IsSet() && desc.PrimaryIndex.ForeignKey.Validity != ConstraintValidity_Validating {
-		fks[desc.PrimaryIndex.ID] = &desc.PrimaryIndex.ForeignKey
-	}
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
-		if idx.ForeignKey.IsSet() && idx.ForeignKey.Validity != ConstraintValidity_Validating {
-			fks[idx.ID] = &idx.ForeignKey
+func (desc *TableDescriptor) AllActiveAndInactiveForeignKeys() []*ForeignKeyConstraint {
+	fks := make([]*ForeignKeyConstraint, 0, len(desc.OutboundFKs))
+	for _, fk := range desc.OutboundFKs {
+		// While a foreign key constraint is being validated for existing rows, the
+		// foreign key reference is present both on the table descriptor and in the
+		// mutations list in the Validating state, so those FKs are excluded here to
+		// avoid double-counting.
+		if fk.Validity != ConstraintValidity_Validating {
+			fks = append(fks, fk)
 		}
 	}
 	for i := range desc.Mutations {
 		if c := desc.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == ConstraintToUpdate_FOREIGN_KEY {
-			if _, ok := fks[c.ForeignKeyIndex]; ok {
-				return nil, errors.AssertionFailedf(
-					"foreign key mutation found for index that already has a foreign key")
-			}
-			fks[c.ForeignKeyIndex] = &c.ForeignKey
+			fks = append(fks, &c.ForeignKey)
 		}
 	}
-	return fks, nil
+	return fks
 }
 
 // ForeachNonDropIndex runs a function on all indexes, including those being
@@ -710,10 +774,76 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 // This includes format upgrades and optional changes that can be handled by all version
 // (for example: additional default privileges).
 // Returns true if any changes were made.
-func (desc *TableDescriptor) MaybeFillInDescriptor() bool {
-	changedVersion := desc.maybeUpgradeFormatVersion()
-	changedPrivileges := desc.Privileges.MaybeFixPrivileges(desc.ID)
-	return changedVersion || changedPrivileges
+func (desc *TableDescriptor) MaybeFillInDescriptor(ctx context.Context, txn *client.Txn) error {
+	desc.maybeUpgradeFormatVersion()
+	desc.Privileges.MaybeFixPrivileges(desc.ID)
+	if txn != nil {
+		if _, err := desc.maybeUpgradeForeignKeyRepresentation(ctx, txn); err != nil {
+			return nil
+		}
+	}
+	return nil
+}
+
+func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(ctx context.Context, txn *client.Txn) (bool, error) {
+	otherTables := make(map[ID]*TableDescriptor)
+	indexes := append(desc.Indexes, desc.PrimaryIndex)
+	changed := false
+	for i := range indexes {
+		idx := &indexes[i]
+		if idx.ForeignKey.IsSet() {
+			ref := &idx.ForeignKey
+			if _, ok := otherTables[ref.Table]; !ok {
+				tbl, err := GetTableDescFromID(ctx, txn, ref.Table)
+				if err != nil {
+					return false, err
+				}
+				otherTables[ref.Table] = tbl
+			}
+
+			referencedIndex, err := otherTables[ref.Table].FindIndexByID(ref.Index)
+			if err != nil {
+				return false, err
+			}
+			numCols := ref.SharedPrefixLen
+			outFK := &ForeignKeyConstraint{
+				ReferencedTableID:   ref.Table,
+				OriginColumnIDs:     idx.ColumnIDs[:numCols],
+				ReferencedColumnIDs: referencedIndex.ColumnIDs[:numCols],
+				Name:                ref.Name,
+				Validity:            ref.Validity,
+				OnDelete:            ref.OnDelete,
+				OnUpdate:            ref.OnUpdate,
+				Match:               ref.Match,
+			}
+			desc.OutboundFKs = append(desc.OutboundFKs, outFK)
+			changed = true
+		}
+		for refIdx := range idx.ReferencedBy {
+			ref := &idx.ReferencedBy[refIdx]
+			if _, ok := otherTables[ref.Table]; !ok {
+				tbl, err := GetTableDescFromID(nil, txn, ref.Table)
+				if err != nil {
+					return false, err
+				}
+				otherTables[ref.Table] = tbl
+			}
+
+			originIndex, err := otherTables[ref.Table].FindIndexByID(ref.Index)
+			if err != nil {
+				return false, err
+			}
+			numCols := ref.SharedPrefixLen
+			inFK := &ForeignKeyBackreference{
+				OriginTableID:       ref.Table,
+				OriginColumnIDs:     originIndex.ColumnIDs[:numCols],
+				ReferencedColumnIDs: idx.ColumnIDs[:numCols],
+			}
+			desc.InboundFKs = append(desc.InboundFKs, inFK)
+			changed = true
+		}
+	}
+	return changed, nil
 }
 
 // maybeUpgradeFormatVersion transforms the TableDescriptor to the latest
@@ -1206,48 +1336,47 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 		return targetTable, targetIndex, nil
 	}
 
-	for _, index := range desc.AllNonDropIndexes() {
-		// Check foreign keys.
-		if index.ForeignKey.IsSet() {
-			targetTable, targetIndex, err := findTargetIndex(
-				index.ForeignKey.Table, index.ForeignKey.Index)
-			if err != nil {
-				return errors.Wrapf(err, "invalid foreign key")
-			}
-			found := false
-			for _, backref := range targetIndex.ReferencedBy {
-				if backref.Table == desc.ID && backref.Index == index.ID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return errors.AssertionFailedf("missing fk back reference to %q@%q from %q@%q",
-					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+	// Check foreign keys.
+	for _, fk := range desc.OutboundFKs {
+		referencedTable, err := getTable(fk.ReferencedTableID)
+		if err != nil {
+			return err
+		}
+		found := false
+		for _, backref := range referencedTable.InboundFKs {
+			if backref.OriginTableID == desc.ID &&
+				ColumnIDs(backref.OriginColumnIDs).EqualSets(fk.OriginColumnIDs) &&
+				ColumnIDs(backref.ReferencedColumnIDs).EqualSets(fk.ReferencedColumnIDs) {
+				found = true
+				break
 			}
 		}
-		fkBackrefs := make(map[ForeignKeyReference]struct{})
-		for _, backref := range index.ReferencedBy {
-			if _, ok := fkBackrefs[backref]; ok {
-				return errors.AssertionFailedf("duplicated fk backreference %+v", backref)
-			}
-			fkBackrefs[backref] = struct{}{}
-			targetTable, err := getTable(backref.Table)
-			if err != nil {
-				return errors.Wrapf(err, "invalid fk backreference table=%d index=%d",
-					backref.Table, errors.Safe(backref.Index))
-			}
-			targetIndex, err := targetTable.FindIndexByID(backref.Index)
-			if err != nil {
-				return errors.Wrapf(err, "invalid fk backreference table=%s index=%d",
-					targetTable.Name, errors.Safe(backref.Index))
-			}
-			if fk := targetIndex.ForeignKey; fk.Table != desc.ID || fk.Index != index.ID {
-				return errors.AssertionFailedf("broken fk backward reference from %q@%q to %q@%q",
-					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+		if !found {
+			return errors.AssertionFailedf("missing fk back reference %s to %q from %q",
+				fk.Name, desc.Name, referencedTable.Name)
+		}
+	}
+	for _, backRef := range desc.InboundFKs {
+		originTable, err := getTable(backRef.OriginTableID)
+		if err != nil {
+			return err
+		}
+		found := false
+		for _, fk := range originTable.OutboundFKs {
+			if fk.ReferencedTableID == desc.ID &&
+				ColumnIDs(fk.OriginColumnIDs).EqualSets(backRef.OriginColumnIDs) &&
+				ColumnIDs(fk.ReferencedColumnIDs).EqualSets(backRef.ReferencedColumnIDs) {
+				found = true
+				break
 			}
 		}
+		if !found {
+			return errors.AssertionFailedf("missing fk forward reference to %q from %q",
+				desc.Name, originTable.Name)
+		}
+	}
 
+	for _, index := range desc.AllNonDropIndexes() {
 		// Check interleaves.
 		if len(index.Interleave.Ancestors) > 0 {
 			// Only check the most recent ancestor, the rest of them don't point
@@ -2183,6 +2312,21 @@ func (desc *TableDescriptor) FindCheckByName(
 	return nil, fmt.Errorf("check %q does not exist", name)
 }
 
+// NamesForColumnIDs returns the names for the given column ids, or an error
+// if one or more column ids was missing. Note - this allocates! It's not for
+// hot path code.
+func (desc *TableDescriptor) NamesForColumnIDs(ids ColumnIDs) ([]string, error) {
+	names := make([]string, len(ids))
+	for i, id := range ids {
+		col, err := desc.FindColumnByID(id)
+		if err != nil {
+			return nil, err
+		}
+		names[i] = col.Name
+	}
+	return names, nil
+}
+
 // RenameIndexDescriptor renames an index descriptor.
 func (desc *MutableTableDescriptor) RenameIndexDescriptor(
 	index *IndexDescriptor, name string,
@@ -2211,7 +2355,7 @@ func (desc *MutableTableDescriptor) RenameIndexDescriptor(
 func (desc *MutableTableDescriptor) DropConstraint(
 	name string,
 	detail ConstraintDetail,
-	removeFK func(*MutableTableDescriptor, *IndexDescriptor) error,
+	removeFK func(*MutableTableDescriptor, *ForeignKeyConstraint) error,
 ) error {
 	switch detail.Kind {
 	case ConstraintTypePK:
@@ -2237,14 +2381,21 @@ func (desc *MutableTableDescriptor) DropConstraint(
 		return nil
 
 	case ConstraintTypeFK:
-		idx, err := desc.FindIndexByID(detail.Index.ID)
-		if err != nil {
+		if err := removeFK(desc, detail.FK); err != nil {
 			return err
 		}
-		if err := removeFK(desc, idx); err != nil {
-			return err
+		// Search through the descriptor's foreign key constraints and delete the
+		// one that we're supposed to be deleting.
+		foundIdx := -1
+		for i, ref := range desc.OutboundFKs {
+			if ref.Name == name {
+				foundIdx = i
+			}
 		}
-		idx.ForeignKey = ForeignKeyReference{}
+		if foundIdx == -1 {
+			return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
+		}
+		desc.OutboundFKs = append(desc.OutboundFKs[:foundIdx], desc.OutboundFKs[foundIdx+1:]...)
 		return nil
 
 	default:
@@ -2274,15 +2425,11 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.FK.Name))
 		}
-		idx, err := desc.FindIndexByID(detail.Index.ID)
+		fk, err := desc.FindFKByName(detail.FK.Name)
 		if err != nil {
 			return err
 		}
-		if !idx.ForeignKey.IsSet() || idx.ForeignKey.Name != oldName {
-			return errors.AssertionFailedf("constraint %q not found",
-				tree.ErrNameString(newName))
-		}
-		idx.ForeignKey.Name = newName
+		fk.Name = newName
 		return nil
 
 	case ConstraintTypeCheck:
@@ -2362,6 +2509,33 @@ func (desc *TableDescriptor) GetIndexMutationCapabilities(id IndexID) (bool, boo
 	return false, false
 }
 
+// FindIndexByID finds an index (active or inactive) with the specified ID.
+// Must return a pointer to the IndexDescriptor in the TableDescriptor, so that
+// callers can use returned values to modify the TableDesc.
+func (desc *TableDescriptor) FindFKByName(name string) (*ForeignKeyConstraint, error) {
+	for _, fk := range desc.OutboundFKs {
+		if fk.Name == name {
+			return fk, nil
+		}
+	}
+	return nil, fmt.Errorf("fk %q does not exist", name)
+}
+
+// FindFKForBackRef searches the table descriptor for the foreign key constraint
+// that matches the supplied backref, which is present on the supplied table id.
+func (desc *TableDescriptor) FindFKForBackRef(
+	referencedTableID ID, backref *ForeignKeyBackreference,
+) (*ForeignKeyConstraint, error) {
+	for _, fk := range desc.OutboundFKs {
+		if fk.ReferencedTableID == referencedTableID &&
+			ColumnIDs(fk.OriginColumnIDs).EqualSets(backref.OriginColumnIDs) &&
+			ColumnIDs(fk.ReferencedColumnIDs).EqualSets(backref.ReferencedColumnIDs) {
+			return fk, nil
+		}
+	}
+	return nil, errors.AssertionFailedf("could not find fk for backref %v", backref)
+}
+
 // IsInterleaved returns true if any part of this this table is interleaved with
 // another table's data.
 func (desc *TableDescriptor) IsInterleaved() bool {
@@ -2403,11 +2577,12 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
 				}
 			case ConstraintToUpdate_FOREIGN_KEY:
-				idx, err := desc.FindIndexByID(t.Constraint.ForeignKeyIndex)
-				if err != nil {
-					return err
+				for _, fk := range desc.OutboundFKs {
+					if fk.Name == t.Constraint.Name {
+						fk.Validity = ConstraintValidity_Validated
+						break
+					}
 				}
-				idx.ForeignKey.Validity = ConstraintValidity_Validated
 			case ConstraintToUpdate_NOT_NULL:
 				// Remove the dummy check constraint that was in place during validation
 				for i, c := range desc.Checks {
@@ -2450,16 +2625,13 @@ func (desc *MutableTableDescriptor) AddCheckMutation(ck *TableDescriptor_CheckCo
 }
 
 // AddForeignKeyValidationMutation adds a foreign key constraint validation mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(
-	fk *ForeignKeyReference, idx IndexID,
-) {
+func (desc *MutableTableDescriptor) AddForeignKeyValidationMutation(fk *ForeignKeyConstraint) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
 			Constraint: &ConstraintToUpdate{
-				ConstraintType:  ConstraintToUpdate_FOREIGN_KEY,
-				Name:            fk.Name,
-				ForeignKey:      *fk,
-				ForeignKeyIndex: idx,
+				ConstraintType: ConstraintToUpdate_FOREIGN_KEY,
+				Name:           fk.Name,
+				ForeignKey:     *fk,
 			},
 		},
 		Direction: DescriptorMutation_ADD,
@@ -2782,13 +2954,8 @@ func (f ForeignKeyReference) IsSet() bool {
 // InvalidateFKConstraints sets all FK constraints to un-validated.
 func (desc *TableDescriptor) InvalidateFKConstraints() {
 	// We don't use GetConstraintInfo because we want to edit the passed desc.
-	if desc.PrimaryIndex.ForeignKey.IsSet() {
-		desc.PrimaryIndex.ForeignKey.Validity = ConstraintValidity_Unvalidated
-	}
-	for i := range desc.Indexes {
-		if desc.Indexes[i].ForeignKey.IsSet() {
-			desc.Indexes[i].ForeignKey.Validity = ConstraintValidity_Unvalidated
-		}
+	for _, fk := range desc.OutboundFKs {
+		fk.Validity = ConstraintValidity_Unvalidated
 	}
 }
 
@@ -3114,20 +3281,17 @@ func (desc *DatabaseDescriptor) GetAuditMode() TableDescriptor_AuditMode {
 // FindAllReferences returns all the references from a table.
 func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 	refs := map[ID]struct{}{}
+	for _, fk := range desc.OutboundFKs {
+		refs[fk.ReferencedTableID] = struct{}{}
+	}
+	for _, fk := range desc.InboundFKs {
+		refs[fk.OriginTableID] = struct{}{}
+	}
 	if err := desc.ForeachNonDropIndex(func(index *IndexDescriptor) error {
 		for _, a := range index.Interleave.Ancestors {
 			refs[a.TableID] = struct{}{}
 		}
 		for _, c := range index.InterleavedBy {
-			refs[c.Table] = struct{}{}
-		}
-
-		if index.ForeignKey.IsSet() {
-			to := index.ForeignKey.Table
-			refs[to] = struct{}{}
-		}
-
-		for _, c := range index.ReferencedBy {
 			refs[c.Table] = struct{}{}
 		}
 		return nil

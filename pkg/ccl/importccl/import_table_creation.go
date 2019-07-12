@@ -173,12 +173,10 @@ func MakeSimpleTableDescriptor(
 // and the FKs to unvalidated.
 func fixDescriptorFKState(tableDesc *sqlbase.TableDescriptor) error {
 	tableDesc.State = sqlbase.TableDescriptor_PUBLIC
-	return tableDesc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
-		if idx.ForeignKey.IsSet() {
-			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
-		}
-		return nil
-	})
+	for _, fk := range tableDesc.OutboundFKs {
+		fk.Validity = sqlbase.ConstraintValidity_Unvalidated
+	}
+	return nil
 }
 
 var (

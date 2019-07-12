@@ -100,12 +100,12 @@ func (t *truncateNode) startExec(params runParams) error {
 		tableDesc := toTraverse[idx]
 		toTraverse = toTraverse[:idx]
 
-		maybeEnqueue := func(ref sqlbase.ForeignKeyReference, msg string) error {
+		maybeEnqueue := func(tableID sqlbase.ID, msg string) error {
 			// Check if we're already truncating the referencing table.
-			if _, ok := toTruncate[ref.Table]; ok {
+			if _, ok := toTruncate[tableID]; ok {
 				return nil
 			}
-			other, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
+			other, err := p.Tables().getMutableTableVersionByID(ctx, tableID, p.txn)
 			if err != nil {
 				return err
 			}
@@ -125,15 +125,14 @@ func (t *truncateNode) startExec(params runParams) error {
 			return nil
 		}
 
-		for _, idx := range tableDesc.AllNonDropIndexes() {
-			for _, ref := range idx.ReferencedBy {
-				if err := maybeEnqueue(ref, "referenced by foreign key from"); err != nil {
-					return err
-				}
+		for _, fk := range tableDesc.InboundFKs {
+			if err := maybeEnqueue(fk.OriginTableID, "referenced by foreign key from"); err != nil {
+				return err
 			}
-
+		}
+		for _, idx := range tableDesc.AllNonDropIndexes() {
 			for _, ref := range idx.InterleavedBy {
-				if err := maybeEnqueue(ref, "interleaved by"); err != nil {
+				if err := maybeEnqueue(ref.Table, "interleaved by"); err != nil {
 					return err
 				}
 			}
@@ -338,26 +337,21 @@ func reassignReferencedTables(
 					changed = true
 				}
 			}
-
-			if index.ForeignKey.IsSet() {
-				if to := index.ForeignKey.Table; to == oldID {
-					index.ForeignKey.Table = newID
-					changed = true
-				}
-			}
-
-			origRefs := index.ReferencedBy
-			index.ReferencedBy = nil
-			for _, ref := range origRefs {
-				if ref.Table == oldID {
-					ref.Table = newID
-					changed = true
-				}
-				index.ReferencedBy = append(index.ReferencedBy, ref)
-			}
 			return nil
 		}); err != nil {
 			return false, err
+		}
+		for _, fk := range table.OutboundFKs {
+			if fk.ReferencedTableID == oldID {
+				fk.ReferencedTableID = newID
+				changed = true
+			}
+		}
+		for _, fk := range table.InboundFKs {
+			if fk.OriginTableID == oldID {
+				fk.OriginTableID = newID
+				changed = true
+			}
 		}
 
 		for i, dest := range table.DependsOn {

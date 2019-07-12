@@ -606,7 +606,10 @@ CREATE TABLE information_schema.constraint_column_usage (
 					// identifies the table/columns that the foreign key
 					// references.
 					conTable = con.ReferencedTable
-					conCols = con.ReferencedIndex.ColumnNames
+					conCols, err = conTable.NamesForColumnIDs(con.FK.ReferencedColumnIDs)
+					if err != nil {
+						return err
+					}
 				}
 				tableNameStr := tree.NewDString(conTable.Name)
 				for _, col := range conCols {
@@ -805,38 +808,32 @@ CREATE TABLE information_schema.referential_constraints (
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
 			tbNameStr := tree.NewDString(table.Name)
-			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
-				fk := index.ForeignKey
-				if !fk.IsSet() {
-					return nil
-				}
-
-				refTable, err := tableLookup.getTableByID(fk.Table)
+			for _, fk := range table.OutboundFKs {
+				refTable, err := tableLookup.getTableByID(fk.ReferencedTableID)
 				if err != nil {
 					return err
 				}
-				refIndex, err := refTable.FindIndexByID(fk.Index)
-				if err != nil {
-					return err
-				}
-				var matchType tree.Datum = tree.DNull
+				var matchType = tree.DNull
 				if r, ok := matchOptionMap[fk.Match]; ok {
 					matchType = r
 				}
-				return addRow(
+				if err := addRow(
 					dbNameStr,                       // constraint_catalog
 					scNameStr,                       // constraint_schema
 					tree.NewDString(fk.Name),        // constraint_name
 					dbNameStr,                       // unique_constraint_catalog
 					scNameStr,                       // unique_constraint_schema
-					tree.NewDString(refIndex.Name),  // unique_constraint_name
+					tree.NewDString(fk.Name),        // unique_constraint_name
 					matchType,                       // match_option
 					dStringForFKAction(fk.OnUpdate), // update_rule
 					dStringForFKAction(fk.OnDelete), // delete_rule
 					tbNameStr,                       // table_name
 					tree.NewDString(refTable.Name),  // referenced_table_name
-				)
-			})
+				); err != nil {
+					return err
+				}
+			}
+			return nil
 		})
 	},
 }
@@ -1503,8 +1500,8 @@ func forEachTableDescAll(
 	virtualOpts virtualOpts,
 	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx,
-		p, dbContext, virtualOpts, true, /* allowAdding */
+	return forEachTableDescAllWithTableLookup(ctx,
+		p, dbContext, virtualOpts,
 		func(
 			db *sqlbase.DatabaseDescriptor,
 			scName string,
@@ -1513,6 +1510,19 @@ func forEachTableDescAll(
 		) error {
 			return fn(db, scName, table)
 		})
+}
+
+// forEachTableDescAllWithTableLookup is like forEachTableDescAll, but it also
+// provides a tableLookupFn like forEachTableDescWithTableLookup.
+func forEachTableDescAllWithTableLookup(
+	ctx context.Context,
+	p *planner,
+	dbContext *DatabaseDescriptor,
+	virtualOpts virtualOpts,
+	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor, tableLookupFn) error,
+) error {
+	return forEachTableDescWithTableLookupInternal(ctx,
+		p, dbContext, virtualOpts, true /* allowAdding */, fn)
 }
 
 // forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a

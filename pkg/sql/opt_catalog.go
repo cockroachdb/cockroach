@@ -346,7 +346,7 @@ func (oc *optCatalog) dataSourceForTable(
 		}
 	}
 
-	ds, err := newOptTable(desc, id, name, tableStats, zoneConfig)
+	ds, err := newOptTable(ctx, desc, id, name, tableStats, zoneConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -534,6 +534,7 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
+	ctx context.Context,
 	desc *sqlbase.ImmutableTableDescriptor,
 	id cat.StableID,
 	name *cat.DataSourceName,
@@ -585,32 +586,57 @@ func newOptTable(
 			}
 
 			ot.indexes[i].init(ot, i, idxDesc, idxZone)
-			if fk := &idxDesc.ForeignKey; fk.IsSet() {
-				ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
-					name:            idxDesc.ForeignKey.Name,
-					originTable:     ot.id,
-					originIndex:     idxDesc.ID,
-					referencedTable: cat.StableID(fk.Table),
-					referencedIndex: fk.Index,
-					numCols:         int(fk.SharedPrefixLen),
-					validity:        fk.Validity,
-					match:           fk.Match,
-				})
-			}
-			for j := range idxDesc.ReferencedBy {
-				fk := &idxDesc.ReferencedBy[j]
-				ot.inboundFKs = append(ot.inboundFKs, optForeignKeyConstraint{
-					name:            idxDesc.ForeignKey.Name,
-					originTable:     cat.StableID(fk.Table),
-					originIndex:     fk.Index,
-					referencedTable: ot.id,
-					referencedIndex: idxDesc.ID,
-					numCols:         int(fk.SharedPrefixLen),
-					validity:        fk.Validity,
-					match:           fk.Match,
-				})
-			}
 		}
+
+		for _, fk := range ot.desc.OutboundFKs {
+			originIdx, err := sqlbase.FindFKOriginIndex(ot.desc.TableDesc(), fk.OriginColumnIDs)
+			if err != nil {
+				return nil, err
+			}
+			referencedIdx, err := sqlbase.FindFKReferencedIndex(ot.desc.TableDesc(), fk.ReferencedColumnIDs)
+			if err != nil {
+				return nil, err
+			}
+			ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
+				name:            fk.Name,
+				originTable:     ot.id,
+				originIndex:     originIdx.ID,
+				referencedTable: cat.StableID(fk.ReferencedTableID),
+				referencedIndex: referencedIdx.ID,
+				numCols:         int(len(fk.OriginColumnIDs)),
+				validity:        fk.Validity,
+				match:           fk.Match,
+			})
+		}
+	}
+
+	for _, ref := range ot.desc.InboundFKs {
+		originIdx, err := sqlbase.FindFKOriginIndex(ot.desc.TableDesc(), ref.OriginColumnIDs)
+		if err != nil {
+			return nil, err
+		}
+		referencedIdx, err := sqlbase.FindFKReferencedIndex(ot.desc.TableDesc(), ref.ReferencedColumnIDs)
+		if err != nil {
+			return nil, err
+		}
+		fk, err := ot.desc.FindFKForBackRef(ot.desc.ID, ref)
+		if err != nil {
+			return nil, err
+		}
+		ot.outboundFKs = append(ot.outboundFKs, optForeignKeyConstraint{
+			name:            fk.Name,
+			originTable:     cat.StableID(ref.OriginTableID),
+			originIndex:     originIdx.ID,
+			referencedTable: ot.id,
+			referencedIndex: referencedIdx.ID,
+			numCols:         int(len(ref.OriginColumnIDs)),
+			validity:        fk.Validity,
+			// TODO(jordan,radu): beware, this is weird: the "delete" direction for
+			// fks always must use "match simple" at runtime. This is correct for
+			// now, but when we implement the optimizer logic for match full, this
+			// has to get attention.
+			match: fk.Match,
+		})
 	}
 
 	if len(desc.Families) == 0 {

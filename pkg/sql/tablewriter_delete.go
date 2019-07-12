@@ -79,7 +79,7 @@ func fastPathDeleteAvailable(ctx context.Context, desc *ImmutableTableDescriptor
 		}
 		return false
 	}
-	if len(desc.PrimaryIndex.ReferencedBy) > 0 {
+	if len(desc.InboundFKs) > 0 {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is referenced by foreign keys")
 		}
