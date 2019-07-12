@@ -2525,6 +2525,14 @@ func (desc *TableDescriptor) FindFKByName(name string) (*ForeignKeyConstraint, e
 
 // FindFKForBackRef searches the table descriptor for the foreign key constraint
 // that matches the supplied backref, which is present on the supplied table id.
+// Our current restriction that each column in a table can be on the referencing
+// side of at most one FK relationship means that there's no possibility of
+// ambiguity when finding the forward FK reference for a given backreference,
+// since ambiguity would require an identical list of referencing columns. This
+// would continue to hold even if we were to lift that restriction (see #38850), as long as
+// it were still prohibited to create multiple foreign key relationships with
+// exactly identical lists of referenced and referencing columns, which we think
+// is a reasonable restriction (even though Postgres does allow doing this).
 func (desc *TableDescriptor) FindFKForBackRef(
 	referencedTableID ID, backref *ForeignKeyBackreference,
 ) (*ForeignKeyConstraint, error) {

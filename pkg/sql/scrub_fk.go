@@ -107,7 +107,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		columnsByID[o.tableDesc.Columns[i].ID] = &o.tableDesc.Columns[i]
 	}
 
-	colIDs, _ := o.constraint.Index.FullColumnIDs()
+	colIDs := o.constraint.FK.OriginColumnIDs
 	o.colIDToRowIdx = make(map[sqlbase.ColumnID]int, len(colIDs))
 	for i, id := range colIDs {
 		o.colIDToRowIdx[id] = i
@@ -135,18 +135,11 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		primaryKeyDatums = append(primaryKeyDatums, row[idx])
 	}
 
-	// Collect all of the values fetched from the index to generate a
-	// pretty JSON dictionary for row_data.
-	for _, id := range o.constraint.Index.ColumnIDs {
-		idx := o.colIDToRowIdx[id]
-		name := o.constraint.Index.ColumnNames[idx]
-		rowDetails[name] = row[idx].String()
-	}
-	for _, id := range o.constraint.Index.ExtraColumnIDs {
-		idx := o.colIDToRowIdx[id]
-		col, err := o.tableDesc.FindActiveColumnByID(id)
-		if err != nil {
-			return nil, err
+	// Generate a JSON dictionary for all columns with entries in colIDToRowIdx.
+	for _, col := range o.tableDesc.Columns {
+		idx, ok := o.colIDToRowIdx[col.ID]
+		if !ok {
+			continue
 		}
 		rowDetails[col.Name] = row[idx].String()
 	}
