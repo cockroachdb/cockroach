@@ -194,7 +194,7 @@ func NewMergeJoinOp(
 	leftOrdering []distsqlpb.Ordering_Column,
 	rightOrdering []distsqlpb.Ordering_Column,
 ) (Operator, error) {
-	base, err := newMergeJoinBase(joinType, left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
+	base, err := newMergeJoinBase(left, right, leftOutCols, rightOutCols, leftTypes, rightTypes, leftOrdering, rightOrdering)
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 		return &mergeJoinInnerOp{base}, err
@@ -244,7 +244,6 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 }
 
 func newMergeJoinBase(
-	joinType sqlbase.JoinType,
 	left Operator,
 	right Operator,
 	leftOutCols []uint32,
@@ -269,7 +268,6 @@ func newMergeJoinBase(
 	}
 
 	base := mergeJoinBase{
-		joinType: joinType,
 		left: mergeJoinInput{
 			source:      left,
 			outCols:     leftOutCols,
@@ -300,9 +298,8 @@ func newMergeJoinBase(
 
 // mergeJoinBase extract the common logic between all merge join operators.
 type mergeJoinBase struct {
-	joinType sqlbase.JoinType
-	left     mergeJoinInput
-	right    mergeJoinInput
+	left  mergeJoinInput
+	right mergeJoinInput
 
 	// Output buffer definition.
 	output            coldata.Batch
