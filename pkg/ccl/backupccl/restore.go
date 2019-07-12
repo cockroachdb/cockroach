@@ -44,7 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // TableRewriteMap maps old table IDs to new table and parent IDs.
@@ -258,21 +258,15 @@ func allocateTableRewrites(
 	// options.
 	for _, table := range tablesByID {
 		// Check that foreign key targets exist.
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
-			if index.ForeignKey.IsSet() {
-				to := index.ForeignKey.Table
-				if _, ok := tablesByID[to]; !ok {
-					if _, ok := opts[restoreOptSkipMissingFKs]; !ok {
-						return errors.Errorf(
-							"cannot restore table %q without referenced table %d (or %q option)",
-							table.Name, to, restoreOptSkipMissingFKs,
-						)
-					}
+		for _, fk := range table.OutboundFKs {
+			if _, ok := tablesByID[fk.ReferencedTableID]; !ok {
+				if _, ok := opts[restoreOptSkipMissingFKs]; !ok {
+					return nil, errors.Errorf(
+						"cannot restore table %q without referenced table %d (or %q option)",
+						table.Name, fk.ReferencedTableID, restoreOptSkipMissingFKs,
+					)
 				}
 			}
-			return nil
-		}); err != nil {
-			return nil, err
 		}
 
 		// Check that referenced sequences exist.
@@ -476,34 +470,38 @@ func RewriteTableDescs(
 				}
 				index.InterleavedBy[j].Table = childRewrite.TableID
 			}
-
-			if index.ForeignKey.IsSet() {
-				to := index.ForeignKey.Table
-				if indexRewrite, ok := tableRewrites[to]; ok {
-					index.ForeignKey.Table = indexRewrite.TableID
-				} else {
-					// If indexRewrite doesn't exist, the user has specified
-					// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
-					// already been done in allocateTableRewrites.
-					index.ForeignKey = sqlbase.ForeignKeyReference{}
-				}
-
-				// TODO(dt): if there is an existing (i.e. non-restoring) table with
-				// a db and name matching the one the FK pointed to at backup, should
-				// we update the FK to point to it?
-			}
-
-			origRefs := index.ReferencedBy
-			index.ReferencedBy = nil
-			for _, ref := range origRefs {
-				if refRewrite, ok := tableRewrites[ref.Table]; ok {
-					ref.Table = refRewrite.TableID
-					index.ReferencedBy = append(index.ReferencedBy, ref)
-				}
-			}
 			return nil
 		}); err != nil {
 			return err
+		}
+
+		// TODO(lucy): deal with outbound foreign key mutations here as well.
+		origFKs := table.OutboundFKs
+		table.OutboundFKs = nil
+		for _, fk := range origFKs {
+			to := fk.ReferencedTableID
+			if indexRewrite, ok := tableRewrites[to]; ok {
+				fk.ReferencedTableID = indexRewrite.TableID
+			} else {
+				// If indexRewrite doesn't exist, the user has specified
+				// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
+				// already been done in allocateTableRewrites.
+				continue
+			}
+
+			// TODO(dt): if there is an existing (i.e. non-restoring) table with
+			// a db and name matching the one the FK pointed to at backup, should
+			// we update the FK to point to it?
+			table.OutboundFKs = append(table.OutboundFKs, fk)
+		}
+
+		origInboundFks := table.InboundFKs
+		table.InboundFKs = nil
+		for _, ref := range origInboundFks {
+			if refRewrite, ok := tableRewrites[ref.OriginTableID]; ok {
+				ref.OriginTableID = refRewrite.TableID
+				table.InboundFKs = append(table.InboundFKs, ref)
+			}
 		}
 
 		for i, dest := range table.DependsOn {

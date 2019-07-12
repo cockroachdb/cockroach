@@ -627,6 +627,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	// TODO (jordan, lucy): upgrade these test cases to use the new representation.
+	// Separately, write tests similar to these that exercise the upgrade and downgrade methods.
+
 	tests := []struct {
 		err        string
 		desc       TableDescriptor
@@ -834,6 +837,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 
 	for i, test := range tests {
 		for _, referencedDesc := range test.referenced {
+			referencedDesc.Privileges = NewDefaultPrivilegeDescriptor()
 			var v roachpb.Value
 			desc := &Descriptor{Union: &Descriptor_Table{Table: &referencedDesc}}
 			if err := v.SetProto(desc); err != nil {

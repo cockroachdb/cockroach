@@ -561,7 +561,7 @@ func (s LeaseStore) getForExpiration(
 		if !tableDesc.ModificationTime.Less(prevTimestamp) {
 			return errors.AssertionFailedf("unable to read table= (%d, %s)", id, expiration)
 		}
-		if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+		if err := tableDesc.MaybeFillInDescriptor(ctx, txn); err != nil {
 			return err
 		}
 		// Create a tableVersionState with the table and without a lease.
