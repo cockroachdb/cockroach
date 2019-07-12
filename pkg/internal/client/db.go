@@ -541,7 +541,8 @@ func (db *DB) AdminChangeReplicas(
 		return nil, errors.Errorf("unexpected response of type %T for AdminChangeReplicas",
 			responses[0].GetInner())
 	}
-	return resp.Desc, nil
+	desc := resp.Desc
+	return &desc, nil
 }
 
 // AdminRelocateRange relocates the replicas for a range onto the specified

@@ -12762,7 +12762,6 @@ bool AdminChangeReplicasRequest::MergePartialFromCodedStream(
         break;
       }
 
-      // .cockroach.roachpb.RangeDescriptor exp_desc = 4;
       case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
@@ -12819,7 +12818,6 @@ void AdminChangeReplicasRequest::SerializeWithCachedSizes(
       output);
   }
 
-  // .cockroach.roachpb.RangeDescriptor exp_desc = 4;
   if (this->has_exp_desc()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       4, this->_internal_exp_desc(), output);
@@ -12852,7 +12850,6 @@ size_t AdminChangeReplicasRequest::ByteSizeLong() const {
         *header_);
   }
 
-  // .cockroach.roachpb.RangeDescriptor exp_desc = 4;
   if (this->has_exp_desc()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
@@ -13035,7 +13032,6 @@ bool AdminChangeReplicasResponse::MergePartialFromCodedStream(
         break;
       }
 
-      // .cockroach.roachpb.RangeDescriptor desc = 2;
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
@@ -13078,7 +13074,6 @@ void AdminChangeReplicasResponse::SerializeWithCachedSizes(
       1, this->_internal_header(), output);
   }
 
-  // .cockroach.roachpb.RangeDescriptor desc = 2;
   if (this->has_desc()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       2, this->_internal_desc(), output);
@@ -13101,7 +13096,6 @@ size_t AdminChangeReplicasResponse::ByteSizeLong() const {
         *header_);
   }
 
-  // .cockroach.roachpb.RangeDescriptor desc = 2;
   if (this->has_desc()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(

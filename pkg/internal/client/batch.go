@@ -658,7 +658,7 @@ func (b *Batch) adminChangeReplicas(
 		},
 		ChangeType: changeType,
 		Targets:    targets,
-		ExpDesc:    &expDesc,
+		ExpDesc:    expDesc,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
