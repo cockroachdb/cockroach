@@ -1960,7 +1960,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				s := mergeJoinInnerOp{
 					mergeJoinBase{
-						joinType: sqlbase.JoinType_INNER,
 						left: mergeJoinInput{
 							eqCols:      []uint32{0},
 							outCols:     []uint32{0, 1},
@@ -2002,7 +2001,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				s := mergeJoinInnerOp{
 					mergeJoinBase{
-						joinType: sqlbase.JoinType_INNER,
 						left: mergeJoinInput{
 							eqCols:      []uint32{0},
 							outCols:     []uint32{0, 1},
@@ -2045,7 +2043,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				s := mergeJoinInnerOp{
 					mergeJoinBase{
-						joinType: sqlbase.JoinType_INNER,
 						left: mergeJoinInput{
 							eqCols:      []uint32{0},
 							outCols:     []uint32{0, 1},
