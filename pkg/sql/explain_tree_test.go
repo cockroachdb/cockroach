@@ -565,7 +565,7 @@ func assertExpectedPlansForTests(t *testing.T, sqlSetup string, plansToTest []*T
 		actualPlanTree := planToTree(ctx, &p.curPlan)
 		assert.Equal(t, test.ExpectedPlanTree, actualPlanTree,
 			"planToTree for %s:\nexpected:%s\nactual:%s", test.SQL, test.ExpectedPlanTree, actualPlanTree)
-		actualPlanString := planToString(ctx, p.curPlan.plan, p.curPlan.subqueryPlans)
+		actualPlanString := planToString(ctx, p.curPlan.plan, p.curPlan.subqueryPlans, p.curPlan.postqueryPlans)
 		assert.Equal(t, test.ExpectedPlanString, actualPlanString,
 			"planToString for %s:\nexpected:%s\nactual:%s", test.SQL, test.ExpectedPlanString, actualPlanString)
 	}

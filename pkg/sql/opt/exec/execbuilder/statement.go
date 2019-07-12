@@ -98,9 +98,10 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 	for i, c := range explain.ColList {
 		ep.outputCols.Set(int(c), i)
 	}
-	// The subqueries are now owned by the explain node; remove them so they don't
-	// also show up in the final plan.
+	// The sub- and postqueries are now owned by the explain node; remove them so
+	// they don't also show up in the final plan.
 	b.subqueries = b.subqueries[:0]
+	b.postqueries = b.postqueries[:0]
 	return ep, nil
 }
 
