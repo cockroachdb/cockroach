@@ -245,10 +245,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 		if i%splitEvery == 0 {
 			splits = append(splits, key(i))
 		}
-		if err := w.Add(engine.MVCCKeyValue{
-			Key:   engine.MVCCKey{Key: key(i)},
-			Value: roachpb.MakeValueFromString(string(buf)).RawBytes,
-		}); err != nil {
+		if err := w.Put(engine.MVCCKey{Key: key(i)}, roachpb.MakeValueFromString(string(buf)).RawBytes); err != nil {
 			t.Fatal(err)
 		}
 	}
