@@ -479,6 +479,12 @@ DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key);
 // SST. `Open` must have been called. `Close` cannot have been called.
 DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter* fw, DBKey start, DBKey end);
 
+// Truncates the writer and stores the constructed file's contents in *data.
+// May be called multiple times. The returned data won't necessarily reflect
+// the latest writes, only the keys whose underlying RocksDB blocks have been
+// flushed. Close cannot have been called.
+DBStatus DBSstFileWriterTruncate(DBSstFileWriter *fw, DBString* data);
+
 // Finalizes the writer and stores the constructed file's contents in *data. At
 // least one kv entry must have been added. May only be called once.
 DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data);
