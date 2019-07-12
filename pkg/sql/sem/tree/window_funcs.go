@@ -507,6 +507,51 @@ func (wfr *WindowFrameRun) RangeModeWithOffsets() bool {
 	return wfr.Frame.Mode == RANGE && wfr.Frame.Bounds.HasOffset()
 }
 
+// FullPartitionIsInWindow checks whether we have such a window frame that all
+// rows of the partition are inside of the window for each of the rows.
+func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
+	if wfr.Frame == nil {
+		return false
+	}
+	if wfr.Frame.Bounds.EndBound == nil {
+		// If the end bound is omitted, it is CURRENT ROW (the default value) which
+		// doesn't guarantee full partition in the window for all rows.
+		return false
+	}
+	// precedingConfirmed and followingConfirmed indicate whether, for every row,
+	// all preceding and following, respectively, rows are always in the window.
+	precedingConfirmed := wfr.Frame.Bounds.StartBound.BoundType == UnboundedPreceding
+	followingConfirmed := wfr.Frame.Bounds.EndBound.BoundType == UnboundedFollowing
+	if wfr.Frame.Mode == ROWS || wfr.Frame.Mode == GROUPS {
+		// Every peer group in GROUPS mode contains always contains at least one
+		// row, so treating GROUPS as ROWS here is a subset of the cases when we
+		// should return true.
+		if wfr.Frame.Bounds.StartBound.BoundType == OffsetPreceding {
+			// Both ROWS and GROUPS have an offset of integer type, so this type
+			// conversion is safe.
+			startOffset := wfr.StartBoundOffset.(*DInt)
+			// The idea of this conditional is that to confirm that all preceding
+			// rows will always be in the window, we only need to look at the last
+			// row: if startOffset is at least as large as the number of rows in the
+			// partition before the last one, then it will be true for the first to
+			// last, second to last, etc.
+			precedingConfirmed = precedingConfirmed || *startOffset >= DInt(wfr.Rows.Len()-1)
+		}
+		if wfr.Frame.Bounds.EndBound.BoundType == OffsetFollowing {
+			// Both ROWS and GROUPS have an offset of integer type, so this type
+			// conversion is safe.
+			endOffset := wfr.EndBoundOffset.(*DInt)
+			// The idea of this conditional is that to confirm that all following
+			// rows will always be in the window, we only need to look at the first
+			// row: if endOffset is at least as large as the number of rows in the
+			// partition after the first one, then it will be true for the second,
+			// third, etc rows as well.
+			followingConfirmed = followingConfirmed || *endOffset >= DInt(wfr.Rows.Len()-1)
+		}
+	}
+	return precedingConfirmed && followingConfirmed
+}
+
 // WindowFunc performs a computation on each row using data from a provided *WindowFrameRun.
 type WindowFunc interface {
 	// Compute computes the window function for the provided window frame, given the
