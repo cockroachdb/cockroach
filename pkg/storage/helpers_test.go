@@ -391,7 +391,7 @@ func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyVal
 		Value: v.RawBytes,
 	}
 
-	if err := sst.Add(kv); err != nil {
+	if err := sst.Put(kv.Key, kv.Value); err != nil {
 		panic(errors.Wrap(err, "while finishing SSTable"))
 	}
 	b, err := sst.Finish()
