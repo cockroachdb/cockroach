@@ -5675,7 +5675,6 @@ class AdminChangeReplicasRequest : public ::google::protobuf::MessageLite /* @@p
   ::cockroach::roachpb::RequestHeader* mutable_header();
   void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
 
-  // .cockroach.roachpb.RangeDescriptor exp_desc = 4;
   bool has_exp_desc() const;
   void clear_exp_desc();
   static const int kExpDescFieldNumber = 4;
@@ -5802,7 +5801,6 @@ class AdminChangeReplicasResponse : public ::google::protobuf::MessageLite /* @@
   ::cockroach::roachpb::ResponseHeader* mutable_header();
   void set_allocated_header(::cockroach::roachpb::ResponseHeader* header);
 
-  // .cockroach.roachpb.RangeDescriptor desc = 2;
   bool has_desc() const;
   void clear_desc();
   static const int kDescFieldNumber = 2;
@@ -20100,7 +20098,6 @@ AdminChangeReplicasRequest::targets() const {
   return targets_;
 }
 
-// .cockroach.roachpb.RangeDescriptor exp_desc = 4;
 inline bool AdminChangeReplicasRequest::has_exp_desc() const {
   return this != internal_default_instance() && exp_desc_ != NULL;
 }
@@ -20205,7 +20202,6 @@ inline void AdminChangeReplicasResponse::set_allocated_header(::cockroach::roach
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AdminChangeReplicasResponse.header)
 }
 
-// .cockroach.roachpb.RangeDescriptor desc = 2;
 inline bool AdminChangeReplicasResponse::has_desc() const {
   return this != internal_default_instance() && desc_ != NULL;
 }
