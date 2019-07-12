@@ -40,6 +40,7 @@ const (
 	VersionStickyBit
 	VersionParallelCommits
 	VersionGenerationComparable
+	VersionSSTableSnapshots
 
 	// Add new versions here (step one of two).
 
@@ -482,6 +483,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionGenerationComparable is https://github.com/cockroachdb/cockroach/pull/38334.
 		Key:     VersionGenerationComparable,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 5},
+	},
+	{
+		// VersionSSTableSnapshots is https://github.com/cockroachdb/cockroach/pull/38873.
+		Key:     VersionSSTableSnapshots,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 6},
 	},
 
 	// Add new versions here (step two of two).
