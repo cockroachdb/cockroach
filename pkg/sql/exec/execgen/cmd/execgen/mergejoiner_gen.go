@@ -107,8 +107,8 @@ func genMergeJoinOps(wr io.Writer) error {
 	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 3)
 	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2 "HasNulls" $3 }}`)
 
-	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 2)
-	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "HasSelection" $1  "HasNulls" $2 }}`)
+	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 3)
+	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2  "HasNulls" $3 }}`)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
 	s = assignEqRe.ReplaceAllString(s, `{{.Eq.Assign $1 $2 $3}}`)

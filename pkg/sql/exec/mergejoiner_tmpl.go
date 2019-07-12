@@ -621,11 +621,17 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 					toAppend = outputBatchSize - outStartIdx
 				}
 
-				// TODO(yuzefovich): template out this if block.
+				// {{ if _JOIN_TYPE.IsRightOuter }}
+				// {{/*
+				// Null groups on the left can only occur with RIGHT OUTER and FULL
+				// OUTER joins for both of which IsRightOuter is true. For other joins,
+				// we're omitting this check.
+				// */}}
 				if leftGroup.nullGroup {
 					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
 					outStartIdx += toAppend
 				} else {
+					// {{ end }}
 					var isNull bool
 					// {{ if _HAS_NULLS }}
 					isNull = src.Nulls().NullAt64(uint64(srcStartIdx))
@@ -642,7 +648,9 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 							outStartIdx++
 						}
 					}
+					// {{ if _JOIN_TYPE.IsRightOuter }}
 				}
+				// {{ end }}
 
 				if toAppend < repeatsLeft {
 					// We didn't materialize all the rows in the group so save state and
@@ -735,8 +743,9 @@ LeftColLoop:
 // {{/*
 // This code snippet builds the output corresponding to the right side (i.e. is
 // the main body of buildRightGroups()).
-func _RIGHT_SWITCH(_HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
+func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 	// {{define "rightSwitch"}}
+	// {{ $joinType := .JoinType }}
 
 	switch colType {
 	// {{range $.Global.MJOverloads }}
@@ -757,10 +766,16 @@ func _RIGHT_SWITCH(_HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 					toAppend = outputBatchSize - outStartIdx
 				}
 
-				// TODO(yuzefovich): template out this if block.
+				// {{ if _JOIN_TYPE.IsLeftOuter }}
+				// {{/*
+				// Null groups on the right can only occur with LEFT OUTER and FULL
+				// OUTER joins for both of which IsLeftOuter is true. For other joins,
+				// we're omitting this check.
+				// */}}
 				if rightGroup.nullGroup {
 					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
 				} else {
+					// {{ end }}
 					// {{ if _HAS_NULLS }}
 					// {{ if _HAS_SELECTION }}
 					out.Nulls().ExtendWithSel(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend), sel)
@@ -786,7 +801,9 @@ func _RIGHT_SWITCH(_HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 						copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
 						// {{ end }}
 					}
+					// {{ if _JOIN_TYPE.IsLeftOuter }}
 				}
+				// {{ end }}
 
 				outStartIdx += toAppend
 
@@ -818,6 +835,8 @@ func _RIGHT_SWITCH(_HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 
 // */}}
 
+// {{ range $joinType := .JoinTypes }}
+
 // buildRightGroups takes a []group and repeats each group numRepeats times.
 // For example, given an input table:
 //  R1 |  R2
@@ -837,7 +856,7 @@ func _RIGHT_SWITCH(_HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 // Note: this is different from buildLeftGroups in that each group is not
 // expanded but directly copied numRepeats times.
 // SIDE EFFECTS: writes into o.output.
-func (o *mergeJoinBase) buildRightGroups(
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroups(
 	rightGroups []group,
 	colOffset int,
 	input *mergeJoinInput,
@@ -859,15 +878,15 @@ RightColLoop:
 
 		if sel != nil {
 			if src.MaybeHasNulls() {
-				_RIGHT_SWITCH(true, true)
+				_RIGHT_SWITCH(_JOIN_TYPE, true, true)
 			} else {
-				_RIGHT_SWITCH(true, false)
+				_RIGHT_SWITCH(_JOIN_TYPE, true, false)
 			}
 		} else {
 			if src.MaybeHasNulls() {
-				_RIGHT_SWITCH(false, true)
+				_RIGHT_SWITCH(_JOIN_TYPE, false, true)
 			} else {
-				_RIGHT_SWITCH(false, false)
+				_RIGHT_SWITCH(_JOIN_TYPE, false, false)
 			}
 		}
 
@@ -875,6 +894,8 @@ RightColLoop:
 	}
 	o.builderState.right.reset()
 }
+
+// {{ end }}
 
 // isBufferedGroupFinished checks to see whether or not the buffered group
 // corresponding to input continues in batch.
