@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -162,10 +164,16 @@ func (p *planner) dropIndexByName(
 
 	// First check if there's indexes for the outgoing FKs.
 	// TODO(jordan, radu) remove this restriction.
-	outputIdx := 0
+
+	// An FK can be removed by DROP CASCADE only if it is not being added/validated.
+	removableFKs := make(map[string]struct{})
 	for _, fk := range tableDesc.OutboundFKs {
-		tableDesc.OutboundFKs[outputIdx] = fk
-		outputIdx++
+		if fk.Validity != sqlbase.ConstraintValidity_Validating {
+			removableFKs[fk.Name] = struct{}{}
+		}
+	}
+	fksToDrop := make(map[string]struct{})
+	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
 		// First, check if the index we're dropping matches this outbound FK.
 		if !sqlbase.ColumnIDs(fk.OriginColumnIDs).EqualSets(idx.ColumnIDs) {
 			// If there's no match, then there's no need to check anything further.
@@ -186,17 +194,27 @@ func (p *planner) dropIndexByName(
 			foundOtherIndexThatSatisfiesFK = true
 		}
 		if !foundOtherIndexThatSatisfiesFK {
+			if _, ok := removableFKs[fk.Name]; !ok {
+				// TODO (lucy): !!! improve this error message
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"constraint %q in the middle of being added, try again later", fk.Name)
+			}
 			if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
 				return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 			}
 			// Now, drop the reference from the table that the index we're
-			// dropping. All we have to do is decrement our outputIdx, which
-			// effectively deletes the element that we're currently looking at from
-			// the list.
-			outputIdx--
+			// dropping.
+			// TODO (lucy): !!! also remove the FK
 			if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
 				return err
 			}
+		}
+	}
+	outputIdx := 0
+	for _, fk := range tableDesc.OutboundFKs {
+		tableDesc.OutboundFKs[outputIdx] = fk
+		if _, ok := fksToDrop[fk.Name]; !ok {
+			outputIdx++
 		}
 	}
 	tableDesc.OutboundFKs = tableDesc.OutboundFKs[:outputIdx]
