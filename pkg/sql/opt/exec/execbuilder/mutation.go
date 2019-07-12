@@ -12,6 +12,7 @@ package execbuilder
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -25,20 +26,42 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
-	// Build the input query and ensure that the input columns that correspond to
-	// the table columns are projected.
-	input, err := b.buildRelational(ins.Input)
+func (b *Builder) buildMutationInput(
+	inputExpr memo.RelExpr, colList opt.ColList, p *memo.MutationPrivate,
+) (execPlan, error) {
+	input, err := b.buildRelational(inputExpr)
 	if err != nil {
 		return execPlan{}, err
 	}
 
+	input, err = b.ensureColumns(input, colList, nil, inputExpr.ProvidedPhysical().Ordering)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	if p.WithID != 0 {
+		label := fmt.Sprintf("buffer %d", p.WithID)
+		input.root, err = b.factory.ConstructBuffer(input.root, label)
+		if err != nil {
+			return execPlan{}, err
+		}
+
+		b.withExprs = append(b.withExprs, builtWithExpr{
+			id:         p.WithID,
+			outputCols: input.outputCols,
+			bufferNode: input.root,
+		})
+	}
+	return input, nil
+}
+
+func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
 	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, ins.Input.ProvidedPhysical().Ordering)
+	input, err := b.buildMutationInput(ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -75,13 +98,6 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
-	// Build the input query and ensure that the fetch and update columns are
-	// projected.
-	input, err := b.buildRelational(upd.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	// Currently, the execution engine requires one input column for each fetch
 	// and update expression, so use ensureColumns to map and reorder colums so
 	// that they correspond to target table columns. For example:
@@ -97,7 +113,8 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, upd.Input.ProvidedPhysical().Ordering)
+
+	input, err := b.buildMutationInput(upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -130,13 +147,6 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
-	// Build the input query and ensure that the insert, fetch, and update columns
-	// are projected.
-	input, err := b.buildRelational(ups.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	// Currently, the execution engine requires one input column for each insert,
 	// fetch, and update expression, so use ensureColumns to map and reorder
 	// columns so that they correspond to target table columns. For example:
@@ -164,7 +174,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		colList = append(colList, ups.CanaryCol)
 	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, ups.Input.ProvidedPhysical().Ordering)
+	input, err := b.buildMutationInput(ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -212,19 +222,13 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 		return b.buildDeleteRange(del)
 	}
 
-	// Build the input query and ensure that the fetch columns are projected.
-	input, err := b.buildRelational(del.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
 	// Ensure that order of input columns matches order of target table columns.
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
 	colList := make(opt.ColList, 0, len(del.FetchCols))
 	colList = appendColsWhenPresent(colList, del.FetchCols)
-	input, err = b.ensureColumns(input, colList, nil, del.Input.ProvidedPhysical().Ordering)
+	input, err := b.buildMutationInput(del.Input, colList, &del.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}

@@ -360,8 +360,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
+			f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 			f.formatColList(e, tp, "check columns:", t.CheckCols)
+			f.formatMutationWithID(tp, t.WithID)
 		}
 
 	case *UpdateExpr:
@@ -370,8 +371,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Child("columns: <none>")
 			}
 			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-			f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
+			f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
 			f.formatColList(e, tp, "check columns:", t.CheckCols)
+			f.formatMutationWithID(tp, t.WithID)
 		}
 
 	case *UpsertExpr:
@@ -382,13 +384,14 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if t.CanaryCol != 0 {
 				tp.Childf("canary column: %d", t.CanaryCol)
 				f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-				f.formatMutation(e, tp, "insert-mapping:", t.InsertCols, t.Table)
-				f.formatMutation(e, tp, "update-mapping:", t.UpdateCols, t.Table)
-				f.formatMutation(e, tp, "return-mapping:", t.ReturnCols, t.Table)
+				f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
+				f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
+				f.formatMutationCols(e, tp, "return-mapping:", t.ReturnCols, t.Table)
 			} else {
-				f.formatMutation(e, tp, "upsert-mapping:", t.InsertCols, t.Table)
+				f.formatMutationCols(e, tp, "upsert-mapping:", t.InsertCols, t.Table)
 			}
 			f.formatColList(e, tp, "check columns:", t.CheckCols)
+			f.formatMutationWithID(tp, t.WithID)
 		}
 
 	case *DeleteExpr:
@@ -397,6 +400,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Child("columns: <none>")
 			}
 			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+			f.formatMutationWithID(tp, t.WithID)
 		}
 
 	case *WithScanExpr:
@@ -809,13 +813,13 @@ func (f *ExprFmtCtx) formatColList(
 	}
 }
 
-// formatMutation adds a new treeprinter child for each non-zero column in the
+// formatMutationCols adds a new treeprinter child for each non-zero column in the
 // given list. Each child shows how the column will be mutated, with the id of
 // the "before" and "after" columns, similar to this:
 //
 //   a:1 => x:4
 //
-func (f *ExprFmtCtx) formatMutation(
+func (f *ExprFmtCtx) formatMutationCols(
 	nd RelExpr, tp treeprinter.Node, heading string, colList opt.ColList, tabID opt.TableID,
 ) {
 	if len(colList) == 0 {
@@ -831,6 +835,14 @@ func (f *ExprFmtCtx) formatMutation(
 			formatCol(f, "" /* label */, tabID.ColumnID(i), opt.ColSet{}, true /* omitType */)
 			tpChild.Child(f.Buffer.String())
 		}
+	}
+}
+
+// formatMutationWithID shows the binding ID, if the mutation is buffering its
+// input.
+func (f *ExprFmtCtx) formatMutationWithID(tp treeprinter.Node, id opt.WithID) {
+	if id != 0 {
+		tp.Childf("input binding: &%d", id)
 	}
 }
 

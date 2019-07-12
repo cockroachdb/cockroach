@@ -20,3 +20,19 @@ INSERT INTO child VALUES (1,1), (2,2), (3,3)
 
 statement ok
 INSERT INTO child VALUES (1,1), (2,2)
+
+# Use data from a different table as input.
+statement ok
+CREATE TABLE xy (x INT, y INT)
+
+statement ok
+INSERT INTO xy VALUES (4, 4), (5, 5), (6, 6)
+
+statement error insert or update on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(4\) is not present in table "parent"\.
+INSERT INTO child SELECT x,y FROM xy
+
+statement ok
+INSERT INTO parent SELECT x FROM xy
+
+statement ok
+INSERT INTO child SELECT x,y FROM xy
