@@ -757,7 +757,7 @@ func BenchmarkRocksDBSstFileWriter(b *testing.B) {
 		kv.Key.Key = []byte(fmt.Sprintf("%09d", i))
 		copy(kv.Value, kv.Key.Key)
 		b.StartTimer()
-		if err := sst.Add(kv); err != nil {
+		if err := sst.Put(kv.Key, kv.Value); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -800,7 +800,7 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 		for i := 0; i < entries; i++ {
 			kv.Key.Key = []byte(fmt.Sprintf("%09d", i))
 			copy(kv.Value, kv.Key.Key)
-			if err := sst.Add(kv); err != nil {
+			if err := sst.Put(kv.Key, kv.Value); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -1342,7 +1342,7 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 				},
 				Value: randutil.RandBytes(rnd, valueSize),
 			}
-			if err := sst.Add(kv); err != nil {
+			if err := sst.Put(kv.Key, kv.Value); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1469,7 +1469,7 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 									Key: makeKey(i),
 								},
 							}
-							if err := sst.Add(kv); err != nil {
+							if err := sst.Put(kv.Key, kv.Value); err != nil {
 								b.Fatal(err)
 							}
 						}
@@ -1588,10 +1588,7 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 			t.Fatal(sst)
 		}
 		defer sst.Close()
-		if err := sst.Add(MVCCKeyValue{
-			Key:   MVCCKey{Key: []byte("key"), Timestamp: hlc.Timestamp{WallTime: walltime}},
-			Value: []byte("value"),
-		}); err != nil {
+		if err := sst.Put(MVCCKey{Key: []byte("key"), Timestamp: hlc.Timestamp{WallTime: walltime}}, []byte("value")); err != nil {
 			t.Fatal(err)
 		}
 		sstContents, err := sst.Finish()
