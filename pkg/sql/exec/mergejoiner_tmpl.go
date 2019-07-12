@@ -630,8 +630,9 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 				if leftGroup.nullGroup {
 					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
 					outStartIdx += toAppend
-				} else {
-					// {{ end }}
+				} else
+				// {{ end }}
+				{
 					var isNull bool
 					// {{ if _HAS_NULLS }}
 					isNull = src.Nulls().NullAt64(uint64(srcStartIdx))
@@ -648,9 +649,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 							outStartIdx++
 						}
 					}
-					// {{ if _JOIN_TYPE.IsRightOuter }}
 				}
-				// {{ end }}
 
 				if toAppend < repeatsLeft {
 					// We didn't materialize all the rows in the group so save state and
@@ -774,8 +773,9 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 				// */}}
 				if rightGroup.nullGroup {
 					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
-				} else {
-					// {{ end }}
+				} else
+				// {{ end }}
+				{
 					// {{ if _HAS_NULLS }}
 					// {{ if _HAS_SELECTION }}
 					out.Nulls().ExtendWithSel(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend), sel)
@@ -801,9 +801,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 						copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
 						// {{ end }}
 					}
-					// {{ if _JOIN_TYPE.IsLeftOuter }}
 				}
-				// {{ end }}
 
 				outStartIdx += toAppend
 
