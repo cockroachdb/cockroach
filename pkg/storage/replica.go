@@ -1272,10 +1272,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.AdminChangeReplicasRequest:
 		var err error
-		expDesc := tArgs.ExpDesc
-		if expDesc == nil {
-			expDesc = r.Desc()
-		}
+		expDesc := &tArgs.ExpDesc
 		for _, target := range tArgs.Targets {
 			// Update expDesc to the outcome of the previous run to enable detection
 			// of concurrent updates while applying a series of changes.
@@ -1290,7 +1287,7 @@ func (r *Replica) executeAdminBatch(
 			resp = &roachpb.AdminChangeReplicasResponse{}
 		} else {
 			resp = &roachpb.AdminChangeReplicasResponse{
-				Desc: expDesc,
+				Desc: *expDesc,
 			}
 		}
 
