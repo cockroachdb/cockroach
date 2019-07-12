@@ -48,7 +48,6 @@ func WriteInitialReplicaState(
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
-	txnSpanGCThreshold hlc.Timestamp,
 	activeVersion roachpb.Version,
 	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
@@ -71,7 +70,6 @@ func WriteInitialReplicaState(
 	s.Stats = &ms
 	s.Lease = &lease
 	s.GCThreshold = &gcThreshold
-	s.TxnSpanGCThreshold = &txnSpanGCThreshold
 	s.UsingAppliedStateKey = true
 
 	if existingLease, err := rsl.LoadLease(ctx, eng); err != nil {
@@ -84,12 +82,6 @@ func WriteInitialReplicaState(
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
 	} else if (*existingGCThreshold != hlc.Timestamp{}) {
 		log.Fatalf(ctx, "expected trivial GChreshold, but found %+v", existingGCThreshold)
-	}
-
-	if existingTxnSpanGCThreshold, err := rsl.LoadTxnSpanGCThreshold(ctx, eng); err != nil {
-		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading TxnSpanGCThreshold")
-	} else if (*existingTxnSpanGCThreshold != hlc.Timestamp{}) {
-		log.Fatalf(ctx, "expected trivial TxnSpanGCThreshold, but found %+v", existingTxnSpanGCThreshold)
 	}
 
 	newMS, err := rsl.Save(ctx, eng, s, truncStateType)
@@ -114,12 +106,11 @@ func WriteInitialState(
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
-	txnSpanGCThreshold hlc.Timestamp,
 	bootstrapVersion roachpb.Version,
 	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	newMS, err := WriteInitialReplicaState(
-		ctx, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold, bootstrapVersion, truncStateType)
+		ctx, eng, ms, desc, lease, gcThreshold, bootstrapVersion, truncStateType)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}

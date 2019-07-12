@@ -161,15 +161,6 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 	return rec.i.GetGCThreshold()
 }
 
-// GetTxnSpanGCThreshold returns the time of the Replica's last
-// transaction span GC.
-func (rec SpanSetReplicaEvalContext) GetTxnSpanGCThreshold() hlc.Timestamp {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
-		roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(rec.GetRangeID())},
-	)
-	return rec.i.GetTxnSpanGCThreshold()
-}
-
 // String implements Stringer.
 func (rec SpanSetReplicaEvalContext) String() string {
 	return rec.i.String()

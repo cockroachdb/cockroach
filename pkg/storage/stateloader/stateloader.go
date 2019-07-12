@@ -73,10 +73,6 @@ func (rsl StateLoader) Load(
 		return storagepb.ReplicaState{}, err
 	}
 
-	if s.TxnSpanGCThreshold, err = rsl.LoadTxnSpanGCThreshold(ctx, reader); err != nil {
-		return storagepb.ReplicaState{}, err
-	}
-
 	if as, err := rsl.LoadRangeAppliedState(ctx, reader); err != nil {
 		return storagepb.ReplicaState{}, err
 	} else if as != nil {
@@ -143,9 +139,6 @@ func (rsl StateLoader) Save(
 		return enginepb.MVCCStats{}, err
 	}
 	if err := rsl.SetGCThreshold(ctx, eng, ms, state.GCThreshold); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	if err := rsl.SetTxnSpanGCThreshold(ctx, eng, ms, state.TxnSpanGCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if truncStateType == TruncatedStateLegacyReplicated {
@@ -465,28 +458,6 @@ func (rsl StateLoader) SetGCThreshold(
 	}
 	return engine.MVCCPutProto(ctx, eng, ms,
 		rsl.RangeLastGCKey(), hlc.Timestamp{}, nil, threshold)
-}
-
-// LoadTxnSpanGCThreshold loads the transaction GC threshold.
-func (rsl StateLoader) LoadTxnSpanGCThreshold(
-	ctx context.Context, reader engine.Reader,
-) (*hlc.Timestamp, error) {
-	var t hlc.Timestamp
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
-		hlc.Timestamp{}, &t, engine.MVCCGetOptions{})
-	return &t, err
-}
-
-// SetTxnSpanGCThreshold overwrites the transaction GC threshold.
-func (rsl StateLoader) SetTxnSpanGCThreshold(
-	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats, threshold *hlc.Timestamp,
-) error {
-	if threshold == nil {
-		return errors.New("cannot persist nil TxnSpanGCThreshold")
-	}
-
-	return engine.MVCCPutProto(ctx, eng, ms,
-		rsl.RangeTxnSpanGCThresholdKey(), hlc.Timestamp{}, nil, threshold)
 }
 
 // The rest is not technically part of ReplicaState.
