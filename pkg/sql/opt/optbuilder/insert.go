@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"fmt"
+	"runtime/debug"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -463,9 +464,11 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 		case 0:
 			// Do nothing.
 		case 1:
+			debug.PrintStack()
 			panic(pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing value for column %q in multi-part foreign key", missingCols[0]))
 		default:
+			debug.PrintStack()
 			sort.Strings(missingCols)
 			panic(pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing values for columns %q in multi-part foreign key", missingCols))

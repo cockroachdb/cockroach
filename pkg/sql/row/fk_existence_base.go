@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
+	"runtime/debug"
 )
 
 // fkExistenceCheckBaseHelper is an auxiliary struct that facilitates FK existence
@@ -205,6 +206,7 @@ func computeFkCheckColumnIDs(
 			return ids, nil
 
 		case 1:
+			debug.PrintStack()
 			return nil, pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing value for column %d in multi-part foreign key", missingColumns[0])
 
@@ -213,6 +215,7 @@ func computeFkCheckColumnIDs(
 			return nil, errSkipUnusedFK
 
 		default:
+			debug.PrintStack()
 			return nil, pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing values for columns %d in multi-part foreign key", missingColumns)
 		}

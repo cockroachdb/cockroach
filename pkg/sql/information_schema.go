@@ -817,18 +817,22 @@ CREATE TABLE information_schema.referential_constraints (
 				if r, ok := matchOptionMap[fk.Match]; ok {
 					matchType = r
 				}
+				referencedIdx, err := sqlbase.FindFKReferencedIndex(refTable, fk.ReferencedColumnIDs)
+				if err != nil {
+					return err
+				}
 				if err := addRow(
-					dbNameStr,                       // constraint_catalog
-					scNameStr,                       // constraint_schema
-					tree.NewDString(fk.Name),        // constraint_name
-					dbNameStr,                       // unique_constraint_catalog
-					scNameStr,                       // unique_constraint_schema
-					tree.NewDString(fk.Name),        // unique_constraint_name
-					matchType,                       // match_option
-					dStringForFKAction(fk.OnUpdate), // update_rule
-					dStringForFKAction(fk.OnDelete), // delete_rule
-					tbNameStr,                       // table_name
-					tree.NewDString(refTable.Name),  // referenced_table_name
+					dbNameStr,                           // constraint_catalog
+					scNameStr,                           // constraint_schema
+					tree.NewDString(fk.Name),            // constraint_name
+					dbNameStr,                           // unique_constraint_catalog
+					scNameStr,                           // unique_constraint_schema
+					tree.NewDString(referencedIdx.Name), // unique_constraint_name
+					matchType,                           // match_option
+					dStringForFKAction(fk.OnUpdate),     // update_rule
+					dStringForFKAction(fk.OnDelete),     // delete_rule
+					tbNameStr,                           // table_name
+					tree.NewDString(refTable.Name),      // referenced_table_name
 				); err != nil {
 					return err
 				}

@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -263,6 +264,7 @@ func batchRequestForIndexValues(
 		if found, ok := values.colIDtoRowIndex[referencedColID]; ok {
 			colIDtoRowIndex[referencingIndex.ColumnIDs[i]] = found
 		} else {
+			debug.PrintStack()
 			return roachpb.BatchRequest{}, nil, pgerror.Newf(pgcode.ForeignKeyViolation,
 				"missing value for column %q in multi-part foreign key", referencedIndex.ColumnNames[i],
 			)
