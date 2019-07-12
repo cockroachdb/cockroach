@@ -212,10 +212,10 @@ func newTestServer(
 	}
 	il := &interceptingListener{Listener: ln}
 	s := grpc.NewServer()
-	serverVersion := cluster.MakeTestingClusterSettings().Version.ServerVersion
+	serverVersion := cluster.MakeTestingClusterSettings().Version.Version().Version
 	hb := &heartbeatService{
-		clock:         clock,
-		serverVersion: serverVersion,
+		clock:                clock,
+		serverClusterVersion: serverVersion,
 	}
 	rpc.RegisterHeartbeatServer(s, hb)
 	if err := stopper.RunAsyncTask(ctx, "localServer", func(ctx context.Context) {
@@ -311,8 +311,8 @@ func (ec *errContainer) setErr(err error) {
 // to inject errors.
 type heartbeatService struct {
 	errContainer
-	clock         *hlc.Clock
-	serverVersion roachpb.Version
+	clock                *hlc.Clock
+	serverClusterVersion roachpb.Version
 }
 
 func (hb *heartbeatService) Ping(
@@ -322,8 +322,8 @@ func (hb *heartbeatService) Ping(
 		return nil, err
 	}
 	return &rpc.PingResponse{
-		Pong:          args.Ping,
-		ServerTime:    hb.clock.PhysicalNow(),
-		ServerVersion: hb.serverVersion,
+		Pong:                 args.Ping,
+		ServerTime:           hb.clock.PhysicalNow(),
+		ServerClusterVersion: hb.serverClusterVersion,
 	}, nil
 }
