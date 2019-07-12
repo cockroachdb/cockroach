@@ -378,3 +378,42 @@ INSERT INTO t35364 (x) VALUES (1.5) ON CONFLICT (x) DO UPDATE SET x=2.5 RETURNIN
 
 statement error pq: failed to satisfy CHECK constraint \(z >= 7\)
 UPSERT INTO t35364 (x) VALUES (0)
+
+# ------------------------------------------------------------------------------
+# Regression for #38627. Combined with the equivalent logic test, make sure that
+# UPSERT in the presence of column mutations uses a lookup join without a
+# problem.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE table38627 (a INT PRIMARY KEY, b INT); INSERT INTO table38627 VALUES(1,1)
+
+statement ok
+BEGIN; ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
+
+query TTTTT
+EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
+----
+count                       ·                      ·                   ()                     ·
+ └── upsert                 ·                      ·                   ()                     ·
+      │                     into                   table38627(a, b)    ·                      ·
+      │                     strategy               opt upserter        ·                      ·
+      └── render            ·                      ·                   (a, b, a, b, c, b, a)  ·
+           │                render 0               a                   ·                      ·
+           │                render 1               b                   ·                      ·
+           │                render 2               a                   ·                      ·
+           │                render 3               b                   ·                      ·
+           │                render 4               c                   ·                      ·
+           │                render 5               b                   ·                      ·
+           │                render 6               a                   ·                      ·
+           └── lookup-join  ·                      ·                   (a, b, a, b, c)        ·
+                │           table                  table38627@primary  ·                      ·
+                │           type                   inner               ·                      ·
+                │           equality               (a) = (a)           ·                      ·
+                │           equality cols are key  ·                   ·                      ·
+                └── scan    ·                      ·                   (a, b)                 ·
+·                           table                  table38627@primary  ·                      ·
+·                           spans                  /1-/1/#             ·                      ·
+
+statement ok
+COMMIT
