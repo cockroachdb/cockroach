@@ -73,12 +73,6 @@ func (tp *TableNamePrefix) Catalog() string {
 	return string(tp.CatalogName)
 }
 
-// Equals returns true if the two table name prefixes are identical (including
-// the ExplicitSchema/ExplicitCatalog flags).
-func (tp *TableNamePrefix) Equals(other *TableNamePrefix) bool {
-	return *tp == *other
-}
-
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(ctx *FmtCtx) {
 	if ctx.tableNameFormatter != nil {

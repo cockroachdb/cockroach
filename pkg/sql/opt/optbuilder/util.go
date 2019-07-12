@@ -438,9 +438,6 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 		panic(err)
 	}
 
-	// Add dependency on this schema to the metadata, so that the metadata can be
-	// cached and later checked for freshness.
-	b.factory.Metadata().AddSchemaDependency(&name.TableNamePrefix, sch, privilege.CREATE)
 	return sch, resName
 }
 
@@ -505,5 +502,5 @@ func (b *Builder) checkPrivilege(
 
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
-	b.factory.Metadata().AddDataSourceDependency(origName, ds, priv)
+	b.factory.Metadata().AddDependency(origName, ds, priv)
 }
