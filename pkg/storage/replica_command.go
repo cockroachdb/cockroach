@@ -1165,6 +1165,20 @@ func (r *Replica) sendSnapshot(
 		}
 	}
 
+	strategy := SnapshotRequest_KV_BATCH
+	sstSnapshotStrategyEnabled := r.store.ClusterSettings().Version.IsActive(cluster.VersionSSTableSnapshots)
+	// REVIEW(jeffreyxiao): Remove later. I wanted to get a CI run with SST as
+	// the default.
+	if sstSnapshotStrategyEnabled {
+		strategy = SnapshotRequest_SST
+	}
+	// REVIEW(jeffreyxiao): Run some workloads to have a better heuristic. E.G.
+	// Run KV_BATCH and SST strategies on a large cluster with constant
+	// relocations and graph range size vs. time to apply.
+	if r.GetMVCCStats().LiveBytes > (8<<20) /* 8MB */ && sstSnapshotStrategyEnabled {
+		strategy = SnapshotRequest_SST
+	}
+
 	req := SnapshotRequest_Header{
 		State: snap.State,
 		// Tell the recipient whether it needs to synthesize the new
@@ -1191,7 +1205,7 @@ func (r *Replica) sendSnapshot(
 		// Recipients can choose to decline preemptive snapshots.
 		CanDecline: snapType == SnapshotRequest_PREEMPTIVE,
 		Priority:   priority,
-		Strategy:   SnapshotRequest_KV_BATCH,
+		Strategy:   strategy,
 		Type:       snapType,
 	}
 	sent := func() {

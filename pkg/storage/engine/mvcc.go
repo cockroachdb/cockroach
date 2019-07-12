@@ -618,6 +618,25 @@ func MVCCPutProto(
 	return MVCCPut(ctx, engine, ms, key, timestamp, value, txn)
 }
 
+// MVCCBlindPutProto sets the given key to the protobuf-serialized byte string
+// of msg and the provided timestamp.
+func MVCCBlindPutProto(
+	ctx context.Context,
+	engine Writer,
+	ms *enginepb.MVCCStats,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	msg protoutil.Message,
+	txn *roachpb.Transaction,
+) error {
+	value := roachpb.Value{}
+	if err := value.SetProto(msg); err != nil {
+		return err
+	}
+	value.InitChecksum(key)
+	return MVCCBlindPut(ctx, engine, ms, key, timestamp, value, txn)
+}
+
 type getBuffer struct {
 	meta             enginepb.MVCCMetadata
 	value            roachpb.Value

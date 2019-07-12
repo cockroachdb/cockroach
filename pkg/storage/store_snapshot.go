@@ -14,7 +14,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -83,6 +86,9 @@ type snapshotStrategy interface {
 	// Status provides a status report on the work performed during the
 	// snapshot. Only valid if the strategy succeeded.
 	Status() string
+
+	// Close cleans up any resources associated with the snapshot strategy.
+	Close(context.Context)
 }
 
 func assertStrategy(
@@ -121,11 +127,19 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	for {
 		req, err := stream.Recv()
 		if err != nil {
-			return IncomingSnapshot{}, err
+			return noSnap, err
 		}
 		if req.Header != nil {
 			err := errors.New("client error: provided a header mid-stream")
-			return IncomingSnapshot{}, sendSnapshotError(stream, err)
+			return noSnap, sendSnapshotError(stream, err)
+		}
+		if req.SSTChunk != nil {
+			err := errors.New("client error: provided SSTChunk with KV_BATCH snapshot strategy")
+			return noSnap, sendSnapshotError(stream, err)
+		}
+		if req.SSTFinal {
+			err := errors.New("client error: set SSTFinal with KV_BATCH snapshot strategy")
+			return noSnap, sendSnapshotError(stream, err)
 		}
 
 		if req.KVBatch != nil {
@@ -138,7 +152,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 			if err != nil {
 				err = errors.Wrap(err, "invalid snapshot")
-				return IncomingSnapshot{}, sendSnapshotError(stream, err)
+				return noSnap, sendSnapshotError(stream, err)
 			}
 
 			inSnap := IncomingSnapshot{
@@ -199,10 +213,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 
 		if int64(b.Len()) >= kvSS.batchSize {
-			if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
-				return err
-			}
-			if err := kvSS.sendBatch(stream, b); err != nil {
+			if err := kvSS.sendBatch(ctx, stream, b); err != nil {
 				return err
 			}
 			b = nil
@@ -213,14 +224,341 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 	}
 	if b != nil {
-		if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
-			return err
-		}
-		if err := kvSS.sendBatch(stream, b); err != nil {
+		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
 			return err
 		}
 	}
 
+	logEntries, err := getLogEntries(ctx, header, snap, kvSS.raftCfg.RaftLogTruncationThreshold)
+	if err != nil {
+		return err
+	}
+	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", n, len(logEntries))
+	return stream.Send(&SnapshotRequest{LogEntries: logEntries})
+}
+
+func (kvSS *kvBatchSnapshotStrategy) sendBatch(
+	ctx context.Context, stream outgoingSnapshotStream, batch engine.Batch,
+) error {
+	if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
+		return err
+	}
+	repr := batch.Repr()
+	batch.Close()
+	return stream.Send(&SnapshotRequest{KVBatch: repr})
+}
+
+// Status implements the snapshotStrategy interface.
+func (kvSS *kvBatchSnapshotStrategy) Status() string { return kvSS.status }
+
+// Close implements the snapshotStrategy interface.
+func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {}
+
+// sstSnapshotStrategy is an implementation of snapshotStrategy that streams sst files.
+type sstSnapshotStrategy struct {
+	raftCfg *base.RaftConfig
+	status  string
+
+	auxDir string
+	sstDir string
+	// The string names of the SSTables to ingest.
+	ssts []string
+	// The Raft log entries for this snapshot.
+	logEntries [][]byte
+
+	// Fields used when sending snapshots.
+	batchSize int64
+	limiter   *rate.Limiter
+}
+
+func (sstSS *sstSnapshotStrategy) createSSTDir(rangeID roachpb.RangeID) error {
+	sstAuxDir := filepath.Join(sstSS.auxDir, "snapshotsst")
+	if err := os.MkdirAll(sstAuxDir, 0755); err != nil {
+		return err
+	}
+	dir, err := ioutil.TempDir(sstSS.auxDir, fmt.Sprintf("r%d_", rangeID))
+	if err != nil {
+		return err
+	}
+	sstSS.sstDir = dir
+	return nil
+}
+
+func (sstSS *sstSnapshotStrategy) createSSTFile(rangeID roachpb.RangeID) (*os.File, error) {
+	if sstSS.sstDir == "" {
+		if err := sstSS.createSSTDir(rangeID); err != nil {
+			return nil, err
+		}
+	}
+
+	// Create a new file with the next available index.
+	sstIndex := len(sstSS.ssts)
+	filename := filepath.Join(sstSS.sstDir, fmt.Sprintf("%d.sst", sstIndex))
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	sstSS.ssts = append(sstSS.ssts, file.Name())
+	return file, nil
+}
+
+// Receive implements the snapshotStrategy interface.
+func (sstSS *sstSnapshotStrategy) Receive(
+	ctx context.Context, stream incomingSnapshotStream, header SnapshotRequest_Header,
+) (IncomingSnapshot, error) {
+	assertStrategy(ctx, header, SnapshotRequest_SST)
+
+	var currSST *os.File
+	defer func() {
+		if currSST != nil {
+			if err := currSST.Close(); err != nil {
+				log.Warningf(ctx, "error closing sst file when receiving snapshot: %v", err)
+			}
+		}
+	}()
+
+	sstSS.ssts = nil
+	sstSS.logEntries = nil
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			return noSnap, err
+		}
+		if req.Header != nil {
+			err := errors.New("client error: provided a header mid-stream")
+			return noSnap, sendSnapshotError(stream, err)
+		}
+		if req.KVBatch != nil {
+			err := errors.New("client error: set KVBatch with SST snapshot strategy")
+			return noSnap, sendSnapshotError(stream, err)
+		}
+
+		if req.SSTChunk != nil {
+			if currSST == nil {
+				currSST, err = sstSS.createSSTFile(header.State.Desc.RangeID)
+				if err != nil {
+					err = errors.Wrap(err, "error when creating SST file for SST snapshot strategy")
+					return noSnap, sendSnapshotError(stream, err)
+				}
+			}
+			if _, err := currSST.Write(req.SSTChunk); err != nil {
+				err = errors.Wrapf(err, "error writing to %s", currSST.Name())
+				return noSnap, sendSnapshotError(stream, err)
+			}
+		}
+		if req.SSTFinal {
+			if currSST == nil {
+				err = errors.Wrap(err, "client error: sent SSTFinal flag, but no in-progress SST")
+				return noSnap, sendSnapshotError(stream, err)
+			}
+			if err := currSST.Close(); err != nil {
+				err = errors.Wrapf(err, "error closing %s", currSST.Name())
+				return noSnap, sendSnapshotError(stream, err)
+			}
+			currSST = nil
+		}
+		if req.LogEntries != nil {
+			sstSS.logEntries = append(sstSS.logEntries, req.LogEntries...)
+		}
+		if req.Final {
+			if currSST != nil {
+				err = errors.Wrap(err, "client error: sent Final flag, but in-progress SST exists")
+				return noSnap, sendSnapshotError(stream, err)
+			}
+			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
+			if err != nil {
+				err = errors.Wrap(err, "invalid snapshot")
+				return noSnap, sendSnapshotError(stream, err)
+			}
+
+			inSnap := IncomingSnapshot{
+				UsesUnreplicatedTruncatedState: header.UnreplicatedTruncatedState,
+				SnapUUID:                       snapUUID,
+				Strategy:                       sstSS,
+				State:                          &header.State,
+				snapType:                       header.Type,
+			}
+
+			// 19.1 nodes don't set the Type field on the SnapshotRequest_Header proto
+			// when sending this RPC, so in a mixed cluster setting we may have gotten
+			// the zero value of RAFT. Since the RPC didn't have type information
+			// previously, a 19.1 node receiving a snapshot distinguished between RAFT
+			// and PREEMPTIVE (19.1 nodes never sent LEARNER snapshots) by checking
+			// whether the replica was a placeholder (ReplicaID == 0).
+			//
+			// This adjustment can be removed after 19.2.
+			if inSnap.snapType == SnapshotRequest_RAFT &&
+				header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
+				inSnap.snapType = SnapshotRequest_PREEMPTIVE
+			}
+
+			sstSS.status = fmt.Sprintf("ssts: %d, log entries: %d", len(sstSS.ssts), len(sstSS.logEntries))
+			return inSnap, nil
+		}
+	}
+}
+
+// Send implements the snapshotStrategy interface.
+func (sstSS *sstSnapshotStrategy) Send(
+	ctx context.Context,
+	stream outgoingSnapshotStream,
+	header SnapshotRequest_Header,
+	snap *OutgoingSnapshot,
+) error {
+	assertStrategy(ctx, header, SnapshotRequest_SST)
+
+	keyRanges := snap.Iter.KeyRanges()
+	curRange := 0
+
+	sst, err := engine.MakeRocksDBSstFileWriter()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		// Idemptotent - ok to call even if already called.
+		sst.Close()
+	}()
+
+	// finishAndSend finishes the current sst and sends it out. It then
+	// increments the curRange counter.
+	finishAndSend := func() error {
+		// We add a DeleteRange tombstone to each file to delete any
+		// existing data in the desired bounds. This also has the effect of
+		// expanding the bounds of the sst to exactly what we want.
+		r := keyRanges[curRange]
+		if err := sst.ClearRange(r.Start, r.End); err != nil {
+			return err
+		}
+		chunk, err := sst.Finish()
+		if err != nil {
+			return err
+		}
+
+		if err := sstSS.sendSSTData(ctx, stream, chunk, true /* final */); err != nil {
+			return err
+		}
+
+		sst.Close()
+		curRange++
+		return nil
+	}
+
+	var lastSizeCheck int64
+	for iter := snap.Iter; ; iter.Next() {
+		valid, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !valid || curRange < iter.Index() {
+			if err := finishAndSend(); err != nil {
+				return err
+			}
+
+			// Send any empty ranges that the iterator may have skipped.
+			sendTo := iter.Index()
+			if !valid {
+				sendTo = len(keyRanges)
+			}
+			for curRange < sendTo {
+				if sst, err = engine.MakeRocksDBSstFileWriter(); err != nil {
+					return err
+				}
+				if err := finishAndSend(); err != nil {
+					return err
+				}
+			}
+
+			if !valid {
+				break
+			}
+			if sst, err = engine.MakeRocksDBSstFileWriter(); err != nil {
+				return err
+			}
+		}
+
+		if err := sst.Put(iter.UnsafeKey(), iter.UnsafeValue()); err != nil {
+			return err
+		}
+
+		newDataSize := sst.DataSize - lastSizeCheck
+		if newDataSize >= sstSS.batchSize {
+			lastSizeCheck = sst.DataSize
+
+			chunk, err := sst.Truncate()
+			if err != nil {
+				return err
+			}
+			if err := sstSS.sendSSTData(ctx, stream, chunk, false /* final */); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Iterate over the specified range of Raft entries and send them all out
+	// together. The receiver would then create an SST out of them and ingest it
+	// with the other SSTs that we've already sent. We could create an SST using
+	// these entries and send that instead, but there are a few reasons why that
+	// approach is difficult:
+	// 1. we would need to handle sideloaded entries separately. This would be a
+	//    good change in the long run, but for now it doesn't get us anything.
+	// 2. the receiver will have a HardState key that it needs to include in an
+	//    SST. We don't know what that HardState is in advance because it is
+	//    handled inside of Raft.
+	// 3. the receiver wants to track some stats about the log entries, like
+	//    lastTerm and raftLogSize. Putting them into an SST on the sender side
+	//    makes this more difficult.
+	logEntries, err := getLogEntries(ctx, header, snap, sstSS.raftCfg.RaftLogTruncationThreshold)
+	if err != nil {
+		return err
+	}
+	sstSS.status = fmt.Sprintf("sst files: %d, log entries: %d", len(keyRanges), len(logEntries))
+	return stream.Send(&SnapshotRequest{LogEntries: logEntries})
+}
+
+func (sstSS *sstSnapshotStrategy) sendSSTData(
+	ctx context.Context, stream outgoingSnapshotStream, data []byte, final bool,
+) error {
+	for len(data) > 0 {
+		var chunk []byte
+		if int64(len(data)) < sstSS.batchSize {
+			chunk, data = data, nil
+		} else {
+			chunk, data = data[:int(sstSS.batchSize)], data[int(sstSS.batchSize):]
+		}
+
+		if err := sstSS.limiter.WaitN(ctx, 1); err != nil {
+			return err
+		}
+		if err := stream.Send(&SnapshotRequest{
+			SSTChunk: chunk,
+			SSTFinal: final && data == nil,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Status implements the snapshotStrategy interface.
+func (sstSS *sstSnapshotStrategy) Status() string { return sstSS.status }
+
+// Close implements the snapshotStrategy interface.
+func (sstSS *sstSnapshotStrategy) Close(ctx context.Context) {
+	if sstSS.sstDir != "" {
+		// Nothing actionable to do when removing directory fails.
+		if err := os.RemoveAll(sstSS.sstDir); err != nil {
+			log.Warningf(ctx, "error removing sstSnapshotStrategy: %v", err)
+		}
+	}
+}
+
+func getLogEntries(
+	ctx context.Context,
+	header SnapshotRequest_Header,
+	snap *OutgoingSnapshot,
+	raftLogTruncationThreshold int64,
+) ([][]byte, error) {
 	// Iterate over the specified range of Raft entries and send them all out
 	// together.
 	firstIndex := header.State.TruncatedState.Index + 1
@@ -244,7 +582,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			logEntries = append(logEntries, bytes)
 			raftLogBytes += int64(len(bytes))
 			if snap.snapType == SnapshotRequest_PREEMPTIVE &&
-				raftLogBytes > 4*kvSS.raftCfg.RaftLogTruncationThreshold {
+				raftLogBytes > 4*raftLogTruncationThreshold {
 				// If the raft log is too large, abort the snapshot instead of
 				// potentially running out of memory. However, if this is a
 				// raft-initiated snapshot (instead of a preemptive one), we
@@ -275,7 +613,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	rangeID := header.State.Desc.RangeID
 
 	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Inline the payloads for all sideloaded proposals.
@@ -288,7 +626,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		var ent raftpb.Entry
 		for i := range logEntries {
 			if err := protoutil.Unmarshal(logEntries[i], &ent); err != nil {
-				return err
+				return nil, err
 			}
 			if !sniffSideloadedRaftCommand(ent.Data) {
 				continue
@@ -320,34 +658,22 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 					// instance by pre-loading them into memory. Or we can make
 					// log truncation less aggressive about removing sideloaded
 					// files, by delaying trailing file deletion for a bit.
-					return &errMustRetrySnapshotDueToTruncation{
+					return nil, &errMustRetrySnapshotDueToTruncation{
 						index: ent.Index,
 						term:  ent.Term,
 					}
 				}
-				return err
+				return nil, err
 			}
 			// TODO(tschottdorf): it should be possible to reuse `logEntries[i]` here.
 			var err error
 			if logEntries[i], err = protoutil.Marshal(&ent); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
-	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", n, len(logEntries))
-	return stream.Send(&SnapshotRequest{LogEntries: logEntries})
+	return logEntries, nil
 }
-
-func (kvSS *kvBatchSnapshotStrategy) sendBatch(
-	stream outgoingSnapshotStream, batch engine.Batch,
-) error {
-	repr := batch.Repr()
-	batch.Close()
-	return stream.Send(&SnapshotRequest{KVBatch: repr})
-}
-
-// Status implements the snapshotStrategy interface.
-func (kvSS *kvBatchSnapshotStrategy) Status() string { return kvSS.status }
 
 // reserveSnapshot throttles incoming snapshots. The returned closure is used
 // to cleanup the reservation and release its resources. A nil cleanup function
@@ -637,12 +963,18 @@ func (s *Store) receiveSnapshot(
 		ss = &kvBatchSnapshotStrategy{
 			raftCfg: &s.cfg.RaftConfig,
 		}
+	case SnapshotRequest_SST:
+		ss = &sstSnapshotStrategy{
+			raftCfg: &s.cfg.RaftConfig,
+			auxDir:  s.engine.GetAuxiliaryDir(),
+		}
 	default:
 		return sendSnapshotError(stream,
 			errors.Errorf("%s,r%d: unknown snapshot strategy: %s",
 				s, header.State.Desc.RangeID, header.Strategy),
 		)
 	}
+	defer ss.Close(ctx)
 
 	if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED}); err != nil {
 		return err
@@ -803,9 +1135,16 @@ func sendSnapshot(
 			limiter:   limiter,
 			newBatch:  newBatch,
 		}
+	case SnapshotRequest_SST:
+		ss = &sstSnapshotStrategy{
+			raftCfg:   raftCfg,
+			batchSize: batchSize,
+			limiter:   limiter,
+		}
 	default:
 		log.Fatalf(ctx, "unknown snapshot strategy: %s", header.Strategy)
 	}
+	defer ss.Close(ctx)
 
 	if err := ss.Send(ctx, stream, header, snap); err != nil {
 		return err

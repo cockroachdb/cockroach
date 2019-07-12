@@ -111,11 +111,14 @@ message SnapshotRequest {
   }
 
   enum Strategy {
-    // KV_BATCH snapshots stream batches of KV pairs for all keys in a
-    // range from the sender the the receiver. These KV pairs are then
-    // combined into a large RocksDB WriteBatch that is atomically
-    // applied.
+    // KV_BATCH snapshots stream batches of KV pairs for all keys in a range
+    // from the sender to the receiver. These KV pairs are then combined into a
+    // large RocksDB WriteBatch that is atomically applied.
     KV_BATCH = 0;
+    // SST snapshots stream the SSTables of a range from the sender to the
+    // receive. These SSTables are then directly imported into RocksDB using
+    // IngestExternalFile.
+    SST = 1;
   }
 
   enum Type {
@@ -168,14 +171,25 @@ message SnapshotRequest {
 
   optional Header header = 1;
 
-  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
+  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple
+  // request messages. Used by the KV_BATCH snapshot strategy.
   optional bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
 
   // These are really raftpb.Entry, but we model them as raw bytes to avoid
-  // roundtripping through memory. They are separate from the kv_batch to
-  // allow flexibility in log implementations.
+  // roundtripping through memory. They are separate from the kv_batch to allow
+  // flexibility in log implementations. Used by both the KV_BATCH and the SST
+  // snapshot strategies.
   repeated bytes log_entries = 3;
 
+  // A chunk of an SSTable. Used by the SST snapshot strategy.
+  optional bytes sst_chunk = 5 [(gogoproto.customname) = "SSTChunk"];
+
+  // If set, indicates that sst_chunk is the last chunk of the current SST
+  // file. Used by the SST snapshot strategy.
+  optional bool sst_final = 6 [(gogoproto.customname) = "SSTFinal", (gogoproto.nullable) = false];
+
+  // If set, indicates that this request is the last request in the snapshot
+  // stream.
   optional bool final = 4 [(gogoproto.nullable) = false];
 }
 

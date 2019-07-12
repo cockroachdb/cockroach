@@ -130,11 +130,33 @@ func (ri *ReplicaDataIterator) advance() {
 	}
 }
 
+// KeyRanges returns all key ranges that the iterator will iterate over.
+func (ri *ReplicaDataIterator) KeyRanges() []KeyRange {
+	return ri.ranges
+}
+
+// Index returns the index of the key range that the iterator points to.
+func (ri *ReplicaDataIterator) Index() int {
+	return ri.curIndex
+}
+
 // Valid returns true if the iterator currently points to a valid value.
 func (ri *ReplicaDataIterator) Valid() (bool, error) {
 	ok, err := ri.it.Valid()
 	ok = ok && ri.curIndex < len(ri.ranges)
 	return ok, err
+}
+
+// UnsafeKey returns the current key, but the memory is invalidated on the next
+// call to {NextKey,Seek}.
+func (ri *ReplicaDataIterator) UnsafeKey() engine.MVCCKey {
+	return ri.it.UnsafeKey()
+}
+
+// UnsafeValue returns the same value as a byte slice, but the memory is
+// invalidated on the next call to {Next,Reset,Close}.
+func (ri *ReplicaDataIterator) UnsafeValue() []byte {
+	return ri.it.UnsafeValue()
 }
 
 // Key returns the current key.
