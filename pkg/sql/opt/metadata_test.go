@@ -44,7 +44,7 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected table id")
 	}
 
-	md.AddDataSourceDependency(tab.Name(), tab, privilege.CREATE)
+	md.AddDependency(tab.Name(), tab, privilege.CREATE)
 	depsUpToDate, err := md.CheckDependencies(context.TODO(), testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked")
