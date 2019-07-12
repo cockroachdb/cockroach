@@ -1,0 +1,34 @@
+# LogicTest: local-opt fakedist-opt
+
+statement ok
+SET experimental_optimizer_foreign_keys = true
+
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY, other INT)
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+
+statement ok
+INSERT INTO parent VALUES (1), (2)
+
+query TTT
+EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
+----
+root                        ·                      ·
+ ├── count                  ·                      ·
+ │    └── insert            ·                      ·
+ │         │                into                   child(c, p)
+ │         │                strategy               inserter
+ │         └── values       ·                      ·
+ │                          size                   2 columns, 2 rows
+ └── postquery              ·                      ·
+      │                     id                     @S1
+      └── errorIfRows       ·                      ·
+           └── lookup-join  ·                      ·
+                │           table                  parent@primary
+                │           type                   anti
+                │           equality               (column2) = (p)
+                │           equality cols are key  ·
+                └── values  ·                      ·
+·                           size                   1 column, 2 rows
