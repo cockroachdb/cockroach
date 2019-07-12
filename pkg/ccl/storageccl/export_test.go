@@ -248,7 +248,7 @@ func exportUsingGoIterator(
 			continue
 		}
 
-		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
+		if err := sst.Put(iter.UnsafeKey(), iter.UnsafeValue()); err != nil {
 			return nil, err
 		}
 	}

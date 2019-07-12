@@ -65,7 +65,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 					b.Fatalf("%+v", err)
 				}
 				for _, kv := range kvs {
-					if err := sst.Add(kv); err != nil {
+					if err := sst.Put(kv.Key, kv.Value); err != nil {
 						b.Fatalf("%+v", err)
 					}
 				}
