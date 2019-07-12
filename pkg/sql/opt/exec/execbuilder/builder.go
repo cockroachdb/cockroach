@@ -58,16 +58,6 @@ type Builder struct {
 	withExprs []builtWithExpr
 }
 
-// builtWithExpr is metadata regarding a With expression which has already been
-// added to the set of subqueries for the query.
-type builtWithExpr struct {
-	id opt.WithID
-	// outputCols maps the output ColumnIDs of the With expression to the ordinal
-	// positions they are output to. See execPlan.outputCols for more details.
-	outputCols opt.ColMap
-	bufferNode exec.Node
-}
-
 // New constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
@@ -148,4 +138,22 @@ func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) (tree.TypedExpr, error
 
 func (b *Builder) decorrelationError() error {
 	return errors.Errorf("could not decorrelate subquery")
+}
+
+// builtWithExpr is metadata regarding a With expression which has already been
+// added to the set of subqueries for the query.
+type builtWithExpr struct {
+	id opt.WithID
+	// outputCols maps the output ColumnIDs of the With expression to the ordinal
+	// positions they are output to. See execPlan.outputCols for more details.
+	outputCols opt.ColMap
+	bufferNode exec.Node
+}
+
+func (b *Builder) addBuiltWithExpr(id opt.WithID, outputCols opt.ColMap, bufferNode exec.Node) {
+	b.withExprs = append(b.withExprs, builtWithExpr{
+		id:         id,
+		outputCols: outputCols,
+		bufferNode: bufferNode,
+	})
 }

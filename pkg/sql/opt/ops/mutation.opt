@@ -120,6 +120,11 @@ define MutationPrivate {
     # as part of online schema change). If no RETURNING clause was specified,
     # then ReturnCols is nil.
     ReturnCols ColList
+
+    # Mutation operators can act similarly to a With operator: they buffer their
+    # input, making it accessible to FK queries. If this is not required, WithID
+    # is zero.
+    WithID WithID
 }
 
 # Update evaluates a relational input expression that fetches existing rows from
