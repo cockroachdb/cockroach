@@ -2114,6 +2114,21 @@ Tablet      iPad             700.00   {700.00,150.00,200.00}
 Tablet      Kindle Fire      150.00   {700.00,150.00,200.00}
 Tablet      Samsung          200.00   {150.00,200.00}
 
+query TTRTTTT
+SELECT group_name, product_name, price, array_agg(price) OVER (w ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING), array_agg(price) OVER (w ROWS BETWEEN UNBOUNDED PRECEDING AND 3 FOLLOWING), array_agg(price) OVER (w GROUPS BETWEEN 3 PRECEDING AND UNBOUNDED FOLLOWING), array_agg(price) OVER (w RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM products WINDOW w AS (PARTITION BY group_name ORDER BY group_id DESC) ORDER BY group_id
+----
+Smartphone  Microsoft Lumia  200.00   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}
+Smartphone  HTC One          400.00   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}
+Smartphone  Nexus            500.00   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}
+Smartphone  iPhone           900.00   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}   {900.00,500.00,400.00,200.00}
+Laptop      HP Elite         1200.00  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}
+Laptop      Lenovo Thinkpad  700.00   {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}
+Laptop      Sony VAIO        700.00   {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}
+Laptop      Dell             800.00   {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}  {800.00,700.00,700.00,1200.00}
+Tablet      iPad             700.00   {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}
+Tablet      Kindle Fire      150.00   {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}
+Tablet      Samsung          200.00   {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}          {200.00,150.00,700.00}
+
 query TTRR
 SELECT group_name, product_name, price, avg(price) OVER (PARTITION BY group_name RANGE UNBOUNDED PRECEDING) AS avg_price FROM products ORDER BY group_id
 ----
