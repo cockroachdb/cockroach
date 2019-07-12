@@ -108,11 +108,23 @@ func getDatabaseID(
 func getDatabaseDescByID(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
-	desc := &sqlbase.DatabaseDescriptor{}
-	if err := getDescriptorByID(ctx, txn, id, desc); err != nil {
+	log.Eventf(ctx, "fetching descriptor with ID %d", id)
+	descKey := sqlbase.MakeDescMetadataKey(id)
+	desc := &sqlbase.Descriptor{}
+	if err := txn.GetProto(ctx, descKey, desc); err != nil {
 		return nil, err
 	}
-	return desc, nil
+
+	database := desc.GetDatabase()
+	if database == nil {
+		return nil, pgerror.Newf(pgcode.WrongObjectType,
+			"%q is not a database", desc.String())
+	}
+
+	if err := database.Validate(); err != nil {
+		return nil, err
+	}
+	return database, nil
 }
 
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,

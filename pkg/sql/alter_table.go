@@ -284,6 +284,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
+				if err := n.tableDesc.Validate(params.ctx, params.p.txn, nil /* clusterVersion */); err != nil {
+					return err
+				}
 
 			default:
 				return errors.AssertionFailedf(
@@ -418,6 +421,20 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
+			output := n.tableDesc.OutboundFKs[:0]
+			for _, fk := range n.tableDesc.OutboundFKs {
+				if sqlbase.ColumnIDs(fk.OriginColumnIDs).Contains(col.ID) {
+					descriptorChanged = true
+					// Delete reverse refs as well.
+					if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, fk); err != nil {
+						return err
+					}
+					continue
+				}
+				output = append(output, fk)
+			}
+			n.tableDesc.OutboundFKs = n.tableDesc.OutboundFKs[:len(output)]
+
 			// Drop check constraints which reference the column.
 			validChecks := n.tableDesc.Checks[:0]
 			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
@@ -460,6 +477,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being added, try again later", t.Column)
 			}
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn, nil /* clusterVersion */); err != nil {
+				return err
+			}
 
 		case *tree.AlterTableDropConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
@@ -477,12 +497,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if err := n.tableDesc.DropConstraint(
 				name, details,
-				func(desc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor) error {
-					return params.p.removeFKBackReference(params.ctx, desc, idx)
+				func(desc *sqlbase.MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint) error {
+					return params.p.removeFKBackReference(params.ctx, desc, ref)
 				}); err != nil {
 				return err
 			}
 			descriptorChanged = true
+			if err := n.tableDesc.Validate(params.ctx, params.p.txn, nil /* clusterVersion */); err != nil {
+				return err
+			}
 
 		case *tree.AlterTableValidateConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
@@ -522,18 +545,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				ck.Validity = sqlbase.ConstraintValidity_Validated
 
 			case sqlbase.ConstraintTypeFK:
-				found := false
-				var fkIdx *sqlbase.IndexDescriptor
-				for _, idx := range n.tableDesc.AllNonDropIndexes() {
-					fk := &idx.ForeignKey
+				var foundFk *sqlbase.ForeignKeyConstraint
+				for _, fk := range n.tableDesc.OutboundFKs {
 					// If the constraint is still being validated, don't allow VALIDATE CONSTRAINT to run
-					if fk.IsSet() && fk.Name == name && fk.Validity != sqlbase.ConstraintValidity_Validating {
-						found = true
-						fkIdx = idx
+					if fk.Name == name && fk.Validity != sqlbase.ConstraintValidity_Validating {
+						foundFk = fk
 						break
 					}
 				}
-				if !found {
+				if foundFk == nil {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
@@ -542,7 +562,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				); err != nil {
 					return err
 				}
-				fkIdx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
+				foundFk.Validity = sqlbase.ConstraintValidity_Validated
 
 			default:
 				return pgerror.Newf(pgcode.WrongObjectType,

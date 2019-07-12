@@ -60,17 +60,10 @@ func newSQLForeignKeyCheckOperation(
 func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 
-	prefix := len(o.constraint.Index.ColumnNames)
-	if o.constraint.FK.SharedPrefixLen > 0 {
-		prefix = int(o.constraint.FK.SharedPrefixLen)
-	}
-
 	checkQuery, _, err := nonMatchingRowQuery(
-		prefix,
 		&o.tableDesc.TableDescriptor,
-		o.constraint.Index,
-		o.constraint.ReferencedTable.ID,
-		o.constraint.ReferencedIndex,
+		o.constraint.FK,
+		o.constraint.ReferencedTable,
 		false, /* limitResults */
 	)
 	if err != nil {
@@ -85,13 +78,12 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	}
 	o.run.rows = rows
 
-	if prefix > 1 && o.constraint.FK.Match == sqlbase.ForeignKeyReference_FULL {
+	if len(o.constraint.FK.OriginColumnIDs) > 1 && o.constraint.FK.Match == sqlbase.ForeignKeyReference_FULL {
 		// Check if there are any disallowed references where some columns are NULL
 		// and some aren't.
 		checkNullsQuery, _, err := matchFullUnacceptableKeyQuery(
-			prefix,
 			&o.tableDesc.TableDescriptor,
-			o.constraint.Index,
+			o.constraint.FK,
 			false, /* limitResults */
 		)
 		if err != nil {

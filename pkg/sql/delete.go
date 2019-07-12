@@ -398,24 +398,26 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 	}
 
 	interleavedQueue := []sqlbase.ID{table.ID}
+	// interleavedIdxs will contain all of the table and index IDs of the indexes
+	// interleaved in any of the interleaved hierarchy of the input table.
+	interleavedIdxs := make(map[sqlbase.ID]map[sqlbase.IndexID]struct{})
 	for len(interleavedQueue) > 0 {
 		tableID := interleavedQueue[0]
 		interleavedQueue = interleavedQueue[1:]
 		if _, ok := fkTables[tableID]; !ok {
 			return false
 		}
-		if fkTables[tableID].Desc == nil {
+		tableDesc := fkTables[tableID].Desc
+		if tableDesc == nil {
 			return false
 		}
-		for _, idx := range fkTables[tableID].Desc.AllNonDropIndexes() {
+		for _, idx := range tableDesc.AllNonDropIndexes() {
 			// Don't allow any secondary indexes
 			// TODO(emmanuel): identify the cases where secondary indexes can still work with the fast path and allow them
-			if idx.ID != fkTables[tableID].Desc.PrimaryIndex.ID {
+			if idx.ID != tableDesc.PrimaryIndex.ID {
 				return false
 			}
 
-			// interleavedIdxs will contain all of the table and index IDs of the indexes interleaved in this one
-			interleavedIdxs := make(map[sqlbase.ID]map[sqlbase.IndexID]struct{})
 			for _, ref := range idx.InterleavedBy {
 				if _, ok := interleavedIdxs[ref.Table]; !ok {
 					interleavedIdxs[ref.Table] = make(map[sqlbase.IndexID]struct{})
@@ -423,30 +425,30 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 				interleavedIdxs[ref.Table][ref.Index] = struct{}{}
 
 			}
-			// The index can't be referenced by anything that's not the interleaved relationship
-			for _, ref := range idx.ReferencedBy {
-				if _, ok := interleavedIdxs[ref.Table]; !ok {
-					return false
-				}
-				if _, ok := interleavedIdxs[ref.Table][ref.Index]; !ok {
-					return false
-				}
-
-				referencingIdx, err := fkTables[ref.Table].Desc.FindIndexByID(ref.Index)
-				if err != nil {
-					return false
-				}
-
-				// All of these references MUST be ON DELETE CASCADE
-				if referencingIdx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
-					return false
-				}
-			}
 
 			for _, ref := range idx.InterleavedBy {
 				interleavedQueue = append(interleavedQueue, ref.Table)
 			}
 
+		}
+
+		// The index can't be referenced by anything that's not the interleaved relationship.
+		for _, fk := range tableDesc.InboundFKs {
+			if _, ok := interleavedIdxs[fk.OriginTableID]; !ok {
+				return false
+			}
+			for _, outboundFK := range fkTables[fk.OriginTableID].Desc.OutboundFKs {
+				if outboundFK.ReferencedTableID != tableDesc.ID {
+					continue
+				}
+				if sqlbase.ColumnIDs(outboundFK.ReferencedColumnIDs).EqualSets(fk.ReferencedColumnIDs) {
+					// All of these references MUST be ON DELETE CASCADE.
+					if outboundFK.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
+						return false
+					}
+					break
+				}
+			}
 		}
 	}
 	return true

@@ -40,8 +40,12 @@ func TestStandAloneShowCreateTable(t *testing.T) {
 
 	desc := sqlbase.JobsTable
 	desc.Indexes = []sqlbase.IndexDescriptor{sqlbase.JobsTable.Indexes[0]}
-	desc.Indexes[0].ForeignKey = sqlbase.ForeignKeyReference{Table: 52, Name: "fk", Index: 1, SharedPrefixLen: 1}
 	desc.Indexes[0].Interleave.Ancestors = []sqlbase.InterleaveDescriptor_Ancestor{{TableID: 51, IndexID: 10, SharedPrefixLen: 1}}
+	desc.OutboundFKs = make([]*sqlbase.ForeignKeyConstraint, 1)
+	desc.OutboundFKs[0] = &sqlbase.ForeignKeyConstraint{
+		ReferencedTableID: 52,
+		Name:              "fk",
+	}
 
 	name := tree.Name(desc.Name)
 	got, err := ShowCreateTable(context.TODO(), &name, "", &desc, nil, false)
