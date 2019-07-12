@@ -99,10 +99,14 @@ type mergeJoin_JOIN_TYPE_STRINGOp struct {
 // {{/*
 // This code snippet is the "meat" of the probing phase.
 func _PROBE_SWITCH(
-	joinType joinTypeInfo, sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool,
+	_JOIN_TYPE joinTypeInfo,
+	_SEL_PERMUTATION selPermutation,
+	_L_HAS_NULLS bool,
+	_R_HAS_NULLS bool,
+	_ASC_DIRECTION bool,
 ) { // */}}
 	// {{define "probeSwitch"}}
-	// {{ $sel := $.Sel }}
+	// {{ $sel := $.SelPermutation }}
 	// {{ $joinType := $.JoinType }}
 	// {{ $mjOverloads := $.Global.MJOverloads }}
 	switch colType {
@@ -205,7 +209,7 @@ func _PROBE_SWITCH(
 						break EqLoop
 					}
 
-					// {{ if $joinType.IsLeftSemi }}
+					// {{ if _JOIN_TYPE.IsLeftSemi }}
 					if eqColIdx < len(o.left.eqCols)-1 {
 						o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 					} else {
@@ -218,7 +222,7 @@ func _PROBE_SWITCH(
 					// {{ end }}
 				} else { // mismatch
 					var incrementLeft bool
-					// {{ if $.Asc }}
+					// {{ if _ASC_DIRECTION }}
 					_ASSIGN_LT("incrementLeft", "lVal", "rVal")
 					// {{ else }}
 					_ASSIGN_GT("incrementLeft", "lVal", "rVal")
@@ -259,7 +263,7 @@ func _PROBE_SWITCH(
 
 // {{/*
 // This code snippet processes an unmatched group from the left.
-func _LEFT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
+func _LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "leftUnmatchedGroupSwitch"}}
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
 	// {{/*
@@ -293,7 +297,7 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
 
 // {{/*
 // This code snippet processes an unmatched group from the right.
-func _RIGHT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
+func _RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "rightUnmatchedGroupSwitch"}}
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
 	// {{/*
@@ -328,7 +332,7 @@ func _RIGHT_UNMATCHED_GROUP_SWITCH(joinType joinTypeInfo) { // */}}
 // {{/*
 // This code snippet decides what to do if we encounter null in the equality
 // column from the left input.
-func _NULL_FROM_LEFT_SWITCH(joinType joinTypeInfo) { // */}}
+func _NULL_FROM_LEFT_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "nullFromLeftSwitch"}}
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
 	// {{/*
@@ -353,7 +357,7 @@ func _NULL_FROM_LEFT_SWITCH(joinType joinTypeInfo) { // */}}
 // {{/*
 // This code snippet decides what to do if we encounter null in the equality
 // column from the right input.
-func _NULL_FROM_RIGHT_SWITCH(joinType joinTypeInfo) { // */}}
+func _NULL_FROM_RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "nullFromRightSwitch"}}
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
 	// {{/*
@@ -381,10 +385,13 @@ func _NULL_FROM_RIGHT_SWITCH(joinType joinTypeInfo) { // */}}
 // between two inputs - we need to advance the left side, i.e. it decides how
 // to handle an unmatched tuple from the left.
 func _INCREMENT_LEFT_SWITCH(
-	joinType joinTypeInfo, sel selPermutation, overload mjOverload, lHasNulls bool,
+	_JOIN_TYPE joinTypeInfo,
+	_SEL_PERMUTATION selPermutation,
+	_MJ_OVERLOAD mjOverload,
+	_L_HAS_NULLS bool,
 ) { // */}}
 	// {{define "incrementLeftSwitch"}}
-	// {{ $sel := $.Sel }}
+	// {{ $sel := $.SelPermutation }}
 	// {{ $mjOverload := $.MJOverload }}
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
 	// {{/*
@@ -404,7 +411,7 @@ func _INCREMENT_LEFT_SWITCH(
 		}
 		// {{ end }}
 		newLVal := lKeys[_L_SEL_IND]
-		// {{with $mjOverload}}
+		// {{with _MJ_OVERLOAD}}
 		_ASSIGN_EQ("match", "newLVal", "lVal")
 		// {{end}}
 		if !match {
@@ -430,10 +437,13 @@ func _INCREMENT_LEFT_SWITCH(
 // between two inputs - we need to advance the right side, i.e. it decides how
 // to handle an unmatched tuple from the right.
 func _INCREMENT_RIGHT_SWITCH(
-	joinType joinTypeInfo, sel selPermutation, overload mjOverload, rHasNulls bool,
+	_JOIN_TYPE joinTypeInfo,
+	_SEL_PERMUTATION selPermutation,
+	_MJ_OVERLOAD mjOverload,
+	_R_HAS_NULLS bool,
 ) { // */}}
 	// {{define "incrementRightSwitch"}}
-	// {{ $sel := $.Sel }}
+	// {{ $sel := $.SelPermutation }}
 	// {{ $mjOverload := $.MJOverload }}
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
 	// {{/*
@@ -458,7 +468,7 @@ func _INCREMENT_RIGHT_SWITCH(
 		}
 		// {{ end }}
 		newRVal := rKeys[_R_SEL_IND]
-		// {{with $mjOverload}}
+		// {{with _MJ_OVERLOAD}}
 		_ASSIGN_EQ("match", "newRVal", "rVal")
 		// {{end}}
 		if !match {
@@ -477,7 +487,7 @@ func _INCREMENT_RIGHT_SWITCH(
 // {{/*
 // This code snippet processes all but last groups in a column after we have
 // reached the end of either the left or right group.
-func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(joinType joinTypeInfo) { // */}}
+func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "processNotLastGroupInColumnSwitch"}}
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
 	// {{/*
@@ -569,7 +579,7 @@ EqLoop:
 // {{/*
 // This code snippet builds the output corresponding to the left side (i.e. is
 // the main body of buildLeftGroups()).
-func _LEFT_SWITCH(joinType joinTypeInfo, isSel bool, hasNulls bool) { // */}}
+func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 	// {{define "leftSwitch"}}
 	// {{ $joinType := .JoinType }}
 	switch colType {
@@ -583,7 +593,7 @@ func _LEFT_SWITCH(joinType joinTypeInfo, isSel bool, hasNulls bool) { // */}}
 		// Loop over every group.
 		for ; o.builderState.left.groupsIdx < len(leftGroups); o.builderState.left.groupsIdx++ {
 			leftGroup := &leftGroups[o.builderState.left.groupsIdx]
-			// {{ if $joinType.IsLeftAnti }}
+			// {{ if _JOIN_TYPE.IsLeftAnti }}
 			// {{/*
 			// With LEFT ANTI JOIN we want to emit output corresponding only to
 			// unmatched tuples, so we're skipping all "matched" groups.
@@ -601,7 +611,7 @@ func _LEFT_SWITCH(joinType joinTypeInfo, isSel bool, hasNulls bool) { // */}}
 			for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 				// Repeat each row numRepeats times.
 				srcStartIdx = o.builderState.left.curSrcStartIdx
-				// {{ if $.IsSel }}
+				// {{ if _HAS_SELECTION }}
 				srcStartIdx = int(sel[srcStartIdx])
 				// {{ end }}
 
@@ -617,7 +627,7 @@ func _LEFT_SWITCH(joinType joinTypeInfo, isSel bool, hasNulls bool) { // */}}
 					outStartIdx += toAppend
 				} else {
 					var isNull bool
-					// {{ if $.HasNulls }}
+					// {{ if _HAS_NULLS }}
 					isNull = src.Nulls().NullAt64(uint64(srcStartIdx))
 					if isNull {
 						out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
@@ -725,7 +735,7 @@ LeftColLoop:
 // {{/*
 // This code snippet builds the output corresponding to the right side (i.e. is
 // the main body of buildRightGroups()).
-func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
+func _RIGHT_SWITCH(_HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 	// {{define "rightSwitch"}}
 
 	switch colType {
@@ -751,8 +761,8 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 				if rightGroup.nullGroup {
 					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
 				} else {
-					// {{ if $.HasNulls }}
-					// {{ if $.IsSel }}
+					// {{ if _HAS_NULLS }}
+					// {{ if _HAS_SELECTION }}
 					out.Nulls().ExtendWithSel(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend), sel)
 					// {{ else }}
 					out.Nulls().Extend(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
@@ -762,13 +772,13 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 					// Optimization in the case that group length is 1, use assign
 					// instead of copy.
 					if toAppend == 1 {
-						// {{ if $.IsSel }}
+						// {{ if _HAS_SELECTION }}
 						outCol[outStartIdx] = srcCol[sel[o.builderState.right.curSrcStartIdx]]
 						// {{ else }}
 						outCol[outStartIdx] = srcCol[o.builderState.right.curSrcStartIdx]
 						// {{ end }}
 					} else {
-						// {{ if $.IsSel }}
+						// {{ if _HAS_SELECTION }}
 						for i := 0; i < toAppend; i++ {
 							outCol[i+outStartIdx] = srcCol[sel[i+o.builderState.right.curSrcStartIdx]]
 						}
@@ -957,7 +967,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
 	o.builderState.rGroups = o.builderState.rGroups[:1]
-	// {{ if not $joinType.IsLeftSemi }}
+	// {{ if not _JOIN_TYPE.IsLeftSemi }}
 	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
 	o.builderState.lGroups[0] = group{
 		rowStartIdx: 0,
@@ -994,13 +1004,13 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
 // the left source. It should only be called when the right source has been
 // exhausted.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
-	// {{ if $joinType.IsInner }}
+	// {{ if _JOIN_TYPE.IsInner }}
 	// {{/*
 	// Remaining tuples from the left source do not have a match, so they are
 	// ignored in INNER JOIN.
 	// */}}
 	// {{ end }}
-	// {{ if or $joinType.IsLeftOuter $joinType.IsLeftAnti }}
+	// {{ if or _JOIN_TYPE.IsLeftOuter _JOIN_TYPE.IsLeftAnti }}
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
@@ -1024,7 +1034,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 
 	o.proberState.lIdx = o.proberState.lLength
 	// {{ end }}
-	// {{ if $joinType.IsRightOuter }}
+	// {{ if _JOIN_TYPE.IsRightOuter }}
 	// {{/*
 	// Remaining tuples from the left source do not have a match, so they are
 	// ignored in RIGHT OUTER JOIN.
@@ -1036,19 +1046,19 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 // the right source. It should only be called when the left source has been
 // exhausted.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustRightSource() {
-	// {{ if $joinType.IsInner }}
+	// {{ if _JOIN_TYPE.IsInner }}
 	// {{/*
 	// Remaining tuples from the right source do not have a match, so they are
 	// ignored in INNER JOIN.
 	// */}}
 	// {{ end }}
-	// {{ if $joinType.IsLeftOuter }}
+	// {{ if _JOIN_TYPE.IsLeftOuter }}
 	// {{/*
 	// Remaining tuples from the right source do not have a match, so they are
 	// ignored in LEFT OUTER JOIN.
 	// */}}
 	// {{ end }}
-	// {{ if $joinType.IsRightOuter }}
+	// {{ if _JOIN_TYPE.IsRightOuter }}
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
@@ -1079,7 +1089,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) build() {
 	if o.output.Width() != 0 {
 		outStartIdx := o.builderState.outCount
 		o.buildLeftGroups(o.builderState.lGroups, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
-		// {{ if not (or $joinType.IsLeftSemi $joinType.IsLeftAnti) }}
+		// {{ if not (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsLeftAnti) }}
 		o.buildRightGroups(o.builderState.rGroups, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
 		// {{ end }}
 	}
@@ -1092,7 +1102,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) build() {
 // This code snippet is executed when at least one of the input sources has
 // been exhausted. It processes any remaining tuples and then sets up the
 // builder.
-func _SOURCE_FINISHED_SWITCH(joinType joinTypeInfo) { // */}}
+func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{define "sourceFinishedSwitch"}}
 	o.outputReady = true
 	// {{ if or $.JoinType.IsInner $.JoinType.IsLeftSemi }}
@@ -1140,7 +1150,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) calculateOutputCount(groups []group) uint
 	count := int(o.builderState.outCount)
 
 	for i := 0; i < len(groups); i++ {
-		// {{ if $joinType.IsLeftAnti }}
+		// {{ if _JOIN_TYPE.IsLeftAnti }}
 		if !groups[i].unmatched {
 			// "Matched" groups are not outputted in LEFT ANTI JOIN, so they do not
 			// contribute to the output count.
