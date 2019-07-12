@@ -204,6 +204,10 @@ func NewMergeJoinOp(
 		return &mergeJoinRightOuterOp{base}, err
 	case sqlbase.JoinType_FULL_OUTER:
 		return &mergeJoinFullOuterOp{base}, err
+	case sqlbase.JoinType_LEFT_SEMI:
+		return &mergeJoinLeftSemiOp{base}, err
+	case sqlbase.JoinType_LEFT_ANTI:
+		return &mergeJoinLeftAntiOp{base}, err
 	default:
 		panic("unsupported join type")
 	}
@@ -350,26 +354,6 @@ func (o *mergeJoinBase) resetBuilderCrossProductState() {
 	o.builderState.right.reset()
 }
 
-// calculateOutputCount uses the toBuild field of each group and the output
-// batch size to determine the output count. Note that as soon as a group is
-// materialized partially or fully to output, its toBuild field is updated
-// accordingly.
-func (o *mergeJoinBase) calculateOutputCount(groups []group) uint16 {
-	count := int(o.builderState.outCount)
-
-	for i := 0; i < len(groups); i++ {
-		count += groups[i].toBuild
-		groups[i].toBuild = 0
-		if count > int(o.outputBatchSize) {
-			groups[i].toBuild = count - int(o.outputBatchSize)
-			count = int(o.outputBatchSize)
-			return uint16(count)
-		}
-	}
-	o.builderState.outFinished = true
-	return uint16(count)
-}
-
 // appendToBufferedGroup appends all the tuples from batch that are part of the
 // same group as the ones in the buffered group that corresponds to the input
 // source. This needs to happen when a group starts at the end of an input
@@ -427,48 +411,6 @@ func (o *mergeJoinBase) setBuilderSourceToBatch() {
 	o.builderState.rBatch = o.proberState.rBatch
 }
 
-// setBuilderSourceToBufferedGroup sets up the builder state to use the
-// buffered group.
-func (o *mergeJoinBase) setBuilderSourceToBufferedGroup() {
-	lGroupEndIdx := int(o.proberState.lBufferedGroup.length)
-	rGroupEndIdx := int(o.proberState.rBufferedGroup.length)
-	// The capacity of builder state lGroups and rGroups is always at least 1
-	// given the init.
-	o.builderState.lGroups = o.builderState.lGroups[:1]
-	o.builderState.lGroups[0] = group{
-		rowStartIdx: 0,
-		rowEndIdx:   lGroupEndIdx,
-		numRepeats:  rGroupEndIdx,
-		toBuild:     lGroupEndIdx * rGroupEndIdx,
-	}
-	o.builderState.rGroups = o.builderState.rGroups[:1]
-	o.builderState.rGroups[0] = group{
-		rowStartIdx: 0,
-		rowEndIdx:   rGroupEndIdx,
-		numRepeats:  lGroupEndIdx,
-		toBuild:     rGroupEndIdx * lGroupEndIdx,
-	}
-
-	o.builderState.lBatch = o.proberState.lBufferedGroup
-	o.builderState.rBatch = o.proberState.rBufferedGroup
-
-	// We cannot yet reset the buffered groups because the builder will be taking
-	// input from them. The actual reset will take place on the next call to
-	// initProberState().
-	o.proberState.lBufferedGroup.needToReset = true
-	o.proberState.rBufferedGroup.needToReset = true
-}
-
-// build creates the cross product, and writes it to the output member.
-func (o *mergeJoinBase) build() {
-	if o.output.Width() != 0 {
-		outStartIdx := o.builderState.outCount
-		o.buildLeftGroups(o.builderState.lGroups, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
-		o.buildRightGroups(o.builderState.rGroups, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
-	}
-	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
-}
-
 // initProberState sets the batches, lengths, and current indices to the right
 // locations given the last iteration of the operator.
 func (o *mergeJoinBase) initProberState(ctx context.Context) {
@@ -498,7 +440,6 @@ func (o *mergeJoinBase) nonEmptyBufferedGroup() bool {
 
 // sourceFinished returns true if either of input sources has no more rows.
 func (o *mergeJoinBase) sourceFinished() bool {
-	// TODO (georgeutsin): update this logic to be able to support joins other than INNER.
 	return o.proberState.lLength == 0 || o.proberState.rLength == 0
 }
 
