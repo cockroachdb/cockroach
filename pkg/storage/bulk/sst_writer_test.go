@@ -56,7 +56,7 @@ func makeRocksSST(t testing.TB, kvs []engine.MVCCKeyValue) []byte {
 	defer w.Close()
 
 	for i := range kvs {
-		if err := w.Add(kvs[i]); err != nil {
+		if err := w.Put(kvs[i].Key, kvs[i].Value); err != nil {
 			t.Fatal(err)
 		}
 	}
