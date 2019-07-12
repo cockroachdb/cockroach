@@ -61,6 +61,7 @@ case "${1-}" in
       TARGET_TRIPLE=aarch64-unknown-linux-gnueabi
       LDFLAGS="-static-libgcc -static-libstdc++"
       SUFFIX=-linux-3.7.10-gnu-aarch64
+      EXTRA_XCONFIGURE_FLAGS="krb5_cv_attr_constructor_destructor=yes,yes ac_cv_func_regcomp=yes ac_cv_printf_positional=yes"
     ) ;;
 
   ?(amd64-)linux-msan)
