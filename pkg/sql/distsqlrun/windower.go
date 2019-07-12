@@ -602,6 +602,7 @@ func (w *windower) processPartition(
 		}
 		frameRun.CurRowPeerGroupNum = 0
 
+		var prevRes tree.Datum
 		for frameRun.RowIdx < partition.Len() {
 			// Perform calculations on each row in the current peer group.
 			peerGroupEndIdx := frameRun.PeerHelper.GetFirstPeerIdx(frameRun.CurRowPeerGroupNum) + frameRun.PeerHelper.GetRowCount(frameRun.CurRowPeerGroupNum)
@@ -617,7 +618,19 @@ func (w *windower) processPartition(
 				if err != nil {
 					return err
 				}
+				if prevRes == nil || prevRes != res {
+					// We don't want to double count the same memory, and since the same
+					// memory can only be reused contiguously as res, comparing against
+					// result of the previous row is sufficient.
+					// We have already accounted for the size of a nil datum prior to
+					// allocating the slice for window values, so we need to keep that in
+					// mind.
+					if err := w.growMemAccount(&w.acc, int64(res.Size())-sizeOfDatum); err != nil {
+						return err
+					}
+				}
 				w.windowValues[partitionIdx][windowFnIdx][row.GetIdx()] = res
+				prevRes = res
 			}
 			if err := frameRun.PeerHelper.Update(frameRun); err != nil {
 				return err
