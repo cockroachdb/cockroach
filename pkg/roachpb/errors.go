@@ -180,14 +180,15 @@ func (e *Error) SetDetail(err error) {
 		} else {
 			e.Message = err.Error()
 		}
-		var isTxnError bool
 		if r, ok := err.(transactionRestartError); ok {
-			isTxnError = true
 			e.TransactionRestart = r.canRestartTransaction()
+		} else {
+			e.TransactionRestart = TransactionRestart_NONE
 		}
 		// If the specific error type exists in the detail union, set it.
 		if !e.Detail.SetInner(err) {
-			if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
+			_, isInternalError := err.(*internalError)
+			if !isInternalError && e.TransactionRestart != TransactionRestart_NONE {
 				panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
 			}
 		}
