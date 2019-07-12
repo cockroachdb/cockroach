@@ -2921,12 +2921,14 @@ func CheckForKeyCollisions(existingIter Iterator, sstIter Iterator) error {
 }
 
 // RocksDBSstFileWriter creates a file suitable for importing with
-// RocksDBSstFileReader.
+// RocksDBSstFileReader. It implements the Writer interface.
 type RocksDBSstFileWriter struct {
 	fw *C.DBSstFileWriter
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 }
+
+var _ Writer = &RocksDBSstFileWriter{}
 
 // MakeRocksDBSstFileWriter creates a new RocksDBSstFileWriter with the default
 // configuration.
@@ -2936,28 +2938,89 @@ func MakeRocksDBSstFileWriter() (RocksDBSstFileWriter, error) {
 	return RocksDBSstFileWriter{fw: fw}, err
 }
 
-// Add puts a kv entry into the sstable being built. An error is returned if it
-// is not greater than any previously added entry (according to the comparator
-// configured during writer creation). `Close` cannot have been called.
-func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
+// ApplyBatchRepr implements the Writer interface.
+func (fw *RocksDBSstFileWriter) ApplyBatchRepr(repr []byte, sync bool) error {
+	panic("unimplemented")
+}
+
+// Clear implements the Writer interface. Note that it inserts a tombstone
+// rather than actually remove the entry from the storage engine. An error is
+// returned if it is not greater than any previously key used in Put or Clear
+// (according to the comparator configured during writer creation). Close
+// cannot have been called.
+func (fw *RocksDBSstFileWriter) Clear(key MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Clear on a closed writer")
+	}
+	fw.DataSize += int64(len(key.Key))
+	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(key)))
+}
+
+// SingleClear implements the Writer interface.
+func (fw *RocksDBSstFileWriter) SingleClear(key MVCCKey) error {
+	panic("unimplemented")
+}
+
+// ClearRange implements the Writer interface. Note that it inserts a range deletion
+// tombstone rather than actually remove the entries from the storage engine.
+// It can be called at any time with respect to Put and Clear.
+func (fw *RocksDBSstFileWriter) ClearRange(start, end MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call ClearRange on a closed writer")
+	}
+	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
+	return statusToError(C.DBSstFileWriterDeleteRange(fw.fw, goToCKey(start), goToCKey(end)))
+}
+
+// ClearIterRange implements the Writer interface. NOTE: This method is fairly
+// expensive as it performs a Cgo call for every key deleted.
+func (fw *RocksDBSstFileWriter) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call ClearIterRange on a closed writer")
+	}
+	iter.Seek(start)
+	for {
+		valid, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !valid || !iter.Key().Less(end) {
+			break
+		}
+		if err := fw.Clear(iter.Key()); err != nil {
+			return err
+		}
+		iter.Next()
+	}
+	return nil
+}
+
+// Merge implements the Writer interface.
+func (fw *RocksDBSstFileWriter) Merge(key MVCCKey, value []byte) error {
+	panic("unimplemented")
+}
+
+// Put implements the Writer interface. It puts a kv entry into the sstable
+// being built. An error is returned if it is not greater than any previously
+// key used in Put or Clear (according to the comparator configured during
+// writer creation). Close cannot have been called.
+func (fw *RocksDBSstFileWriter) Put(key MVCCKey, value []byte) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Open on a closed writer")
 	}
-	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
-	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
+	fw.DataSize += int64(len(key.Key)) + int64(len(value))
+	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(key), goToCSlice(value)))
 }
 
-// Delete puts a deletion tombstone into the sstable being built. See
-// the Add method for more.
-func (fw *RocksDBSstFileWriter) Delete(k MVCCKey) error {
-	if fw.fw == nil {
-		return errors.New("cannot call Delete on a closed writer")
-	}
-	fw.DataSize += int64(len(k.Key))
-	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(k)))
+// LogData implements the Writer interface.
+func (fw *RocksDBSstFileWriter) LogData(data []byte) error {
+	panic("unimplemented")
 }
 
-var _ = (*RocksDBSstFileWriter).Delete
+// LogLogicalOp implements the Writer interface.
+func (fw *RocksDBSstFileWriter) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	// No-op. Logical logging disabled.
+}
 
 // Finish finalizes the writer and returns the constructed file's contents. At
 // least one kv entry must have been added.

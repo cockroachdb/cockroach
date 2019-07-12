@@ -946,6 +946,14 @@ DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key) {
   return kSuccess;
 }
 
+DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter *fw, DBKey start, DBKey end) {
+  rocksdb::Status status = fw->rep.DeleteRange(EncodeKey(start), EncodeKey(end));
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
 DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
   rocksdb::Status status = fw->rep.Finish();
   if (!status.ok()) {
