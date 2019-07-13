@@ -2427,7 +2427,7 @@ CREATE TABLE pg_catalog.pg_stat_activity (
 	datname NAME,
 	pid INTEGER,
 	usesysid OID,
-	username NAME,
+	usename NAME,
 	application_name TEXT,
 	client_addr INET,
 	client_hostname TEXT,
