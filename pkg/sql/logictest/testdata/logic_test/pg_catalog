@@ -240,11 +240,11 @@ FROM pg_catalog.pg_database
 ORDER BY oid
 ----
 oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system         -1            NULL           NULL          NULL        0              NULL
-50   defaultdb      -1            NULL           NULL          NULL        0              NULL
-51   postgres       -1            NULL           NULL          NULL        0              NULL
-52   test           -1            NULL           NULL          NULL        0              NULL
-54   constraint_db  -1            NULL           NULL          NULL        0              NULL
+1    system         -1            0              NULL          NULL        0              NULL
+50   defaultdb      -1            0              NULL          NULL        0              NULL
+51   postgres       -1            0              NULL          NULL        0              NULL
+52   test           -1            0              NULL          NULL        0              NULL
+54   constraint_db  -1            0              NULL          NULL        0              NULL
 
 ## pg_catalog.pg_tables
 

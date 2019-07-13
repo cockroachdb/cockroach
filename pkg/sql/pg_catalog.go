@@ -960,7 +960,7 @@ CREATE TABLE pg_catalog.pg_database (
 				tree.DBoolFalse,            // datistemplate
 				tree.DBoolTrue,             // datallowconn
 				negOneVal,                  // datconnlimit
-				tree.DNull,                 // datlastsysoid
+				oidZero,                    // datlastsysoid
 				tree.DNull,                 // datfrozenxid
 				tree.DNull,                 // datminmxid
 				oidZero,                    // dattablespace
