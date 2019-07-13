@@ -191,6 +191,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogClassTableID:               pgCatalogClassTable,
 		sqlbase.PgCatalogCollationTableID:           pgCatalogCollationTable,
 		sqlbase.PgCatalogConstraintTableID:          pgCatalogConstraintTable,
+		sqlbase.PgCatalogConversionTableID:          pgCatalogConversionTable,
 		sqlbase.PgCatalogDatabaseTableID:            pgCatalogDatabaseTable,
 		sqlbase.PgCatalogDependTableID:              pgCatalogDependTable,
 		sqlbase.PgCatalogDescriptionTableID:         pgCatalogDescriptionTable,
@@ -879,6 +880,25 @@ func colIDArrayToVector(arr []sqlbase.ColumnID) (tree.Datum, error) {
 		return dArr, nil
 	}
 	return tree.NewDIntVectorFromDArray(tree.MustBeDArray(dArr)), nil
+}
+
+var pgCatalogConversionTable = virtualSchemaTable{
+	comment: `encoding conversions (empty - unimplemented)
+https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_conversion (
+	oid OID,
+	conname NAME,
+	connamespace OID,
+	conowner OID,
+	conforencoding INT4,
+	contoencoding INT4,
+	conproc OID,
+  condefault BOOL
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
 }
 
 var pgCatalogDatabaseTable = virtualSchemaTable{
