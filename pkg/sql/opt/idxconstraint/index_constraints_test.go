@@ -161,7 +161,7 @@ func TestIndexConstraints(t *testing.T) {
 				}
 				remainingFilter := ic.RemainingFilters()
 				if !remainingFilter.IsTrue() {
-					execBld := execbuilder.New(nil /* execFactory */, f.Memo(), &remainingFilter, &evalCtx)
+					execBld := execbuilder.New(nil /* execFactory */, f.Memo(), nil /* catalog */, &remainingFilter, &evalCtx)
 					expr, err := execBld.BuildScalar(&iVarHelper)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
