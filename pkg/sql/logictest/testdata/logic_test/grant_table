@@ -99,6 +99,7 @@ test           pg_catalog          pg_auth_members                    public   S
 test           pg_catalog          pg_class                           public   SELECT
 test           pg_catalog          pg_collation                       public   SELECT
 test           pg_catalog          pg_constraint                      public   SELECT
+test           pg_catalog          pg_conversion                      public   SELECT
 test           pg_catalog          pg_database                        public   SELECT
 test           pg_catalog          pg_depend                          public   SELECT
 test           pg_catalog          pg_description                     public   SELECT

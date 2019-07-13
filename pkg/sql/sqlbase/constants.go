@@ -113,6 +113,7 @@ const (
 	PgCatalogClassTableID
 	PgCatalogCollationTableID
 	PgCatalogConstraintTableID
+	PgCatalogConversionTableID
 	PgCatalogDatabaseTableID
 	PgCatalogDependTableID
 	PgCatalogDescriptionTableID
