@@ -3093,7 +3093,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 	tree.Overload{
 		Types: tree.ArgTypes{
 			{"input", types.String},
-			{"substr_pos", types.Int},
+			{"start_pos", types.Int},
 		},
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -3109,13 +3109,13 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 
 			return tree.NewDString(string(runes[start:])), nil
 		},
-		Info: "Returns a substring of `input` starting at `substr_pos` (count starts at 1).",
+		Info: "Returns a substring of `input` starting at `start_pos` (count starts at 1).",
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
 			{"input", types.String},
 			{"start_pos", types.Int},
-			{"end_pos", types.Int},
+			{"length", types.Int},
 		},
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -3147,7 +3147,8 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 
 			return tree.NewDString(string(runes[start:end])), nil
 		},
-		Info: "Returns a substring of `input` between `start_pos` and `end_pos` (count starts at 1).",
+		Info: "Returns a substring of `input` starting at `start_pos` (count starts at 1) and " +
+			"including up to `length` characters.",
 	},
 	tree.Overload{
 		Types: tree.ArgTypes{
