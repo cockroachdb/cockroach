@@ -149,7 +149,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (_ *planTop, isCorrelat
 	// Build the plan tree.
 	root := execMemo.RootExpr()
 	execFactory := makeExecFactory(p)
-	plan, err := execbuilder.New(&execFactory, execMemo, root, p.EvalContext()).Build()
+	plan, err := execbuilder.New(&execFactory, execMemo, &opc.catalog, root, p.EvalContext()).Build()
 	if err != nil {
 		return nil, isCorrelated, err
 	}

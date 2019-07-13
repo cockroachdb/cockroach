@@ -1015,6 +1015,35 @@ func (oi *optIndex) Ordinal() int {
 	return oi.indexOrdinal
 }
 
+// PartitionByListPrefixes is part of the cat.Index interface.
+func (oi *optIndex) PartitionByListPrefixes() []tree.Datums {
+	list := oi.desc.Partitioning.List
+	if len(list) == 0 {
+		return nil
+	}
+	res := make([]tree.Datums, 0, len(list))
+	var a sqlbase.DatumAlloc
+	for i := range list {
+		for _, valueEncBuf := range list[i].Values {
+			t, _, err := sqlbase.DecodePartitionTuple(
+				&a, &oi.tab.desc.TableDescriptor, oi.desc, &oi.desc.Partitioning,
+				valueEncBuf, nil, /* prefixDatums */
+			)
+			if err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "while decoding partition tuple"))
+			}
+			// Ignore the DEFAULT case, where there is nothing to return.
+			if len(t.Datums) > 0 {
+				res = append(res, t.Datums)
+			}
+			// TODO(radu): split into multiple prefixes if Subpartition is also by list.
+			// Note that this functionality should be kept in sync with the test catalog
+			// implementation (test_catalog.go).
+		}
+	}
+	return res
+}
+
 type optTableStat struct {
 	createdAt      time.Time
 	columnOrdinals []int

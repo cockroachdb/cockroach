@@ -133,6 +133,9 @@ func FindTableColumnByName(tab Table, name tree.Name) int {
 // and testing.
 func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	child := tp.Childf("TABLE %s", tab.Name().TableName)
+	if tab.IsVirtualTable() {
+		child.Child("virtual table")
+	}
 
 	var buf bytes.Buffer
 	for i := 0; i < tab.DeletableColumnCount(); i++ {
@@ -207,6 +210,14 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 	}
 
 	FormatZone(idx.Zone(), child)
+
+	partPrefixes := idx.PartitionByListPrefixes()
+	if len(partPrefixes) != 0 {
+		c := child.Child("partition by list prefixes")
+		for i := range partPrefixes {
+			c.Child(partPrefixes[i].String())
+		}
+	}
 }
 
 // formatColPrefix returns a string representation of a list of columns. The

@@ -156,9 +156,11 @@ type TableDef interface {
 	SetName(name Name)
 }
 
-func (*ColumnTableDef) tableDef() {}
-func (*IndexTableDef) tableDef()  {}
-func (*FamilyTableDef) tableDef() {}
+func (*ColumnTableDef) tableDef()               {}
+func (*IndexTableDef) tableDef()                {}
+func (*FamilyTableDef) tableDef()               {}
+func (*ForeignKeyConstraintTableDef) tableDef() {}
+func (*CheckConstraintTableDef) tableDef()      {}
 
 // TableDefs represents a list of table definitions.
 type TableDefs []TableDef
@@ -569,7 +571,9 @@ type ConstraintTableDef interface {
 	constraintTableDef()
 }
 
-func (*UniqueConstraintTableDef) constraintTableDef() {}
+func (*UniqueConstraintTableDef) constraintTableDef()     {}
+func (*ForeignKeyConstraintTableDef) constraintTableDef() {}
+func (*CheckConstraintTableDef) constraintTableDef()      {}
 
 // UniqueConstraintTableDef represents a unique constraint within a CREATE
 // TABLE statement.
@@ -714,12 +718,6 @@ func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
 func (node *ForeignKeyConstraintTableDef) SetName(name Name) {
 	node.Name = name
 }
-
-func (*ForeignKeyConstraintTableDef) tableDef()           {}
-func (*ForeignKeyConstraintTableDef) constraintTableDef() {}
-
-func (*CheckConstraintTableDef) tableDef()           {}
-func (*CheckConstraintTableDef) constraintTableDef() {}
 
 // CheckConstraintTableDef represents a check constraint within a CREATE
 // TABLE statement.

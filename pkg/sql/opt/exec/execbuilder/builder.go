@@ -12,6 +12,7 @@ package execbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,6 +26,7 @@ import (
 type Builder struct {
 	factory            exec.Factory
 	mem                *memo.Memo
+	catalog            cat.Catalog
 	e                  opt.Expr
 	disableTelemetry   bool
 	evalCtx            *tree.EvalContext
@@ -53,12 +55,23 @@ type Builder struct {
 // New constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
-func New(factory exec.Factory, mem *memo.Memo, e opt.Expr, evalCtx *tree.EvalContext) *Builder {
+//
+// catalog is only needed if the statement contains an EXPLAIN (OPT, CATALOG).
+func New(
+	factory exec.Factory, mem *memo.Memo, catalog cat.Catalog, e opt.Expr, evalCtx *tree.EvalContext,
+) *Builder {
 	var nameGen *memo.ExprNameGenerator
 	if evalCtx != nil && evalCtx.SessionData.SaveTablesPrefix != "" {
 		nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
 	}
-	return &Builder{factory: factory, mem: mem, e: e, evalCtx: evalCtx, nameGen: nameGen}
+	return &Builder{
+		factory: factory,
+		mem:     mem,
+		catalog: catalog,
+		e:       e,
+		evalCtx: evalCtx,
+		nameGen: nameGen,
+	}
 }
 
 // DisableTelemetry prevents the execbuilder from updating telemetry counters.
