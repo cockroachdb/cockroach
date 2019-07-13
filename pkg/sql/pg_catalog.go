@@ -204,6 +204,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogIndexesTableID:             pgCatalogIndexesTable,
 		sqlbase.PgCatalogInheritsTableID:            pgCatalogInheritsTable,
 		sqlbase.PgCatalogLanguageTableID:            pgCatalogLanguageTable,
+		sqlbase.PgCatalogMatViewsTableID:            pgCatalogMatViewsTable,
 		sqlbase.PgCatalogNamespaceTableID:           pgCatalogNamespaceTable,
 		sqlbase.PgCatalogOperatorTableID:            pgCatalogOperatorTable,
 		sqlbase.PgCatalogProcTableID:                pgCatalogProcTable,
@@ -1436,6 +1437,24 @@ CREATE TABLE pg_catalog.pg_language (
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Languages to write functions and stored procedures are not supported.
+		return nil
+	},
+}
+
+var pgCatalogMatViewsTable = virtualSchemaTable{
+	comment: `available materialized views (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_matviews (
+  schemaname NAME,
+  matviewname NAME,
+  matviewowner NAME,
+  tablespace NAME,
+  hasindexes BOOL,
+  ispopulated BOOL,
+  definition TEXT
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 }

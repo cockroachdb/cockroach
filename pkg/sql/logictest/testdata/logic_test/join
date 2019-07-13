@@ -553,8 +553,6 @@ SELECT     NULL::text  AS pktable_cat,
   AND      con.oid = dep.objid
   AND      pkic.oid = dep.refobjid
   AND      pkic.relkind = 'i'
-  AND      dep.classid = 'pg_constraint'::regclass::oid
-  AND      dep.refclassid = 'pg_class'::regclass::oid
   AND      fkn.nspname = 'public'
   AND      fkc.relname = 'orders'
   ORDER BY pkn.nspname,
