@@ -687,7 +687,7 @@ SELECT * FROM pg_collation
 WHERE collname='en-US'
 ----
 oid         collname  collnamespace  collowner  collencoding  collcollate  collctype
-3903121477  en-US     2332901747     NULL       6             NULL         NULL
+3903121477  en-US     1307062959     NULL       6             NULL         NULL
 
 ## pg_catalog.pg_constraint
 ##
