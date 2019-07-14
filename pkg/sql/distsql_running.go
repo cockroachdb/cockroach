@@ -221,6 +221,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 // mutated.
 // - finishedSetupFn, if non-nil, is called synchronously after all the
 // processors have successfully started up.
+//
+// It returns a cleanup function that must be called in order to release the
+// resources.
 func (dsp *DistSQLPlanner) Run(
 	planCtx *PlanningCtx,
 	txn *client.Txn,
@@ -228,7 +231,7 @@ func (dsp *DistSQLPlanner) Run(
 	recv *DistSQLReceiver,
 	evalCtx *extendedEvalContext,
 	finishedSetupFn func(),
-) {
+) (cleanup func()) {
 	ctx := planCtx.ctx
 
 	var (
@@ -296,13 +299,25 @@ func (dsp *DistSQLPlanner) Run(
 		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 			"The error should have gone to the consumer.", err)
 	}
-	// We need to close the planNode tree we translated into a DistSQL plan before
-	// flow.Cleanup, which closes memory accounts that expect to be emptied.
+
 	if planCtx.planner != nil && !planCtx.ignoreClose {
-		planCtx.planner.curPlan.execErr = recv.resultWriter.Err()
-		planCtx.planner.curPlan.close(ctx)
+		// planCtx can change before the cleanup function is executed, so we make
+		// a copy of the planner and bind it to the function.
+		plannerCopy := *planCtx.planner
+		return func() {
+			// We need to close the planNode tree we translated into a DistSQL plan
+			// before flow.Cleanup, which closes memory accounts that expect to be
+			// emptied.
+			plannerCopy.curPlan.execErr = recv.resultWriter.Err()
+			plannerCopy.curPlan.close(ctx)
+			flow.Cleanup(ctx)
+		}
 	}
+
+	// ignoreClose is set to true meaning that someone else will handle the
+	// closing of the current plan, so we simply clean up the flow.
 	flow.Cleanup(ctx)
+	return nil /* cleanup */
 }
 
 // DistSQLReceiver is a RowReceiver that writes results to a rowResultWriter.
@@ -778,7 +793,11 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRowReceiver := NewRowResultWriter(rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
-	dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
+	if cleanup := dsp.Run(
+		subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil, /* finishedSetupFn */
+	); cleanup != nil {
+		cleanup()
+	}
 	if subqueryRecv.commErr != nil {
 		return subqueryRecv.commErr
 	}
@@ -840,6 +859,9 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 // while using that resultWriter), the error is also stored in
 // DistSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
+//
+// It returns a cleanup function that must be called in order to release the
+// resources.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -847,7 +869,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	txn *client.Txn,
 	plan planNode,
 	recv *DistSQLReceiver,
-) {
+) (cleanup func()) {
 	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
 	physPlan, err := dsp.createPlanForNode(planCtx, plan)
@@ -856,7 +878,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		return
 	}
 	dsp.FinalizePlan(planCtx, &physPlan)
-	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	return dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
 
 // PlanAndRunPostqueries returns false if an error was encountered and sets
@@ -924,11 +946,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryPlanCtx.isLocal = !distributePostquery
 	postqueryPlanCtx.planner = planner
 	postqueryPlanCtx.stmtType = tree.Rows
-	// We cannot close the postqueries' plans through the plan top since
-	// postqueries haven't been executed yet, so we manually close each postquery
-	// plan right after the execution.
 	postqueryPlanCtx.ignoreClose = true
-	defer postqueryPlan.plan.Close(ctx)
 
 	postqueryPhysPlan, err := dsp.createPlanForNode(postqueryPlanCtx, postqueryPlan.plan)
 	if err != nil {
@@ -939,7 +957,11 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryRecv := recv.clone()
 	var postqueryRowReceiver postqueryRowResultWriter
 	postqueryRecv.resultWriter = &postqueryRowReceiver
-	dsp.Run(postqueryPlanCtx, planner.txn, &postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)
+	if cleanup := dsp.Run(
+		postqueryPlanCtx, planner.txn, &postqueryPhysPlan, postqueryRecv, evalCtx, nil, /* finishedSetupFn */
+	); cleanup != nil {
+		cleanup()
+	}
 	if postqueryRecv.commErr != nil {
 		return postqueryRecv.commErr
 	}

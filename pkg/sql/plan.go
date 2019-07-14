@@ -445,6 +445,13 @@ func (p *planTop) close(ctx context.Context) {
 			p.subqueryPlans[i].plan = nil
 		}
 	}
+
+	for i := range p.postqueryPlans {
+		if p.postqueryPlans[i].plan != nil {
+			p.postqueryPlans[i].plan.Close(ctx)
+			p.postqueryPlans[i].plan = nil
+		}
+	}
 }
 
 // columns retrieves the plan's columns.

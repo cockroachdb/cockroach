@@ -513,9 +513,8 @@ type PlanningCtx struct {
 	planner *planner
 	// ignoreClose, when set to true, will prevent the closing of the planner's
 	// current plan. Only the top-level query needs to close it, but everything
-	// else (like subqueries or EXPLAIN ANALYZE) should set this to true to avoid
-	// double closes of the planNode tree. Postqueries also need to set it to
-	// true, and they are responsible for closing their own plan.
+	// else (like sub- and postqueries, or EXPLAIN ANALYZE) should set this to
+	// true to avoid double closes of the planNode tree.
 	ignoreClose bool
 	stmtType    tree.StatementType
 	// planDepth is set to the current depth of the planNode tree. It's used to
