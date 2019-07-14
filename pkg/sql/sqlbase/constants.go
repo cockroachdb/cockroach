@@ -136,6 +136,7 @@ const (
 	PgCatalogRangeTableID
 	PgCatalogRewriteTableID
 	PgCatalogRolesTableID
+	PgCatalogSecLabelsTableID
 	PgCatalogSequencesTableID
 	PgCatalogSettingsTableID
 	PgCatalogUserTableID
