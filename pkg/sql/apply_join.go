@@ -326,7 +326,8 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 	planCtx.stmtType = recv.stmtType
 
 	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(
-		params.ctx, evalCtx, planCtx, params.p.Txn(), plan.plan, recv)
+		params.ctx, evalCtx, planCtx, params.p.Txn(), plan.plan, recv,
+	)()
 	if recv.commErr != nil {
 		return recv.commErr
 	}
