@@ -2243,6 +2243,33 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"row_to_json": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"row", types.AnyTuple}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// TODO(mjibson): make sure this fits in an int32.
+				tuple := args[0].(*tree.DTuple)
+				builder := json.NewObjectBuilder(len(tuple.D))
+				typ := tuple.ResolvedType()
+				labels := typ.TupleLabels()
+				for i, d := range tuple.D {
+					label := ""
+					if labels != nil {
+						label = labels[i]
+					}
+					val, err := tree.AsJSON(d)
+					if err != nil {
+						return nil, err
+					}
+					builder.Add(label, val)
+				}
+				return tree.NewDJSON(builder.Build()), nil
+			},
+			Info: "Returns the row as a JSON object.",
+		},
+	),
+
 	"sin": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Sin(x))), nil
