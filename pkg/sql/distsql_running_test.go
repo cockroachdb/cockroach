@@ -163,8 +163,10 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		planCtx.planner = p
 		planCtx.stmtType = recv.stmtType
 
-		execCfg.DistSQLPlanner.PlanAndRun(
-			ctx, evalCtx, planCtx, txn, p.curPlan.plan, recv)
+		if cleanup := execCfg.DistSQLPlanner.PlanAndRun(
+			ctx, evalCtx, planCtx, txn, p.curPlan.plan, recv); cleanup != nil {
+			cleanup()
+		}
 		return rw.Err()
 	})
 	if err != nil {

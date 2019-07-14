@@ -222,8 +222,11 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			newParams.extendedEvalCtx.Tracing,
 		)
 		defer recv.Release()
-		distSQLPlanner.Run(
-			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil /* finishedSetupFn */)
+		if cleanup := distSQLPlanner.Run(
+			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil, /* finishedSetupFn */
+		); cleanup != nil {
+			cleanup()
+		}
 
 		n.run.executedStatement = true
 
