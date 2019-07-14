@@ -2402,6 +2402,90 @@ project
            └── projections
                 └── a + 1 [type=int, outer=(9)]
 
+# We derive the prune cols for the mutation appropriately so we
+# can prune away columns even when the mutation is not under a
+# projection. Another rule will fire to add the appropriate
+# projection when this happens.
+opt
+SELECT a FROM [SELECT a, b FROM [UPDATE returning_test SET a = a + 1 RETURNING a, b, c] WHERE a > 1]
+----
+project
+ ├── columns: a:1(int!null)
+ ├── side-effects, mutations
+ └── select
+      ├── columns: a:1(int!null) rowid:8(int!null)
+      ├── side-effects, mutations
+      ├── key: (8)
+      ├── fd: (8)-->(1)
+      ├── update returning_test
+      │    ├── columns: a:1(int) rowid:8(int!null)
+      │    ├── fetch columns: a:9(int) rowid:16(int)
+      │    ├── update-mapping:
+      │    │    └──  column17:17 => a:1
+      │    ├── side-effects, mutations
+      │    ├── key: (8)
+      │    ├── fd: (8)-->(1)
+      │    └── project
+      │         ├── columns: column17:17(int) a:9(int) rowid:16(int!null)
+      │         ├── key: (16)
+      │         ├── fd: (16)-->(9), (9)~~>(16), (9)-->(17)
+      │         ├── scan returning_test@secondary
+      │         │    ├── columns: a:9(int) rowid:16(int!null)
+      │         │    ├── key: (16)
+      │         │    └── fd: (16)-->(9), (9)~~>(16)
+      │         └── projections
+      │              └── a + 1 [type=int, outer=(9)]
+      └── filters
+           └── a > 1 [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+
+opt
+SELECT
+    *
+FROM
+    [SELECT a, b FROM returning_test] AS x
+    JOIN [SELECT a, b FROM [UPDATE returning_test SET a = a + 1 RETURNING a, b, c] WHERE a > 1]
+            AS y ON true
+----
+project
+ ├── columns: a:1(int) b:2(int) a:9(int!null) b:10(int)
+ ├── side-effects, mutations
+ ├── fd: (1)~~>(2)
+ └── inner-join (hash)
+      ├── columns: x.a:1(int) x.b:2(int) returning_test.a:9(int!null) returning_test.b:10(int) returning_test.rowid:16(int!null)
+      ├── side-effects, mutations
+      ├── lax-key: (1,2,16)
+      ├── fd: (1)~~>(2), (16)-->(9,10)
+      ├── scan x
+      │    ├── columns: x.a:1(int) x.b:2(int)
+      │    ├── lax-key: (1,2)
+      │    └── fd: (1)~~>(2)
+      ├── select
+      │    ├── columns: returning_test.a:9(int!null) returning_test.b:10(int) returning_test.rowid:16(int!null)
+      │    ├── side-effects, mutations
+      │    ├── key: (16)
+      │    ├── fd: (16)-->(9,10)
+      │    ├── update returning_test
+      │    │    ├── columns: returning_test.a:9(int) returning_test.b:10(int) returning_test.rowid:16(int!null)
+      │    │    ├── fetch columns: returning_test.a:17(int) returning_test.b:18(int) returning_test.rowid:24(int)
+      │    │    ├── update-mapping:
+      │    │    │    └──  column25:25 => returning_test.a:9
+      │    │    ├── side-effects, mutations
+      │    │    ├── key: (16)
+      │    │    ├── fd: (16)-->(9,10)
+      │    │    └── project
+      │    │         ├── columns: column25:25(int) returning_test.a:17(int) returning_test.b:18(int) returning_test.rowid:24(int!null)
+      │    │         ├── key: (24)
+      │    │         ├── fd: (24)-->(17,18), (17)~~>(18,24), (17)-->(25)
+      │    │         ├── scan returning_test
+      │    │         │    ├── columns: returning_test.a:17(int) returning_test.b:18(int) returning_test.rowid:24(int!null)
+      │    │         │    ├── key: (24)
+      │    │         │    └── fd: (24)-->(17,18), (17)~~>(18,24)
+      │    │         └── projections
+      │    │              └── returning_test.a + 1 [type=int, outer=(17)]
+      │    └── filters
+      │         └── returning_test.a > 1 [type=bool, outer=(9), constraints=(/9: [/2 - ]; tight)]
+      └── filters (true)
+
 # Check if the rule works as desired for other mutations.
 opt
 INSERT INTO returning_test VALUES (1, 2, 'c') ON CONFLICT (a) DO UPDATE SET a = excluded.a + returning_test.a RETURNING a, b, c

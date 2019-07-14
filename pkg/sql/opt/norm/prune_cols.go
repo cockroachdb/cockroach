@@ -73,9 +73,17 @@ func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColS
 func (c *CustomFuncs) NeededMutationFetchCols(
 	op opt.Operator, private *memo.MutationPrivate,
 ) opt.ColSet {
+	return neededMutationFetchCols(c.mem, op, private)
+}
+
+// neededMutationFetchCols returns the set of columns needed by the given
+// mutation operator.
+func neededMutationFetchCols(
+	mem *memo.Memo, op opt.Operator, private *memo.MutationPrivate,
+) opt.ColSet {
 
 	var cols opt.ColSet
-	tabMeta := c.mem.Metadata().TableMeta(private.Table)
+	tabMeta := mem.Metadata().TableMeta(private.Table)
 
 	// familyCols returns the columns in the given family.
 	familyCols := func(fam cat.Family) opt.ColSet {
@@ -500,6 +508,21 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 			relProps.Rule.PruneCols.Add(w.Col)
 			relProps.Rule.PruneCols.DifferenceWith(w.ScalarProps(e.Memo()).OuterCols)
 		}
+
+	case opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
+		// Any of the RETURNING columns are candidates for pruning if they are
+		// not required for the mutation.
+		relProps.Rule.PruneCols = relProps.OutputCols
+
+		// Find the columns that would need to be fetched, if no returning
+		// clause were present.
+		withoutReturningPrivate := *e.Private().(*memo.MutationPrivate)
+		withoutReturningPrivate.ReturnCols = opt.ColList{}
+		neededCols := neededMutationFetchCols(e.Memo(), e.Op(), &withoutReturningPrivate)
+
+		// Only the "free" RETURNING columns can be pruned away (i.e. the columns
+		// required by the mutation only because they're being returned).
+		relProps.Rule.PruneCols.DifferenceWith(neededCols)
 
 	default:
 		// Don't allow any columns to be pruned, since that would trigger the
