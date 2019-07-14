@@ -251,6 +251,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	)
 	defer recv.Release()
 
-	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	cleanup := dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	cleanup()
 	return resultRows.Err()
 }

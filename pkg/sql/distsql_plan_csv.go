@@ -87,7 +87,8 @@ func PlanAndRunExport(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	cleanup := dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	cleanup()
 	return resultRows.Err()
 }
 
@@ -429,7 +430,8 @@ func LoadCSV(
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		cleanup := dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		cleanup()
 		return resultRows.Err()
 	})
 }
@@ -641,7 +643,8 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	samples = nil
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	cleanup := dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	cleanup()
 	if err := rowResultWriter.Err(); err != nil {
 		return nil, err
 	}
@@ -738,7 +741,8 @@ func DistIngest(
 	defer recv.Release()
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	cleanup := dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	cleanup()
 	if err := rowResultWriter.Err(); err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
