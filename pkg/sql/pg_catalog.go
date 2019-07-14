@@ -214,6 +214,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogRangeTableID:               pgCatalogRangeTable,
 		sqlbase.PgCatalogRewriteTableID:             pgCatalogRewriteTable,
 		sqlbase.PgCatalogRolesTableID:               pgCatalogRolesTable,
+		sqlbase.PgCatalogSecLabelsTableID:           pgCatalogSecLabelsTable,
 		sqlbase.PgCatalogSequencesTableID:           pgCatalogSequencesTable,
 		sqlbase.PgCatalogSettingsTableID:            pgCatalogSettingsTable,
 		sqlbase.PgCatalogUserTableID:                pgCatalogUserTable,
@@ -1917,6 +1918,25 @@ CREATE TABLE pg_catalog.pg_roles (
 					tree.DNull,                   // rolconfig
 				)
 			})
+	},
+}
+
+var pgCatalogSecLabelsTable = virtualSchemaTable{
+	comment: `security labels (empty)
+https://www.postgresql.org/docs/9.6/view-pg-seclabels.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_seclabels (
+	objoid OID,
+  classoid OID,
+  objsubid INT4,
+  objtype TEXT,
+	objnamespace OID,
+	objname TEXT,
+	provider TEXT,
+	label TEXT
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
 	},
 }
 

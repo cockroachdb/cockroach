@@ -298,6 +298,7 @@ pg_catalog          pg_range
 pg_catalog          pg_rewrite
 pg_catalog          pg_roles
 pg_catalog          pg_seclabel
+pg_catalog          pg_seclabels
 pg_catalog          pg_sequence
 pg_catalog          pg_settings
 pg_catalog          pg_shdescription
@@ -430,6 +431,7 @@ pg_range
 pg_rewrite
 pg_roles
 pg_seclabel
+pg_seclabels
 pg_sequence
 pg_settings
 pg_shdescription
@@ -569,6 +571,7 @@ system         pg_catalog          pg_range                           SYSTEM VIE
 system         pg_catalog          pg_rewrite                         SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_roles                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_seclabel                        SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_seclabels                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_sequence                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_settings                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_shdescription                   SYSTEM VIEW  NO                  1
@@ -1305,6 +1308,7 @@ NULL     public   system         pg_catalog          pg_range                   
 NULL     public   system         pg_catalog          pg_rewrite                         SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_roles                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabel                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_seclabels                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_sequence                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_settings                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shdescription                   SELECT          NULL          YES
@@ -1550,6 +1554,7 @@ NULL     public   system         pg_catalog          pg_range                   
 NULL     public   system         pg_catalog          pg_rewrite                         SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_roles                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabel                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_seclabels                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_sequence                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_settings                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shdescription                   SELECT          NULL          YES
