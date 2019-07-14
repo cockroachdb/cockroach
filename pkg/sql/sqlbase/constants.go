@@ -139,6 +139,7 @@ const (
 	PgCatalogSecLabelsTableID
 	PgCatalogSequencesTableID
 	PgCatalogSettingsTableID
+	PgCatalogShdependTableID
 	PgCatalogUserTableID
 	PgCatalogUserMappingTableID
 	PgCatalogTablesTableID

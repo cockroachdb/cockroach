@@ -125,6 +125,7 @@ test           pg_catalog          pg_seclabel                        public   S
 test           pg_catalog          pg_seclabels                       public   SELECT
 test           pg_catalog          pg_sequence                        public   SELECT
 test           pg_catalog          pg_settings                        public   SELECT
+test           pg_catalog          pg_shdepend                        public   SELECT
 test           pg_catalog          pg_shdescription                   public   SELECT
 test           pg_catalog          pg_shseclabel                      public   SELECT
 test           pg_catalog          pg_stat_activity                   public   SELECT

@@ -50,6 +50,7 @@ pg_seclabel
 pg_seclabels
 pg_sequence
 pg_settings
+pg_shdepend
 pg_shdescription
 pg_shseclabel
 pg_stat_activity
@@ -119,6 +120,7 @@ pg_seclabel
 pg_seclabels
 pg_sequence
 pg_settings
+pg_shdepend
 pg_shdescription
 pg_shseclabel
 pg_stat_activity
@@ -1420,20 +1422,21 @@ objoid      classoid    objsubid  description
 4294967210  4294967233  0         range types (empty - feature does not exist)
 4294967209  4294967233  0         rewrite rules (empty - feature does not exist)
 4294967208  4294967233  0         database roles
-4294967196  4294967233  0         security labels (empty - feature does not exist)
+4294967195  4294967233  0         security labels (empty - feature does not exist)
 4294967207  4294967233  0         security labels (empty)
 4294967206  4294967233  0         sequences (see also information_schema.sequences)
 4294967205  4294967233  0         session variables (incomplete)
+4294967204  4294967233  0         shared dependencies (empty - not implemented)
 4294967226  4294967233  0         shared object comments
-4294967195  4294967233  0         shared security labels (empty - feature not supported)
-4294967197  4294967233  0         backend access statistics (empty - monitoring works differently in CockroachDB)
-4294967202  4294967233  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
-4294967201  4294967233  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
-4294967200  4294967233  0         triggers (empty - feature does not exist)
-4294967199  4294967233  0         scalar types (incomplete)
-4294967204  4294967233  0         database users
-4294967203  4294967233  0         local to remote user mapping (empty - feature does not exist)
-4294967198  4294967233  0         view definitions (incomplete - see also information_schema.views)
+4294967194  4294967233  0         shared security labels (empty - feature not supported)
+4294967196  4294967233  0         backend access statistics (empty - monitoring works differently in CockroachDB)
+4294967201  4294967233  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
+4294967200  4294967233  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
+4294967199  4294967233  0         triggers (empty - feature does not exist)
+4294967198  4294967233  0         scalar types (incomplete)
+4294967203  4294967233  0         database users
+4294967202  4294967233  0         local to remote user mapping (empty - feature does not exist)
+4294967197  4294967233  0         view definitions (incomplete - see also information_schema.views)
 
 ## pg_catalog.pg_shdescription
 
