@@ -209,6 +209,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogMatViewsTableID:            pgCatalogMatViewsTable,
 		sqlbase.PgCatalogNamespaceTableID:           pgCatalogNamespaceTable,
 		sqlbase.PgCatalogOperatorTableID:            pgCatalogOperatorTable,
+		sqlbase.PgCatalogPreparedXactsTableID:       pgCatalogPreparedXactsTable,
 		sqlbase.PgCatalogProcTableID:                pgCatalogProcTable,
 		sqlbase.PgCatalogRangeTableID:               pgCatalogRangeTable,
 		sqlbase.PgCatalogRewriteTableID:             pgCatalogRewriteTable,
@@ -1654,6 +1655,22 @@ var (
 	_ = proArgModeOut
 	_ = proArgModeTable
 )
+
+var pgCatalogPreparedXactsTable = virtualSchemaTable{
+	comment: `prepared transactions (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_prepared_xacts (
+  transaction INTEGER,
+  gid TEXT,
+  prepared TIMESTAMP WITH TIME ZONE,
+  owner NAME,
+  database NAME
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
 
 var pgCatalogProcTable = virtualSchemaTable{
 	comment: `built-in functions (incomplete)
