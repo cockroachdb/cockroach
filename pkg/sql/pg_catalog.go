@@ -205,6 +205,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogIndexesTableID:             pgCatalogIndexesTable,
 		sqlbase.PgCatalogInheritsTableID:            pgCatalogInheritsTable,
 		sqlbase.PgCatalogLanguageTableID:            pgCatalogLanguageTable,
+		sqlbase.PgCatalogLocksTableID:               pgCatalogLocksTable,
 		sqlbase.PgCatalogMatViewsTableID:            pgCatalogMatViewsTable,
 		sqlbase.PgCatalogNamespaceTableID:           pgCatalogNamespaceTable,
 		sqlbase.PgCatalogOperatorTableID:            pgCatalogOperatorTable,
@@ -1457,6 +1458,32 @@ CREATE TABLE pg_catalog.pg_language (
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Languages to write functions and stored procedures are not supported.
+		return nil
+	},
+}
+
+var pgCatalogLocksTable = virtualSchemaTable{
+	comment: `locks held by active processes (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/view-pg-locks.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_locks (
+  locktype TEXT,
+  database OID,
+  relation OID,
+  page INTEGER,
+  tuple SMALLINT,
+  virtualxid TEXT,
+  transactionid INT,
+  classid OID,
+  objid OID,
+  objsubid SMALLINT,
+  virtualtransaction TEXT,
+  pid INTEGER,
+  mode TEXT,
+  granted BOOLEAN,
+  fastpath BOOLEAN
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 }

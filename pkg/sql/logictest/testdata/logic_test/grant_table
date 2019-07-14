@@ -112,6 +112,7 @@ test           pg_catalog          pg_index                           public   S
 test           pg_catalog          pg_indexes                         public   SELECT
 test           pg_catalog          pg_inherits                        public   SELECT
 test           pg_catalog          pg_language                        public   SELECT
+test           pg_catalog          pg_locks                           public   SELECT
 test           pg_catalog          pg_matviews                        public   SELECT
 test           pg_catalog          pg_namespace                       public   SELECT
 test           pg_catalog          pg_operator                        public   SELECT

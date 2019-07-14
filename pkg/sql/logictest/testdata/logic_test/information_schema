@@ -288,6 +288,7 @@ pg_catalog          pg_index
 pg_catalog          pg_indexes
 pg_catalog          pg_inherits
 pg_catalog          pg_language
+pg_catalog          pg_locks
 pg_catalog          pg_matviews
 pg_catalog          pg_namespace
 pg_catalog          pg_operator
@@ -418,6 +419,7 @@ pg_index
 pg_indexes
 pg_inherits
 pg_language
+pg_locks
 pg_matviews
 pg_namespace
 pg_operator
@@ -555,6 +557,7 @@ system         pg_catalog          pg_index                           SYSTEM VIE
 system         pg_catalog          pg_indexes                         SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_inherits                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_language                        SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_locks                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_matviews                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_namespace                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_operator                        SYSTEM VIEW  NO                  1
@@ -1289,6 +1292,7 @@ NULL     public   system         pg_catalog          pg_index                   
 NULL     public   system         pg_catalog          pg_indexes                         SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_inherits                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_language                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_locks                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_matviews                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_namespace                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_operator                        SELECT          NULL          YES
@@ -1532,6 +1536,7 @@ NULL     public   system         pg_catalog          pg_index                   
 NULL     public   system         pg_catalog          pg_indexes                         SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_inherits                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_language                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_locks                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_matviews                        SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_namespace                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_operator                        SELECT          NULL          YES
