@@ -278,6 +278,7 @@ pg_catalog          pg_collation
 pg_catalog          pg_constraint
 pg_catalog          pg_conversion
 pg_catalog          pg_database
+pg_catalog          pg_default_acl
 pg_catalog          pg_depend
 pg_catalog          pg_description
 pg_catalog          pg_enum
@@ -413,6 +414,7 @@ pg_collation
 pg_constraint
 pg_conversion
 pg_database
+pg_default_acl
 pg_depend
 pg_description
 pg_enum
@@ -555,6 +557,7 @@ system         pg_catalog          pg_collation                       SYSTEM VIE
 system         pg_catalog          pg_constraint                      SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_conversion                      SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_database                        SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_default_acl                     SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_depend                          SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_description                     SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_enum                            SYSTEM VIEW  NO                  1
@@ -1294,6 +1297,7 @@ NULL     public   system         pg_catalog          pg_collation               
 NULL     public   system         pg_catalog          pg_constraint                      SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_conversion                      SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_database                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_default_acl                     SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_depend                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_description                     SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_enum                            SELECT          NULL          YES
@@ -1542,6 +1546,7 @@ NULL     public   system         pg_catalog          pg_collation               
 NULL     public   system         pg_catalog          pg_constraint                      SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_conversion                      SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_database                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_default_acl                     SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_depend                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_description                     SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_enum                            SELECT          NULL          YES

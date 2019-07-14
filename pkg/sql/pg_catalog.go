@@ -194,6 +194,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogConstraintTableID:          pgCatalogConstraintTable,
 		sqlbase.PgCatalogConversionTableID:          pgCatalogConversionTable,
 		sqlbase.PgCatalogDatabaseTableID:            pgCatalogDatabaseTable,
+		sqlbase.PgCatalogDefaultACLTableID:          pgCatalogDefaultACLTable,
 		sqlbase.PgCatalogDependTableID:              pgCatalogDependTable,
 		sqlbase.PgCatalogDescriptionTableID:         pgCatalogDescriptionTable,
 		sqlbase.PgCatalogSharedDescriptionTableID:   pgCatalogSharedDescriptionTable,
@@ -968,6 +969,23 @@ CREATE TABLE pg_catalog.pg_database (
 		})
 	},
 }
+
+var pgCatalogDefaultACLTable = virtualSchemaTable{
+	comment: `default ACLs (empty - unimplemented)
+https://www.postgresql.org/docs/9.6/catalog-pg-default-acl.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_default_acl (
+	oid OID,
+	defaclrole OID,
+	defaclnamespace OID,
+	defaclobjtype CHAR,
+	defaclacl STRING[]
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
 var (
 	depTypeNormal        = tree.NewDString("n")
 	depTypeAuto          = tree.NewDString("a")

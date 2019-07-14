@@ -102,6 +102,7 @@ test           pg_catalog          pg_collation                       public   S
 test           pg_catalog          pg_constraint                      public   SELECT
 test           pg_catalog          pg_conversion                      public   SELECT
 test           pg_catalog          pg_database                        public   SELECT
+test           pg_catalog          pg_default_acl                     public   SELECT
 test           pg_catalog          pg_depend                          public   SELECT
 test           pg_catalog          pg_description                     public   SELECT
 test           pg_catalog          pg_enum                            public   SELECT
