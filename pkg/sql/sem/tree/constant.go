@@ -398,6 +398,9 @@ func (expr *StrVal) Format(ctx *FmtCtx) {
 var (
 	// StrValAvailAllParsable is the set of parsable string types.
 	StrValAvailAllParsable = []*types.T{
+		// Note: String is deliberately first, to make sure that "string" is the
+		// default type that raw strings get parsed into, without any casts or type
+		// assertions.
 		types.String,
 		types.Bytes,
 		types.Bool,
@@ -405,6 +408,7 @@ var (
 		types.Float,
 		types.Decimal,
 		types.Date,
+		types.StringArray,
 		types.Time,
 		types.Timestamp,
 		types.TimestampTZ,

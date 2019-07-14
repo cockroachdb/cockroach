@@ -56,6 +56,8 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, erro
 // strings are not handled. nil, nil is returned if t is not a supported type.
 func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 	switch t.Family() {
+	case types.ArrayFamily:
+		return ParseDArrayFromString(ctx, s, t.ArrayContents())
 	case types.BitFamily:
 		return ParseDBitArray(s)
 	case types.BoolFamily:

@@ -71,10 +71,10 @@ func (p *parseState) gobbleString(isTerminatingChar func(ch byte) bool) (out str
 }
 
 type parseState struct {
-	s       string
-	evalCtx *EvalContext
-	result  *DArray
-	t       *types.T
+	s      string
+	ctx    ParseTimeContext
+	result *DArray
+	t      *types.T
 }
 
 func (p *parseState) advance() {
@@ -136,7 +136,7 @@ func (p *parseState) parseElement() error {
 		}
 	}
 
-	d, err := PerformCast(p.evalCtx, NewDString(next), p.t)
+	d, err := parseStringAs(p.t, next, p.ctx)
 	if err != nil {
 		return err
 	}
@@ -145,12 +145,12 @@ func (p *parseState) parseElement() error {
 
 // ParseDArrayFromString parses the string-form of constructing arrays, handling
 // cases such as `'{1,2,3}'::INT[]`.
-func ParseDArrayFromString(evalCtx *EvalContext, s string, t *types.T) (*DArray, error) {
+func ParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArray, error) {
 	parser := parseState{
-		s:       s,
-		evalCtx: evalCtx,
-		result:  NewDArray(t),
-		t:       t,
+		s:      s,
+		ctx:    ctx,
+		result: NewDArray(t),
+		t:      t,
 	}
 
 	parser.eatWhitespace()
