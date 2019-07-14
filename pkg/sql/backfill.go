@@ -769,7 +769,7 @@ func (sc *SchemaChanger) distBackfill(
 					nil, /* txn - the processors manage their own transactions */
 					&plan, recv, evalCtx,
 					nil, /* finishedSetupFn */
-				)
+				)()
 				return rw.Err()
 			}); err != nil {
 				return err
