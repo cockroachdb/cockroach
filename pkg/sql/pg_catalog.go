@@ -217,6 +217,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogSecLabelsTableID:           pgCatalogSecLabelsTable,
 		sqlbase.PgCatalogSequencesTableID:           pgCatalogSequencesTable,
 		sqlbase.PgCatalogSettingsTableID:            pgCatalogSettingsTable,
+		sqlbase.PgCatalogShdependTableID:            pgCatalogShdependTable,
 		sqlbase.PgCatalogUserTableID:                pgCatalogUserTable,
 		sqlbase.PgCatalogUserMappingTableID:         pgCatalogUserMappingTable,
 		sqlbase.PgCatalogTablesTableID:              pgCatalogTablesTable,
@@ -2049,6 +2050,24 @@ CREATE TABLE pg_catalog.pg_settings (
 				return err
 			}
 		}
+		return nil
+	},
+}
+
+var pgCatalogShdependTable = virtualSchemaTable{
+	comment: `shared dependencies (empty - not implemented)
+https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_shdepend (
+	dbid OID,
+	classid OID,
+	objid OID,
+  objsubid INT4,
+	refclassid OID,
+	refobjid OID,
+	deptype CHAR
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 }
