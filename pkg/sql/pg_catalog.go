@@ -514,6 +514,7 @@ CREATE TABLE pg_catalog.pg_class (
 	relname NAME NOT NULL,
 	relnamespace OID,
 	reltype OID,
+	reloftype OID,
 	relowner OID,
 	relam OID,
 	relfilenode OID,
@@ -555,6 +556,7 @@ CREATE TABLE pg_catalog.pg_class (
 					tree.NewDName(table.Name), // relname
 					namespaceOid,              // relnamespace
 					oidZero,                   // reltype (PG creates a composite type in pg_type for each table)
+					oidZero,                   // reloftype (PG creates a composite type in pg_type for each table)
 					tree.DNull,                // relowner
 					cockroachIndexEncodingOid, // relam
 					oidZero,                   // relfilenode
@@ -596,6 +598,7 @@ CREATE TABLE pg_catalog.pg_class (
 						tree.NewDName(index.Name),            // relname
 						namespaceOid,                         // relnamespace
 						oidZero,                              // reltype
+						oidZero,                              // reloftype
 						tree.DNull,                           // relowner
 						cockroachIndexEncodingOid,            // relam
 						oidZero,                              // relfilenode
