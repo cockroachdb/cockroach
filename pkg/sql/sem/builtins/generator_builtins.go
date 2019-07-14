@@ -64,12 +64,27 @@ func genProps(labels []string) tree.FunctionProperties {
 	}
 }
 
+var aclexplodeGeneratorType = types.MakeLabeledTuple(
+	[]types.T{*types.Oid, *types.Oid, *types.String, *types.Bool},
+	[]string{"grantor", "grantee", "privilege_type", "is_grantable"},
+)
+
 // generators is a map from name to slice of Builtins for all built-in
 // generators.
 //
 // These functions are identified with Class == tree.GeneratorClass.
 // The properties are reachable via tree.FunctionDefinition.
 var generators = map[string]builtinDefinition{
+	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
+	"aclexplode": makeBuiltin(genProps(aclexplodeGeneratorType.TupleLabels()),
+		makeGeneratorOverload(
+			tree.ArgTypes{{"aclitems", types.StringArray}},
+			aclexplodeGeneratorType,
+			makeUnaryGenerator,
+			"Produces a virtual table containing aclitem stuff ("+
+				"returns no rows as this feature is unsupported in CockroachDB)",
+		),
+	),
 	"generate_series": makeBuiltin(genProps(seriesValueGeneratorLabels),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
 		makeGeneratorOverload(
