@@ -159,24 +159,24 @@ func TestParseArrayError(t *testing.T) {
 		typ           *types.T
 		expectedError string
 	}{
-		{``, types.Int, "array must be enclosed in { and }"},
-		{`1`, types.Int, "array must be enclosed in { and }"},
-		{`1,2`, types.Int, "array must be enclosed in { and }"},
-		{`{1,2`, types.Int, "malformed array"},
-		{`{1,2,`, types.Int, "malformed array"},
-		{`{`, types.Int, "malformed array"},
-		{`{,}`, types.Int, "malformed array"},
-		{`{}{}`, types.Int, "extra text after closing right brace"},
-		{`{} {}`, types.Int, "extra text after closing right brace"},
-		{`{{}}`, types.Int, "unimplemented: nested arrays not supported"},
-		{`{1, {1}}`, types.Int, "unimplemented: nested arrays not supported"},
-		{`{hello}`, types.Int, `could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax`},
-		{`{"hello}`, types.String, `malformed array`},
+		{``, types.Int, `could not parse "" as type int[]: array must be enclosed in { and }`},
+		{`1`, types.Int, `could not parse "1" as type int[]: array must be enclosed in { and }`},
+		{`1,2`, types.Int, `could not parse "1,2" as type int[]: array must be enclosed in { and }`},
+		{`{1,2`, types.Int, `could not parse "{1,2" as type int[]: malformed array`},
+		{`{1,2,`, types.Int, `could not parse "{1,2," as type int[]: malformed array`},
+		{`{`, types.Int, `could not parse "{" as type int[]: malformed array`},
+		{`{,}`, types.Int, `could not parse "{,}" as type int[]: malformed array`},
+		{`{}{}`, types.Int, `could not parse "{}{}" as type int[]: extra text after closing right brace`},
+		{`{} {}`, types.Int, `could not parse "{} {}" as type int[]: extra text after closing right brace`},
+		{`{{}}`, types.Int, `could not parse "{{}}" as type int[]: unimplemented: nested arrays not supported`},
+		{`{1, {1}}`, types.Int, `could not parse "{1, {1}}" as type int[]: unimplemented: nested arrays not supported`},
+		{`{hello}`, types.Int, `could not parse "{hello}" as type int[]: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax`},
+		{`{"hello}`, types.String, `could not parse "{\"hello}" as type string[]: malformed array`},
 		// It might be unnecessary to disallow this, but Postgres does.
-		{`{he"lo}`, types.String, "malformed array"},
+		{`{he"lo}`, types.String, `could not parse "{he\"lo}" as type string[]: malformed array`},
 
-		{string([]byte{200}), types.String, "array must be enclosed in { and }"},
-		{string([]byte{'{', 'a', 200}), types.String, "malformed array"},
+		{string([]byte{200}), types.String, `could not parse "\xc8" as type string[]: array must be enclosed in { and }`},
+		{string([]byte{'{', 'a', 200}), types.String, `could not parse "{a\xc8" as type string[]: malformed array`},
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {

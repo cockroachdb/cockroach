@@ -239,6 +239,14 @@ func mustParseDJSON(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
+func mustParseDStringArray(t *testing.T, s string) tree.Datum {
+	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	d, err := tree.ParseDArrayFromString(&evalContext, s, types.String)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 
 var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.String:      func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
@@ -250,6 +258,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.TimestampTZ: mustParseDTimestampTZ,
 	types.Interval:    mustParseDInterval,
 	types.Jsonb:       mustParseDJSON,
+	types.StringArray: mustParseDStringArray,
 }
 
 func typeSet(tys ...*types.T) map[*types.T]struct{} {
@@ -318,6 +327,10 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c:            tree.NewStrVal(`{"a": 1}`),
 			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
+		},
+		{
+			c:            tree.NewStrVal(`{a,b}`),
+			parseOptions: typeSet(types.String, types.Bytes, types.StringArray),
 		},
 		{
 			c:            tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),
