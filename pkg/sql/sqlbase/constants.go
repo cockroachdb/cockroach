@@ -116,6 +116,7 @@ const (
 	PgCatalogConstraintTableID
 	PgCatalogConversionTableID
 	PgCatalogDatabaseTableID
+	PgCatalogDefaultACLTableID
 	PgCatalogDependTableID
 	PgCatalogDescriptionTableID
 	PgCatalogSharedDescriptionTableID
