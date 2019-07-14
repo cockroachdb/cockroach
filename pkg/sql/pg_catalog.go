@@ -188,6 +188,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogAttrDefTableID:             pgCatalogAttrDefTable,
 		sqlbase.PgCatalogAttributeTableID:           pgCatalogAttributeTable,
 		sqlbase.PgCatalogAuthMembersTableID:         pgCatalogAuthMembersTable,
+		sqlbase.PgCatalogCastTableID:                pgCatalogCastTable,
 		sqlbase.PgCatalogClassTableID:               pgCatalogClassTable,
 		sqlbase.PgCatalogCollationTableID:           pgCatalogCollationTable,
 		sqlbase.PgCatalogConstraintTableID:          pgCatalogConstraintTable,
@@ -446,6 +447,27 @@ CREATE TABLE pg_catalog.pg_attribute (
 				)
 			})
 		})
+	},
+}
+
+var pgCatalogCastTable = virtualSchemaTable{
+	comment: `casts (empty - needs filling out)
+https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_cast (
+	oid OID,
+	castsource OID,
+	casttarget OID,
+	castfunc OID,
+	castcontext CHAR,
+	castmethod CHAR
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// TODO(someone): to populate this, we should split up the big PerformCast
+		// method in tree/eval.go into entries in a list. Then, this virtual table
+		// can simply range over the list. This would probably be better for
+		// maintainability anyway.
+		return nil
 	},
 }
 
