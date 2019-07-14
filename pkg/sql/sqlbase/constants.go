@@ -127,6 +127,7 @@ const (
 	PgCatalogIndexesTableID
 	PgCatalogInheritsTableID
 	PgCatalogLanguageTableID
+	PgCatalogLocksTableID
 	PgCatalogMatViewsTableID
 	PgCatalogNamespaceTableID
 	PgCatalogOperatorTableID
