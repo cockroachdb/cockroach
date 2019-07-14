@@ -286,24 +286,24 @@ public      v1        NULL       SELECT p, a, b, c FROM constraint_db.public.t1
 
 ## pg_catalog.pg_class
 
-query OTOOOOOO colnames
-SELECT c.oid, relname, relnamespace, reltype, relowner, relam, relfilenode, reltablespace
+query OTOOOOOOO colnames
+SELECT c.oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-oid         relname       relnamespace  reltype  relowner  relam       relfilenode  reltablespace
-55          t1            2332901747    0        NULL      2631952481  0            0
-450499963   primary       2332901747    0        NULL      2631952481  0            0
-450499960   t1_a_key      2332901747    0        NULL      2631952481  0            0
-450499961   index_key     2332901747    0        NULL      2631952481  0            0
-56          t2            2332901747    0        NULL      2631952481  0            0
-2315049508  primary       2332901747    0        NULL      2631952481  0            0
-2315049511  t2_t1_id_idx  2332901747    0        NULL      2631952481  0            0
-57          t3            2332901747    0        NULL      2631952481  0            0
-969972501   primary       2332901747    0        NULL      2631952481  0            0
-969972502   t3_a_b_idx    2332901747    0        NULL      2631952481  0            0
-58          v1            2332901747    0        NULL      2631952481  0            0
+oid         relname       relnamespace  reltype  reloftype  relowner  relam       relfilenode  reltablespace
+55          t1            2332901747    0        0          NULL      2631952481  0            0
+450499963   primary       2332901747    0        0          NULL      2631952481  0            0
+450499960   t1_a_key      2332901747    0        0          NULL      2631952481  0            0
+450499961   index_key     2332901747    0        0          NULL      2631952481  0            0
+56          t2            2332901747    0        0          NULL      2631952481  0            0
+2315049508  primary       2332901747    0        0          NULL      2631952481  0            0
+2315049511  t2_t1_id_idx  2332901747    0        0          NULL      2631952481  0            0
+57          t3            2332901747    0        0          NULL      2631952481  0            0
+969972501   primary       2332901747    0        0          NULL      2631952481  0            0
+969972502   t3_a_b_idx    2332901747    0        0          NULL      2631952481  0            0
+58          v1            2332901747    0        0          NULL      2631952481  0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
