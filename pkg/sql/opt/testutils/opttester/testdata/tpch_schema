@@ -1,0 +1,134 @@
+exec-ddl
+CREATE TABLE public.region
+(
+    r_regionkey int PRIMARY KEY,
+    r_name char(25) NOT NULL,
+    r_comment varchar(152)
+);
+----
+
+exec-ddl
+CREATE TABLE public.nation
+(
+    n_nationkey int PRIMARY KEY,
+    n_name char(25) NOT NULL,
+    n_regionkey int NOT NULL,
+    n_comment varchar(152),
+    INDEX n_rk (n_regionkey ASC),
+    CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) references public.region (r_regionkey)
+);
+----
+
+exec-ddl
+CREATE TABLE public.supplier
+(
+    s_suppkey int PRIMARY KEY,
+    s_name char(25) NOT NULL,
+    s_address varchar(40) NOT NULL,
+    s_nationkey int NOT NULL,
+    s_phone char(15) NOT NULL,
+    s_acctbal float NOT NULL,
+    s_comment varchar(101) NOT NULL,
+    INDEX s_nk (s_nationkey ASC),
+    CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) references public.nation (n_nationkey)
+);
+----
+
+exec-ddl
+CREATE TABLE public.part
+(
+    p_partkey int PRIMARY KEY,
+    p_name varchar(55) NOT NULL,
+    p_mfgr char(25) NOT NULL,
+    p_brand char(10) NOT NULL,
+    p_type varchar(25) NOT NULL,
+    p_size int NOT NULL,
+    p_container char(10) NOT NULL,
+    p_retailprice float NOT NULL,
+    p_comment varchar(23) NOT NULL
+);
+----
+
+exec-ddl
+CREATE TABLE public.partsupp
+(
+    ps_partkey int NOT NULL,
+    ps_suppkey int NOT NULL,
+    ps_availqty int NOT NULL,
+    ps_supplycost float NOT NULL,
+    ps_comment varchar(199) NOT NULL,
+    PRIMARY KEY (ps_partkey, ps_suppkey),
+    INDEX ps_sk (ps_suppkey ASC),
+    CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) references public.part (p_partkey),
+    CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) references public.supplier (s_suppkey)
+);
+----
+
+exec-ddl
+CREATE TABLE public.customer
+(
+    c_custkey int PRIMARY KEY,
+    c_name varchar(25) NOT NULL,
+    c_address varchar(40) NOT NULL,
+    c_nationkey int NOT NULL NOT NULL,
+    c_phone char(15) NOT NULL,
+    c_acctbal float NOT NULL,
+    c_mktsegment char(10) NOT NULL,
+    c_comment varchar(117) NOT NULL,
+    INDEX c_nk (c_nationkey ASC),
+    CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) references public.nation (n_nationkey)
+);
+----
+
+exec-ddl
+CREATE TABLE public.orders
+(
+    o_orderkey int PRIMARY KEY,
+    o_custkey int NOT NULL,
+    o_orderstatus char(1) NOT NULL,
+    o_totalprice float NOT NULL,
+    o_orderdate date NOT NULL,
+    o_orderpriority char(15) NOT NULL,
+    o_clerk char(15) NOT NULL,
+    o_shippriority int NOT NULL,
+    o_comment varchar(79) NOT NULL,
+    INDEX o_ck (o_custkey ASC),
+    INDEX o_od (o_orderdate ASC),
+    CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) references public.customer (c_custkey)
+);
+----
+
+exec-ddl
+CREATE TABLE public.lineitem
+(
+    l_orderkey int NOT NULL,
+    l_partkey int NOT NULL,
+    l_suppkey int NOT NULL,
+    l_linenumber int NOT NULL,
+    l_quantity float NOT NULL,
+    l_extendedprice float NOT NULL,
+    l_discount float NOT NULL,
+    l_tax float NOT NULL,
+    l_returnflag char(1) NOT NULL,
+    l_linestatus char(1) NOT NULL,
+    l_shipdate date NOT NULL,
+    l_commitdate date NOT NULL,
+    l_receiptdate date NOT NULL,
+    l_shipinstruct char(25) NOT NULL,
+    l_shipmode char(10) NOT NULL,
+    l_comment varchar(44) NOT NULL,
+    PRIMARY KEY (l_orderkey, l_linenumber),
+    INDEX l_ok (l_orderkey ASC),
+    INDEX l_pk (l_partkey ASC),
+    INDEX l_sk (l_suppkey ASC),
+    INDEX l_sd (l_shipdate ASC),
+    INDEX l_cd (l_commitdate ASC),
+    INDEX l_rd (l_receiptdate ASC),
+    INDEX l_pk_sk (l_partkey ASC, l_suppkey ASC),
+    INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC),
+    CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) references public.orders (o_orderkey),
+    CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) references public.part (p_partkey),
+    CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) references public.supplier (s_suppkey),
+    CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) references public.partsupp (ps_partkey, ps_suppkey)
+);
+----

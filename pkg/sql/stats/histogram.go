@@ -13,10 +13,19 @@ package stats
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
+)
+
+// HistogramClusterMode controls the cluster setting for enabling
+// histogram collection.
+var HistogramClusterMode = settings.RegisterBoolSetting(
+	"sql.stats.histogram_collection.enabled",
+	"histogram collection mode",
+	false,
 )
 
 // EquiDepthHistogram creates a histogram where each bucket contains roughly the
