@@ -352,7 +352,7 @@ func (md *Metadata) ColumnMeta(colID ColumnID) *ColumnMeta {
 //      a different table name, then prefix the column alias with the table
 //      name: "tabName.columnAlias".
 //
-func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool) string {
+func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool, catalog cat.Catalog) string {
 	cm := md.ColumnMeta(colID)
 	if cm.Table == 0 {
 		// Column doesn't belong to a table, so no need to qualify it further.
@@ -393,8 +393,11 @@ func (md *Metadata) QualifiedAlias(colID ColumnID, fullyQualify bool) string {
 
 	var sb strings.Builder
 	if fullyQualify {
-		s := md.TableMeta(cm.Table).Table.Name().FQString()
-		sb.WriteString(s)
+		tn, err := catalog.FullyQualifiedName(context.TODO(), md.TableMeta(cm.Table).Table)
+		if err != nil {
+			panic(err)
+		}
+		sb.WriteString(tn.FQString())
 	} else {
 		sb.WriteString(tabAlias.String())
 	}

@@ -104,9 +104,9 @@ func (b *Builder) buildDataSource(
 			tabMeta := b.addTable(t, &resName)
 			return b.buildScan(tabMeta, nil /* ordinals */, indexFlags, excludeMutations, inScope)
 		case cat.View:
-			return b.buildView(t, inScope)
+			return b.buildView(t, &resName, inScope)
 		case cat.Sequence:
-			return b.buildSequenceSelect(t, inScope)
+			return b.buildSequenceSelect(t, &resName, inScope)
 		default:
 			panic(errors.AssertionFailedf("unknown DataSource type %T", ds))
 		}
@@ -153,7 +153,9 @@ func (b *Builder) buildDataSource(
 }
 
 // buildView parses the view query text and builds it as a Select expression.
-func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
+func (b *Builder) buildView(
+	view cat.View, viewName *tree.TableName, inScope *scope,
+) (outScope *scope) {
 	// Cache the AST so that multiple references won't need to reparse.
 	if b.views == nil {
 		b.views = make(map[cat.View]*tree.Select)
@@ -196,7 +198,7 @@ func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 	// are specified, then update names of output columns.
 	hasCols := view.ColumnNameCount() > 0
 	for i := range outScope.cols {
-		outScope.cols[i].table = *view.Name()
+		outScope.cols[i].table = *viewName
 		if hasCols {
 			outScope.cols[i].name = view.ColumnName(i)
 		}
@@ -299,7 +301,8 @@ func (b *Builder) buildScanFromTableRef(
 		}
 	}
 
-	tabMeta := b.addTable(tab, tab.Name())
+	tn := tree.MakeUnqualifiedTableName(tab.Name())
+	tabMeta := b.addTable(tab, &tn)
 	return b.buildScan(tabMeta, ordinals, indexFlags, excludeMutations, inScope)
 }
 
@@ -436,8 +439,9 @@ func (b *Builder) addCheckConstraintsToScan(scope *scope, tabMeta *opt.TableMeta
 	}
 }
 
-func (b *Builder) buildSequenceSelect(seq cat.Sequence, inScope *scope) (outScope *scope) {
-	tn := seq.SequenceName()
+func (b *Builder) buildSequenceSelect(
+	seq cat.Sequence, seqName *tree.TableName, inScope *scope,
+) (outScope *scope) {
 	md := b.factory.Metadata()
 	outScope = inScope.push()
 
@@ -453,7 +457,7 @@ func (b *Builder) buildSequenceSelect(seq cat.Sequence, inScope *scope) (outScop
 		outScope.cols[i] = scopeColumn{
 			id:    c,
 			name:  tree.Name(col.Alias),
-			table: *tn,
+			table: *seqName,
 			typ:   col.Type,
 		}
 	}

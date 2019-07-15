@@ -786,7 +786,7 @@ func (mb *mutationBuilder) buildFKChecks() {
 			refOrdinals[j] = fk.ReferencedColumnOrdinal(refTab.(cat.Table), j)
 		}
 
-		refTabMeta := mb.b.addTable(refTab.(cat.Table), refTab.Name())
+		refTabMeta := mb.b.addTable(refTab.(cat.Table), tree.NewUnqualifiedTableName(refTab.Name()))
 		item.ReferencedTable = refTabMeta.MetaID
 		scanScope := mb.b.buildScan(
 			refTabMeta,
