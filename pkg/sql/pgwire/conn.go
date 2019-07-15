@@ -864,24 +864,24 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	lenCodes := numQArgFormatCodes
-	if lenCodes == 0 {
-		lenCodes = 1
-	}
-	qArgFormatCodes := make([]pgwirebase.FormatCode, lenCodes)
+	var qArgFormatCodes []pgwirebase.FormatCode
 	switch numQArgFormatCodes {
 	case 0:
 		// No format codes means all arguments are passed as text.
-		qArgFormatCodes[0] = pgwirebase.FormatText
+		qArgFormatCodes = []pgwirebase.FormatCode{
+			pgwirebase.FormatText,
+		}
 	case 1:
 		// `1` means read one code and apply it to every argument.
 		ch, err := buf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
-		fmtCode := pgwirebase.FormatCode(ch)
-		qArgFormatCodes[0] = fmtCode
+		qArgFormatCodes = []pgwirebase.FormatCode{
+			pgwirebase.FormatCode(ch),
+		}
 	default:
+		qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgFormatCodes)
 		// Read one format code for each argument and apply it to that argument.
 		for i := range qArgFormatCodes {
 			code, err := buf.GetUint16()
@@ -929,17 +929,18 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	switch numColumnFormatCodes {
 	case 0:
 		// All columns will use the text format.
-		columnFormatCodes = make([]pgwirebase.FormatCode, 1)
-		columnFormatCodes[0] = pgwirebase.FormatText
+		columnFormatCodes = []pgwirebase.FormatCode{
+			pgwirebase.FormatText,
+		}
 	case 1:
 		// All columns will use the one specficied format.
 		ch, err := buf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
-		fmtCode := pgwirebase.FormatCode(ch)
-		columnFormatCodes = make([]pgwirebase.FormatCode, 1)
-		columnFormatCodes[0] = fmtCode
+		columnFormatCodes = []pgwirebase.FormatCode{
+			pgwirebase.FormatCode(ch),
+		}
 	default:
 		columnFormatCodes = make([]pgwirebase.FormatCode, numColumnFormatCodes)
 		// Read one format code for each column and apply it to that column.

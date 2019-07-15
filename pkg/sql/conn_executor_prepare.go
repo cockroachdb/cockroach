@@ -309,14 +309,21 @@ func (ex *connExecutor) execBind(
 	} else {
 		qArgFormatCodes := bindCmd.ArgFormatCodes
 
-		// If a single code is specified, it is applied to all arguments.
+		// If there is only one format code, then that format code is used to decode all the
+		// arguments. But if the number of format codes provided does not match the number of
+		// arguments AND it's not a single format code then we cannot infer what format to use to
+		// decode all of the arguments.
 		if len(qArgFormatCodes) != 1 && len(qArgFormatCodes) != int(numQArgs) {
 			return retErr(pgwirebase.NewProtocolViolationErrorf(
 				"wrong number of format codes specified: %d for %d arguments",
 				len(qArgFormatCodes), numQArgs))
 		}
-		// If a single format code was specified, it applies to all the arguments.
-		if len(qArgFormatCodes) == 1 {
+
+		// If a single format code is provided and there is more than one argument to be decoded,
+		// then expand qArgFormatCodes to the number of arguments provided.
+		// If the number of format codes matches the number of arguments then nothing needs to be
+		// done.
+		if len(qArgFormatCodes) == 1 && numQArgs > 1 {
 			fmtCode := qArgFormatCodes[0]
 			qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgs)
 			for i := range qArgFormatCodes {
