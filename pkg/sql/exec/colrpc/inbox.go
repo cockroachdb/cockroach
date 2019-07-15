@@ -87,6 +87,10 @@ var _ exec.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(typs []types.T) (*Inbox, error) {
+	c, err := colserde.NewArrowBatchConverter(typs)
+	if err != nil {
+		return nil, err
+	}
 	s, err := colserde.NewRecordBatchSerializer(typs)
 	if err != nil {
 		return nil, err
@@ -94,7 +98,7 @@ func NewInbox(typs []types.T) (*Inbox, error) {
 	i := &Inbox{
 		typs:         typs,
 		zeroBatch:    coldata.NewMemBatchWithSize(typs, 0),
-		converter:    colserde.NewArrowBatchConverter(typs),
+		converter:    c,
 		serializer:   s,
 		streamCh:     make(chan flowStreamServer, 1),
 		contextCh:    make(chan context.Context, 1),
