@@ -100,7 +100,7 @@ CREATE SEQUENCE seq
 query T
 EXPLAIN (OPT, ENV) SELECT * FROM seq
 ----
-https://cockroachdb.github.io/text/decode.html#eJwkjkFPgzAcR-_9FL-jGrsMcHa6U61_ExLazdKRXV39JxLJEArGj2-U2zu85L2Gx9T2l0eYPn6O_Vv8eH4C_3A8z233ziMmThO-F0sI40kHQk2vR3KGkHiALV2jqyMhg9WnBR_yvChUvi7ut5s7pTbbtULpjCdLLiBDHbQPyHZC0OlQ6dLhan8ItyDXXKOmikzADV783v4ldkJKKUXiYeZLZJm44zj9r62-5nPXxlXiQfwGAAD__6j-PBk=
+https://cockroachdb.github.io/text/decode.html#eJwkjcFKxDAYBu95iu-oYmDbumZ1TzH-QqHJrmm27FXjDxZLS5tWfHwpvQ3MwDQ8pXbon2GG-DMNH_H79QX8x_FzabsvnjBzmvG7VUIYTzoQanq_kDOExCNs6RpdXQgZrL5u-JTnRaHyXfF42D8otT_sFEpnPFlyARnqoH1AdhSCrudKlw43p3O4B7nmFjVVZALu8OZPdl0chZRSisTjwn1kmbjjOK9G_AcAAP__7QE3fg==
 
 #
 # Test views.

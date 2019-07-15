@@ -42,6 +42,9 @@ type mutationBuilder struct {
 	// tab is the target table.
 	tab cat.Table
 
+	// tabName is the name of the target table, as returned by ResolveDataSource.
+	tabName cat.DataSourceName
+
 	// tabID is the metadata ID of the table.
 	tabID opt.TableID
 
@@ -786,7 +789,7 @@ func (mb *mutationBuilder) buildFKChecks() {
 			refOrdinals[j] = fk.ReferencedColumnOrdinal(refTab.(cat.Table), j)
 		}
 
-		refTabMeta := mb.b.addTable(refTab.(cat.Table), refTab.Name())
+		refTabMeta := mb.b.addTable(refTab.(cat.Table), tree.NewUnqualifiedTableName(refTab.Name()))
 		item.ReferencedTable = refTabMeta.MetaID
 		scanScope := mb.b.buildScan(
 			refTabMeta,

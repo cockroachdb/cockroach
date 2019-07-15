@@ -359,7 +359,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			return fmt.Sprintf("error: %s\n", text)
 		}
 		ot.postProcess(tb, d, e)
-		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat, ot.catalog)
 
 	case "norm":
 		e, err := ot.OptNorm()
@@ -376,7 +376,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			return fmt.Sprintf("error: %s\n", text)
 		}
 		ot.postProcess(tb, d, e)
-		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat, ot.catalog)
 
 	case "opt":
 		e, err := ot.Optimize()
@@ -384,7 +384,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
-		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat, ot.catalog)
 
 	case "optsteps":
 		result, err := ot.OptSteps()
@@ -420,7 +420,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
-		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat, ot.catalog)
 
 	case "exprnorm":
 		e, err := ot.ExprNorm()
@@ -428,7 +428,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
-		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat, ot.catalog)
 
 	case "save-tables":
 		e, err := ot.SaveTables()
@@ -436,7 +436,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
-		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat, ot.catalog)
 
 	case "stats":
 		result, err := ot.Stats(d)
@@ -880,7 +880,7 @@ func (ot *OptTester) OptSteps() (string, error) {
 			return "", err
 		}
 
-		next = memo.FormatExpr(os.Root(), ot.Flags.ExprFormat)
+		next = memo.FormatExpr(os.Root(), ot.Flags.ExprFormat, ot.catalog)
 
 		// This call comes after setting "next", because we want to output the
 		// final expression, even though there were no diffs from the previous
@@ -1013,14 +1013,14 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 		ot.output("%s\n", et.LastRuleName())
 		ot.separator("=")
 		ot.output("Source expression:\n")
-		ot.indent(memo.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat))
+		ot.indent(memo.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat, ot.catalog))
 		newNodes := et.NewExprs()
 		if len(newNodes) == 0 {
 			ot.output("\nNo new expressions.\n")
 		}
 		for i := range newNodes {
 			ot.output("\nNew expression %d of %d:\n", i+1, len(newNodes))
-			ot.indent(memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat))
+			ot.indent(memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat, ot.catalog))
 		}
 	}
 	return ot.builder.String(), nil

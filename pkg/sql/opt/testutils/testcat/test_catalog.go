@@ -42,6 +42,11 @@ type Catalog struct {
 	counter    int
 }
 
+type dataSource interface {
+	cat.DataSource
+	fqName() cat.DataSourceName
+}
+
 var _ cat.Catalog = &Catalog{}
 
 // New creates a new empty instance of the test catalog.
@@ -55,7 +60,7 @@ func New() *Catalog {
 				ExplicitSchema:  true,
 				ExplicitCatalog: true,
 			},
-			dataSources: make(map[string]cat.DataSource),
+			dataSources: make(map[string]dataSource),
 		},
 	}
 }
@@ -200,6 +205,13 @@ func (tc *Catalog) IsSuperUser(ctx context.Context, action string) (bool, error)
 // RequireSuperUser is part of the cat.Catalog interface.
 func (tc *Catalog) RequireSuperUser(ctx context.Context, action string) error {
 	return nil
+}
+
+// FullyQualifiedName is part of the cat.Catalog interface.
+func (tc *Catalog) FullyQualifiedName(
+	ctx context.Context, ds cat.DataSource,
+) (cat.DataSourceName, error) {
+	return ds.(dataSource).fqName(), nil
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
@@ -401,7 +413,7 @@ type Schema struct {
 	// If Revoked is true, then the user has had privileges on the schema revoked.
 	Revoked bool
 
-	dataSources map[string]cat.DataSource
+	dataSources map[string]dataSource
 }
 
 var _ cat.Schema = &Schema{}
@@ -431,7 +443,7 @@ func (s *Schema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, 
 	sort.Strings(keys)
 	var res []cat.DataSourceName
 	for _, k := range keys {
-		res = append(res, *s.dataSources[k].Name())
+		res = append(res, s.dataSources[k].fqName())
 	}
 	return res, nil
 }
@@ -471,8 +483,13 @@ func (tv *View) Equals(other cat.Object) bool {
 }
 
 // Name is part of the cat.DataSource interface.
-func (tv *View) Name() *cat.DataSourceName {
-	return &tv.ViewName
+func (tv *View) Name() tree.Name {
+	return tv.ViewName.TableName
+}
+
+// fqName is part of the dataSource interface.
+func (tv *View) fqName() cat.DataSourceName {
+	return tv.ViewName
 }
 
 // Query is part of the cat.View interface.
@@ -542,8 +559,13 @@ func (tt *Table) Equals(other cat.Object) bool {
 }
 
 // Name is part of the cat.DataSource interface.
-func (tt *Table) Name() *cat.DataSourceName {
-	return &tt.TabName
+func (tt *Table) Name() tree.Name {
+	return tt.TabName.TableName
+}
+
+// fqName is part of the dataSource interface.
+func (tv *Table) fqName() cat.DataSourceName {
+	return tv.TabName
 }
 
 // IsVirtualTable is part of the cat.Table interface.
@@ -1084,14 +1106,17 @@ func (ts *Sequence) Equals(other cat.Object) bool {
 }
 
 // Name is part of the cat.DataSource interface.
-func (ts *Sequence) Name() *tree.TableName {
-	return &ts.SeqName
+func (ts *Sequence) Name() tree.Name {
+	return ts.SeqName.TableName
 }
 
-// SequenceName is part of the cat.Sequence interface.
-func (ts *Sequence) SequenceName() *tree.TableName {
-	return ts.Name()
+// fqName is part of the dataSource interface.
+func (tv *Sequence) fqName() cat.DataSourceName {
+	return tv.SeqName
 }
+
+// SequenceMarker is part of the cat.Sequence interface.
+func (ts *Sequence) SequenceMarker() {}
 
 func (ts *Sequence) String() string {
 	tp := treeprinter.New()

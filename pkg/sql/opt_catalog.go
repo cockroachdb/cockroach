@@ -190,15 +190,9 @@ func (oc *optCatalog) ResolveDataSourceByID(
 		}
 		return nil, err
 	}
-	desc := tableLookup.Desc
 
-	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.planner.Txn(), desc.ParentID)
-	if err != nil {
-		return nil, err
-	}
-
-	name := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
-	return oc.dataSourceForDesc(ctx, cat.Flags{}, desc, &name)
+	// The name is only used for virtual tables, which can't be looked up by ID.
+	return oc.dataSourceForDesc(ctx, cat.Flags{}, tableLookup.Desc, &tree.TableName{})
 }
 
 func (oc *optCatalog) getDescForObject(o cat.Object) (sqlbase.DescriptorProto, error) {
@@ -246,6 +240,29 @@ func (oc *optCatalog) RequireSuperUser(ctx context.Context, action string) error
 	return oc.planner.RequireSuperUser(ctx, action)
 }
 
+// FullyQualifiedName is part of the cat.Catalog interface.
+func (oc *optCatalog) FullyQualifiedName(
+	ctx context.Context, ds cat.DataSource,
+) (cat.DataSourceName, error) {
+	if vt, ok := ds.(*optVirtualTable); ok {
+		// Virtual tables require special handling, because they can have multiple
+		// effective instances that utilize the same descriptor.
+		return vt.name, nil
+	}
+
+	desc, err := oc.getDescForObject(ds)
+	if err != nil {
+		return cat.DataSourceName{}, err
+	}
+
+	dbID := desc.(*sqlbase.ImmutableTableDescriptor).ParentID
+	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.planner.Txn(), dbID)
+	if err != nil {
+		return cat.DataSourceName{}, err
+	}
+	return tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.GetName())), nil
+}
+
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForDesc(
@@ -266,10 +283,10 @@ func (oc *optCatalog) dataSourceForDesc(
 
 	switch {
 	case desc.IsView():
-		ds = newOptView(desc, name)
+		ds = newOptView(desc)
 
 	case desc.IsSequence():
-		ds = newOptSequence(desc, name)
+		ds = newOptSequence(desc)
 
 	default:
 		return nil, errors.AssertionFailedf("unexpected table descriptor: %+v", desc)
@@ -319,7 +336,7 @@ func (oc *optCatalog) dataSourceForTable(
 		return ds, nil
 	}
 
-	ds, err := newOptTable(desc, name, tableStats, zoneConfig)
+	ds, err := newOptTable(desc, tableStats, zoneConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -357,22 +374,12 @@ func (oc *optCatalog) getZoneConfig(
 // the cat.Object, cat.DataSource, and cat.View interfaces.
 type optView struct {
 	desc *sqlbase.ImmutableTableDescriptor
-
-	// name is the fully qualified, fully resolved, fully normalized name of
-	// the view.
-	name cat.DataSourceName
 }
 
 var _ cat.View = &optView{}
 
-func newOptView(desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName) *optView {
-	ov := &optView{desc: desc, name: *name}
-
-	// The cat.View interface requires that view names be fully qualified.
-	ov.name.ExplicitSchema = true
-	ov.name.ExplicitCatalog = true
-
-	return ov
+func newOptView(desc *sqlbase.ImmutableTableDescriptor) *optView {
+	return &optView{desc: desc}
 }
 
 // ID is part of the cat.Object interface.
@@ -390,8 +397,8 @@ func (ov *optView) Equals(other cat.Object) bool {
 }
 
 // Name is part of the cat.View interface.
-func (ov *optView) Name() *cat.DataSourceName {
-	return &ov.name
+func (ov *optView) Name() tree.Name {
+	return tree.Name(ov.desc.Name)
 }
 
 // Query is part of the cat.View interface.
@@ -413,23 +420,13 @@ func (ov *optView) ColumnName(i int) tree.Name {
 // implements the cat.Object and cat.DataSource interfaces.
 type optSequence struct {
 	desc *sqlbase.ImmutableTableDescriptor
-
-	// name is the fully qualified, fully resolved, fully normalized name of the
-	// sequence.
-	name cat.DataSourceName
 }
 
 var _ cat.DataSource = &optSequence{}
 var _ cat.Sequence = &optSequence{}
 
-func newOptSequence(desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName) *optSequence {
-	os := &optSequence{desc: desc, name: *name}
-
-	// The cat.Sequence interface requires that table names be fully qualified.
-	os.name.ExplicitSchema = true
-	os.name.ExplicitCatalog = true
-
-	return os
+func newOptSequence(desc *sqlbase.ImmutableTableDescriptor) *optSequence {
+	return &optSequence{desc: desc}
 }
 
 // ID is part of the cat.Object interface.
@@ -446,24 +443,18 @@ func (os *optSequence) Equals(other cat.Object) bool {
 	return os.desc.ID == otherSeq.desc.ID && os.desc.Version == otherSeq.desc.Version
 }
 
-// Name is part of the cat.DataSource interface.
-func (os *optSequence) Name() *cat.DataSourceName {
-	return &os.name
+// Name is part of the cat.Sequence interface.
+func (os *optSequence) Name() tree.Name {
+	return tree.Name(os.desc.Name)
 }
 
-// SequenceName is part of the cat.Sequence interface.
-func (os *optSequence) SequenceName() *tree.TableName {
-	return os.Name()
-}
+// SequenceMarker is part of the cat.Sequence interface.
+func (os *optSequence) SequenceMarker() {}
 
 // optTable is a wrapper around sqlbase.ImmutableTableDescriptor that caches
 // index wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
 	desc *sqlbase.ImmutableTableDescriptor
-
-	// name is the fully qualified, fully resolved, fully normalized name of the
-	// table.
-	name cat.DataSourceName
 
 	// indexes are the inlined wrappers for the table's primary and secondary
 	// indexes.
@@ -500,21 +491,13 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
-	desc *sqlbase.ImmutableTableDescriptor,
-	name *cat.DataSourceName,
-	stats []*stats.TableStatistic,
-	tblZone *config.ZoneConfig,
+	desc *sqlbase.ImmutableTableDescriptor, stats []*stats.TableStatistic, tblZone *config.ZoneConfig,
 ) (*optTable, error) {
 	ot := &optTable{
 		desc:     desc,
-		name:     *name,
 		rawStats: stats,
 		zone:     tblZone,
 	}
-
-	// The cat.Table interface requires that table names be fully qualified.
-	ot.name.ExplicitSchema = true
-	ot.name.ExplicitCatalog = true
 
 	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
 	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
@@ -666,9 +649,9 @@ func (ot *optTable) Equals(other cat.Object) bool {
 	return true
 }
 
-// Name is part of the cat.DataSource interface.
-func (ot *optTable) Name() *cat.DataSourceName {
-	return &ot.name
+// Name is part of the cat.Table interface.
+func (ot *optTable) Name() tree.Name {
+	return tree.Name(ot.desc.Name)
 }
 
 // IsVirtualTable is part of the cat.Table interface.
@@ -1276,7 +1259,6 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
-	// The cat.Table interface requires that table names be fully qualified.
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
@@ -1308,8 +1290,8 @@ func (ot *optVirtualTable) Equals(other cat.Object) bool {
 }
 
 // Name is part of the cat.DataSource interface.
-func (ot *optVirtualTable) Name() *cat.DataSourceName {
-	return &ot.name
+func (ot *optVirtualTable) Name() tree.Name {
+	return ot.name.TableName
 }
 
 // IsVirtualTable is part of the cat.Table interface.

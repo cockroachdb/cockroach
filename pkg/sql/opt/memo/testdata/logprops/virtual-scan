@@ -14,13 +14,13 @@ project
       ├── select
       │    ├── columns: catalog_name:1(string) schema_name:2(string!null) default_character_set_name:3(string) sql_path:4(string)
       │    ├── fd: ()-->(2)
-      │    ├── virtual-scan t.information_schema.schemata
+      │    ├── virtual-scan information_schema.schemata
       │    │    └── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
       │    └── filters
       │         └── eq [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight), fd=()-->(2)]
       │              ├── variable: schema_name [type=string]
       │              └── const: 'public' [type=string]
-      ├── virtual-scan t.information_schema.tables
+      ├── virtual-scan information_schema.tables
       │    └── columns: table_catalog:5(string) table_schema:6(string) table_name:7(string) table_type:8(string) is_insertable_into:9(string) version:10(int)
       └── filters
            └── and [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ])]

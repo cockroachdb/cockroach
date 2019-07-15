@@ -124,4 +124,12 @@ type Catalog interface {
 	// RequireSuperUser checks that the current user has admin privileges. If not,
 	// returns an error.
 	RequireSuperUser(ctx context.Context, action string) error
+
+	// FullyQualifiedName retrieves the fully qualified name of a data source.
+	// Note that:
+	//  - this call may involve a database operation so it shouldn't be used in
+	//    performance sensitive paths;
+	//  - the fully qualified name of a data source object can change without the
+	//    object itself changing (e.g. when a database is renamed).
+	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
 }
