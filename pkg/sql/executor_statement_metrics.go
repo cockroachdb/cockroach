@@ -162,12 +162,6 @@ func (ex *connExecutor) recordStatementSummary(
 		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 	}
 
-	// Close the plan if this was not done earlier.
-	// This also ensures that curPlan.savedPlanForStats is
-	// collected (see maybeSavePlan).
-	planner.curPlan.execErr = err
-	planner.curPlan.close(ctx)
-
 	planner.statsCollector.RecordStatement(
 		stmt, planner.curPlan.savedPlanForStats,
 		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagOptUsed), flags.IsSet(planFlagImplicitTxn),
