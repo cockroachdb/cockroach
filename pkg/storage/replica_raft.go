@@ -45,10 +45,10 @@ func makeIDKey() storagebase.CmdIDKey {
 	return storagebase.CmdIDKey(idKeyBuf)
 }
 
-// evalAndPropose prepares the necessary pending command struct and initializes a
-// client command ID if one hasn't been. A verified lease is supplied
-// as a parameter if the command requires a lease; nil otherwise. It
-// then evaluates the command and proposes it to Raft on success.
+// evalAndPropose prepares the necessary pending command struct and initializes
+// a client command ID if one hasn't been. A verified lease is supplied as a
+// parameter if the command requires a lease; nil otherwise. It then evaluates
+// the command and proposes it to Raft on success.
 //
 // Return values:
 // - a channel which receives a response or error upon application
@@ -66,9 +66,17 @@ func (r *Replica) evalAndPropose(
 	ctx context.Context,
 	lease roachpb.Lease,
 	ba *roachpb.BatchRequest,
-	endCmds *endCmds,
 	spans *spanset.SpanSet,
+	ec endCmds,
 ) (_ chan proposalResult, _ func(), _ int64, pErr *roachpb.Error) {
+	// Guarantee we release the latches that we acquired if we never make
+	// it to passing responsibility to a proposal. This is wrapped to
+	// delay pErr evaluation to its value when returning.
+	defer func() {
+		// No-op if we move ec into proposal.ec.
+		ec.done(ba, nil /* br */, pErr)
+	}()
+
 	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
 	r.mu.RLock()
 	if !r.mu.destroyStatus.IsAlive() {
@@ -105,8 +113,18 @@ func (r *Replica) evalAndPropose(
 	}
 
 	idKey := makeIDKey()
-	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds, spans)
+	proposal, pErr := r.requestToProposal(ctx, idKey, ba, spans)
 	log.Event(proposal.ctx, "evaluated request")
+
+	// Attach the endCmds to the proposal. This moves responsibility of
+	// releasing latches to "below Raft" machinery. However, we make sure
+	// we clean up this resource if the proposal doesn't make it to Raft.
+	proposal.ec = ec.move()
+	defer func() {
+		if pErr != nil {
+			proposal.ec.done(ba, nil /* br */, pErr)
+		}
+	}()
 
 	// Pull out proposal channel to return. proposal.doneCh may be set to
 	// nil if it is signaled in this function.
