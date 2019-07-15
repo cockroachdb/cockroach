@@ -84,7 +84,7 @@ func (r *Replica) evalAndPropose(
 	}
 	r.mu.RUnlock()
 
-	rSpan, err := keys.Range(ba)
+	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
 		return nil, nil, 0, roachpb.NewError(err)
 	}

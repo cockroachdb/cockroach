@@ -1114,7 +1114,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1211,7 +1211,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1652,7 +1652,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1867,7 +1867,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3264,7 +3264,7 @@ func TestEvictMetaRange(t *testing.T) {
 			_ ReplicaSlice,
 			ba roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, error) {
-			rs, err := keys.Range(ba)
+			rs, err := keys.Range(ba.Requests)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3431,7 +3431,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 		_ ReplicaSlice,
 		ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba.Requests)
 		br := ba.CreateReply()
 		if err != nil {
 			br.Error = roachpb.NewError(err)

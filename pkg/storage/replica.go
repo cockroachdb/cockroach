@@ -1220,7 +1220,7 @@ func (r *Replica) executeAdminBatch(
 		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
 	}
 
-	rSpan, err := keys.Range(ba)
+	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
