@@ -70,6 +70,11 @@ type testSpec struct {
 	Run func(ctx context.Context, t *test, c *cluster)
 }
 
+// perfArtifactsDir is the directory on cluster nodes in which perf artifacts
+// reside. Upon success this directory is copied into test artifactsDir from
+// each node in the cluster.
+const perfArtifactsDir = "perf"
+
 // matchOrSkip returns true if the filter matches the test. If the filter does
 // not match the test because the tag filter does not match, the test is
 // matched, but marked as skipped.

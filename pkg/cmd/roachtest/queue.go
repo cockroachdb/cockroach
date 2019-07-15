@@ -52,7 +52,7 @@ func runQueue(ctx context.Context, t *test, c *cluster) {
 				init = " --init"
 			}
 			cmd := fmt.Sprintf(
-				"./workload run queue --histograms=logs/stats.json"+
+				"./workload run queue --histograms="+perfArtifactsDir+"/stats.json"+
 					init+
 					concurrency+
 					duration+

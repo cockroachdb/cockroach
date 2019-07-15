@@ -30,7 +30,7 @@ func registerYCSB(r *testRegistry) {
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
 				"./workload run ycsb --init --record-count=1000000 --splits=100"+
-					" --workload=%s --concurrency=64 --histograms=logs/stats.json"+
+					" --workload=%s --concurrency=64 --histograms="+perfArtifactsDir+"/stats.json"+
 					ramp+duration+" {pgurl:1-%d}",
 				wl, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
