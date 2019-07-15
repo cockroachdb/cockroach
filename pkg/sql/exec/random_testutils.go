@@ -36,10 +36,10 @@ func randomTypes(rng *rand.Rand, n int) []coltypes.T {
 	return typs
 }
 
-// randomVec populates vec with n random values of typ, setting each value to
+// RandomVec populates vec with n random values of typ, setting each value to
 // null with a probability of nullProbability. It is assumed that n is in bounds
 // of the given vec.
-func randomVec(rng *rand.Rand, typ coltypes.T, vec coldata.Vec, n int, nullProbability float64) {
+func RandomVec(rng *rand.Rand, typ coltypes.T, vec coldata.Vec, n int, nullProbability float64) {
 	switch typ {
 	case coltypes.Bool:
 		bools := vec.Bool()
@@ -109,15 +109,20 @@ func randomVec(rng *rand.Rand, typ coltypes.T, vec coldata.Vec, n int, nullProba
 	}
 }
 
-// RandomBatch returns an n-length batch of the given typs where each value will
-// be null with a probability of nullProbability. The returned batch will have
-// no selection vector.
-func RandomBatch(rng *rand.Rand, typs []coltypes.T, n int, nullProbability float64) coldata.Batch {
-	batch := coldata.NewMemBatchWithSize(typs, n)
-	for i, typ := range typs {
-		randomVec(rng, typ, batch.ColVec(i), n, nullProbability)
+// RandomBatch returns a batch with a capacity of capacity and a number of
+// random elements equal to length (capacity if length is 0). The values will be
+// null with a probability of nullProbability.
+func RandomBatch(
+	rng *rand.Rand, typs []coltypes.T, capacity int, length int, nullProbability float64,
+) coldata.Batch {
+	batch := coldata.NewMemBatchWithSize(typs, capacity)
+	if length == 0 {
+		length = capacity
 	}
-	batch.SetLength(uint16(n))
+	for i, typ := range typs {
+		RandomVec(rng, typ, batch.ColVec(i), length, nullProbability)
+	}
+	batch.SetLength(uint16(length))
 	return batch
 }
 
@@ -153,7 +158,7 @@ var _ = randomTypes
 func randomBatchWithSel(
 	rng *rand.Rand, typs []coltypes.T, n int, nullProbability float64, selProbability float64,
 ) coldata.Batch {
-	batch := RandomBatch(rng, typs, n, nullProbability)
+	batch := RandomBatch(rng, typs, n, 0 /* length */, nullProbability)
 	if selProbability != 0 {
 		sel := randomSel(rng, uint16(n), 1-selProbability)
 		batch.SetSelection(true)
