@@ -32,15 +32,6 @@ func NewFlowSpec(flowID distsqlpb.FlowID, gateway roachpb.NodeID) *distsqlpb.Flo
 	return spec
 }
 
-// ReleaseFlowSpec returns this FlowSpec back to the pool of FlowSpecs. It may
-// not be used again after this call.
-func ReleaseFlowSpec(spec *distsqlpb.FlowSpec) {
-	*spec = distsqlpb.FlowSpec{
-		Processors: spec.Processors[:0],
-	}
-	flowSpecPool.Put(spec)
-}
-
 var trSpecPool = sync.Pool{
 	New: func() interface{} {
 		return &distsqlpb.TableReaderSpec{}
@@ -52,23 +43,8 @@ func NewTableReaderSpec() *distsqlpb.TableReaderSpec {
 	return trSpecPool.Get().(*distsqlpb.TableReaderSpec)
 }
 
-// ReleaseTableReaderSpec puts this TableReaderSpec back into its sync pool. It
-// may not be used again after Release returns.
-func ReleaseTableReaderSpec(s *distsqlpb.TableReaderSpec) {
-	s.Reset()
-	trSpecPool.Put(s)
-}
-
 // ReleaseSetupFlowRequest releases the resources of this SetupFlowRequest,
 // putting them back into their respective object pools.
-func ReleaseSetupFlowRequest(s *distsqlpb.SetupFlowRequest) {
-	if s == nil {
-		return
-	}
-	for i := range s.Flow.Processors {
-		if tr := s.Flow.Processors[i].Core.TableReader; tr != nil {
-			ReleaseTableReaderSpec(tr)
-		}
-	}
-	ReleaseFlowSpec(&s.Flow)
+func ReleaseSetupFlowRequest(_ *distsqlpb.SetupFlowRequest) {
+	// TODO(yuzefovich): figure out who incorrectly reuses the memory.
 }
