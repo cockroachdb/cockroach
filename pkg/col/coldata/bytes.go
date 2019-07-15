@@ -278,16 +278,6 @@ func (b Bytes) String() string {
 	return builder.String()
 }
 
-// PrimitiveRepr is a temprorary migration tool.
-// TODO(asubiotto): Remove this.
-func (b Bytes) PrimitiveRepr() [][]byte {
-	bytes := make([][]byte, b.Len())
-	for i := 0; i < b.Len(); i++ {
-		bytes[i] = b.Get(i)
-	}
-	return bytes
-}
-
 // BytesFromArrowSerializationFormat takes an Arrow byte slice and accompanying
 // offsets and populates b.
 func BytesFromArrowSerializationFormat(b *Bytes, data []byte, offsets []int32) {

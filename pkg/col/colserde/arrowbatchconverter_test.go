@@ -78,11 +78,31 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 		// fail.
 		expectedVec := expected.ColVec(colIdx)
 		actualVec := actual.ColVec(colIdx)
+		typ := expectedVec.Type()
+		require.Equal(t, typ, actualVec.Type())
 		require.Equal(
 			t,
-			expectedVec.Slice(expectedVec.Type(), 0, uint64(expected.Length())),
-			actualVec.Slice(actualVec.Type(), 0, uint64(actual.Length())),
+			expectedVec.Nulls().Slice(0, uint64(expected.Length())),
+			actualVec.Nulls().Slice(0, uint64(actual.Length())),
 		)
+		if typ == types.Bytes {
+			// Cannot use require.Equal for this type.
+			// TODO(asubiotto): Again, why not?
+			expectedBytes := expectedVec.Bytes().Slice(0, int(expected.Length()))
+			resultBytes := actualVec.Bytes().Slice(0, int(actual.Length()))
+			require.Equal(t, expectedBytes.Len(), resultBytes.Len())
+			for i := 0; i < expectedBytes.Len(); i++ {
+				if !bytes.Equal(expectedBytes.Get(i), resultBytes.Get(i)) {
+					t.Fatalf("bytes mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedBytes, resultBytes)
+				}
+			}
+		} else {
+			require.Equal(
+				t,
+				expectedVec.Slice(expectedVec.Type(), 0, uint64(expected.Length())),
+				actualVec.Slice(actualVec.Type(), 0, uint64(actual.Length())),
+			)
+		}
 	}
 }
 
