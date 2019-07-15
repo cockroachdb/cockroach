@@ -15,7 +15,6 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -34,9 +33,6 @@ type ArrowBatchConverter struct {
 	builders struct {
 		// boolBuilder builds arrow bool columns as a bitmap from a bool slice.
 		boolBuilder *array.BooleanBuilder
-		// binaryBuilder builds arrow []byte columns as one []byte slice with
-		// accompanying offsets from a [][]byte slice.
-		binaryBuilder *array.BinaryBuilder
 	}
 
 	scratch struct {
@@ -55,13 +51,12 @@ type ArrowBatchConverter struct {
 func NewArrowBatchConverter(typs []types.T) *ArrowBatchConverter {
 	c := &ArrowBatchConverter{typs: typs}
 	c.builders.boolBuilder = array.NewBooleanBuilder(memory.DefaultAllocator)
-	c.builders.binaryBuilder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
 	c.scratch.arrowData = make([]*array.Data, len(typs))
 	c.scratch.buffers = make([][]*memory.Buffer, len(typs))
 	for i := range c.scratch.buffers {
-		// Only primitive types are directly constructed, therefore we only need
-		// two buffers: one for the nulls, the other for the values.
-		c.scratch.buffers[i] = make([]*memory.Buffer, 2)
+		// Most types need only two buffers: one for the nulls, and one for the
+		// values, but some type (i.e. Bytes) need an extra buffer for the offsets.
+		c.scratch.buffers[i] = make([]*memory.Buffer, 0, 3)
 	}
 	return c
 }
@@ -95,20 +90,11 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			arrowBitmap = n.NullBitmap()
 		}
 
-		if typ == types.Bool || typ == types.Bytes {
-			// Bools and Bytes are handled differently from other types. Refer to the
-			// comment on ArrowBatchConverter.builders for more information.
-			var data *array.Data
-			switch typ {
-			case types.Bool:
-				c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
-				data = c.builders.boolBuilder.NewBooleanArray().Data()
-			case types.Bytes:
-				c.builders.binaryBuilder.AppendValues(vec.Bytes().PrimitiveRepr()[:n], nil /* valid */)
-				data = c.builders.binaryBuilder.NewBinaryArray().Data()
-			default:
-				panic(fmt.Sprintf("unexpected type %s", typ))
-			}
+		if typ == types.Bool {
+			// Bools are handled differently from other types. Refer to the comment on
+			// ArrowBatchConverter.builders for more information.
+			c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
+			data := c.builders.boolBuilder.NewBooleanArray().Data()
 			if arrowBitmap != nil {
 				// Overwrite empty null bitmap with the true bitmap.
 				data.Buffers()[0] = memory.NewBufferBytes(arrowBitmap)
@@ -118,7 +104,8 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		}
 
 		var (
-			values []byte
+			values  []byte
+			offsets []byte
 			// dataHeader is the reflect.SliceHeader of the coldata.Vec's underlying
 			// data slice that we are casting to bytes.
 			dataHeader *reflect.SliceHeader
@@ -127,6 +114,15 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		)
 
 		switch typ {
+		case types.Bytes:
+			var int32Offsets []int32
+			values, int32Offsets = vec.Bytes().ToArrowSerializationFormat()
+			// Cast int32Offsets to []byte.
+			int32Header := (*reflect.SliceHeader)(unsafe.Pointer(&int32Offsets))
+			offsetsHeader := (*reflect.SliceHeader)(unsafe.Pointer(&offsets))
+			offsetsHeader.Data = int32Header.Data
+			offsetsHeader.Len = int32Header.Len * sizeOfInt32
+			offsetsHeader.Cap = int32Header.Cap * sizeOfInt32
 		case types.Int8:
 			ints := vec.Int8()[:n]
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&ints))
@@ -155,16 +151,22 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", typ))
 		}
 
-		// Cast values.
-		valuesHeader := (*reflect.SliceHeader)(unsafe.Pointer(&values))
-		valuesHeader.Data = dataHeader.Data
-		valuesHeader.Len = dataHeader.Len * datumSize
-		valuesHeader.Cap = dataHeader.Cap * datumSize
+		// Cast values if not set (mostly for non-byte types).
+		if values == nil {
+			valuesHeader := (*reflect.SliceHeader)(unsafe.Pointer(&values))
+			valuesHeader.Data = dataHeader.Data
+			valuesHeader.Len = dataHeader.Len * datumSize
+			valuesHeader.Cap = dataHeader.Cap * datumSize
+		}
 
 		// Construct the underlying arrow buffers.
 		// WARNING: The ordering of construction is critical.
-		c.scratch.buffers[i][0] = memory.NewBufferBytes(arrowBitmap)
-		c.scratch.buffers[i][1] = memory.NewBufferBytes(values)
+		c.scratch.buffers[i] = c.scratch.buffers[i][:0]
+		c.scratch.buffers[i] = append(c.scratch.buffers[i], memory.NewBufferBytes(arrowBitmap))
+		if offsets != nil {
+			c.scratch.buffers[i] = append(c.scratch.buffers[i], memory.NewBufferBytes(offsets))
+		}
+		c.scratch.buffers[i] = append(c.scratch.buffers[i], memory.NewBufferBytes(values))
 
 		// Create the data from the buffers. It might be surprising that we don't
 		// set a type or a null count, but these fields are not used in the way that
@@ -227,11 +229,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 					// corresponds.
 					bytes = make([]byte, 0)
 				}
-				offsets := bytesArr.ValueOffsets()
-				vecArr := vec.Bytes()
-				for i := 0; i < len(offsets)-1; i++ {
-					vecArr.Set(i, bytes[offsets[i]:offsets[i+1]])
-				}
+				coldata.BytesFromArrowSerializationFormat(vec.Bytes(), bytes, bytesArr.ValueOffsets())
 				arr = bytesArr
 			default:
 				panic(fmt.Sprintf("unexpected type %s", typ))
