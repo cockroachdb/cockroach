@@ -1124,6 +1124,7 @@ func (ef *execFactory) ConstructExplain(
 			false, /* optimizeSubqueries */
 			p.plan,
 			p.subqueryPlans,
+			p.postqueryPlans,
 		)
 
 	default:

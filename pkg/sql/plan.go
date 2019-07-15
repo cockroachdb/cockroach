@@ -392,7 +392,7 @@ func (p *planner) makePlan(ctx context.Context) error {
 
 	if log.V(3) {
 		log.Infof(ctx, "statement %s compiled to:\n%s", stmt,
-			planToString(ctx, p.curPlan.plan, p.curPlan.subqueryPlans))
+			planToString(ctx, p.curPlan.plan, p.curPlan.subqueryPlans, p.curPlan.postqueryPlans))
 	}
 
 	return nil
