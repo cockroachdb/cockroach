@@ -21,9 +21,11 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestFormatStatement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		stmt     string
 		f        tree.FmtFlags
@@ -110,6 +112,7 @@ func TestFormatStatement(t *testing.T) {
 }
 
 func TestFormatTableName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		stmt     string
 		expected string
@@ -159,6 +162,7 @@ func TestFormatTableName(t *testing.T) {
 }
 
 func TestFormatExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		expr     string
 		f        tree.FmtFlags
@@ -276,6 +280,7 @@ func TestFormatExpr(t *testing.T) {
 }
 
 func TestFormatExpr2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// This tests formatting from an expr AST. Suitable for use if your input
 	// isn't easily creatable from a string without running an Eval.
 	testData := []struct {
@@ -334,6 +339,7 @@ func TestFormatExpr2(t *testing.T) {
 }
 
 func TestFormatPgwireText(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		expr     string
 		expected string
