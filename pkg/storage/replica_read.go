@@ -72,7 +72,7 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	rSpan, err := keys.Range(ba)
+	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}

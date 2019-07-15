@@ -703,7 +703,7 @@ func (ds *DistSender) Send(
 		// Local addressing has already been resolved.
 		// TODO(tschottdorf): consider rudimentary validation of the batch here
 		// (for example, non-range requests with EndKey, or empty key ranges).
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -840,7 +840,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	// over multiple ranges, so call into divideAndSendBatchToRanges.
 	qiBa := ba
 	qiBa.Requests = swappedReqs[swapIdx+1:]
-	qiRS, err := keys.Range(qiBa)
+	qiRS, err := keys.Range(qiBa.Requests)
 	if err != nil {
 		return br, roachpb.NewError(err)
 	}
@@ -882,7 +882,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	// QueryIntent requests. Make sure to determine the request's
 	// new key span.
 	ba.Requests = swappedReqs[:swapIdx+1]
-	rs, err = keys.Range(ba)
+	rs, err = keys.Range(ba.Requests)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
