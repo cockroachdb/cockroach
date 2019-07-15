@@ -51,7 +51,7 @@ var backpressurableSpans = []roachpb.Span{
 
 // canBackpressureBatch returns whether the provided BatchRequest is eligible
 // for backpressure.
-func canBackpressureBatch(ba roachpb.BatchRequest) bool {
+func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 	// Don't backpressure splits themselves.
 	if ba.Txn != nil && ba.Txn.Name == splitTxnName {
 		return false
@@ -92,7 +92,7 @@ func (r *Replica) shouldBackpressureWrites() bool {
 
 // maybeBackpressureWriteBatch blocks to apply backpressure if the replica
 // deems that backpressure is necessary.
-func (r *Replica) maybeBackpressureWriteBatch(ctx context.Context, ba roachpb.BatchRequest) error {
+func (r *Replica) maybeBackpressureWriteBatch(ctx context.Context, ba *roachpb.BatchRequest) error {
 	if !canBackpressureBatch(ba) {
 		return nil
 	}
