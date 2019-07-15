@@ -63,7 +63,14 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
-		a.curIdx++
+		// If a.curIdx is negative, it means the input has zero rows, and the output
+		// should be a single row with the value 0.
+		if a.curIdx >= 0 {
+			a.curIdx++
+		} else {
+			a.vec[0] = 0
+			a.curIdx = 1
+		}
 		a.done = true
 		return
 	}
