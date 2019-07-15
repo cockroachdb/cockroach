@@ -399,7 +399,9 @@ func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
 					result.Append(c.Spans.Get(j))
 				}
 			}
-			result.Get(result.Count() - 1).end = sp.end
+			r := result.Get(result.Count() - 1)
+			r.end = sp.end
+			r.endBoundary = sp.endBoundary
 		} else {
 			if result.Count() != 0 {
 				result.Append(sp)

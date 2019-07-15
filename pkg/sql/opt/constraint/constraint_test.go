@@ -298,6 +298,12 @@ func TestConsolidateSpans(t *testing.T) {
 			s: "[/1 - /2] [/3 - /4] [/5 - /6] [/8 - /9] [/10 - /11] [/12 - /13] [/15 - /16]",
 			e: "[/1 - /6] [/8 - /13] [/15 - /16]",
 		},
+		{
+			// Test that consolidating two spans preserves the correct type of ending
+			// boundary (#38878).
+			s: "[/1 - /2] [/3 - /5)",
+			e: "[/1 - /5)",
+		},
 	}
 
 	kc := testKeyContext(1, 2, -3)
