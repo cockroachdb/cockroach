@@ -11,10 +11,10 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -116,7 +116,7 @@ type atomicDescString struct {
 
 // store atomically updates d.strPtr with the string representation of desc.
 func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.RangeDescriptor) {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	fmt.Fprintf(&buf, "%d/", desc.RangeID)
 	if replicaID == 0 {
 		fmt.Fprintf(&buf, "?:")
@@ -1027,9 +1027,24 @@ type endCmds struct {
 	lg   *spanlatch.Guard
 }
 
+// move moves the endCmds into the return value, clearing and making
+// a call to done on the receiver a no-op.
+func (ec *endCmds) move() endCmds {
+	res := *ec
+	*ec = endCmds{}
+	return res
+}
+
 // done releases the latches acquired by the command and updates
 // the timestamp cache using the final timestamp of each command.
+//
+// No-op if the receiver has been zeroed out by a call to move.
 func (ec *endCmds) done(ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	if ec.repl == nil {
+		// The endCmds were cleared.
+		return
+	}
+
 	// Update the timestamp cache if the request is not being re-evaluated. Each
 	// request is considered in turn; only those marked as affecting the cache are
 	// processed. Inconsistent reads are excluded.
@@ -1102,14 +1117,14 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 // the supplied error.
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
-) (*endCmds, error) {
+) (endCmds, error) {
 	// Only acquire latches for consistent operations.
 	var lg *spanlatch.Guard
 	if ba.ReadConsistency == roachpb.CONSISTENT {
 		// Check for context cancellation before acquiring latches.
 		if err := ctx.Err(); err != nil {
 			log.VEventf(ctx, 2, "%s before acquiring latches: %s", err, ba.Summary())
-			return nil, errors.Wrap(err, "aborted before acquiring latches")
+			return endCmds{}, errors.Wrap(err, "aborted before acquiring latches")
 		}
 
 		var beforeLatch time.Time
@@ -1123,7 +1138,7 @@ func (r *Replica) beginCmds(
 		var err error
 		lg, err = r.latchMgr.Acquire(ctx, spans, ba.Timestamp)
 		if err != nil {
-			return nil, err
+			return endCmds{}, err
 		}
 
 		if !beforeLatch.IsZero() {
@@ -1134,7 +1149,7 @@ func (r *Replica) beginCmds(
 		if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
 			if pErr := filter(*ba); pErr != nil {
 				r.latchMgr.Release(lg)
-				return nil, pErr.GoError()
+				return endCmds{}, pErr.GoError()
 			}
 		}
 
@@ -1183,7 +1198,7 @@ func (r *Replica) beginCmds(
 			// mergeCompleteCh closes. See #27442 for the full context.
 			log.Event(ctx, "waiting on in-progress merge")
 			r.latchMgr.Release(lg)
-			return nil, &roachpb.MergeInProgressError{}
+			return endCmds{}, &roachpb.MergeInProgressError{}
 		}
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
@@ -1199,7 +1214,7 @@ func (r *Replica) beginCmds(
 		}
 	}
 
-	ec := &endCmds{
+	ec := endCmds{
 		repl: r,
 		lg:   lg,
 	}

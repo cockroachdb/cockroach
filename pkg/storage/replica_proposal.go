@@ -83,9 +83,9 @@ type ProposalData struct {
 	// tmpFooter is used to avoid an allocation.
 	tmpFooter storagepb.RaftCommandFooter
 
-	// endCmds.finish is called after command execution to update the
-	// timestamp cache & release latches.
-	endCmds *endCmds
+	// ec.done is called after command application to update the timestamp
+	// cache and release latches.
+	ec endCmds
 
 	// doneCh is used to signal the waiting RPC handler (the contents of
 	// proposalResult come from LocalEvalResult).
@@ -122,10 +122,7 @@ type ProposalData struct {
 // is canceled, it won't be listening to this done channel, and so it can't be
 // counted on to invoke endCmds itself.)
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
-	if proposal.endCmds != nil {
-		proposal.endCmds.done(proposal.Request, pr.Reply, pr.Err)
-		proposal.endCmds = nil
-	}
+	proposal.ec.done(proposal.Request, pr.Reply, pr.Err)
 	if proposal.sp != nil {
 		tracing.FinishSpan(proposal.sp)
 	}
@@ -743,7 +740,6 @@ func (r *Replica) requestToProposal(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	ba *roachpb.BatchRequest,
-	endCmds *endCmds,
 	spans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
 	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, spans)
@@ -752,7 +748,6 @@ func (r *Replica) requestToProposal(
 	proposal := &ProposalData{
 		ctx:     ctx,
 		idKey:   idKey,
-		endCmds: endCmds,
 		doneCh:  make(chan proposalResult, 1),
 		Local:   &res.Local,
 		Request: ba,

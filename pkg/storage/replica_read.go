@@ -50,7 +50,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// Acquire latches to prevent overlapping commands from executing
 	// until this command completes.
 	log.Event(ctx, "acquire latches")
-	endCmds, err := r.beginCmds(ctx, ba, spans)
+	ec, err := r.beginCmds(ctx, ba, spans)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -64,7 +64,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		endCmds.done(ba, br, pErr)
+		ec.done(ba, br, pErr)
 	}()
 
 	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?

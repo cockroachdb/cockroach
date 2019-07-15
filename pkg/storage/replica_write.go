@@ -79,7 +79,7 @@ func (r *Replica) executeWriteBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	var endCmds *endCmds
+	var ec endCmds
 	if !ba.IsLeaseRequest() {
 		// Acquire latches to prevent overlapping commands from executing until
 		// this command completes. Note that this must be done before getting
@@ -87,18 +87,18 @@ func (r *Replica) executeWriteBatch(
 		// after preceding commands have been run to successful completion.
 		log.Event(ctx, "acquire latches")
 		var err error
-		endCmds, err = r.beginCmds(ctx, ba, spans)
+		ec, err = r.beginCmds(ctx, ba, spans)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
 
-	// Guarantee we release the latches that we just acquired. This is
-	// wrapped to delay pErr evaluation to its value when returning.
+	// Guarantee we release the latches that we just acquired if we never make
+	// it to passing responsibility to evalAndPropose. This is wrapped to delay
+	// pErr evaluation to its value when returning.
 	defer func() {
-		if endCmds != nil {
-			endCmds.done(ba, br, pErr)
-		}
+		// No-op if we move ec into evalAndPropose.
+		ec.done(ba, br, pErr)
 	}()
 
 	var lease roachpb.Lease
@@ -146,7 +146,9 @@ func (r *Replica) executeWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
-	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, lease, ba, endCmds, spans)
+	// After the command is proposed to Raft, invoking endCmds.done is the
+	// responsibility of Raft, so move the endCmds into evalAndPropose.
+	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, lease, ba, spans, ec.move())
 	if pErr != nil {
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
@@ -163,10 +165,6 @@ func (r *Replica) executeWriteBatch(
 	if maxLeaseIndex != 0 {
 		untrack(ctx, ctpb.Epoch(lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
-
-	// After the command is proposed to Raft, invoking endCmds.done is now the
-	// responsibility of processRaftCommand.
-	endCmds = nil
 
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
@@ -258,9 +256,9 @@ and the following Raft status: %+v`,
 // re-executed in full. This allows it to lay down intents and return
 // an appropriate retryable error.
 func (r *Replica) evaluateWriteBatch(
-	ctx context.Context, 
-	idKey storagebase.CmdIDKey, 
-	ba *roachpb.BatchRequest, 
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	ba *roachpb.BatchRequest,
 	spans *spanset.SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	ms := enginepb.MVCCStats{}
