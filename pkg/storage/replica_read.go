@@ -27,7 +27,7 @@ import (
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the latches.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// If the read is not inconsistent, the read requires the range lease or
 	// permission to serve via follower reads.
@@ -40,9 +40,9 @@ func (r *Replica) executeReadOnlyBatch(
 			r.store.metrics.FollowerReadsCount.Inc(1)
 		}
 	}
-	r.limitTxnMaxTimestamp(ctx, &ba, status)
+	r.limitTxnMaxTimestamp(ctx, ba, status)
 
-	spans, err := r.collectSpans(&ba)
+	spans, err := r.collectSpans(ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -50,7 +50,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// Acquire latches to prevent overlapping commands from executing
 	// until this command completes.
 	log.Event(ctx, "acquire latches")
-	endCmds, err := r.beginCmds(ctx, &ba, spans)
+	ec, err := r.beginCmds(ctx, ba, spans)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -64,7 +64,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		endCmds.done(br, pErr)
+		ec.done(ba, br, pErr)
 	}()
 
 	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
@@ -72,7 +72,7 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	rSpan, err := keys.Range(ba)
+	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}

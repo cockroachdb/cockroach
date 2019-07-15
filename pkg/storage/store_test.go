@@ -72,7 +72,7 @@ func (s *Store) TestSender() client.Sender {
 		// If the client hasn't set ba.Range, we do it a favor and figure out the
 		// range to which the request needs to go.
 		//
-		// NOTE: We don't use keys.Range(ba) here because that does some
+		// NOTE: We don't use keys.Range(ba.Requests) here because that does some
 		// validation on the batch, and some tests using this sender don't like
 		// that.
 		key, err := keys.Addr(ba.Requests[0].GetInner().Header().Key)
@@ -150,7 +150,7 @@ func (db *testSender) Send(
 		return nil, roachpb.NewErrorf("%s method not supported", et.Method())
 	}
 	// Lookup range and direct request.
-	rs, err := keys.Range(ba)
+	rs, err := keys.Range(ba.Requests)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -727,7 +727,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	if _, _, _, pErr := repl1.evalAndPropose(
-		context.Background(), lease, roachpb.BatchRequest{}, nil, &allSpans,
+		context.Background(), lease, &roachpb.BatchRequest{}, &allSpans, endCmds{},
 	); !pErr.Equal(expErr) {
 		t.Fatalf("expected error %s, but got %v", expErr, pErr)
 	}

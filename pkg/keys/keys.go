@@ -804,12 +804,11 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	return key[:idx], nil
 }
 
-// Range returns a key range encompassing the key ranges of all requests in the
-// Batch.
-func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
+// Range returns a key range encompassing the key ranges of all requests.
+func Range(reqs []roachpb.RequestUnion) (roachpb.RSpan, error) {
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin
-	for _, arg := range ba.Requests {
+	for _, arg := range reqs {
 		req := arg.GetInner()
 		h := req.Header()
 		if !roachpb.IsRange(req) && len(h.EndKey) != 0 {
