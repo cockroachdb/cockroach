@@ -308,7 +308,7 @@ func (b *Builder) buildScanFromTableRef(
 // catalog and schema names were explicitly specified.
 func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta {
 	md := b.factory.Metadata()
-	tabID := md.AddTableWithAlias(tab, alias)
+	tabID := md.AddTable(tab, alias)
 	return md.TableMeta(tabID)
 }
 

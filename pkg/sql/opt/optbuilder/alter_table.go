@@ -29,7 +29,7 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 		AvoidDescriptorCaches: true,
 		NoTableStats:          true,
 	}
-	index, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &split.TableOrIndex)
+	index, tn, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &split.TableOrIndex)
 	if err != nil {
 		panic(err)
 	}
@@ -72,7 +72,7 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 		inputScope.expr.(memo.RelExpr),
 		expiration,
 		&memo.AlterTableSplitPrivate{
-			Table:   b.factory.Metadata().AddTable(table),
+			Table:   b.factory.Metadata().AddTable(table, &tn),
 			Index:   index.Ordinal(),
 			Columns: colsToColList(outScope.cols),
 			Props:   inputScope.makePhysicalProps(),
@@ -87,7 +87,7 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 		AvoidDescriptorCaches: true,
 		NoTableStats:          true,
 	}
-	index, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &unsplit.TableOrIndex)
+	index, tn, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &unsplit.TableOrIndex)
 	if err != nil {
 		panic(err)
 	}
@@ -101,7 +101,7 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 	outScope = inScope.push()
 	b.synthesizeResultColumns(outScope, sqlbase.AlterTableUnsplitColumns)
 	private := &memo.AlterTableSplitPrivate{
-		Table:   b.factory.Metadata().AddTable(table),
+		Table:   b.factory.Metadata().AddTable(table, &tn),
 		Index:   index.Ordinal(),
 		Columns: colsToColList(outScope.cols),
 	}
@@ -137,7 +137,7 @@ func (b *Builder) buildAlterTableRelocate(
 		AvoidDescriptorCaches: true,
 		NoTableStats:          true,
 	}
-	index, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &relocate.TableOrIndex)
+	index, tn, err := cat.ResolveTableIndex(b.ctx, b.catalog, flags, &relocate.TableOrIndex)
 	if err != nil {
 		panic(err)
 	}
@@ -177,7 +177,7 @@ func (b *Builder) buildAlterTableRelocate(
 		&memo.AlterTableRelocatePrivate{
 			RelocateLease: relocate.RelocateLease,
 			AlterTableSplitPrivate: memo.AlterTableSplitPrivate{
-				Table:   b.factory.Metadata().AddTable(table),
+				Table:   b.factory.Metadata().AddTable(table, &tn),
 				Index:   index.Ordinal(),
 				Columns: colsToColList(outScope.cols),
 				Props:   inputScope.makePhysicalProps(),

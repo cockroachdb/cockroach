@@ -116,7 +116,7 @@ func (eg *exprGen) addTable(name string) opt.TableID {
 	if !ok {
 		panic(errorf("non-table datasource %s not supported", name))
 	}
-	return eg.mem.Metadata().AddTable(tab)
+	return eg.mem.Metadata().AddTable(tab, &tn)
 }
 
 // findIndex looks for an index specified as "table@idx_name" among the tables

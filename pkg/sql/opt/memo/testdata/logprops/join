@@ -1383,7 +1383,7 @@ inner-join (merge)
  ├── right ordering: +5
  ├── key: (7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6), (1)==(5), (5)==(1)
- ├── scan t.public.xysd
+ ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -1395,7 +1395,7 @@ inner-join (merge)
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── ordering: +5
- │    └── scan t.public.uv
+ │    └── scan uv
  │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │         ├── key: (7)
  │         └── fd: (7)-->(5,6)
@@ -1422,7 +1422,7 @@ left-join (merge)
  ├── right ordering: +5
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
- ├── scan t.public.xysd
+ ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -1434,7 +1434,7 @@ left-join (merge)
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── ordering: +5
- │    └── scan t.public.uv
+ │    └── scan uv
  │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │         ├── key: (7)
  │         └── fd: (7)-->(5,6)
@@ -1461,7 +1461,7 @@ right-join (merge)
  ├── right ordering: +5
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
- ├── scan t.public.xysd
+ ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -1473,7 +1473,7 @@ right-join (merge)
  │    ├── key: (7)
  │    ├── fd: (7)-->(5,6)
  │    ├── ordering: +5
- │    └── scan t.public.uv
+ │    └── scan uv
  │         ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │         ├── key: (7)
  │         └── fd: (7)-->(5,6)
