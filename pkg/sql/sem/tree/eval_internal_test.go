@@ -18,6 +18,7 @@ import (
 )
 
 func TestUnescapePattern(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		pattern     string
 		expected    string
@@ -56,6 +57,7 @@ func TestUnescapePattern(t *testing.T) {
 }
 
 func TestUnescapePatternError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		pattern     string
 		escapeToken string
@@ -85,6 +87,7 @@ func TestUnescapePatternError(t *testing.T) {
 }
 
 func TestReplaceUnescaped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		pattern     string
 		old         string

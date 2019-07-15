@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // TestNumericConstantVerifyAndResolveAvailableTypes verifies that test NumVals will
 // all return expected available type sets, and that attempting to resolve the NumVals
 // as each of these types will all succeed with an expected tree.Datum result.
 func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	wantInt := tree.NumValAvailInteger
 	wantDecButCanBeInt := tree.NumValAvailDecimalNoFraction
 	wantDec := tree.NumValAvailDecimalWithFraction
@@ -143,6 +145,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 // return expected available type sets, and that attempting to resolve the StrVals
 // as each of these types will either succeed or return a parse error.
 func TestStringConstantVerifyAvailableTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	wantStringButCanBeAll := tree.StrValAvailAllParsable
 	wantBytes := tree.StrValAvailBytes
 
@@ -263,6 +266,7 @@ func typeSet(tys ...*types.T) map[*types.T]struct{} {
 // the expected results which come from running the string literal through a
 // corresponding parseFunc (above).
 func TestStringConstantResolveAvailableTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		c            *tree.StrVal
 		parseOptions map[*types.T]struct{}
@@ -397,6 +401,7 @@ func testConstantLiteralFolding(t *testing.T, testData []constantLiteralFoldingT
 }
 
 func TestFoldNumericConstants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testConstantLiteralFolding(t, []constantLiteralFoldingTestCase{
 		// Unary ops.
 		{`+1`, `1`},
@@ -495,6 +500,7 @@ func TestFoldNumericConstants(t *testing.T) {
 }
 
 func TestFoldStringConstants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testConstantLiteralFolding(t, []constantLiteralFoldingTestCase{
 		// Binary ops.
 		{`'string' || 'string'`, `'stringstring'`},

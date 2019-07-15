@@ -18,9 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestParseColumnType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		str          string
 		expectedType *types.T
@@ -90,6 +92,7 @@ func TestParseColumnType(t *testing.T) {
 }
 
 func TestParseColumnTypeAliases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		str          string
 		expectedStr  string

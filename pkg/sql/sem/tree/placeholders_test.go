@@ -15,9 +15,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestPlaceholderTypesEquals(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		a, b  PlaceholderTypes
 		equal bool

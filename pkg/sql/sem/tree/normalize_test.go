@@ -19,9 +19,11 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestContainsVars(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		expr     string
 		expected bool
@@ -49,6 +51,7 @@ func TestContainsVars(t *testing.T) {
 }
 
 func TestNormalizeExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	defer tree.MockNameTypes(map[string]*types.T{
 		"a":  types.Int,
 		"b":  types.Int,
