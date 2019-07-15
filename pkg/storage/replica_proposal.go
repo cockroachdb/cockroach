@@ -123,7 +123,7 @@ type ProposalData struct {
 // counted on to invoke endCmds itself.)
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
 	if proposal.endCmds != nil {
-		proposal.endCmds.done(pr.Reply, pr.Err)
+		proposal.endCmds.done(proposal.Request, pr.Reply, pr.Err)
 		proposal.endCmds = nil
 	}
 	if proposal.sp != nil {
@@ -636,7 +636,7 @@ type proposalResult struct {
 //
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
 	if ba.Timestamp == (hlc.Timestamp{}) {
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
@@ -742,7 +742,7 @@ func (r *Replica) evaluateProposal(
 func (r *Replica) requestToProposal(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
@@ -755,7 +755,7 @@ func (r *Replica) requestToProposal(
 		endCmds: endCmds,
 		doneCh:  make(chan proposalResult, 1),
 		Local:   &res.Local,
-		Request: &ba,
+		Request: ba,
 	}
 
 	if needConsensus {

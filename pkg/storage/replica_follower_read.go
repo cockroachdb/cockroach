@@ -35,7 +35,7 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 // acquired, whether the read only batch can be served as a follower
 // read despite the error.
 func (r *Replica) canServeFollowerRead(
-	ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error,
+	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error,
 ) *roachpb.Error {
 	canServeFollowerRead := false
 	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&

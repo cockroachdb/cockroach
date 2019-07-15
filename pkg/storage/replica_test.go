@@ -490,7 +490,7 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Add(c.reqs...)
 		t.Run(fmt.Sprint(ba), func(t *testing.T) {
-			resBa, err := maybeStripInFlightWrites(ba)
+			resBa, err := maybeStripInFlightWrites(&ba)
 			if c.expErr == "" {
 				if err != nil {
 					t.Errorf("expected no error, got %v", err)
@@ -559,7 +559,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
 			}
 		}
-		if is1PC := isOnePhaseCommit(ba, &StoreTestingKnobs{}); is1PC != c.exp1PC {
+		if is1PC := isOnePhaseCommit(&ba, &StoreTestingKnobs{}); is1PC != c.exp1PC {
 			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, is1PC)
 		}
 	}
@@ -603,7 +603,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, _, pErr := r.evalAndPropose(context.TODO(), exLease, ba, nil, &allSpans)
+	ch, _, _, pErr := r.evalAndPropose(context.TODO(), exLease, &ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1384,7 +1384,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, pErr := tc.repl.evalAndPropose(context.Background(), exLease, ba, nil, &allSpans)
+	ch, _, _, pErr := tc.repl.evalAndPropose(context.Background(), exLease, &ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -6960,7 +6960,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				t.Fatal(err)
 			}
-			_, pErr := tc.repl.executeWriteBatch(ctx, ba)
+			_, pErr := tc.repl.executeWriteBatch(ctx, &ba)
 			if cancelEarly {
 				if !testutils.IsPError(pErr, context.Canceled.Error()) {
 					t.Fatalf("expected canceled error; got %v", pErr)
@@ -7013,7 +7013,7 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{Key: []byte("acdfg")},
 	})
-	_, pErr := tc.repl.executeWriteBatch(ctx, ba)
+	_, pErr := tc.repl.executeWriteBatch(ctx, &ba)
 	if pErr == nil {
 		t.Fatal("expected failure, but found success")
 	}
@@ -7242,7 +7242,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 		},
 		Value: roachpb.MakeValueFromBytes([]byte("val")),
 	})
-	_, _, _, err := repl.evalAndPropose(context.Background(), lease, ba, nil, &allSpans)
+	_, _, _, err := repl.evalAndPropose(context.Background(), lease, &ba, nil, &allSpans)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7370,7 +7370,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	{
 		_, pErr := tc.repl.executeWriteBatch(
 			context.WithValue(ctx, magicKey{}, "foo"),
-			ba,
+			&ba,
 		)
 		if pErr != nil {
 			t.Fatalf("write batch returned error: %s", pErr)
@@ -7401,7 +7401,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 		})
 		_, pErr := tc.repl.executeWriteBatch(
 			context.WithValue(ctx, magicKey{}, "foo"),
-			ba,
+			&ba,
 		)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -7448,7 +7448,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 			},
 		})
-		ch, _, idx, err := repl.evalAndPropose(ctx, lease, ba, nil, &allSpans)
+		ch, _, idx, err := repl.evalAndPropose(ctx, lease, &ba, nil, &allSpans)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -7514,7 +7514,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 					Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 				},
 			})
-			ch, _, _, err := tc.repl.evalAndPropose(ctx, lease, ba, nil, &allSpans)
+			ch, _, _, err := tc.repl.evalAndPropose(ctx, lease, &ba, nil, &allSpans)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -7639,7 +7639,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		lease, _ := r.GetLease()
 		ctx := context.Background()
-		cmd, pErr := r.requestToProposal(ctx, storagebase.CmdIDKey(id), ba, nil, &allSpans)
+		cmd, pErr := r.requestToProposal(ctx, storagebase.CmdIDKey(id), &ba, nil, &allSpans)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -7765,7 +7765,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 
 	incCmdID = makeIDKey()
 	atomic.StoreInt32(&filterActive, 1)
-	proposal, pErr := repl.requestToProposal(ctx, incCmdID, ba, nil, &allSpans)
+	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, nil, &allSpans)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -8128,7 +8128,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	assignSeqNumsForReqs(txn, &txnPut, &txnPut2)
 	origTxn := txn.Clone()
 
-	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), ba, &allSpans)
+	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), &ba, &allSpans)
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -8761,7 +8761,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 
 	exLease, _ := repl.GetLease()
 	ch, _, _, pErr := repl.evalAndPropose(
-		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
+		context.Background(), exLease, &ba, nil /* endCmds */, &allSpans,
 	)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -8808,7 +8808,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
 	ch, _, _, pErr := repl.evalAndPropose(
-		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
+		context.Background(), exLease, &ba, nil /* endCmds */, &allSpans,
 	)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -8872,7 +8872,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	_, _, _, pErr := repl.evalAndPropose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
+	_, _, _, pErr := repl.evalAndPropose(ctx, exLease, &ba, nil /* endCmds */, &allSpans)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -8890,7 +8890,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 		ba2.Timestamp = tc.Clock().Now()
 
 		var pErr *roachpb.Error
-		ch, _, _, pErr = repl.evalAndPropose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
+		ch, _, _, pErr = repl.evalAndPropose(ctx, exLease, &ba, nil /* endCmds */, &allSpans)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
