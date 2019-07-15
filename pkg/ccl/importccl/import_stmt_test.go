@@ -10,15 +10,11 @@ package importccl
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -769,113 +765,6 @@ ALTER TABLE ONLY public.b
 `
 )
 
-// TODO(dt): switch to a helper in sampledataccl.
-func makeCSVData(
-	t testing.TB, in string, numFiles, rowsPerFile int,
-) (files []string, filesWithOpts []string, filesWithDups []string) {
-	if err := os.Mkdir(filepath.Join(in, "csv"), 0777); err != nil {
-		t.Fatal(err)
-	}
-	for fn := 0; fn < numFiles; fn++ {
-		path := filepath.Join("csv", fmt.Sprintf("data-%d", fn))
-		f, err := os.Create(filepath.Join(in, path))
-		if err != nil {
-			t.Fatal(err)
-		}
-		pathWithOpts := filepath.Join("csv", fmt.Sprintf("data-%d-opts", fn))
-		fWithOpts, err := os.Create(filepath.Join(in, pathWithOpts))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := fmt.Fprint(fWithOpts, "This is a header line to be skipped\n"); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := fmt.Fprint(fWithOpts, "So is this\n"); err != nil {
-			t.Fatal(err)
-		}
-		pathDup := filepath.Join("csv", fmt.Sprintf("data-%d-dup", fn))
-		fDup, err := os.Create(filepath.Join(in, pathDup))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for i := 0; i < rowsPerFile; i++ {
-			x := fn*rowsPerFile + i
-			if _, err := fmt.Fprintf(f, "%d,%c\n", x, 'A'+x%26); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := fmt.Fprintf(fDup, "1,%c\n", 'A'+x%26); err != nil {
-				t.Fatal(err)
-			}
-
-			// Write a comment.
-			if _, err := fmt.Fprintf(fWithOpts, "# %d\n", x); err != nil {
-				t.Fatal(err)
-			}
-			// Write a pipe-delim line with trailing delim.
-			if x%4 == 0 { // 1/4 of rows have blank val for b
-				if _, err := fmt.Fprintf(fWithOpts, "%d||\n", x); err != nil {
-					t.Fatal(err)
-				}
-			} else {
-				if _, err := fmt.Fprintf(fWithOpts, "%d|%c|\n", x, 'A'+x%26); err != nil {
-					t.Fatal(err)
-				}
-			}
-		}
-		if err := f.Close(); err != nil {
-			t.Fatal(err)
-		}
-		if err := fWithOpts.Close(); err != nil {
-			t.Fatal(err)
-		}
-		files = append(files, path)
-		filesWithOpts = append(filesWithOpts, pathWithOpts)
-		filesWithDups = append(filesWithDups, pathDup)
-	}
-	return files, filesWithOpts, filesWithDups
-}
-
-func nodelocalPrefix(in []string) []string {
-	res := make([]string, len(in))
-	for i := range in {
-		res[i] = fmt.Sprintf(`'nodelocal:///%s'`, in[i])
-	}
-	return res
-}
-
-func gzipFile(t *testing.T, in string) string {
-	r, err := os.Open(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r.Close()
-	name := in + ".gz"
-	f, err := os.Create(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	w := gzip.NewWriter(f)
-	if _, err := io.Copy(w, r); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return name
-}
-
-func bzipFile(t *testing.T, dir, in string) string {
-	_, err := exec.Command("bzip2", "-k", filepath.Join(dir, in)).CombinedOutput()
-	if err != nil {
-		if strings.Contains(err.Error(), "executable file not found") {
-			return ""
-		}
-		t.Fatal(err)
-	}
-	return in + ".bz2"
-}
-
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	if testing.Short() {
@@ -886,25 +775,27 @@ func TestImportCSVStmt(t *testing.T) {
 
 	numFiles := nodes + 2
 	rowsPerFile := 1000
-	if util.RaceEnabled {
-		// This test takes a while with the race detector, so reduce the number of
-		// files and rows per file in an attempt to speed it up.
-		numFiles = nodes
-		rowsPerFile = 16
-	}
+	rowsPerRaceFile := 16
 
 	ctx := context.Background()
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	baseDir := filepath.Join("testdata", "csv")
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 
-	tablePath := filepath.Join(dir, "table")
+	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
+	if util.RaceEnabled {
+		// This test takes a while with the race detector, so reduce the number of
+		// files and rows per file in an attempt to speed it up.
+		numFiles = nodes
+		rowsPerFile = rowsPerRaceFile
+	}
+
+	// Table schema used in IMPORT TABLE tests.
+	tablePath := filepath.Join(baseDir, "table")
 	if err := ioutil.WriteFile(tablePath, []byte(`
 		CREATE TABLE t (
 			a int8 primary key,
@@ -915,40 +806,16 @@ func TestImportCSVStmt(t *testing.T) {
 	`), 0666); err != nil {
 		t.Fatal(err)
 	}
+	schema := []interface{}{"nodelocal:///table"}
 
-	if err := ioutil.WriteFile(filepath.Join(dir, "empty.csv"), nil, 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(baseDir, "empty.csv"), nil, 0666); err != nil {
 		t.Fatal(err)
 	}
 	empty := []string{"'nodelocal:///empty.csv'"}
-	schema := []interface{}{"nodelocal:///table"}
-
-	files, filesWithOpts, dups := makeCSVData(t, dir, numFiles, rowsPerFile)
-	filesWithOpts = nodelocalPrefix(filesWithOpts)
-	dups = nodelocalPrefix(dups)
-
-	gzip := make([]string, len(files))
-	for i := range files {
-		gzip[i] = strings.TrimPrefix(gzipFile(t, filepath.Join(dir, files[i])), dir) + "?param=value"
-	}
-	gzip = nodelocalPrefix(gzip)
-
-	var skipBzip = false
-	bzip := make([]string, len(files))
-	for i := range files {
-		bzip[i] = bzipFile(t, dir, files[i])
-		// if we don't have `bzip` on PATH, just skip those subtests.
-		if bzip[i] == "" {
-			skipBzip = true
-		}
-	}
-	bzip = nodelocalPrefix(bzip)
-
-	files = nodelocalPrefix(files)
-
-	expectedRows := numFiles * rowsPerFile
 
 	// Support subtests by keeping track of the number of jobs that are executed.
 	testNum := -1
+	expectedRows := numFiles * rowsPerFile
 	for i, tc := range []struct {
 		name    string
 		query   string        // must have one `%s` for the files list.
@@ -961,7 +828,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
 			schema,
-			files,
+			testFiles.files,
 			``,
 			"",
 		},
@@ -969,7 +836,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-intodb",
 			`IMPORT TABLE csv1.t CREATE USING $1 CSV DATA (%s)`,
 			schema,
-			files,
+			testFiles.files,
 			``,
 			"",
 		},
@@ -977,7 +844,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-query",
 			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`,
 			nil,
-			files,
+			testFiles.files,
 			``,
 			"",
 		},
@@ -985,7 +852,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-query-opts",
 			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
 			nil,
-			filesWithOpts,
+			testFiles.filesWithOpts,
 			` WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2'`,
 			"",
 		},
@@ -994,7 +861,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-sstsize",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH sstsize = '10K'`,
 			schema,
-			files,
+			testFiles.files,
 			` WITH sstsize = '10K'`,
 			"",
 		},
@@ -1010,7 +877,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"empty-with-files",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
 			schema,
-			append(empty, files...),
+			append(empty, testFiles.files...),
 			``,
 			"",
 		},
@@ -1018,7 +885,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-auto-decompress",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'auto'`,
 			schema,
-			files,
+			testFiles.files,
 			` WITH decompress = 'auto'`,
 			"",
 		},
@@ -1026,7 +893,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-no-decompress",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'none'`,
 			schema,
-			files,
+			testFiles.files,
 			` WITH decompress = 'none'`,
 			"",
 		},
@@ -1034,7 +901,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-explicit-gzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'gzip'`,
 			schema,
-			gzip,
+			testFiles.gzipFiles,
 			` WITH decompress = 'gzip'`,
 			"",
 		},
@@ -1042,7 +909,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-auto-gzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'auto'`,
 			schema,
-			gzip,
+			testFiles.bzipFiles,
 			` WITH decompress = 'auto'`,
 			"",
 		},
@@ -1050,7 +917,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-implicit-gzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
 			schema,
-			gzip,
+			testFiles.gzipFiles,
 			``,
 			"",
 		},
@@ -1058,7 +925,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-explicit-bzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'bzip'`,
 			schema,
-			bzip,
+			testFiles.bzipFiles,
 			` WITH decompress = 'bzip'`,
 			"",
 		},
@@ -1066,7 +933,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-auto-bzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'auto'`,
 			schema,
-			bzip,
+			testFiles.bzipFiles,
 			` WITH decompress = 'auto'`,
 			"",
 		},
@@ -1074,7 +941,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-implicit-bzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
 			schema,
-			bzip,
+			testFiles.bzipFiles,
 			``,
 			"",
 		},
@@ -1083,7 +950,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"bad-opt-name",
 			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH foo = 'bar'`,
 			nil,
-			files,
+			testFiles.files,
 			``,
 			"invalid option \"foo\"",
 		},
@@ -1091,7 +958,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"bad-computed-column",
 			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH skip = '2'`,
 			nil,
-			filesWithOpts,
+			testFiles.filesWithOpts,
 			``,
 			"computed columns not supported",
 		},
@@ -1099,7 +966,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"primary-key-dup",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
 			schema,
-			dups,
+			testFiles.filesWithDups,
 			``,
 			"primary or unique index has duplicate keys",
 		},
@@ -1107,7 +974,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"no-database",
 			`IMPORT TABLE nonexistent.t CREATE USING $1 CSV DATA (%s)`,
 			schema,
-			files,
+			testFiles.files,
 			``,
 			`database does not exist: "nonexistent.t"`,
 		},
@@ -1115,7 +982,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"into-db-fails",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH into_db = 'test'`,
 			schema,
-			files,
+			testFiles.files,
 			``,
 			`invalid option "into_db"`,
 		},
@@ -1123,7 +990,7 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-no-decompress-gzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'none'`,
 			schema,
-			gzip,
+			testFiles.gzipFiles,
 			` WITH decompress = 'none'`,
 			"expected 2 fields, got",
 		},
@@ -1131,13 +998,13 @@ func TestImportCSVStmt(t *testing.T) {
 			"schema-in-file-no-decompress-gzip",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH decompress = 'gzip'`,
 			schema,
-			files,
+			testFiles.files,
 			` WITH decompress = 'gzip'`,
 			"gzip: invalid header",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if strings.Contains(tc.name, "bzip") && skipBzip {
+			if strings.Contains(tc.name, "bzip") && len(testFiles.bzipFiles) == 0 {
 				t.Skip("bzip2 not available on PATH?")
 			}
 			intodb := fmt.Sprintf(`csv%d`, i)
@@ -1201,7 +1068,7 @@ func TestImportCSVStmt(t *testing.T) {
 
 			// Verify sstsize created > 1 SST files.
 			if tc.name == "schema-in-file-sstsize-dist" {
-				pattern := filepath.Join(dir, fmt.Sprintf("%d", i), "*.sst")
+				pattern := filepath.Join(baseDir, fmt.Sprintf("%d", i), "*.sst")
 				matches, err := filepath.Glob(pattern)
 				if err != nil {
 					t.Fatal(err)
@@ -1225,7 +1092,7 @@ func TestImportCSVStmt(t *testing.T) {
 	// Verify unique_rowid is replaced for tables without primary keys.
 	t.Run("unique_rowid", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE pk")
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE pk.t (a INT8, b STRING) CSV DATA (%s)`, strings.Join(files, ", ")))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE pk.t (a INT8, b STRING) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
 		// Verify the rowids are being generated as expected.
 		sqlDB.CheckQueryResults(t,
 			`SELECT count(*), sum(rowid) FROM pk.t`,
@@ -1246,23 +1113,23 @@ func TestImportCSVStmt(t *testing.T) {
 		// Specify wrong number of columns.
 		sqlDB.ExpectErr(
 			t, "expected 1 fields, got 2",
-			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY) CSV DATA (%s)`, files[0]),
+			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY) CSV DATA (%s)`, testFiles.files[0]),
 		)
 
 		// Specify wrong table name; still shouldn't leave behind a checkpoint file.
 		sqlDB.ExpectErr(
 			t, `file specifies a schema for table t`,
-			fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s)`, files[0]), schema[0],
+			fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s)`, testFiles.files[0]), schema[0],
 		)
 
 		// Expect it to succeed with correct columns.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]))
 
 		// A second attempt should fail fast. A "slow fail" is the error message
 		// "restoring table desc and namespace entries: table already exists".
 		sqlDB.ExpectErr(
 			t, `relation "t" already exists`,
-			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]),
+			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
 
@@ -1341,7 +1208,7 @@ func TestImportCSVStmt(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE s; USE s; CREATE TABLE t (a int8 primary key, b string, index (b))")
 		sqlDB.ExpectErr(
 			t, `cannot IMPORT INTO a table with secondary indexes.`,
-			fmt.Sprintf(`IMPORT INTO t(a, b) CSV DATA (%s)`, files[0]),
+			fmt.Sprintf(`IMPORT INTO t(a, b) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
 }
@@ -1351,15 +1218,13 @@ func BenchmarkImport(b *testing.B) {
 		nodes    = 3
 		numFiles = nodes + 2
 	)
-	dir, cleanup := testutils.TempDir(b)
-	defer cleanup()
+	baseDir := filepath.Join("testdata", "csv")
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-	files, _, _ := makeCSVData(b, dir, numFiles, b.N*100)
-	files = nodelocalPrefix(files)
+	testFiles := makeCSVData(b, numFiles, b.N*100, nodes, 16)
 
 	b.ResetTimer()
 
@@ -1367,7 +1232,7 @@ func BenchmarkImport(b *testing.B) {
 		fmt.Sprintf(
 			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
 			CSV DATA (%s)`,
-			strings.Join(files, ","),
+			strings.Join(testFiles.files, ","),
 		))
 }
 
