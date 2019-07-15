@@ -316,7 +316,7 @@ func (ex *connExecutor) execBind(
 				len(qArgFormatCodes), numQArgs))
 		}
 		// If a single format code was specified, it applies to all the arguments.
-		if len(qArgFormatCodes) == 1 {
+		if len(qArgFormatCodes) == 1 && numQArgs > 1 {
 			fmtCode := qArgFormatCodes[0]
 			qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgs)
 			for i := range qArgFormatCodes {
