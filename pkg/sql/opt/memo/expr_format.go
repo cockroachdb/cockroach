@@ -12,6 +12,7 @@ package memo
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"unicode"
 
@@ -88,12 +89,12 @@ func (f ExprFmtFlags) HasFlags(subset ExprFmtFlags) bool {
 
 // FormatExpr returns a string representation of the given expression, formatted
 // according to the specified flags.
-func FormatExpr(e opt.Expr, flags ExprFmtFlags) string {
+func FormatExpr(e opt.Expr, flags ExprFmtFlags, catalog cat.Catalog) string {
 	var mem *Memo
 	if nd, ok := e.(RelExpr); ok {
 		mem = nd.Memo()
 	}
-	f := MakeExprFmtCtx(flags, mem)
+	f := MakeExprFmtCtx(flags, mem, catalog)
 	f.FormatExpr(e)
 	return f.Buffer.String()
 }
@@ -110,6 +111,9 @@ type ExprFmtCtx struct {
 	// Memo must contain any expression that is formatted.
 	Memo *Memo
 
+	// Catalog must be set unless the ExprFmtHideQualifications flag is set.
+	Catalog cat.Catalog
+
 	// nameGen is used to generate a unique name for each relational
 	// subexpression when Memo.saveTablesPrefix is non-empty. These names
 	// correspond to the tables that would be saved if the query were run
@@ -118,18 +122,20 @@ type ExprFmtCtx struct {
 }
 
 // MakeExprFmtCtx creates an expression formatting context from a new buffer.
-func MakeExprFmtCtx(flags ExprFmtFlags, mem *Memo) ExprFmtCtx {
-	return MakeExprFmtCtxBuffer(&bytes.Buffer{}, flags, mem)
+func MakeExprFmtCtx(flags ExprFmtFlags, mem *Memo, catalog cat.Catalog) ExprFmtCtx {
+	return MakeExprFmtCtxBuffer(&bytes.Buffer{}, flags, mem, catalog)
 }
 
 // MakeExprFmtCtxBuffer creates an expression formatting context from an
 // existing buffer.
-func MakeExprFmtCtxBuffer(buf *bytes.Buffer, flags ExprFmtFlags, mem *Memo) ExprFmtCtx {
+func MakeExprFmtCtxBuffer(
+	buf *bytes.Buffer, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog,
+) ExprFmtCtx {
 	var nameGen *ExprNameGenerator
 	if mem != nil && mem.saveTablesPrefix != "" {
 		nameGen = NewExprNameGenerator(mem.saveTablesPrefix)
 	}
-	return ExprFmtCtx{Buffer: buf, Flags: flags, Memo: mem, nameGen: nameGen}
+	return ExprFmtCtx{Buffer: buf, Flags: flags, Memo: mem, Catalog: catalog, nameGen: nameGen}
 }
 
 // HasFlags tests whether the given flags are all set.
@@ -866,7 +872,7 @@ func formatCol(
 	colMeta := md.ColumnMeta(id)
 	if label == "" {
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label = md.QualifiedAlias(id, fullyQualify)
+		label = md.QualifiedAlias(id, fullyQualify, f.Catalog)
 	}
 
 	if !isSimpleColumnName(label) {
@@ -915,7 +921,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	switch t := private.(type) {
 	case *opt.ColumnID:
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label := f.Memo.metadata.QualifiedAlias(*t, fullyQualify)
+		label := f.Memo.metadata.QualifiedAlias(*t, fullyQualify, f.Catalog)
 		fmt.Fprintf(f.Buffer, " %s", label)
 
 	case *TupleOrdinal:
@@ -934,9 +940,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		}
 
 	case *VirtualScanPrivate:
-		// Always fully qualify virtual table names.
-		tabMeta := f.Memo.metadata.TableMeta(t.Table)
-		fmt.Fprintf(f.Buffer, " %s", tabMeta.Table.Name())
+		fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
 
 	case *SequenceSelectPrivate:
 		seq := f.Memo.metadata.Sequence(t.Sequence)
@@ -958,14 +962,14 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *IndexJoinPrivate:
 		tab := f.Memo.metadata.Table(t.Table)
-		fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
+		fmt.Fprintf(f.Buffer, " %s", tab.Name())
 
 	case *LookupJoinPrivate:
 		tab := f.Memo.metadata.Table(t.Table)
 		if t.Index == cat.PrimaryIndex {
-			fmt.Fprintf(f.Buffer, " %s", tab.Name().TableName)
+			fmt.Fprintf(f.Buffer, " %s", tab.Name())
 		} else {
-			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name().TableName, tab.Index(t.Index).Name())
+			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name(), tab.Index(t.Index).Name())
 		}
 
 	case *ValuesPrivate:
@@ -974,11 +978,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *ZigzagJoinPrivate:
 		leftTab := f.Memo.metadata.Table(t.LeftTable)
 		rightTab := f.Memo.metadata.Table(t.RightTable)
-		fmt.Fprintf(f.Buffer, " %s", leftTab.Name().TableName)
+		fmt.Fprintf(f.Buffer, " %s", leftTab.Name())
 		if t.LeftIndex != cat.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, "@%s", leftTab.Index(t.LeftIndex).Name())
 		}
-		fmt.Fprintf(f.Buffer, " %s", rightTab.Name().TableName)
+		fmt.Fprintf(f.Buffer, " %s", rightTab.Name())
 		if t.RightIndex != cat.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, "@%s", rightTab.Index(t.RightIndex).Name())
 		}
@@ -1057,7 +1061,11 @@ func tableAlias(f *ExprFmtCtx, tabID opt.TableID) string {
 	if f.HasFlags(ExprFmtHideQualifications) {
 		return tabMeta.Alias.String()
 	}
-	return tabMeta.Table.Name().FQString()
+	tn, err := f.Catalog.FullyQualifiedName(context.TODO(), tabMeta.Table)
+	if err != nil {
+		panic(err)
+	}
+	return tn.FQString()
 }
 
 // isSimpleColumnName returns true if the given label consists of only ASCII

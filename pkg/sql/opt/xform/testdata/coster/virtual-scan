@@ -6,7 +6,7 @@ select
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  ├── cost: 20.02
  ├── fd: ()-->(2)
- ├── virtual-scan t.information_schema.schemata
+ ├── virtual-scan information_schema.schemata
  │    ├── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
  │    ├── stats: [rows=1000, distinct(2)=100, null(2)=0]
  │    └── cost: 10.01

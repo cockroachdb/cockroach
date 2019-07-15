@@ -573,9 +573,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		// Type check the input column against the corresponding table column.
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
 
-		// Assign name of input column. Computed columns can refer to this column
-		// by its name.
-		inCol.table = *mb.tab.Name()
+		// Assign name of input column.
 		inCol.name = tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias)
 
 		// Record the ordinal position of the scope column that contains the
@@ -938,9 +936,7 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 		scopeCol := mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
 		scopeColOrd := scopeOrdinal(len(projectionsScope.cols) - 1)
 
-		// Assign name to synthesized column. Check constraint columns may refer
-		// to columns in the table by name.
-		scopeCol.table = *mb.tab.Name()
+		// Assign name to synthesized column.
 		scopeCol.name = mb.tab.Column(i).ColName()
 
 		// Update the scope ordinals for the update columns that are involved in

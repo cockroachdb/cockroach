@@ -12,10 +12,12 @@ package execbuilder
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -1856,26 +1858,25 @@ func (b *Builder) getEnvData() exec.ExplainEnvData {
 	// Catalog objects can show up multiple times in these lists, so
 	// deduplicate them.
 	seen := make(map[tree.TableName]bool)
-	for _, t := range b.mem.Metadata().AllTables() {
-		tn := *t.Table.Name()
+	addDS := func(list []tree.TableName, ds cat.DataSource) []tree.TableName {
+		tn, err := b.catalog.FullyQualifiedName(context.TODO(), ds)
+		if err != nil {
+			panic(err)
+		}
 		if !seen[tn] {
 			seen[tn] = true
-			envOpts.Tables = append(envOpts.Tables, tn)
+			list = append(list, tn)
 		}
+		return list
+	}
+	for _, t := range b.mem.Metadata().AllTables() {
+		envOpts.Tables = addDS(envOpts.Tables, t.Table)
 	}
 	for _, s := range b.mem.Metadata().AllSequences() {
-		tn := *s.Name()
-		if !seen[tn] {
-			seen[tn] = true
-			envOpts.Sequences = append(envOpts.Sequences, tn)
-		}
+		envOpts.Sequences = addDS(envOpts.Sequences, s)
 	}
 	for _, v := range b.mem.Metadata().AllViews() {
-		tn := *v.Name()
-		if !seen[tn] {
-			seen[tn] = true
-			envOpts.Views = append(envOpts.Views, tn)
-		}
+		envOpts.Views = addDS(envOpts.Views, v)
 	}
 
 	return envOpts

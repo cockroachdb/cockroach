@@ -134,7 +134,7 @@ func FindTableColumnByName(tab Table, name tree.Name) int {
 // FormatTable nicely formats a catalog table using a treeprinter for debugging
 // and testing.
 func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
-	child := tp.Childf("TABLE %s", tab.Name().TableName)
+	child := tp.Childf("TABLE %s", tab.Name())
 	if tab.IsVirtualTable() {
 		child.Child("virtual table")
 	}

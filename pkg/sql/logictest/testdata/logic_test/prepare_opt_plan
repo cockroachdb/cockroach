@@ -90,7 +90,7 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
- ├── scan test.public.t
+ ├── scan t
  │    ├── columns: k:1 str:2
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1040.02

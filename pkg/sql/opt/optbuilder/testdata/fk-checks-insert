@@ -31,12 +31,12 @@ insert child
                 │    ├── columns: column2:7(int!null)
                 │    └── mapping:
                 │         └──  column2:4(int) => column2:7(int)
-                ├── scan t.public.parent
-                │    └── columns: t.public.parent.p:5(int!null)
+                ├── scan parent
+                │    └── columns: parent.p:5(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
-                          └── variable: t.public.parent.p [type=int]
+                          └── variable: parent.p [type=int]
 
 # Use a non-constant input.
 exec-ddl
@@ -64,12 +64,12 @@ insert child
                 │    ├── columns: y:8(int)
                 │    └── mapping:
                 │         └──  xy.y:4(int) => y:8(int)
-                ├── scan t.public.parent
-                │    └── columns: t.public.parent.p:6(int!null)
+                ├── scan parent
+                │    └── columns: parent.p:6(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: y [type=int]
-                          └── variable: t.public.parent.p [type=int]
+                          └── variable: parent.p [type=int]
 
 exec-ddl
 CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p));
@@ -109,12 +109,12 @@ insert child_nullable
                 │         └── is-not [type=bool]
                 │              ├── variable: column2 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.parent
-                │    └── columns: t.public.parent.p:5(int!null)
+                ├── scan parent
+                │    └── columns: parent.p:5(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
-                          └── variable: t.public.parent.p [type=int]
+                          └── variable: parent.p [type=int]
 
 # The column is nullable but we know that the input is not null, so we don't
 # need to plan the filter.
@@ -143,12 +143,12 @@ insert child_nullable
                 │    ├── columns: column2:7(int!null)
                 │    └── mapping:
                 │         └──  column2:4(int) => column2:7(int)
-                ├── scan t.public.parent
-                │    └── columns: t.public.parent.p:5(int!null)
+                ├── scan parent
+                │    └── columns: parent.p:5(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
-                          └── variable: t.public.parent.p [type=int]
+                          └── variable: parent.p [type=int]
 
 # Check planning of filter with FULL match (which should be the same on a
 # single column).
@@ -188,12 +188,12 @@ insert child_nullable_full
                 │         └── is-not [type=bool]
                 │              ├── variable: column2 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.parent
-                │    └── columns: t.public.parent.p:5(int!null)
+                ├── scan parent
+                │    └── columns: parent.p:5(int!null)
                 └── filters
                      └── eq [type=bool]
                           ├── variable: column2 [type=int]
-                          └── variable: t.public.parent.p [type=int]
+                          └── variable: parent.p [type=int]
 
 # Tests with multicolumn FKs.
 exec-ddl
@@ -252,18 +252,18 @@ insert multi_col_child
                 │         └── is-not [type=bool]
                 │              ├── variable: column4 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 # Only p and q are nullable.
 build
@@ -310,18 +310,18 @@ insert multi_col_child
                 │         └── is-not [type=bool]
                 │              ├── variable: column3 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 # All the FK columns are not-null; no filter necessary.
 build
@@ -352,18 +352,18 @@ insert multi_col_child
                 │         ├──  column2:6(int) => column2:13(int)
                 │         ├──  column3:7(int) => column3:14(int)
                 │         └──  column4:8(int) => column4:15(int)
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 exec-ddl
 CREATE TABLE multi_col_child_full  (
@@ -419,18 +419,18 @@ insert multi_col_child_full
                 │              └── is-not [type=bool]
                 │                   ├── variable: column4 [type=int]
                 │                   └── null [type=unknown]
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 # Only p and q are nullable; no filter necessary.
 build
@@ -468,18 +468,18 @@ insert multi_col_child_full
                 │         ├──  column2:6(int) => column2:13(int)
                 │         ├──  column3:7(int) => column3:14(int)
                 │         └──  column4:8(int) => column4:15(int)
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 # All the FK columns are not-null; no filter necessary.
 build
@@ -510,18 +510,18 @@ insert multi_col_child_full
                 │         ├──  column2:6(int) => column2:13(int)
                 │         ├──  column3:7(int) => column3:14(int)
                 │         └──  column4:8(int) => column4:15(int)
-                ├── scan t.public.multi_col_parent
-                │    └── columns: t.public.multi_col_parent.p:9(int!null) t.public.multi_col_parent.q:10(int!null) t.public.multi_col_parent.r:11(int!null)
+                ├── scan multi_col_parent
+                │    └── columns: multi_col_parent.p:9(int!null) multi_col_parent.q:10(int!null) multi_col_parent.r:11(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column2 [type=int]
-                     │    └── variable: t.public.multi_col_parent.p [type=int]
+                     │    └── variable: multi_col_parent.p [type=int]
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_col_parent.q [type=int]
+                     │    └── variable: multi_col_parent.q [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_col_parent.r [type=int]
+                          └── variable: multi_col_parent.r [type=int]
 
 exec-ddl
 CREATE TABLE multi_ref_parent_a (a INT PRIMARY KEY, other INT)
@@ -577,12 +577,12 @@ insert multi_ref_child
       │         │         └── is-not [type=bool]
       │         │              ├── variable: column2 [type=int]
       │         │              └── null [type=unknown]
-      │         ├── scan t.public.multi_ref_parent_a
-      │         │    └── columns: t.public.multi_ref_parent_a.a:9(int!null)
+      │         ├── scan multi_ref_parent_a
+      │         │    └── columns: multi_ref_parent_a.a:9(int!null)
       │         └── filters
       │              └── eq [type=bool]
       │                   ├── variable: column2 [type=int]
-      │                   └── variable: t.public.multi_ref_parent_a.a [type=int]
+      │                   └── variable: multi_ref_parent_a.a [type=int]
       └── f-k-checks-item: multi_ref_child(b,c) -> multi_ref_parent_bc(b,c)
            └── anti-join (hash)
                 ├── columns: column3:15(int!null) column4:16(int!null)
@@ -600,12 +600,12 @@ insert multi_ref_child
                 │         └── is-not [type=bool]
                 │              ├── variable: column4 [type=int]
                 │              └── null [type=unknown]
-                ├── scan t.public.multi_ref_parent_bc
-                │    └── columns: t.public.multi_ref_parent_bc.b:12(int!null) t.public.multi_ref_parent_bc.c:13(int!null)
+                ├── scan multi_ref_parent_bc
+                │    └── columns: multi_ref_parent_bc.b:12(int!null) multi_ref_parent_bc.c:13(int!null)
                 └── filters
                      ├── eq [type=bool]
                      │    ├── variable: column3 [type=int]
-                     │    └── variable: t.public.multi_ref_parent_bc.b [type=int]
+                     │    └── variable: multi_ref_parent_bc.b [type=int]
                      └── eq [type=bool]
                           ├── variable: column4 [type=int]
-                          └── variable: t.public.multi_ref_parent_bc.c [type=int]
+                          └── variable: multi_ref_parent_bc.c [type=int]
