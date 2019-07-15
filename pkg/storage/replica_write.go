@@ -60,7 +60,7 @@ import (
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
@@ -74,7 +74,7 @@ func (r *Replica) executeWriteBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	spans, err := r.collectSpans(&ba)
+	spans, err := r.collectSpans(ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -87,7 +87,7 @@ func (r *Replica) executeWriteBatch(
 		// after preceding commands have been run to successful completion.
 		log.Event(ctx, "acquire latches")
 		var err error
-		endCmds, err = r.beginCmds(ctx, &ba, spans)
+		endCmds, err = r.beginCmds(ctx, ba, spans)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -97,7 +97,7 @@ func (r *Replica) executeWriteBatch(
 	// wrapped to delay pErr evaluation to its value when returning.
 	defer func() {
 		if endCmds != nil {
-			endCmds.done(br, pErr)
+			endCmds.done(ba, br, pErr)
 		}
 	}()
 
@@ -114,7 +114,7 @@ func (r *Replica) executeWriteBatch(
 		}
 		lease = status.Lease
 	}
-	r.limitTxnMaxTimestamp(ctx, &ba, status)
+	r.limitTxnMaxTimestamp(ctx, ba, status)
 
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
@@ -123,7 +123,7 @@ func (r *Replica) executeWriteBatch(
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if bumped, pErr := r.applyTimestampCache(ctx, &ba, minTS); pErr != nil {
+	if bumped, pErr := r.applyTimestampCache(ctx, ba, minTS); pErr != nil {
 		return nil, pErr
 	} else if bumped {
 		// If we bump the transaction's timestamp, we must absolutely
@@ -258,7 +258,10 @@ and the following Raft status: %+v`,
 // re-executed in full. This allows it to lay down intents and return
 // an appropriate retryable error.
 func (r *Replica) evaluateWriteBatch(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context, 
+	idKey storagebase.CmdIDKey, 
+	ba *roachpb.BatchRequest, 
+	spans *spanset.SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn will
@@ -270,7 +273,7 @@ func (r *Replica) evaluateWriteBatch(
 
 		// Try executing with transaction stripped. We use the transaction timestamp
 		// to write any values as it may have been advanced by the timestamp cache.
-		strippedBa := ba
+		strippedBa := *ba
 		strippedBa.Timestamp = strippedBa.Txn.Timestamp
 		strippedBa.Txn = nil
 		if hasBegin {
@@ -287,7 +290,7 @@ func (r *Replica) evaluateWriteBatch(
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		rec := NewReplicaEvalContext(r, spans)
 		batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(
-			ctx, idKey, rec, &ms, strippedBa, spans, retryLocally,
+			ctx, idKey, rec, &ms, &strippedBa, spans, retryLocally,
 		)
 		if pErr == nil && (ba.Timestamp == br.Timestamp ||
 			(retryLocally && !batcheval.IsEndTransactionExceedingDeadline(br.Timestamp, etArg))) {
@@ -362,7 +365,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 	idKey storagebase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	spans *spanset.SpanSet,
 	canRetry bool,
 ) (batch engine.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
@@ -440,7 +443,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 // serializable and the commit timestamp has been forwarded, or (3) the
 // transaction exceeded its deadline, or (4) the testing knobs disallow optional
 // one phase commits and the BatchRequest does not require one phase commit.
-func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
+func isOnePhaseCommit(ba *roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if ba.Txn == nil {
 		return false
 	}
@@ -468,7 +471,7 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 // entirely. This is possible if the function removes all of the in-flight
 // writes from an EndTransaction request that was committing in parallel with
 // writes which all happened to be on the same range as the transaction record.
-func maybeStripInFlightWrites(ba roachpb.BatchRequest) (roachpb.BatchRequest, error) {
+func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, error) {
 	args, hasET := ba.GetArg(roachpb.EndTransaction)
 	if !hasET {
 		return ba, nil

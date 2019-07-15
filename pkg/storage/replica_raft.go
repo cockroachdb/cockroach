@@ -65,7 +65,7 @@ func makeIDKey() storagebase.CmdIDKey {
 func (r *Replica) evalAndPropose(
 	ctx context.Context,
 	lease roachpb.Lease,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
 ) (_ chan proposalResult, _ func(), _ int64, pErr *roachpb.Error) {
@@ -200,7 +200,7 @@ func (r *Replica) evalAndPropose(
 			Ctx:   ctx,
 			Cmd:   *proposal.command,
 			CmdID: idKey,
-			Req:   ba,
+			Req:   *ba,
 		}
 		if pErr := filter(filterArgs); pErr != nil {
 			return nil, nil, 0, pErr

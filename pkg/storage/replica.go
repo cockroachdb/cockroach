@@ -519,7 +519,7 @@ func (r *Replica) sendWithRangeID(
 		useRaft = true
 	}
 
-	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
+	if err := r.checkBatchRequest(&ba, isReadOnly); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -533,13 +533,13 @@ func (r *Replica) sendWithRangeID(
 	var pErr *roachpb.Error
 	if useRaft {
 		log.Event(ctx, "read-write path")
-		br, pErr = r.executeWriteBatch(ctx, ba)
+		br, pErr = r.executeWriteBatch(ctx, &ba)
 	} else if isReadOnly {
 		log.Event(ctx, "read-only path")
-		br, pErr = r.executeReadOnlyBatch(ctx, ba)
+		br, pErr = r.executeReadOnlyBatch(ctx, &ba)
 	} else if ba.IsAdmin() {
 		log.Event(ctx, "admin path")
-		br, pErr = r.executeAdminBatch(ctx, ba)
+		br, pErr = r.executeAdminBatch(ctx, &ba)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
@@ -1000,7 +1000,7 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 //
 // TODO(tschottdorf): should check that request is contained in range
 // and that EndTransaction only occurs at the very end.
-func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) error {
+func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) error {
 	if ba.Timestamp == (hlc.Timestamp{}) {
 		// For transactional requests, Store.Send sets the timestamp. For non-
 		// transactional requests, the client sets the timestamp. Either way, we
@@ -1025,17 +1025,16 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) er
 type endCmds struct {
 	repl *Replica
 	lg   *spanlatch.Guard
-	ba   roachpb.BatchRequest
 }
 
 // done releases the latches acquired by the command and updates
 // the timestamp cache using the final timestamp of each command.
-func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error) {
+func (ec *endCmds) done(ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Update the timestamp cache if the request is not being re-evaluated. Each
 	// request is considered in turn; only those marked as affecting the cache are
 	// processed. Inconsistent reads are excluded.
-	if ec.ba.ReadConsistency == roachpb.CONSISTENT {
-		ec.repl.updateTimestampCache(&ec.ba, br, pErr)
+	if ba.ReadConsistency == roachpb.CONSISTENT {
+		ec.repl.updateTimestampCache(ba, br, pErr)
 	}
 
 	// Release the latches acquired by the request back to the spanlatch
@@ -1203,7 +1202,6 @@ func (r *Replica) beginCmds(
 	ec := &endCmds{
 		repl: r,
 		lg:   lg,
-		ba:   *ba,
 	}
 	return ec, nil
 }
@@ -1214,7 +1212,7 @@ func (r *Replica) beginCmds(
 // Admin commands must run on the lease holder replica. Batch support here is
 // limited to single-element batches; everything else catches an error.
 func (r *Replica) executeAdminBatch(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) != 1 {
 		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
