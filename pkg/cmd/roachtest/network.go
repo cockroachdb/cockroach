@@ -136,7 +136,9 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 		}
 
 		cmd := fmt.Sprintf(
-			"./workload run tpcc --warehouses=%d --wait=false --histograms=logs/stats.json --duration=%s {pgurl:2-%d}",
+			"./workload run tpcc --warehouses=%d --wait=false"+
+				" --histograms="+perfArtifactsDir+"/stats.json"+
+				" --duration=%s {pgurl:2-%d}",
 			warehouses, duration, c.spec.NodeCount-1)
 		return c.RunL(ctx, tpccL, workerNode, cmd)
 	})
@@ -244,8 +246,9 @@ func registerNetwork(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
-		Cluster: makeClusterSpec(numNodes),
+		Name:             fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
+		Cluster:          makeClusterSpec(numNodes),
+		HasPerfArtifacts: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runNetworkTPCC(ctx, t, c, numNodes)
 		},

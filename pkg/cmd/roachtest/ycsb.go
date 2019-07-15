@@ -30,7 +30,7 @@ func registerYCSB(r *testRegistry) {
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
 				"./workload run ycsb --init --record-count=1000000 --splits=100"+
-					" --workload=%s --concurrency=64 --histograms=logs/stats.json"+
+					" --workload=%s --concurrency=64 --histograms="+perfArtifactsDir+"/stats.json"+
 					ramp+duration+" {pgurl:1-%d}",
 				wl, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
@@ -49,8 +49,9 @@ func registerYCSB(r *testRegistry) {
 			}
 			wl, cpus := wl, cpus
 			r.Add(testSpec{
-				Name:    name,
-				Cluster: makeClusterSpec(4, cpu(cpus)),
+				Name:             name,
+				Cluster:          makeClusterSpec(4, cpu(cpus)),
+				HasPerfArtifacts: true,
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runYCSB(ctx, t, c, wl, cpus)
 				},

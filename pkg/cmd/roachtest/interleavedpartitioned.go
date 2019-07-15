@@ -67,7 +67,7 @@ func registerInterleaved(r *testRegistry) {
 		c.Run(ctx, cockroachEast.randNode(), cmdInit)
 
 		duration := " --duration " + ifLocal("10s", "10m")
-		histograms := " --histograms logs/stats.json"
+		histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
 
 		createCmd := func(locality string, cockroachNodes nodeListOption) string {
 			return fmt.Sprintf(
@@ -123,8 +123,9 @@ func registerInterleaved(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		Name:    "interleavedpartitioned",
-		Cluster: makeClusterSpec(12, geo(), zones("us-west1-b,us-east4-b,us-central1-a")),
+		Name:             "interleavedpartitioned",
+		Cluster:          makeClusterSpec(12, geo(), zones("us-west1-b,us-east4-b,us-central1-a")),
+		HasPerfArtifacts: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runInterleaved(ctx, t, c,
 				config{

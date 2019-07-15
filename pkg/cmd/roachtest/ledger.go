@@ -19,8 +19,9 @@ func registerLedger(r *testRegistry) {
 	const nodes = 6
 	const azs = "us-central1-a,us-central1-b,us-central1-c"
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
-		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(azs)),
+		Name:             fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
+		Cluster:          makeClusterSpec(nodes+1, cpu(16), geo(), zones(azs)),
+		HasPerfArtifacts: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
@@ -36,7 +37,7 @@ func registerLedger(r *testRegistry) {
 				concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*32))
 				duration := " --duration=" + ifLocal("10s", "30m")
 
-				cmd := fmt.Sprintf("./workload run ledger --init --histograms=logs/stats.json"+
+				cmd := fmt.Sprintf("./workload run ledger --init --histograms="+perfArtifactsDir+"/stats.json"+
 					concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, loadNode, cmd)
 				return nil

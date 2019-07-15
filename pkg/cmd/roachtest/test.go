@@ -66,9 +66,22 @@ type testSpec struct {
 	// care about.
 	UseIOBarrier bool
 
+	// HasPerfArtifacts is true is the test has perf artifacts in its
+	// perfArtifactsDir on remote nodes which should be retreived when the test
+	// completes. Because tests control which node has the artifacts we pull this
+	// directory from all of the nodes if it is non-empty.
+	// It will not cause an error if the perf artifacts directory does not exist.
+	HasPerfArtifacts bool
+
 	// Run is the test function.
 	Run func(ctx context.Context, t *test, c *cluster)
 }
+
+// perfArtifactsDir is the directory on cluster nodes in which perf artifacts
+// should be stored. If a test spec HasPerfArtifacts and passes, then the runner
+// will retreive that directory from all nodes and copy it to the test artifacts
+// directory.
+const perfArtifactsDir = "perf"
 
 // matchOrSkip returns true if the filter matches the test. If the filter does
 // not match the test because the tag filter does not match, the test is

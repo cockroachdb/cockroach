@@ -25,7 +25,8 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 		Name:    fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
 		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(geoZonesStr)),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
-		MinVersion: `v19.1.0`,
+		MinVersion:       `v19.1.0`,
+		HasPerfArtifacts: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			firstAZ := geoZones[0]
 			roachNodes := c.Range(1, nodes)
@@ -56,7 +57,7 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 				payload := " --payload=256"
 				concurrency := ifLocal("", " --concurrency="+strconv.Itoa(nodes*32))
 				duration := " --duration=" + ifLocal("10s", "30m")
-				runCmd := fmt.Sprintf("./workload run indexes --histograms=logs/stats.json"+
+				runCmd := fmt.Sprintf("./workload run indexes --histograms="+perfArtifactsDir+"/stats.json"+
 					payload+concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, loadNode, runCmd)
 				return nil

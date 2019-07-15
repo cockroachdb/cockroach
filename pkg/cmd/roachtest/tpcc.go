@@ -167,7 +167,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running tpcc")
 		cmd := fmt.Sprintf(
-			"./workload run tpcc --warehouses=%d --histograms=logs/stats.json "+
+			"./workload run tpcc --warehouses=%d --histograms="+perfArtifactsDir+"/stats.json "+
 				opts.Extra+" --ramp=%s --duration=%s {pgurl:1-%d}",
 			opts.Warehouses, rampDuration, opts.Duration, c.spec.NodeCount-1)
 		c.Run(ctx, workloadNode, cmd)
@@ -238,9 +238,10 @@ func registerTPCC(r *testRegistry) {
 		Name: "tpcc/headroom/" + headroomSpec.String(),
 		// TODO(dan): Backfill tpccSupportedWarehouses and remove this "v2.1.0"
 		// minimum on gce.
-		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
-		Tags:       []string{`default`, `release_qualification`},
-		Cluster:    headroomSpec,
+		MinVersion:       maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
+		Tags:             []string{`default`, `release_qualification`},
+		Cluster:          headroomSpec,
+		HasPerfArtifacts: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.spec.Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
@@ -551,10 +552,11 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 	nodes := makeClusterSpec(numNodes, opts...)
 
 	r.Add(testSpec{
-		Name:       name,
-		Cluster:    nodes,
-		MinVersion: maybeMinVersionForFixturesImport(cloud),
-		Tags:       b.Tags,
+		Name:             name,
+		Cluster:          nodes,
+		MinVersion:       maybeMinVersionForFixturesImport(cloud),
+		Tags:             b.Tags,
+		HasPerfArtifacts: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
@@ -781,7 +783,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 					}
 
 					t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
-					histogramsPath := fmt.Sprintf("logs/warehouses=%d/stats.json", activeWarehouses)
+					histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, activeWarehouses)
 					cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+
 						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s} "+
 						"--histograms=%s",

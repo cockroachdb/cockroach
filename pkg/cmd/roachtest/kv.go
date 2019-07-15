@@ -47,7 +47,7 @@ func registerKV(r *testRegistry) {
 			splits := " --splits=1000"
 			duration := " --duration=" + ifLocal("10s", "10m")
 			readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
-
+			histograms := "--histograms=" + perfArtifactsDir + "/stats.json"
 			var batchSize string
 			if opts.batchSize > 0 {
 				batchSize = fmt.Sprintf(" --batch=%d", opts.batchSize)
@@ -64,9 +64,9 @@ func registerKV(r *testRegistry) {
 				splits = "" // no splits
 				sequential = " --sequential"
 			}
-
-			cmd := fmt.Sprintf("./workload run kv --init --histograms=logs/stats.json"+
-				concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+
+			t.ArtifactsDir()
+			cmd := fmt.Sprintf("./workload run kv --init"+
+				histograms+concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+
 				" {pgurl:1-%d}", nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
@@ -139,9 +139,10 @@ func registerKV(r *testRegistry) {
 		}
 
 		r.Add(testSpec{
-			Name:       strings.Join(nameParts, "/"),
-			MinVersion: minVersion,
-			Cluster:    makeClusterSpec(opts.nodes+1, cpu(opts.cpus)),
+			Name:             strings.Join(nameParts, "/"),
+			MinVersion:       minVersion,
+			Cluster:          makeClusterSpec(opts.nodes+1, cpu(opts.cpus)),
+			HasPerfArtifacts: true,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runKV(ctx, t, c, opts)
 			},

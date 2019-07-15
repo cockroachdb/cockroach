@@ -23,9 +23,10 @@ func registerQueue(r *testRegistry) {
 	// One node runs the workload generator, all other nodes host CockroachDB.
 	const numNodes = 2
 	r.Add(testSpec{
-		Skip:    "https://github.com/cockroachdb/cockroach/issues/17229",
-		Name:    fmt.Sprintf("queue/nodes=%d", numNodes-1),
-		Cluster: makeClusterSpec(numNodes),
+		Skip:             "https://github.com/cockroachdb/cockroach/issues/17229",
+		Name:             fmt.Sprintf("queue/nodes=%d", numNodes-1),
+		Cluster:          makeClusterSpec(numNodes),
+		HasPerfArtifacts: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runQueue(ctx, t, c)
 		},
@@ -52,7 +53,7 @@ func runQueue(ctx context.Context, t *test, c *cluster) {
 				init = " --init"
 			}
 			cmd := fmt.Sprintf(
-				"./workload run queue --histograms=logs/stats.json"+
+				"./workload run queue --histograms="+perfArtifactsDir+"/stats.json"+
 					init+
 					concurrency+
 					duration+
