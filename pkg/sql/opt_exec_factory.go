@@ -126,7 +126,7 @@ func (ef *execFactory) ConstructScan(
 
 // ConstructVirtualScan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) {
-	tn := table.Name()
+	tn := &table.(*optVirtualTable).name
 	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err

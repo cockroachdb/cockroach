@@ -10,20 +10,15 @@
 
 package cat
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 
 // Sequence is an interface to a database sequence.
 type Sequence interface {
 	DataSource
 
-	// SequenceName returns the name of the sequence. This method should always
-	// return the same value as DataSource.Name(), but is included here as a
-	// safety measure so that every DataSource does not trivially implement
-	// Sequence.
-	SequenceName() *tree.TableName
+	// SequenceMarker is a dummy method, included as a safety measure so that
+	// every DataSource does not trivially implement Sequence.
+	SequenceMarker()
 }
 
 // FormatSequence nicely formats a catalog sequence using a treeprinter for

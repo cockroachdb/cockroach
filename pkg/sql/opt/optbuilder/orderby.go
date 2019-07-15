@@ -113,11 +113,16 @@ func (b *Builder) addExtraColumn(
 func (b *Builder) analyzeOrderByIndex(
 	order *tree.Order, inScope, projectionsScope, orderByScope *scope,
 ) {
-	tab, _ := b.resolveTable(&order.Table, privilege.SELECT)
+	tab, tn := b.resolveTable(&order.Table, privilege.SELECT)
 	index, err := b.findIndexByName(tab, order.Index)
 	if err != nil {
 		panic(err)
 	}
+
+	// We fully qualify the table name in case another table expression was
+	// aliased to the same name as an existing table.
+	tn.ExplicitCatalog = true
+	tn.ExplicitSchema = true
 
 	// Append each key column from the index (including the implicit primary key
 	// columns) to the ordering scope.
@@ -135,7 +140,7 @@ func (b *Builder) analyzeOrderByIndex(
 			desc = !desc
 		}
 
-		colItem := tree.NewColumnItem(tab.Name(), col.ColName())
+		colItem := tree.NewColumnItem(&tn, col.ColName())
 		expr := inScope.resolveType(colItem, types.Any)
 		outCol := b.addColumn(orderByScope, "" /* alias */, expr)
 		outCol.descending = desc
