@@ -86,11 +86,19 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 	}
 }
 
+func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	typs := []types.T{types.Decimal}
+	_, err := NewArrowBatchConverter(typs)
+	require.Error(t, err)
+}
+
 func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	typs, b := randomBatch()
-	c := NewArrowBatchConverter(typs)
+	c, _ := NewArrowBatchConverter(typs)
 
 	// Make a copy of the original batch because the converter modifies and casts
 	// data without copying for performance reasons.
@@ -108,7 +116,7 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	typs, b := randomBatch()
-	c := NewArrowBatchConverter(typs)
+	c, _ := NewArrowBatchConverter(typs)
 	r, err := NewRecordBatchSerializer(typs)
 	require.NoError(t, err)
 
@@ -161,7 +169,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 				}
 			}
 		}
-		c := NewArrowBatchConverter([]types.T{typ})
+		c, _ := NewArrowBatchConverter([]types.T{typ})
 		nullFractions := []float64{0, 0.25, 0.5}
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {
 			vec := batch.ColVec(0)

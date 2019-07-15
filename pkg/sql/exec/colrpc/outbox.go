@@ -58,6 +58,10 @@ type Outbox struct {
 func NewOutbox(
 	input exec.Operator, typs []types.T, metadataSources []distsqlpb.MetadataSource,
 ) (*Outbox, error) {
+	c, err := colserde.NewArrowBatchConverter(typs)
+	if err != nil {
+		return nil, err
+	}
 	s, err := colserde.NewRecordBatchSerializer(typs)
 	if err != nil {
 		return nil, err
@@ -67,7 +71,7 @@ func NewOutbox(
 		// be).
 		input:           exec.NewDeselectorOp(input, typs),
 		typs:            typs,
-		converter:       colserde.NewArrowBatchConverter(typs),
+		converter:       c,
 		serializer:      s,
 		metadataSources: metadataSources,
 	}
