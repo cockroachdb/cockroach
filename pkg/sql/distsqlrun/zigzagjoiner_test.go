@@ -111,6 +111,13 @@ func TestZigzagJoiner(t *testing.T) {
 		true, /* shouldPrint */
 	)
 
+	sqlutils.CreateTableDebug(t, sqlDB, "small_fam",
+		"a INT, b INT, c INT, d INT, PRIMARY KEY (a,b), FAMILY f1 (a, b), FAMILY f2 (c), FAMILY f3 (d), INDEX c (c), INDEX d (d)",
+		10,
+		sqlutils.ToRowFn(aFn, bFn, cFn, dFn),
+		true, /* shouldPrint */
+	)
+
 	sqlutils.CreateTableDebug(t, sqlDB, "med",
 		"a INT, b INT, c INT, d INT, PRIMARY KEY (a,b), INDEX c (c), INDEX d (d)",
 		22,
@@ -177,6 +184,7 @@ func TestZigzagJoiner(t *testing.T) {
 	empty := sqlbase.GetTableDescriptor(kvDB, "test", "empty")
 	single := sqlbase.GetTableDescriptor(kvDB, "test", "single")
 	smallDesc := sqlbase.GetTableDescriptor(kvDB, "test", "small")
+	smallDescF := sqlbase.GetTableDescriptor(kvDB, "test", "small_fam")
 	medDesc := sqlbase.GetTableDescriptor(kvDB, "test", "med")
 	highRangeDesc := sqlbase.GetTableDescriptor(kvDB, "test", "offset")
 	overlappingDesc := sqlbase.GetTableDescriptor(kvDB, "test", "overlapping")
@@ -373,6 +381,18 @@ func TestZigzagJoiner(t *testing.T) {
 			desc: "join on a populated table with no fixed columns",
 			spec: distsqlpb.ZigzagJoinerSpec{
 				Tables:    []sqlbase.TableDescriptor{*smallDesc, *smallDesc},
+				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
+				Type:      sqlbase.InnerJoin,
+				IndexIds:  []uint32{0 /* (a, b) */, 0 /* (a, b) */},
+			},
+			outCols:       []uint32{0, 1},
+			expectedTypes: intCols(2),
+			expected:      "[[0 1] [0 2] [0 3] [0 4] [1 0] [1 1] [1 2] [1 3] [1 4] [2 0]]",
+		},
+		{
+			desc: "join on a populated table with no fixed columns and families",
+			spec: distsqlpb.ZigzagJoinerSpec{
+				Tables:    []sqlbase.TableDescriptor{*smallDescF, *smallDescF},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{0 /* (a, b) */, 0 /* (a, b) */},

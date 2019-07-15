@@ -378,6 +378,9 @@ type zigzagJoinerInfo struct {
 	// endKey marks where this side should stop fetching, taking into account the
 	// fixedValues.
 	endKey roachpb.Key
+
+	// The needed families for this side of the zigzagjoiner.
+	neededFamilies []sqlbase.FamilyID
 }
 
 // Setup the curInfo struct for the current z.side, which specifies the side
@@ -426,6 +429,12 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 	for _, col := range info.eqColumns {
 		neededCols.Add(int(col))
 	}
+
+	info.neededFamilies = sqlbase.NeededColumnFamilyIDs(
+		info.table.ColumnIdxMap(),
+		info.table.Families,
+		neededCols,
+	)
 
 	// Setup the RowContainers.
 	info.container.Reset()
@@ -619,6 +628,24 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 	)
 }
 
+func (z *zigzagJoiner) canSplitSpanIntoSeparateFamilies(span roachpb.Span) (bool, roachpb.Spans) {
+	info := z.infos[z.side]
+
+	indexLenCount := len(info.fixedValues)
+	if z.baseRow != nil {
+		indexLenCount += len(z.extractEqDatums(z.baseRow, z.prevSide()))
+	}
+	if len(info.neededFamilies) > 0 &&
+		len(info.table.Families) > 1 &&
+		info.index.ID == info.table.PrimaryIndex.ID &&
+		len(info.neededFamilies) < len(info.table.Families) &&
+		indexLenCount == len(info.table.PrimaryIndex.ColumnIDs) {
+		return true, sqlbase.SplitSpanIntoSeparateFamilies(span, info.neededFamilies)
+	}
+
+	return false, roachpb.Spans{}
+}
+
 // Returns the column types of the equality columns.
 func (zi *zigzagJoinerInfo) eqColTypes() []types.T {
 	eqColTypes := make([]types.T, len(zi.eqColumns))
@@ -755,10 +782,26 @@ func (z *zigzagJoiner) nextRow(
 		}
 		curInfo.key = span.Key
 
+		curSpan := roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}
+
+		// We want to generate a span from curInfo.Key -> curInfo.EndKey.
+		// However, if curInfo.Key is a single row lookup on separate
+		// families, we can split up that span into multiple spans.
+		// Therefore the new spans are
+		// [curInfo.Key/Family1 ... curInfo.Key/FamilyN,
+		//  curInfo.Key/FamilyN.Next(), curInfo.EndKey].
+		var inputSpans roachpb.Spans
+		if canSplit, splitSpans := z.canSplitSpanIntoSeparateFamilies(curSpan); canSplit {
+			lastKey := splitSpans[len(splitSpans)-1].EndKey
+			inputSpans = append(splitSpans, roachpb.Span{Key: lastKey.Next(), EndKey: curInfo.endKey})
+		} else {
+			inputSpans = roachpb.Spans{curSpan}
+		}
+
 		err = curInfo.fetcher.StartScan(
 			ctx,
 			txn,
-			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
+			inputSpans,
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
 			z.flowCtx.traceKV,
@@ -900,11 +943,27 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		z.started = true
 
 		curInfo := z.infos[z.side]
+
+		curSpan := roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}
+
+		// We want to generate a span from curInfo.Key -> curInfo.EndKey.
+		// However, if curInfo.Key is a single row lookup on separate
+		// families, we can split up that request into multiple spans.
+		// Therefore the new spans are
+		// [curInfo.Key/Family1 ... curInfo.Key/FamilyN,
+		//  curInfo.Key/FamilyN.Next(), curInfo.EndKey].
+		var inputSpans roachpb.Spans
+		if canSplit, splitSpans := z.canSplitSpanIntoSeparateFamilies(curSpan); canSplit {
+			lastKey := splitSpans[len(splitSpans)-1].EndKey
+			inputSpans = append(splitSpans, roachpb.Span{Key: lastKey.Next(), EndKey: curInfo.endKey})
+		} else {
+			inputSpans = roachpb.Spans{curSpan}
+		}
 		// Fetch initial batch.
 		err := curInfo.fetcher.StartScan(
 			z.Ctx,
 			txn,
-			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
+			inputSpans,
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
 			z.flowCtx.traceKV,
