@@ -151,7 +151,7 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alia
 	mb.checkOrds = scopeOrds[n*4:]
 
 	// Add the table and its columns (including mutation columns) to metadata.
-	mb.tabID = mb.md.AddTableWithAlias(tab, &mb.alias)
+	mb.tabID = mb.md.AddTable(tab, &mb.alias)
 }
 
 // scopeOrdToColID returns the ID of the given scope column. If no scope column
