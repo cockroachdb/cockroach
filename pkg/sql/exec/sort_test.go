@@ -13,6 +13,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"testing"
@@ -76,8 +77,8 @@ func TestSort(t *testing.T) {
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
-			tuples:   tuples{{3.2}, {2.0}, {2.4}},
-			expected: tuples{{2.0}, {2.4}, {3.2}},
+			tuples:   tuples{{3.2}, {2.0}, {2.4}, {math.NaN()}, {math.Inf(-1)}, {math.Inf(1)}},
+			expected: tuples{{math.NaN()}, {math.Inf(-1)}, {2.0}, {2.4}, {3.2}, {math.Inf(1)}},
 			typ:      []types.T{types.Float64},
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}},
 		},
