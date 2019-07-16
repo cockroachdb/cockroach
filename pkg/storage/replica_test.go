@@ -5156,15 +5156,12 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 				t.Fatalf("%d: %s", i, pErr)
 			}
 		case roachpb.STAGING:
-			// TODO(nvanbenschoten): Avoid writing directly to the engine once
-			// there's a way to create a STAGING transaction record.
-			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
-			txnRecord := pushee.AsRecord()
-			txnRecord.Status = roachpb.STAGING
-			if err := engine.MVCCPutProto(
-				context.Background(), tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &txnRecord,
-			); err != nil {
-				t.Fatal(err)
+			et, etH := endTxnArgs(pushee, true)
+			et.InFlightWrites = []roachpb.SequencedWrite{
+				{Key: key, Sequence: 1},
+			}
+			if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), etH, &et); pErr != nil {
+				t.Fatalf("%d: %s", i, pErr)
 			}
 		default:
 			t.Fatalf("unexpected status: %v", test.status)
