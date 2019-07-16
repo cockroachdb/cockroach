@@ -92,3 +92,33 @@ func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 	next.SetLength(0)
 	return next
 }
+
+type singleTupleNoInputOperator struct {
+	batch  coldata.Batch
+	nexted bool
+}
+
+var _ Operator = &singleTupleNoInputOperator{}
+
+// NewSingleTupleNoInputOp creates a new Operator which returns a batch of
+// length 1 with no actual columns on the first call to Next() and zero-length
+// batches on all consecutive calls.
+func NewSingleTupleNoInputOp() Operator {
+	return &singleTupleNoInputOperator{
+		batch: coldata.NewMemBatchWithSize(nil, 1),
+	}
+}
+
+func (s *singleTupleNoInputOperator) Init() {
+}
+
+func (s *singleTupleNoInputOperator) Next(ctx context.Context) coldata.Batch {
+	s.batch.SetSelection(false)
+	if s.nexted {
+		s.batch.SetLength(0)
+		return s.batch
+	}
+	s.nexted = true
+	s.batch.SetLength(1)
+	return s.batch
+}
