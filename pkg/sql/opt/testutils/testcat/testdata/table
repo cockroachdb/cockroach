@@ -19,7 +19,7 @@ CREATE TABLE abcdef (
     a INT NOT NULL,
     b INT,
     c INT DEFAULT (10),
-    d INT AS (abcde.b + c + 1) STORED,
+    d INT AS (b + c + 1) STORED,
     e INT AS (a) STORED,
     f INT CHECK (f > 2)
 )
@@ -32,7 +32,7 @@ TABLE abcdef
  ├── a int not null
  ├── b int
  ├── c int default ((10))
- ├── d int as ((abcde.b + c) + 1) stored
+ ├── d int as ((b + c) + 1) stored
  ├── e int as (a) stored
  ├── f int
  ├── rowid int not null default (unique_rowid()) [hidden]
