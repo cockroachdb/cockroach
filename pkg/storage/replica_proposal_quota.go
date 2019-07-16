@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 // MaxQuotaReplicaLivenessDuration is the maximum duration that a replica
@@ -146,7 +147,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	now := timeutil.Now()
 	status := r.mu.internalRaftGroup.StatusWithoutProgress()
 	commitIndex, minIndex := status.Commit, status.Commit
-	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress raft.Progress) {
+	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress tracker.Progress) {
 		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
 		if !ok {
 			return

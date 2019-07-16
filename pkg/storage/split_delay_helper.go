@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 type splitDelayHelperI interface {
@@ -106,13 +107,7 @@ func maybeDelaySplitToAvoidSnapshot(ctx context.Context, sdh splitDelayHelperI) 
 
 		done := true
 		for replicaID, pr := range raftStatus.Progress {
-			if replicaID == raftStatus.Lead {
-				// TODO(tschottdorf): remove this once we have picked up
-				// https://github.com/etcd-io/etcd/pull/10279
-				continue
-			}
-
-			if pr.State != raft.ProgressStateReplicate {
+			if pr.State != tracker.StateReplicate {
 				if !pr.RecentActive {
 					if ticks == 0 {
 						// Having set done = false, we make sure we're not exiting early.

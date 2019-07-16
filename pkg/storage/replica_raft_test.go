@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 func TestLastUpdateTimesMap(t *testing.T) {
@@ -37,14 +37,14 @@ func TestLastUpdateTimesMap(t *testing.T) {
 
 	t4 := t3.Add(time.Second)
 	descs = append(descs, []roachpb.ReplicaDescriptor{{ReplicaID: 5}, {ReplicaID: 6}}...)
-	prs := map[uint64]raft.Progress{
-		1: {State: raft.ProgressStateReplicate}, // should be updated
+	prs := map[uint64]tracker.Progress{
+		1: {State: tracker.StateReplicate}, // should be updated
 		// 2 is missing because why not
-		3: {State: raft.ProgressStateProbe},     // should be ignored
-		4: {State: raft.ProgressStateSnapshot},  // should be ignored
-		5: {State: raft.ProgressStateProbe},     // should be ignored
-		6: {State: raft.ProgressStateReplicate}, // should be added
-		7: {State: raft.ProgressStateReplicate}, // ignored, not in descs
+		3: {State: tracker.StateProbe},     // should be ignored
+		4: {State: tracker.StateSnapshot},  // should be ignored
+		5: {State: tracker.StateProbe},     // should be ignored
+		6: {State: tracker.StateReplicate}, // should be added
+		7: {State: tracker.StateReplicate}, // ignored, not in descs
 	}
 	m.updateOnUnquiesce(descs, prs, t4)
 	assert.EqualValues(t, map[roachpb.ReplicaID]time.Time{
