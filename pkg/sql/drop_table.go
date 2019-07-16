@@ -176,11 +176,9 @@ func (p *planner) prepareDrop(
 // 1. if there are no longer
 // to see whether a foreign key backreference
 // has
+// TODO (lucy, jordan): update the mangled doc comment above
 func (p *planner) canRemoveFKBackreference(
-	ctx context.Context,
-	from string,
-	ref *sqlbase.ForeignKeyBackreference,
-	behavior tree.DropBehavior,
+	ctx context.Context, from string, ref *sqlbase.ForeignKeyConstraint, behavior tree.DropBehavior,
 ) error {
 	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.OriginTableID, p.txn)
 	if err != nil {
@@ -413,9 +411,7 @@ func (p *planner) initiateDropTable(
 }
 
 func (p *planner) removeFKForBackReference(
-	ctx context.Context,
-	tableDesc *sqlbase.MutableTableDescriptor,
-	ref *sqlbase.ForeignKeyBackreference,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, ref *sqlbase.ForeignKeyConstraint,
 ) error {
 	var originTableDesc *sqlbase.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
@@ -444,7 +440,7 @@ func (p *planner) removeFKForBackReference(
 // backreference, which is a member of the supplied referencedTableDesc.
 func removeFKForBackReferenceFromTable(
 	originTableDesc *sqlbase.MutableTableDescriptor,
-	backref *sqlbase.ForeignKeyBackreference,
+	backref *sqlbase.ForeignKeyConstraint,
 	referencedTableDesc *sqlbase.TableDescriptor,
 ) error {
 	matchIdx := -1
@@ -496,7 +492,7 @@ func (p *planner) removeFKBackReference(
 		return nil
 	}
 
-	if err := removeFKBackReferenceFromTable(referencedTableDesc, ref, tableDesc.TableDesc()); err != nil {
+	if err := removeFKBackReferenceFromTable(referencedTableDesc, ref.Name, tableDesc.TableDesc()); err != nil {
 		return err
 	}
 	return p.writeSchemaChange(ctx, referencedTableDesc, sqlbase.InvalidMutationID)
@@ -507,18 +503,12 @@ func (p *planner) removeFKBackReference(
 // which is a member of the supplied originTableDesc.
 func removeFKBackReferenceFromTable(
 	referencedTableDesc *sqlbase.MutableTableDescriptor,
-	fk *sqlbase.ForeignKeyConstraint,
+	fkName string,
 	originTableDesc *sqlbase.TableDescriptor,
 ) error {
 	matchIdx := -1
 	for i, backref := range referencedTableDesc.InboundFKs {
-		if backref.OriginTableID != originTableDesc.ID {
-			// This back reference is to another table, so we don't care about it.
-			continue
-		}
-
-		if sqlbase.ColumnIDs(backref.ReferencedColumnIDs).Equal(fk.ReferencedColumnIDs) &&
-			sqlbase.ColumnIDs(backref.OriginColumnIDs).Equal(fk.OriginColumnIDs) {
+		if backref.OriginTableID == originTableDesc.ID && backref.Name == fkName {
 			// We found a match! We want to delete it from the list now.
 			matchIdx = i
 			break
@@ -529,7 +519,7 @@ func removeFKBackReferenceFromTable(
 		// matched the foreign key constraint that we were trying to delete.
 		// This really shouldn't happen...
 		return errors.AssertionFailedf("there was no foreign key backreference "+
-			"for constraint %q on table %q", fk.Name, originTableDesc.Name)
+			"for constraint %q on table %q", fkName, originTableDesc.Name)
 	}
 	// Delete our match.
 	referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs[:matchIdx], referencedTableDesc.InboundFKs[matchIdx+1:]...)

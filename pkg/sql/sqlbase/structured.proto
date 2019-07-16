@@ -62,23 +62,6 @@ message ForeignKeyReference {
 }
 
 message ForeignKeyConstraint {
-  optional uint32 referenced_table_id = 1 [(gogoproto.nullable) = false,
-                                          (gogoproto.customname) = "ReferencedTableID",
-                                          (gogoproto.casttype) = "ID"];
-  repeated uint32 origin_column_ids = 2 [(gogoproto.customname) = "OriginColumnIDs",
-                                        (gogoproto.casttype) = "ColumnID"];
-  repeated uint32 referenced_column_ids = 3 [(gogoproto.customname) = "ReferencedColumnIDs",
-                                            (gogoproto.casttype) = "ColumnID"];
-  optional string name = 4 [(gogoproto.nullable) = false];
-  optional ConstraintValidity validity = 5 [(gogoproto.nullable) = false];
-  optional ForeignKeyReference.Action on_delete = 6 [(gogoproto.nullable) = false];
-  optional ForeignKeyReference.Action on_update = 7 [(gogoproto.nullable) = false];
-  // This is only important for composite keys. For all prior matches before
-  // the addition of this value, MATCH SIMPLE will be used.
-  optional ForeignKeyReference.Match match = 8 [(gogoproto.nullable) = false];
-}
-
-message ForeignKeyBackreference {
   optional uint32 origin_table_id = 1 [(gogoproto.nullable) = false,
                                       (gogoproto.customname) = "OriginTableID",
                                       (gogoproto.casttype) = "ID"];
@@ -86,6 +69,16 @@ message ForeignKeyBackreference {
                                         (gogoproto.casttype) = "ColumnID"];
   repeated uint32 referenced_column_ids = 3 [(gogoproto.customname) = "ReferencedColumnIDs",
                                             (gogoproto.casttype) = "ColumnID"];
+  optional uint32 referenced_table_id = 4 [(gogoproto.nullable) = false,
+                                          (gogoproto.customname) = "ReferencedTableID",
+                                          (gogoproto.casttype) = "ID"];
+  optional string name = 5 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 6 [(gogoproto.nullable) = false];
+  optional ForeignKeyReference.Action on_delete = 7 [(gogoproto.nullable) = false];
+  optional ForeignKeyReference.Action on_update = 8 [(gogoproto.nullable) = false];
+  // This is only important for composite keys. For all prior matches before
+  // the addition of this value, MATCH SIMPLE will be used.
+  optional ForeignKeyReference.Match match = 9 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
@@ -776,7 +769,7 @@ message TableDescriptor {
   repeated ForeignKeyConstraint outbound_fks = 36 [(gogoproto.customname) = "OutboundFKs"];
   // inbound_fks contains all foreign key constraints that have this table as
   // the referenced table.
-  repeated ForeignKeyBackreference inbound_fks = 37 [(gogoproto.customname) = "InboundFKs"];
+  repeated ForeignKeyConstraint inbound_fks = 37 [(gogoproto.customname) = "InboundFKs"];
   optional bool did_upgrade_foreign_key_representation = 38 [(gogoproto.nullable) = false];
 }
 

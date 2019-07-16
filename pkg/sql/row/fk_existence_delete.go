@@ -12,11 +12,11 @@ package row
 
 import (
 	"context"
-	"github.com/cockroachdb/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // fkExistenceCheckForDelete is an auxiliary object that facilitates the
@@ -89,9 +89,10 @@ func makeFkExistenceCheckHelperForDelete(
 				"failed to find forward fk for backward fk %v", ref)
 		}
 		fakeRef := &sqlbase.ForeignKeyConstraint{
-			ReferencedColumnIDs: ref.OriginColumnIDs,
-			OriginColumnIDs:     ref.ReferencedColumnIDs,
 			ReferencedTableID:   ref.OriginTableID,
+			ReferencedColumnIDs: ref.OriginColumnIDs,
+			OriginTableID:       ref.ReferencedTableID,
+			OriginColumnIDs:     ref.ReferencedColumnIDs,
 			// N.B.: Back-references always must have SIMPLE match method, because ... TODO(jordan) !!!
 			Match:    sqlbase.ForeignKeyReference_SIMPLE,
 			OnDelete: foundFK.OnDelete,

@@ -311,16 +311,11 @@ func (sc *SchemaChanger) AddConstraints(
 				}
 				if !foundExisting {
 					scTable.OutboundFKs = append(scTable.OutboundFKs, &constraint.ForeignKey)
-					backref := sqlbase.ForeignKeyBackreference{
-						OriginTableID: scTable.ID,
-						OriginColumnIDs: constraint.ForeignKey.OriginColumnIDs,
-						ReferencedColumnIDs: constraint.ForeignKey.ReferencedColumnIDs,
-					}
 					backrefTable, ok := descs[constraint.ForeignKey.ReferencedTableID]
 					if !ok {
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 					}
-					backrefTable.InboundFKs = append(backrefTable.InboundFKs, &backref)
+					backrefTable.InboundFKs = append(backrefTable.InboundFKs, &constraint.ForeignKey)
 				}
 			}
 		}

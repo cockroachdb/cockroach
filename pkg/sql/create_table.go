@@ -590,8 +590,9 @@ func ResolveFK(
 	}
 
 	ref := &sqlbase.ForeignKeyConstraint{
-		ReferencedTableID:   target.ID,
+		OriginTableID:       tbl.ID,
 		OriginColumnIDs:     originColumnIDs,
+		ReferencedTableID:   target.ID,
 		ReferencedColumnIDs: targetColIDs,
 		Name:                constraintName,
 		OnDelete:            sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
@@ -605,11 +606,6 @@ func ResolveFK(
 		} else {
 			ref.Validity = sqlbase.ConstraintValidity_Validating
 		}
-	}
-	backref := sqlbase.ForeignKeyBackreference{
-		OriginTableID:       tbl.ID,
-		OriginColumnIDs:     originColumnIDs,
-		ReferencedColumnIDs: targetColIDs,
 	}
 
 	// Search for an index on the origin table that matches. If one doesn't exist,
@@ -650,7 +646,7 @@ func ResolveFK(
 	// transaction too
 	// TODO (lucy): Should the IsNewTable() case be handled in runSchemaChangesInTxn instead?
 	if ts == NewTable || tbl.IsNewTable() {
-		target.InboundFKs = append(target.InboundFKs, &backref)
+		target.InboundFKs = append(target.InboundFKs, ref)
 	}
 
 	// Multiple FKs from the same column would potentially result in ambiguous or

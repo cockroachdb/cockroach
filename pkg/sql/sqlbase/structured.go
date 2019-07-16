@@ -199,7 +199,7 @@ type ImmutableTableDescriptor struct {
 	// progress, as mutation columns may have NULL values.
 	ReadableColumns []ColumnDescriptor
 
-	inboundFKs  []*ForeignKeyBackreference
+	inboundFKs  []*ForeignKeyConstraint
 	outboundFKs []*ForeignKeyConstraint
 }
 
@@ -363,6 +363,16 @@ func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDesc
 	if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
 		return nil, err
 	}
+
+	// TODO (lucy): We used to validate the table in GetDescriptorByID, but now
+	// we have to do it somewhere else. Calling it here won't work though since
+	// Validate() calls this function to get other tables, so we get an infinite
+	// recursion for FKs. In general, we need to figure out the proliferation of
+	// extremely similar functions/methods to get table descs from KV.
+	// We should at least make it so that SHOW CONSTRAINTS eventually calls Validate.
+	// if err := table.Validate(ctx, txn, nil); err != nil {
+	// 	return nil, err
+	// }
 
 	return table, nil
 }
@@ -809,8 +819,9 @@ func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
 			}
 			numCols := ref.SharedPrefixLen
 			outFK := &ForeignKeyConstraint{
-				ReferencedTableID:   ref.Table,
+				OriginTableID:       desc.ID,
 				OriginColumnIDs:     idx.ColumnIDs[:numCols],
+				ReferencedTableID:   ref.Table,
 				ReferencedColumnIDs: referencedIndex.ColumnIDs[:numCols],
 				Name:                ref.Name,
 				Validity:            ref.Validity,
@@ -836,10 +847,16 @@ func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
 				return false, err
 			}
 			numCols := ref.SharedPrefixLen
-			inFK := &ForeignKeyBackreference{
+			inFK := &ForeignKeyConstraint{
 				OriginTableID:       ref.Table,
 				OriginColumnIDs:     originIndex.ColumnIDs[:numCols],
+				ReferencedTableID:   desc.ID,
 				ReferencedColumnIDs: idx.ColumnIDs[:numCols],
+				Name:                originIndex.ForeignKey.Name,
+				Validity:            originIndex.ForeignKey.Validity,
+				OnDelete:            originIndex.ForeignKey.OnDelete,
+				OnUpdate:            originIndex.ForeignKey.OnUpdate,
+				Match:               originIndex.ForeignKey.Match,
 			}
 			desc.InboundFKs = append(desc.InboundFKs, inFK)
 			changed = true
@@ -1346,9 +1363,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 		}
 		found := false
 		for _, backref := range referencedTable.InboundFKs {
-			if backref.OriginTableID == desc.ID &&
-				ColumnIDs(backref.OriginColumnIDs).EqualSets(fk.OriginColumnIDs) &&
-				ColumnIDs(backref.ReferencedColumnIDs).EqualSets(fk.ReferencedColumnIDs) {
+			if backref.OriginTableID == desc.ID && backref.Name == fk.Name {
 				found = true
 				break
 			}
@@ -1365,9 +1380,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 		}
 		found := false
 		for _, fk := range originTable.OutboundFKs {
-			if fk.ReferencedTableID == desc.ID &&
-				ColumnIDs(fk.OriginColumnIDs).EqualSets(backRef.OriginColumnIDs) &&
-				ColumnIDs(fk.ReferencedColumnIDs).EqualSets(backRef.ReferencedColumnIDs) {
+			if fk.ReferencedTableID == desc.ID && fk.Name == backRef.Name {
 				found = true
 				break
 			}
@@ -2534,7 +2547,7 @@ func (desc *TableDescriptor) FindFKByName(name string) (*ForeignKeyConstraint, e
 // exactly identical lists of referenced and referencing columns, which we think
 // is a reasonable restriction (even though Postgres does allow doing this).
 func (desc *TableDescriptor) FindFKForBackRef(
-	referencedTableID ID, backref *ForeignKeyBackreference,
+	referencedTableID ID, backref *ForeignKeyConstraint,
 ) (*ForeignKeyConstraint, error) {
 	for _, fk := range desc.OutboundFKs {
 		if fk.ReferencedTableID == referencedTableID &&
