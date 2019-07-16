@@ -50,6 +50,7 @@ func registerTests(r *testRegistry) {
 	registerLargeRange(r)
 	registerLedger(r)
 	registerNetwork(r)
+	registerPgjdbc(r)
 	registerPsycopg(r)
 	registerQueue(r)
 	registerRebalanceLoad(r)
