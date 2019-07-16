@@ -7478,9 +7478,15 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var tc testContext
+	cfg := TestStoreConfig(nil)
+	// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
+	// refreshes so that our proposals don't risk being reproposed due to
+	// Raft leadership instability.
+	cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
+	cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	type magicKey struct{}
 	ctx := context.WithValue(context.Background(), magicKey{}, "foo")
@@ -7488,7 +7494,6 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	var seenCmds []int
 	dropAll := int32(1)
 	tc.repl.mu.Lock()
-	lease := *tc.repl.mu.state.Lease
 	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if atomic.LoadInt32(&dropAll) == 1 {
 			return true, nil
@@ -7498,59 +7503,55 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		}
 		return false, nil
 	}
+	lease := *tc.repl.mu.state.Lease
 	tc.repl.mu.Unlock()
 
 	const num = 10
 	expIndexes := make([]int, 0, num)
-	chs := func() []chan proposalResult {
-		chs := make([]chan proposalResult, 0, num)
-
-		for i := 0; i < num; i++ {
-			expIndexes = append(expIndexes, i+1)
-			var ba roachpb.BatchRequest
-			ba.Timestamp = tc.Clock().Now()
-			ba.Add(&roachpb.PutRequest{
-				RequestHeader: roachpb.RequestHeader{
-					Key: roachpb.Key(fmt.Sprintf("k%d", i)),
-				},
-			})
-			ch, _, _, err := tc.repl.evalAndPropose(ctx, lease, &ba, &allSpans, endCmds{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			chs = append(chs, ch)
-			tc.repl.mu.Lock()
-			if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
-				t.Fatal(err)
-			}
-			tc.repl.mu.Unlock()
-		}
-
-		tc.repl.mu.Lock()
-		origIndexes := make([]int, 0, num)
-		for _, p := range tc.repl.mu.proposals {
-			if v := p.ctx.Value(magicKey{}); v != nil {
-				origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
-			}
-		}
-		sort.Ints(origIndexes)
-		tc.repl.mu.Unlock()
-
-		if !reflect.DeepEqual(expIndexes, origIndexes) {
-			t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
-		}
-
-		tc.repl.raftMu.Lock()
-		tc.repl.mu.Lock()
-		atomic.StoreInt32(&dropAll, 0)
-		tc.repl.refreshProposalsLocked(0, reasonTicks)
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	chs := make([]chan proposalResult, 0, num)
+	for i := 0; i < num; i++ {
+		var ba roachpb.BatchRequest
+		ba.Timestamp = tc.Clock().Now()
+		ba.Add(&roachpb.PutRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
+			},
+		})
+		ch, _, idx, err := tc.repl.evalAndPropose(ctx, lease, &ba, &allSpans, endCmds{})
+		if err != nil {
 			t.Fatal(err)
 		}
-		tc.repl.mu.Unlock()
-		tc.repl.raftMu.Unlock()
-		return chs
-	}()
+		chs = append(chs, ch)
+		expIndexes = append(expIndexes, int(idx))
+	}
+
+	tc.repl.mu.Lock()
+	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		t.Fatal(err)
+	}
+	origIndexes := make([]int, 0, num)
+	for _, p := range tc.repl.mu.proposals {
+		if v := p.ctx.Value(magicKey{}); v != nil {
+			origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
+		}
+	}
+	sort.Ints(origIndexes)
+	tc.repl.mu.Unlock()
+
+	if !reflect.DeepEqual(expIndexes, origIndexes) {
+		t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
+	}
+
+	tc.repl.raftMu.Lock()
+	tc.repl.mu.Lock()
+	atomic.StoreInt32(&dropAll, 0)
+	tc.repl.refreshProposalsLocked(0, reasonTicks)
+	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		t.Fatal(err)
+	}
+	tc.repl.mu.Unlock()
+	tc.repl.raftMu.Unlock()
+
 	for _, ch := range chs {
 		if pErr := (<-ch).Err; pErr != nil {
 			t.Fatal(pErr)
