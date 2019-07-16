@@ -336,6 +336,13 @@ func (c floatCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
+func (c floatCustomizer) getCmpOpCompareFunc() compareFunc {
+	// Float comparisons need special handling for NaN.
+	return func(l, r string) string {
+		return fmt.Sprintf("compareFloats(float64(%s), float64(%s))", l, r)
+	}
+}
+
 func (c intCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
 		return fmt.Sprintf("%[1]s = memhash%[3]d(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)

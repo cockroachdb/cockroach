@@ -444,3 +444,14 @@ query II
 SELECT * FROM t38753 ORDER BY y;
 ----
 0  NULL
+
+# Regression test for #38752.
+query IIBB
+SELECT count(*), count(*) + 1, count(*) > 4, count(*) + 1 > 4 FROM b
+----
+4  5  false  true
+
+query I
+SELECT * FROM (SELECT count(*) AS x FROM b) WHERE x > 0;
+----
+4

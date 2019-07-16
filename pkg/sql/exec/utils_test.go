@@ -13,6 +13,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -516,6 +517,14 @@ func tupleEquals(expected tuple, actual tuple) bool {
 				return false
 			}
 		} else {
+			// Special case for NaN, since it does not equal itself.
+			if f1, ok := expected[i].(float64); ok {
+				if f2, ok := actual[i].(float64); ok {
+					if math.IsNaN(f1) && math.IsNaN(f2) {
+						continue
+					}
+				}
+			}
 			if !reflect.DeepEqual(reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(), expected[i]) {
 				return false
 			}
