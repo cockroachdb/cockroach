@@ -12,13 +12,16 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -494,5 +497,135 @@ func registerKVScalability(r *testRegistry) {
 				},
 			})
 		}
+	}
+}
+
+func registerKVRangeLookups(r *testRegistry) {
+	type rangeLookupWorkloadType int
+	const (
+		splitWorkload rangeLookupWorkloadType = iota
+		relocateWorkload
+	)
+
+	const (
+		nodes = 8
+		cpus  = 8
+	)
+
+	runRangeLookups := func(ctx context.Context, t *test, c *cluster, workers int, workloadType rangeLookupWorkloadType, maximumRangeLookupsPerSec float64) {
+		nodes := c.spec.NodeCount - 1
+		doneInit := make(chan struct{})
+		doneWorkload := make(chan struct{})
+		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+		c.Start(ctx, t, c.Range(1, nodes))
+
+		t.Status("running workload")
+
+		conns := make([]*gosql.DB, nodes)
+		for i := 0; i < nodes; i++ {
+			conns[i] = c.Conn(ctx, i+1)
+		}
+		defer func() {
+			for i := 0; i < nodes; i++ {
+				conns[i].Close()
+			}
+		}()
+		waitForFullReplication(t, conns[0])
+
+		m := newMonitor(ctx, c, c.Range(1, nodes))
+		m.Go(func(ctx context.Context) error {
+			defer close(doneWorkload)
+			cmd := fmt.Sprintf("./workload init kv {pgurl:1-%d}", nodes)
+			c.Run(ctx, c.Node(nodes+1), cmd)
+			close(doneInit)
+			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+			splits := " --splits=1000"
+			duration := " --duration=" + ifLocal("10s", "10m")
+			readPercent := " --read-percent=50"
+			// We run kv with --tolerate-errors, since the relocate workload is
+			// expected to create `result is ambiguous (removing replica)` errors.
+			cmd = fmt.Sprintf("./workload run kv --tolerate-errors"+
+				concurrency+splits+duration+readPercent+
+				" {pgurl:1-%d}", nodes)
+			start := timeutil.Now()
+			c.Run(ctx, c.Node(nodes+1), cmd)
+			end := timeutil.Now()
+			verifyLookupsPerSec(ctx, c, t, c.Node(1), start, end, maximumRangeLookupsPerSec)
+			return nil
+		})
+
+		<-doneInit
+		for i := 0; i < workers; i++ {
+			m.Go(func(ctx context.Context) error {
+				for {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-doneWorkload:
+						return nil
+					default:
+					}
+
+					conn := conns[c.Range(1, nodes).randNode()[0]-1]
+					switch workloadType {
+					case splitWorkload:
+						_, err := conn.ExecContext(ctx, `
+							ALTER TABLE
+								kv.kv
+							SPLIT AT
+								VALUES (CAST(floor(random() * 9223372036854775808) AS INT))
+							WITH EXPIRATION '1s'
+						`)
+						if err != nil && !pgerror.IsSQLRetryableError(err) {
+							return err
+						}
+					case relocateWorkload:
+						newReplicas := rand.Perm(nodes)[:3]
+						_, err := conn.ExecContext(ctx, `
+							ALTER TABLE
+								kv.kv
+							EXPERIMENTAL_RELOCATE
+								SELECT ARRAY[$1, $2, $3], CAST(floor(random() * 9223372036854775808) AS INT)
+						`, newReplicas[0]+1, newReplicas[1]+1, newReplicas[2]+1)
+						if err != nil && !pgerror.IsSQLRetryableError(err) && !isExpectedRelocateError(err) {
+							return err
+						}
+					default:
+						panic("unexpected")
+					}
+				}
+			})
+		}
+		m.Wait()
+	}
+	for _, item := range []struct {
+		workers                   int
+		workloadType              rangeLookupWorkloadType
+		maximumRangeLookupsPerSec float64
+	}{
+		{2, splitWorkload, 10.0},
+		// Relocates are expected to fail periodically when relocating random
+		// ranges, so use more workers.
+		{4, relocateWorkload, 50.0},
+	} {
+		// For use in closure.
+		item := item
+		var workloadName string
+		switch item.workloadType {
+		case splitWorkload:
+			workloadName = "split"
+		case relocateWorkload:
+			workloadName = "relocate"
+		default:
+			panic("unexpected")
+		}
+		r.Add(testSpec{
+			Name:    fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
+			Cluster: makeClusterSpec(nodes+1, cpu(cpus)),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
+			},
+		})
 	}
 }
