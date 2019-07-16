@@ -69,7 +69,12 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 			return nil, err
 		}
 
-		numColNames := len(n.AsColumnNames)
+		numColNames := 0
+		for i := 0; i < len(n.Defs); i++ {
+			if _, ok := n.Defs[i].(*tree.ColumnTableDef); ok {
+				numColNames++
+			}
+		}
 		numColumns := len(planColumns(sourcePlan))
 		if numColNames != 0 && numColNames != numColumns {
 			sourcePlan.Close(ctx)
@@ -80,12 +85,22 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		}
 
 		// Synthesize an input column that provides the default value for the
-		// hidden rowid column.
+		// hidden rowid column, if none of the provided columns are specified
+		// as the PRIMARY KEY.
 		synthRowID = true
+		for _, def := range n.Defs {
+			if d, ok := def.(*tree.ColumnTableDef); ok && d.PrimaryKey {
+				synthRowID = false
+				break
+			}
+		}
 	}
 
 	ct := &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}
 	ct.run.synthRowID = synthRowID
+	// This method is only invoked if the heuristic planner was used in the
+	// planning stage.
+	ct.run.fromHeuristicPlanner = true
 	return ct, nil
 }
 
@@ -95,10 +110,17 @@ type createTableRun struct {
 	autoCommit autoCommitOpt
 
 	// synthRowID indicates whether an input column needs to be synthesized to
-	// provide the default value for the hidden rowid column. The optimizer's
-	// plan already includes this column (so synthRowID is false), whereas the
-	// heuristic planner's plan does not (so synthRowID is true).
+	// provide the default value for the hidden rowid column. The optimizer's plan
+	// already includes this column if a user specified PK does not exist (so
+	// synthRowID is false), whereas the heuristic planner's plan does not in this
+	// case (so synthRowID is true).
 	synthRowID bool
+
+	// fromHeuristicPlanner indicates whether the planning was performed by the
+	// heuristic planner instead of the optimizer. This is used to determine
+	// whether or not a row_id was synthesized as part of the planning stage, if a
+	// user defined PK is not specified.
+	fromHeuristicPlanner bool
 }
 
 func (n *createTableNode) startExec(params runParams) error {
@@ -139,15 +161,18 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		asCols = planColumns(n.sourcePlan)
-		if !n.run.synthRowID {
-			// rowID column is already present in the input as the last column, so
-			// ignore it for the purpose of creating column metadata (because
+		if !n.run.fromHeuristicPlanner && !n.n.AsHasUserSpecifiedPrimaryKey() {
+			// rowID column is already present in the input as the last column if it
+			// was planned by the optimizer and the user did not specify a PRIMARY
+			// KEY. So ignore it for the purpose of creating column metadata (because
 			// makeTableDescIfAs does it automatically).
 			asCols = asCols[:len(asCols)-1]
 		}
-		desc, err = makeTableDescIfAs(
+
+		desc, err = makeTableDescIfAs(params,
 			n.n, n.dbDesc.ID, id, creationTime, asCols,
-			privs, &params.p.semaCtx, params.p.EvalContext())
+			privs, params.p.EvalContext())
+
 		if err != nil {
 			return err
 		}
@@ -259,9 +284,9 @@ func (n *createTableNode) startExec(params runParams) error {
 			return err
 		}
 
-		// Prepare the buffer for row values. At this point, one more
-		// column has been added by ensurePrimaryKey() to the list of
-		// columns in sourcePlan.
+		// Prepare the buffer for row values. At this point, one more column has
+		// been added by ensurePrimaryKey() to the list of columns in sourcePlan, if
+		// a PRIMARY KEY is not specified by the user.
 		rowBuffer := make(tree.Datums, len(desc.Columns))
 		pkColIdx := len(desc.Columns) - 1
 
@@ -985,38 +1010,51 @@ func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string 
 // makeTableDescIfAs is the MakeTableDesc method for when we have a table
 // that is created with the CREATE AS format.
 func makeTableDescIfAs(
+	params runParams,
 	p *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-	semaCtx *tree.SemaContext,
 	evalContext *tree.EvalContext,
 ) (desc sqlbase.MutableTableDescriptor, err error) {
-	desc = InitTableDescriptor(id, parentID, p.Table.Table(), creationTime, privileges)
-	desc.CreateQuery = getFinalSourceQuery(p.AsSource, evalContext)
-
-	for i, colRes := range resultColumns {
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
-		columnTableDef.Nullable.Nullability = tree.SilentNull
-		if len(p.AsColumnNames) > i {
-			columnTableDef.Name = p.AsColumnNames[i]
+	colResIndex := 0
+	// TableDefs for a CREATE TABLE ... AS AST node comprise of a ColumnTableDef
+	// for each column, and a ConstraintTableDef for any constraints on those
+	// columns.
+	for _, defs := range p.Defs {
+		var d *tree.ColumnTableDef
+		var ok bool
+		if d, ok = defs.(*tree.ColumnTableDef); ok {
+			d.Type = resultColumns[colResIndex].Typ
+			colResIndex++
 		}
-
-		// The new types in the CREATE TABLE AS column specs never use
-		// SERIAL so we need not process SERIAL types here.
-		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx)
-		if err != nil {
-			return desc, err
-		}
-		desc.AddColumn(col)
 	}
 
-	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
-	// happens to work in gc, but does not work in gccgo.
-	//
-	// See https://github.com/golang/go/issues/23188.
-	err = desc.AllocateIDs()
+	// If there are no TableDefs defined by the parser, then we construct a
+	// ColumnTableDef for each column using resultColumns.
+	if len(p.Defs) == 0 {
+		for _, colRes := range resultColumns {
+			var d *tree.ColumnTableDef
+			var ok bool
+			var tableDef tree.TableDef = &tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
+			if d, ok = tableDef.(*tree.ColumnTableDef); !ok {
+				return desc, errors.Errorf("failed to cast type to ColumnTableDef\n")
+			}
+			d.Nullable.Nullability = tree.SilentNull
+			p.Defs = append(p.Defs, tableDef)
+		}
+	}
+
+	desc, err = makeTableDesc(
+		params,
+		p,
+		parentID, id,
+		creationTime,
+		privileges,
+		nil, /* affected */
+	)
+	desc.CreateQuery = getFinalSourceQuery(p.AsSource, evalContext)
 	return desc, err
 }
 
