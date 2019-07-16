@@ -38,6 +38,7 @@ import (
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
@@ -80,17 +81,17 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 				// https://github.com/etcd-io/etcd/pull/10279
 				continue
 			}
-			if pr.State == raft.ProgressStateReplicate {
+			if pr.State == tracker.StateReplicate {
 				// This follower is in good working order.
 				continue
 			}
 			s += fmt.Sprintf("; r%d/%d is ", rangeID, replicaID)
 			switch pr.State {
-			case raft.ProgressStateSnapshot:
+			case tracker.StateSnapshot:
 				// If the Raft snapshot queue is backed up, replicas can spend
 				// minutes or worse until they are caught up.
 				s += "waiting for a Raft snapshot"
-			case raft.ProgressStateProbe:
+			case tracker.StateProbe:
 				// Assuming the split has already been delayed for a little bit,
 				// seeing a follower that is probing hints at some problem with
 				// Raft or Raft message delivery. (Of course it's possible that

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 const (
@@ -209,7 +210,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	if pr, ok := raftStatus.Progress[raftStatus.Lead]; ok {
 		// TODO(tschottdorf): remove this line once we have picked up
 		// https://github.com/etcd-io/etcd/pull/10279
-		pr.State = raft.ProgressStateReplicate
+		pr.State = tracker.StateReplicate
 		raftStatus.Progress[raftStatus.Lead] = pr
 	}
 
@@ -229,7 +230,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 func updateRaftProgressFromActivity(
 	ctx context.Context,
-	prs map[uint64]raft.Progress,
+	prs map[uint64]tracker.Progress,
 	replicas []roachpb.ReplicaDescriptor,
 	lastUpdate lastUpdateTimesMap,
 	now time.Time,
@@ -285,7 +286,7 @@ type truncateDecision struct {
 func (td *truncateDecision) raftSnapshotsForIndex(index uint64) int {
 	var n int
 	for _, p := range td.Input.RaftStatus.Progress {
-		if p.State != raft.ProgressStateReplicate {
+		if p.State != tracker.StateReplicate {
 			// If the follower isn't replicating, we can't trust its Match in
 			// the first place. But note that this shouldn't matter in practice
 			// as we already take care to not cut off these followers when
@@ -427,7 +428,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// overlapping bounds that put significant stress on the Raft snapshot
 		// queue.
 		if progress.RecentActive {
-			if progress.State == raft.ProgressStateProbe {
+			if progress.State == tracker.StateProbe {
 				decision.ProtectIndex(decision.Input.FirstIndex, truncatableIndexChosenViaProbingFollower)
 			} else {
 				decision.ProtectIndex(progress.Match, truncatableIndexChosenViaFollowers)
@@ -475,7 +476,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 func getQuorumIndex(raftStatus *raft.Status) uint64 {
 	match := make([]uint64, 0, len(raftStatus.Progress))
 	for _, progress := range raftStatus.Progress {
-		if progress.State == raft.ProgressStateReplicate {
+		if progress.State == tracker.StateReplicate {
 			match = append(match, progress.Match)
 		} else {
 			match = append(match, 0)

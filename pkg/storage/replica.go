@@ -870,7 +870,8 @@ func (r *Replica) RaftStatus() *raft.Status {
 
 func (r *Replica) raftStatusRLocked() *raft.Status {
 	if rg := r.mu.internalRaftGroup; rg != nil {
-		return rg.Status()
+		s := rg.Status()
+		return &s
 	}
 	return nil
 }
