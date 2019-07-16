@@ -18,6 +18,8 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -162,6 +164,10 @@ type Flags struct {
 	// SaveTablesPrefix specifies the prefix of the table to create or print
 	// for each subexpression in the query.
 	SaveTablesPrefix string
+
+	// File specifies the name of the file to import. This field is only used by
+	// the import command.
+	File string
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -247,6 +253,13 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    target expression as a table. The name of this table must be provided
 //    with the table flag.
 //
+//  - import [flags]
+//
+//    Imports a file containing exec-ddl commands in order to add tables and/or
+//    stats to the catalog. This allows commonly-used schemas such as TPC-C or
+//    TPC-H to be used by multiple test files without copying the schemas and
+//    stats multiple times. The file name must be provided with the file flag.
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
@@ -294,6 +307,9 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    given prefix for the output of each subexpression in the query.
 //    Otherwise, outputs the name of the table that would be created for each
 //    subexpression.
+//
+//  - file: used to set the name of the file to be imported. This is used by
+//    the import command.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -427,6 +443,10 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		return result
+
+	case "import":
+		ot.Import(tb)
+		return ""
 
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
@@ -631,6 +651,12 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return fmt.Errorf("save-tables-prefix requires one argument")
 		}
 		f.SaveTablesPrefix = arg.Vals[0]
+
+	case "file":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("file requires one argument")
+		}
+		f.File = arg.Vals[0]
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -1011,6 +1037,23 @@ func (ot *OptTester) Stats(d *datadriven.TestData) (string, error) {
 
 	st := statsTester{}
 	return st.testStats(catalog, d, ot.Flags.Table)
+}
+
+// Import imports a file containing exec-ddl commands in order to add tables
+// and/or stats to the catalog. This allows commonly-used schemas such as
+// TPC-C or TPC-H to be used by multiple test files without copying the schemas
+// and stats multiple times.
+func (ot *OptTester) Import(tb testing.TB) {
+	// Find the file to be imported in opttester/testdata.
+	_, optTesterFile, _, ok := runtime.Caller(1)
+	if !ok {
+		tb.Fatalf("unable to find file %s", ot.Flags.File)
+	}
+	path := filepath.Join(filepath.Dir(optTesterFile), "testdata", ot.Flags.File)
+	datadriven.RunTest(tb.(*testing.T), path, func(d *datadriven.TestData) string {
+		tester := New(ot.catalog, d.Input)
+		return tester.RunCommand(tb.(*testing.T), d)
+	})
 }
 
 // SaveTables optimizes the given query and saves the subexpressions as tables
