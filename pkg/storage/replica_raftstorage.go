@@ -954,7 +954,7 @@ func (r *Replica) applySnapshot(
 		log.Infof(ctx, "applying %s snapshot at index %d "+
 			"(id=%s, %d SSTables, %d log entries)",
 			snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
-			len(ss.ssts)+1, len(ss.logEntries))
+			len(ss.sss.ssts)+1, len(ss.logEntries))
 		defer func(start time.Time) {
 			now := timeutil.Now()
 			log.Infof(ctx, "applied %s snapshot in %0.0fms [unreplicatedClear=%0.0fms unreplicatedState=%0.0fms unreplicatedLogEntries=%0.0fms unreplicatedWrite=%0.0fms ingestion=%0.0fms]",
@@ -1069,16 +1069,16 @@ func (r *Replica) applySnapshot(
 		stats.unreplicatedLogEntries = timeutil.Now()
 
 		// Create a new file to write SST into.
-		unreplicatedSSTFile, err := ss.createSSTFile(r.RangeID)
+		unreplicatedSSTFile, err := ss.sss.CreateFile()
 		if err != nil {
-			return errors.Wrapf(err, "error opening empty SST file")
+			return errors.Wrapf(err, "error creating new SST file")
 		}
 		data, err := unreplicatedSST.Finish()
 		if err != nil {
 			unreplicatedSSTFile.Close()
 			return errors.Wrapf(err, "error finishing SST file writer")
 		}
-		_, err = unreplicatedSSTFile.Write(data)
+		err = ss.sss.Write(ctx, unreplicatedSSTFile, data)
 		unreplicatedSSTFile.Close()
 		if err != nil {
 			return errors.Wrapf(err, "error writing SST data to file")
@@ -1086,8 +1086,8 @@ func (r *Replica) applySnapshot(
 		stats.unreplicatedWrite = timeutil.Now()
 
 		// Ingest all SSTs atomically.
-		if err := r.store.engine.IngestExternalFiles(ctx, ss.ssts, true /* skipWritingSeqNo */, true /* modify */); err != nil {
-			return errors.Wrapf(err, "while ingesting %s", ss.ssts)
+		if err := r.store.engine.IngestExternalFiles(ctx, ss.sss.ssts, true /* skipWritingSeqNo */, true /* modify */); err != nil {
+			return errors.Wrapf(err, "while ingesting %s", ss.sss.ssts)
 		}
 		stats.ingestion = timeutil.Now()
 		// REVIEW(jeffreyxiao): Should there be a compaction suggestion here? A

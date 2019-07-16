@@ -14,10 +14,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -259,48 +257,14 @@ type sstSnapshotStrategy struct {
 	raftCfg *base.RaftConfig
 	status  string
 
-	auxDir string
-	sstDir string
-	// The string names of the SSTables to ingest.
-	ssts []string
+	// Storage for the sst files being created.
+	sss *SstSnapshotStorage
 	// The Raft log entries for this snapshot.
 	logEntries [][]byte
 
 	// Fields used when sending snapshots.
 	batchSize int64
 	limiter   *rate.Limiter
-}
-
-func (sstSS *sstSnapshotStrategy) createSSTDir(rangeID roachpb.RangeID) error {
-	sstAuxDir := filepath.Join(sstSS.auxDir, "snapshotsst")
-	if err := os.MkdirAll(sstAuxDir, 0755); err != nil {
-		return err
-	}
-	dir, err := ioutil.TempDir(sstSS.auxDir, fmt.Sprintf("r%d_", rangeID))
-	if err != nil {
-		return err
-	}
-	sstSS.sstDir = dir
-	return nil
-}
-
-func (sstSS *sstSnapshotStrategy) createSSTFile(rangeID roachpb.RangeID) (*os.File, error) {
-	if sstSS.sstDir == "" {
-		if err := sstSS.createSSTDir(rangeID); err != nil {
-			return nil, err
-		}
-	}
-
-	// Create a new file with the next available index.
-	sstIndex := len(sstSS.ssts)
-	filename := filepath.Join(sstSS.sstDir, fmt.Sprintf("%d.sst", sstIndex))
-	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return nil, err
-	}
-
-	sstSS.ssts = append(sstSS.ssts, file.Name())
-	return file, nil
 }
 
 // Receive implements the snapshotStrategy interface.
@@ -313,12 +277,11 @@ func (sstSS *sstSnapshotStrategy) Receive(
 	defer func() {
 		if currSST != nil {
 			if err := currSST.Close(); err != nil {
-				log.Warningf(ctx, "error closing sst file when receiving snapshot: %v", err)
+				log.Warningf(ctx, "error closing SST file %s: %v", currSST.Name(), err)
 			}
 		}
 	}()
 
-	sstSS.ssts = nil
 	sstSS.logEntries = nil
 	for {
 		req, err := stream.Recv()
@@ -336,13 +299,13 @@ func (sstSS *sstSnapshotStrategy) Receive(
 
 		if req.SSTChunk != nil {
 			if currSST == nil {
-				currSST, err = sstSS.createSSTFile(header.State.Desc.RangeID)
+				currSST, err = sstSS.sss.CreateFile()
 				if err != nil {
-					err = errors.Wrap(err, "error when creating SST file for SST snapshot strategy")
+					err = errors.Wrap(err, "error creating new SST file")
 					return noSnap, sendSnapshotError(stream, err)
 				}
 			}
-			if _, err := currSST.Write(req.SSTChunk); err != nil {
+			if err := sstSS.sss.Write(ctx, currSST, req.SSTChunk); err != nil {
 				err = errors.Wrapf(err, "error writing to %s", currSST.Name())
 				return noSnap, sendSnapshotError(stream, err)
 			}
@@ -393,7 +356,7 @@ func (sstSS *sstSnapshotStrategy) Receive(
 				inSnap.snapType = SnapshotRequest_PREEMPTIVE
 			}
 
-			sstSS.status = fmt.Sprintf("ssts: %d, log entries: %d", len(sstSS.ssts), len(sstSS.logEntries))
+			sstSS.status = fmt.Sprintf("ssts: %d, log entries: %d", len(sstSS.sss.ssts), len(sstSS.logEntries))
 			return inSnap, nil
 		}
 	}
@@ -545,9 +508,9 @@ func (sstSS *sstSnapshotStrategy) Status() string { return sstSS.status }
 
 // Close implements the snapshotStrategy interface.
 func (sstSS *sstSnapshotStrategy) Close(ctx context.Context) {
-	if sstSS.sstDir != "" {
+	if sstSS.sss != nil {
 		// Nothing actionable to do when removing directory fails.
-		if err := os.RemoveAll(sstSS.sstDir); err != nil {
+		if err := sstSS.sss.Clear(); err != nil {
 			log.Warningf(ctx, "error removing sstSnapshotStrategy: %v", err)
 		}
 	}
@@ -964,9 +927,17 @@ func (s *Store) receiveSnapshot(
 			raftCfg: &s.cfg.RaftConfig,
 		}
 	case SnapshotRequest_SST:
+		snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
+		if err != nil {
+			return sendSnapshotError(stream,
+				errors.Wrapf(err, "%s,r%d: invalid snapshot",
+					s, header.State.Desc.RangeID),
+			)
+		}
 		ss = &sstSnapshotStrategy{
 			raftCfg: &s.cfg.RaftConfig,
-			auxDir:  s.engine.GetAuxiliaryDir(),
+			sss: newSstSnapshotStorage(s.cfg.Settings, header.State.Desc.RangeID, snapUUID,
+				s.engine.GetAuxiliaryDir(), s.limiters.BulkIOWriteRate, s.engine),
 		}
 	default:
 		return sendSnapshotError(stream,
