@@ -71,8 +71,8 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		// state. Include both writes as the EndTransaction's in-flight writes.
 		et, etH := endTxnArgs(txn, true)
 		et.InFlightWrites = []roachpb.SequencedWrite{
-			{Key: keyA, Sequence: 0},
-			{Key: keyB, Sequence: 1},
+			{Key: keyA, Sequence: 1},
+			{Key: keyB, Sequence: 2},
 		}
 		etReply, pErr := client.SendWrappedWith(ctx, store.TestSender(), etH, &et)
 		if pErr != nil {
