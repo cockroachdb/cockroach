@@ -45,33 +45,54 @@ func GetLikeOperator(
 		return NewNoop(input), nil
 	}
 	if len(pattern) > 1 && !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
-		// Special cases for patterns which are just a prefix or suffix.
-		if pattern[0] == '%' {
+		// There are no wildcards in the middle of the string, so we only need to
+		// use a regular expression if both the first and last characters are
+		// wildcards.
+		firstChar := pattern[0]
+		lastChar := pattern[len(pattern)-1]
+		if !isWildcard(firstChar) && !isWildcard(lastChar) {
+			// No wildcards, so this is just an exact string match.
+			if negate {
+				return &selNEBytesBytesConstOp{
+					input:    input,
+					colIdx:   colIdx,
+					constArg: []byte(pattern),
+				}, nil
+			}
+			return &selEQBytesBytesConstOp{
+				input:    input,
+				colIdx:   colIdx,
+				constArg: []byte(pattern),
+			}, nil
+		}
+		if firstChar == '%' && !isWildcard(lastChar) {
+			suffix := []byte(pattern[1:])
 			if negate {
 				return &selNotSuffixBytesBytesConstOp{
 					input:    input,
 					colIdx:   colIdx,
-					constArg: []byte(pattern[1:]),
+					constArg: suffix,
 				}, nil
 			}
 			return &selSuffixBytesBytesConstOp{
 				input:    input,
 				colIdx:   colIdx,
-				constArg: []byte(pattern[1:]),
+				constArg: suffix,
 			}, nil
 		}
-		if pattern[len(pattern)-1] == '%' {
+		if lastChar == '%' && !isWildcard(firstChar) {
+			prefix := []byte(pattern[:len(pattern)-1])
 			if negate {
 				return &selNotPrefixBytesBytesConstOp{
 					input:    input,
 					colIdx:   colIdx,
-					constArg: []byte(pattern[:len(pattern)-1]),
+					constArg: prefix,
 				}, nil
 			}
 			return &selPrefixBytesBytesConstOp{
 				input:    input,
 				colIdx:   colIdx,
-				constArg: []byte(pattern[:len(pattern)-1]),
+				constArg: prefix,
 			}, nil
 		}
 	}
@@ -92,4 +113,8 @@ func GetLikeOperator(
 		colIdx:   colIdx,
 		constArg: re,
 	}, nil
+}
+
+func isWildcard(c byte) bool {
+	return c == '%' || c == '_'
 }
