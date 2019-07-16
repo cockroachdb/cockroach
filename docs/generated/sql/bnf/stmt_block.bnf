@@ -1694,7 +1694,7 @@ partition_by ::=
 	| 'PARTITION' 'BY' 'NOTHING'
 
 create_as_table_defs ::=
-	( column_name create_as_col_qual_list ) ( ( ',' create_as_constraint_def | ',' column_name create_as_col_qual_list ) )*
+	( column_name create_as_col_qual_list ) ( ( ',' column_name create_as_col_qual_list | ',' family_def | ',' create_as_constraint_def ) )*
 
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
@@ -2136,6 +2136,10 @@ range_partition ::=
 
 create_as_col_qualification ::=
 	create_as_col_qualification_elem
+	| 'FAMILY' family_name
+	| 'CREATE' 'FAMILY' family_name
+	| 'CREATE' 'FAMILY'
+	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' family_name
 
 create_as_constraint_elem ::=
 	'PRIMARY' 'KEY' '(' create_as_params ')'
