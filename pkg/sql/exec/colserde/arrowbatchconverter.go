@@ -52,7 +52,12 @@ type ArrowBatchConverter struct {
 // NewArrowBatchConverter converts coldata.Batches to []*array.Data and back
 // again according to the schema specified by typs. Converting data that does
 // not conform to typs results in undefined behavior.
-func NewArrowBatchConverter(typs []types.T) *ArrowBatchConverter {
+func NewArrowBatchConverter(typs []types.T) (*ArrowBatchConverter, error) {
+	for _, t := range typs {
+		if _, supported := supportedTypes[t]; !supported {
+			return nil, errors.Errorf("unsupported type %v", t.String())
+		}
+	}
 	c := &ArrowBatchConverter{typs: typs}
 	c.builders.boolBuilder = array.NewBooleanBuilder(memory.DefaultAllocator)
 	c.builders.binaryBuilder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
@@ -63,7 +68,7 @@ func NewArrowBatchConverter(typs []types.T) *ArrowBatchConverter {
 		// two buffers: one for the nulls, the other for the values.
 		c.scratch.buffers[i] = make([]*memory.Buffer, 2)
 	}
-	return c
+	return c, nil
 }
 
 const (
@@ -74,6 +79,23 @@ const (
 	sizeOfFloat32 = int(unsafe.Sizeof(float32(0)))
 	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
 )
+
+var supportedTypes = func() map[types.T]struct{} {
+	typs := make(map[types.T]struct{})
+	for _, t := range []types.T{
+		types.Bool,
+		types.Bytes,
+		types.Int8,
+		types.Int16,
+		types.Int32,
+		types.Int64,
+		types.Float32,
+		types.Float64,
+	} {
+		typs[t] = struct{}{}
+	}
+	return typs
+}()
 
 // BatchToArrow converts the first batch.Length elements of the batch into an
 // arrow []*array.Data. It is assumed that the batch is not larger than
