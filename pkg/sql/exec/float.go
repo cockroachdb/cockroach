@@ -22,12 +22,14 @@ func compareFloats(a, b float64) int {
 	if a > b {
 		return 1
 	}
-	// Compare bits so that NaN == NaN.
-	if math.Float64bits(a) == math.Float64bits(b) {
+	if a == b {
 		return 0
 	}
-	// Either a or b is NaN.
+	// At least one value is NaN.
 	if math.IsNaN(a) {
+		if math.IsNaN(b) {
+			return 0
+		}
 		return -1
 	}
 	return 1
