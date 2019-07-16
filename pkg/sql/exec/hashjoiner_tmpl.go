@@ -119,17 +119,21 @@ func _CHECK_COL_WITH_NULLS(
 	_SEL_STRING string,
 ) { // */}}
 	// {{define "checkColWithNulls"}}
-	if probeVec.MaybeHasNulls() {
-		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true)
-		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false)
-		}
+	if ht.allowNullEquality {
+		_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false)
 	} else {
-		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true)
+		if probeVec.MaybeHasNulls() {
+			if buildVec.MaybeHasNulls() {
+				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true)
+			} else {
+				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false)
+			}
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false)
+			if buildVec.MaybeHasNulls() {
+				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true)
+			} else {
+				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false)
+			}
 		}
 	}
 	// {{end}}
@@ -285,8 +289,9 @@ func (ht *hashTable) rehash(
 
 // checkCol determines if the current key column in the groupID buckets matches
 // the specified equality column key. If there is a match, then the key is added
-// to differs. If the bucket has reached the end, the key is rejected. If any
-// element in the key is null, then there is no match.
+// to differs. If the bucket has reached the end, the key is rejected. If the
+// hashTable disallows null equality, then if any element in the key is null,
+// there is no match.
 func (ht *hashTable) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
 	switch t {
 	// {{range $neType := .NETemplate}}

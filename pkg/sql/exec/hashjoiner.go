@@ -212,6 +212,7 @@ func (hj *hashJoinEqOp) Init() {
 		build.sourceTypes,
 		build.eqCols,
 		build.outCols,
+		false, /* allowNullEquality */
 	)
 
 	hj.builder = makeHashJoinBuilder(
@@ -392,11 +393,19 @@ type hashTable struct {
 	// key.
 	differs []bool
 
+	// allowNullEquality determines if NULL keys should be treated as equal to
+	// each other.
+	allowNullEquality bool
+
 	cancelChecker CancelChecker
 }
 
 func makeHashTable(
-	bucketSize uint64, sourceTypes []types.T, eqCols []uint32, outCols []uint32,
+	bucketSize uint64,
+	sourceTypes []types.T,
+	eqCols []uint32,
+	outCols []uint32,
+	allowNullEquality bool,
 ) *hashTable {
 	// Compute the union of eqCols and outCols and compress vals to only keep the
 	// important columns.
@@ -467,6 +476,8 @@ func makeHashTable(
 
 		keys:    make([]coldata.Vec, len(eqCols)),
 		buckets: make([]uint64, coldata.BatchSize),
+
+		allowNullEquality: allowNullEquality,
 	}
 }
 
