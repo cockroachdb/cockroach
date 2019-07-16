@@ -458,6 +458,23 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 				`alter_default: [2]->{"after": {"a": 2, "b": "after"}}`,
 			})
 		})
+
+		// Test adding a column with explicitly setting the default value to be NULL
+		t.Run(`add column with DEFAULT NULL`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO t VALUES (1)`)
+			defaultNull := feed(t, f, `CREATE CHANGEFEED FOR t`)
+			defer closeFeed(t, defaultNull)
+			assertPayloads(t, defaultNull, []string{
+				`t: [1]->{"after": {"id": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE t ADD COLUMN c INT DEFAULT NULL`)
+			sqlDB.Exec(t, `INSERT INTO t VALUES (2, 2)`)
+			assertPayloads(t, defaultNull, []string{
+				// Verify nothing is in the c column before an INSERT
+				`t: [2]->{"after": {"c": 2, "id": 2}}`,
+			})
+		})
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
@@ -527,6 +544,22 @@ func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
 				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
 			}
 		})
+
+		t.Run(`add column with default null`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (1)`)
+			addColumnDef := feed(t, f, `CREATE CHANGEFEED FOR add_column_def`)
+			defer closeFeed(t, addColumnDef)
+			assertPayloads(t, addColumnDef, []string{
+				`add_column_def: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b INT DEFAULT NULL`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (2, 2)`)
+			if _, err := addColumnDef.Next(); !testutils.IsError(err, `tables being backfilled`) {
+				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
+			}
+		})
+
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
