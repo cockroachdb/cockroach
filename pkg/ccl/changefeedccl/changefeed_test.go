@@ -527,6 +527,22 @@ func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
 				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
 			}
 		})
+
+		t.Run(`add column with default null`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (1)`)
+			addColumnDef := feed(t, f, `CREATE CHANGEFEED FOR add_column_def`)
+			defer closeFeed(t, addColumnDef)
+			assertPayloads(t, addColumnDef, []string{
+				`add_column_def: [1]->{"after": {"a": 1}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b INT DEFAULT NULL`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (2, 2)`)
+			if _, err := addColumnDef.Next(); !testutils.IsError(err, `tables being backfilled`) {
+				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
+			}
+		})
+
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
