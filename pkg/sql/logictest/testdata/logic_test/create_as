@@ -236,3 +236,65 @@ foo11  CREATE TABLE foo11 (
 statement error pq: multiple primary keys for table "foo12" are not allowed
 CREATE TABLE foo12 (x PRIMARY KEY, y, PRIMARY KEY(y)) AS VALUES (1, 2), (3, 4);
 
+# Check that CREATE TABLE AS allows users to specify column families.
+statement ok
+CREATE TABLE abcd(
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT
+);
+
+# Test column qualifiers to define column families.
+statement ok
+CREATE TABLE foo12 (a PRIMARY KEY FAMILY f1, b, c CREATE FAMILY, d) AS SELECT * FROM abcd;
+
+query TT
+SHOW CREATE TABLE foo12
+----
+foo12  CREATE TABLE foo12 (
+      a INT8 NOT NULL,
+      b INT8 NULL,
+      c INT8 NULL,
+      d INT8 NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC),
+      FAMILY f1 (a, b, d),
+      FAMILY fam_1_c (c)
+)
+
+# Test constraint style definition of column families.
+statement ok
+CREATE TABLE foo13 (a, b, c, d, PRIMARY KEY(a, b), FAMILY pk (a, b), FAMILY (c, d)) AS SELECT * FROM abcd;
+
+query TT
+SHOW CREATE TABLE foo13
+----
+foo13  CREATE TABLE foo13 (
+      a INT8 NOT NULL,
+      b INT8 NOT NULL,
+      c INT8 NULL,
+      d INT8 NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+      FAMILY pk (a, b),
+      FAMILY fam_1_c_d (c, d)
+)
+
+# Test renaming columns still preserves the column families.
+statement ok
+ALTER TABLE foo13 RENAME d TO z
+
+statement ok
+ALTER TABLE foo13 RENAME c TO e
+
+query TT
+SHOW CREATE TABLE foo13
+----
+foo13  CREATE TABLE foo13 (
+            a INT8 NOT NULL,
+            b INT8 NOT NULL,
+            e INT8 NULL,
+            z INT8 NULL,
+            CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+            FAMILY pk (a, b),
+            FAMILY fam_1_c_d (e, z)
+)

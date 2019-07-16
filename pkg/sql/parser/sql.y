@@ -4443,11 +4443,6 @@ create_as_table_defs:
     var colToTableDef tree.TableDef = tableDef
     $$.val = tree.TableDefs{colToTableDef}
   }
-| create_as_table_defs ',' create_as_constraint_def
-  {
-    var constraintToTableDef tree.TableDef = $3.constraintDef()
-    $$.val = append($1.tblDefs(), constraintToTableDef)
-  }
 | create_as_table_defs ',' column_name create_as_col_qual_list
   {
     tableDef, err := tree.NewColumnTableDef(tree.Name($3), nil, false, $4.colQuals())
@@ -4459,6 +4454,15 @@ create_as_table_defs:
 
     $$.val = append($1.tblDefs(), colToTableDef)
   }
+| create_as_table_defs ',' family_def
+  {
+    $$.val = append($1.tblDefs(), $3.tblDef())
+  }
+| create_as_table_defs ',' create_as_constraint_def
+{
+  var constraintToTableDef tree.TableDef = $3.constraintDef()
+  $$.val = append($1.tblDefs(), constraintToTableDef)
+}
 
 create_as_constraint_def:
   create_as_constraint_elem
@@ -4507,6 +4511,22 @@ create_as_col_qualification:
   create_as_col_qualification_elem
   {
     $$.val = tree.NamedColumnQualification{Qualification: $1.colQualElem()}
+  }
+| FAMILY family_name
+  {
+    $$.val = tree.NamedColumnQualification{Qualification: &tree.ColumnFamilyConstraint{Family: tree.Name($2)}}
+  }
+| CREATE FAMILY family_name
+  {
+    $$.val = tree.NamedColumnQualification{Qualification: &tree.ColumnFamilyConstraint{Family: tree.Name($3), Create: true}}
+  }
+| CREATE FAMILY
+  {
+    $$.val = tree.NamedColumnQualification{Qualification: &tree.ColumnFamilyConstraint{Create: true}}
+  }
+| CREATE IF NOT EXISTS FAMILY family_name
+  {
+    $$.val = tree.NamedColumnQualification{Qualification: &tree.ColumnFamilyConstraint{Family: tree.Name($6), Create: true, IfNotExists: true}}
   }
 
 create_as_col_qualification_elem:
