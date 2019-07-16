@@ -395,7 +395,7 @@ func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr
 		})
 		var frame *tree.WindowFrame
 		if s.coin() {
-			frame = makeWindowFrame(s, refs)
+			frame = makeWindowFrame(s, refs, order)
 		}
 		window = &tree.WindowDef{
 			Partitions: parts,
@@ -428,10 +428,19 @@ func randWindowFrameMode(s *scope) tree.WindowFrameMode {
 	return windowFrameModes[s.schema.rnd.Intn(len(windowFrameModes))]
 }
 
-func makeWindowFrame(s *scope, refs colRefs) *tree.WindowFrame {
+func makeWindowFrame(s *scope, refs colRefs, orderBy tree.OrderBy) *tree.WindowFrame {
+	var frameMode tree.WindowFrameMode
+	for {
+		frameMode = randWindowFrameMode(s)
+		if len(orderBy) > 0 || frameMode != tree.GROUPS {
+			// GROUPS mode requires an ORDER BY clause, so if it is not present and
+			// GROUPS mode was randomly chosen, we need to generate again; otherwise,
+			// we're done.
+			break
+		}
+	}
 	// Window frame mode and start bound must always be present whereas end
 	// bound can be omitted.
-	frameMode := randWindowFrameMode(s)
 	var startBound tree.WindowFrameBound
 	var endBound *tree.WindowFrameBound
 	if frameMode == tree.RANGE {
