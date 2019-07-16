@@ -1486,7 +1486,7 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 
 func (c *SyncedCluster) scp(src, dest string) error {
 	args := []string{
-		"scp", "-v", "-r", "-C",
+		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
 	}
 	args = append(args, sshAuthArgs()...)
