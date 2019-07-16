@@ -455,3 +455,21 @@ query I
 SELECT * FROM (SELECT count(*) AS x FROM b) WHERE x > 0;
 ----
 4
+
+# Regression test for #38908
+statement ok
+CREATE TABLE t38908 (x INT)
+
+statement ok
+INSERT INTO t38908 VALUES (1)
+
+statement ok
+SET experimental_vectorize=always
+
+query I
+SELECT * FROM t38908 WHERE x IN (1, 2)
+----
+1
+
+statement ok
+RESET experimental_vectorize
