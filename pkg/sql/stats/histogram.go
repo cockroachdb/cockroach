@@ -40,6 +40,9 @@ func EquiDepthHistogram(
 	if numSamples == 0 {
 		return HistogramData{}, nil
 	}
+	if maxBuckets < 2 {
+		return HistogramData{}, errors.Errorf("histogram requires at least two buckets")
+	}
 	if numRows < int64(numSamples) {
 		return HistogramData{}, errors.Errorf("more samples than rows")
 	}
@@ -65,9 +68,10 @@ func EquiDepthHistogram(
 	}
 	// i keeps track of the current sample and advances as we form buckets.
 	for i, b := 0, 0; b < numBuckets && i < numSamples; b++ {
-		// num is the number of samples in this bucket.
+		// num is the number of samples in this bucket. The first bucket has
+		// num=1 so the histogram has a clear lower bound.
 		num := (numSamples - i) / (numBuckets - b)
-		if num < 1 {
+		if i == 0 || num < 1 {
 			num = 1
 		}
 		upper := samples[i+num-1]

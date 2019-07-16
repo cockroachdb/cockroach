@@ -69,7 +69,7 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 		js.HistogramBuckets[i] = JSONHistoBucket{
 			NumEq:      b.NumEq,
 			NumRange:   b.NumRange,
-			UpperBound: datum.String(),
+			UpperBound: tree.AsStringWithFlags(datum, tree.FmtBareStrings),
 		}
 	}
 	return nil
