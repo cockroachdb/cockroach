@@ -287,11 +287,11 @@ func (jr *joinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error
 func (jr *joinReader) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {
 	// check the following:
 	// - we have more than one needed family
-	// - we are looking at a unique index
+	// - we are looking at the primary key
 	// - our table has more than the default family
 	// - we have all the columns of the index
 	if len(jr.neededFamilies) > 0 &&
-		jr.index.Unique &&
+		jr.index.ID == jr.desc.PrimaryIndex.ID &&
 		len(jr.lookupCols) == len(jr.index.ColumnIDs) &&
 		len(jr.neededFamilies) < len(jr.desc.Families) {
 		return sqlbase.SplitSpanIntoSeparateFamilies(span, jr.neededFamilies)
