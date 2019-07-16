@@ -483,8 +483,8 @@ EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDE
 ----
 render                 ·              ·                   (b)              ·
  │                     render 0       b                   ·                ·
- └── run               ·              ·                   (a, b, c)        ·
-      └── insert       ·              ·                   (a, b, c)        ·
+ └── run               ·              ·                   (a, b)           ·
+      └── insert       ·              ·                   (a, b)           ·
            │           into           t(a, b, c)          ·                ·
            │           strategy       inserter            ·                ·
            └── values  ·              ·                   (x, y, column6)  ·
@@ -496,23 +496,23 @@ render                 ·              ·                   (b)              ·
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-render               ·         ·          (b)        ·
- │                   render 0  b          ·          ·
- └── run             ·         ·          (a, b, c)  ·
-      └── delete     ·         ·          (a, b, c)  ·
-           │         from      t          ·          ·
-           │         strategy  deleter    ·          ·
-           └── scan  ·         ·          (a, b, c)  ·
-·                    table     t@primary  ·          ·
-·                    spans     /3-/3/#    ·          ·
+render               ·         ·          (b)     ·
+ │                   render 0  b          ·       ·
+ └── run             ·         ·          (a, b)  ·
+      └── delete     ·         ·          (a, b)  ·
+           │         from      t          ·       ·
+           │         strategy  deleter    ·       ·
+           └── scan  ·         ·          (a, b)  ·
+·                    table     t@primary  ·       ·
+·                    spans     /3-/3/#    ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
 render                    ·         ·          (b)                 ·
  │                        render 0  b          ·                   ·
- └── run                  ·         ·          (a, b, c)           ·
-      └── update          ·         ·          (a, b, c)           ·
+ └── run                  ·         ·          (a, b)              ·
+      └── update          ·         ·          (a, b)              ·
            │              table     t          ·                   ·
            │              set       c          ·                   ·
            │              strategy  updater    ·                   ·

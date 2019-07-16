@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -348,6 +349,17 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 		return &t.ScalarProps(c.mem).Shared
 	}
 	panic(errors.AssertionFailedf("no logical properties available for node: %v", e))
+}
+
+// MutationTable returns the table upon which the mutation is applied.
+func (c *CustomFuncs) MutationTable(private *memo.MutationPrivate) opt.TableID {
+	return private.Table
+}
+
+// PrimaryKeyCols returns the key columns of the primary key of the table.
+func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
+	tabMeta := c.mem.Metadata().TableMeta(table)
+	return tabMeta.IndexKeyColumns(cat.PrimaryIndex)
 }
 
 // ----------------------------------------------------------------------
