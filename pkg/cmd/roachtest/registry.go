@@ -46,6 +46,7 @@ func registerTests(r *testRegistry) {
 	registerKVGracefulDraining(r)
 	registerKVScalability(r)
 	registerKVSplits(r)
+	registerKVRangeLookups(r)
 	registerLargeRange(r)
 	registerLedger(r)
 	registerNetwork(r)
