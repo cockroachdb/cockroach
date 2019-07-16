@@ -542,7 +542,12 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 	relProps := scan.Relational()
 	s := &relProps.Stats
 
-	colStat := sb.copyColStat(colSet, s, sb.colStatTable(scan.Table, colSet))
+	inputColStat := sb.colStatTable(scan.Table, colSet)
+	colStat := sb.copyColStat(colSet, s, inputColStat)
+	if inputColStat.Histogram != nil {
+		colStat.Histogram = inputColStat.Histogram.Copy()
+	}
+
 	if s.Selectivity != 1 {
 		tableStats := sb.makeTableStatistics(scan.Table)
 		colStat.ApplySelectivity(s.Selectivity, tableStats.RowCount)
@@ -2105,7 +2110,7 @@ func (sb *statisticsBuilder) ensureColStat(
 }
 
 // copyColStat creates a column statistic and copies the data from an existing
-// column statistic.
+// column statistic. Does not copy the histogram.
 func (sb *statisticsBuilder) copyColStat(
 	colSet opt.ColSet, s *props.Statistics, inputColStat *props.ColumnStatistic,
 ) *props.ColumnStatistic {
@@ -2117,9 +2122,6 @@ func (sb *statisticsBuilder) copyColStat(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inputColStat.DistinctCount
 	colStat.NullCount = inputColStat.NullCount
-	if inputColStat.Histogram != nil {
-		colStat.Histogram = inputColStat.Histogram.Copy()
-	}
 	return colStat
 }
 
@@ -2342,7 +2344,9 @@ func (sb *statisticsBuilder) applyFilter(
 		scalarProps := conjunct.ScalarProps(e.Memo())
 		constrainedCols.UnionWith(scalarProps.OuterCols)
 		if scalarProps.Constraints != nil {
-			histColsLocal := sb.applyConstraintSet(scalarProps.Constraints, e, relProps)
+			histColsLocal := sb.applyConstraintSet(
+				scalarProps.Constraints, scalarProps.TightConstraints, e, relProps,
+			)
 			histCols.UnionWith(histColsLocal)
 			if !scalarProps.TightConstraints {
 				numUnappliedConjuncts++
@@ -2400,6 +2404,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		if colStat, ok := s.ColStats.Lookup(constrainedCols); ok {
 			colStat.Histogram = inputHist.Filter(c)
 			histCols = constrainedCols
+			sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
 		}
 	}
 
@@ -2410,7 +2415,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 // for the constrained columns in a constraint set. Returns the set of
 // columns with a filtered histogram.
 func (sb *statisticsBuilder) applyConstraintSet(
-	cs *constraint.Set, e RelExpr, relProps *props.Relational,
+	cs *constraint.Set, tight bool, e RelExpr, relProps *props.Relational,
 ) (histCols opt.ColSet) {
 	// If unconstrained, then no constraint could be derived from the expression,
 	// so fall back to estimate.
@@ -2440,6 +2445,12 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts)
 		}
 
+		if !tight {
+			// TODO(rytaft): it may still be beneficial to calculate the histogram
+			// even if the constraint is not tight, but don't bother for now.
+			continue
+		}
+
 		// Calculate histogram.
 		cols := opt.MakeColSet(col)
 		inputStat := sb.colStatFromInput(cols, e)
@@ -2448,6 +2459,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			if colStat, ok := s.ColStats.Lookup(cols); ok {
 				colStat.Histogram = inputHist.Filter(c)
 				histCols.UnionWith(cols)
+				sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
 			}
 		}
 	}
@@ -2618,6 +2630,35 @@ func (sb *statisticsBuilder) updateDistinctCountFromUnappliedConjuncts(
 	inputStat := sb.colStatFromInput(colSet, e)
 	distinctCount := inputStat.DistinctCount * math.Pow(unknownFilterSelectivity, numConjuncts)
 	sb.ensureColStat(colSet, distinctCount, e, relProps)
+}
+
+// updateDistinctCountFromHistogram updates the distinct count for the given
+// column statistic based on the estimated number of distinct values in the
+// histogram. This should be called after updateDistinctCountsFromConstraint
+// and/or updateDistinctCountFromUnappliedConjuncts.
+func (sb *statisticsBuilder) updateDistinctCountFromHistogram(
+	colStat *props.ColumnStatistic, maxDistinctCount float64,
+) {
+	distinct := colStat.Histogram.DistinctValuesCount()
+	if distinct == 0 {
+		// Make sure the count is non-zero. The stats may be stale, and we
+		// can end up with weird and inefficient plans if we estimate 0 rows.
+		distinct = min(1, colStat.DistinctCount)
+	}
+
+	col, _ := colStat.Cols.Next(0)
+
+	// For discrete types (integers and dates), the distinct count estimate from
+	// the histogram should always be more accurate than the distinct count
+	// analysis performed in updateDistinctCountsFromConstraint, so use the
+	// histogram estimate to replace the distinct count value. For other types,
+	// the histogram estimate serves as an upper bound on the distinct count.
+	switch sb.md.ColumnMeta(col).Type.Family() {
+	case types.IntFamily, types.DateFamily:
+		colStat.DistinctCount = min(distinct, maxDistinctCount)
+	default:
+		colStat.DistinctCount = min(distinct, colStat.DistinctCount)
+	}
 }
 
 func (sb *statisticsBuilder) applyEquivalencies(

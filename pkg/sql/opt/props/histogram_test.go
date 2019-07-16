@@ -37,11 +37,20 @@ func TestHistogram(t *testing.T) {
 	}
 	h := &Histogram{}
 	h.Init(&evalCtx, opt.ColumnID(1), histData)
+	count, expected := h.ValuesCount(), float64(91)
+	if count != expected {
+		t.Fatalf("expected %f but found %f", expected, count)
+	}
+	distinct, expected := h.DistinctValuesCount(), float64(22)
+	if distinct != expected {
+		t.Fatalf("expected %f but found %f", expected, distinct)
+	}
 
 	testData := []struct {
 		constraint string
 		buckets    []HistogramBucket
 		count      float64
+		distinct   float64
 	}{
 		{
 			constraint: "/1: [/0 - /0]",
@@ -50,7 +59,8 @@ func TestHistogram(t *testing.T) {
 			buckets: []HistogramBucket{
 				{NumRange: 0, NumEq: 0, UpperBound: tree.NewDInt(0)},
 			},
-			count: 0,
+			count:    0,
+			distinct: 0,
 		},
 		{
 			constraint: "/1: [/50 - /100]",
@@ -59,7 +69,8 @@ func TestHistogram(t *testing.T) {
 			buckets: []HistogramBucket{
 				{NumRange: 0, NumEq: 0, UpperBound: tree.NewDInt(42)},
 			},
-			count: 0,
+			count:    0,
+			distinct: 0,
 		},
 		{
 			constraint: "/1: [ - /1] [/11 - /24] [/30 - /45]",
@@ -72,7 +83,8 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, UpperBound: tree.NewDInt(30)},
 				{NumRange: 40, NumEq: 35, UpperBound: tree.NewDInt(42)},
 			},
-			count: 80,
+			count:    80,
+			distinct: 17,
 		},
 		{
 			constraint: "/1: [/5 - /10] [/15 - /32] [/34 - /36] [/38 - ]",
@@ -90,7 +102,8 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, UpperBound: tree.NewDInt(37)},
 				{NumRange: 4 * 40.0 / 11.0, NumEq: 35, UpperBound: tree.NewDInt(42)},
 			},
-			count: 3*5.0/8.0 + 4*10.0/14.0 + 9*40.0/11 + 43,
+			count:    3*5.0/8.0 + 4*10.0/14.0 + 9*40.0/11 + 43,
+			distinct: 3*5.0/8.0 + 4*10.0/14.0 + 12,
 		},
 		{
 			constraint: "/1: [ - /41]",
@@ -103,7 +116,8 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, UpperBound: tree.NewDInt(30)},
 				{NumRange: 10 * 40.0 / 11.0, NumEq: 40.0 / 11.0, UpperBound: tree.NewDInt(41)},
 			},
-			count: 56,
+			count:    56,
+			distinct: 21,
 		},
 		{
 			constraint: "/1: [/1 - ]",
@@ -116,7 +130,8 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, UpperBound: tree.NewDInt(30)},
 				{NumRange: 40, NumEq: 35, UpperBound: tree.NewDInt(42)},
 			},
-			count: 91,
+			count:    91,
+			distinct: 22,
 		},
 	}
 
@@ -132,6 +147,10 @@ func TestHistogram(t *testing.T) {
 		count := filtered.ValuesCount()
 		if testData[i].count != count {
 			t.Fatalf("expected %f but found %f", testData[i].count, count)
+		}
+		distinct := filtered.DistinctValuesCount()
+		if testData[i].distinct != distinct {
+			t.Fatalf("expected %f but found %f", testData[i].distinct, distinct)
 		}
 	}
 }

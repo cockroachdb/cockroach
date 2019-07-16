@@ -107,6 +107,61 @@ func (h *Histogram) ValuesCount() float64 {
 	return count
 }
 
+// DistinctValuesCount estimates the total number of distinct values in the
+// histogram.
+func (h *Histogram) DistinctValuesCount() float64 {
+	if len(h.buckets) == 0 {
+		return 0
+	}
+
+	// The lower bound for the first bucket is the smallest possible value for
+	// the data type.
+	lowerBound, ok := h.buckets[0].UpperBound.Min(h.evalCtx)
+	if !ok {
+		lowerBound = h.buckets[0].UpperBound
+	}
+
+	var count float64
+	for i := range h.buckets {
+		b := &h.buckets[i]
+		var rng float64
+		ok := true
+
+		// For discrete data types (integers and dates), determine the maximum
+		// number of distinct values in the bucket.
+		switch lowerBound.ResolvedType().Family() {
+		case types.IntFamily:
+			rng = float64(*b.UpperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt))
+
+		case types.DateFamily:
+			lower := lowerBound.(*tree.DDate)
+			upper := b.UpperBound.(*tree.DDate)
+			if lower.IsFinite() && upper.IsFinite() {
+				rng = float64(upper.PGEpochDays()) - float64(lower.PGEpochDays())
+			} else {
+				ok = false
+			}
+
+		default:
+			ok = false
+		}
+
+		if ok && b.NumRange > rng {
+			count += rng
+		} else {
+			count += b.NumRange
+		}
+
+		if b.NumEq > 1 {
+			count++
+		} else {
+			count += b.NumEq
+		}
+		lowerBound = h.getNextLowerBound(b.UpperBound)
+	}
+	return count
+}
+
 // CanFilter returns true if the given constraint can filter the histogram.
 // This is the case if there is only one constrained column in c, it is
 // ascending, and it matches the column of the histogram.
