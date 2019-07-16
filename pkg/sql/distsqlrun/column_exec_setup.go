@@ -137,6 +137,18 @@ func newColOperator(
 			return nil, nil, err
 		}
 		aggSpec := core.Aggregator
+		if len(aggSpec.Aggregations) == 0 {
+			// We can get an aggregator when no aggregate functions are present if
+			// HAVING clause is present, for example, with a query as follows:
+			// SELECT 1 FROM t HAVING true. In this case, we plan a special operator
+			// that outputs a batch of length 1 without actual columns once and then
+			// zero-length batches. The actual "data" will be added by projections
+			// below.
+			op, err = exec.NewSingleTupleNoInputOp(), nil
+			// We make columnTypes non-nil so that sanity check doesn't panic.
+			columnTypes = make([]semtypes.T, 0)
+			break
+		}
 		if len(aggSpec.GroupCols) == 0 &&
 			len(aggSpec.Aggregations) == 1 &&
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
