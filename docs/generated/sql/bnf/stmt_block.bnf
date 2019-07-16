@@ -969,8 +969,8 @@ create_table_stmt ::=
 	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
 
 create_table_as_stmt ::=
-	'CREATE' 'TABLE' table_name opt_column_list 'AS' select_stmt
-	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name opt_column_list 'AS' select_stmt
+	'CREATE' 'TABLE' table_name create_as_opt_col_list 'AS' select_stmt
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list 'AS' select_stmt
 
 create_view_stmt ::=
 	'CREATE' 'VIEW' view_name opt_column_list 'AS' select_stmt
@@ -1352,6 +1352,10 @@ opt_table_elem_list ::=
 	table_elem_list
 	| 
 
+create_as_opt_col_list ::=
+	'(' create_as_table_defs ')'
+	| 
+
 view_name ::=
 	table_name
 
@@ -1689,6 +1693,9 @@ partition_by ::=
 	| 'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')'
 	| 'PARTITION' 'BY' 'NOTHING'
 
+create_as_table_defs ::=
+	( column_name create_as_col_qual_list ) ( ( ',' create_as_constraint_def | ',' column_name create_as_col_qual_list ) )*
+
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
 
@@ -1911,6 +1918,12 @@ list_partitions ::=
 range_partitions ::=
 	( range_partition ) ( ( ',' range_partition ) )*
 
+create_as_col_qual_list ::=
+	(  ) ( ( create_as_col_qualification ) )*
+
+create_as_constraint_def ::=
+	create_as_constraint_elem
+
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
 	| 'NO_INDEX_JOIN'
@@ -2121,6 +2134,12 @@ list_partition ::=
 range_partition ::=
 	partition 'VALUES' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')' opt_partition_by
 
+create_as_col_qualification ::=
+	create_as_col_qualification_elem
+
+create_as_constraint_elem ::=
+	'PRIMARY' 'KEY' '(' create_as_params ')'
+
 col_qualification_elem ::=
 	'NOT' 'NULL'
 	| 'NULL'
@@ -2230,6 +2249,12 @@ func_expr_windowless ::=
 rowsfrom_list ::=
 	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
 
+create_as_col_qualification_elem ::=
+	'PRIMARY' 'KEY'
+
+create_as_params ::=
+	( create_as_param ) ( ( ',' create_as_param ) )*
+
 opt_name_parens ::=
 	'(' name ')'
 	| 
@@ -2294,6 +2319,9 @@ join_outer ::=
 
 rowsfrom_item ::=
 	func_expr_windowless
+
+create_as_param ::=
+	column_name
 
 frame_extent ::=
 	frame_bound
