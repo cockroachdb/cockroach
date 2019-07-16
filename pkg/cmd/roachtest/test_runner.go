@@ -491,6 +491,19 @@ func (r *testRunner) runWorker(
 			if err != nil {
 				return err
 			}
+		} else {
+			// Upon success fetch the perf artifacts from the remote hosts.
+			// If there's an error, oh well, don't do anything rash like fail the test
+			// which already passed.
+			//
+			// TODO(ajwerner): this Get on all nodes has the unfortunate side effect
+			// of logging an error in the test runner log for all of the nodes which
+			// do not have perf artifacts. Ideally we'd have the test tell us which
+			// nodes have the artifacts, or we'd go check explicitly, or we'd find a
+			// way for Get to not complain if a file does not exist.
+			if err := c.Get(ctx, l, perfArtifactsDir, t.artifactsDir+"/"+perfArtifactsDir); err != nil {
+				l.PrintfCtx(ctx, "failed to get perf artifacts: %v", err)
+			}
 		}
 	}
 }
