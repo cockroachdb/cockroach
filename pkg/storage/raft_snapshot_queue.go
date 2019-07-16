@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 const (
@@ -66,7 +66,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 	if status := repl.RaftStatus(); status != nil {
 		// raft.Status.Progress is only populated on the Raft group leader.
 		for _, p := range status.Progress {
-			if p.State == raft.ProgressStateSnapshot {
+			if p.State == tracker.StateSnapshot {
 				if log.V(2) {
 					log.Infof(ctx, "raft snapshot needed, enqueuing")
 				}
@@ -84,7 +84,7 @@ func (rq *raftSnapshotQueue) process(
 	if status := repl.RaftStatus(); status != nil {
 		// raft.Status.Progress is only populated on the Raft group leader.
 		for id, p := range status.Progress {
-			if p.State == raft.ProgressStateSnapshot {
+			if p.State == tracker.StateSnapshot {
 				if log.V(1) {
 					log.Infof(ctx, "sending raft snapshot")
 				}

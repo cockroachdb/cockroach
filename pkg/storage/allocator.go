@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 const (
@@ -1196,7 +1197,7 @@ func replicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool 
 	// behind the actual commit index of the range.
 	if progress, ok := raftStatus.Progress[uint64(replicaID)]; ok {
 		if uint64(replicaID) == raftStatus.Lead ||
-			(progress.State == raft.ProgressStateReplicate &&
+			(progress.State == tracker.StateReplicate &&
 				progress.Match >= raftStatus.Commit) {
 			return false
 		}
@@ -1214,8 +1215,8 @@ func simulateFilterUnremovableReplicas(
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
 	status := *raftStatus
-	status.Progress[uint64(brandNewReplicaID)] = raft.Progress{
-		State: raft.ProgressStateReplicate,
+	status.Progress[uint64(brandNewReplicaID)] = tracker.Progress{
+		State: tracker.StateReplicate,
 		Match: status.Commit,
 	}
 	return filterUnremovableReplicas(&status, replicas, brandNewReplicaID)
