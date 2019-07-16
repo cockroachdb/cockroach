@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -43,6 +44,10 @@ type HistogramBucket struct {
 	// UpperBound.
 	NumRange float64
 
+	// DistinctRange is the estimated number of distinct values in this bucket
+	// not equal to UpperBound.
+	DistinctRange float64
+
 	// UpperBound is the largest value in this bucket. The lower bound can be
 	// inferred based on the upper bound of the previous bucket in the histogram.
 	UpperBound tree.Datum
@@ -58,7 +63,7 @@ func (h *Histogram) String() string {
 
 // Init initializes the histogram with data from the catalog.
 func (h *Histogram) Init(
-	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket,
+	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket, distinctCount float64,
 ) {
 	h.evalCtx = evalCtx
 	h.col = col
@@ -71,6 +76,115 @@ func (h *Histogram) Init(
 		h.buckets[i].NumRange = float64(buckets[i].NumRange)
 		h.buckets[i].UpperBound = buckets[i].UpperBound
 	}
+
+	// Estimate the number of distinct values in each bucket.
+	if isDiscreteType(h.buckets[0].UpperBound) {
+		h.initDistinctCountDiscreteType(distinctCount)
+	} else {
+		h.initDistinctCountContinuousType(distinctCount)
+	}
+}
+
+// initDistinctCountDiscreteType estimates the number of distinct values in
+// each bucket. It is used for discrete types such as integer and date.
+func (h *Histogram) initDistinctCountDiscreteType(distinctCount float64) {
+	// The lower bound for the first bucket is the smallest possible value for
+	// the data type.
+	lowerBound, ok := h.buckets[0].UpperBound.Min(h.evalCtx)
+	if !ok {
+		lowerBound = h.buckets[0].UpperBound
+	}
+
+	// Estimate the number of distinct values for each bucket, keeping track of
+	// the total.
+	var distinctCountRange, distinctCountEq float64
+	for i := range h.buckets {
+		b := &h.buckets[i]
+		if maxDistinct, ok := b.maxDistinctValuesInRange(lowerBound); ok {
+			b.DistinctRange = expectedDistinctCount(b.NumRange, maxDistinct)
+		} else {
+			b.DistinctRange = b.NumRange
+		}
+		distinctCountRange += b.DistinctRange
+		if b.NumEq > 0 {
+			distinctCountEq++
+		}
+		lowerBound = h.getNextLowerBound(b.UpperBound)
+	}
+
+	if distinctCountRange == 0 {
+		return
+	}
+
+	// Adjust the number of distinct values per bucket based on the total number
+	// of distinct values.
+	adjustmentFactor := (distinctCount - distinctCountEq) / distinctCountRange
+	if adjustmentFactor < 0 {
+		adjustmentFactor = 0
+	}
+	for i := range h.buckets {
+		h.buckets[i].DistinctRange *= adjustmentFactor
+	}
+}
+
+// initDistinctCountContinuousType estimates the number of distinct values in
+// each bucket. It is used for continuous types (i.e. all types other than
+// integer and date).
+func (h *Histogram) initDistinctCountContinuousType(distinctCount float64) {
+	// Determine the maximum number of distinct values for each bucket.
+	var totalCountRange, distinctCountEq float64
+	for i := range h.buckets {
+		b := &h.buckets[i]
+		totalCountRange += b.NumRange
+		if b.NumEq > 0 {
+			distinctCountEq++
+		}
+	}
+
+	if totalCountRange == 0 {
+		return
+	}
+
+	// Estimate the number of distinct values for each bucket.
+	fractionDistinct := (distinctCount - distinctCountEq) / totalCountRange
+	if fractionDistinct <= 0 {
+		return
+	}
+	for i := range h.buckets {
+		b := &h.buckets[i]
+		b.DistinctRange = fractionDistinct * b.NumRange
+	}
+}
+
+// expectedDistinctCount returns the expected number of distinct values in a
+// column with rowCount rows, given that the values are chosen from
+// maxDistinctCount possible values using uniform random sampling with
+// replacement.
+func expectedDistinctCount(rowCount, maxDistinctCount float64) float64 {
+	n := maxDistinctCount
+	k := rowCount
+	if n == 0 || k == 0 {
+		return 0
+	}
+	// The probability that one specific value (out of the n possible values)
+	// does not appear in any of the k rows is:
+	//
+	//         ⎛ n-1 ⎞ k
+	//     p = ⎜-----⎟
+	//         ⎝  n  ⎠
+	//
+	// Therefore, the probability that a specific value appears at least once is
+	// 1-p. Over all n values, the expected number that appear at least once is
+	// n * (1-p). In other words, the expected distinct count is:
+	//
+	//                             ⎛     ⎛ n-1 ⎞ k ⎞
+	//     E[distinct count] = n * ⎜ 1 - ⎜-----⎟   ⎟
+	//                             ⎝     ⎝  n  ⎠   ⎠
+	//
+	// See https://math.stackexchange.com/questions/72223/finding-expected-
+	//   number-of-distinct-values-selected-from-a-set-of-integers for more info.
+	count := n * (1 - math.Pow((n-1)/n, k))
+	return count
 }
 
 // Copy returns a deep copy of the histogram.
@@ -105,6 +219,91 @@ func (h *Histogram) ValuesCount() float64 {
 		count += h.buckets[i].NumEq
 	}
 	return count
+}
+
+// DistinctValuesCount returns the estimated number of distinct values in the
+// histogram.
+func (h *Histogram) DistinctValuesCount() float64 {
+	var count float64
+	for i := range h.buckets {
+		b := &h.buckets[i]
+		count += b.DistinctRange
+		if b.NumEq > 1 {
+			count++
+		} else {
+			count += b.NumEq
+		}
+	}
+	if maxCount := h.maxDistinctValuesCount(); maxCount < count {
+		count = maxCount
+	}
+	return count
+}
+
+// maxDistinctValuesCount estimates the maximum number of distinct values in
+// the histogram.
+func (h *Histogram) maxDistinctValuesCount() float64 {
+	if len(h.buckets) == 0 {
+		return 0
+	}
+
+	// The lower bound for the first bucket is the smallest possible value for
+	// the data type.
+	lowerBound, ok := h.buckets[0].UpperBound.Min(h.evalCtx)
+	if !ok {
+		lowerBound = h.buckets[0].UpperBound
+	}
+
+	var count float64
+	for i := range h.buckets {
+		b := &h.buckets[i]
+		rng, ok := b.maxDistinctValuesInRange(lowerBound)
+
+		if ok && b.NumRange > rng {
+			count += rng
+		} else {
+			count += b.NumRange
+		}
+
+		if b.NumEq > 1 {
+			count++
+		} else {
+			count += b.NumEq
+		}
+		lowerBound = h.getNextLowerBound(b.UpperBound)
+	}
+	return count
+}
+
+// maxDistinctValuesInRange returns the maximum number of distinct values in
+// the range of the bucket (i.e., not including the upper bound). It returns
+// ok=false when it is not possible to determine a finite value (which is the
+// case for all types other than integers and dates).
+func (b *HistogramBucket) maxDistinctValuesInRange(lowerBound tree.Datum) (_ float64, ok bool) {
+	switch lowerBound.ResolvedType().Family() {
+	case types.IntFamily:
+		return float64(*b.UpperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt)), true
+
+	case types.DateFamily:
+		lower := lowerBound.(*tree.DDate)
+		upper := b.UpperBound.(*tree.DDate)
+		if lower.IsFinite() && upper.IsFinite() {
+			return float64(upper.PGEpochDays()) - float64(lower.PGEpochDays()), true
+		}
+		return 0, false
+
+	default:
+		return 0, false
+	}
+}
+
+func isDiscreteType(d tree.Datum) bool {
+	switch d.ResolvedType().Family() {
+	case types.IntFamily, types.DateFamily:
+		return true
+	default:
+		return false
+	}
 }
 
 // CanFilter returns true if the given constraint can filter the histogram.
@@ -253,8 +452,26 @@ func (h *Histogram) addBucket(bucket *HistogramBucket) {
 // the given selectivity.
 func (h *Histogram) ApplySelectivity(selectivity float64) {
 	for i := range h.buckets {
-		h.buckets[i].NumEq *= selectivity
-		h.buckets[i].NumRange *= selectivity
+		b := &h.buckets[i]
+
+		// Save n and d for the distinct count formula below.
+		n := b.NumRange
+		d := b.DistinctRange
+
+		b.NumEq *= selectivity
+		b.NumRange *= selectivity
+
+		if d == 0 {
+			continue
+		}
+		// If each distinct value appears n/d times, and the probability of a
+		// row being filtered out is (1 - selectivity), the probability that all
+		// n/d rows are filtered out is (1 - selectivity)^(n/d). So the expected
+		// number of values that are filtered out is d*(1 - selectivity)^(n/d).
+		//
+		// This formula returns d * selectivity when d=n but is closer to d
+		// when d << n.
+		b.DistinctRange = d - d*math.Pow(1-selectivity, n/d)
 	}
 }
 
@@ -401,10 +618,16 @@ func (b *HistogramBucket) getFilteredBucket(
 		numRange = 0.5 * b.NumRange
 	}
 
+	var distinctCountRange float64
+	if b.NumRange > 0 {
+		distinctCountRange = b.DistinctRange * numRange / b.NumRange
+	}
+
 	return &HistogramBucket{
-		NumEq:      numEq,
-		NumRange:   numRange,
-		UpperBound: spanUpperBound,
+		NumEq:         numEq,
+		NumRange:      numRange,
+		DistinctRange: distinctCountRange,
+		UpperBound:    spanUpperBound,
 	}
 }
 
