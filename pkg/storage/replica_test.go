@@ -1282,10 +1282,10 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	// Disable raft log truncation which confuses this test.
+	cfg.TestingKnobs.DisableRaftLogQueue = true
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
-	// Disable raft log truncation which confuses this test.
-	tc.store.SetRaftLogQueueActive(false)
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
 	if err != nil {
 		t.Fatal(err)
@@ -6621,10 +6621,10 @@ func TestEntries(t *testing.T) {
 	// Disable ticks to avoid quiescence, which can result in empty
 	// entries being proposed and causing the test to flake.
 	cfg.RaftTickInterval = math.MaxInt32
+	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
-	tc.repl.store.SetRaftLogQueueActive(false)
 
 	repl := tc.repl
 	rangeID := repl.RangeID
@@ -6771,10 +6771,11 @@ func TestEntries(t *testing.T) {
 func TestTerm(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
+	tsc := TestStoreConfig(nil)
+	tsc.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-	tc.repl.store.SetRaftLogQueueActive(false)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	repl := tc.repl
 	rangeID := repl.RangeID

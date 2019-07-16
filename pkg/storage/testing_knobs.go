@@ -103,6 +103,8 @@ type StoreTestingKnobs struct {
 	DisableGCQueue bool
 	// DisableMergeQueue disables the merge queue.
 	DisableMergeQueue bool
+	// DisableReplicateQueue disables the raft log queue.
+	DisableRaftLogQueue bool
 	// DisableReplicaGCQueue disables the replica GC queue.
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.

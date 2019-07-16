@@ -937,6 +937,9 @@ func NewStore(
 	if cfg.TestingKnobs.DisableMergeQueue {
 		s.setMergeQueueActive(false)
 	}
+	if cfg.TestingKnobs.DisableRaftLogQueue {
+		s.setRaftLogQueueActive(false)
+	}
 	if cfg.TestingKnobs.DisableReplicaGCQueue {
 		s.setReplicaGCQueueActive(false)
 	}
