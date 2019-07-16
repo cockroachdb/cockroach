@@ -730,6 +730,14 @@ func assertHomogeneousTypes(expr tree.TypedExpr) error {
 	case *tree.ComparisonExpr:
 		left := t.TypedLeft().ResolvedType()
 		right := t.TypedRight().ResolvedType()
+
+		// Special rules for IN and NOT IN expressions. The type checker
+		// handles invalid types for the IN and NOT IN operations at this point,
+		// and we allow a comparison between t and t tuple.
+		if t.Operator == tree.In || t.Operator == tree.NotIn {
+			return nil
+		}
+
 		if !left.Identical(right) {
 			return errors.Errorf("ComparisonExpr on %s and %s is unhandled", left, right)
 		}
