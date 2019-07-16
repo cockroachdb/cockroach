@@ -1489,14 +1489,17 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:71e03c7f9fbead2dd42b87d696a37282dd47ebfb6cdcd7d70ecb8e7bc4f61434"
+  digest = "1:630ab379824658b3487aff6843001abf8a10c158d996f2a4196263c0b81adebe"
   name = "go.etcd.io/etcd"
   packages = [
     "raft",
+    "raft/confchange",
+    "raft/quorum",
     "raft/raftpb",
+    "raft/tracker",
   ]
   pruneopts = "UT"
-  revision = "1eee465a43720d713bb69f7b7f5e120135fdb1ac"
+  revision = "9fba06ba3b832a6cb6d3342eb719132ad2da4fd6"
 
 [[projects]]
   digest = "1:3b5a3bc35810830ded5e26ef9516e933083a2380d8e57371fdfde3c70d7c6952"
