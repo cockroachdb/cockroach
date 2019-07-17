@@ -312,3 +312,9 @@ func (f *stubFactory) ConstructAlterTableRelocate(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructControlJobs(
+	command tree.JobCommand, input exec.Node,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}

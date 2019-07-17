@@ -422,6 +422,10 @@ type Factory interface {
 	// ConstructAlterTableRelocate creates a node that implements ALTER TABLE/INDEX
 	// UNSPLIT AT.
 	ConstructAlterTableRelocate(index cat.Index, input Node, relocateLease bool) (Node, error)
+
+	// ConstructControlJobs creates a node that implements PAUSE/CANCEL/RESUME
+	// JOBS.
+	ConstructControlJobs(command tree.JobCommand, input Node) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being
