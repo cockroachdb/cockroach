@@ -473,3 +473,9 @@ SELECT * FROM t38908 WHERE x IN (1, 2)
 
 statement ok
 RESET experimental_vectorize
+
+# Test that an aggregate with no aggregate functions is handled correctly.
+query III
+SELECT 0, 1 + 2, 3 * 4 FROM a HAVING true
+----
+0 3 12
