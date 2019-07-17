@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // FlowCtx encompasses the contexts needed for various flow components.
@@ -506,32 +506,20 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 			log.VEventf(ctx, 1, "vectorized flow.")
 			return nil
 		}
-		// We won't run this flow through vectorized, so clear the memory account.
+		// Vectorization attempt failed with an error.
+		// We won't run this flow through vectorized, so clear the memory account
+		// and other state.
 		acc.Close(ctx)
 		f.vectorizedBoundAccount = nil
-		// Vectorization attempt failed with an error.
-		if f.spec.Gateway != f.nodeID {
-			// If we are not the gateway node, do not attempt to plan this with the
-			// row execution branch since there is no way to tell whether vectorized
-			// planning will succeed on any other node. Notify the gateway by
-			// returning an error.
-			log.VEventf(
-				ctx,
-				1,
-				"flow vectorization failed on remote node, returning error to gateway for possible replanning: %s", err,
-			)
-			return &VectorizedSetupError{cause: err}
-		}
-		// Reset state to be used by the row execution branch.
 		f.processors = nil
 		f.inboundStreams = nil
 		f.startables = nil
 
+		var isException bool
 		if f.EvalCtx.SessionData.Vectorize == sessiondata.VectorizeAlways {
-			// Only return the error if we are running a local planNode that is an
-			// exception to the rule that failures to set up a vectorized flow when
-			// experimental_vectorize=always should return an error.
-			var isException bool
+			// If running with VectorizeAlways, this check makes sure that we can
+			// still run SET statements (mostly to set experimental_vectorize=off) and
+			// the like.
 			if len(spec.Processors) == 1 &&
 				spec.Processors[0].Core.LocalPlanNode != nil {
 				rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
@@ -542,11 +530,20 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 					}
 				}
 			}
-			if !isException {
-				return err
-			}
 		}
 		log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+		if !isException {
+			// If setupVectorized failed, do not attempt to plan this with the row
+			// execution branch since there is no way to tell whether vectorized
+			// planning will succeed or not on any other node. Notify whoever set up
+			// this flow by returning an error.
+			log.VEventf(
+				ctx,
+				1,
+				"flow %s vectorization failed, returning error to gateway for possible replanning: %+v", f.FlowCtx.id, err,
+			)
+			return &VectorizedSetupError{cause: err}
+		}
 	}
 
 	// First step: setup the input synchronizers for all processors.
