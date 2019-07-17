@@ -223,7 +223,8 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		)
 		defer recv.Release()
 		distSQLPlanner.Run(
-			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil /* finishedSetupFn */)
+			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil, /* finishedSetupFn */
+		)()
 
 		n.run.executedStatement = true
 

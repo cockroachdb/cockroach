@@ -899,8 +899,12 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	recv.discardRows = planner.discardRows
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
-	ex.server.cfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv)
+	cleanup := ex.server.cfg.DistSQLPlanner.PlanAndRun(
+		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv,
+	)
+	// Note that we're not cleaning up right away because postqueries might
+	// need to have access to the main query tree.
+	defer cleanup()
 	if recv.commErr != nil {
 		return recv.bytesRead, recv.rowsRead, recv.commErr
 	}
