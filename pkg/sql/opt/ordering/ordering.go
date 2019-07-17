@@ -202,6 +202,11 @@ func init() {
 		buildChildReqOrdering: alterTableRelocateBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.ControlJobsOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: controlJobsBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {

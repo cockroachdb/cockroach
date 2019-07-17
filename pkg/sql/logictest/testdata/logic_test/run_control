@@ -9,10 +9,12 @@ PAUSE JOB 'foo'
 query error could not parse "foo" as type int
 CANCEL JOBS SELECT 'foo'
 
-query error CANCEL JOBS expects a single column source, got 2 columns
+# The heuristic planner and the optimizer give different errors for these
+# queries. Accept both.
+query error (CANCEL JOBS expects a single column source, got 2 columns|too many columns in CANCEL JOBS data)
 CANCEL JOBS VALUES (1,2)
 
-query error CANCEL JOBS requires int values, not type oid
+query error (CANCEL JOBS requires int values, not type oid|pq: CANCEL JOBS data column 1 \(job_id\) must be of type int, not type oid)
 CANCEL JOB 1::OID
 
 statement ok count 0
@@ -24,7 +26,7 @@ PAUSE JOBS SELECT id FROM system.jobs LIMIT 0
 query error could not parse "foo" as type int
 PAUSE JOBS SELECT 'foo'
 
-query error PAUSE JOBS expects a single column source, got 2 columns
+query error (PAUSE JOBS expects a single column source, got 2 columns|too many columns in PAUSE JOBS data)
 PAUSE JOBS VALUES (1,2)
 
 query error job with ID 1 does not exist
@@ -36,7 +38,7 @@ RESUME JOB 'foo'
 query error could not parse "foo" as type int
 RESUME JOBS SELECT 'foo'
 
-query error RESUME JOBS expects a single column source, got 2 columns
+query error (RESUME JOBS expects a single column source, got 2 columns|too many columns in RESUME JOBS data)
 RESUME JOBS VALUES (1,2)
 
 statement ok count 0

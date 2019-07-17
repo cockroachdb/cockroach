@@ -155,3 +155,20 @@ define AlterTableRelocatePrivate {
 
     _ AlterTableSplitPrivate
 }
+
+# ControlJobs represents a `PAUSE/CANCEL/RESUME JOBS` statement.
+[Relational]
+define ControlJobs {
+    # The input expression returns job IDs (as integers).
+    Input RelExpr
+
+    _ ControlJobsPrivate
+}
+
+[Private]
+define ControlJobsPrivate {
+    # Props stores the required physical properties for the enclosed
+    # expression.
+    Props    PhysProps
+    Command  JobCommand
+}

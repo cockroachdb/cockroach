@@ -842,6 +842,11 @@ func (b *logicalPropsBuilder) buildAlterTableRelocateProps(
 	rel.CanMutate = true
 }
 
+func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *props.Relational) {
+	b.buildBasicProps(ctl, opt.ColList{}, rel)
+	rel.CanHaveSideEffects = true
+}
+
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
 	BuildSharedProps(b.mem, limit, &rel.Shared)
 

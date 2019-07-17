@@ -47,3 +47,12 @@ func alterTableRelocateBuildChildReqOrdering(
 	}
 	return parent.(*memo.AlterTableRelocateExpr).Props.Ordering
 }
+
+func controlJobsBuildChildReqOrdering(
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
+	if childIdx != 0 {
+		return physical.OrderingChoice{}
+	}
+	return parent.(*memo.ControlJobsExpr).Props.Ordering
+}

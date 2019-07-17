@@ -1,0 +1,58 @@
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+
+build
+CANCEL JOBS SELECT 1
+----
+control-jobs (CANCEL)
+ └── project
+      ├── columns: "?column?":1(int!null)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── projections
+           └── const: 1 [type=int]
+
+build
+RESUME JOBS VALUES (1), (2), (3)
+----
+control-jobs (RESUME)
+ └── values
+      ├── columns: column1:1(int!null)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 2 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 3 [type=int]
+
+build
+PAUSE JOBS SELECT b FROM ab ORDER BY a
+----
+control-jobs (PAUSE)
+ └── sort
+      ├── columns: b:2(int)  [hidden: a:1(int)]
+      ├── ordering: +1
+      └── project
+           ├── columns: a:1(int) b:2(int)
+           └── scan ab
+                └── columns: a:1(int) b:2(int) rowid:3(int!null)
+
+build
+PAUSE JOB 1
+----
+control-jobs (PAUSE)
+ └── values
+      ├── columns: column1:1(int!null)
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+build
+PAUSE JOBS SELECT 1.1
+----
+error (42601): PAUSE JOBS data column 1 (job_id) must be of type int, not type decimal
+
+build
+CANCEL JOBS SELECT 1, 1
+----
+error (42601): too many columns in CANCEL JOBS data
