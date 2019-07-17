@@ -506,6 +506,9 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 			log.VEventf(ctx, 1, "vectorized flow.")
 			return nil
 		}
+		// We won't run this flow through vectorized, so clear the memory account.
+		acc.Close(ctx)
+		f.vectorizedBoundAccount = nil
 		// Vectorization attempt failed with an error.
 		if f.spec.Gateway != f.nodeID {
 			// If we are not the gateway node, do not attempt to plan this with the
