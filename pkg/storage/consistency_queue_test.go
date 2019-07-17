@@ -482,7 +482,7 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		// not affected by the workload we run below and also does not influence the
 		// GC queue score.
 		ms.SysCount += sysCountGarbage
-		ms.ContainsEstimates = false
+		ms.ContainsEstimates = 0
 
 		// Overwrite with the new stats; remember that this range hasn't upreplicated,
 		// so the consistency checker won't see any replica divergence when it runs,

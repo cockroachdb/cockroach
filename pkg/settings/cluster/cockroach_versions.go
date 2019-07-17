@@ -46,6 +46,7 @@ const (
 	VersionPartitionedBackup
 	Version19_2
 	VersionStart20_1
+	VersionContainsEstimatesCounter
 
 	// Add new versions here (step one of two).
 
@@ -264,6 +265,34 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionStart20_1 demarcates work towards CockroachDB v20.1.
 		Key:     VersionStart20_1,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 1},
+	},
+	{
+		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
+		//
+		// MVCCStats.ContainsEstimates has been migrated from boolean to a counter so that the
+		// consistency checker and splits can reset it by returning -ContainsEstimates,
+		// avoiding racing with other operations that want to also change it.
+		//
+		// The commands that set ContainsEstimates must set/increase it by 1.
+		// During command evaluation, proposer nodes check the cluster version and
+		// adjust ContainsEstimates accordingly:
+		// - If the new cluster version is not active, ContainsEstimates must be kept
+		// translatable to bool and is truncated to {0,1}.
+		// - If the new cluster version is active, ContainsEstimates is multiplied by 2.
+		// Such an even positive number signals the code downstream of Raft that the
+		// new cluster version is active and all followers can use regular math to add
+		// ContainsEstimates as an integer.
+		//
+		// During command application, commands proposed under truncation are detected and
+		// the replicas' ContainsEstimates are truncated to {0,1} accordingly. This makes the
+		// new code compatible with the old code when adding/subtracting ContainsEstimates:
+		// (true + true = true) and (1 + 1 = 1), keeping ContainsEstimates <= 1 while the old
+		// cluster version is active.
+		// When the new cluster version is active, ContainsEstimates>=2 will enter Raft and
+		// add/sub will be calculated normally. This will allow commands to try to reset
+		// it without clashing with other operations, by emitting a -ContainsEstimates delta.
+		Key:     VersionContainsEstimatesCounter,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 2},
 	},
 
 	// Add new versions here (step two of two).
