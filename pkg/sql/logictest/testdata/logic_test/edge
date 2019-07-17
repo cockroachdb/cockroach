@@ -195,7 +195,7 @@ WHERE
 ----
 131068  8589934588
 
-statement error sum exceeded int range
+statement error integer out of range
 SELECT sum_int(t._int8) FROM t, t AS u WHERE t.key = 'max'
 
 query RRRRRRRRRR
@@ -227,7 +227,7 @@ WHERE
 ----
 -131072  -8589934592
 
-statement error sum exceeded int range
+statement error integer out of range
 SELECT sum_int(t._int8) FROM t, t AS u WHERE t.key = 'min'
 
 query RRRRRRRRRR
