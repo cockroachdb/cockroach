@@ -66,6 +66,11 @@ SELECT url FROM [EXPLAIN ANALYZE SELECT * FROM kv JOIN kw ON kv.k = kw.k]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl89vm0oQx-_vr0Bzek9ZP9gFnBipkq-p1KRKe6t8IDC1UQmLliVNFPl_rzCqUmOzA17Vwjfz47M73_FnpeENCpniXfyEFUTfgAMDAQx8YBAAgxBWDEolE6wqqZpXWuA2fYHIY5AVZa2b2ysGiVQI0RvoTOcIEXyNH3N8wDhF5XrAIEUdZ_lum1JlT7F6Xf54BgZfyrioImfmNhs_xjrZYOXIWpe1jpymIF2XeedWhTkmOnvO9GvkeP97zfqVjvPc0dkTRo5XwWrLoEXasn-X9fjqbOJqs1_QksNqu9qtsUaI-JadlnPek_Pne06XTymp6E36vo5UKSpMu-tcNRsPeutI0z6hWuNHmRWoXN6xI8fv-t8lv_rvg8rWm_YnMLhvWrLkbCnY0mfLwK6H-IJJrTNZ9PXxvUf-gB7VxbH8R6PfyZksXR7uh-5GCQ-jhPZRgr0ofLjYnD7Arpi5_mTE5qcmvR5whCeVVPQmPeMR5pd0hMVwG8QA7_2Za5nkr3k_IunNAO8nlVT0Jj2j9-KSvPeH2-AP8D6YueFkbOCnJl0M8H5SSUVv0jN671-S98FwG4IB3oezybjAT80Z0tbPXO7ERepwR-oNqslkFr2Zz-h_cEn-Ex-wD1iVsqiw8-lyfGWvaQ2ma2wbXslaJfhZyWS3TXt5v-N2s2iKlW6fivbitmgfNQUOh-c28MIG5lZ189BM8xEtE-PguQ28sIG5Vd2dlh3Qokt7f9K-ud--Eeb7PfO6dGAjuBkmBDfDhOBmmBKcoAnBQxvBzTAhuBkmBDfDlOAETQg-txH82kZRM0woaoYJRc0wpShBE4re2ChqhglFzTChqBmmFCVoQtGFjaLcak4gaEJSgiYsJWhKUwqnZgW7YcFuWrAbFyznBbuBgVtNDPxgZBhlq5mmbDXTlK1mmrSVwClbxwxLh__ZmGlpLE3ZOmpeGo1Tth4MD0ZbV9t_fgUAAP__VILF4Q==
 
+# This statement currently tests our fallback logic. Once we support avg()
+# window functions in vectorized, this can go away.
+statement ok
+SELECT avg(k) OVER () FROM kv
+
 # Verify execution.
 statement ok
 SET experimental_vectorize = always;

@@ -1067,6 +1067,15 @@ func init() {
 	errors.RegisterWrapperDecoder(errors.GetTypeKey((*VectorizedSetupError)(nil)), decodeVectorizedSetupError)
 }
 
+// IsVectorizedSetupError returns whether the error is a VectorizedSetupError.
+func IsVectorizedSetupError(err error) bool {
+	_, ok := errors.If(err, func(err error) (v interface{}, ok bool) {
+		v, ok = err.(*VectorizedSetupError)
+		return v, ok
+	})
+	return ok
+}
+
 func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error {
 	streamIDToInputOp := make(map[distsqlpb.StreamID]exec.Operator)
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
