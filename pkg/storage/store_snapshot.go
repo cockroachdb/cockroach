@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -121,6 +120,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	var ssts []string
 	var batches [][]byte
 	var logEntries [][]byte
+
+	emptySST := true
 	b := kvSS.newBatch()
 	defer b.Close()
 
@@ -128,11 +129,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
 		err = errors.Wrap(err, "failed to create sst file writer")
-		return noSnap, sendSnapshotError(stream, err)
-	}
-	dataRange := rditer.MakeAllKeyRanges(header.State.Desc)[2]
-	if err := sst.ClearRange(dataRange.Start, dataRange.End); err != nil {
-		err = errors.Wrap(err, "failed to clear range in sst")
 		return noSnap, sendSnapshotError(stream, err)
 	}
 	sstFile, err := kvSS.sss.CreateFile()
@@ -172,6 +168,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 						err = errors.Wrap(err, "failed to put in sst")
 						return noSnap, sendSnapshotError(stream, err)
 					}
+					emptySST = false
 					if sst.DataSize-lastSizeCheck > kvSS.sstChunkSize {
 						lastSizeCheck = sst.DataSize
 						chunk, err := sst.Truncate()
@@ -214,7 +211,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			batches = append(batches, b.Repr())
-			ssts = append(ssts, sstFile.Name())
+			if !emptySST {
+				ssts = append(ssts, sstFile.Name())
+			}
 
 			inSnap := IncomingSnapshot{
 				UsesUnreplicatedTruncatedState: header.UnreplicatedTruncatedState,

@@ -950,14 +950,19 @@ func (r *Replica) applySnapshot(
 	// errors past this point must therefore be treated as fatal. If the node
 	// crashes before the data SST is ingested, the unreplicated range-ID local
 	// key LocalRangeSSTSnapshotInProgress will indicate to ingest the data SST.
-	if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSTs, true /* skipWritingSeqNo */, true /* modify */); err != nil {
-		log.Fatalf(ctx, "unable to ingest SSTs %s while applying snapshot: %+v", inSnap.SSTs, err)
-	}
-	// Note that ingesting the same set of SSTs is idempotent so removing
-	// SSTSnapshotInProgressData and performing the ingestion does not have to be
-	// atomic to be safe.
-	if err := engine.MVCCDelete(ctx, r.store.engine, nil, sstSnapshotInProgressKey, hlc.Timestamp{}, nil); err != nil {
-		log.Fatalf(ctx, "unable to remove RangeSSTSnapshotInProgress: %+v", err)
+
+	// There is a possibility that the number of SSTs is zero because it is an
+	// error to ingest an empty SST.
+	if len(inSnap.SSTs) > 0 {
+		if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSTs, true /* skipWritingSeqNo */, true /* modify */); err != nil {
+			log.Fatalf(ctx, "unable to ingest SSTs %s while applying snapshot: %+v", inSnap.SSTs, err)
+		}
+		// Note that ingesting the same set of SSTs is idempotent so removing
+		// SSTSnapshotInProgressData and performing the ingestion does not have to be
+		// atomic to be safe.
+		if err := engine.MVCCDelete(ctx, r.store.engine, nil, sstSnapshotInProgressKey, hlc.Timestamp{}, nil); err != nil {
+			log.Fatalf(ctx, "unable to remove RangeSSTSnapshotInProgress: %+v", err)
+		}
 	}
 
 	for _, sr := range subsumedRepls {

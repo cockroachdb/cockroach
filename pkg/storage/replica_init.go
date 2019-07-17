@@ -15,8 +15,10 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/split"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -150,6 +152,31 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.rangeStr.store(replicaID, r.mu.state.Desc)
 	if err := r.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
 		return err
+	}
+
+	// If we crashed before finishing applying the disk changes of a snapshot, we
+	// must ingest the SSTs. Note that ingesting the same set of SSTs is
+	// idempotent so removing SSTSnapshotInProgressData and performing the
+	// ingestion does not have to be atomic to be safe.
+	sstSnapshotInProgressKey := keys.RangeSSTSnapshotInProgress(desc.RangeID)
+	var sstSnapshotInProgressData roachpb.SSTSnapshotInProgressData
+	if ok, err := engine.MVCCGetProto(
+		ctx, r.store.Engine(), sstSnapshotInProgressKey, hlc.Timestamp{}, &sstSnapshotInProgressData, engine.MVCCGetOptions{},
+	); err != nil {
+		return err
+	} else if ok {
+		sss, err := newSstSnapshotStorage(r.store.cfg.Settings, desc.RangeID, uuid.Must(uuid.FromBytes(sstSnapshotInProgressData.UUID)),
+			r.store.engine.GetAuxiliaryDir(), r.store.limiters.BulkIOWriteRate, r.store.Engine())
+		if err != nil {
+			return err
+		}
+		if err := r.store.Engine().IngestExternalFiles(ctx, sss.ssts, true /* skipWritingSeqNo */, true /* modify */); err != nil {
+			return err
+		}
+		if err := engine.MVCCDelete(ctx, r.store.Engine(), nil, sstSnapshotInProgressKey, hlc.Timestamp{}, nil); err != nil {
+			return err
+		}
+		sss.Clear()
 	}
 
 	r.assertStateLocked(ctx, r.store.Engine())

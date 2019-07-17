@@ -29,13 +29,10 @@ type SstSnapshotStorage struct {
 	st         *cluster.Settings
 	limiter    *rate.Limiter
 	ssts       []string
-	dir        string
+	rangeDir   string
+	snapDir    string
 	dirCreated bool
 	eng        engine.Engine
-}
-
-func sstSnapshotStoragePath(baseDir string, rangeID roachpb.RangeID, snapUUID uuid.UUID) string {
-	return filepath.Join(baseDir, "sstsnapshot", fmt.Sprintf("r%d_%s", rangeID, snapUUID))
 }
 
 func newSstSnapshotStorage(
@@ -46,31 +43,33 @@ func newSstSnapshotStorage(
 	limiter *rate.Limiter,
 	eng engine.Engine,
 ) (*SstSnapshotStorage, error) {
-	dir := sstSnapshotStoragePath(baseDir, rangeID, snapUUID)
+	rangeDir := filepath.Join(baseDir, "sstsnapshot")
+	snapDir := filepath.Join(rangeDir, snapUUID.String())
 	var ssts []string
-	matches, err := filepath.Glob(filepath.Join(dir, "*.sst"))
+	matches, err := filepath.Glob(filepath.Join(snapDir, "*.sst"))
 	if err != nil {
 		return nil, err
 	}
 	ssts = append(ssts, matches...)
 	sss := &SstSnapshotStorage{
-		st:      st,
-		limiter: limiter,
-		ssts:    ssts,
-		dir:     dir,
-		eng:     eng,
+		st:       st,
+		limiter:  limiter,
+		ssts:     ssts,
+		rangeDir: rangeDir,
+		snapDir:  snapDir,
+		eng:      eng,
 	}
 	return sss, nil
 }
 
 func (sss *SstSnapshotStorage) createDir() error {
-	err := os.MkdirAll(sss.dir, 0755)
+	err := os.MkdirAll(sss.snapDir, 0755)
 	sss.dirCreated = sss.dirCreated || err == nil
 	return err
 }
 
 func (sss *SstSnapshotStorage) filename(index int) string {
-	return filepath.Join(sss.dir, fmt.Sprintf("%d.sst", index))
+	return filepath.Join(sss.snapDir, fmt.Sprintf("%d.sst", index))
 }
 
 // CreateFile creates a new SST file. If the directory storing the SST files
@@ -102,5 +101,5 @@ func (sss *SstSnapshotStorage) Write(ctx context.Context, file *os.File, content
 
 // Clear removes the directory and all SST files created.
 func (sss *SstSnapshotStorage) Clear() error {
-	return os.RemoveAll(sss.dir)
+	return os.RemoveAll(sss.rangeDir)
 }
