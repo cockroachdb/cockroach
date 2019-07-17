@@ -116,6 +116,39 @@ func (c *replicatedCmd) Rejected() bool {
 	return c.forcedErr != nil
 }
 
+// CanAckBeforeApplication implements the apply.CheckedCommand interface.
+func (c *replicatedCmd) CanAckBeforeApplication() bool {
+	// CanAckBeforeApplication determines whether the request type is compatible
+	// with acknowledgement of success before it has been applied. For now, this
+	// determination is based on whether the request is performing transactional
+	// writes. This could be exposed as an option on the batch header instead.
+	//
+	// We don't try to ack async consensus writes before application because we
+	// know that there isn't a client waiting for the result.
+	req := c.proposal.Request
+	return req.IsTransactionWrite() && !req.AsyncConsensus
+}
+
+// AckSuccess implements the apply.CheckedCommand interface.
+func (c *replicatedCmd) AckSuccess() error {
+	if !c.IsLocal() {
+		return nil
+	}
+
+	// Signal the proposal's response channel with the result.
+	// Make a copy of the response to avoid data races between client mutations
+	// of the response and use of the response in endCmds.done when the command
+	// is finished.
+	var resp proposalResult
+	reply := *c.proposal.Local.Reply
+	reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
+	resp.Reply = &reply
+	resp.Intents = c.proposal.Local.DetachIntents()
+	resp.EndTxns = c.proposal.Local.DetachEndTxns(false /* alwaysOnly */)
+	c.proposal.signalProposalResult(resp)
+	return nil
+}
+
 // FinishAndAckOutcome implements the apply.AppliedCommand interface.
 func (c *replicatedCmd) FinishAndAckOutcome() error {
 	tracing.FinishSpan(c.sp)

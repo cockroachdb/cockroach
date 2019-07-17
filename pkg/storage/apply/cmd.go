@@ -33,6 +33,13 @@ type CheckedCommand interface {
 	Command
 	// Rejected returns whether the command was rejected.
 	Rejected() bool
+	// CanAckBeforeApplication returns whether the success of the command
+	// can be acknowledged before the command has been applied to the state
+	// machine.
+	CanAckBeforeApplication() bool
+	// AckSuccess acknowledges the success of the command to its client.
+	// Must only be called if !Rejected.
+	AckSuccess() error
 }
 
 // AppliedCommand is a command that has been applied to the replicated state
@@ -180,6 +187,19 @@ func mapCheckedCmdIter(
 		ret.AppendApplied(applied)
 	}
 	return ret, nil
+}
+
+// forEachCheckedCmdIter calls a closure on each command in the provided
+// iterator. The function closes the provided iterator.
+func forEachCheckedCmdIter(iter CheckedCommandIterator, fn func(CheckedCommand) error) error {
+	defer iter.Close()
+	for iter.Valid() {
+		if err := fn(iter.CurChecked()); err != nil {
+			return err
+		}
+		iter.Next()
+	}
+	return nil
 }
 
 // forEachAppliedCmdIter calls a closure on each command in the provided
