@@ -94,6 +94,57 @@ func TestConstraintUnion(t *testing.T) {
 	test(t, &evalCtx, &data.mangoStrawberry, &data.cherryRaspberry, expected)
 }
 
+func TestConstraintAppendSpans(t *testing.T) {
+	test := func(t *testing.T, evalCtx *tree.EvalContext, left, right *Constraint, expected string) {
+		t.Helper()
+		clone := *left
+		clone.AppendSpans(evalCtx, right)
+
+		if actual := clone.String(); actual != expected {
+			format := "left: %s, right: %s, expected: %v, actual: %v"
+			t.Errorf(format, left.String(), right.String(), expected, actual)
+		}
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	data := newConstraintTestData(&evalCtx)
+
+	// Append when spans are adjacent `...- /30) [/30 -....`
+	test(t, &evalCtx, &data.c20to30, &data.c30to40, "/1: [/20 - /30) [/30 - /40]")
+	test(t, &evalCtx, &data.c30to40, &data.c20to30, "/1: [/20 - /30) [/30 - /40]")
+
+	// Disjoint spans in each constraint.
+	test(t, &evalCtx, &data.c1to10, &data.c40to50, "/1: [/1 - /10] [/40 - /50]")
+	test(t, &evalCtx, &data.c40to50, &data.c1to10, "/1: [/1 - /10] [/40 - /50]")
+
+	// Append multiple spans.
+	var left, right Constraint
+	left = data.c1to10
+	left.UnionWith(&evalCtx, &data.c20to30)
+
+	right = data.c40to50
+	right.UnionWith(&evalCtx, &data.c30to40)
+
+	test(t, &evalCtx, &left, &right, "/1: [/1 - /10] [/20 - /30) [/30 - /50]")
+	test(t, &evalCtx, &right, &left, "/1: [/1 - /10] [/20 - /30) [/30 - /50]")
+
+	// Multiple disjoint spans on each side.
+	left = data.c1to10
+	left.UnionWith(&evalCtx, &data.c20to30)
+
+	right = data.c40to50
+	right.UnionWith(&evalCtx, &data.c60to70)
+
+	test(t, &evalCtx, &left, &right, "/1: [/1 - /10] [/20 - /30) [/40 - /50] (/60 - /70)")
+	test(t, &evalCtx, &right, &left, "/1: [/1 - /10] [/20 - /30) [/40 - /50] (/60 - /70)")
+
+	// Multiple columns.
+	expected := "/1/2: [/'cherry'/true - /'raspberry'/false) [/'mango'/false - /'strawberry']"
+	test(t, &evalCtx, &data.cherryRaspberry, &data.mangoStrawberry, expected)
+	test(t, &evalCtx, &data.mangoStrawberry, &data.cherryRaspberry, expected)
+}
+
 func TestConstraintIntersect(t *testing.T) {
 	test := func(t *testing.T, evalCtx *tree.EvalContext, left, right *Constraint, expected string) {
 		t.Helper()

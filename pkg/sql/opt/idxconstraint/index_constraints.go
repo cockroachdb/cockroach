@@ -624,6 +624,9 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 	case *memo.OrExpr:
 		return c.makeSpansForOr(offset, t, out)
 
+	case *memo.LikelyExpr:
+		return c.makeSpansForLikely(offset, t, out)
+
 	case *memo.VariableExpr:
 		// Support (@1) as (@1 = TRUE) if @1 is boolean.
 		if c.colType(offset).Family() == types.BoolFamily && c.isIndexColumn(t, offset) {
@@ -733,6 +736,51 @@ func (c *indexConstraintCtx) makeSpansForAnd(offset int, e opt.Expr, out *constr
 		}
 		out.Combine(c.evalCtx, &ofsC)
 	}
+}
+
+// makeSpansForLikelySatisfied is similar to makeSpansForOr
+// except it doesn't merge the spans together. It is used
+// to generate the spans for the LikelySatisfied expressions
+// in a LikelyExpr.
+func (c *indexConstraintCtx) makeSpansForLikelySatisfied(
+	offset int, e opt.Expr, out *constraint.Constraint,
+) (tight bool) {
+	c.contradiction(offset, out)
+	tight = true
+	var exprConstraint constraint.Constraint
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		exprTight := c.makeSpansForExpr(offset, e.Child(i), &exprConstraint)
+		if exprConstraint.IsUnconstrained() {
+			// If we can't generate spans for a disjunct, exit early.
+			c.unconstrained(offset, out)
+			return false
+		}
+		// The OR is "tight" if all the spans are tight.
+		tight = tight && exprTight
+		out.AppendSpans(c.evalCtx, &exprConstraint)
+	}
+	return tight
+}
+
+// makeSpansForLikely calculates spans for the LikelyExpr.
+func (c *indexConstraintCtx) makeSpansForLikely(
+	offset int, e opt.Expr, out *constraint.Constraint,
+) (tight bool) {
+	c.contradiction(offset, out)
+
+	var likelyConstraint constraint.Constraint
+	var unlikelyConstraint constraint.Constraint
+	likelyTight := c.makeSpansForLikelySatisfied(offset, e.Child(0), &likelyConstraint)
+	unlikelyTight := c.makeSpansForOr(offset, e.Child(1), &unlikelyConstraint)
+
+	tight = likelyTight && unlikelyTight
+	out.UnionWith(c.evalCtx, &unlikelyConstraint)
+
+	// We append instead of union the likely spans because it is possible the
+	// likely spans can get constrained further. See comment above AppendSpans
+	// for more detail.
+	out.AppendSpans(c.evalCtx, &likelyConstraint)
+	return tight
 }
 
 // makeSpansForOr calculates spans for an OrOp.

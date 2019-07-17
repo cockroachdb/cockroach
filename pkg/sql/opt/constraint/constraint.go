@@ -75,6 +75,75 @@ func (c *Constraint) IsUnconstrained() bool {
 	return c.Spans.Count() == 1 && c.Spans.Get(0).IsUnconstrained()
 }
 
+// AppendSpans is similar to UnionWith except that the other constraints are not merged
+// with the current constraint. It is useful for scans that involve partitions as the
+// partition spans (and in between spans) can be isolated and further constrained.
+//
+// Consider the following unmerged constraints:
+//
+// [ - /'earth'/'eu') [/'earth'/'eu' - /'earth'/'us'/'cali') [/'earth'/'us'/'cali' - /'earth'/'us'/'cali']...
+//
+// Now consider the merged constraints that are equivalent:
+// [ - /'earth'/'us'/'cali']...
+//
+// Now consider that the fourth column (val) has a filter constraining its value to 8.
+// Notice how each of the spans above are further constrained:
+//
+// Unmerged: [ - /'earth'/'eu') [/'earth'/'eu' - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/8 - /'earth'/'us'/'cali'/8]...
+// Merged:   [ - /'earth'/'us'/'cali'/8]...
+//
+// In the unmerged case, we can skip all the values of the val col that have a value of
+// less than 8 but have the prefix (earth, us, cali). In this case, having the spans
+// unmerged is better.
+//
+// NOTE: The constraints can't have overlapping spans. If you want the constraints
+// with overlapping spans to combine, use UnionWith.
+func (c *Constraint) AppendSpans(evalCtx *tree.EvalContext, other *Constraint) {
+	if !c.Columns.Equals(&other.Columns) {
+		panic(errors.AssertionFailedf("column mismatch"))
+	}
+	if c.IsUnconstrained() || other.IsContradiction() {
+		return
+	}
+
+	left := &c.Spans
+	leftIndex := 0
+	right := &other.Spans
+	rightIndex := 0
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	var result Spans
+	var lastSeenSpan Span
+	result.Alloc(left.Count() + right.Count())
+
+	for leftIndex < left.Count() || rightIndex < right.Count() {
+		if rightIndex < right.Count() {
+			if leftIndex >= left.Count() ||
+				left.Get(leftIndex).Compare(&keyCtx, right.Get(rightIndex)) > 0 {
+				// Swap the two sets, so that going forward the current left
+				// span starts before the current right span.
+				left, right = right, left
+				leftIndex, rightIndex = rightIndex, leftIndex
+			}
+		}
+
+		currSpan := *left.Get(leftIndex)
+
+		// Does the span overlap with the previous?
+		if leftIndex > 0 {
+			if lastSeenSpan.end.Compare(&keyCtx, currSpan.start, lastSeenSpan.endExt(), currSpan.startExt()) > 0 {
+				panic(errors.AssertionFailedf("cannot append overlapping spans: %+v overlaps with %+v", lastSeenSpan, currSpan))
+			}
+		}
+
+		leftIndex++
+		result.Append(&currSpan)
+		lastSeenSpan = currSpan
+	}
+
+	c.Spans = result
+	c.Spans.makeImmutable()
+}
+
 // UnionWith merges the spans of the given constraint into this constraint.  The
 // columns of both constraints must be the same. Constrained columns in the
 // merged constraint can have values that are part of either of the input

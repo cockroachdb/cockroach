@@ -308,6 +308,45 @@ define Or {
     Right ScalarExpr
 }
 
+# Likely is logically equivalent to an Or expression across all the scalar
+# expressions in LikelySatisfied and LikelyNotSatisfied.
+#
+# The expressions are organized into two disjoint categories: the LikelySatisfied
+# and the LikelyNotSatisfied categories; an input is likely to satisfy at least
+# one of the likely expressions. This categorization is used to incorporate
+# likely column values into index constraint generation.
+#
+# This is useful when partition values are defined for an index. We can then
+# assume the input values are likely in the partitions and so can use this
+# knowledge to constrain an index (that would otherwise not be used) using
+# the LikelyExpr. The LikelyNotSatisfied expressions are required for when
+# the assumption doesn't hold, they are required so no rows are unscanned.
+[Scalar, Bool]
+define Likely {
+    # LikelySatisfied contains a list of expressions such that, for any input
+    # row, one of them are likely satisfied.
+    # For example, if we have a partition of the form:
+    #
+    # PARTITION BY LIST (col) (
+    #     PARTITION partition VALUES IN (val1, val2, val3)
+    # )
+    #
+    # We assume that it is likely that the input rows have a value in
+    # (val1, val2, val3) for the column col.
+    LikelySatisfied  ScalarListExpr
+
+    # LikelyNotSatisfied contains a list of expressions such that, for any input
+    # row, none of them are likely satisfied.
+    # In the above partition example, we assume that it is likely that the input
+    # rows have a value in (val1, val2, val3) for the column col. And so, it is
+    # inlikely that the value for col is in between those specified values or
+    # greater than or smaller than all of them. LikelyNotSatisfied considers
+    # these cases for when the assumption doesn't hold. This is required so
+    # no rows are left unscanned when we do an index-skip-scan using the partition
+    # values.
+    LikelyNotSatisfied ScalarListExpr
+}
+
 # Range contains an And expression that constrains a single variable to a
 # range. For example, the And expression might be x > 5 AND x < 10. The
 # children of the And expression can be arbitrary expressions (including nested
