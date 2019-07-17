@@ -336,6 +336,9 @@ func (b *RequestBatcher) cleanup(err error) {
 }
 
 func (b *RequestBatcher) run(ctx context.Context) {
+	// Create a parent context which will be canceled when b stops running.
+	sendCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	var (
 		// inFlight tracks the number of batches currently being sent.
 		// true.
@@ -359,7 +362,7 @@ func (b *RequestBatcher) run(ctx context.Context) {
 			if inFlight >= b.cfg.InFlightBackpressureLimit {
 				inBackPressure = true
 			}
-			b.sendBatch(ctx, ba)
+			b.sendBatch(sendCtx, ba)
 		}
 		handleSendDone = func() {
 			inFlight--
