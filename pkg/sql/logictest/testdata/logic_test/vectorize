@@ -515,3 +515,12 @@ query I
 SELECT EXTRACT(YEAR FROM x) FROM extract_test
 ----
 2017
+
+# Regression test for #38937
+statement ok
+CREATE TABLE t38937 (_int2) AS SELECT 1::INT2
+
+query I
+SELECT sum_int(_int2) FROM t38937
+----
+1

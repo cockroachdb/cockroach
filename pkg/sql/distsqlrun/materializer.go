@@ -46,6 +46,11 @@ type materializer struct {
 
 	// row is the memory used for the output row.
 	row sqlbase.EncDatumRow
+
+	// Fields to store the returned results of next() to be passed through an
+	// adapter.
+	outputRow      sqlbase.EncDatumRow
+	outputMetadata *distsqlpb.ProducerMetadata
 }
 
 func newMaterializer(
@@ -95,21 +100,20 @@ func (m *materializer) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
-// nextBatch saves the next batch from input in m.batch. For internal use only.
-// The purpose of having this function is to not create an anonymous function
-// on every call to Next().
-func (m *materializer) nextBatch() {
-	m.batch = m.input.Next(m.Ctx)
+// nextAdapter calls next() and saves the returned results in m. For internal
+// use only. The purpose of having this function is to not create an anonymous
+// function on every call to Next().
+func (m *materializer) nextAdapter() {
+	m.outputRow, m.outputMetadata = m.next()
 }
 
-func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+// next is the logic of Next() extracted in a separate method to be used by an
+// adapter to be able to wrap the latter with a catcher.
+func (m *materializer) next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
-			if err := exec.CatchVectorizedRuntimeError(m.nextBatch); err != nil {
-				m.MoveToDraining(err)
-				return nil, m.DrainHelper()
-			}
+			m.batch = m.input.Next(m.Ctx)
 
 			if m.batch.Length() == 0 {
 				m.MoveToDraining(nil /* err */)
@@ -143,6 +147,14 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		return m.ProcessRowHelper(m.row), nil
 	}
 	return nil, m.DrainHelper()
+}
+
+func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
+	if err := exec.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
+		m.MoveToDraining(err)
+		return nil, m.DrainHelper()
+	}
+	return m.outputRow, m.outputMetadata
 }
 
 func (m *materializer) ConsumerClosed() {
