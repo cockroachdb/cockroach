@@ -9344,7 +9344,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	repl.mu.Lock()
 	ms := repl.mu.state.Stats // intentionally mutated below
 	disturbMS := enginepb.NewPopulatedMVCCStats(rnd, false)
-	disturbMS.ContainsEstimates = false
+	disturbMS.ContainsEstimates = 0
 	ms.Add(*disturbMS)
 	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, tc.engine, ms)
 	repl.assertStateLocked(ctx, tc.engine)

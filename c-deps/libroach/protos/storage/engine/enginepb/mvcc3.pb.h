@@ -434,11 +434,11 @@ class MVCCStatsDelta : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::google::protobuf::int64 sys_count() const;
   void set_sys_count(::google::protobuf::int64 value);
 
-  // bool contains_estimates = 14;
+  // int64 contains_estimates = 14;
   void clear_contains_estimates();
   static const int kContainsEstimatesFieldNumber = 14;
-  bool contains_estimates() const;
-  void set_contains_estimates(bool value);
+  ::google::protobuf::int64 contains_estimates() const;
+  void set_contains_estimates(::google::protobuf::int64 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCStatsDelta)
  private:
@@ -457,7 +457,7 @@ class MVCCStatsDelta : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::google::protobuf::int64 intent_count_;
   ::google::protobuf::int64 sys_bytes_;
   ::google::protobuf::int64 sys_count_;
-  bool contains_estimates_;
+  ::google::protobuf::int64 contains_estimates_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
 };
@@ -625,11 +625,11 @@ class MVCCPersistentStats : public ::google::protobuf::MessageLite /* @@protoc_i
   ::google::protobuf::int64 sys_count() const;
   void set_sys_count(::google::protobuf::int64 value);
 
-  // bool contains_estimates = 14;
+  // int64 contains_estimates = 14;
   void clear_contains_estimates();
   static const int kContainsEstimatesFieldNumber = 14;
-  bool contains_estimates() const;
-  void set_contains_estimates(bool value);
+  ::google::protobuf::int64 contains_estimates() const;
+  void set_contains_estimates(::google::protobuf::int64 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCPersistentStats)
  private:
@@ -648,7 +648,7 @@ class MVCCPersistentStats : public ::google::protobuf::MessageLite /* @@protoc_i
   ::google::protobuf::int64 intent_count_;
   ::google::protobuf::int64 sys_bytes_;
   ::google::protobuf::int64 sys_count_;
-  bool contains_estimates_;
+  ::google::protobuf::int64 contains_estimates_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
 };
@@ -1966,15 +1966,15 @@ inline void TxnMeta::set_sequence(::google::protobuf::int32 value) {
 
 // MVCCStatsDelta
 
-// bool contains_estimates = 14;
+// int64 contains_estimates = 14;
 inline void MVCCStatsDelta::clear_contains_estimates() {
-  contains_estimates_ = false;
+  contains_estimates_ = GOOGLE_LONGLONG(0);
 }
-inline bool MVCCStatsDelta::contains_estimates() const {
+inline ::google::protobuf::int64 MVCCStatsDelta::contains_estimates() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.contains_estimates)
   return contains_estimates_;
 }
-inline void MVCCStatsDelta::set_contains_estimates(bool value) {
+inline void MVCCStatsDelta::set_contains_estimates(::google::protobuf::int64 value) {
   
   contains_estimates_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.contains_estimates)
@@ -2165,15 +2165,15 @@ inline void MVCCStatsDelta::set_sys_count(::google::protobuf::int64 value) {
 
 // MVCCPersistentStats
 
-// bool contains_estimates = 14;
+// int64 contains_estimates = 14;
 inline void MVCCPersistentStats::clear_contains_estimates() {
-  contains_estimates_ = false;
+  contains_estimates_ = GOOGLE_LONGLONG(0);
 }
-inline bool MVCCPersistentStats::contains_estimates() const {
+inline ::google::protobuf::int64 MVCCPersistentStats::contains_estimates() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCPersistentStats.contains_estimates)
   return contains_estimates_;
 }
-inline void MVCCPersistentStats::set_contains_estimates(bool value) {
+inline void MVCCPersistentStats::set_contains_estimates(::google::protobuf::int64 value) {
   
   contains_estimates_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCPersistentStats.contains_estimates)

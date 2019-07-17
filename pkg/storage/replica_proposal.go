@@ -723,6 +723,21 @@ func (r *Replica) evaluateProposal(
 		res.Replicated.Timestamp = ba.Timestamp
 		res.Replicated.Delta = ms.ToStatsDelta()
 
+		_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+		if r.ClusterSettings().Version.IsActive(cluster.VersionContainsEstimatesCounter) {
+			// Use ContainsEstimates > 1 as a hint for code downstream of Raft that
+			// were running the new cluster version
+			res.Replicated.Delta.ContainsEstimates *= 2
+		} else {
+			// We are running an older version where ContainsEstimates is a bool, so
+			// clamp it to {0,1} for safety
+			if res.Replicated.Delta.ContainsEstimates > 1 {
+				res.Replicated.Delta.ContainsEstimates = 1
+			} else if res.Replicated.Delta.ContainsEstimates < 0 {
+				res.Replicated.Delta.ContainsEstimates = 0
+			}
+		}
+
 		// If the RangeAppliedState key is not being used and the cluster version is
 		// high enough to guarantee that all current and future binaries will
 		// understand the key, we send the migration flag through Raft. Because

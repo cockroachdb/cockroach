@@ -91,7 +91,7 @@ import "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 //     CombinedErrorDelta =   AbsPreSplitBothEstimated + DeltaBatchEstimated
 //                          -(AbsPostSplitLeft + AbsPostSplitRight)
 //
-// and the fact that the second line coontains no estimates, we know that
+// and the fact that the second line contains no estimates, we know that
 // CombinedErrorDelta is zero if the first line contains no estimates. Using
 // this, we can rearrange as
 //
@@ -129,8 +129,8 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 		in: input,
 	}
 
-	if !h.in.AbsPreSplitBothEstimated.ContainsEstimates &&
-		!h.in.DeltaBatchEstimated.ContainsEstimates {
+	if h.in.AbsPreSplitBothEstimated.ContainsEstimates == 0 &&
+		h.in.DeltaBatchEstimated.ContainsEstimates == 0 {
 		// We have CombinedErrorDelta zero, so use arithmetic to compute
 		// AbsPostSplitRight().
 		ms := h.in.AbsPreSplitBothEstimated

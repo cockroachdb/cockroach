@@ -121,10 +121,7 @@ message TxnMeta {
 message MVCCStatsDelta {
   option (gogoproto.equal) = true;
 
-  // TODO(nvanbenschoten): now that we've split MVCCPersistentStats
-  // from this MVCCStatsDelta type, we can turn contains_estimates
-  // into a three-valued type ('UNCHANGED', 'NO', and 'YES').
-  bool contains_estimates = 14;
+  int64 contains_estimates = 14;
   sfixed64 last_update_nanos = 1;
   sfixed64 intent_age = 2;
   sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
@@ -148,7 +145,7 @@ message MVCCPersistentStats {
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
-  bool contains_estimates = 14;
+  int64 contains_estimates = 14; // must never go negative absent a bug
   sfixed64 last_update_nanos = 1;
   sfixed64 intent_age = 2;
   sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
