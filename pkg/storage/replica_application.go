@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
@@ -38,6 +37,105 @@ type handleCommittedEntriesStats struct {
 	entriesProcessed int
 	stateAssertions  int
 	numEmptyEntries  int
+}
+
+// ackCommittedEntriesBeforeAppRaftMuLocked attempts to acknowledge the success
+// of raft entries that have been durably committed to the raft log but have not
+// yet been applied to the proposer replica's replicated state machine.
+//
+// This is safe because a proposal through raft is known to have succeeded as
+// soon as it is replicated to a quorum of replicas (i.e. has committed in the
+// raft log). The proposal does not need to wait for the effects of the proposal
+// to be applied in order to know whether its changes will succeed or fail. This
+// is because the raft log is the provider of atomicity and durability for
+// replicated writes, not (ignoring log truncation) the replicated state machine
+// itself.
+//
+// However, there are a few complications to acknowledging the success of a
+// proposal at this stage:
+//
+// 1. Committing an entry in the raft log and having the command in that entry
+//    succeed are similar but not equivalent concepts. Even if the entry succeeds
+//    in achieving durability by replicating to a quorum of replicas, its command
+//    may still be rejected "beneath raft". This means that a (deterministic)
+//    check after replication decides that the command will not be applied to the
+//    replicated state machine. In that case, the client waiting on the result of
+//    the command should not be informed of its success. Luckily, this check is
+//    cheap to perform so we can do it here and when applying the command. See
+//    Replica.shouldApplyCommand.
+//
+// 2. Some commands perform non-trivial work such as updating Replica configuration
+//    state or performing Range splits. In those cases, it's likely that the client
+//    is interested in not only knowing whether it has succeeded in sequencing the
+//    change in the raft log, but also in knowing when the change has gone into
+//    effect. There's currently no exposed hook to ask for an acknowledgement only
+//    after a command has been applied, so for simplicity the current implementation
+//    only ever acks transactional writes before they have gone into effect. All
+//    other commands wait until they have been applied to ack their client.
+//
+// 3. Even though we can determine whether a command has succeeded without applying
+//    it, the effect of the command will not be visible to conflicting commands until
+//    it is applied. Because of this, the client can be informed of the success of
+//    a write at this point, but we cannot release that write's latches until the
+//    write has applied. See ProposalData.signalProposalResult/finishApplication.
+//
+func (r *Replica) ackCommittedEntriesBeforeAppRaftMuLocked(
+	ctx context.Context, gen *entryGen, b *cmdAppBatch,
+) (errExpl string, err error) {
+	errExpl, err = b.decode(ctx, gen)
+	if b.cmdBuf.len == 0 {
+		// If no trivial entries were decoded, return.
+		return errExpl, err
+	}
+	if !r.retrieveLocalProposals(ctx, b) {
+		// If none of proposals were local, return.
+		return errExpl, err
+	}
+	// Determine the initial lease applied index. We'll adjust this as we
+	// iterate over committed entries to ensure that shouldApplyCommand makes
+	// the correct decision. Reset before returning.
+	initLeaseIndex := b.replicaState.LeaseAppliedIndex
+	defer func() {
+		b.replicaState.LeaseAppliedIndex = initLeaseIndex
+	}()
+	// Iterate over the trivial commands in the cmdAppCtxBuf. For each command,
+	// check whether it should apply
+	var it cmdAppCtxBufIterator
+	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
+		cmd := it.cur()
+		if cmd.proposedLocally() {
+			willApply := r.shouldApplyCommand(ctx, cmd, &b.replicaState)
+			canAckEarly := canAckBeforeApplication(cmd.proposal.Request)
+			if willApply && canAckEarly {
+				// Unbind the request's context.
+				cmd.ctx = ctx
+
+				// Signal the proposal's response channel with the result.
+				// Make a copy of the response to avoid data races.
+				var resp proposalResult
+				reply := *cmd.proposal.Local.Reply
+				reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
+				resp.Reply = &reply
+				resp.Intents = cmd.proposal.Local.DetachIntents()
+				resp.EndTxns = cmd.proposal.Local.DetachEndTxns(false)
+				cmd.proposal.signalProposalResult(resp)
+			}
+		}
+		// Update the lease applied index. This is the only part of
+		// stageTrivialReplicatedEvalResult that matters here.
+		if cmd.leaseIndex != 0 {
+			b.replicaState.LeaseAppliedIndex = cmd.leaseIndex
+		}
+	}
+	return errExpl, err
+}
+
+// canAckBeforeApplication determines whether the request type is compatable
+// with acknowledgement of success before it has been applied. For now, this
+// determination is based on whether the request is performing transactional
+// writes. This could be exposed as an option on the batch header instead.
+func canAckBeforeApplication(ba *roachpb.BatchRequest) bool {
+	return ba.IsTransactionWrite()
 }
 
 // handleCommittedEntriesRaftMuLocked deals with the complexities involved in
@@ -92,37 +190,33 @@ type handleCommittedEntriesStats struct {
 // the Replica's state are applied, and the clients acked with the respective
 // results.
 func (r *Replica) handleCommittedEntriesRaftMuLocked(
-	ctx context.Context, committedEntries []raftpb.Entry,
+	ctx context.Context, gen *entryGen, b *cmdAppBatch,
 ) (stats handleCommittedEntriesStats, errExpl string, err error) {
-	var (
-		haveNonTrivialEntry bool
-		toProcess           = committedEntries
-		b                   = getCmdAppBatch()
-	)
-	defer releaseCmdAppBatch(b)
-	for len(toProcess) > 0 {
-		if haveNonTrivialEntry {
-			// If the previous call to b.decode() informed us that it left a
-			// non-trivial entry in decodeBuf, use it.
-			haveNonTrivialEntry = false
-			b.add(&toProcess[0], b.decodeBuf)
-			toProcess = toProcess[1:]
+	for gen.valid() || b.cmdBuf.len > 0 {
+		if b.cmdBuf.len == 0 {
+			if b.decodeBufFull {
+				// If the previous call to b.decode() left a non-trivial entry
+				// in decodeBuf, use it.
+				b.add(gen.entry(), b.popDecodeBuf())
+				gen.next()
+			} else {
+				// Decode zero or more trivial entries into b.
+				errExpl, err = b.decode(ctx, gen)
+				if err != nil {
+					return stats, errExpl, err
+				}
+				// If no trivial entries were decoded go back around and process
+				// the non-trivial entry.
+				if b.cmdBuf.len == 0 {
+					continue
+				}
+			}
+			r.retrieveLocalProposals(ctx, b)
 		} else {
-			// Decode zero or more trivial entries into b.
-			var numEmptyEntries int
-			haveNonTrivialEntry, numEmptyEntries, toProcess, errExpl, err =
-				b.decode(ctx, toProcess, &b.decodeBuf)
-			if err != nil {
-				return stats, errExpl, err
-			}
-			// If no trivial entries were decoded go back around and process the
-			// non-trivial entry.
-			if b.cmdBuf.len == 0 {
-				continue
-			}
-			stats.numEmptyEntries += numEmptyEntries
+			// The command buffer was already populated and the proposals were
+			// already retrieved by ackCommittedEntriesBeforeAppRaftMuLocked.
 		}
-		r.retrieveLocalProposals(ctx, b)
+
 		b.batch = r.store.engine.NewBatch()
 		// Stage each of the commands which will write them into the newly created
 		// engine.Batch and update b's view of the replicaState.
@@ -137,6 +231,10 @@ func (r *Replica) handleCommittedEntriesRaftMuLocked(
 			updatedTruncatedState := stageTrivialReplicatedEvalResult(cmd.ctx,
 				cmd.replicatedResult(), cmd.e.Index, cmd.leaseIndex, &b.replicaState)
 			b.updatedTruncatedState = b.updatedTruncatedState || updatedTruncatedState
+			// Record the number of entries that contain zero-byte payloads.
+			if len(cmd.e.Data) == 0 {
+				stats.numEmptyEntries++
+			}
 		}
 		if errExpl, err = r.applyCmdAppBatch(ctx, b, &stats); err != nil {
 			return stats, errExpl, err
@@ -146,8 +244,8 @@ func (r *Replica) handleCommittedEntriesRaftMuLocked(
 }
 
 // retrieveLocalProposals populates the proposal and ctx fields for each of the
-// commands in b.
-func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) {
+// commands in b. It returns whether any of the commands were proposed locally.
+func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) (anyLocal bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	b.replicaState = r.mu.state
@@ -160,6 +258,7 @@ func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) {
 		cmd := it.cur()
 		cmd.proposal = r.mu.proposals[cmd.idKey]
 		if cmd.proposedLocally() {
+			anyLocal = true
 			// We initiated this command, so use the caller-supplied context.
 			cmd.ctx = cmd.proposal.ctx
 			delete(r.mu.proposals, cmd.idKey)
@@ -173,6 +272,7 @@ func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) {
 			cmd.ctx = ctx
 		}
 	}
+	return anyLocal
 }
 
 // stageRaftCommand handles the first phase of applying a command to the
@@ -220,37 +320,10 @@ func (r *Replica) stageRaftCommand(
 			cmd.idKey, cmd.raftCmd.MaxLeaseIndex)
 	}
 
-	var ts hlc.Timestamp
-	if cmd.idKey != "" {
-		ts = cmd.replicatedResult().Timestamp
-	}
-
-	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = checkForcedErr(ctx,
-		cmd.idKey, cmd.raftCmd, cmd.proposal, cmd.proposedLocally(), replicaState)
-	if cmd.forcedErr == nil {
-		// Verify that the batch timestamp is after the GC threshold. This is
-		// necessary because not all commands declare read access on the GC
-		// threshold key, even though they implicitly depend on it. This means
-		// that access to this state will not be serialized by latching,
-		// so we must perform this check upstream and downstream of raft.
-		// See #14833.
-		//
-		// We provide an empty key span because we already know that the Raft
-		// command is allowed to apply within its key range. This is guaranteed
-		// by checks upstream of Raft, which perform the same validation, and by
-		// span latches, which assure that any modifications to the range's
-		// boundaries will be serialized with this command. Finally, the
-		// leaseAppliedIndex check in checkForcedErrLocked ensures that replays
-		// outside of the spanlatch manager's control which break this
-		// serialization ordering will already by caught and an error will be
-		// thrown.
-		cmd.forcedErr = roachpb.NewError(r.requestCanProceed(roachpb.RSpan{}, ts))
-	}
-
 	// applyRaftCommandToBatch will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
-	if cmd.forcedErr != nil {
+	if !r.shouldApplyCommand(ctx, cmd, replicaState) {
 		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
 	} else {
 		log.Event(ctx, "applying command")
@@ -278,19 +351,6 @@ func (r *Replica) stageRaftCommand(
 		}
 	}
 
-	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
-		var newPropRetry int
-		newPropRetry, cmd.forcedErr = filter(storagebase.ApplyFilterArgs{
-			CmdID:                cmd.idKey,
-			ReplicatedEvalResult: *cmd.replicatedResult(),
-			StoreID:              r.store.StoreID(),
-			RangeID:              r.RangeID,
-		})
-		if cmd.proposalRetry == 0 {
-			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
-		}
-	}
-
 	if cmd.forcedErr != nil {
 		// Apply an empty entry.
 		*cmd.replicatedResult() = storagepb.ReplicatedEvalResult{}
@@ -303,7 +363,9 @@ func (r *Replica) stageRaftCommand(
 	// a timestamp specified are guaranteed one higher than any op already
 	// executed for overlapping keys.
 	// TODO(ajwerner): coalesce the clock update per batch.
-	r.store.Clock().Update(ts)
+	if ts := cmd.replicatedResult().Timestamp; !ts.IsEmpty() {
+		r.store.Clock().Update(ts)
+	}
 
 	{
 		err := r.applyRaftCommandToBatch(cmd.ctx, cmd, replicaState, batch, writeAppliedState)
@@ -380,10 +442,54 @@ func (r *Replica) stageRaftCommand(
 	}
 }
 
+// shouldApplyCommand determines whether or not a command should be applied to
+// the replicated state machine after it has been committed to the Raft log.
+// This decision is deterministic on all replicas, such that a command that
+// is rejected "beneath raft" on one replica will be rejected "beneath raft"
+// on all replicas.
+//
+// The decision about whether or not to apply a command is a combination of
+// three checks:
+// 1. verify that the command was proposed under the current lease. This is
+//    determined using the proposal's ProposerLeaseSequence.
+// 2. verify that the command hasn't been re-ordered with other commands that
+//    were proposed after it and which already applied. This is determined
+//    using the proposal's MaxLeaseIndex.
+// 3. verify that the command isn't in violation of the Range's current
+//    garbage collection threshold. This is determined using the proposal's
+//    Timestamp.
+func (r *Replica) shouldApplyCommand(
+	ctx context.Context, cmd *cmdAppCtx, replicaState *storagepb.ReplicaState,
+) bool {
+	// If we're already checked whether the command should apply, don't do so
+	// again. Doing so would result in the same answer (given the same replica
+	// state), but we don't want to run the TestingApplyFilter again.
+	if cmd.leaseIndex != 0 {
+		return cmd.forcedErr == nil
+	}
+
+	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = checkForcedErr(
+		ctx, cmd.idKey, &cmd.raftCmd, cmd.proposal, cmd.proposedLocally(), replicaState,
+	)
+	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
+		var newPropRetry int
+		newPropRetry, cmd.forcedErr = filter(storagebase.ApplyFilterArgs{
+			CmdID:                cmd.idKey,
+			ReplicatedEvalResult: *cmd.replicatedResult(),
+			StoreID:              r.store.StoreID(),
+			RangeID:              r.RangeID,
+		})
+		if cmd.proposalRetry == 0 {
+			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+		}
+	}
+	return cmd.forcedErr == nil
+}
+
 func checkForcedErr(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
-	raftCmd storagepb.RaftCommand,
+	raftCmd *storagepb.RaftCommand,
 	proposal *ProposalData,
 	proposedLocally bool,
 	replicaState *storagepb.ReplicaState,
@@ -521,6 +627,20 @@ func checkForcedErr(
 		return leaseIndex, retry, roachpb.NewErrorf(
 			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
 		)
+	}
+
+	// Verify that the batch timestamp is after the GC threshold. This is
+	// necessary because not all commands declare read access on the GC
+	// threshold key, even though they implicitly depend on it. This means
+	// that access to this state will not be serialized by latching,
+	// so we must perform this check upstream and downstream of raft.
+	// See #14833.
+	ts := raftCmd.ReplicatedEvalResult.Timestamp
+	if !replicaState.GCThreshold.Less(ts) {
+		return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+			Timestamp: ts,
+			Threshold: *replicaState.GCThreshold,
+		})
 	}
 	return leaseIndex, proposalNoReevaluation, nil
 }
@@ -717,7 +837,7 @@ func (r *Replica) applyRaftCommandToBatch(
 func (r *Replica) applyCmdAppBatch(
 	ctx context.Context, b *cmdAppBatch, stats *handleCommittedEntriesStats,
 ) (errExpl string, err error) {
-	defer b.reset()
+	defer b.resetBatch()
 	if log.V(4) {
 		log.Infof(ctx, "flushing batch %v of %d entries", b.replicaState, b.cmdBuf.len)
 	}

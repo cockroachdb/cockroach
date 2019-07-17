@@ -433,6 +433,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
+	localProps := r.numPendingProposalsRLocked()
 
 	// We defer the check to Replica.updateProposalQuotaRaftMuLocked because we need
 	// to check it in both cases, if hasReady is false and otherwise.
@@ -538,6 +539,42 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if !r.store.TestingKnobs().DisableRefreshReasonSnapshotApplied &&
 			refreshReason == noReason {
 			refreshReason = reasonSnapshotApplied
+		}
+	}
+
+	// If the ready struct includes entries that have been committed, these
+	// entries will be applied to the Replica's replicated state machine down
+	// below, after appending new entries to the raft log and sending messages
+	// to peers. However, the process of appending new entries to the raft log
+	// and then applying committed entries to the state machine can take some
+	// time - and these entries are already durably committed. If they have
+	// clients waiting on them, we'd like to acknowledge their success as soon
+	// as possible. To facilitate this, we take a quick pass over the committed
+	// entries and acknowledge as many as we can trivially prove will not be
+	// rejected beneath raft.
+	//
+	// We only try to ack committed entries before applying them if we have
+	// clients waiting on the result of Raft entries. If not, we know none of
+	// the committed entries were proposed locally.
+	//
+	// We share the entry generator and command application batch with the call
+	// to handleCommittedEntriesRaftMuLocked down below to avoid duplicating any
+	// decoding work.
+	//
+	// TODO(nvanbenschoten): I'm pretty sure that etcd/raft returns proposals
+	// in rd.Entries and rd.CommittedEntries at the same time for single peer
+	// Raft groups. In that case, we'll need to disable this optimization, as
+	// it no longer makes sense. TODO BEFORE PR MERGES.
+	committedEntryGen := entryGen(rd.CommittedEntries)
+	var commandApplyBatch *cmdAppBatch
+	if len(rd.CommittedEntries) > 0 && localProps > 0 &&
+		!r.store.TestingKnobs().DisableRaftAckBeforeApplication {
+		commandApplyBatch = getCmdAppBatch()
+		defer commandApplyBatch.release()
+
+		expl, err := r.ackCommittedEntriesBeforeAppRaftMuLocked(ctx, &committedEntryGen, commandApplyBatch)
+		if err != nil {
+			return stats, expl, err
 		}
 	}
 
@@ -716,9 +753,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	applicationStart := timeutil.Now()
 	if len(rd.CommittedEntries) > 0 {
+		if commandApplyBatch == nil {
+			commandApplyBatch = getCmdAppBatch()
+			defer commandApplyBatch.release()
+		}
+
 		var expl string
 		stats.handleCommittedEntriesStats, expl, err =
-			r.handleCommittedEntriesRaftMuLocked(ctx, rd.CommittedEntries)
+			r.handleCommittedEntriesRaftMuLocked(ctx, &committedEntryGen, commandApplyBatch)
 		if err != nil {
 			return stats, expl, err
 		}

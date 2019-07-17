@@ -26,6 +26,7 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableRaftAckBeforeApplication = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
 	}

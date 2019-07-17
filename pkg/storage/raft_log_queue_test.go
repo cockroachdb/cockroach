@@ -715,6 +715,9 @@ func TestTruncateLog(t *testing.T) {
 	tc := testContext{}
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
+	// Ensure that writes have been applied (and updated the replica's
+	// last index with their log index) before being acknowledged.
+	cfg.TestingKnobs.DisableRaftAckBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
@@ -881,6 +884,9 @@ func TestTruncateLogRecompute(t *testing.T) {
 	}
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
+	// Ensure that writes have been applied (and updated the replica's
+	// last index with their log index) before being acknowledged.
+	cfg.TestingKnobs.DisableRaftAckBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)

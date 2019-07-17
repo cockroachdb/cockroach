@@ -149,6 +149,10 @@ type StoreTestingKnobs struct {
 	RefreshReasonTicksPeriod int
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft bool
+	// DisableRaftAckBeforeApplication disables the ability for raft to
+	// acknowledge a write after it has been committed to the log but before
+	// its effects have been applied to the replicated state machine.
+	DisableRaftAckBeforeApplication bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
 	DisableLastProcessedCheck bool
 	// ReplicateQueueAcceptsUnsplit allows the replication queue to

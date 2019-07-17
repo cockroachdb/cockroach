@@ -843,10 +843,15 @@ func TestGCQueueTransactionTable(t *testing.T) {
 func TestGCQueueIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tc := testContext{}
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	// Ensure that writes have been applied before being acknowledged.
+	// The GC queue scans the storage engine directly and we want to
+	// make sure it doesn't miss any intents.
+	tsc.TestingKnobs.DisableRaftAckBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	tc.manualClock.Set(48 * 60 * 60 * 1E9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime

@@ -683,6 +683,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableRaftAckBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
@@ -2593,6 +2594,7 @@ func TestUnsplittableRange(t *testing.T) {
 	}
 	cfg.TestingKnobs.SplitQueuePurgatoryChan = splitQueuePurgatoryChan
 	cfg.TestingKnobs.DisableMergeQueue = true
+	cfg.TestingKnobs.DisableRaftAckBeforeApplication = true
 	store := createTestStoreWithConfig(t, stopper, cfg)
 
 	// Add a single large row to /Table/14.
@@ -2774,6 +2776,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	cfg := storage.TestStoreConfig(hlc.NewClock(manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.DisableMergeQueue = true
+	cfg.TestingKnobs.DisableRaftAckBeforeApplication = true
 	s := createTestStoreWithOpts(
 		t,
 		testStoreOpts{

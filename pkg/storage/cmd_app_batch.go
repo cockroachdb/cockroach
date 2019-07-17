@@ -20,16 +20,31 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
-// cmdAppBatch accumulates state due to the application of raft
-// commands. Committed raft commands are applied to the batch in a multi-stage
-// process whereby individual commands are decoded, prepared for application
-// relative to the current view of replicaState, committed to the storage
-// engine, applied to the Replica's in-memory state and then finished by
-// releasing their latches and notifying clients.
+// entryGen is a generator of raft entries. cmdAppBatch uses the type when
+// iterating over committed entries to decode and apply.
+//
+// The entry and next methods should only be called if valid returns true.
+type entryGen []raftpb.Entry
+
+func (g *entryGen) valid() bool          { return len(*g) != 0 }
+func (g *entryGen) entry() *raftpb.Entry { return &(*g)[0] }
+func (g *entryGen) next()                { *g = (*g)[1:] }
+
+// cmdAppBatch accumulates state due to the application of raft commands.
+// Committed raft commands are applied to the batch in a multi-stage process
+// whereby individual commands are decoded, prepared for application relative to
+// the current view of replicaState, committed to the storage engine, applied to
+// the Replica's in-memory state and then finished by releasing their latches
+// and notifying clients.
 type cmdAppBatch struct {
 	// decodeBuf is used to decode an entry before adding it to the batch.
 	// See decode().
-	decodeBuf decodedRaftEntry
+	decodeBuf     decodedRaftEntry
+	decodeBufFull bool
+
+	// cmdBuf is a buffer containing decoded raft entries that are ready to be
+	// applied in the same batch.
+	cmdBuf cmdAppCtxBuf
 
 	// batch accumulates writes implied by the raft entries in this batch.
 	batch engine.Batch
@@ -54,12 +69,10 @@ type cmdAppBatch struct {
 	// TODO(ajwerner): consider whether this logic should imply that commands
 	// which update truncated state are non-trivial.
 	updatedTruncatedState bool
-
-	cmdBuf cmdAppCtxBuf
 }
 
-// cmdAppBatch structs are needed to apply raft commands, which is to
-// say, frequently, so best to pool them rather than allocated under the raftMu.
+// cmdAppBatch structs are needed to apply raft commands, which is to say,
+// frequently, so best to pool them rather than allocated under the raftMu.
 var cmdAppBatchSyncPool = sync.Pool{
 	New: func() interface{} {
 		return new(cmdAppBatch)
@@ -70,7 +83,7 @@ func getCmdAppBatch() *cmdAppBatch {
 	return cmdAppBatchSyncPool.Get().(*cmdAppBatch)
 }
 
-func releaseCmdAppBatch(b *cmdAppBatch) {
+func (b *cmdAppBatch) release() {
 	b.cmdBuf.clear()
 	*b = cmdAppBatch{}
 	cmdAppBatchSyncPool.Put(b)
@@ -83,49 +96,42 @@ func (b *cmdAppBatch) add(e *raftpb.Entry, d decodedRaftEntry) {
 	s.e = e
 }
 
-// decode decodes commands from toProcess until either all of the commands have
+// decode decodes commands from gen until either all of the commands have
 // been added to the batch or a non-trivial command is decoded. Non-trivial
 // commands must always be in their own batch. If a non-trivial command is
 // encountered the batch is returned immediately without adding the newly
-// decoded command to the batch or removing it from remaining.
-// It is the client's responsibility to deal with non-trivial commands.
-//
-// numEmptyEntries indicates the number of entries in the consumed portion of
-// toProcess contained a zero-byte payload.
-func (b *cmdAppBatch) decode(
-	ctx context.Context, toProcess []raftpb.Entry, decodeBuf *decodedRaftEntry,
-) (
-	foundNonTrivialEntry bool,
-	numEmptyEntries int,
-	remaining []raftpb.Entry,
-	errExpl string,
-	err error,
-) {
-	for len(toProcess) > 0 {
-		e := &toProcess[0]
-		if len(e.Data) == 0 {
-			numEmptyEntries++
+// decoded command to the batch or removing it from remaining. It is the
+// client's responsibility to deal with non-trivial commands.
+func (b *cmdAppBatch) decode(ctx context.Context, gen *entryGen) (errExpl string, err error) {
+	for gen.valid() {
+		e := gen.entry()
+		if errExpl, err = b.decodeBuf.decode(ctx, e); err != nil {
+			return errExpl, err
 		}
-		if errExpl, err = decodeBuf.decode(ctx, e); err != nil {
-			return false, numEmptyEntries, nil, errExpl, err
-		}
+		b.decodeBufFull = true
 		// This is a non-trivial entry which needs to be processed alone.
-		foundNonTrivialEntry = !isTrivial(decodeBuf.replicatedResult(),
-			b.replicaState.UsingAppliedStateKey)
-		if foundNonTrivialEntry {
+		if !isTrivial(b.decodeBuf.replicatedResult(), b.replicaState.UsingAppliedStateKey) {
 			break
 		}
-		// We're going to process this entry in this batch so pop it from toProcess
-		// and add to appStates.
-		toProcess = toProcess[1:]
-		b.add(e, *decodeBuf)
+		// We're going to process this entry in this batch so add to the
+		// cmdBuf and advance the generator.
+		b.add(e, b.popDecodeBuf())
+		gen.next()
 	}
-	return foundNonTrivialEntry, numEmptyEntries, toProcess, "", nil
+	return "", nil
 }
 
-func (b *cmdAppBatch) reset() {
+func (b *cmdAppBatch) popDecodeBuf() decodedRaftEntry {
+	b.decodeBufFull = false
+	return b.decodeBuf
+}
+
+// resetBatch resets the accumulate batch state in the cmdAppBatch.
+// However, it does not reset the receiver's decode buffer.
+func (b *cmdAppBatch) resetBatch() {
 	b.cmdBuf.clear()
 	*b = cmdAppBatch{
-		decodeBuf: b.decodeBuf, // preserve the previously decoded entry
+		decodeBuf:     b.decodeBuf, // preserve the previously decoded entry
+		decodeBufFull: b.decodeBufFull,
 	}
 }

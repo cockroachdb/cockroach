@@ -900,7 +900,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	}
 	tc.repl.mu.Lock()
 	_, _, pErr := checkForcedErr(
-		context.Background(), makeIDKey(), raftCmd, nil /* proposal */, false, /* proposedLocally */
+		context.Background(), makeIDKey(), &raftCmd, nil /* proposal */, false, /* proposedLocally */
 		&tc.repl.mu.state,
 	)
 	tc.repl.mu.Unlock()
@@ -2771,20 +2771,25 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
 				t.Fatal(pErr)
 			}
-			iter := tc.engine.NewIterator(engine.IterOptions{Prefix: true})
-			defer iter.Close()
-			mvccKey := engine.MakeMVCCMetadataKey(key)
-			iter.Seek(mvccKey)
-			var keyMeta enginepb.MVCCMetadata
-			if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
-				t.Fatalf("missing mvcc metadata for %q: %+v", mvccKey, err)
-			} else if err := iter.ValueProto(&keyMeta); err != nil {
-				t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
-			}
-			if tsNext := tsNew.Next(); hlc.Timestamp(keyMeta.Timestamp) != tsNext {
-				t.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
-					key, tsNext, keyMeta.Timestamp)
-			}
+			// Raft entry application is asynchronous, so we may not see the
+			// intent immediately after the Put returns.
+			testutils.SucceedsSoon(t, func() error {
+				iter := tc.engine.NewIterator(engine.IterOptions{Prefix: true})
+				defer iter.Close()
+				mvccKey := engine.MakeMVCCMetadataKey(key)
+				iter.Seek(mvccKey)
+				var keyMeta enginepb.MVCCMetadata
+				if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
+					return errors.Errorf("missing mvcc metadata for %q: %+v", mvccKey, err)
+				} else if err := iter.ValueProto(&keyMeta); err != nil {
+					return errors.Errorf("failed to unmarshal metadata for %q", mvccKey)
+				}
+				if tsNext := tsNew.Next(); hlc.Timestamp(keyMeta.Timestamp) != tsNext {
+					return errors.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
+						key, tsNext, keyMeta.Timestamp)
+				}
+				return nil
+			})
 		})
 	}
 }
@@ -5655,10 +5660,14 @@ func TestRangeStatsComputation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
+		manualClock:   hlc.NewManualClock(123),
 	}
+	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	// Async entry application makes this more difficult to test, so disable it.
+	tsc.TestingKnobs.DisableRaftAckBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	baseStats := initialStats()
 	// The initial stats contain no lease, but there will be an initial
@@ -5910,13 +5919,18 @@ func TestAppliedIndex(t *testing.T) {
 			t.Errorf("expected %d, got %d", sum, reply.NewValue)
 		}
 
-		tc.repl.mu.Lock()
-		newAppliedIndex := tc.repl.mu.state.RaftAppliedIndex
-		tc.repl.mu.Unlock()
-		if newAppliedIndex <= appliedIndex {
-			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
-		}
-		appliedIndex = newAppliedIndex
+		// Raft entry application is not synchronous for increment requests,
+		// so wait for the entry to be applied to the state machine.
+		testutils.SucceedsSoon(t, func() error {
+			tc.repl.mu.RLock()
+			newAppliedIndex := tc.repl.mu.state.RaftAppliedIndex
+			tc.repl.mu.RUnlock()
+			if newAppliedIndex <= appliedIndex {
+				return errors.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
+			}
+			appliedIndex = newAppliedIndex
+			return nil
+		})
 	}
 }
 
@@ -6002,10 +6016,15 @@ func TestReplicaDanglingMetaIntent(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
 		tc := testContext{}
+		tsc := TestStoreConfig(nil)
+		// Ensure that writes have been applied before being acknowledged so
+		// that we can ensure that the READ_UNCOMMITTED scan (which does not
+		// acquire latches) does not miss the intent.
+		tsc.TestingKnobs.DisableRaftAckBeforeApplication = true
 		ctx := context.Background()
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		tc.Start(t, stopper)
+		tc.StartWithStoreConfig(t, stopper, tsc)
 
 		key := roachpb.Key("a")
 
@@ -6619,6 +6638,9 @@ func TestEntries(t *testing.T) {
 	// entries being proposed and causing the test to flake.
 	cfg.RaftTickInterval = math.MaxInt32
 	cfg.TestingKnobs.DisableRaftLogQueue = true
+	// Ensure that writes have been applied (and updated the replica's
+	// last index with their log index) before being acknowledged.
+	cfg.TestingKnobs.DisableRaftAckBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
@@ -6770,6 +6792,9 @@ func TestTerm(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.DisableRaftLogQueue = true
+	// Ensure that writes have been applied (and updated the replica's
+	// last index with their log index) before being acknowledged.
+	tsc.TestingKnobs.DisableRaftAckBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, tsc)
@@ -7323,14 +7348,16 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	tc.Start(t, stopper)
 
 	type magicKey struct{}
+	magicCtx := context.WithValue(ctx, magicKey{}, "foo")
 
-	var c int32                // updated atomically
-	var wrongLeaseIndex uint64 // populated below
-
+	var c int32 // updated atomically
 	tc.repl.mu.Lock()
 	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
 		if v := p.ctx.Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
+				// Set the max lease index to that of the recently applied
+				// write. Two requests can't have the same lease applied index.
+				wrongLeaseIndex := uint64(1)
 				return wrongLeaseIndex, nil
 			}
 		}
@@ -7348,17 +7375,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 		}
 	}
 
-	// Set the max lease index to that of the recently applied write.
-	// Two requests can't have the same lease applied index.
-	tc.repl.mu.RLock()
-	wrongLeaseIndex = tc.repl.mu.state.LeaseAppliedIndex
-	if wrongLeaseIndex < 1 {
-		t.Fatal("committed a few batches, but still at lease index zero")
-	}
-	tc.repl.mu.RUnlock()
-
 	log.Infof(ctx, "test begins")
-
 	var ba roachpb.BatchRequest
 	ba.RangeID = 1
 	ba.Timestamp = tc.Clock().Now()
@@ -7366,12 +7383,8 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
 	ba.Add(&iArg)
 	{
-		_, pErr := tc.repl.executeWriteBatch(
-			context.WithValue(ctx, magicKey{}, "foo"),
-			&ba,
-		)
-		if pErr != nil {
-			t.Fatalf("write batch returned error: %s", pErr)
+		if _, pErr := tc.Sender().Send(magicCtx, ba); pErr != nil {
+			t.Fatal(pErr)
 		}
 		// The command was reproposed internally, for two total proposals.
 		if exp, act := int32(2), atomic.LoadInt32(&c); exp != act {
@@ -7397,18 +7410,13 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 			Lease:     lease,
 			PrevLease: prevLease,
 		})
-		_, pErr := tc.repl.executeWriteBatch(
-			context.WithValue(ctx, magicKey{}, "foo"),
-			&ba,
-		)
-		if pErr != nil {
+		if _, pErr := tc.Sender().Send(magicCtx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 		if exp, act := int32(1), atomic.LoadInt32(&c); exp != act {
 			t.Fatalf("expected %d proposals, got %d", exp, act)
 		}
 	}
-
 }
 
 // TestReplicaCancelRaftCommandProgress creates a number of Raft commands and
@@ -7482,6 +7490,9 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	// Raft leadership instability.
 	cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
 	cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
+	// The test expects that all entries will be applied (with their
+	// lease applied index updates) by the time they ack their client.
+	cfg.TestingKnobs.DisableRaftAckBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
@@ -8826,6 +8837,70 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	close(blockRaftApplication)
 }
 
+// TestAckWriteBeforeApplication tests that the success of transactional writes
+// is acknowledged after those writes have been committed to a Range's Raft log
+// but before those writes have been applied to its replicated state machine.
+func TestAckWriteBeforeApplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tsc := TestStoreConfig(nil)
+
+	var filterActive int32
+	var magicTS hlc.Timestamp
+	blockPreApplication, blockPostApplication := make(chan struct{}), make(chan struct{})
+	applyFilterFn := func(ch chan struct{}) storagebase.ReplicaApplyFilter {
+		return func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+			if atomic.LoadInt32(&filterActive) == 1 && filterArgs.Timestamp == magicTS {
+				ch <- struct{}{}
+			}
+			return 0, nil
+		}
+	}
+	tsc.TestingKnobs.TestingApplyFilter = applyFilterFn(blockPreApplication)
+	tsc.TestingKnobs.TestingPostApplyFilter = applyFilterFn(blockPostApplication)
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.StartWithStoreConfig(t, stopper, tsc)
+	repl := tc.repl
+
+	var ba roachpb.BatchRequest
+	key := roachpb.Key("a")
+	put := putArgs(key, []byte("val"))
+	ba.Add(&put)
+	magicTS = tc.Clock().Now()
+	ba.Timestamp = magicTS
+
+	atomic.StoreInt32(&filterActive, 1)
+	exLease, _ := repl.GetLease()
+	ch, _, _, pErr := repl.evalAndPropose(
+		context.Background(), exLease, &ba, &allSpans, endCmds{},
+	)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// The result should be blocked on the pre-apply filter.
+	select {
+	case <-time.After(10 * time.Millisecond):
+		// Expected.
+	case propRes := <-ch:
+		t.Fatalf("unexpected proposal acknowledged before TestingApplyFilter: %v", propRes.Err)
+	}
+
+	// Release the pre-apply filter. The result should not be blocked on the
+	// post-apply filter because it acknowledges the client before applying.
+	<-blockPreApplication
+	propRes := <-ch
+	if propRes.Err != nil {
+		t.Fatalf("unexpected proposal result error: %v", propRes.Err)
+	}
+
+	// Stop blocking Raft application to allow everything to shut down cleanly.
+	// This also confirms that the proposal does eventually apply.
+	<-blockPostApplication
+}
+
 // TestApplyPaginatedCommittedEntries tests that a Raft group's committed
 // entries are quickly applied, even if their application is paginated due to
 // the RaftMaxSizePerMsg configuration. This is a regression test for #31330.
@@ -9774,11 +9849,13 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 func TestRangeStatsRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	tsc := TestStoreConfig(nil)
+	tsc.TestingKnobs.DisableRaftAckBeforeApplication = true
 	tc := testContext{}
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	keyPrefix := roachpb.RKey("dummy-prefix")
 
