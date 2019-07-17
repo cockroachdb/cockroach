@@ -90,10 +90,9 @@ type sort_TYPE_DIROp struct {
 	cancelChecker CancelChecker
 }
 
-func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64, workingSpace []uint64) {
+func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64) {
 	s.sortCol = col._TemplateType()
 	s.order = order
-	s.workingSpace = workingSpace
 }
 
 func (s *sort_TYPE_DIROp) sort(ctx context.Context) {
@@ -129,7 +128,6 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 		panic(fmt.Sprintf("invalid partitions list %v", partitions))
 	}
 	order := s.order
-	sortCol := s.sortCol
 	for i, partitionStart := range partitions {
 		var partitionEnd uint64
 		if i == len(partitions)-1 {
@@ -138,7 +136,6 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 			partitionEnd = partitions[i+1]
 		}
 		s.order = order[partitionStart:partitionEnd]
-		s.sortCol = sortCol[partitionStart:partitionEnd]
 		n := int(partitionEnd - partitionStart)
 		s.quickSort(ctx, 0, n, maxDepth(n))
 	}
@@ -146,15 +143,13 @@ func (s *sort_TYPE_DIROp) sortPartitions(ctx context.Context, partitions []uint6
 
 func (s *sort_TYPE_DIROp) Less(i, j int) bool {
 	var lt bool
-	_ASSIGN_LT("lt", "s.sortCol[i]", "s.sortCol[j]")
+	// We always indirect via the order vector.
+	_ASSIGN_LT("lt", "s.sortCol[s.order[i]]", "s.sortCol[s.order[j]]")
 	return lt
 }
 
 func (s *sort_TYPE_DIROp) Swap(i, j int) {
-	// Swap needs to swap the values in the column being sorted, as otherwise
-	// subsequent calls to Less would be incorrect.
-	// We also store the swap order in s.order to swap all the other columns.
-	s.sortCol[i], s.sortCol[j] = s.sortCol[j], s.sortCol[i]
+	// We don't physically swap the column - we merely edit the order vector.
 	s.order[i], s.order[j] = s.order[j], s.order[i]
 }
 

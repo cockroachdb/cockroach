@@ -115,6 +115,15 @@ type partitioner interface {
 	// partition partitions the input colVec of size n, writing true to the
 	// outputCol for every value that differs from the previous one.
 	partition(colVec coldata.Vec, outputCol []bool, n uint64)
+
+	// partitionWithOrder is like partition, except it performs the partitioning
+	// on the input Vec as if it were ordered via the input order vector, which is
+	// a selection vector. The output is written in absolute order, however. For
+	// example, with an input vector [a,b,b] and an order vector [1,2,0], which
+	// implies a reordered input vector [b,b,a], the resultant outputCol would be
+	// [true, false, true], indicating a distinct value at the 0th and 2nd
+	// elements.
+	partitionWithOrder(colVec coldata.Vec, order []uint64, outputCol []bool, n uint64)
 }
 
 // newPartitioner returns a new partitioner on type t.
@@ -206,12 +215,14 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		// Bounds check elimination.
 		sel = sel[:n]
 		if nulls != nil {
-			for _, i := range sel {
-				_CHECK_DISTINCT_WITH_NULLS(int(i), lastVal, col, outputCol)
+			for _, checkIdx := range sel {
+				outputIdx := checkIdx
+				_CHECK_DISTINCT_WITH_NULLS(int(checkIdx), outputIdx, lastVal, col, outputCol)
 			}
 		} else {
-			for _, i := range sel {
-				_CHECK_DISTINCT(int(i), lastVal, col, outputCol)
+			for _, checkIdx := range sel {
+				outputIdx := checkIdx
+				_CHECK_DISTINCT(int(checkIdx), outputIdx, tlastVal, col, outputCol)
 			}
 		}
 	} else {
@@ -220,12 +231,14 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		outputCol = outputCol[:n]
 		_ = outputCol[len(col)-1]
 		if nulls != nil {
-			for i := range col {
-				_CHECK_DISTINCT_WITH_NULLS(i, lastVal, col, outputCol)
+			for checkIdx := range col {
+				outputIdx := checkIdx
+				_CHECK_DISTINCT_WITH_NULLS(checkIdx, outputIdx, lastVal, col, outputCol)
 			}
 		} else {
-			for i := range col {
-				_CHECK_DISTINCT(i, lastVal, col, outputCol)
+			for checkIdx := range col {
+				outputIdx := checkIdx
+				_CHECK_DISTINCT(checkIdx, outputIdx, lastVal, col, outputCol)
 			}
 		}
 	}
@@ -242,6 +255,30 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 // input column.
 type partitioner_TYPE struct{}
 
+func (p partitioner_TYPE) partitionWithOrder(
+	colVec coldata.Vec, order []uint64, outputCol []bool, n uint64,
+) {
+	var lastVal _GOTYPE
+	var lastValNull bool
+	var nulls *coldata.Nulls
+	if colVec.MaybeHasNulls() {
+		nulls = colVec.Nulls()
+	}
+
+	col := colVec._TemplateType()[:n]
+	outputCol = outputCol[:n]
+	outputCol[0] = true
+	if nulls != nil {
+		for outputIdx, checkIdx := range order {
+			_CHECK_DISTINCT_WITH_NULLS(checkIdx, outputIdx, lastVal, col, outputCol)
+		}
+	} else {
+		for outputIdx, checkIdx := range order {
+			_CHECK_DISTINCT(outputIdx, checkIdx, lastVal, col, outputCol)
+		}
+	}
+}
+
 func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint64) {
 	var lastVal _GOTYPE
 	var lastValNull bool
@@ -254,12 +291,14 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint
 	outputCol = outputCol[:n]
 	outputCol[0] = true
 	if nulls != nil {
-		for i := range col {
-			_CHECK_DISTINCT_WITH_NULLS(i, lastVal, col, outputCol)
+		for checkIdx := range col {
+			outputIdx := checkIdx
+			_CHECK_DISTINCT_WITH_NULLS(checkIdx, lastVal, col, outputCol)
 		}
 	} else {
-		for i := range col {
-			_CHECK_DISTINCT(i, lastVal, col, outputCol)
+		for checkIdx := range col {
+			outputIdx := checkIdx
+			_CHECK_DISTINCT(checkIdx, lastVal, col, outputCol)
 		}
 	}
 }
@@ -271,13 +310,15 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint
 // to the passed in lastVal, and sets the ith value of outputCol to true if the
 // compared values were distinct. It presumes that the current batch has no null
 // values.
-func _CHECK_DISTINCT(i int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool) { // */}}
+func _CHECK_DISTINCT(
+	checkIdx int, outputIdx int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool,
+) { // */}}
 
 	// {{define "checkDistinct"}}
-	v := col[i]
+	v := col[checkIdx]
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal)
-	outputCol[i] = outputCol[i] || unique
+	outputCol[outputIdx] = outputCol[outputIdx] || unique
 	lastVal = v
 	// {{end}}
 
@@ -288,19 +329,21 @@ func _CHECK_DISTINCT(i int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool) { 
 // _CHECK_DISTINCT_WITH_NULLS behaves the same as _CHECK_DISTINCT, but it also
 // considers whether the previous and current values are null. It assumes that
 // `nulls` is non-nil.
-func _CHECK_DISTINCT_WITH_NULLS(i int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool) { // */}}
+func _CHECK_DISTINCT_WITH_NULLS(
+	checkIdx int, outputIdx, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool,
+) { // */}}
 
 	// {{define "checkDistinctWithNulls"}}
-	null := nulls.NullAt(uint16(i))
-	v := col[i]
+	null := nulls.NullAt(uint16(checkIdx))
+	v := col[checkIdx]
 	if null != lastValNull {
 		// Either the current value is null and the previous was not or vice-versa.
-		outputCol[i] = true
+		outputCol[outputIdx] = true
 	} else if !null {
 		// Neither value is null, so we must compare.
 		var unique bool
 		_ASSIGN_NE(unique, v, lastVal)
-		outputCol[i] = outputCol[i] || unique
+		outputCol[outputIdx] = outputCol[outputIdx] || unique
 	}
 	lastVal = v
 	lastValNull = null
