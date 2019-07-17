@@ -1648,6 +1648,16 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 	}, nil
 }
 
+// ConstructControlJobs is part of the exec.Factory interface.
+func (ef *execFactory) ConstructControlJobs(
+	command tree.JobCommand, input exec.Node,
+) (exec.Node, error) {
+	return &controlJobsNode{
+		rows:          input.(planNode),
+		desiredStatus: jobCommandToDesiredStatus[command],
+	}, nil
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode
