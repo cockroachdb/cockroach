@@ -15,13 +15,16 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
@@ -397,8 +400,8 @@ func TestServerConnSettings(t *testing.T) {
 		{[]string{"start", "--port", "12345"}, ":12345", ":12345", "[]"},
 		{[]string{"start", "--advertise-host", "192.168.0.111"}, ":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort, "[]"},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--listen-addr", "::1"}, "[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort, "[]"},
-		{[]string{"start", "--listen-addr", "2622:6221:e663:4922:fc2b:788b:fadd:7b48", "[]"},
+		{[]string{"start", "--listen-addr", "[::1]"}, "[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort, "[]"},
+		{[]string{"start", "--listen-addr", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]", "[]"},
 			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[]"},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345", "127.0.0.1:12345", "[]"},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "12345"}, "127.0.0.1:12345", "192.168.0.111:12345", "[]"},
@@ -449,6 +452,58 @@ func TestServerConnSettings(t *testing.T) {
 	}
 }
 
+func TestServerJoinSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	f := StartCmd.Flags()
+	testData := []struct {
+		args         []string
+		expectedJoin []string
+	}{
+		{[]string{"start", "--join=a"}, []string{"a:" + base.DefaultPort}},
+		{[]string{"start", "--join=:"}, []string{"HOSTNAME:" + base.DefaultPort}},
+		{[]string{"start", "--join=:123"}, []string{"HOSTNAME:123"}},
+		{[]string{"start", "--join=a,b,c"}, []string{"a:" + base.DefaultPort, "b:" + base.DefaultPort, "c:" + base.DefaultPort}},
+		{[]string{"start", "--join=a", "--join=b"}, []string{"a:" + base.DefaultPort, "b:" + base.DefaultPort}},
+		{[]string{"start", "--join=127.0.0.1"}, []string{"127.0.0.1:" + base.DefaultPort}},
+		{[]string{"start", "--join=127.0.0.1:"}, []string{"127.0.0.1:" + base.DefaultPort}},
+		{[]string{"start", "--join=127.0.0.1,abc"}, []string{"127.0.0.1:" + base.DefaultPort, "abc:" + base.DefaultPort}},
+		{[]string{"start", "--join=[::1],[::2]"}, []string{"[::1]:" + base.DefaultPort, "[::2]:" + base.DefaultPort}},
+		{[]string{"start", "--join=[::1]:123,[::2]"}, []string{"[::1]:123", "[::2]:" + base.DefaultPort}},
+		{[]string{"start", "--join=[::1],127.0.0.1"}, []string{"[::1]:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort}},
+		{[]string{"start", "--join=[::1]:123", "--join=[::2]"}, []string{"[::1]:123", "[::2]:" + base.DefaultPort}},
+	}
+
+	for i, td := range testData {
+		initCLIDefaults()
+		if err := f.Parse(td.args); err != nil {
+			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+		}
+
+		extraClientFlagInit()
+
+		var actual []string
+		myHostname, _ := os.Hostname()
+		for _, addr := range serverCfg.JoinList {
+			res, err := resolver.NewResolver(addr)
+			if err != nil {
+				t.Error(err)
+			}
+			actualAddr := res.Addr()
+			// Normalize the local hostname to make the test location-agnostic.
+			actualAddr = strings.ReplaceAll(actualAddr, myHostname, "HOSTNAME")
+			actual = append(actual, actualAddr)
+		}
+		if !reflect.DeepEqual(td.expectedJoin, actual) {
+			t.Errorf("%d. serverCfg.JoinList expected %#v, but got %#v. td.args was '%#v'.",
+				i, td.expectedJoin, actual, td.args)
+		}
+	}
+}
+
 func TestClientConnSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -482,9 +537,6 @@ func TestClientConnSettings(t *testing.T) {
 		// Deprecated syntax.
 		{[]string{"quit", "--port", "12345"}, ":12345"},
 		{[]string{"quit", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345"},
-		{[]string{"quit", "--host", "::1"}, "[::1]:" + base.DefaultPort},
-		{[]string{"quit", "--host", "2622:6221:e663:4922:fc2b:788b:fadd:7b48"},
-			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
 	}
 
 	for i, td := range testData {
@@ -524,8 +576,8 @@ func TestHttpHostFlagValue(t *testing.T) {
 		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "my.host.name"}, "my.host.name:" + base.DefaultHTTPPort},
 		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "myhostname"}, "myhostname:" + base.DefaultHTTPPort},
 		// confirm IPv6 works too
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "::1"}, "[::1]:" + base.DefaultHTTPPort},
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "[::1]"}, "[::1]:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultHTTPPort},
 	}
 
 	for i, td := range testData {
