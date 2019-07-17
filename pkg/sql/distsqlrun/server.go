@@ -464,6 +464,7 @@ func (ds *ServerImpl) setupFlow(
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
 		ctx = opentracing.ContextWithSpan(ctx, nil)
+		monitor.Stop(ctx)
 		return ctx, nil, err
 	}
 	if !f.isLocal() {

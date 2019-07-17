@@ -102,6 +102,32 @@ func (dsp *DistSQLPlanner) initRunners() {
 	}
 }
 
+// shouldFallbackOnVectorizedSetupError returns true if the given error is a
+// vectorized setup error and the VectorizeExecMode semantics support falling
+// back to distsql.
+func shouldFallbackOnVectorizedSetupError(mode sessiondata.VectorizeExecMode, err error) bool {
+	return mode == sessiondata.VectorizeOn && distsqlrun.IsVectorizedSetupError(err)
+}
+
+// prepareVectorizedFlowsForReplanning prepares evalCtx and flows to be reused
+// in setupFlows in the case of a vectorization setup failure. Specifically, it
+// turns off Vectorize in the evalCtx and generates a new flowID for all the
+// flows so that these are treated as a new distributed flow. If we did not
+// regenerate the flowID, we could possibly have vectorized and non vectorized
+// flows connect to each other. This function returns the new flow ID and a
+// function to reset the evalCtx's Vectorize mode.
+func prepareVectorizedFlowsForReplanning(
+	evalCtx *extendedEvalContext, flows map[roachpb.NodeID]*distsqlpb.FlowSpec,
+) (distsqlpb.FlowID, func()) {
+	origMode := evalCtx.SessionData.Vectorize
+	evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
+	newFlowID := uuid.MakeV4()
+	for i := range flows {
+		flows[i].FlowID.UUID = newFlowID
+	}
+	return distsqlpb.FlowID{UUID: newFlowID}, func() { evalCtx.SessionData.Vectorize = origMode }
+}
+
 // setupFlows sets up all the flows specified in flows using the provided state.
 // It will first attempt to set up all remote flows using the dsp workers if
 // available or sequentially if not, and then finally set up the gateway flow,
@@ -168,26 +194,19 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// into the local flow.
 	}
 	if firstErr != nil {
-		if _, ok := errors.If(firstErr, func(err error) (v interface{}, ok bool) {
-			v, ok = err.(*distsqlrun.VectorizedSetupError)
-			return v, ok
-		}); ok && evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn {
+		if shouldFallbackOnVectorizedSetupError(evalCtx.SessionData.Vectorize, firstErr) {
 			// Error vectorizing remote flows, try again with off.
 			// Generate a new flow ID so that any remote nodes that successfully set
 			// up a vectorized flow will not be connected to by a non-vectorized flow.
-			newFlowID := uuid.MakeV4()
+			oldFlowID := flows[thisNodeID].FlowID
+			newFlowID, reset := prepareVectorizedFlowsForReplanning(evalCtx, flows)
+			defer reset()
 			log.Infof(
-				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %+v", flows[thisNodeID].FlowID, newFlowID, firstErr,
+				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %+v", oldFlowID, newFlowID, firstErr,
 			)
-			for i := range flows {
-				flows[i].FlowID.UUID = newFlowID
-			}
-			evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
-			// Reset vectorize setting after returning.
-			defer func() { evalCtx.SessionData.Vectorize = sessiondata.VectorizeOn }()
 			// Recurse once with sessiondata.VectorizeOff, note that this branch will
-			// not be hit again due to the condition above that
-			// evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn.
+			// not be hit again due to prepareVectorizedFlowsForReplanning turning off
+			// vectorized.
 			return dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
 		}
 		return nil, nil, firstErr
@@ -197,8 +216,22 @@ func (dsp *DistSQLPlanner) setupFlows(
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
 	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
+	parentMonitor := evalCtx.Mon
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
+		if shouldFallbackOnVectorizedSetupError(evalCtx.SessionData.Vectorize, err) {
+			// Error vectorizing only the gateway flow.
+			oldFlowID := flows[thisNodeID].FlowID
+			newFlowID, reset := prepareVectorizedFlowsForReplanning(evalCtx, flows)
+			defer reset()
+			log.Infof(
+				ctx, "error vectorizing gateway flow %s, restarting with vectorize=off and ID %s: %+v", oldFlowID, newFlowID, firstErr,
+			)
+			// Reset the parent monitor, this field is overwritten when running a flow
+			// locally.
+			evalCtx.Mon = parentMonitor
+			return dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
+		}
 		return nil, nil, err
 	}
 
