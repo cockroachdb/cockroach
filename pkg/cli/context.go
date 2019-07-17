@@ -106,6 +106,8 @@ func initCLIDefaults() {
 	serverCfg.ReadyFn = nil
 	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
+	serverCfg.JoinList = nil
+
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
 	startCtx.serverListenAddr = ""
