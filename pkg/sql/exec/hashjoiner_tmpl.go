@@ -87,8 +87,11 @@ func _CHECK_COL_BODY(
 	nToCheck uint16,
 	_PROBE_HAS_NULLS bool,
 	_BUILD_HAS_NULLS bool,
+	_ALLOW_NULL_EQUALITY bool,
 ) { // */}}
 	// {{define "checkColBody"}}
+	probeIsNull := false
+	buildIsNull := false
 	for i := uint16(0); i < nToCheck; i++ {
 		// keyID of 0 is reserved to represent the end of the next chain.
 
@@ -98,11 +101,23 @@ func _CHECK_COL_BODY(
 			// found.
 
 			/* {{if .ProbeHasNulls }} */
-			if probeVec.Nulls().NullAt(_SEL_IND) {
+			probeIsNull = probeVec.Nulls().NullAt(_SEL_IND)
+			/* {{end}} */
+
+			/* {{if .BuildHasNulls }} */
+			buildIsNull = buildVec.Nulls().NullAt64(keyID - 1)
+			/* {{end}} */
+
+			/* {{if .AllowNullEquality}} */
+			if probeIsNull && buildIsNull {
+				continue
+			}
+			/* {{end}} */
+			if probeIsNull {
 				ht.groupID[ht.toCheck[i]] = 0
-			} else /*{{end}} {{if .BuildHasNulls}} */ if buildVec.Nulls().NullAt64(keyID - 1) {
+			} else if buildIsNull {
 				ht.differs[ht.toCheck[i]] = true
-			} else /*{{end}} */ {
+			} else {
 				_CHECK_COL_MAIN(ht, buildKeys, probeKeys, keyID, i)
 			}
 		}
@@ -121,15 +136,21 @@ func _CHECK_COL_WITH_NULLS(
 	// {{define "checkColWithNulls"}}
 	if probeVec.MaybeHasNulls() {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true)
+			if ht.allowNullEquality {
+				// The allowNullEquality flag only matters if both vectors have nulls.
+				// This lets us avoid writing all 2^3 conditional branches.
+				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true, true)
+			} else {
+				_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true, false)
+			}
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false, false)
 		}
 	} else {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true, false)
 		} else {
-			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false, false)
 		}
 	}
 	// {{end}}
@@ -141,12 +162,19 @@ func _REHASH_BODY(
 	ht *hashTable,
 	buckets []uint64,
 	keys []interface{},
+	nulls *coldata.Nulls,
 	nKeys uint64,
 	_SEL_STRING string,
+	_HAS_NULLS bool,
 ) { // */}}
 	// {{define "rehashBody"}}
 	for i := uint64(0); i < nKeys; i++ {
 		ht.cancelChecker.check(ctx)
+		// {{ if .HasNulls }}
+		if nulls.NullAt(uint16(_SEL_IND)) {
+			continue
+		}
+		// {{ end }}
 		v := keys[_SEL_IND]
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v)
@@ -270,11 +298,19 @@ func (ht *hashTable) rehash(
 	switch t {
 	// {{range $hashType := .HashTemplate}}
 	case _TYPES_T:
-		keys := col._TemplateType()
-		if sel != nil {
-			_REHASH_BODY(ctx, ht, buckets, keys, nKeys, "sel[i]")
+		keys, nulls := col._TemplateType(), col.Nulls()
+		if col.MaybeHasNulls() {
+			if sel != nil {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, "sel[i]", true)
+			} else {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, "i", true)
+			}
 		} else {
-			_REHASH_BODY(ctx, ht, buckets, keys, nKeys, "i")
+			if sel != nil {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, "sel[i]", false)
+			} else {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, "i", false)
+			}
 		}
 
 	// {{end}}
@@ -285,8 +321,9 @@ func (ht *hashTable) rehash(
 
 // checkCol determines if the current key column in the groupID buckets matches
 // the specified equality column key. If there is a match, then the key is added
-// to differs. If the bucket has reached the end, the key is rejected. If any
-// element in the key is null, then there is no match.
+// to differs. If the bucket has reached the end, the key is rejected. If the
+// hashTable disallows null equality, then if any element in the key is null,
+// there is no match.
 func (ht *hashTable) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
 	switch t {
 	// {{range $neType := .NETemplate}}
