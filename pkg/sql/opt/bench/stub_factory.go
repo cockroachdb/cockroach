@@ -329,3 +329,11 @@ func (f *stubFactory) ConstructControlJobs(
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructCancelQueries(input exec.Node, ifExists bool) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (exec.Node, error) {
+	return struct{}{}, nil
+}

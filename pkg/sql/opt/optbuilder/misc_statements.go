@@ -42,3 +42,53 @@ func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScop
 	)
 	return outScope
 }
+
+func (b *Builder) buildCancelQueries(n *tree.CancelQueries, inScope *scope) (outScope *scope) {
+	// We don't allow the input statement to reference outer columns, so we
+	// pass a "blank" scope rather than inScope.
+	emptyScope := &scope{builder: b}
+	colTypes := []*types.T{types.String}
+	inputScope := b.buildStmt(n.Queries, colTypes, emptyScope)
+
+	checkInputColumns(
+		"CANCEL QUERIES",
+		inputScope,
+		[]string{"query_id"},
+		colTypes,
+		1, /* minPrefix */
+	)
+	outScope = inScope.push()
+	outScope.expr = b.factory.ConstructCancelQueries(
+		inputScope.expr.(memo.RelExpr),
+		&memo.CancelPrivate{
+			Props:    inputScope.makePhysicalProps(),
+			IfExists: n.IfExists,
+		},
+	)
+	return outScope
+}
+
+func (b *Builder) buildCancelSessions(n *tree.CancelSessions, inScope *scope) (outScope *scope) {
+	// We don't allow the input statement to reference outer columns, so we
+	// pass a "blank" scope rather than inScope.
+	emptyScope := &scope{builder: b}
+	colTypes := []*types.T{types.String}
+	inputScope := b.buildStmt(n.Sessions, colTypes, emptyScope)
+
+	checkInputColumns(
+		"CANCEL SESSIONS",
+		inputScope,
+		[]string{"session_id"},
+		colTypes,
+		1, /* minPrefix */
+	)
+	outScope = inScope.push()
+	outScope.expr = b.factory.ConstructCancelSessions(
+		inputScope.expr.(memo.RelExpr),
+		&memo.CancelPrivate{
+			Props:    inputScope.makePhysicalProps(),
+			IfExists: n.IfExists,
+		},
+	)
+	return outScope
+}

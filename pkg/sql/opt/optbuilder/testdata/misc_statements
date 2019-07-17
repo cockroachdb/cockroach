@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE ab (a INT, b INT)
+CREATE TABLE ab (a INT, b STRING)
 ----
 
 build
@@ -27,16 +27,16 @@ control-jobs (RESUME)
            └── const: 3 [type=int]
 
 build
-PAUSE JOBS SELECT b FROM ab ORDER BY a
+PAUSE JOBS SELECT a FROM ab ORDER BY b
 ----
 control-jobs (PAUSE)
  └── sort
-      ├── columns: b:2(int)  [hidden: a:1(int)]
-      ├── ordering: +1
+      ├── columns: a:1(int)  [hidden: b:2(string)]
+      ├── ordering: +2
       └── project
-           ├── columns: a:1(int) b:2(int)
+           ├── columns: a:1(int) b:2(string)
            └── scan ab
-                └── columns: a:1(int) b:2(int) rowid:3(int!null)
+                └── columns: a:1(int) b:2(string) rowid:3(int!null)
 
 build
 PAUSE JOB 1
@@ -56,3 +56,87 @@ build
 CANCEL JOBS SELECT 1, 1
 ----
 error (42601): too many columns in CANCEL JOBS data
+
+build
+CANCEL SESSION 'foo'
+----
+cancel-sessions
+ └── values
+      ├── columns: column1:1(string!null)
+      └── tuple [type=tuple{string}]
+           └── const: 'foo' [type=string]
+
+build
+CANCEL SESSIONS VALUES ('foo'), ('bar')
+----
+cancel-sessions
+ └── values
+      ├── columns: column1:1(string!null)
+      ├── tuple [type=tuple{string}]
+      │    └── const: 'foo' [type=string]
+      └── tuple [type=tuple{string}]
+           └── const: 'bar' [type=string]
+
+build
+CANCEL SESSIONS SELECT b FROM ab ORDER BY a
+----
+cancel-sessions
+ └── sort
+      ├── columns: b:2(string)  [hidden: a:1(int)]
+      ├── ordering: +1
+      └── project
+           ├── columns: a:1(int) b:2(string)
+           └── scan ab
+                └── columns: a:1(int) b:2(string) rowid:3(int!null)
+
+build
+CANCEL SESSION 1
+----
+error (42601): CANCEL SESSIONS data column 1 (session_id) must be of type string, not type int
+
+build
+CANCEL SESSIONS VALUES (1, 2)
+----
+error (42601): too many columns in CANCEL SESSIONS data
+
+build
+CANCEL QUERY 'foo'
+----
+cancel-queries
+ └── values
+      ├── columns: column1:1(string!null)
+      └── tuple [type=tuple{string}]
+           └── const: 'foo' [type=string]
+
+build
+CANCEL QUERIES VALUES ('foo'), ('bar')
+----
+cancel-queries
+ └── values
+      ├── columns: column1:1(string!null)
+      ├── tuple [type=tuple{string}]
+      │    └── const: 'foo' [type=string]
+      └── tuple [type=tuple{string}]
+           └── const: 'bar' [type=string]
+
+build
+CANCEL QUERIES SELECT b FROM ab ORDER BY a
+----
+cancel-queries
+ └── sort
+      ├── columns: b:2(string)  [hidden: a:1(int)]
+      ├── ordering: +1
+      └── project
+           ├── columns: a:1(int) b:2(string)
+           └── scan ab
+                └── columns: a:1(int) b:2(string) rowid:3(int!null)
+
+build
+CANCEL QUERY 1
+----
+error (42601): CANCEL QUERIES data column 1 (query_id) must be of type string, not type int
+
+build
+CANCEL QUERIES VALUES (1, 2)
+----
+error (42601): too many columns in CANCEL QUERIES data

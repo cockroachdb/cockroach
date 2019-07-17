@@ -847,6 +847,20 @@ func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *p
 	rel.CanHaveSideEffects = true
 }
 
+func (b *logicalPropsBuilder) buildCancelQueriesProps(
+	cancel *CancelQueriesExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(cancel, opt.ColList{}, rel)
+	rel.CanHaveSideEffects = true
+}
+
+func (b *logicalPropsBuilder) buildCancelSessionsProps(
+	cancel *CancelSessionsExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(cancel, opt.ColList{}, rel)
+	rel.CanHaveSideEffects = true
+}
+
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
 	BuildSharedProps(b.mem, limit, &rel.Shared)
 
