@@ -204,6 +204,11 @@ func newColOperator(
 					// issues, at first, we could plan SUM for all types besides Int64.
 					return nil, nil, memUsage, errors.Newf("sum on int cols not supported (use sum_int)")
 				}
+			case distsqlpb.AggregatorSpec_SUM_INT:
+				// TODO(yuzefovich): support this case through vectorize.
+				if aggTyps[i][0].Width() != 64 {
+					return nil, nil, memUsage, errors.Newf("sum_int is only supported on Int64 through vectorized")
+				}
 			}
 			_, retType, err := GetAggregateInfo(agg.Func, aggTyps[i]...)
 			if err != nil {
