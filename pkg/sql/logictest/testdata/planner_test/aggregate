@@ -351,8 +351,9 @@ statement ok
 SET tracing = on,kv,results; SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0); SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
 output row: [1]
@@ -378,8 +379,9 @@ statement ok
 SET tracing = on,kv,results; SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /xyz/primary/1 -> NULL
 fetched: /xyz/primary/1/y -> 2
@@ -410,8 +412,9 @@ statement ok
 SET tracing = on,kv,results; SELECT min(z) FROM xyz; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
 output row: [3.0]
@@ -453,8 +456,9 @@ statement ok
 SET tracing = on,kv,results; SELECT min(a) FROM ab; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /ab/primary/1 -> NULL
 fetched: /ab/primary/1/b -> 10
@@ -480,8 +484,9 @@ statement ok
 SET tracing = on,kv,results; SELECT max(a) FROM ab; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /ab/primary/5/b -> 50
 fetched: /ab/primary/5 -> NULL
