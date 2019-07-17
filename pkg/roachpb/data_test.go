@@ -28,10 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 func makeTS(walltime int64, logical int32) hlc.Timestamp {
@@ -1558,4 +1561,32 @@ func TestUpdateObservedTimestamps(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestChangeReplicasTrigger_String(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	l := ReplicaType_LEARNER
+	v := ReplicaType_VOTER
+	repl := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3, Type: &l}
+	crt := ChangeReplicasTrigger{
+		ChangeType: ADD_REPLICA,
+		Replica:    repl,
+		Desc: &RangeDescriptor{
+			RangeID:  1,
+			StartKey: RKey("a"),
+			EndKey:   RKey("b"),
+			InternalReplicas: []ReplicaDescriptor{
+				repl,
+				{NodeID: 4, StoreID: 5, ReplicaID: 6, Type: &v},
+				{NodeID: 7, StoreID: 8, ReplicaID: 9, Type: &l},
+			},
+			NextReplicaID:        10,
+			Generation:           proto.Int64(5),
+			GenerationComparable: proto.Bool(true),
+		},
+	}
+	act := crt.String()
+	exp := `ADD_REPLICA((n1,s2):3LEARNER): updated=(n4,s5):6,(n1,s2):3LEARNER,(n7,s8):9LEARNER next=10`
+	require.Equal(t, exp, act)
 }
