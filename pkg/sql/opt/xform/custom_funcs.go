@@ -852,7 +852,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			}
 			constColID := c.e.f.Metadata().AddColumn(
 				fmt.Sprintf("project_const_col_@%d", idxCol),
-				condition.Right.(*memo.ConstExpr).Typ)
+				condition.Right.DataType())
 			projections = append(projections, memo.ProjectionsItem{
 				Element:    c.e.f.ConstructConst(constValMap[idxCol]),
 				ColPrivate: memo.ColPrivate{Col: constColID},
