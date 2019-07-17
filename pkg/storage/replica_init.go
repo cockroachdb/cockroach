@@ -152,6 +152,35 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		return err
 	}
 
+	// If we crashed before finishing applying the disk changes of a snapshot, we
+	// must ingest the SSTs. Note that ingesting the same set of SSTs is
+	// idempotent so removing SSTSnapshotInProgressData and performing the
+	// ingestion does not have to be atomic to be safe.
+	sstSnapshotInProgressData, found, err := r.mu.stateLoader.LoadSSTSnapshotInProgressData(ctx, r.store.Engine())
+	if err != nil {
+		return err
+	}
+	// TODO(jeffreyxiao): Test an untimely crash here. Since
+	// SSTSnapshotInProgressData still exists, the same set of SSTs should be
+	// ingested again. This is safe because ingesting the same set of SSTs should
+	// be idempotent.
+	if found {
+		sss, err := newSSTSnapshotStorage(r.store.cfg.Settings, desc.RangeID, sstSnapshotInProgressData.ID,
+			r.store.engine.GetAuxiliaryDir(), r.store.limiters.BulkIOWriteRate, r.store.Engine())
+		if err != nil {
+			return err
+		}
+		if err := r.store.Engine().IngestExternalFiles(ctx, sss.ssts, true /* skipWritingSeqNo */, true /* modify */); err != nil {
+			return err
+		}
+		if err := r.mu.stateLoader.DeleteSSTSnapshotInProgressData(ctx, r.store.Engine()); err != nil {
+			return err
+		}
+		if err := sss.Clear(); err != nil {
+			return err
+		}
+	}
+
 	r.assertStateLocked(ctx, r.store.Engine())
 	return nil
 }

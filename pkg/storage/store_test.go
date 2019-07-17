@@ -3365,6 +3365,98 @@ func TestSnapshotRateLimit(t *testing.T) {
 	}
 }
 
+// TestSnapshotSSTRecovery simulates a node crash just before the SSTs of a
+// snapshot get ingested to test that when a replica starts up, the SSTs are
+// properly ingested.
+func TestSnapshotSSTRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testKey := testutils.MakeKey(keys.MakeTablePrefix(50), roachpb.RKey("a"))
+	testTimestamp := hlc.MinTimestamp
+	testValue := roachpb.MakeValueFromBytesAndTimestamp([]byte("foo"), testTimestamp)
+	// The test is setup so that the testRangeID corresponds to the range that
+	// starts with testKey.
+	testRangeID := roachpb.RangeID(7)
+	testUUID := uuid.UUID{}
+
+	stopper := stop.NewStopper()
+	ctx := context.TODO()
+	defer stopper.Stop(ctx)
+
+	cfg := TestStoreConfig(nil)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+	cfg.DB = client.NewDB(cfg.AmbientCtx, &testSenderFactory{}, cfg.Clock)
+
+	// Initialize engine.
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
+	if err := InitEngine(ctx, eng, testIdent, cfg.Settings.Version.BootstrapVersion()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create splits.
+	var splits []roachpb.RKey
+	splits = config.StaticSplits()
+	splits = append(splits, testKey)
+	sort.Slice(splits, func(i, j int) bool {
+		return splits[i].Less(splits[j])
+	})
+	if err := WriteInitialClusterData(
+		ctx, eng, nil /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
+		1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	rsl := stateloader.Make(testRangeID)
+	sstSnapshotInProgressData := roachpb.SSTSnapshotInProgressData{ID: testUUID}
+	if err := rsl.SetSSTSnapshotInProgressData(ctx, eng, sstSnapshotInProgressData); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a test SST to ingest.
+	sst, err := engine.MakeRocksDBSstFileWriter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sst.Put(engine.MVCCKey{Key: roachpb.Key(testKey), Timestamp: testTimestamp}, testValue.RawBytes); err != nil {
+		t.Fatal(err)
+	}
+	sss, err := newSSTSnapshotStorage(cfg.Settings, testRangeID, testUUID,
+		eng.GetAuxiliaryDir(), rate.NewLimiter(rate.Inf, 0), eng)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sss.NewFile(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := sst.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sss.Write(ctx, data); err != nil {
+		t.Fatal(err)
+	}
+	if err := sss.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start store.
+	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+	if err := store.Start(ctx, stopper); err != nil {
+		t.Fatalf("failure initializing bootstrapped store: %+v", err)
+	}
+
+	// Verify that SST has been ingested.
+	if value, _, err := engine.MVCCGet(
+		ctx, store.Engine(), testKey, testTimestamp, engine.MVCCGetOptions{},
+	); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(value, &testValue) {
+		t.Fatalf("expected key '%s' to exist with value '%s', but found '%s'", testKey, testValue, value)
+	}
+}
+
 func BenchmarkStoreGetReplica(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())

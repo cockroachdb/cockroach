@@ -974,3 +974,9 @@ func (b RangeIDPrefixBuf) RangeLastReplicaGCTimestampKey() roachpb.Key {
 func (b RangeIDPrefixBuf) RangeLastVerificationTimestampKeyDeprecated() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRangeLastVerificationTimestampSuffixDeprecated...)
 }
+
+// RangeSSTSnapshotInProgress returns a range-local key for the snapshot in
+// progress, in any.
+func (b RangeIDPrefixBuf) RangeSSTSnapshotInProgress() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRangeSSTSnapshotInProgressSuffix...)
+}

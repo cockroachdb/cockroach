@@ -629,3 +629,32 @@ func (rsl StateLoader) SynthesizeHardState(
 	err := rsl.SetHardState(ctx, eng, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
 }
+
+// LoadSSTSnapshotInProgressData returns the record that indicates an
+// in-progress snapshot, if any.
+func (rsl StateLoader) LoadSSTSnapshotInProgressData(
+	ctx context.Context, reader engine.Reader,
+) (roachpb.SSTSnapshotInProgressData, bool, error) {
+	var sstSnapshotInProgressData roachpb.SSTSnapshotInProgressData
+	found, err := engine.MVCCGetProto(ctx, reader, rsl.RangeSSTSnapshotInProgress(),
+		hlc.Timestamp{}, &sstSnapshotInProgressData, engine.MVCCGetOptions{})
+	return sstSnapshotInProgressData, found, err
+}
+
+// SetSSTSnapshotInProgressData persists the record that indicates an
+// in-progress snapshot.
+func (rsl StateLoader) SetSSTSnapshotInProgressData(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	sstSnapshotInProgressData roachpb.SSTSnapshotInProgressData,
+) error {
+	return engine.MVCCPutProto(ctx, eng, nil /* ms */, rsl.RangeSSTSnapshotInProgress(), hlc.Timestamp{}, nil, &sstSnapshotInProgressData)
+}
+
+// DeleteSSTSnapshotInProgressData deletes the record that indicates an
+// in-progress snapshot.
+func (rsl StateLoader) DeleteSSTSnapshotInProgressData(
+	ctx context.Context, eng engine.ReadWriter,
+) error {
+	return engine.MVCCDelete(ctx, eng, nil, rsl.RangeSSTSnapshotInProgress(), hlc.Timestamp{}, nil)
+}

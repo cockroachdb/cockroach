@@ -51,3 +51,13 @@ message RaftSnapshotData {
   // roundtripping through memory.
   repeated bytes log_entries = 3;
 }
+
+// SSTSnapshotInProgressData is the persisted record that a snapshot is in
+// progess which is durably written to coordinate recovery from an untimely
+// crash.
+message SSTSnapshotInProgressData {
+  // The uuid of the in-progress snapshot.
+  optional bytes id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+      (gogoproto.customname) = "ID"];
+}

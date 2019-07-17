@@ -482,8 +482,10 @@ func (s *OutgoingSnapshot) Close() {
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
 type IncomingSnapshot struct {
 	SnapUUID uuid.UUID
-	// The RocksDB BatchReprs that make up this snapshot.
-	Batches [][]byte
+	// SSTables that make up this snapshot.
+	SSTs []string
+	// The RocksDB BatchRepr that makes up this snapshot.
+	Batch []byte
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
@@ -817,17 +819,15 @@ func (r *Replica) applySnapshot(
 	}
 
 	var size int
-	for _, b := range inSnap.Batches {
-		size += len(b)
-	}
+	size += len(inSnap.Batch)
 	for _, e := range inSnap.LogEntries {
 		size += len(e)
 	}
 
 	log.Infof(ctx, "applying %s snapshot at index %d "+
-		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
+		"(id=%s, encoded size=%d, %d log entries, %d SSTs)",
 		snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
-		size, len(inSnap.Batches), len(inSnap.LogEntries))
+		size, len(inSnap.LogEntries), len(inSnap.SSTs))
 	defer func(start time.Time) {
 		now := timeutil.Now()
 		log.Infof(ctx, "applied %s snapshot in %0.0fms [clear=%0.0fms batch=%0.0fms entries=%0.0fms commit=%0.0fms]",
@@ -866,6 +866,10 @@ func (r *Replica) applySnapshot(
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
+	// TODO(jeffreyxiao): The downside of putting the data range deletions in the
+	// batch is that it guarantee that something in the memtable overlaps with
+	// the SST causing it to get stuck in a higher level of the LSM. Need to
+	// determine if adding a range deletion tombstone is better.
 	if err := clearRangeData(ctx, s.Desc, r.store.Engine(), batch, true /* destroyData */); err != nil {
 		return err
 	}
@@ -875,10 +879,8 @@ func (r *Replica) applySnapshot(
 	stats.clear = timeutil.Now()
 
 	// Write the snapshot into the range.
-	for _, batchRepr := range inSnap.Batches {
-		if err := batch.ApplyBatchRepr(batchRepr, false); err != nil {
-			return err
-		}
+	if err := batch.ApplyBatchRepr(inSnap.Batch, false); err != nil {
+		return err
 	}
 
 	// The log entries are all written to distinct keys so we can use a
@@ -886,15 +888,25 @@ func (r *Replica) applySnapshot(
 	distinctBatch := batch.Distinct()
 	stats.batch = timeutil.Now()
 
+	rsl := stateloader.Make(s.Desc.RangeID)
 	if inSnap.UsesUnreplicatedTruncatedState {
 		// We're using the unreplicated truncated state, which we need to
 		// manually persist to disk. If we're not taking this branch, the
 		// snapshot contains a legacy TruncatedState and we don't need to do
 		// anything (in fact, must not -- the invariant is that exactly one of
 		// them exists at any given point in the state machine).
-		if err := stateloader.Make(s.Desc.RangeID).SetRaftTruncatedState(
+		if err := rsl.SetRaftTruncatedState(
 			ctx, distinctBatch, s.TruncatedState,
 		); err != nil {
+			return err
+		}
+	}
+	// There is a possibility that the number of SSTs is zero because it is an
+	// error to ingest an empty SST. In this case, there won't be any in progress
+	// snapshots after we commit this batch because there are no SSTs to ingest.
+	if len(inSnap.SSTs) > 0 {
+		sstSnapshotInProgressData := roachpb.SSTSnapshotInProgressData{ID: inSnap.SnapUUID}
+		if err := rsl.SetSSTSnapshotInProgressData(ctx, distinctBatch, sstSnapshotInProgressData); err != nil {
 			return err
 		}
 	}
@@ -955,8 +967,33 @@ func (r *Replica) applySnapshot(
 	stats.commit = timeutil.Now()
 
 	// The on-disk state is now committed, but the corresponding in-memory state
-	// has not yet been updated. Any errors past this point must therefore be
-	// treated as fatal.
+	// has not yet been updated and the data SST has not been ingested. Any
+	// errors past this point must therefore be treated as fatal. If the node
+	// crashes before the data SST is ingested, the unreplicated range-ID local
+	// key LocalRangeSSTSnapshotInProgress will indicate to ingest the data SST
+	// on replica startup.
+
+	// There is a possibility that the number of SSTs is zero because it is an
+	// error to ingest an empty SST.
+	if len(inSnap.SSTs) > 0 {
+		// TODO(jeffreyxiao): Test an untimely crash here.
+		// Since SSTSnapshotInProgressData is persisted as part of the batch, a
+		// crash here is safe because the SSTs should be ingested on replica
+		// startup.
+		if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSTs, true /* skipWritingSeqNo */, true /* modify */); err != nil {
+			log.Fatalf(ctx, "unable to ingest SSTs %s while applying snapshot: %+v", inSnap.SSTs, err)
+		}
+
+		// TODO(jeffreyxiao): Test an untimely crash here.
+		// If deleting SSTSnapshotInProgressData fails, we will ingest the same set
+		// of SSTs on replica startup. A crash here is safe because ingesting the
+		// same set of SSTs should be idempotent. Therefore, removing
+		// SSTSnapshotInProgressData and performing the ingestion does not have to
+		// be atomic to be safe.
+		if err := rsl.DeleteSSTSnapshotInProgressData(ctx, r.store.engine); err != nil {
+			log.Fatalf(ctx, "unable to remove RangeSSTSnapshotInProgress: %+v", err)
+		}
+	}
 
 	for _, sr := range subsumedRepls {
 		// We removed sr's data when we committed the batch. Finish subsumption by
