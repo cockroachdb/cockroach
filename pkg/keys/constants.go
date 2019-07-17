@@ -150,6 +150,11 @@ var (
 	// last verification timestamp (for checking integrity of on-disk data).
 	// Note: DEPRECATED.
 	LocalRangeLastVerificationTimestampSuffixDeprecated = []byte("rlvt")
+	// LocalRangeSSTSnapshotInProgress is the UUID of the snapshot in progress,
+	// if any. If this key is set, the replica must finish processing the
+	// snapshot by ingesting the SSTs of the snapshot before performing any other
+	// action.
+	LocalRangeSSTSnapshotInProgressSuffix = []byte("rssp")
 	// LocalRangePrefix is the prefix identifying per-range data indexed
 	// by range key (either start key, or some key in the range). The
 	// key is appended to this prefix, encoded using EncodeBytes. The

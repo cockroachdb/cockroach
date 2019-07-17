@@ -140,6 +140,7 @@ var (
 		{name: "RaftTombstone", suffix: LocalRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: LocalRaftHardStateSuffix},
 		{name: "RangeAppliedState", suffix: LocalRangeAppliedStateSuffix},
+		{name: "RangeSSTSnapshotInProgress", suffix: LocalRangeSSTSnapshotInProgressSuffix},
 		{name: "RaftAppliedIndex", suffix: LocalRaftAppliedIndexLegacySuffix},
 		{name: "LeaseAppliedIndex", suffix: LocalLeaseAppliedIndexLegacySuffix},
 		{name: "RaftLog", suffix: LocalRaftLogSuffix,

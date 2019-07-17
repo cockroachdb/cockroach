@@ -51,3 +51,9 @@ message RaftSnapshotData {
   // roundtripping through memory.
   repeated bytes log_entries = 3;
 }
+
+// SSTSnapshotInProgressData is the data needed to process an in-progress snapshot.
+message SSTSnapshotInProgressData {
+  // The uuid of the in-progress snapshot.
+  optional bytes uuid = 1 [(gogoproto.customname) = "UUID"];
+}

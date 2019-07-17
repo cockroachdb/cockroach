@@ -350,6 +350,12 @@ func RangeLastVerificationTimestampKeyDeprecated(rangeID roachpb.RangeID) roachp
 	return MakeRangeIDPrefixBuf(rangeID).RangeLastVerificationTimestampKeyDeprecated()
 }
 
+// RangeSSTSnapshotInProgress returns a range-local key for the snapshot in
+// progress, in any.
+func RangeSSTSnapshotInProgress(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeSSTSnapshotInProgress()
+}
+
 // MakeRangeKey creates a range-local key based on the range
 // start key, metadata key suffix, and optional detail (e.g. the
 // transaction ID for a txn record, etc.).
@@ -974,4 +980,10 @@ func (b RangeIDPrefixBuf) RangeLastReplicaGCTimestampKey() roachpb.Key {
 // key for the range's last verification timestamp.
 func (b RangeIDPrefixBuf) RangeLastVerificationTimestampKeyDeprecated() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRangeLastVerificationTimestampSuffixDeprecated...)
+}
+
+// RangeSSTSnapshotInProgress returns a range-local key for the snapshot in
+// progress, in any.
+func (b RangeIDPrefixBuf) RangeSSTSnapshotInProgress() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRangeSSTSnapshotInProgressSuffix...)
 }

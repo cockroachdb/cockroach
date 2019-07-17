@@ -481,6 +481,8 @@ type IncomingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The RocksDB BatchReprs that make up this snapshot.
 	Batches [][]byte
+	// SSTables that make put this snapshot.
+	SSTs []string
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
@@ -806,9 +808,9 @@ func (r *Replica) applySnapshot(
 	}
 
 	log.Infof(ctx, "applying %s snapshot at index %d "+
-		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
+		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries, %d SSTs)",
 		snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
-		size, len(inSnap.Batches), len(inSnap.LogEntries))
+		size, len(inSnap.Batches), len(inSnap.LogEntries), len(inSnap.SSTs))
 	defer func(start time.Time) {
 		now := timeutil.Now()
 		log.Infof(ctx, "applied %s snapshot in %0.0fms [clear=%0.0fms batch=%0.0fms entries=%0.0fms commit=%0.0fms]",
@@ -847,6 +849,7 @@ func (r *Replica) applySnapshot(
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
+	// REVIEW(jeffreyxiao): This is deleting the data in the user range twice.
 	if err := clearRangeData(ctx, s.Desc, r.store.Engine(), batch, true /* destroyData */); err != nil {
 		return err
 	}
@@ -880,6 +883,13 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
+	sstSnapshotInProgressKey := stateloader.Make(s.Desc.RangeID).RangeSSTSnapshotInProgress()
+	sstSnapshotInProgressData := roachpb.SSTSnapshotInProgressData{
+		UUID: inSnap.SnapUUID.GetBytes(),
+	}
+	if err := engine.MVCCPutProto(ctx, distinctBatch, nil /* ms */, sstSnapshotInProgressKey, hlc.Timestamp{}, nil, &sstSnapshotInProgressData); err != nil {
+		return err
+	}
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
 	for i, bytes := range inSnap.LogEntries {
 		if err := protoutil.Unmarshal(bytes, &logEntries[i]); err != nil {
@@ -936,8 +946,19 @@ func (r *Replica) applySnapshot(
 	stats.commit = timeutil.Now()
 
 	// The on-disk state is now committed, but the corresponding in-memory state
-	// has not yet been updated. Any errors past this point must therefore be
-	// treated as fatal.
+	// has not yet been updated and the data SST has not been ingested. Any
+	// errors past this point must therefore be treated as fatal. If the node
+	// crashes before the data SST is ingested, the unreplicated range-ID local
+	// key LocalRangeSSTSnapshotInProgress will indicate to ingest the data SST.
+	if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSTs, true /* skipWritingSeqNo */, true /* modify */); err != nil {
+		log.Fatalf(ctx, "unable to ingest SSTs %s while applying snapshot: %+v", inSnap.SSTs, err)
+	}
+	// Note that ingesting the same set of SSTs is idempotent so removing
+	// SSTSnapshotInProgressData and performing the ingestion does not have to be
+	// atomic to be safe.
+	if err := engine.MVCCDelete(ctx, r.store.engine, nil, sstSnapshotInProgressKey, hlc.Timestamp{}, nil); err != nil {
+		log.Fatalf(ctx, "unable to remove RangeSSTSnapshotInProgress: %+v", err)
+	}
 
 	for _, sr := range subsumedRepls {
 		// We removed sr's data when we committed the batch. Finish subsumption by

@@ -18,10 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -83,6 +85,9 @@ type snapshotStrategy interface {
 	// Status provides a status report on the work performed during the
 	// snapshot. Only valid if the strategy succeeded.
 	Status() string
+
+	// Close cleans up any resources associated with the snapshot strategy.
+	Close(context.Context)
 }
 
 func assertStrategy(
@@ -100,9 +105,11 @@ type kvBatchSnapshotStrategy struct {
 	status  string
 
 	// Fields used when sending snapshots.
-	batchSize int64
-	limiter   *rate.Limiter
-	newBatch  func() engine.Batch
+	batchSize    int64
+	sstChunkSize int64
+	limiter      *rate.Limiter
+	sss          *SstSnapshotStorage
+	newBatch     func() engine.Batch
 }
 
 // Receive implements the snapshotStrategy interface.
@@ -111,35 +118,109 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, SnapshotRequest_KV_BATCH)
 
+	var ssts []string
 	var batches [][]byte
 	var logEntries [][]byte
+	b := kvSS.newBatch()
+	defer b.Close()
+
+	lastSizeCheck := int64(0)
+	sst, err := engine.MakeRocksDBSstFileWriter()
+	if err != nil {
+		err = errors.Wrap(err, "failed to create sst file writer")
+		return noSnap, sendSnapshotError(stream, err)
+	}
+	dataRange := rditer.MakeAllKeyRanges(header.State.Desc)[2]
+	if err := sst.ClearRange(dataRange.Start, dataRange.End); err != nil {
+		err = errors.Wrap(err, "failed to clear range in sst")
+		return noSnap, sendSnapshotError(stream, err)
+	}
+	sstFile, err := kvSS.sss.CreateFile()
+	if err != nil {
+		err = errors.Wrap(err, "failed to create sst file")
+		return noSnap, sendSnapshotError(stream, err)
+	}
+	defer sstFile.Close()
+
 	for {
 		req, err := stream.Recv()
 		if err != nil {
-			return IncomingSnapshot{}, err
+			return noSnap, err
 		}
 		if req.Header != nil {
 			err := errors.New("client error: provided a header mid-stream")
-			return IncomingSnapshot{}, sendSnapshotError(stream, err)
+			return noSnap, sendSnapshotError(stream, err)
 		}
 
 		if req.KVBatch != nil {
-			batches = append(batches, req.KVBatch)
+			batchReader, err := engine.NewRocksDBBatchReader(req.KVBatch)
+			if err != nil {
+				err = errors.Wrap(err, "failed to decode batch")
+				return noSnap, sendSnapshotError(stream, err)
+			}
+			// All operations in the batch are guaranteed to be puts.
+			for batchReader.Next() {
+				key, err := batchReader.MVCCKey()
+				if err != nil {
+					err = errors.Wrap(err, "failed to decode mvcc key")
+					return noSnap, sendSnapshotError(stream, err)
+				}
+				// Add the key to the sst table if it is not a part of the local key
+				// range.
+				if key.Key.Compare(keys.LocalMax) > 0 {
+					if err := sst.Put(key, batchReader.Value()); err != nil {
+						err = errors.Wrap(err, "failed to put in sst")
+						return noSnap, sendSnapshotError(stream, err)
+					}
+					if sst.DataSize-lastSizeCheck > kvSS.sstChunkSize {
+						lastSizeCheck = sst.DataSize
+						chunk, err := sst.Truncate()
+						if err != nil {
+							err = errors.Wrap(err, "failed to truncate sst")
+							return noSnap, sendSnapshotError(stream, err)
+						}
+						if err := kvSS.sss.Write(ctx, sstFile, chunk); err != nil {
+							err = errors.Wrap(err, "failed to write to sst file")
+							return noSnap, sendSnapshotError(stream, err)
+						}
+					}
+				} else if err := b.Put(key, batchReader.Value()); err != nil {
+					err = errors.Wrap(err, "failed to put in batch")
+					return noSnap, sendSnapshotError(stream, err)
+				}
+			}
 		}
 		if req.LogEntries != nil {
 			logEntries = append(logEntries, req.LogEntries...)
 		}
 		if req.Final {
+			chunk, err := sst.Finish()
+			if err != nil {
+				err = errors.Wrap(err, "failed to finish sst")
+				return noSnap, sendSnapshotError(stream, err)
+			}
+			if err := kvSS.sss.Write(ctx, sstFile, chunk); err != nil {
+				err = errors.Wrap(err, "failed to write to sst file")
+				return noSnap, sendSnapshotError(stream, err)
+			}
+			if err := sstFile.Close(); err != nil {
+				err = errors.Wrap(err, "failed to close sst file")
+				return noSnap, sendSnapshotError(stream, err)
+			}
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 			if err != nil {
 				err = errors.Wrap(err, "invalid snapshot")
-				return IncomingSnapshot{}, sendSnapshotError(stream, err)
+				return noSnap, sendSnapshotError(stream, err)
 			}
+
+			batches = append(batches, b.Repr())
+			ssts = append(ssts, sstFile.Name())
 
 			inSnap := IncomingSnapshot{
 				UsesUnreplicatedTruncatedState: header.UnreplicatedTruncatedState,
 				SnapUUID:                       snapUUID,
 				Batches:                        batches,
+				SSTs:                           ssts,
 				LogEntries:                     logEntries,
 				State:                          &header.State,
 				snapType:                       header.Type,
@@ -195,10 +276,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 
 		if int64(b.Len()) >= kvSS.batchSize {
-			if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
-				return err
-			}
-			if err := kvSS.sendBatch(stream, b); err != nil {
+			if err := kvSS.sendBatch(ctx, stream, b); err != nil {
 				return err
 			}
 			b = nil
@@ -209,10 +287,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 	}
 	if b != nil {
-		if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
-			return err
-		}
-		if err := kvSS.sendBatch(stream, b); err != nil {
+		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
 			return err
 		}
 	}
@@ -335,8 +410,11 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 }
 
 func (kvSS *kvBatchSnapshotStrategy) sendBatch(
-	stream outgoingSnapshotStream, batch engine.Batch,
+	ctx context.Context, stream outgoingSnapshotStream, batch engine.Batch,
 ) error {
+	if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
+		return err
+	}
 	repr := batch.Repr()
 	batch.Close()
 	return stream.Send(&SnapshotRequest{KVBatch: repr})
@@ -344,6 +422,16 @@ func (kvSS *kvBatchSnapshotStrategy) sendBatch(
 
 // Status implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Status() string { return kvSS.status }
+
+// Close implements the snapshotStrategy interface.
+func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
+	if kvSS.sss != nil {
+		// Nothing actionable to do when removing directory fails.
+		if err := kvSS.sss.Clear(); err != nil {
+			log.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
+		}
+	}
+}
 
 // reserveSnapshot throttles incoming snapshots. The returned closure is used
 // to cleanup the reservation and release its resources. A nil cleanup function
@@ -630,8 +718,25 @@ func (s *Store) receiveSnapshot(
 	var ss snapshotStrategy
 	switch header.Strategy {
 	case SnapshotRequest_KV_BATCH:
+		snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
+		if err != nil {
+			err = errors.Wrap(err, "invalid snapshot")
+			return sendSnapshotError(stream, err)
+		}
+		sss, err := newSstSnapshotStorage(s.cfg.Settings, header.State.Desc.RangeID, snapUUID,
+			s.engine.GetAuxiliaryDir(), s.limiters.BulkIOWriteRate, s.engine)
+		if err != nil {
+			return sendSnapshotError(stream,
+				errors.Wrapf(err, "%s,r%d: error opening sst snapshot storage",
+					s, header.State.Desc.RangeID),
+			)
+		}
+
 		ss = &kvBatchSnapshotStrategy{
-			raftCfg: &s.cfg.RaftConfig,
+			raftCfg:      &s.cfg.RaftConfig,
+			sss:          sss,
+			sstChunkSize: 256 << 10, /* 256 KB */
+			newBatch:     s.Engine().NewBatch,
 		}
 	default:
 		return sendSnapshotError(stream,

@@ -3949,6 +3949,30 @@ func (s *Store) tryGetOrCreateReplica(
 	s.mu.uninitReplicas[repl.RangeID] = repl
 	s.mu.Unlock()
 
+	// If we crashed before finishing applying the disk changes of a snapshot, we
+	// must ingest the SSTs. Note that ingesting the same set of SSTs is
+	// idempotent so removing SSTSnapshotInProgressData and performing the
+	// ingestion does not have to be atomic to be safe.
+	sstSnapshotInProgressKey := keys.RangeSSTSnapshotInProgress(rangeID)
+	var sstSnapshotInProgressData roachpb.SSTSnapshotInProgressData
+	if ok, err := engine.MVCCGetProto(
+		ctx, s.Engine(), sstSnapshotInProgressKey, hlc.Timestamp{}, &sstSnapshotInProgressData, engine.MVCCGetOptions{},
+	); err != nil {
+		return nil, false, err
+	} else if ok {
+		sss, err := newSstSnapshotStorage(s.cfg.Settings, rangeID, uuid.Must(uuid.FromBytes(sstSnapshotInProgressData.UUID)),
+			s.engine.GetAuxiliaryDir(), s.limiters.BulkIOWriteRate, s.engine)
+		if err != nil {
+			return nil, false, err
+		}
+		if err := s.engine.IngestExternalFiles(ctx, sss.ssts, true /* skipWritingSeqNo */, true /* modify */); err != nil {
+			return nil, false, err
+		}
+		if err := engine.MVCCDelete(ctx, s.Engine(), nil, sstSnapshotInProgressKey, hlc.Timestamp{}, nil); err != nil {
+			return nil, false, err
+		}
+	}
+
 	desc := &roachpb.RangeDescriptor{
 		RangeID: rangeID,
 		// TODO(bdarnell): other fields are unknown; need to populate them from
