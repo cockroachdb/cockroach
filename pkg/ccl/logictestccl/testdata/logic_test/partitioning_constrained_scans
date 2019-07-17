@@ -1,0 +1,112 @@
+# LogicTest: local-opt
+
+# The orders example that inspired the partitioning index scan.
+statement ok
+CREATE TABLE orders (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  total DECIMAL NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  PRIMARY KEY (region, id)
+)
+
+# Create an index with the appropriate partitions.
+statement ok
+CREATE INDEX orders_by_created_at on orders (region, created_at, id) STORING (total)
+PARTITION BY LIST (region) (
+  PARTITION us_east1 VALUES IN ('us-east1'),
+  PARTITION us_west1 VALUES IN ('us-west1'),
+  PARTITION europe_west2 VALUES IN ('europe-west2')
+)
+
+# The index is used instead of the table scan.
+query T
+EXPLAIN (OPT) SELECT sum(total) FROM "orders" WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05';
+----
+scalar-group-by
+ ├── select
+ │    ├── scan orders@orders_by_created_at
+ │    │    └── constraint: /1/4/2: [ - /'europe-west2') [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/e'europe-west2\x00'/'2019-05-04 00:00:00+00:00' - /'us-east1') [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/e'us-east1\x00'/'2019-05-04 00:00:00+00:00' - /'us-west1') [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00'] [/e'us-west1\x00'/'2019-05-04 00:00:00+00:00' - ]
+ │    └── filters
+ │         └── (created_at >= '2019-05-04 00:00:00+00:00') AND (created_at < '2019-05-05 00:00:00+00:00')
+ └── aggregations
+      └── sum
+           └── variable: total
+
+# The partition values are not required as the index is constrained as is.
+query T
+EXPLAIN (OPT) SELECT sum(total) FROM "orders" WHERE region = 'us-east1' AND created_at >= '2019-05-04' AND created_at < '2019-05-05';
+----
+scalar-group-by
+ ├── scan orders@orders_by_created_at
+ │    └── constraint: /1/4/2: [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00']
+ └── aggregations
+      └── sum
+           └── variable: total
+
+# Create a truly distributed and partitioned table where we use multi-column
+# partitions.
+statement ok
+CREATE TABLE solar_system (
+    planet STRING, region STRING, subregion STRING, val INT8,
+    PRIMARY KEY (planet, region, subregion, val)
+    )
+  PARTITION BY LIST (planet, region, subregion) (
+      PARTITION westcoast VALUES IN (('earth', 'us', 'seatle'), ('earth', 'us', 'cali')),
+      PARTITION eu VALUES IN (('earth', 'eu', DEFAULT)),
+      PARTITION us VALUES IN (('earth', 'us', DEFAULT)),
+      PARTITION earth VALUES IN (('earth', DEFAULT, DEFAULT)),
+      PARTITION mars VALUES IN (('mars', DEFAULT, DEFAULT)),
+      PARTITION jupiter VALUES IN (('jupiter', DEFAULT, DEFAULT))
+      )
+
+statement ok
+insert into solar_system values ('earth', 'us', 'seatle', 1);
+
+statement ok
+insert into solar_system values ('earth', 'us', 'cali', 2);
+
+statement ok
+insert into solar_system values ('earth', 'us', 'cali', 3);
+
+statement ok
+insert into solar_system values ('earth', 'eu', '', 4);
+
+statement ok
+insert into solar_system values ('mars', '', '', 5);
+
+statement ok
+insert into solar_system values ('jupiter', '', '', 6);
+
+statement ok
+insert into solar_system values ('jupiter', 'titan', '', 7);
+
+query TTTI
+select * from solar_system where val < 8
+----
+earth    eu     ·       4
+earth    us     cali    2
+earth    us     cali    3
+earth    us     seatle  1
+jupiter  ·      ·       6
+jupiter  titan  ·       7
+mars     ·      ·       5
+
+query T
+EXPLAIN (OPT, VERBOSE) select * from solar_system where val = 8
+----
+select
+ ├── columns: planet:1 region:2 subregion:3 val:4
+ ├── stats: [rows=10, distinct(1)=9.5617925, null(1)=0, distinct(2)=9.5617925, null(2)=0, distinct(3)=9.5617925, null(3)=0, distinct(4)=1, null(4)=0]
+ ├── cost: 390.02
+ ├── key: (1-3)
+ ├── fd: ()-->(4)
+ ├── prune: (1-3)
+ ├── scan solar_system
+ │    ├── columns: planet:1 region:2 subregion:3 val:4
+ │    ├── constraint: /1/2/3/4: [ - /'earth'/'eu') [/'earth'/'eu' - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/8 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/8 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/8 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/8 - /'jupiter') [/'jupiter' - /'mars') [/'mars' - ]
+ │    ├── stats: [rows=333.333333, distinct(1)=33.3333333, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(4)=100, null(4)=0]
+ │    ├── cost: 386.676667
+ │    └── key: (1-4)
+ └── filters
+      └── val = 8 [outer=(4), constraints=(/4: [/8 - /8]; tight), fd=()-->(4)]
