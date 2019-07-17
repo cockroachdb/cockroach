@@ -768,6 +768,20 @@ func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *p
 	rel.CanHaveSideEffects = true
 }
 
+func (b *logicalPropsBuilder) buildCancelQueriesProps(
+	ctl *CancelQueriesExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(ctl, opt.ColList{}, rel)
+	rel.CanHaveSideEffects = true
+}
+
+func (b *logicalPropsBuilder) buildCancelSessionsProps(
+	ctl *CancelSessionsExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(ctl, opt.ColList{}, rel)
+	rel.CanHaveSideEffects = true
+}
+
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
 	BuildSharedProps(b.mem, limit, &rel.Shared)
 

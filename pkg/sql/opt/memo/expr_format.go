@@ -188,7 +188,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	case *ScanExpr, *VirtualScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr,
 		*WindowExpr, *OpaqueRelExpr, *AlterTableSplitExpr, *AlterTableUnsplitExpr,
-		*AlterTableUnsplitAllExpr, *AlterTableRelocateExpr, *ControlJobsExpr:
+		*AlterTableUnsplitAllExpr, *AlterTableRelocateExpr, *ControlJobsExpr,
+		*CancelQueriesExpr, *CancelSessionsExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
@@ -994,6 +995,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *ControlJobsPrivate:
 		fmt.Fprintf(f.Buffer, " (%s)", tree.JobCommandToStatement[t.Command])
+
+	case *CancelPrivate:
+		if t.IfExists {
+			f.Buffer.WriteString(" [if-exists]")
+		}
 
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.

@@ -56,3 +56,21 @@ func controlJobsBuildChildReqOrdering(
 	}
 	return parent.(*memo.ControlJobsExpr).Props.Ordering
 }
+
+func cancelQueriesBuildChildReqOrdering(
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
+	if childIdx != 0 {
+		return physical.OrderingChoice{}
+	}
+	return parent.(*memo.CancelQueriesExpr).Props.Ordering
+}
+
+func cancelSessionsBuildChildReqOrdering(
+	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
+) physical.OrderingChoice {
+	if childIdx != 0 {
+		return physical.OrderingChoice{}
+	}
+	return parent.(*memo.CancelSessionsExpr).Props.Ordering
+}

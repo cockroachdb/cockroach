@@ -40,3 +40,63 @@ build
 CANCEL JOBS SELECT 1, 1
 ----
 error (42601): too many columns in CANCEL JOBS data
+
+build
+CANCEL SESSION 'foo'
+----
+cancel-sessions
+ └── values
+      ├── columns: column1:1(string!null)
+      └── tuple [type=tuple{string}]
+           └── const: 'foo' [type=string]
+
+build
+CANCEL SESSIONS VALUES ('foo'), ('bar')
+----
+cancel-sessions
+ └── values
+      ├── columns: column1:1(string!null)
+      ├── tuple [type=tuple{string}]
+      │    └── const: 'foo' [type=string]
+      └── tuple [type=tuple{string}]
+           └── const: 'bar' [type=string]
+
+build
+CANCEL SESSION 1
+----
+error (42601): CANCEL SESSIONS data column 1 (session_id) must be of type string, not type int
+
+build
+CANCEL SESSIONS VALUES (1, 2)
+----
+error (42601): too many columns in CANCEL SESSIONS data
+
+build
+CANCEL QUERY 'foo'
+----
+cancel-queries
+ └── values
+      ├── columns: column1:1(string!null)
+      └── tuple [type=tuple{string}]
+           └── const: 'foo' [type=string]
+
+build
+CANCEL QUERIES VALUES ('foo'), ('bar')
+----
+cancel-queries
+ └── values
+      ├── columns: column1:1(string!null)
+      ├── tuple [type=tuple{string}]
+      │    └── const: 'foo' [type=string]
+      └── tuple [type=tuple{string}]
+           └── const: 'bar' [type=string]
+
+build
+CANCEL QUERY 1
+----
+error (42601): CANCEL QUERIES data column 1 (query_id) must be of type string, not type int
+
+build
+CANCEL QUERIES VALUES (1, 2)
+----
+error (42601): too many columns in CANCEL QUERIES data
