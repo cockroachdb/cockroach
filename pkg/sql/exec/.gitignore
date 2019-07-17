@@ -19,3 +19,4 @@ vec_comparators.eg.go
 vecbuiltins/rank.eg.go
 vecbuiltins/row_number.eg.go
 zerocolumns.eg.go
+overloads_test_utils.eg.go

@@ -1025,9 +1025,7 @@ func (a *smallIntSumAggregate) Add(_ context.Context, datum tree.Datum, _ ...tre
 	var ok bool
 	a.sum, ok = arith.AddWithOverflow(a.sum, int64(tree.MustBeDInt(datum)))
 	if !ok {
-		return pgerror.Newf(pgcode.NumericValueOutOfRange,
-			"sum exceeded int range",
-		)
+		return tree.ErrIntOutOfRange
 	}
 	a.seenNonNull = true
 	return nil
