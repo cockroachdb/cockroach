@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -1027,14 +1028,10 @@ func splitTriggerHelper(
 		RHSDelta: *h.AbsPostSplitRight(),
 	}
 
-	// HACK(tbg): ContainsEstimates isn't an additive group (there isn't a
-	// -true), and instead of "-true" we'll emit a "true". This will all be
-	// fixed when #37583 lands (and the version is active). For now hard-code
-	// false and there's also code below Raft that interprets this (coming from
-	// a split) as a signal to reset the ContainsEstimates field to false (see
-	// applyRaftCommand).
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
-	deltaPostSplitLeft.ContainsEstimates = false
+	if !rec.ClusterSettings().Version.IsActive(cluster.VersionContainsEstimatesCounter) {
+		deltaPostSplitLeft.ContainsEstimates = 0
+	}
 	return deltaPostSplitLeft, pd, nil
 }
 

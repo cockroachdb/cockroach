@@ -153,7 +153,7 @@ var mvccGetImpls = []struct {
 func TestMVCCStatsAddSubForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	goldMS := enginepb.MVCCStats{
-		ContainsEstimates: true,
+		ContainsEstimates: 1,
 		KeyBytes:          1,
 		KeyCount:          1,
 		ValBytes:          1,
@@ -182,7 +182,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 
 	ms := goldMS
 	zeroWithLU := enginepb.MVCCStats{
-		ContainsEstimates: true,
+		ContainsEstimates: 0,
 		LastUpdateNanos:   ms.LastUpdateNanos,
 	}
 
