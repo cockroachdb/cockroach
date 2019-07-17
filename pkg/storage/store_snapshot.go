@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,10 +34,6 @@ import (
 )
 
 const (
-	// preemptiveSnapshotRaftGroupID is a bogus ID for which a Raft group is
-	// temporarily created during the application of a preemptive snapshot.
-	preemptiveSnapshotRaftGroupID = math.MaxUint64
-
 	// Messages that provide detail about why a preemptive snapshot was rejected.
 	snapshotStoreTooFullMsg = "store almost out of disk space"
 	snapshotApplySemBusyMsg = "store busy applying snapshots"
