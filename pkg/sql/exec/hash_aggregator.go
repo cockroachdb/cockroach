@@ -110,6 +110,7 @@ func NewHashAggregator(
 		colTypes,
 		groupCols,
 		outCols,
+		true, /* allowNullEquality */
 	)
 
 	builder := makeHashJoinBuilder(

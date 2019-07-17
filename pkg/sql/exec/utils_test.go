@@ -17,7 +17,9 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"testing/quick"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -40,6 +42,9 @@ var orderedVerifier verifier = (*opTestOutput).Verify
 // unorderedVerifier compares the input and output tuples as sets, returning an
 // error if they aren't equal by set comparison (irrespective of order).
 var unorderedVerifier verifier = (*opTestOutput).VerifyAnyOrder
+
+// decimalType is the reflection type for apd.Decimal.
+var decimalType = reflect.TypeOf(apd.Decimal{})
 
 // runTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
@@ -271,18 +276,34 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		s.batch.ColVec(i).Nulls().UnsetNulls()
 	}
 
+	rng := rand.New(rand.NewSource(123))
+
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
+		typ := reflect.TypeOf(vec.Col()).Elem()
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
 		for j := uint16(0); j < batchSize; j++ {
 			outputIdx := s.selection[j]
 			if tups[j][i] == nil {
+				// Set garbage data in the value to make sure NULL gets handled
+				// correctly.
 				vec.Nulls().SetNull(outputIdx)
+				if typ.AssignableTo(decimalType) {
+					d := apd.Decimal{}
+					_, err := d.SetFloat64(rng.Float64())
+					if err != nil {
+						panic(fmt.Sprintf("%v", err))
+					}
+					col.Index(int(outputIdx)).Set(reflect.ValueOf(d))
+				} else if val, ok := quick.Value(typ, rng); ok {
+					col.Index(int(outputIdx)).Set(val)
+				} else {
+					panic(fmt.Sprintf("could not generate a random value of type %s\n.", typ.Name()))
+				}
 			} else {
-				col.Index(int(outputIdx)).Set(
-					reflect.ValueOf(tups[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
+				col.Index(int(outputIdx)).Set(reflect.ValueOf(tups[j][i]).Convert(typ))
 			}
 		}
 	}
