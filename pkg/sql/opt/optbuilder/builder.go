@@ -226,6 +226,9 @@ func (b *Builder) buildStmt(
 	case *tree.Relocate:
 		return b.buildAlterTableRelocate(stmt, inScope)
 
+	case *tree.ControlJobs:
+		return b.buildControlJobs(stmt, inScope)
+
 	default:
 		// See if this statement can be rewritten to another statement using the
 		// delegate functionality.

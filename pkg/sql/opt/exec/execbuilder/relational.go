@@ -265,6 +265,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.AlterTableRelocateExpr:
 		ep, err = b.buildAlterTableRelocate(t)
 
+	case *memo.ControlJobsExpr:
+		ep, err = b.buildControlJobs(t)
+
 	default:
 		if opt.IsSetOp(e) {
 			ep, err = b.buildSetOp(e)
