@@ -268,6 +268,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ControlJobsExpr:
 		ep, err = b.buildControlJobs(t)
 
+	case *memo.CancelQueriesExpr:
+		ep, err = b.buildCancelQueries(t)
+
+	case *memo.CancelSessionsExpr:
+		ep, err = b.buildCancelSessions(t)
+
 	default:
 		if opt.IsSetOp(e) {
 			ep, err = b.buildSetOp(e)

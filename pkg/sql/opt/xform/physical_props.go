@@ -59,6 +59,10 @@ func BuildChildPhysicalProps(
 		childProps.Presentation = parent.(*memo.AlterTableRelocateExpr).Props.Presentation
 	case opt.ControlJobsOp:
 		childProps.Presentation = parent.(*memo.ControlJobsExpr).Props.Presentation
+	case opt.CancelQueriesOp:
+		childProps.Presentation = parent.(*memo.CancelQueriesExpr).Props.Presentation
+	case opt.CancelSessionsOp:
+		childProps.Presentation = parent.(*memo.CancelSessionsExpr).Props.Presentation
 	}
 
 	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)

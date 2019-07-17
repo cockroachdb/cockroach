@@ -229,6 +229,12 @@ func (b *Builder) buildStmt(
 	case *tree.ControlJobs:
 		return b.buildControlJobs(stmt, inScope)
 
+	case *tree.CancelQueries:
+		return b.buildCancelQueries(stmt, inScope)
+
+	case *tree.CancelSessions:
+		return b.buildCancelSessions(stmt, inScope)
+
 	default:
 		// See if this statement can be rewritten to another statement using the
 		// delegate functionality.
