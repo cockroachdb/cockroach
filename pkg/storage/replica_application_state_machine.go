@@ -105,8 +105,10 @@ func (e *nonDeterministicFailure) Unwrap() error { return e.wrapped }
 // side-effects of each command is applied to the Replica's in-memory state.
 type replicaStateMachine struct {
 	r *Replica
-	// batch is returned from NewBatch().
+	// batch is returned from NewBatch(false /* ephemeral */).
 	batch replicaAppBatch
+	// ephemeralBatch is returned from NewBatch(true /* ephemeral */).
+	ephemeralBatch ephemeralReplicaAppBatch
 	// stats are updated during command application and reset by moveStats.
 	stats applyCommittedEntriesStats
 }
@@ -321,8 +323,16 @@ func checkForcedErr(
 }
 
 // NewBatch implements the apply.StateMachine interface.
-func (sm *replicaStateMachine) NewBatch() apply.Batch {
+func (sm *replicaStateMachine) NewBatch(ephemeral bool) apply.Batch {
 	r := sm.r
+	if ephemeral {
+		mb := &sm.ephemeralBatch
+		mb.r = r
+		r.mu.RLock()
+		mb.state = r.mu.state
+		r.mu.RUnlock()
+		return mb
+	}
 	b := &sm.batch
 	b.r = r
 	b.sm = sm
@@ -773,6 +783,35 @@ func (b *replicaAppBatch) Close() {
 		b.batch.Close()
 	}
 	*b = replicaAppBatch{}
+}
+
+// ephemeralReplicaAppBatch implements the apply.Batch interface.
+//
+// The batch performs the bare-minimum amount of work to be able to
+// determine whether a replicated command should be rejected or applied.
+type ephemeralReplicaAppBatch struct {
+	r     *Replica
+	state storagepb.ReplicaState
+}
+
+// Stage implements the apply.Batch interface.
+func (mb *ephemeralReplicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
+	cmd := cmdI.(*replicatedCmd)
+	ctx := cmd.ctx
+
+	mb.r.shouldApplyCommand(ctx, cmd, &mb.state)
+	mb.state.LeaseAppliedIndex = cmd.leaseIndex
+	return cmd, nil
+}
+
+// ApplyToStateMachine implements the apply.Batch interface.
+func (mb *ephemeralReplicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
+	panic("cannot apply ephemeralReplicaAppBatch to state machine")
+}
+
+// Close implements the apply.Batch interface.
+func (mb *ephemeralReplicaAppBatch) Close() {
+	*mb = ephemeralReplicaAppBatch{}
 }
 
 // ApplySideEffects implements the apply.StateMachine interface. The method
