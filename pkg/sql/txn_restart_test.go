@@ -1117,7 +1117,7 @@ CREATE DATABASE t;
 CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 SELECT * from t.test WHERE k = 'test_key';
-`); !testutils.IsError(err, "pq: testError") {
+`); !testutils.IsError(err, ".*testError.*") {
 		t.Errorf("unexpected error %v", err)
 	}
 	if !hitError {
