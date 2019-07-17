@@ -35,6 +35,7 @@ type columnarizer struct {
 }
 
 var _ exec.Operator = &columnarizer{}
+var _ exec.StaticMemoryOperator = &columnarizer{}
 
 // newColumnarizer returns a new columnarizer.
 func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*columnarizer, error) {
@@ -54,7 +55,12 @@ func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*col
 		return nil, err
 	}
 	c.Init()
+
 	return c, nil
+}
+
+func (c *columnarizer) EstimateStaticMemoryUsage() int {
+	return exec.EstimateBatchSizeBytes(conv.FromColumnTypes(c.OutputTypes()), coldata.BatchSize)
 }
 
 func (c *columnarizer) Init() {

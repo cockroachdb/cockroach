@@ -109,6 +109,8 @@ type FlowCtx struct {
 
 	// local is true if this flow is being run as part of a local-only query.
 	local bool
+
+	vectorizedBoundAccount *mon.BoundAccount
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
@@ -497,7 +499,9 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
 	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
-		err := f.setupVectorized(ctx)
+		acc := f.EvalCtx.Mon.MakeBoundAccount()
+		f.vectorizedBoundAccount = &acc
+		err := f.setupVectorized(ctx, f.vectorizedBoundAccount)
 		if err == nil {
 			log.VEventf(ctx, 1, "vectorized flow.")
 			return nil
@@ -691,6 +695,11 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	if f.status == FlowFinished {
 		panic("flow cleanup called twice")
 	}
+
+	if f.vectorizedBoundAccount != nil {
+		f.vectorizedBoundAccount.Close(ctx)
+	}
+
 	// This closes the monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.Stop(ctx)
 	for _, p := range f.processors {

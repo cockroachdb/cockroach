@@ -84,6 +84,7 @@ type Inbox struct {
 }
 
 var _ exec.Operator = &Inbox{}
+var _ exec.StaticMemoryOperator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(typs []types.T) (*Inbox, error) {
@@ -110,6 +111,11 @@ func NewInbox(typs []types.T) (*Inbox, error) {
 	i.scratch.data = make([]*array.Data, len(typs))
 	i.scratch.b = coldata.NewMemBatch(typs)
 	return i, nil
+}
+
+// EstimateStaticMemoryUsage implements the StaticMemoryOperator interface.
+func (i *Inbox) EstimateStaticMemoryUsage() int {
+	return exec.EstimateBatchSizeBytes(i.typs, coldata.BatchSize)
 }
 
 // maybeInit calls Inbox.init if the inbox is not initialized and returns an
