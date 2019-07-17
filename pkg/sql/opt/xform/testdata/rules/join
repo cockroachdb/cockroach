@@ -1454,6 +1454,35 @@ project
       │         └── const: 10 [type=int]
       └── filters (true)
 
+# Projection of constant columns work with non const expressions as well.
+exec-ddl
+CREATE TABLE bool_col (a INT, b INT, c bool, d bool, e bool, INDEX (a,b,c))
+----
+
+# Projection of constant columns work on boolean expressions.
+# Regression test for a test in opt-private-tests
+opt
+SELECT * FROM small INNER JOIN bool_col ON a=m AND b=10 AND c=true
+----
+inner-join (lookup bool_col)
+ ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(bool!null) d:7(bool) e:8(bool)
+ ├── key columns: [9] = [9]
+ ├── fd: ()-->(5,6), (1)==(4), (4)==(1)
+ ├── inner-join (lookup bool_col@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(bool!null) bool_col.rowid:9(int!null)
+ │    ├── key columns: [1 10 11] = [4 5 6]
+ │    ├── fd: ()-->(5,6), (9)-->(4), (1)==(4), (4)==(1)
+ │    ├── project
+ │    │    ├── columns: "project_const_col_@5":10(int!null) "project_const_col_@6":11(bool!null) m:1(int) n:2(int)
+ │    │    ├── fd: ()-->(10,11)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1(int) n:2(int)
+ │    │    └── projections
+ │    │         ├── const: 10 [type=int]
+ │    │         └── const: true [type=bool]
+ │    └── filters (true)
+ └── filters (true)
+
 # Simple zigzag case - where all requested columns are in the indexes being
 # joined.
 opt
