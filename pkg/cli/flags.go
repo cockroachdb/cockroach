@@ -12,7 +12,6 @@ package cli
 
 import (
 	"flag"
-	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -172,27 +172,7 @@ func (a addrSetter) Type() string { return "<addr/host>[:<port>]" }
 
 // Set implement the pflag.Value interface.
 func (a addrSetter) Set(v string) error {
-	addr, port, err := net.SplitHostPort(v)
-	if err != nil {
-		if aerr, ok := err.(*net.AddrError); ok {
-			if strings.HasPrefix(aerr.Err, "too many colons") {
-				// Maybe this was an IPv6 address using the deprecated syntax
-				// without '[...]'. Try that.
-				// Note: the following is valid even if *a.port is empty.
-				// (An empty port number is always a valid listen address.)
-				maybeAddr := "[" + v + "]:" + *a.port
-				addr, port, err = net.SplitHostPort(maybeAddr)
-				if err == nil {
-					fmt.Fprintf(stderr,
-						"warning: the syntax \"%s\" for IPv6 addresses is deprecated; use \"[%s]\"\n", v, v)
-				}
-			} else if strings.HasPrefix(aerr.Err, "missing port") {
-				// It's inconvenient that SplitHostPort doesn't know how to ignore
-				// a missing port number. Oh well.
-				addr, port, err = net.SplitHostPort(v + ":" + *a.port)
-			}
-		}
-	}
+	addr, port, err := netutil.SplitHostPort(v, *a.port)
 	if err != nil {
 		return err
 	}

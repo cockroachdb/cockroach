@@ -13,6 +13,7 @@ package base
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -398,6 +400,21 @@ func (jls *JoinListType) Type() string {
 // Set adds a new value to the JoinListType. It is the important part of
 // pflag's value interface.
 func (jls *JoinListType) Set(value string) error {
-	*jls = append(*jls, value)
+	if strings.TrimSpace(value) == "" {
+		// No value, likely user error.
+		return errors.New("no address specified in --join")
+	}
+	for _, v := range strings.Split(value, ",") {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			// --join=a,,b  equivalent to --join=a,b
+			continue
+		}
+		addr, port, err := netutil.SplitHostPort(v, "")
+		if err != nil {
+			return err
+		}
+		*jls = append(*jls, net.JoinHostPort(addr, port))
+	}
 	return nil
 }
