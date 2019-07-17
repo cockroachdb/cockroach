@@ -67,7 +67,7 @@ func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
 func (m *MVCCMetadata) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata) ProtoMessage()    {}
 func (*MVCCMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_d6d531974b8f8580, []int{0}
+	return fileDescriptor_mvcc_0d3b8a25ae993fba, []int{0}
 }
 func (m *MVCCMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -108,7 +108,7 @@ func (m *MVCCMetadata_SequencedIntent) Reset()         { *m = MVCCMetadata_Seque
 func (m *MVCCMetadata_SequencedIntent) String() string { return proto.CompactTextString(m) }
 func (*MVCCMetadata_SequencedIntent) ProtoMessage()    {}
 func (*MVCCMetadata_SequencedIntent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_d6d531974b8f8580, []int{0, 0}
+	return fileDescriptor_mvcc_0d3b8a25ae993fba, []int{0, 0}
 }
 func (m *MVCCMetadata_SequencedIntent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -167,8 +167,9 @@ type MVCCStats struct {
 	// contains_estimates indicates that the MVCCStats object contains values
 	// which have been estimated. This means that the stats should not be used
 	// where complete accuracy is required, and instead should be recomputed
-	// when necessary.
-	ContainsEstimates bool `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates" json:"contains_estimates"`
+	// when necessary. See cluster.VersionContainsEstimatesCounter for details
+	// about the migration from bool to int64.
+	ContainsEstimates int64 `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates" json:"contains_estimates"`
 	// last_update_nanos is a timestamp at which the ages were last
 	// updated. See the comment on MVCCStats.
 	LastUpdateNanos int64 `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos" json:"last_update_nanos"`
@@ -222,7 +223,7 @@ func (m *MVCCStats) Reset()         { *m = MVCCStats{} }
 func (m *MVCCStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()    {}
 func (*MVCCStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc_d6d531974b8f8580, []int{1}
+	return fileDescriptor_mvcc_0d3b8a25ae993fba, []int{1}
 }
 func (m *MVCCStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -566,12 +567,7 @@ func (m *MVCCStats) MarshalTo(dAtA []byte) (int, error) {
 	i += 8
 	dAtA[i] = 0x70
 	i++
-	if m.ContainsEstimates {
-		dAtA[i] = 1
-	} else {
-		dAtA[i] = 0
-	}
-	i++
+	i = encodeVarintMvcc(dAtA, i, uint64(m.ContainsEstimates))
 	return i, nil
 }
 
@@ -695,7 +691,10 @@ func NewPopulatedMVCCStats(r randyMvcc, easy bool) *MVCCStats {
 	if r.Intn(2) == 0 {
 		this.SysCount *= -1
 	}
-	this.ContainsEstimates = bool(bool(r.Intn(2) == 0))
+	this.ContainsEstimates = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.ContainsEstimates *= -1
+	}
 	if !easy && r.Intn(10) != 0 {
 	}
 	return this
@@ -838,7 +837,7 @@ func (m *MVCCStats) Size() (n int) {
 	n += 9
 	n += 9
 	n += 9
-	n += 2
+	n += 1 + sovMvcc(uint64(m.ContainsEstimates))
 	return n
 }
 
@@ -1384,7 +1383,7 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ContainsEstimates", wireType)
 			}
-			var v int
+			m.ContainsEstimates = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMvcc
@@ -1394,12 +1393,11 @@ func (m *MVCCStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				m.ContainsEstimates |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.ContainsEstimates = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMvcc(dAtA[iNdEx:])
@@ -1527,10 +1525,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptor_mvcc_d6d531974b8f8580)
+	proto.RegisterFile("storage/engine/enginepb/mvcc.proto", fileDescriptor_mvcc_0d3b8a25ae993fba)
 }
 
-var fileDescriptor_mvcc_d6d531974b8f8580 = []byte{
+var fileDescriptor_mvcc_0d3b8a25ae993fba = []byte{
 	// 655 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0xcd, 0x4e, 0xdb, 0x4e,
 	0x10, 0xc0, 0xe3, 0x7f, 0x02, 0x38, 0x9b, 0x10, 0xfe, 0xac, 0x38, 0x44, 0x54, 0x72, 0x02, 0x1c,
@@ -1569,8 +1567,8 @@ var fileDescriptor_mvcc_d6d531974b8f8580 = []byte{
 	0x14, 0x55, 0xcd, 0x85, 0x69, 0x11, 0xca, 0x51, 0x15, 0x9d, 0xd1, 0xae, 0x0c, 0xd4, 0xba, 0xca,
 	0x9f, 0x60, 0x5a, 0x17, 0x8f, 0xb9, 0xd1, 0x55, 0xf3, 0x87, 0xf2, 0x98, 0xa7, 0x75, 0x49, 0x44,
 	0x8b, 0x56, 0x17, 0x10, 0x6d, 0xd9, 0x47, 0x98, 0x46, 0x4c, 0x90, 0x80, 0xf1, 0x1e, 0x70, 0x11,
-	0x0c, 0x89, 0xd4, 0xd5, 0x72, 0xff, 0xee, 0x7a, 0x92, 0x7f, 0x9d, 0xa4, 0xb3, 0x39, 0xea, 0xec,
+	0x0c, 0x89, 0xd4, 0xd5, 0x72, 0xbf, 0xdd, 0x7a, 0x92, 0x7f, 0x9d, 0xa4, 0xb3, 0x39, 0xea, 0xec,
 	0xde, 0xfc, 0x70, 0x0a, 0x37, 0x33, 0xc7, 0xba, 0x9d, 0x39, 0xd6, 0xdd, 0xcc, 0xb1, 0xbe, 0xcf,
 	0x1c, 0xeb, 0xf3, 0x83, 0x53, 0xb8, 0x7d, 0x70, 0x0a, 0x77, 0x0f, 0x4e, 0xe1, 0xa3, 0x9d, 0xfc,
-	0x0e, 0xbf, 0x03, 0x00, 0x00, 0xff, 0xff, 0xdc, 0x01, 0xd6, 0x1d, 0x57, 0x05, 0x00, 0x00,
+	0x0e, 0xbf, 0x03, 0x00, 0x00, 0xff, 0xff, 0x4b, 0x69, 0x82, 0xd8, 0x57, 0x05, 0x00, 0x00,
 }

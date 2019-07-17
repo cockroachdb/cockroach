@@ -92,7 +92,7 @@ func TestDebugCheckStore(t *testing.T) {
 		sl := stateloader.Make(1)
 		ms, err := sl.LoadMVCCStats(ctx, eng)
 		require.NoError(t, err)
-		ms.ContainsEstimates = false
+		ms.ContainsEstimates = 0
 		ms.LiveBytes++
 		require.NoError(t, sl.SetMVCCStats(ctx, eng, &ms))
 	}()

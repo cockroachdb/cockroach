@@ -282,7 +282,7 @@ func makeGCQueueScoreImpl(
 	// If we GC'ed now, we can expect to delete at least this much GCByteAge.
 	// GCByteAge - TTL*GCBytes = ExpMinGCByteAgeReduction & algebra.
 	//
-	// Note that for ranges with ContainsEstimates=true, the value here may not
+	// Note that for ranges with ContainsEstimates > 0, the value here may not
 	// reflect reality, and may even be nonsensical (though that's unlikely).
 	r.ExpMinGCByteAgeReduction = r.GCByteAge - r.GCBytes*int64(r.TTL.Seconds())
 
@@ -292,7 +292,7 @@ func makeGCQueueScoreImpl(
 	// completely by a DeleteRange, it should be (almost) one.
 	//
 	// The algebra below is complicated by the fact that ranges may contain
-	// stats that aren't exact (ContainsEstimates=true).
+	// stats that aren't exact (ContainsEstimates > 0).
 	clamp := func(n int64) float64 {
 		if n < 0 {
 			return 0.0
