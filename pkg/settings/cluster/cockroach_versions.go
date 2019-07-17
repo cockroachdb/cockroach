@@ -40,6 +40,7 @@ const (
 	VersionStickyBit
 	VersionParallelCommits
 	VersionGenerationComparable
+	VersionContainsEstimatesCounter
 
 	// Add new versions here (step one of two).
 
@@ -482,6 +483,28 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionGenerationComparable is https://github.com/cockroachdb/cockroach/pull/38334.
 		Key:     VersionGenerationComparable,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 5},
+	},
+	{
+		// VersionContainsEstimatesCounter is https://github.com/cockroachdb/cockroach/pull/37583.
+		// MVCCStats.ContainsEstimates has been migrated from boolean to a counter so that the
+		// consistency checker and splits can reset it by returning -ContainsEstimates,
+		// avoiding racing with other operations that want to also change it.
+		//
+		// The commands that set ContainsEstimates must set/increase it by 2 instead of 1.
+		// Because nodes with the old version can handle only 0 or 1 (compatible with bool),
+		// proposer nodes truncate ContainsEstimates to {0, 1} during command evaluation.
+		// ContainsEstimates<=1 is an indication that the old cluster version was active
+		// when the command entered Raft and ContainsEstimates must be kept <=1.
+		// During command application, commands proposed under truncation are detected and
+		// the replicas' ContainsEstimates are truncated to {0,1} accordingly. This makes the
+		// new code compatible with the old code when adding/subtracting ContainsEstimates:
+		// (true + true = true) and (1 + 1 = 1), keeping ContainsEstimates <= 1 while the old
+		// cluster version is active.
+		// WHen the new cluster version is active, ContainsEstimates>=2 will enter Raft and
+		// add/sub will be calculated normally. This will allow commands to try to reset
+		// it without clashing with other operations, by emitting a -ContainsEstimates delta.
+		Key:     VersionContainsEstimatesCounter,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 6},
 	},
 
 	// Add new versions here (step two of two).

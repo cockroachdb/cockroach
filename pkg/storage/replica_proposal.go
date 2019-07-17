@@ -729,6 +729,15 @@ func (r *Replica) evaluateProposal(
 		}
 	}
 
+	if !r.ClusterSettings().Version.IsActive(cluster.VersionContainsEstimatesCounter) {
+		_ = cluster.VersionContainsEstimatesCounter // see for info on ContainsEstimates migration
+		if res.Replicated.Delta.ContainsEstimates > 0 {
+			res.Replicated.Delta.ContainsEstimates = 1
+		} else if res.Replicated.Delta.ContainsEstimates < 0 {
+			res.Replicated.Delta.ContainsEstimates = 0
+		}
+	}
+
 	return &res, needConsensus, nil
 }
 
