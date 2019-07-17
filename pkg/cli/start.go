@@ -907,9 +907,8 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 
 func clientFlags() string {
 	flags := []string{os.Args[0], "<client cmd>"}
-	host, port, err := net.SplitHostPort(serverCfg.AdvertiseAddr)
-	if err == nil {
-		flags = append(flags, "--host="+host+":"+port)
+	if serverCfg.AdvertiseAddr != "" {
+		flags = append(flags, "--host="+serverCfg.AdvertiseAddr)
 	}
 	if startCtx.serverInsecure {
 		flags = append(flags, "--insecure")
