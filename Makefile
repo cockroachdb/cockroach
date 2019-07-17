@@ -802,7 +802,8 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/vec_comparators.eg.go \
   pkg/sql/exec/vecbuiltins/rank.eg.go \
   pkg/sql/exec/vecbuiltins/row_number.eg.go \
-  pkg/sql/exec/zerocolumns.eg.go
+  pkg/sql/exec/zerocolumns.eg.go \
+  pkg/sql/exec/overloads_test_utils.eg.go
 
 execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
