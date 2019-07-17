@@ -388,7 +388,6 @@ func (mb *mutationBuilder) addSynthesizedCols(
 
 		// Assign name to synthesized column. Computed columns may refer to default
 		// columns in the table by name.
-		scopeCol.table = *mb.tab.Name()
 		scopeCol.name = tabCol.ColName()
 
 		// Remember ordinal position of the new scope column.
@@ -552,13 +551,9 @@ func (mb *mutationBuilder) disambiguateColumns() {
 		}
 	}
 
-	// Clear names of all non-preserved columns. Set the fully qualified table
-	// name of preserved columns, since computed column expressions will reference
-	// table names, not alias names.
+	// Clear names of all non-preserved columns.
 	for i := range mb.outScope.cols {
-		if preserve.Contains(i) {
-			mb.outScope.cols[i].table = *mb.tab.Name()
-		} else {
+		if !preserve.Contains(i) {
 			mb.outScope.cols[i].clearName()
 		}
 	}

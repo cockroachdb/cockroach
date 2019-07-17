@@ -3,7 +3,7 @@ CREATE TABLE abcde (
     a INT NOT NULL,
     b INT,
     c INT DEFAULT (10),
-    d INT AS (abcde.b + c + 1) STORED,
+    d INT AS (b + c + 1) STORED,
     e INT AS (a) STORED
 )
 ----
@@ -40,7 +40,7 @@ CREATE TABLE checks (
     b INT,
     c INT,
     d INT AS (c + 1) STORED,
-    CHECK (checks.b < d)
+    CHECK (b < d)
 )
 ----
 
