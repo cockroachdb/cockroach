@@ -53,6 +53,12 @@ type Span struct {
 
 	// endBoundary indicates whether the span contains the the end key value.
 	endBoundary SpanBoundary
+
+	// isolated indicates that this span should remain isolated and not
+	// consolidated with spans beside it. This is useful when scanning
+	// on a partitioned index as it allows you to see the partitioned
+	// spans in the EXPLAIN output.
+	isolated bool
 }
 
 // UnconstrainedSpan is the span without any boundaries.
@@ -84,6 +90,17 @@ func (sp *Span) EndKey() Key {
 // EndBoundary returns whether the end key is included or excluded.
 func (sp *Span) EndBoundary() SpanBoundary {
 	return sp.endBoundary
+}
+
+// IsIsolated returns whether the span is isolated or not.
+func (sp *Span) IsIsolated() bool {
+	return sp.isolated
+}
+
+// ForceIsolate makes the span isolated. The span will not be consolidated
+// anymore.
+func (sp *Span) ForceIsolate() {
+	sp.isolated = true
 }
 
 // Init sets the boundaries of this span to the given values. The following
@@ -201,6 +218,7 @@ func (sp *Span) TryIntersectWith(keyCtx *KeyContext, other *Span) bool {
 	}
 
 	// Only update now that it's known that intersection is not empty.
+	sp.isolated = sp.isolated || other.isolated
 	if cmpStarts < 0 {
 		sp.start = other.start
 		sp.startBoundary = other.startBoundary

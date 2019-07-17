@@ -75,6 +75,45 @@ func (c *Constraint) IsUnconstrained() bool {
 	return c.Spans.Count() == 1 && c.Spans.Get(0).IsUnconstrained()
 }
 
+// UnmergedUnionWith is similar to UnionWith except that the other constraints are not merged
+// with the current constraint. It is useful for scans that involve partitions
+// as it lets you see the partition spans clearly.
+func (c *Constraint) UnmergedUnionWith(evalCtx *tree.EvalContext, other *Constraint) {
+	if !c.Columns.Equals(&other.Columns) {
+		panic(errors.AssertionFailedf("column mismatch"))
+	}
+	if c.IsUnconstrained() || other.IsContradiction() {
+		return
+	}
+
+	left := &c.Spans
+	leftIndex := 0
+	right := &other.Spans
+	rightIndex := 0
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	var result Spans
+	result.Alloc(left.Count() + right.Count())
+
+	for leftIndex < left.Count() || rightIndex < right.Count() {
+		if rightIndex < right.Count() {
+			if leftIndex >= left.Count() ||
+				left.Get(leftIndex).Compare(&keyCtx, right.Get(rightIndex)) > 0 {
+				// Swap the two sets, so that going forward the current left
+				// span starts before the current right span.
+				left, right = right, left
+				leftIndex, rightIndex = rightIndex, leftIndex
+			}
+		}
+
+		currSpan := *left.Get(leftIndex)
+		leftIndex++
+		result.Append(&currSpan)
+	}
+
+	c.Spans = result
+	c.Spans.makeImmutable()
+}
+
 // UnionWith merges the spans of the given constraint into this constraint.  The
 // columns of both constraints must be the same. Constrained columns in the
 // merged constraint can have values that are part of either of the input
@@ -390,6 +429,12 @@ func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
 	for i := 1; i < c.Spans.Count(); i++ {
 		last := c.Spans.Get(i - 1)
 		sp := c.Spans.Get(i)
+
+		// Don't consolidate Isolated spans.
+		if last.IsIsolated() || sp.IsIsolated() {
+			continue
+		}
+
 		if last.endBoundary == IncludeBoundary && sp.startBoundary == IncludeBoundary &&
 			sp.start.IsNextKey(&keyCtx, last.end) {
 			// We only initialize `result` if we need to change something.

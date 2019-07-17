@@ -624,6 +624,9 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 	case *memo.OrExpr:
 		return c.makeSpansForOr(offset, t, out)
 
+	case *memo.LikelyExpr:
+		return c.makeSpansForLikely(offset, t, out)
+
 	case *memo.VariableExpr:
 		// Support (@1) as (@1 = TRUE) if @1 is boolean.
 		if c.colType(offset).Family() == types.BoolFamily && c.isIndexColumn(t, offset) {
@@ -733,6 +736,55 @@ func (c *indexConstraintCtx) makeSpansForAnd(offset int, e opt.Expr, out *constr
 		}
 		out.Combine(c.evalCtx, &ofsC)
 	}
+}
+
+// makeSpansForLikelySatisfied is similar to Or except it
+// doesn't merge the spans together. It is used to generate
+// the spans for the LikelySatisfied expressions in a
+// LikelyExpr.
+func (c *indexConstraintCtx) makeSpansForLikelySatisfied(
+	offset int, e opt.Expr, out *constraint.Constraint,
+) (tight bool) {
+	c.contradiction(offset, out)
+	tight = true
+	var exprConstraint constraint.Constraint
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		exprTight := c.makeSpansForExpr(offset, e.Child(i), &exprConstraint)
+		if exprConstraint.IsUnconstrained() {
+			// If we can't generate spans for a disjunct, exit early.
+			c.unconstrained(offset, out)
+			return false
+		}
+		// The OR is "tight" if all the spans are tight.
+		tight = tight && exprTight
+		out.UnmergedUnionWith(c.evalCtx, &exprConstraint)
+	}
+	return tight
+}
+
+// makeSpansForLikely calculates spans for the LikelyExpr.
+func (c *indexConstraintCtx) makeSpansForLikely(
+	offset int, e opt.Expr, out *constraint.Constraint,
+) (tight bool) {
+	c.contradiction(offset, out)
+
+	var likelyConstraint constraint.Constraint
+	var unlikelyConstraint constraint.Constraint
+	likelyTight := c.makeSpansForLikelySatisfied(offset, e.Child(0), &likelyConstraint)
+	unlikelyTight := c.makeSpansForOr(offset, e.Child(1), &unlikelyConstraint)
+
+	tight = likelyTight && unlikelyTight
+	out.UnionWith(c.evalCtx, &unlikelyConstraint)
+
+	// Isolate all the likelyConstraints.
+	for i := 0; i < likelyConstraint.Spans.Count(); i++ {
+		likelyConstraint.Spans.Get(i).ForceIsolate()
+	}
+
+	// We use an unmerged union so its easier to see the partition spans
+	// in the EXPLAIN plans. It shouldn't have an effect on anything else.
+	out.UnmergedUnionWith(c.evalCtx, &likelyConstraint)
+	return tight
 }
 
 // makeSpansForOr calculates spans for an OrOp.
@@ -1109,6 +1161,8 @@ func (ic *Instance) Init(
 	// if we have the spans [/1/1 - /1/1], [/1/2 - /1/2] but not if
 	// we have [/1/1 - /1/2].
 	ic.consolidated = ic.constraint
+	// TODO(ridwanmsharif): Uncomment the following line. We have to do a better
+	//  job at knowing what spans to consolidate.
 	ic.consolidated.ConsolidateSpans(evalCtx)
 	ic.initialized = true
 }

@@ -308,6 +308,26 @@ define Or {
     Right ScalarExpr
 }
 
+# Likely is logically equivalent to an Or expression across all the scalar
+# expressions in LikelySatisfied and LikelyNotSatisfied with the key difference
+# being - the spans created by the index constraint generator will try to keep
+# the Likely spans isolated. That is, the spans created by the Likely expressions
+# will not be merged or consolidated with the Unlikely spans.
+#
+# This is useful because it lets you see the partition spans in an EXPLAIN.
+[Scalar, Bool]
+define Likely {
+    # Conditions that are likely satisfied by rows.
+    LikelySatisfied  ScalarListExpr
+
+    # Conditions that are likely not satisfied by rows but are required anyway
+    # for correctness reasons. For example, if a column is partitioned into
+    # 3 sets of values, it is likely that the rows will have values that are
+    # in the 3 defined partition buckets. It is however legal to have values,
+    # even if they are unlikely, that are not in the 3 partitions.
+    LikelyNotSatisfied ScalarListExpr
+}
+
 # Range contains an And expression that constrains a single variable to a
 # range. For example, the And expression might be x > 5 AND x < 10. The
 # children of the And expression can be arbitrary expressions (including nested
