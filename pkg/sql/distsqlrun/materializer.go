@@ -130,56 +130,64 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 		m.curIdx++
 
 		typs := m.OutputTypes()
-		for outIdx, cIdx := range m.outputToInputColIdx {
-			col := m.batch.ColVec(cIdx)
-			// TODO(asubiotto): we shouldn't have to do this check. Figure out who's
-			// not setting nulls.
-			if col.MaybeHasNulls() {
-				if col.Nulls().NullAt(rowIdx) {
-					m.row[outIdx].Datum = tree.DNull
-					continue
+		populateOutputRow := func() {
+			for outIdx, cIdx := range m.outputToInputColIdx {
+				col := m.batch.ColVec(cIdx)
+				// TODO(asubiotto): we shouldn't have to do this check. Figure out who's
+				// not setting nulls.
+				if col.MaybeHasNulls() {
+					if col.Nulls().NullAt(rowIdx) {
+						m.row[outIdx].Datum = tree.DNull
+						continue
+					}
 				}
-			}
 
-			ct := typs[outIdx]
-			switch ct.Family() {
-			case types.BoolFamily:
-				if col.Bool()[rowIdx] {
-					m.row[outIdx].Datum = tree.DBoolTrue
-				} else {
-					m.row[outIdx].Datum = tree.DBoolFalse
-				}
-			case types.IntFamily:
-				switch ct.Width() {
-				case 8:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
-				case 16:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int16()[rowIdx]))
-				case 32:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int32()[rowIdx]))
+				ct := typs[outIdx]
+				switch ct.Family() {
+				case types.BoolFamily:
+					if col.Bool()[rowIdx] {
+						m.row[outIdx].Datum = tree.DBoolTrue
+					} else {
+						m.row[outIdx].Datum = tree.DBoolFalse
+					}
+				case types.IntFamily:
+					switch ct.Width() {
+					case 8:
+						m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
+					case 16:
+						m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int16()[rowIdx]))
+					case 32:
+						m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int32()[rowIdx]))
+					default:
+						m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int64()[rowIdx]))
+					}
+				case types.FloatFamily:
+					m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
+				case types.DecimalFamily:
+					m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
+				case types.DateFamily:
+					m.row[outIdx].Datum = tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
+				case types.StringFamily:
+					b := col.Bytes()[rowIdx]
+					if ct.Oid() == oid.T_name {
+						m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
+					} else {
+						m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
+					}
+				case types.BytesFamily:
+					m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
+				case types.OidFamily:
+					m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 				default:
-					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int64()[rowIdx]))
+					panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
 				}
-			case types.FloatFamily:
-				m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
-			case types.DecimalFamily:
-				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
-			case types.DateFamily:
-				m.row[outIdx].Datum = tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
-			case types.StringFamily:
-				b := col.Bytes()[rowIdx]
-				if ct.Oid() == oid.T_name {
-					m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
-				} else {
-					m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
-				}
-			case types.BytesFamily:
-				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
-			case types.OidFamily:
-				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
-			default:
-				panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
 			}
+		}
+		// It is possible that types were messed up during planning, so we want to
+		// catch type conversion panic if it occurs.
+		if err := exec.CatchVectorizedRuntimeError(populateOutputRow); err != nil {
+			m.MoveToDraining(err)
+			return nil, m.DrainHelper()
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}
