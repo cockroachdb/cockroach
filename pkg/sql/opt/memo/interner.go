@@ -460,6 +460,10 @@ func (h *hasher) HashValuesID(val opt.ValuesID) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashWithID(val opt.WithID) {
+	h.HashUint64(uint64(val))
+}
+
 func (h *hasher) HashScanLimit(val ScanLimit) {
 	h.HashUint64(uint64(val))
 }
@@ -749,6 +753,10 @@ func (h *hasher) IsSequenceIDEqual(l, r opt.SequenceID) bool {
 }
 
 func (h *hasher) IsValuesIDEqual(l, r opt.ValuesID) bool {
+	return l == r
+}
+
+func (h *hasher) IsWithIDEqual(l, r opt.WithID) bool {
 	return l == r
 }
 

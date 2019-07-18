@@ -1,0 +1,70 @@
+# LogicTest: local-opt fakedist-opt
+
+statement ok
+CREATE TABLE x(a) AS SELECT generate_series(1, 3)
+
+statement ok
+CREATE TABLE y(b) AS SELECT generate_series(2, 4)
+
+# Referencing a CTE multiple times.
+query II
+WITH t AS (SELECT b FROM y) SELECT * FROM t JOIN t AS q ON true
+----
+2  2
+2  3
+2  4
+3  2
+3  3
+3  4
+4  2
+4  3
+4  4
+
+query II
+WITH
+    one AS (SELECT a AS u FROM x),
+    two AS (SELECT b AS v FROM (SELECT b FROM y UNION ALL SELECT u FROM one))
+SELECT
+    *
+FROM
+    one JOIN two ON u = v
+----
+1  1
+2  2
+3  3
+2  2
+3  3
+
+# Mutation CTEs that aren't referenced elsewhere in the query.
+statement ok
+CREATE TABLE z (c INT PRIMARY KEY);
+
+query I
+WITH foo AS (INSERT INTO z VALUES (10) RETURNING 1) SELECT 2
+----
+2
+
+query I
+SELECT * FROM z
+----
+10
+
+query I
+WITH foo AS (UPDATE z SET c = 20 RETURNING 1) SELECT 3
+----
+3
+
+query I
+SELECT * FROM z
+----
+20
+
+query I
+WITH foo AS (DELETE FROM z RETURNING 1) SELECT 4
+----
+4
+
+query I
+SELECT count(*) FROM z
+----
+0

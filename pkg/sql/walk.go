@@ -649,7 +649,15 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *errorIfRowsNode:
 		n.plan = v.visit(n.plan)
 
+	case *scanBufferNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "label", n.label)
+		}
+
 	case *bufferNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "label", n.label)
+		}
 		n.plan = v.visit(n.plan)
 	}
 }
