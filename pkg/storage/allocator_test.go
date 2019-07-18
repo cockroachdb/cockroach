@@ -44,6 +44,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 const firstRange = roachpb.RangeID(1)
@@ -825,10 +826,10 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	rangeInfo := rangeInfoForRepl(repl, desc)
 
 	status := &raft.Status{
-		Progress: make(map[uint64]raft.Progress),
+		Progress: make(map[uint64]tracker.Progress),
 	}
 	for _, replica := range replicas {
-		status.Progress[uint64(replica.NodeID)] = raft.Progress{
+		status.Progress[uint64(replica.NodeID)] = tracker.Progress{
 			Match: 10,
 		}
 	}
@@ -5154,18 +5155,18 @@ func TestFilterBehindReplicas(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := &raft.Status{
-				Progress: make(map[uint64]raft.Progress),
+				Progress: make(map[uint64]tracker.Progress),
 			}
 			status.Lead = c.leader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
-				p := raft.Progress{
+				p := tracker.Progress{
 					Match: v,
-					State: raft.ProgressStateReplicate,
+					State: tracker.StateReplicate,
 				}
 				if v == 0 {
-					p.State = raft.ProgressStateProbe
+					p.State = tracker.StateProbe
 				}
 				replicaID := uint64(j + 1)
 				status.Progress[replicaID] = p
@@ -5222,7 +5223,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := &raft.Status{
-				Progress: make(map[uint64]raft.Progress),
+				Progress: make(map[uint64]tracker.Progress),
 			}
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
@@ -5230,12 +5231,12 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
-				p := raft.Progress{
+				p := tracker.Progress{
 					Match: v,
-					State: raft.ProgressStateReplicate,
+					State: tracker.StateReplicate,
 				}
 				if v == 0 {
-					p.State = raft.ProgressStateProbe
+					p.State = tracker.StateProbe
 				}
 				replicaID := uint64(j + 1)
 				status.Progress[replicaID] = p
@@ -5277,7 +5278,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := &raft.Status{
-				Progress: make(map[uint64]raft.Progress),
+				Progress: make(map[uint64]tracker.Progress),
 			}
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
@@ -5285,12 +5286,12 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
-				p := raft.Progress{
+				p := tracker.Progress{
 					Match: v,
-					State: raft.ProgressStateReplicate,
+					State: tracker.StateReplicate,
 				}
 				if v == 0 {
-					p.State = raft.ProgressStateProbe
+					p.State = tracker.StateProbe
 				}
 				replicaID := uint64(j + 1)
 				status.Progress[replicaID] = p

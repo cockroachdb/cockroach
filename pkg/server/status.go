@@ -1205,7 +1205,7 @@ func (s *statusServer) Ranges(
 			state.Progress[id] = serverpb.RaftState_Progress{
 				Match:           progress.Match,
 				Next:            progress.Next,
-				Paused:          progress.Paused,
+				Paused:          progress.IsPaused(),
 				PendingSnapshot: progress.PendingSnapshot,
 				State:           progress.State.String(),
 			}

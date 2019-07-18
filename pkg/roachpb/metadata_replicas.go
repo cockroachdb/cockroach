@@ -10,7 +10,11 @@
 
 package roachpb
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // ReplicaDescriptors is a set of replicas, usually the nodes/stores on which
 // replicas of a range are stored.
@@ -27,6 +31,17 @@ type ReplicaDescriptors struct {
 func MakeReplicaDescriptors(replicas []ReplicaDescriptor) ReplicaDescriptors {
 	sort.Sort(byTypeThenReplicaID(replicas))
 	return ReplicaDescriptors{wrapped: replicas}
+}
+
+func (d ReplicaDescriptors) String() string {
+	var buf strings.Builder
+	for i, desc := range d.wrapped {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		fmt.Fprint(&buf, desc)
+	}
+	return buf.String()
 }
 
 // Unwrap returns every replica in the set. It is a placeholder for code that
