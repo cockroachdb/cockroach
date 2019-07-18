@@ -293,7 +293,8 @@ func (rsl StateLoader) SetRangeAppliedState(
 	return engine.MVCCPutProto(ctx, eng, ms, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, nil, &as)
 }
 
-// MigrateToRangeAppliedStateKey TODO
+// MigrateToRangeAppliedStateKey deletes the keys that were replaced by the
+// RangeAppliedState key.
 func (rsl StateLoader) MigrateToRangeAppliedStateKey(
 	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats,
 ) error {
@@ -393,7 +394,11 @@ func (rsl StateLoader) CalcAppliedIndexSysBytes(appliedIndex, leaseAppliedIndex 
 func (rsl StateLoader) writeLegacyMVCCStatsInternal(
 	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, newMS)
+	// NB: newMS is copied to prevent conditional calls to this method from
+	// causing the stats argument to escape. This is legacy code which does
+	// not need to be optimized for performance.
+	newMSCopy := *newMS
+	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &newMSCopy)
 }
 
 // SetLegacyMVCCStats overwrites the legacy MVCC stats key.
