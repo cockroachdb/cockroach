@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 statement ok
 CREATE TABLE u (token uuid PRIMARY KEY,
                 token2 uuid,

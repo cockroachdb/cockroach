@@ -1,3 +1,5 @@
+# TODO(mjibson): The fakedist-disk config produces an error. When fixed,
+# remove this config line. See #38985.
 # LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
 
 ## This test file contains various complex queries that ORMs issue during

@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 query error pgcode XXC01 a CCL binary is required to use this statement type
 BACKUP DATABASE foo TO '/bar' INCREMENTAL FROM '/baz'
 
