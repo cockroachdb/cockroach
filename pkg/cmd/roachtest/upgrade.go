@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	settings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -372,12 +371,14 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// upgrade mechanism (which is not inhibited by the
 	// cluster.preserve_downgrade_option cluster setting in this test.
 	var currentVersion string
-	clusterVersionUpgrade := func(newVersion string, manual bool) versionStep {
+	clusterVersionUpgrade := func(newVersion string) versionStep {
 		return versionStep{
 			clusterVersion: newVersion,
 			run: func() {
+				manual := newVersion != "" // old binary; needs hacks
+
 				func() {
-					if newVersion != "" {
+					if manual {
 						return
 					}
 					db1 := c.Conn(ctx, 1)
@@ -385,6 +386,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 					if err := db1.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
 						t.Fatal(err)
 					}
+					t.l.Printf("%s: auto-resolved target version via node_executable_version()\n", newVersion)
 				}()
 				t.l.Printf("%s: cluster\n", newVersion)
 
@@ -461,20 +463,23 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	steps := []versionStep{
 		// v1.1.0 is the first binary version that knows about cluster versions.
 		binaryVersionUpgrade("v1.1.9", nodes),
-		clusterVersionUpgrade("1.1", true /* manual */),
+		clusterVersionUpgrade("1.1"),
 
 		binaryVersionUpgrade("v2.0.7", nodes),
-		clusterVersionUpgrade("2.0", true /* manual */),
+		clusterVersionUpgrade("2.0"),
 
 		binaryVersionUpgrade("v2.1.2", nodes),
-		clusterVersionUpgrade("2.1", true /* manual */),
+		clusterVersionUpgrade("2.1"),
 
-		// TODO(bram): Update this to the full release version once it's out.
-		binaryVersionUpgrade("v19.1.0-rc.4", nodes),
-		clusterVersionUpgrade("19.1", false /* manual */),
+		// From now on, all version upgrade steps pass an empty version which
+		// means the test will look it up from node_executable_version().
 
+		binaryVersionUpgrade("v19.1.3", nodes),
+		clusterVersionUpgrade(""),
+
+		// HEAD gives us the main binary for this roachtest run.
 		binaryVersionUpgrade("HEAD", nodes),
-		clusterVersionUpgrade(settings.BinaryServerVersion.String(), false /* manual */),
+		clusterVersionUpgrade(""),
 	}
 
 	type feature struct {
@@ -511,9 +516,14 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		},
 	}
 
-	testFeature := func(f feature, cv string) {
+	testFeature := func(f feature) {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
+
+		var cv string
+		if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&cv); err != nil {
+			t.Fatal(err)
+		}
 
 		minAllowedVersion, err := roachpb.ParseVersion(f.minAllowedVersion)
 		if err != nil {
@@ -568,10 +578,8 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 
 	for _, step := range steps {
 		step.run()
-		if step.clusterVersion != "" {
-			for _, feature := range features {
-				testFeature(feature, step.clusterVersion)
-			}
+		for _, feature := range features {
+			testFeature(feature)
 		}
 	}
 
@@ -586,10 +594,9 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 			t.Fatal(err)
 		}
 		if nodeVersion != currentVersion {
-			clusterVersionUpgrade(nodeVersion, false /* manual */).run()
-			for _, feature := range features {
-				testFeature(feature, nodeVersion)
-			}
+			t.Fatalf("not fully upgraded at end of test; have cluster setting at %s but node could run at %s",
+				currentVersion, nodeVersion,
+			)
 		}
 	}()
 }
