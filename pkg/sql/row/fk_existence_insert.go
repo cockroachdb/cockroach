@@ -68,13 +68,12 @@ func makeFkExistenceCheckHelperForInsert(
 			return h, errors.NewAssertionErrorWithWrappedErrf(err,
 				"failed to find search index for fk %q", ref.Name)
 		}
-		// TODO(jordan,radu) this isn't necessary.
 		mutatedIdx, err := sqlbase.FindFKOriginIndex(table.TableDesc(), ref.OriginColumnIDs)
 		if err != nil {
 			return h, errors.NewAssertionErrorWithWrappedErrf(err,
 				"failed to find search index for fk %q", ref.Name)
 		}
-		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, ref, searchIdx, nil, colMap, alloc, CheckInserts)
+		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, ref, searchIdx, mutatedIdx, colMap, alloc, CheckInserts)
 		if err == errSkipUnusedFK {
 			continue
 		}

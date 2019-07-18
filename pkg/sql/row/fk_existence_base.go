@@ -11,6 +11,8 @@
 package row
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -129,7 +131,7 @@ func makeFkExistenceCheckBaseHelper(
 		return ret, errors.AssertionFailedf("referenced table %d not in provided table map %+v", ref.ReferencedTableID, otherTables)
 	}
 	// Determine the columns being looked up.
-	ids, err := computeFkCheckColumnIDs(ref, searchIdx, colMap)
+	ids, err := computeFkCheckColumnIDs(ref, mutatedIdx, searchIdx, colMap)
 	if err != nil {
 		return ret, err
 	}
@@ -174,6 +176,7 @@ func makeFkExistenceCheckBaseHelper(
 // different composite foreign key matching methods.
 func computeFkCheckColumnIDs(
 	ref *sqlbase.ForeignKeyConstraint,
+	mutatedIdx *sqlbase.IndexDescriptor,
 	searchIdx *sqlbase.IndexDescriptor,
 	colMap map[sqlbase.ColumnID]int,
 ) (ids map[sqlbase.ColumnID]int, err error) {
@@ -191,12 +194,23 @@ func computeFkCheckColumnIDs(
 		return ids, nil
 
 	case sqlbase.ForeignKeyReference_FULL:
-		var missingColumns sqlbase.ColumnIDs
-		for i, writeColID := range ref.OriginColumnIDs {
+		var missingColumns []string
+		for _, writeColID := range ref.OriginColumnIDs {
+			colOrdinal := -1
+			for i, colID := range mutatedIdx.ColumnIDs {
+				if writeColID == colID {
+					colOrdinal = i
+					break
+				}
+			}
+			if colOrdinal == -1 {
+				return nil, errors.AssertionFailedf("index %q on columns %+v does not contain column %d",
+					mutatedIdx.Name, mutatedIdx.ColumnIDs, writeColID)
+			}
 			if found, ok := colMap[writeColID]; ok {
-				ids[searchIdx.ColumnIDs[i]] = found
+				ids[searchIdx.ColumnIDs[colOrdinal]] = found
 			} else {
-				missingColumns = append(missingColumns, writeColID)
+				missingColumns = append(missingColumns, mutatedIdx.ColumnNames[colOrdinal])
 			}
 		}
 
@@ -206,15 +220,16 @@ func computeFkCheckColumnIDs(
 
 		case 1:
 			return nil, pgerror.Newf(pgcode.ForeignKeyViolation,
-				"missing value for column %d in multi-part foreign key", missingColumns[0])
+				"missing value for column %q in multi-part foreign key", missingColumns[0])
 
 		case len(ref.OriginColumnIDs):
 			// All the columns are nulls, don't check the foreign key.
 			return nil, errSkipUnusedFK
 
 		default:
+			sort.Strings(missingColumns)
 			return nil, pgerror.Newf(pgcode.ForeignKeyViolation,
-				"missing values for columns %d in multi-part foreign key", missingColumns)
+				"missing values for columns %q in multi-part foreign key", missingColumns)
 		}
 
 	case sqlbase.ForeignKeyReference_PARTIAL:

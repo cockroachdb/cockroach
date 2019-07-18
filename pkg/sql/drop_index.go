@@ -351,18 +351,6 @@ func (p *planner) dropIndexByName(
 				}
 			}
 
-			// Remove all foreign key references and backreferences from the index.
-			// TODO (lucy): This is incorrect for two reasons: The first is that FKs
-			// won't be restored if the DROP INDEX is rolled back, and the second is
-			// that validated constraints should be dropped in the schema changer in
-			// multiple steps to avoid inconsistencies. We should be queuing a
-			// mutation to drop the FK instead. The reason why the FK is removed here
-			// is to keep the index state consistent with the earlier removal of the
-			// reference on the other table involved in the FK, in case of rollbacks
-			// (#38733).
-			idxEntry.ForeignKey = sqlbase.ForeignKeyReference{}
-			idxEntry.ReferencedBy = nil
-
 			// the idx we picked up with FindIndexByID at the top may not
 			// contain the same field any more due to other schema changes
 			// intervening since the initial lookup. So we send the recent
