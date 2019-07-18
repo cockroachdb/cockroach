@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 query TI colnames
 SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS x(name, i)
 ----

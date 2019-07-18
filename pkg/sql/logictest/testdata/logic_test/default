@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 statement error expected DEFAULT expression to have type int, but 'false' has type bool
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
 

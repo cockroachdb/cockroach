@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt
-
 statement error pgcode 42P01 relation "kv" does not exist
 INSERT INTO kv VALUES ('a', 'b')
 
