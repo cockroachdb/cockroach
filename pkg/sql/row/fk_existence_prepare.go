@@ -79,8 +79,8 @@ func MakeFkMetadata(
 		}
 
 		// Explore all the FK constraints on the table.
-		for _, fk := range tableEntry.Desc.OutboundFKs {
-			if usage == CheckInserts || usage == CheckUpdates {
+		if usage == CheckInserts || usage == CheckUpdates {
+			for _, fk := range tableEntry.Desc.OutboundFKs {
 				// If the mutation performed is an insertion or an update,
 				// we'll need to do existence checks on the referenced
 				// table(s), if any.
@@ -93,10 +93,10 @@ func MakeFkMetadata(
 			// If the mutation performed is a deletion or an update,
 			// we'll need to do existence checks on the referencing
 			// table(s), if any, as well as cascading actions.
-			for _, ref := range tableEntry.Desc.InboundFKs {
+			for _, fk := range tableEntry.Desc.InboundFKs {
 				// The referencing table is required to know the relationship, so
 				// fetch it here.
-				referencingTableEntry, err := queue.getTable(ctx, ref.OriginTableID)
+				referencingTableEntry, err := queue.getTable(ctx, fk.OriginTableID)
 				if err != nil {
 					return nil, err
 				}
@@ -111,15 +111,9 @@ func MakeFkMetadata(
 					continue
 				}
 
-				// Find the outbound fk that corresponds to this backreference.
-				foundFK, err := referencingTableEntry.Desc.FindFKForBackRef(tableEntry.Desc.ID, ref)
-				if err != nil {
-					return nil, err
-				}
-
 				if usage == CheckDeletes {
 					var nextUsage FKCheckType
-					switch foundFK.OnDelete {
+					switch fk.OnDelete {
 					case sqlbase.ForeignKeyReference_CASCADE:
 						nextUsage = CheckDeletes
 					case sqlbase.ForeignKeyReference_SET_DEFAULT, sqlbase.ForeignKeyReference_SET_NULL:
@@ -128,17 +122,15 @@ func MakeFkMetadata(
 						// There is no need to check any other relationships.
 						continue
 					}
-					if err := queue.enqueue(ctx, referencingTableEntry.Desc.ID, nextUsage); err != nil {
+					if err := queue.enqueue(ctx, fk.OriginTableID, nextUsage); err != nil {
 						return nil, err
 					}
 				} else {
 					// curUsage == CheckUpdates
-					if foundFK.OnUpdate == sqlbase.ForeignKeyReference_CASCADE ||
-						foundFK.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
-						foundFK.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
-						if err := queue.enqueue(
-							ctx, referencingTableEntry.Desc.ID, CheckUpdates,
-						); err != nil {
+					if fk.OnUpdate == sqlbase.ForeignKeyReference_CASCADE ||
+						fk.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
+						fk.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
+						if err := queue.enqueue(ctx, fk.OriginTableID, CheckUpdates); err != nil {
 							return nil, err
 						}
 					}

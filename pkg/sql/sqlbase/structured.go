@@ -1359,7 +1359,8 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 	for _, fk := range desc.OutboundFKs {
 		referencedTable, err := getTable(fk.ReferencedTableID)
 		if err != nil {
-			return err
+			return errors.Wrapf(err,
+				"invalid foreign key: missing table=%d", errors.Safe(fk.ReferencedTableID))
 		}
 		found := false
 		for _, backref := range referencedTable.InboundFKs {
@@ -1373,21 +1374,22 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 				fk.Name, desc.Name, referencedTable.Name)
 		}
 	}
-	for _, backRef := range desc.InboundFKs {
-		originTable, err := getTable(backRef.OriginTableID)
+	for _, backref := range desc.InboundFKs {
+		originTable, err := getTable(backref.OriginTableID)
 		if err != nil {
-			return err
+			return errors.Wrapf(err,
+				"invalid foreign key backreference: missing table=%d", errors.Safe(backref.OriginTableID))
 		}
 		found := false
 		for _, fk := range originTable.OutboundFKs {
-			if fk.ReferencedTableID == desc.ID && fk.Name == backRef.Name {
+			if fk.ReferencedTableID == desc.ID && fk.Name == backref.Name {
 				found = true
 				break
 			}
 		}
 		if !found {
-			return errors.AssertionFailedf("missing fk forward reference to %q from %q",
-				desc.Name, originTable.Name)
+			return errors.AssertionFailedf("missing fk forward reference %s to %q from %q",
+				backref.Name, desc.Name, originTable.Name)
 		}
 	}
 

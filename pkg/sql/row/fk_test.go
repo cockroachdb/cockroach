@@ -59,33 +59,14 @@ func (t *testTables) createForeignKeyReference(
 	if !exists {
 		return errors.Errorf("Can't find table with ID:%d", referencedID)
 	}
-	// Create an index on both tables.
-	referencedIndexID := referenced.NextIndexID
-	referencingIndexID := referencing.NextIndexID
-	referencedIndex := sqlbase.IndexDescriptor{
-		ID: referencedIndexID,
-		ReferencedBy: []sqlbase.ForeignKeyReference{
-			{
-				Table: referencingID,
-				Index: referencingIndexID,
-			},
-		},
+	fk := sqlbase.ForeignKeyConstraint{
+		ReferencedTableID: referencedID,
+		OriginTableID:     referencingID,
+		OnDelete:          onDelete,
+		OnUpdate:          onUpdate,
 	}
-	referenced.Indexes = append(referenced.Indexes, referencedIndex)
-
-	referencingIndex := sqlbase.IndexDescriptor{
-		ID: referencingIndexID,
-		ForeignKey: sqlbase.ForeignKeyReference{
-			Table:    referencedID,
-			OnDelete: onDelete,
-			OnUpdate: onUpdate,
-			Index:    referencedIndexID,
-		},
-	}
-	referencing.Indexes = append(referencing.Indexes, referencingIndex)
-
-	referenced.NextIndexID++
-	referencing.NextIndexID++
+	referencing.OutboundFKs = append(referencing.OutboundFKs, &fk)
+	referenced.InboundFKs = append(referenced.InboundFKs, &fk)
 	return nil
 }
 
@@ -198,7 +179,7 @@ func TestMakeFkMetadata(t *testing.T) {
 		}
 		sort.Slice(actualIDs, func(i, j int) bool { return actualIDs[i] < actualIDs[j] })
 		if a, e := actualIDs, expectedIDs; !reflect.DeepEqual(a, e) {
-			t.Errorf("insert's expected table IDs did not match actual IDs diff:\n %v", pretty.Diff(e, a))
+			t.Errorf("insert's expected table IDs did not match actual IDs diff:\n %v %v %v", pretty.Diff(e, a), e, a)
 		}
 	}
 
