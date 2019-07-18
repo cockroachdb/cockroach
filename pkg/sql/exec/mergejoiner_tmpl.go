@@ -1219,6 +1219,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		case mjEntry:
 			if o.needToResetOutput {
 				o.needToResetOutput = false
+				o.output.ResetInternalBatch()
 				for _, vec := range o.output.ColVecs() {
 					// We only need to explicitly reset nulls since the values will be
 					// copied over and the correct length will be set.

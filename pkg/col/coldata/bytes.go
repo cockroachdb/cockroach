@@ -267,6 +267,16 @@ func (b Bytes) Zero() {
 	b.maxSetIndex = 0
 }
 
+// Reset resets the underlying Bytes but does not zero out offsets or lengths.
+// This is useful when the caller is going to overwrite the underlying bytes and
+// needs a quick way to Reset. Note that overwriting with Sets only results in
+// higher memory usage due to Sets appending data.
+func (b Bytes) Reset() {
+	b.data = b.data[:0]
+	b.outOfOrder = false
+	b.maxSetIndex = 0
+}
+
 // String is used for debugging purposes.
 func (b Bytes) String() string {
 	var builder strings.Builder

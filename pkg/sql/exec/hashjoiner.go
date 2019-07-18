@@ -259,11 +259,16 @@ func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 			hj.initEmitting()
 			return hj.Next(ctx)
 		}
-
+		// TODO(asubiotto): We should be calling ResetInternalBatch to avoid
+		//  memory growth but can't do it here because we're about to return the
+		//  batch.
 		hj.prober.batch.SetSelection(false)
 		return hj.prober.batch
 	case hjEmittingUnmatched:
 		hj.emitUnmatched()
+		// TODO(asubiotto): We should be calling ResetInternalBatch to avoid
+		//  memory growth but can't do it here because we're about to return the
+		//  batch.
 		hj.prober.batch.SetSelection(false)
 		return hj.prober.batch
 	default:
