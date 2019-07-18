@@ -374,31 +374,6 @@ func (n *createTableNode) Close(ctx context.Context) {
 	}
 }
 
-type indexMatch bool
-
-const (
-	matchExact  indexMatch = true
-	matchPrefix indexMatch = false
-)
-
-// Referenced cols must be unique, thus referenced indexes must match exactly.
-// Referencing cols have no uniqueness requirement and thus may match a strict
-// prefix of an index.
-func matchesIndex(
-	cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor, exact indexMatch,
-) bool {
-	if len(cols) > len(idx.ColumnIDs) || (exact && len(cols) != len(idx.ColumnIDs)) {
-		return false
-	}
-
-	for i := range cols {
-		if cols[i].ID != idx.ColumnIDs[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // resolveFK on the planner calls resolveFK() on the current txn.
 //
 // The caller must make sure the planner is configured to look up

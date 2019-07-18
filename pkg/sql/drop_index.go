@@ -163,7 +163,7 @@ func (p *planner) dropIndexByName(
 	// continue being semantically valid.
 
 	// First check if there's indexes for the outgoing FKs.
-	// TODO(jordan, radu) remove this restriction.
+	// TODO(jordan, radu): remove this restriction.
 
 	// An FK can be removed by DROP CASCADE only if it is not being added/validated.
 	removableFKs := make(map[string]struct{})

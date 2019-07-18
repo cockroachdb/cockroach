@@ -189,10 +189,7 @@ func (p *planner) canRemoveFKBackreference(
 	}
 	// Check to see whether we're allowed to edit the table that has a
 	// foreign key constraint on the table that we're dropping right now.
-	if err := p.CheckPrivilege(ctx, table, privilege.CREATE); err != nil {
-		return err
-	}
-	return nil
+	return p.CheckPrivilege(ctx, table, privilege.CREATE)
 }
 
 func (p *planner) canRemoveInterleave(

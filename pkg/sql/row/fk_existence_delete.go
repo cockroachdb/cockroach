@@ -93,7 +93,7 @@ func makeFkExistenceCheckHelperForDelete(
 			ReferencedColumnIDs: ref.OriginColumnIDs,
 			OriginTableID:       ref.ReferencedTableID,
 			OriginColumnIDs:     ref.ReferencedColumnIDs,
-			// N.B.: Back-references always must have SIMPLE match method, because ... TODO(jordan) !!!
+			// N.B.: Back-references always must have SIMPLE match method, because ... TODO(jordan): !!!
 			Match:    sqlbase.ForeignKeyReference_SIMPLE,
 			OnDelete: foundFK.OnDelete,
 			OnUpdate: foundFK.OnUpdate,

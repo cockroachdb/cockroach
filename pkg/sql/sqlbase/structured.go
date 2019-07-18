@@ -123,6 +123,7 @@ func (c ColumnIDs) Contains(needle ColumnID) bool {
 	return false
 }
 
+// HasPrefix returns true if the input list is a prefix of this list.
 func (c ColumnIDs) HasPrefix(other ColumnIDs) bool {
 	if len(other) > len(c) {
 		return false
@@ -199,8 +200,9 @@ type ImmutableTableDescriptor struct {
 	// progress, as mutation columns may have NULL values.
 	ReadableColumns []ColumnDescriptor
 
-	inboundFKs  []*ForeignKeyConstraint
-	outboundFKs []*ForeignKeyConstraint
+	// TODO (lucy): populate these and use them
+	// inboundFKs  []*ForeignKeyConstraint
+	// outboundFKs []*ForeignKeyConstraint
 }
 
 // InvalidMutationID is the uninitialised mutation id.
@@ -835,7 +837,7 @@ func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
 		for refIdx := range idx.ReferencedBy {
 			ref := &idx.ReferencedBy[refIdx]
 			if _, ok := otherTables[ref.Table]; !ok {
-				tbl, err := GetTableDescFromID(nil, txn, ref.Table)
+				tbl, err := GetTableDescFromID(ctx, txn, ref.Table)
 				if err != nil {
 					return false, err
 				}
@@ -2526,8 +2528,8 @@ func (desc *TableDescriptor) GetIndexMutationCapabilities(id IndexID) (bool, boo
 	return false, false
 }
 
-// FindIndexByID finds an index (active or inactive) with the specified ID.
-// Must return a pointer to the IndexDescriptor in the TableDescriptor, so that
+// FindFKByName returns the FK constraint on the table with the given name.
+// Must return a pointer to the FK in the TableDescriptor, so that
 // callers can use returned values to modify the TableDesc.
 func (desc *TableDescriptor) FindFKByName(name string) (*ForeignKeyConstraint, error) {
 	for _, fk := range desc.OutboundFKs {

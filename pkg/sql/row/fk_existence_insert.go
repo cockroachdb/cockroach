@@ -12,11 +12,11 @@ package row
 
 import (
 	"context"
-	"github.com/cockroachdb/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // fkExistenceCheckForInsert is an auxiliary object that facilitates the existence

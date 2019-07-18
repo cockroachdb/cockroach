@@ -420,19 +420,18 @@ func FindFKReferencedIndex(
 	// key columns.
 	if referencedColIDs.EqualSets(referencedTable.PrimaryIndex.ColumnIDs) {
 		return &referencedTable.PrimaryIndex, nil
-	} else {
-		// Find the index corresponding to the referenced column.
-		for _, idx := range referencedTable.Indexes {
-			if idx.Unique && referencedColIDs.EqualSets(idx.ColumnIDs) {
-				return &idx, nil
-			}
-		}
-		return nil, pgerror.Newf(
-			pgcode.ForeignKeyViolation,
-			"there is no unique constraint matching given keys for referenced table %s",
-			referencedTable.Name,
-		)
 	}
+	// If the PK doesn't match, find the index corresponding to the referenced column.
+	for _, idx := range referencedTable.Indexes {
+		if idx.Unique && referencedColIDs.EqualSets(idx.ColumnIDs) {
+			return &idx, nil
+		}
+	}
+	return nil, pgerror.Newf(
+		pgcode.ForeignKeyViolation,
+		"there is no unique constraint matching given keys for referenced table %s",
+		referencedTable.Name,
+	)
 }
 
 // FindFKOriginIndex finds the first index in the supplied originTable
@@ -445,17 +444,16 @@ func FindFKOriginIndex(
 	// key columns.
 	if ColumnIDs(originTable.PrimaryIndex.ColumnIDs).HasPrefix(originColIDs) || originColIDs.EqualSets(originTable.PrimaryIndex.ColumnIDs) {
 		return &originTable.PrimaryIndex, nil
-	} else {
-		// Find the index corresponding to the origin column.
-		for _, idx := range originTable.Indexes {
-			if ColumnIDs(idx.ColumnIDs).HasPrefix(originColIDs) || originColIDs.EqualSets(idx.ColumnIDs) {
-				return &idx, nil
-			}
-		}
-		return nil, pgerror.Newf(
-			pgcode.ForeignKeyViolation,
-			"there is no index matching given keys for referenced table %s",
-			originTable.Name,
-		)
 	}
+	// If the PK doesn't match, find the index corresponding to the origin column.
+	for _, idx := range originTable.Indexes {
+		if ColumnIDs(idx.ColumnIDs).HasPrefix(originColIDs) || originColIDs.EqualSets(idx.ColumnIDs) {
+			return &idx, nil
+		}
+	}
+	return nil, pgerror.Newf(
+		pgcode.ForeignKeyViolation,
+		"there is no index matching given keys for referenced table %s",
+		originTable.Name,
+	)
 }
