@@ -422,6 +422,14 @@ type Factory interface {
 	// ConstructAlterTableRelocate creates a node that implements ALTER TABLE/INDEX
 	// UNSPLIT AT.
 	ConstructAlterTableRelocate(index cat.Index, input Node, relocateLease bool) (Node, error)
+
+	// ConstructBuffer constructs a node whose input can be referenced from
+	// elsewhere in the query.
+	ConstructBuffer(value Node, label string) (Node, error)
+
+	// ConstructScanBuffer constructs a node which refers to a node constructed by
+	// ConstructBuffer.
+	ConstructScanBuffer(ref Node, label string) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being
