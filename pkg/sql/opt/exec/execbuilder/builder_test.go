@@ -13,6 +13,7 @@ package execbuilder_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -25,5 +26,6 @@ import (
 // it's sufficient to run on a single configuration.
 func TestExecBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
 	logictest.RunLogicTest(t, "testdata/[^.]*")
 }
