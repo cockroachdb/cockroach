@@ -242,7 +242,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		if newEmitted > p.input.getNumTuples() {
 			newEmitted = p.input.getNumTuples()
 		}
-		p.output.SetSelection(false)
+		p.output.ResetInternalBatch()
 		p.output.SetLength(uint16(newEmitted - p.emitted))
 		if p.output.Length() == 0 {
 			return p.output

@@ -595,7 +595,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			for i := range rf.machine.colvecs {
 				rf.machine.colvecs[i].Nulls().UnsetNulls()
 			}
-			rf.machine.batch.SetSelection(false)
+			rf.machine.batch.ResetInternalBatch()
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
 			if rf.mustDecodeIndexKey || rf.traceKV {

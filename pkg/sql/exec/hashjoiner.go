@@ -248,6 +248,7 @@ func (hj *hashJoinEqOp) Init() {
 }
 
 func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
+	hj.prober.batch.ResetInternalBatch()
 	switch hj.runningState {
 	case hjBuilding:
 		hj.build(ctx)
@@ -259,12 +260,9 @@ func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 			hj.initEmitting()
 			return hj.Next(ctx)
 		}
-
-		hj.prober.batch.SetSelection(false)
 		return hj.prober.batch
 	case hjEmittingUnmatched:
 		hj.emitUnmatched()
-		hj.prober.batch.SetSelection(false)
 		return hj.prober.batch
 	default:
 		execerror.VectorizedInternalPanic("hash joiner in unhandled state")
