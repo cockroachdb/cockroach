@@ -524,3 +524,39 @@ query I
 SELECT sum_int(_int2) FROM t38937
 ----
 1
+
+# Regression tests for #38959
+
+statement ok
+CREATE TABLE t38959 (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX b_idx (b) STORING (c, d), UNIQUE INDEX c_idx (c) STORING (b, d))
+
+statement ok
+INSERT INTO t38959 VALUES (1, 2, 3, 4)
+
+statement ok
+SET tracing=on,kv,results
+
+query IIII
+SELECT * FROM t38959@c_idx
+----
+1 2 3 4
+
+statement ok
+SET tracing=off
+
+statement ok
+CREATE TABLE t38959_2 (x INT PRIMARY KEY, y INT, z FLOAT, INDEX xy (x, y), INDEX zyx (z, y, x), FAMILY (x), FAMILY (y), FAMILY (z))
+
+statement ok
+INSERT INTO t38959_2 VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
+
+statement ok
+SET tracing=on,kv,results
+
+query I
+SELECT min(x) FROM t38959_2 WHERE (y, z) = (2, 3.0)
+----
+1
+
+statement ok
+SET tracing=off
