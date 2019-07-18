@@ -370,11 +370,9 @@ func (rf *CFetcher) Init(
 				table.extraValColOrdinals = make([]int, nExtraColumns)
 			}
 			for i, id := range table.index.ExtraColumnIDs {
-				if neededCols.Contains(int(id)) {
-					table.extraValColOrdinals[i] = tableArgs.ColIdxMap[id]
-				} else {
-					table.extraValColOrdinals[i] = -1
-				}
+				// TODO (rohany): In order to properly trace output, we need all
+				// of the extra columns. Is there a better way to do this?
+				table.extraValColOrdinals[i] = tableArgs.ColIdxMap[id]
 			}
 			if err != nil {
 				return err
@@ -580,7 +578,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.batch.SetSelection(false)
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
-			if rf.mustDecodeIndexKey {
+			if rf.mustDecodeIndexKey || rf.traceKV {
 				if debugState {
 					log.Infof(ctx, "Decoding first key %s", rf.machine.nextKV.Key)
 				}
@@ -677,7 +675,6 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// TODO(jordan): if nextKV returns newSpan = true, set the new span
 			// prefix and indicate that it needs decoding.
 			rf.machine.nextKV = kv
-
 			if debugState {
 				log.Infof(ctx, "Decoding next key %s", rf.machine.nextKV.Key)
 			}
@@ -766,6 +763,15 @@ func (rf *CFetcher) pushState(state fetcherState) {
 	rf.machine.state[0] = state
 }
 
+// getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
+// This function is meant for tracing and should not be used in hot paths.
+func (rf *CFetcher) getDatumAt(colIdx int, rowIdx uint16, typ semtypes.T) tree.Datum {
+	if rf.machine.colvecs[colIdx].Nulls().NullAt(rowIdx) {
+		return tree.DNull
+	}
+	return exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, typ)
+}
+
 // processValue processes the state machine's current value component, setting
 // columns in the rowIdx'th tuple in the current batch depending on what data
 // is found in the current value component.
@@ -785,8 +791,7 @@ func (rf *CFetcher) processValue(
 		for _, idx := range rf.table.indexColOrdinals {
 			buf.WriteByte('/')
 			if idx != -1 {
-				dVal := exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, rf.table.cols[idx].Type)
-				buf.WriteString(fmt.Sprintf("%v", dVal.String()))
+				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
 			} else {
 				buf.WriteByte('?')
 			}
@@ -861,6 +866,19 @@ func (rf *CFetcher) processValue(
 				&rf.machine.remainingValueColsByIdx,
 				valueBytes,
 			)
+			if rf.traceKV {
+				var buf strings.Builder
+				for j := range table.extraTypes {
+					idx := table.extraValColOrdinals[j]
+					buf.WriteByte('/')
+					if idx != -1 {
+						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+					} else {
+						buf.WriteByte('?')
+					}
+				}
+				prettyValue = buf.String()
+			}
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 			}
@@ -933,7 +951,7 @@ func (rf *CFetcher) processValueSingle(
 			rf.machine.remainingValueColsByIdx.Remove(idx)
 
 			if rf.traceKV {
-				prettyValue = exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, *typ).String()
+				prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx, *typ).String()
 			}
 			if debugRowFetch {
 				log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
@@ -1023,7 +1041,8 @@ func (rf *CFetcher) processValueBytes(
 		}
 		rf.machine.remainingValueColsByIdx.Remove(idx)
 		if rf.traceKV {
-			if _, err := fmt.Fprintf(rf.machine.prettyValueBuf, "/%v", exec.PhysicalTypeColElemToDatum(vec, rf.machine.rowIdx, rf.table.da, *valTyp).String()); err != nil {
+			dVal := rf.getDatumAt(idx, rf.machine.rowIdx, *valTyp)
+			if _, err := fmt.Fprintf(rf.machine.prettyValueBuf, "/%v", dVal.String()); err != nil {
 				return "", "", err
 			}
 		}
@@ -1057,7 +1076,7 @@ func (rf *CFetcher) fillNulls() error {
 			var indexColValues []string
 			for _, idx := range table.indexColOrdinals {
 				if idx != -1 {
-					indexColValues = append(indexColValues, exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, rf.table.cols[idx].Type).String())
+					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
 				} else {
 					indexColValues = append(indexColValues, "?")
 				}
