@@ -38,11 +38,7 @@ import (
 {{define "opLConstName"}}proj{{.Name}}{{.LTyp}}Const{{.RTyp}}Op{{end}}
 {{define "opName"}}proj{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
-{{/* The outer range is a types.T, and the inner is the overloads associated
-     with that type. */}}
-{{range .TypToOverloads}}
-{{range .}}
-
+{{define "projRConstOp"}}
 type {{template "opRConstName" .}} struct {
 	OneInputNode
 
@@ -90,7 +86,9 @@ func (p {{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
 func (p {{template "opRConstName" .}}) Init() {
 	p.input.Init()
 }
+{{end}}
 
+{{define "projLConstOp"}}
 type {{template "opLConstName" .}} struct {
 	OneInputNode
 
@@ -138,7 +136,9 @@ func (p {{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
 func (p {{template "opLConstName" .}}) Init() {
 	p.input.Init()
 }
+{{end}}
 
+{{define "projOp"}}
 type {{template "opName" .}} struct {
 	OneInputNode
 
@@ -188,7 +188,15 @@ func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 func (p {{template "opName" .}}) Init() {
 	p.input.Init()
 }
+{{end}}
 
+{{/* The outer range is a types.T, and the inner is the overloads associated
+     with that type. */}}
+{{range .TypToOverloads}}
+{{range .}}
+{{template "projRConstOp" .}}
+{{template "projLConstOp" .}}
+{{template "projOp" .}}
 {{end}}
 {{end}}
 
