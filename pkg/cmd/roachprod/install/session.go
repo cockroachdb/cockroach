@@ -58,10 +58,10 @@ func newRemoteSession(user, host string, logdir string) (*remoteSession, error) 
 
 		// TODO(tbg): see above.
 		//"-vvv", "-E", logfile,
-
 		// NB: -q suppresses -E, at least on OSX. Difficult decisions will have
 		// to be made if omitting -q leads to annoyance on stdout/stderr.
-		// "-q",
+
+		"-q",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
 		// Send keep alives every minute to prevent connections without activity
