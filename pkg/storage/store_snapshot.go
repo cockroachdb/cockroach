@@ -191,29 +191,31 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			logEntries = append(logEntries, req.LogEntries...)
 		}
 		if req.Final {
-			chunk, err := sst.Finish()
-			if err != nil {
-				err = errors.Wrap(err, "failed to finish sst")
-				return noSnap, sendSnapshotError(stream, err)
-			}
-			if err := kvSS.sss.Write(ctx, sstFile, chunk); err != nil {
-				err = errors.Wrap(err, "failed to write to sst file")
-				return noSnap, sendSnapshotError(stream, err)
+			if !emptySST {
+				chunk, err := sst.Finish()
+				if err != nil {
+					err = errors.Wrap(err, "failed to finish sst")
+					return noSnap, sendSnapshotError(stream, err)
+				}
+				if err := kvSS.sss.Write(ctx, sstFile, chunk); err != nil {
+					err = errors.Wrap(err, "failed to write to sst file")
+					return noSnap, sendSnapshotError(stream, err)
+				}
 			}
 			if err := sstFile.Close(); err != nil {
 				err = errors.Wrap(err, "failed to close sst file")
 				return noSnap, sendSnapshotError(stream, err)
 			}
+			if !emptySST {
+				ssts = append(ssts, sstFile.Name())
+			}
+
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 			if err != nil {
 				err = errors.Wrap(err, "invalid snapshot")
 				return noSnap, sendSnapshotError(stream, err)
 			}
-
 			batches = append(batches, b.Repr())
-			if !emptySST {
-				ssts = append(ssts, sstFile.Name())
-			}
 
 			inSnap := IncomingSnapshot{
 				UsesUnreplicatedTruncatedState: header.UnreplicatedTruncatedState,

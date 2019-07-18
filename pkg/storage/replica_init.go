@@ -176,7 +176,9 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		if err := engine.MVCCDelete(ctx, r.store.Engine(), nil, sstSnapshotInProgressKey, hlc.Timestamp{}, nil); err != nil {
 			return err
 		}
-		sss.Clear()
+		if err := sss.Clear(); err != nil {
+			return err
+		}
 	}
 
 	r.assertStateLocked(ctx, r.store.Engine())
