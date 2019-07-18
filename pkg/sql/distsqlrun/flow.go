@@ -85,7 +85,7 @@ type FlowCtx struct {
 
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.
-	nodeID       roachpb.NodeID
+	NodeID       roachpb.NodeID
 	testingKnobs TestingKnobs
 
 	// TempStorage is used by some DistSQL processors to store Rows when the
@@ -501,31 +501,23 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	if f.EvalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
-		streaming, err := f.setupVectorized(ctx, f.vectorizedBoundAccount)
+		_, err := f.setupVectorized(ctx, f.vectorizedBoundAccount)
 		if err == nil {
-			abandonVectorizedFlow := !streaming && f.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeStreaming
-			if !abandonVectorizedFlow {
-				log.VEventf(ctx, 1, "vectorized flow.")
-				return nil
-			}
-			// Non-streaming operator is present in the vectorized flow which doesn't
-			// match the desired vectorize mode, so we need to replan with row
-			// execution branch.
-			log.VEventf(ctx, 1, "non-streaming vectorized flow abandoned")
-		} else {
-			// Vectorization attempt failed with an error.
-			if f.spec.Gateway != f.nodeID {
-				// If we are not the gateway node, do not attempt to plan this with the
-				// row execution branch since there is no way to tell whether vectorized
-				// planning will succeed on any other node. Notify the gateway by
-				// returning an error.
-				log.VEventf(
-					ctx,
-					1,
-					"flow vectorization failed on remote node, returning error to gateway for possible replanning: %s", err,
-				)
-				return &VectorizedSetupError{cause: err}
-			}
+			log.VEventf(ctx, 1, "vectorized flow.")
+			return nil
+		}
+		// Vectorization attempt failed with an error.
+		if f.spec.Gateway != f.NodeID {
+			// If we are not the gateway node, do not attempt to plan this with the
+			// row execution branch since there is no way to tell whether vectorized
+			// planning will succeed on any other node. Notify the gateway by
+			// returning an error.
+			log.VEventf(
+				ctx,
+				1,
+				"flow vectorization failed on remote node, returning error to gateway for possible replanning: %s", err,
+			)
+			return &VectorizedSetupError{cause: err}
 		}
 		// Reset state to be used by the row execution branch.
 		f.processors = nil
@@ -542,7 +534,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 				rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
 				if rsidx != nil {
 					lp := f.localProcessors[*rsidx]
-					if z, ok := lp.(vectorizeAlwaysException); ok {
+					if z, ok := lp.(VectorizeAlwaysException); ok {
 						isException = z.IsException()
 					}
 				}

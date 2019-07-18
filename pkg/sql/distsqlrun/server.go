@@ -451,7 +451,7 @@ func (ds *ServerImpl) setupFlow(
 		executor:       ds.Executor,
 		LeaseManager:   ds.LeaseManager,
 		testingKnobs:   ds.TestingKnobs,
-		nodeID:         nodeID,
+		NodeID:         nodeID,
 		TempStorage:    ds.TempStorage,
 		BulkAdder:      ds.BulkAdder,
 		diskMonitor:    ds.DiskMonitor,

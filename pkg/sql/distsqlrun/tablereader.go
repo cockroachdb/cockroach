@@ -82,7 +82,7 @@ func newTableReader(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*tableReader, error) {
-	if flowCtx.nodeID == 0 {
+	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
@@ -325,7 +325,7 @@ func (tr *tableReader) outputStatsToTrace() {
 func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
-		ranges := misplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.flowCtx.nodeID)
+		ranges := misplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.flowCtx.NodeID)
 		if ranges != nil {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
 		}

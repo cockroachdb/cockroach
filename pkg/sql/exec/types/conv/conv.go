@@ -52,12 +52,15 @@ func FromColumnType(ct *semtypes.T) types.T {
 
 // FromColumnTypes calls FromColumnType on each element of cts, returning the
 // resulting slice.
-func FromColumnTypes(cts []semtypes.T) []types.T {
+func FromColumnTypes(cts []semtypes.T) ([]types.T, error) {
 	typs := make([]types.T, len(cts))
 	for i := range typs {
 		typs[i] = FromColumnType(&cts[i])
+		if typs[i] == types.Unhandled {
+			return nil, errors.Errorf("unsupported type %s", cts[i])
+		}
 	}
-	return typs
+	return typs, nil
 }
 
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
