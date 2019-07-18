@@ -272,6 +272,15 @@ func (bg *mjBufferedGroup) Reset(types []types.T, length int) {
 	panic("Reset([]types.T, int) should not be called on mjBufferedGroup")
 }
 
+// ResetInternalBatch implements the Batch interface.
+func (bg *mjBufferedGroup) ResetInternalBatch() {
+	for _, v := range bg.colVecs {
+		if v.Type() == types.Bytes {
+			v.Bytes().Reset()
+		}
+	}
+}
+
 // reset resets the state of the buffered group so that we can reuse the
 // underlying memory.
 func (bg *mjBufferedGroup) reset() {
@@ -282,4 +291,5 @@ func (bg *mjBufferedGroup) reset() {
 		// written over, but we do need to reset the nulls.
 		colVec.Nulls().UnsetNulls()
 	}
+	bg.ResetInternalBatch()
 }
