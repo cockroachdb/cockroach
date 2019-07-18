@@ -116,14 +116,16 @@ func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
 	}
 	defer session.Close()
 
+	var stdout, stderr strings.Builder
+	session.SetStdout(&stdout)
+	session.SetStderr(&stderr)
 	cmd := `hostname --all-ip-addresses`
-	out, err := session.CombinedOutput(cmd)
-	if err != nil {
+	if err := session.Run(cmd); err != nil {
 		return "", errors.Wrapf(err,
-			"GetInternalIP: failed to execute hostname on %s:%d: (output) %s",
-			c.Name, index, out)
+			"GetInternalIP: failed to execute hostname on %s:%d:\n(stdout) %s\n(stderr) %s",
+			c.Name, index, stdout.String(), stderr.String())
 	}
-	return strings.TrimSpace(string(out)), nil
+	return strings.TrimSpace(stdout.String()), nil
 }
 
 // Start TODO(peter): document
