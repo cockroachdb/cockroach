@@ -53,7 +53,7 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 						// needs to be annotated to indicate that it was
 						// unexpected.
 						if code := pgerror.GetPGCode(e); code == pgcode.Uncategorized {
-							e = errors.Wrap(e, "unexpected error from the vectorized runtime")
+							e = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", e)
 						}
 						retErr = e
 					} else {
