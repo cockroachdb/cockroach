@@ -187,8 +187,8 @@ func TestShowCreateTable(t *testing.T) {
 	j INT8 NULL,
 	k INT8 NULL,
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b),
-	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items(c),
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
@@ -207,8 +207,8 @@ func TestShowCreateTable(t *testing.T) {
 	j INT8 NULL,
 	k INT8 NULL,
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b) MATCH FULL,
-	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items(c) MATCH FULL,
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
@@ -241,8 +241,8 @@ func TestShowCreateTable(t *testing.T) {
 	j INT8 NULL DEFAULT 123:::INT8,
 	k INT8 NULL,
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b) ON DELETE SET DEFAULT,
-	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items(c) ON DELETE SET NULL,
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
@@ -291,8 +291,8 @@ func TestShowCreateTable(t *testing.T) {
 	k INT8 NULL DEFAULT 3:::INT8,
 	l INT8 NULL DEFAULT 4:::INT8,
 	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b) ON DELETE SET DEFAULT,
-	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	CONSTRAINT fk_k_ref_items FOREIGN KEY (k, l) REFERENCES items(a, b) MATCH FULL ON UPDATE CASCADE,
+	INDEX %[1]s_auto_index_fk_i_ref_items (i ASC, j ASC),
 	INDEX %[1]s_auto_index_fk_k_ref_items (k ASC, l ASC),
 	FAMILY "primary" (i, j, k, l, rowid)
 )`,

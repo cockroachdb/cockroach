@@ -33,7 +33,7 @@ func TestStandAloneShowCreateTable(t *testing.T) {
 			created TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
 			payload BYTES NOT NULL,
 			CONSTRAINT "primary" PRIMARY KEY (id ASC),
-			CONSTRAINT fk FOREIGN KEY (status) REFERENCES "[52 as ref]"("???"),
+			CONSTRAINT fk FOREIGN KEY ("???") REFERENCES "[52 as ref]"("???"),
 			INDEX jobs_status_created_idx (status ASC, created ASC) INTERLEAVE IN PARENT "[51 as parent]" (status),
 			FAMILY fam_0_id_status_created_payload (id, status, created, payload)
 		)`

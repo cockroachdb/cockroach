@@ -209,6 +209,7 @@ func ShowCreateTable(
 		f.WriteString(")")
 	}
 
+	// TODO (lucy): probably go back to using desc.Checks for consistency
 	for _, e := range desc.AllActiveAndInactiveChecks() {
 		f.WriteString(",\n\t")
 		if len(e.Name) > 0 {
