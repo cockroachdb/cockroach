@@ -785,7 +785,7 @@ func (rf *CFetcher) processValue(
 		for _, idx := range rf.table.indexColOrdinals {
 			buf.WriteByte('/')
 			if idx != -1 {
-				dVal := exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, rf.table.keyValTypes[idx])
+				dVal := exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, rf.table.cols[idx].Type)
 				buf.WriteString(fmt.Sprintf("%v", dVal.String()))
 			} else {
 				buf.WriteByte('?')
@@ -1057,7 +1057,7 @@ func (rf *CFetcher) fillNulls() error {
 			var indexColValues []string
 			for _, idx := range table.indexColOrdinals {
 				if idx != -1 {
-					indexColValues = append(indexColValues, exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, rf.table.keyValTypes[idx]).String())
+					indexColValues = append(indexColValues, exec.PhysicalTypeColElemToDatum(rf.machine.colvecs[idx], rf.machine.rowIdx, rf.table.da, rf.table.cols[idx].Type).String())
 				} else {
 					indexColValues = append(indexColValues, "?")
 				}
