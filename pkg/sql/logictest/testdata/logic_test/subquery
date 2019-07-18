@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 # Tests for subqueries (SELECT statements which are part of a bigger statement).
 
 query I

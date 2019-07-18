@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata fakedist-disk
-
 # The join condition logic is tricky to get right with NULL
 # values. Simple implementations can deal well with NULLs on the first
 # or last row but fail to handle them in the middle. So the test table

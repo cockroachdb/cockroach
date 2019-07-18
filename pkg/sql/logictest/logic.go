@@ -254,14 +254,6 @@ import (
 // -bigtest   enable the long-running SqlLiteLogic test, which uses files from
 //            CockroachDB's fork of Sqllogictest.
 //
-// Configuration:
-//
-// -config name   customizes the test cluster configuration for test
-//                files that lack LogicTest directives; must be one
-//                of `logicTestConfigs`.
-//                Example:
-//                  -config distsql
-//
 // Error mode:
 //
 // -max-errors N  stop testing after N errors have been
@@ -321,10 +313,6 @@ var (
 	// Input selection
 	logictestdata = flag.String("d", "", "glob that selects subset of files to run")
 	bigtest       = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
-	defaultConfig = flag.String(
-		"config", "local",
-		"customizes the default test cluster configuration for files that lack LogicTest directives",
-	)
 
 	// Testing mode
 	maxErrs = flag.Int(
@@ -438,6 +426,26 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "on", distSQLUseDisk: true, skipShort: true,
 		overrideOptimizerMode: "off"},
 }
+
+var defaultConfig = func() []logicTestConfigIdx {
+	defaults := []string{
+		"local",
+		"local-opt",
+		"fakedist",
+		"fakedist-opt",
+		"fakedist-metadata",
+		"fakedist-disk",
+	}
+	ret := make([]logicTestConfigIdx, len(defaults))
+	for i, name := range defaults {
+		idx, ok := findLogicTestConfig(name)
+		if !ok {
+			panic(fmt.Errorf("unknown config %s", name))
+		}
+		ret[i] = idx
+	}
+	return ret
+}()
 
 // An index in the above slice.
 type logicTestConfigIdx int
@@ -1139,11 +1147,7 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 		}
 	}
 	// No directive found, return the default config.
-	idx, ok := findLogicTestConfig(*defaultConfig)
-	if !ok {
-		t.Fatalf("unknown -config %s", *defaultConfig)
-	}
-	return []logicTestConfigIdx{idx}
+	return defaultConfig
 }
 
 type subtestDetails struct {

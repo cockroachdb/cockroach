@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
 # USING THE `lastval` FUNCTION

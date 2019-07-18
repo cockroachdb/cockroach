@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata fakedist-disk
-
 # Test on-disk SQL semantics of edge cases and overflows. On-disk is
 # important because it avoids any constant folding that could happen
 # in the parse or normalization phases, forcing it to be handled by the
