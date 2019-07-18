@@ -43,7 +43,7 @@ new engineers.
      - GNU Make (3.81+ is known to work)
      - CMake 3.1+
      - Autoconf 2.68+
-     - NodeJS 6.x and Yarn 1.7+
+     - NodeJS 10.x and Yarn 1.7+
      - Yacc or Bison
 
    Note that at least 4GB of RAM is required to build from source and run tests.
