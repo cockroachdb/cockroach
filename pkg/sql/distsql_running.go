@@ -169,6 +169,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(flows) > 1 {
 		resultChan = make(chan runnerResult, len(flows)-1)
 	}
+	// recursed indicates whether we called setupFlows again from this method. It
+	// helps to transfer ownership of the request to the callee to avoid
+	// double-releasing processor specs.
+	recursed := false
 	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
 			// Skip this node.
@@ -183,7 +187,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 			nodeID:     nodeID,
 			resultChan: resultChan,
 		}
-		defer distsqlplan.ReleaseSetupFlowRequest(&req)
+		defer func() {
+			if !recursed {
+				distsqlplan.ReleaseSetupFlowRequest(&req)
+			}
+		}()
 
 		// Send out a request to the workers; if no worker is available, run
 		// directly.
@@ -219,6 +227,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// Recurse once with sessiondata.VectorizeOff, note that this branch will
 			// not be hit again due to prepareVectorizedFlowsForReplanning turning off
 			// vectorized.
+			recursed = true
 			return dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
 		}
 		return nil, nil, firstErr
@@ -227,7 +236,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
-	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
+	defer func() {
+		if !recursed {
+			distsqlplan.ReleaseSetupFlowRequest(&localReq)
+		}
+	}()
 	parentMonitor := evalCtx.Mon
 	setupCtx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
@@ -242,6 +255,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// Reset the parent monitor, this field is overwritten when running a flow
 			// locally.
 			evalCtx.Mon = parentMonitor
+			recursed = true
 			return dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
 		}
 		return nil, nil, err
