@@ -64,6 +64,7 @@ func registerAcceptance(r *testRegistry) {
 		tc := tc // copy for closure
 		spec := specTemplate
 		spec.Name = specTemplate.Name + "/" + tc.name
+		spec.MinVersion = tc.minVersion
 		spec.Run = func(ctx context.Context, t *test, c *cluster) {
 			tc.fn(ctx, t, c)
 		}
