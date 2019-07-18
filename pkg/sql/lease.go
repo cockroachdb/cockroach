@@ -1080,7 +1080,7 @@ func releaseLease(lease *storedTableLease, m *LeaseManager) {
 
 // purgeOldVersions removes old unused table descriptor versions older than
 // minVersion and releases any associated leases.
-// If dropped is set, minVersion is ignored; no lease is acquired and all
+// If takenOffline is set, minVersion is ignored; no lease is acquired and all
 // existing unused versions are removed. The table is further marked dropped,
 // which will cause existing in-use leases to be eagerly released once
 // they're not in use any more.
@@ -1089,7 +1089,7 @@ func purgeOldVersions(
 	ctx context.Context,
 	db *client.DB,
 	id sqlbase.ID,
-	dropped bool,
+	takenOffline bool,
 	minVersion sqlbase.DescriptorVersion,
 	m *LeaseManager,
 ) error {
@@ -1116,8 +1116,8 @@ func purgeOldVersions(
 		}
 	}
 
-	if dropped {
-		removeInactives(dropped)
+	if takenOffline {
+		removeInactives(takenOffline)
 		return nil
 	}
 
@@ -1742,7 +1742,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 						}
 						// Try to refresh the table lease to one >= this version.
 						if err := purgeOldVersions(
-							ctx, db, table.ID, table.Dropped(), table.Version, m); err != nil {
+							ctx, db, table.ID, table.GoingOffline(), table.Version, m); err != nil {
 							log.Warningf(ctx, "error purging leases for table %d(%s): %s",
 								table.ID, table.Name, err)
 						}

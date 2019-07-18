@@ -2665,6 +2665,11 @@ func (desc *TableDescriptor) HasColumnBackfillMutation() bool {
 	return false
 }
 
+// GoingOffline returns true if the table is being dropped or is importing.
+func (desc *TableDescriptor) GoingOffline() bool {
+	return desc.Dropped() || desc.State == TableDescriptor_IMPORTING
+}
+
 // Dropped returns true if the table is being dropped.
 func (desc *TableDescriptor) Dropped() bool {
 	return desc.State == TableDescriptor_DROP
