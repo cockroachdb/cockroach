@@ -50,7 +50,7 @@ func registerKV(r *testRegistry) {
 			splits := " --splits=1000"
 			duration := " --duration=" + ifLocal("10s", "10m")
 			readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
-			histograms := "--histograms=" + perfArtifactsDir + "/stats.json"
+			histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
 			var batchSize string
 			if opts.batchSize > 0 {
 				batchSize = fmt.Sprintf(" --batch=%d", opts.batchSize)
