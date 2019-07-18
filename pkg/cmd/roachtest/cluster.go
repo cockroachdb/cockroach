@@ -217,9 +217,8 @@ func (r *clusterRegistry) registerCluster(c *cluster) error {
 func (r *clusterRegistry) unregisterCluster(c *cluster) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, exists := r.mu.clusters[c.name]
-	if !exists {
-		panic(fmt.Sprintf("trying to unregister cluster not in registry: %s", c))
+	if _, ok := r.mu.clusters[c.name]; !ok {
+		return false
 	}
 	delete(r.mu.clusters, c.name)
 	if c.tag != "" {
@@ -228,7 +227,7 @@ func (r *clusterRegistry) unregisterCluster(c *cluster) bool {
 		}
 		r.mu.tagCount[c.tag]--
 	}
-	return exists
+	return true
 }
 
 func (r *clusterRegistry) countForTag(tag string) int {
