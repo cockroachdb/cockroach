@@ -189,7 +189,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 }
 
 func (t *topKSorter) emit() coldata.Batch {
-	t.output.SetSelection(false)
+	t.output.ResetInternalBatch()
 	toEmit := t.topK.Length() - t.emitted
 	if toEmit == 0 {
 		// We're done.

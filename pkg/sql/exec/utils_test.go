@@ -245,7 +245,7 @@ func (s *opTestInput) Init() {
 }
 
 func (s *opTestInput) Next(context.Context) coldata.Batch {
-	s.batch.SetSelection(false)
+	s.batch.ResetInternalBatch()
 	if len(s.tuples) == 0 {
 		s.batch.SetLength(0)
 		return s.batch
