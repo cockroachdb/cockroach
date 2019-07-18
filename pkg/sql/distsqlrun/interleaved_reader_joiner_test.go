@@ -400,7 +400,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Settings: s.ClusterSettings(),
 				// Run in a RootTxn so that there's no txn metadata produced.
 				txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				nodeID: s.NodeID(),
+				NodeID: s.NodeID(),
 			}
 
 			out := &RowBuffer{}
@@ -530,7 +530,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				Settings: s.ClusterSettings(),
 				// Run in a RootTxn so that there's no txn metadata produced.
 				txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				nodeID: s.NodeID(),
+				NodeID: s.NodeID(),
 			}
 
 			out := &RowBuffer{}
@@ -588,7 +588,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		Settings: s.ClusterSettings(),
 		// Run in a LeafTxn so that txn metadata is produced.
 		txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
-		nodeID: s.NodeID(),
+		NodeID: s.NodeID(),
 	}
 
 	innerJoinSpec := distsqlpb.InterleavedReaderJoinerSpec{

@@ -216,13 +216,17 @@ func newColOperator(
 			}
 			columnTypes[i] = *retType
 		}
+		typs, err := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		if err != nil {
+			return nil, nil, memUsage, err
+		}
 		if needHash {
 			op, err = exec.NewHashAggregator(
-				inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols,
+				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols,
 			)
 		} else {
 			op, err = exec.NewOrderedAggregator(
-				inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols,
+				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols,
 			)
 		}
 
@@ -247,7 +251,10 @@ func newColOperator(
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
-		typs := conv.FromColumnTypes(columnTypes)
+		typs, err := conv.FromColumnTypes(columnTypes)
+		if err != nil {
+			return nil, nil, 0, err
+		}
 		op, err = exec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
 
 	case core.Ordinality != nil:
@@ -266,8 +273,14 @@ func newColOperator(
 			return nil, nil, memUsage, errors.Newf("can't plan hash join with on expressions")
 		}
 
-		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
-		rightTypes := conv.FromColumnTypes(spec.Input[1].ColumnTypes)
+		leftTypes, err := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		rightTypes, err := conv.FromColumnTypes(spec.Input[1].ColumnTypes)
+		if err != nil {
+			return nil, nil, 0, err
+		}
 
 		columnTypes = make([]semtypes.T, len(leftTypes)+len(rightTypes))
 		copy(columnTypes, spec.Input[0].ColumnTypes)
@@ -324,8 +337,14 @@ func newColOperator(
 			return nil, nil, memUsage, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 		}
 
-		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
-		rightTypes := conv.FromColumnTypes(spec.Input[1].ColumnTypes)
+		leftTypes, err := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		rightTypes, err := conv.FromColumnTypes(spec.Input[1].ColumnTypes)
+		if err != nil {
+			return nil, nil, 0, err
+		}
 
 		nLeftCols := uint32(len(leftTypes))
 		nRightCols := uint32(len(rightTypes))
@@ -412,7 +431,10 @@ func newColOperator(
 			return nil, nil, memUsage, err
 		}
 		input := inputs[0]
-		inputTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		inputTypes, err := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		if err != nil {
+			return nil, nil, 0, err
+		}
 		orderingCols := core.Sorter.OutputOrdering.Columns
 		matchLen := core.Sorter.OrderingMatchLen
 		if matchLen > 0 {
@@ -450,7 +472,10 @@ func newColOperator(
 		}
 
 		input := inputs[0]
-		typs := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		typs, err := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		if err != nil {
+			return nil, nil, memUsage, err
+		}
 		tempPartitionColOffset, partitionColIdx := 0, -1
 		if len(core.Windower.PartitionBy) > 0 {
 			// TODO(yuzefovich): add support for hashing partitioner (probably by
@@ -578,7 +603,11 @@ func newColOperator(
 	if post.Limit != 0 {
 		op = exec.NewLimitOp(op, post.Limit)
 	}
-	return op, conv.FromColumnTypes(columnTypes), memUsage, nil
+	if err != nil {
+		return nil, nil, memUsage, err
+	}
+	typs, err := conv.FromColumnTypes(columnTypes)
+	return op, typs, memUsage, err
 }
 
 func planSelectionOperators(
@@ -1000,7 +1029,11 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 			if err := f.checkInboundStreamID(inputStream.StreamID); err != nil {
 				return nil, nil, memUsed, err
 			}
-			inbox, err := colrpc.NewInbox(conv.FromColumnTypes(input.ColumnTypes))
+			typs, err := conv.FromColumnTypes(input.ColumnTypes)
+			if err != nil {
+				return nil, nil, memUsed, err
+			}
+			inbox, err := colrpc.NewInbox(typs)
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
@@ -1034,13 +1067,17 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 	op := inputStreamOps[0]
 	if len(inputStreamOps) > 1 {
 		statsInputs := inputStreamOps
+		typs, err := conv.FromColumnTypes(input.ColumnTypes)
+		if err != nil {
+			return nil, nil, memUsed, err
+		}
 		if input.Type == distsqlpb.InputSyncSpec_ORDERED {
 			op = exec.NewOrderedSynchronizer(
-				inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), distsqlpb.ConvertToColumnOrdering(input.Ordering),
+				inputStreamOps, typs, distsqlpb.ConvertToColumnOrdering(input.Ordering),
 			)
 			memUsed += op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {
-			op = exec.NewUnorderedSynchronizer(inputStreamOps, conv.FromColumnTypes(input.ColumnTypes), &f.waitGroup)
+			op = exec.NewUnorderedSynchronizer(inputStreamOps, typs, &f.waitGroup)
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
 			// instead.
@@ -1311,4 +1348,14 @@ func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error
 		panic("not all vectorized stats collectors have been processed")
 	}
 	return nil
+}
+
+// SupportsVectorized returns nil if the input ProcessorSpec can be vectorized,
+// and an error if it cannot.
+func SupportsVectorized(
+	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec,
+) error {
+	ops := make([]exec.Operator, len(spec.Input))
+	_, _, _, err := newColOperator(ctx, flowCtx, spec, ops)
+	return err
 }
