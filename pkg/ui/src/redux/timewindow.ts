@@ -85,6 +85,11 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
       windowValid: moment.duration(10, "minutes"),
       sampleSize: moment.duration(5, "minutes"),
     },
+    "2 days": {
+      windowSize: moment.duration(2, "day"),
+      windowValid: moment.duration(10, "minutes"),
+      sampleSize: moment.duration(5, "minutes"),
+    },
     "1 week": {
       windowSize: moment.duration(7, "days"),
       windowValid: moment.duration(10, "minutes"),
