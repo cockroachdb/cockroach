@@ -32,15 +32,19 @@ type columnarizer struct {
 	buffered        sqlbase.EncDatumRows
 	batch           coldata.Batch
 	accumulatedMeta []distsqlpb.ProducerMetadata
+	ctx             context.Context
 }
 
 var _ exec.Operator = &columnarizer{}
 var _ exec.StaticMemoryOperator = &columnarizer{}
 
 // newColumnarizer returns a new columnarizer.
-func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*columnarizer, error) {
+func newColumnarizer(
+	ctx context.Context, flowCtx *FlowCtx, processorID int32, input RowSource,
+) (*columnarizer, error) {
 	c := &columnarizer{
 		input: input,
+		ctx:   ctx,
 	}
 	if err := c.ProcessorBase.Init(
 		nil,
@@ -71,7 +75,7 @@ func (c *columnarizer) Init() {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(typs))
 	}
 	c.accumulatedMeta = make([]distsqlpb.ProducerMetadata, 0, 1)
-	c.input.Start(context.TODO())
+	c.input.Start(c.ctx)
 }
 
 func (c *columnarizer) Next(context.Context) coldata.Batch {
