@@ -119,7 +119,7 @@ func TestMinBoolResultDeepCopy(t *testing.T) {
 }
 
 func TestSumSmallIntResultDeepCopy(t *testing.T) {
-	testAggregateResultDeepCopy(t, newSmallIntSumAggregate, makeIntTestDatum(10))
+	testAggregateResultDeepCopy(t, newSmallIntSumAggregate, makeSmallIntTestDatum(10))
 }
 
 func TestSumIntResultDeepCopy(t *testing.T) {
