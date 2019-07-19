@@ -99,6 +99,8 @@ func wrapRowSource(
 func newColOperator(
 	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
 ) (op exec.Operator, ct []types.T, memUsage int, err error) {
+	log.VEventf(ctx, 2, "planning col operator for spec %+v", spec)
+
 	core := &spec.Core
 	post := &spec.Post
 
@@ -124,6 +126,10 @@ func newColOperator(
 			return nil, nil, memUsage, errors.Newf("scrub table reader is unsupported in vectorized")
 		}
 		op, err = newColBatchScan(flowCtx, core.TableReader, post)
+		// We will be wrapping colBatchScan with a cancel checker below, so we
+		// need to log its creation separately.
+		log.VEventf(ctx, 1, "made op %T\n", op)
+
 		// We want to check for cancellation once per input batch, and wrapping
 		// only colBatchScan with an exec.CancelChecker allows us to do just that.
 		// It's sufficient for most of the operators since they are extremely fast.
@@ -1359,6 +1365,27 @@ func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error
 	}
 	if len(vectorizedStatsCollectorsQueue) > 0 {
 		panic("not all vectorized stats collectors have been processed")
+	}
+	return nil
+}
+
+// SupportsVectorized checks whether flow is supported by vectorized engine and
+// return an error if it isn't. Note that it does so by planning all columnar
+// operators corresponding to the processors in the flow which is quite
+// inefficient.
+func SupportsVectorized(ctx context.Context, flowCtx *FlowCtx, flow *distsqlpb.FlowSpec) error {
+	var ops []exec.Operator
+	for i := range flow.Processors {
+		spec := &flow.Processors[i]
+		if cap(ops) < len(spec.Input) {
+			ops = make([]exec.Operator, len(spec.Input))
+		} else {
+			ops = ops[:len(spec.Input)]
+		}
+		_, _, _, err := newColOperator(ctx, flowCtx, spec, ops)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

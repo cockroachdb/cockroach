@@ -499,6 +499,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
 	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
+		log.VEventf(ctx, 1, "attempting to vectorize flow %d with setting %s", f.id, f.EvalCtx.SessionData.Vectorize)
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
 		err := f.setupVectorized(ctx, f.vectorizedBoundAccount)

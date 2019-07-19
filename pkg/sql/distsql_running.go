@@ -131,6 +131,53 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(flows) > 1 {
 		resultChan = make(chan runnerResult, len(flows)-1)
 	}
+	// First check to see whether or not to even try vectorizing the flow. The
+	// goal here is to determine up front whether all of the flows can be
+	// vectorized. If any of them can't, turn off the setting.
+	// TODO(yuzefovich): this is a safe but quite inefficient way of setting up
+	// vectorized flows since the flows will effectively be planned twice. Remove
+	// this once logic of falling back to DistSQL is bullet-proof.
+	if evalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
+		for _, spec := range flows {
+			if err := distsqlrun.SupportsVectorized(
+				ctx, &distsqlrun.FlowCtx{EvalCtx: &evalCtx.EvalContext, NodeID: -1}, spec,
+			); err != nil {
+				// Vectorization attempt failed with an error.
+				returnVectorizationSetupError := false
+				if evalCtx.SessionData.Vectorize == sessiondata.VectorizeAlways {
+					returnVectorizationSetupError = true
+					// If running with VectorizeAlways, this check makes sure that we can
+					// still run SET statements (mostly to set experimental_vectorize to
+					// off) and the like.
+					if len(spec.Processors) == 1 &&
+						spec.Processors[0].Core.LocalPlanNode != nil {
+						rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
+						if rsidx != nil {
+							lp := localState.LocalProcs[*rsidx]
+							if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
+								if z.IsException() {
+									returnVectorizationSetupError = false
+								}
+							}
+						}
+					}
+				}
+				log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+				if returnVectorizationSetupError {
+					return nil, nil, err
+				}
+				// Vectorization is not supported for this flow, so we override the
+				// setting. Note that we need to restore the setting of evalCtx since
+				// it can be used in the future, but setupReq is used only once, so we
+				// don't need to restore it.
+				setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+				origMode := evalCtx.SessionData.Vectorize
+				evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
+				defer func() { evalCtx.SessionData.Vectorize = origMode }()
+				break
+			}
+		}
+	}
 	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
 			// Skip this node.
@@ -177,7 +224,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// up a vectorized flow will not be connected to by a non-vectorized flow.
 			newFlowID := uuid.MakeV4()
 			log.Infof(
-				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %+v", flows[thisNodeID].FlowID, newFlowID, firstErr,
+				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %s", flows[thisNodeID].FlowID, newFlowID, firstErr,
 			)
 			for i := range flows {
 				flows[i].FlowID.UUID = newFlowID
