@@ -188,10 +188,13 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogAttrDefTableID:             pgCatalogAttrDefTable,
 		sqlbase.PgCatalogAttributeTableID:           pgCatalogAttributeTable,
 		sqlbase.PgCatalogAuthMembersTableID:         pgCatalogAuthMembersTable,
+		sqlbase.PgCatalogCastTableID:                pgCatalogCastTable,
 		sqlbase.PgCatalogClassTableID:               pgCatalogClassTable,
 		sqlbase.PgCatalogCollationTableID:           pgCatalogCollationTable,
 		sqlbase.PgCatalogConstraintTableID:          pgCatalogConstraintTable,
+		sqlbase.PgCatalogConversionTableID:          pgCatalogConversionTable,
 		sqlbase.PgCatalogDatabaseTableID:            pgCatalogDatabaseTable,
+		sqlbase.PgCatalogDefaultACLTableID:          pgCatalogDefaultACLTable,
 		sqlbase.PgCatalogDependTableID:              pgCatalogDependTable,
 		sqlbase.PgCatalogDescriptionTableID:         pgCatalogDescriptionTable,
 		sqlbase.PgCatalogSharedDescriptionTableID:   pgCatalogSharedDescriptionTable,
@@ -204,14 +207,19 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogIndexesTableID:             pgCatalogIndexesTable,
 		sqlbase.PgCatalogInheritsTableID:            pgCatalogInheritsTable,
 		sqlbase.PgCatalogLanguageTableID:            pgCatalogLanguageTable,
+		sqlbase.PgCatalogLocksTableID:               pgCatalogLocksTable,
+		sqlbase.PgCatalogMatViewsTableID:            pgCatalogMatViewsTable,
 		sqlbase.PgCatalogNamespaceTableID:           pgCatalogNamespaceTable,
 		sqlbase.PgCatalogOperatorTableID:            pgCatalogOperatorTable,
+		sqlbase.PgCatalogPreparedXactsTableID:       pgCatalogPreparedXactsTable,
 		sqlbase.PgCatalogProcTableID:                pgCatalogProcTable,
 		sqlbase.PgCatalogRangeTableID:               pgCatalogRangeTable,
 		sqlbase.PgCatalogRewriteTableID:             pgCatalogRewriteTable,
 		sqlbase.PgCatalogRolesTableID:               pgCatalogRolesTable,
+		sqlbase.PgCatalogSecLabelsTableID:           pgCatalogSecLabelsTable,
 		sqlbase.PgCatalogSequencesTableID:           pgCatalogSequencesTable,
 		sqlbase.PgCatalogSettingsTableID:            pgCatalogSettingsTable,
+		sqlbase.PgCatalogShdependTableID:            pgCatalogShdependTable,
 		sqlbase.PgCatalogUserTableID:                pgCatalogUserTable,
 		sqlbase.PgCatalogUserMappingTableID:         pgCatalogUserMappingTable,
 		sqlbase.PgCatalogTablesTableID:              pgCatalogTablesTable,
@@ -241,8 +249,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-am.html`,
 CREATE TABLE pg_catalog.pg_am (
 	oid OID,
 	amname NAME,
-	amstrategies INT,
-	amsupport INT,
+	amstrategies INT2,
+	amsupport INT2,
 	amcanorder BOOL,
 	amcanorderbyop BOOL,
 	amcanbackward BOOL,
@@ -319,7 +327,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 CREATE TABLE pg_catalog.pg_attrdef (
 	oid OID,
 	adrelid OID,
-	adnum INT,
+	adnum INT2,
 	adbin STRING,
 	adsrc STRING
 )`,
@@ -355,12 +363,12 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attrelid OID,
 	attname NAME,
 	atttypid OID,
-	attstattarget INT,
-	attlen INT,
-	attnum INT,
-	attndims INT,
-	attcacheoff INT,
-	atttypmod INT,
+	attstattarget INT4,
+	attlen INT2,
+	attnum INT2,
+	attndims INT4,
+	attcacheoff INT4,
+	atttypmod INT4,
 	attbyval BOOL,
 	attstorage CHAR,
 	attalign CHAR,
@@ -368,7 +376,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	atthasdef BOOL,
 	attisdropped BOOL,
 	attislocal BOOL,
-	attinhcount INT,
+	attinhcount INT4,
 	attcollation OID,
 	attacl STRING[],
 	attoptions STRING[],
@@ -443,6 +451,27 @@ CREATE TABLE pg_catalog.pg_attribute (
 	},
 }
 
+var pgCatalogCastTable = virtualSchemaTable{
+	comment: `casts (empty - needs filling out)
+https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_cast (
+	oid OID,
+	castsource OID,
+	casttarget OID,
+	castfunc OID,
+	castcontext CHAR,
+	castmethod CHAR
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// TODO(someone): to populate this, we should split up the big PerformCast
+		// method in tree/eval.go into entries in a list. Then, this virtual table
+		// can simply range over the list. This would probably be better for
+		// maintainability anyway.
+		return nil
+	},
+}
+
 var pgCatalogAuthMembersTable = virtualSchemaTable{
 	comment: `role membership
 https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
@@ -485,21 +514,22 @@ CREATE TABLE pg_catalog.pg_class (
 	relname NAME NOT NULL,
 	relnamespace OID,
 	reltype OID,
+	reloftype OID,
 	relowner OID,
 	relam OID,
 	relfilenode OID,
 	reltablespace OID,
-	relpages INT,
-	reltuples FLOAT,
-	relallvisible INT,
+	relpages INT4,
+	reltuples FLOAT4,
+	relallvisible INT4,
 	reltoastrelid OID,
 	relhasindex BOOL,
 	relisshared BOOL,
 	relpersistence CHAR,
 	relistemp BOOL,
 	relkind CHAR,
-	relnatts INT,
-	relchecks INT,
+	relnatts INT2,
+	relchecks INT2,
 	relhasoids BOOL,
 	relhaspkey BOOL,
 	relhasrules BOOL,
@@ -526,6 +556,7 @@ CREATE TABLE pg_catalog.pg_class (
 					tree.NewDName(table.Name), // relname
 					namespaceOid,              // relnamespace
 					oidZero,                   // reltype (PG creates a composite type in pg_type for each table)
+					oidZero,                   // reloftype (PG creates a composite type in pg_type for each table)
 					tree.DNull,                // relowner
 					cockroachIndexEncodingOid, // relam
 					oidZero,                   // relfilenode
@@ -567,6 +598,7 @@ CREATE TABLE pg_catalog.pg_class (
 						tree.NewDName(index.Name),            // relname
 						namespaceOid,                         // relnamespace
 						oidZero,                              // reltype
+						oidZero,                              // reloftype
 						tree.DNull,                           // relowner
 						cockroachIndexEncodingOid,            // relam
 						oidZero,                              // relfilenode
@@ -605,14 +637,14 @@ CREATE TABLE pg_catalog.pg_collation (
   collname STRING,
   collnamespace OID,
   collowner OID,
-  collencoding INT,
+  collencoding INT4,
   collcollate STRING,
   collctype STRING
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, func(db *DatabaseDescriptor) error {
-			namespaceOid := h.NamespaceOid(db, tree.PublicSchema)
+			namespaceOid := h.NamespaceOid(db, pgCatalogName)
 			for _, tag := range collate.Supported() {
 				collName := tag.String()
 				if err := addRow(
@@ -691,10 +723,10 @@ CREATE TABLE pg_catalog.pg_constraint (
 	confdeltype STRING,
 	confmatchtype STRING,
 	conislocal BOOL,
-	coninhcount INT,
+	coninhcount INT4,
 	connoinherit BOOL,
-	conkey INT[],
-	confkey INT[],
+	conkey INT2[],
+	confkey INT2[],
 	conpfeqop OID[],
 	conppeqop OID[],
 	conffeqop OID[],
@@ -880,6 +912,25 @@ func colIDArrayToVector(arr []sqlbase.ColumnID) (tree.Datum, error) {
 	return tree.NewDIntVectorFromDArray(tree.MustBeDArray(dArr)), nil
 }
 
+var pgCatalogConversionTable = virtualSchemaTable{
+	comment: `encoding conversions (empty - unimplemented)
+https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_conversion (
+	oid OID,
+	conname NAME,
+	connamespace OID,
+	conowner OID,
+	conforencoding INT4,
+	contoencoding INT4,
+	conproc OID,
+  condefault BOOL
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
 var pgCatalogDatabaseTable = virtualSchemaTable{
 	comment: `available databases (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
@@ -888,12 +939,12 @@ CREATE TABLE pg_catalog.pg_database (
 	oid OID,
 	datname Name,
 	datdba OID,
-	encoding INT,
+	encoding INT4,
 	datcollate STRING,
 	datctype STRING,
 	datistemplate BOOL,
 	datallowconn BOOL,
-	datconnlimit INT,
+	datconnlimit INT4,
 	datlastsysoid OID,
 	datfrozenxid INT,
 	datminmxid INT,
@@ -912,7 +963,7 @@ CREATE TABLE pg_catalog.pg_database (
 				tree.DBoolFalse,            // datistemplate
 				tree.DBoolTrue,             // datallowconn
 				negOneVal,                  // datconnlimit
-				tree.DNull,                 // datlastsysoid
+				oidZero,                    // datlastsysoid
 				tree.DNull,                 // datfrozenxid
 				tree.DNull,                 // datminmxid
 				oidZero,                    // dattablespace
@@ -921,6 +972,23 @@ CREATE TABLE pg_catalog.pg_database (
 		})
 	},
 }
+
+var pgCatalogDefaultACLTable = virtualSchemaTable{
+	comment: `default ACLs (empty - unimplemented)
+https://www.postgresql.org/docs/9.6/catalog-pg-default-acl.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_default_acl (
+	oid OID,
+	defaclrole OID,
+	defaclnamespace OID,
+	defaclobjtype CHAR,
+	defaclacl STRING[]
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
 var (
 	depTypeNormal        = tree.NewDString("n")
 	depTypeAuto          = tree.NewDString("a")
@@ -955,10 +1023,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 CREATE TABLE pg_catalog.pg_depend (
   classid OID,
   objid OID,
-  objsubid INT,
+  objsubid INT4,
   refclassid OID,
   refobjid OID,
-  refobjsubid INT,
+  refobjsubid INT4,
   deptype CHAR
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1038,7 +1106,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 CREATE TABLE pg_catalog.pg_description (
 	objoid OID,
 	classoid OID,
-	objsubid INT,
+	objsubid INT4,
 	description STRING
 )`,
 	populate: func(
@@ -1118,7 +1186,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 CREATE TABLE pg_catalog.pg_enum (
   oid OID,
   enumtypid OID,
-  enumsortorder FLOAT,
+  enumsortorder FLOAT4,
   enumlabel STRING
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1228,7 +1296,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 CREATE TABLE pg_catalog.pg_index (
     indexrelid OID,
     indrelid OID,
-    indnatts INT,
+    indnatts INT2,
     indisunique BOOL,
     indisprimary BOOL,
     indisexclusion BOOL,
@@ -1411,7 +1479,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-inherits.html`,
 CREATE TABLE pg_catalog.pg_inherits (
 	inhrelid OID,
 	inhparent OID,
-	inhseqno INT
+	inhseqno INT4
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Table inheritance is not supported.
@@ -1436,6 +1504,50 @@ CREATE TABLE pg_catalog.pg_language (
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Languages to write functions and stored procedures are not supported.
+		return nil
+	},
+}
+
+var pgCatalogLocksTable = virtualSchemaTable{
+	comment: `locks held by active processes (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/view-pg-locks.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_locks (
+  locktype TEXT,
+  database OID,
+  relation OID,
+  page INT4,
+  tuple SMALLINT,
+  virtualxid TEXT,
+  transactionid INT,
+  classid OID,
+  objid OID,
+  objsubid SMALLINT,
+  virtualtransaction TEXT,
+  pid INT4,
+  mode TEXT,
+  granted BOOLEAN,
+  fastpath BOOLEAN
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
+var pgCatalogMatViewsTable = virtualSchemaTable{
+	comment: `available materialized views (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_matviews (
+  schemaname NAME,
+  matviewname NAME,
+  matviewowner NAME,
+  tablespace NAME,
+  hasindexes BOOL,
+  ispopulated BOOL,
+  definition TEXT
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 }
@@ -1589,6 +1701,22 @@ var (
 	_ = proArgModeTable
 )
 
+var pgCatalogPreparedXactsTable = virtualSchemaTable{
+	comment: `prepared transactions (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_prepared_xacts (
+  transaction INTEGER,
+  gid TEXT,
+  prepared TIMESTAMP WITH TIME ZONE,
+  owner NAME,
+  database NAME
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
 var pgCatalogProcTable = virtualSchemaTable{
 	comment: `built-in functions (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
@@ -1599,8 +1727,8 @@ CREATE TABLE pg_catalog.pg_proc (
 	pronamespace OID,
 	proowner OID,
 	prolang OID,
-	procost FLOAT,
-	prorows FLOAT,
+	procost FLOAT4,
+	prorows FLOAT4,
 	provariadic OID,
 	protransform STRING,
 	proisagg BOOL,
@@ -1611,8 +1739,8 @@ CREATE TABLE pg_catalog.pg_proc (
 	proretset BOOL,
 	provolatile CHAR,
 	proparallel CHAR,
-	pronargs INT,
-	pronargdefaults INT,
+	pronargs INT2,
+	pronargdefaults INT2,
 	prorettype OID,
 	proargtypes OIDVECTOR,
 	proallargtypes OID[],
@@ -1756,8 +1884,8 @@ CREATE TABLE pg_catalog.pg_range (
 	rngsubtype OID,
 	rngcollation OID,
 	rngsubopc OID,
-	rngcanonical INT,
-	rngsubdiff INT
+	rngcanonical OID,
+	rngsubdiff OID
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// We currently do not support any range types, so this table is empty.
@@ -1801,7 +1929,7 @@ CREATE TABLE pg_catalog.pg_roles (
 	rolcatupdate BOOL,
 	rolcanlogin BOOL,
 	rolreplication BOOL,
-	rolconnlimit INT,
+	rolconnlimit INT4,
 	rolpassword STRING,
 	rolvaliduntil TIMESTAMPTZ,
 	rolbypassrls BOOL,
@@ -1834,6 +1962,25 @@ CREATE TABLE pg_catalog.pg_roles (
 					tree.DNull,                   // rolconfig
 				)
 			})
+	},
+}
+
+var pgCatalogSecLabelsTable = virtualSchemaTable{
+	comment: `security labels (empty)
+https://www.postgresql.org/docs/9.6/view-pg-seclabels.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_seclabels (
+	objoid OID,
+  classoid OID,
+  objsubid INT4,
+  objtype TEXT,
+	objnamespace OID,
+	objname TEXT,
+	provider TEXT,
+	label TEXT
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
 	},
 }
 
@@ -1897,7 +2044,7 @@ CREATE TABLE pg_catalog.pg_settings (
     boot_val STRING,
     reset_val STRING,
     sourcefile STRING,
-    sourceline INT,
+    sourceline INT4,
     pending_restart BOOL
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1946,6 +2093,24 @@ CREATE TABLE pg_catalog.pg_settings (
 				return err
 			}
 		}
+		return nil
+	},
+}
+
+var pgCatalogShdependTable = virtualSchemaTable{
+	comment: `shared dependencies (empty - not implemented)
+https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_shdepend (
+	dbid OID,
+	classid OID,
+	objid OID,
+  objsubid INT4,
+	refclassid OID,
+	refobjid OID,
+	deptype CHAR
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 }
@@ -2020,7 +2185,7 @@ CREATE TABLE pg_catalog.pg_trigger (
 	tgrelid OID,
 	tgname NAME,
 	tgfoid OID,
-	tgtype INT,
+	tgtype INT2,
 	tgenabled TEXT,
 	tgisinternal BOOL,
 	tgconstrrelid OID,
@@ -2028,7 +2193,7 @@ CREATE TABLE pg_catalog.pg_trigger (
 	tgconstraint OID,
 	tgdeferrable BOOL,
 	tginitdeferred BOOL,
-	tgnargs INT,
+	tgnargs INT2,
 	tgattr INT2VECTOR,
 	tgargs BYTEA,
 	tgqual TEXT,
@@ -2092,7 +2257,7 @@ CREATE TABLE pg_catalog.pg_type (
 	typname NAME NOT NULL,
 	typnamespace OID,
 	typowner OID,
-	typlen INT,
+	typlen INT2,
 	typbyval BOOL,
 	typtype CHAR,
 	typcategory CHAR,
@@ -2113,8 +2278,8 @@ CREATE TABLE pg_catalog.pg_type (
 	typstorage CHAR,
 	typnotnull BOOL,
 	typbasetype OID,
-	typtypmod INT,
-	typndims INT,
+	typtypmod INT4,
+	typndims INT4,
 	typcollation OID,
 	typdefaultbin STRING,
 	typdefault STRING,
@@ -2265,7 +2430,7 @@ CREATE TABLE pg_catalog.pg_stat_activity (
 	datname NAME,
 	pid INTEGER,
 	usesysid OID,
-	username NAME,
+	usename NAME,
 	application_name TEXT,
 	client_addr INET,
 	client_hostname TEXT,

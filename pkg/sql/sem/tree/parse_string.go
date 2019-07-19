@@ -52,14 +52,18 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, erro
 	}
 }
 
-// parseStringAs parses s as type t for simple types. Bytes, arrays, collated
+// parseStringAs parses s as type t for simple types. Arrays and collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
 func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 	switch t.Family() {
+	case types.ArrayFamily:
+		return ParseDArrayFromString(ctx, s, t.ArrayContents())
 	case types.BitFamily:
 		return ParseDBitArray(s)
 	case types.BoolFamily:
 		return ParseDBool(s)
+	case types.BytesFamily:
+		return ParseDByte(s)
 	case types.DateFamily:
 		return ParseDDate(ctx, s)
 	case types.DecimalFamily:

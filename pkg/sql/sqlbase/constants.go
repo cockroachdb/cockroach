@@ -110,10 +110,13 @@ const (
 	PgCatalogAttrDefTableID
 	PgCatalogAttributeTableID
 	PgCatalogAuthMembersTableID
+	PgCatalogCastTableID
 	PgCatalogClassTableID
 	PgCatalogCollationTableID
 	PgCatalogConstraintTableID
+	PgCatalogConversionTableID
 	PgCatalogDatabaseTableID
+	PgCatalogDefaultACLTableID
 	PgCatalogDependTableID
 	PgCatalogDescriptionTableID
 	PgCatalogSharedDescriptionTableID
@@ -126,14 +129,19 @@ const (
 	PgCatalogIndexesTableID
 	PgCatalogInheritsTableID
 	PgCatalogLanguageTableID
+	PgCatalogLocksTableID
+	PgCatalogMatViewsTableID
 	PgCatalogNamespaceTableID
 	PgCatalogOperatorTableID
+	PgCatalogPreparedXactsTableID
 	PgCatalogProcTableID
 	PgCatalogRangeTableID
 	PgCatalogRewriteTableID
 	PgCatalogRolesTableID
+	PgCatalogSecLabelsTableID
 	PgCatalogSequencesTableID
 	PgCatalogSettingsTableID
+	PgCatalogShdependTableID
 	PgCatalogUserTableID
 	PgCatalogUserMappingTableID
 	PgCatalogTablesTableID
