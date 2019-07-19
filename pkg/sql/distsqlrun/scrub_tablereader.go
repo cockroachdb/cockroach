@@ -67,7 +67,7 @@ func newScrubTableReader(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*scrubTableReader, error) {
-	if flowCtx.nodeID == 0 {
+	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 	if flowCtx.txn == nil {
