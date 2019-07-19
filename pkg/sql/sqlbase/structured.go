@@ -2851,16 +2851,6 @@ func (desc *TableDescriptor) TableSpan() roachpb.Span {
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
-// GetDescMetadataKey returns the descriptor key for the table.
-func (desc TableDescriptor) GetDescMetadataKey() roachpb.Key {
-	return MakeDescMetadataKey(desc.ID)
-}
-
-// GetNameMetadataKey returns the namespace key for the table.
-func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
-	return MakeNameMetadataKey(desc.ParentID, desc.Name)
-}
-
 // SQLString returns the SQL statement describing the column.
 func (desc *ColumnDescriptor) SQLString() string {
 	f := tree.NewFmtCtx(tree.FmtSimple)
