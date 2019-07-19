@@ -210,10 +210,11 @@ func RangeLookup(
 		desiredDesc := containsForDir(prefetchReverse, rkey)
 		var matchingRanges []roachpb.RangeDescriptor
 		var prefetchedRanges []roachpb.RangeDescriptor
-		for index, desc := range descs {
+		for index := range descs {
+			desc := &descs[index]
 			if desiredDesc(desc) {
 				if len(matchingRanges) == 0 {
-					matchingRanges = append(matchingRanges, desc)
+					matchingRanges = append(matchingRanges, *desc)
 				} else {
 					// Since we support scanning non-transactionally, it's possible that
 					// we pick up both the pre- and post-split descriptor for a range.
@@ -221,7 +222,7 @@ func RangeLookup(
 						if desc.GetGeneration() > matchingRanges[0].GetGeneration() {
 							// If both generations are comparable, we take the range
 							// descriptor with the newer generation.
-							matchingRanges[0] = desc
+							matchingRanges[0] = *desc
 						}
 					} else {
 						if rand.Intn(index+1) == 0 {
@@ -233,19 +234,20 @@ func RangeLookup(
 							// wrong we will try the lookup again. Randomness is used to
 							// ensure we probabilistically converge to the correct
 							// descriptor.
-							matchingRanges[0] = desc
+							matchingRanges[0] = *desc
 						}
 					}
 				}
 			} else {
 				// If this is not the desired descriptor, it must be a prefetched
 				// descriptor.
-				prefetchedRanges = append(prefetchedRanges, desc)
+				prefetchedRanges = append(prefetchedRanges, *desc)
 			}
 		}
-		for _, desc := range intentDescs {
+		for i := range intentDescs {
+			desc := &intentDescs[i]
 			if desiredDesc(desc) {
-				matchingRanges = append(matchingRanges, desc)
+				matchingRanges = append(matchingRanges, *desc)
 				// We only want up to one intent descriptor.
 				break
 			}
@@ -343,10 +345,10 @@ func lookupRangeFwdScan(
 	// This occurs in case 2 from above.
 	if prefetchReverse {
 		desiredDesc := containsForDir(prefetchReverse, key)
-		if len(descs) > 0 && !desiredDesc(descs[0]) {
+		if len(descs) > 0 && !desiredDesc(&descs[0]) {
 			descs = nil
 		}
-		if len(intentDescs) > 0 && !desiredDesc(intentDescs[0]) {
+		if len(intentDescs) > 0 && !desiredDesc(&intentDescs[0]) {
 			intentDescs = nil
 		}
 	}
@@ -421,11 +423,11 @@ func addrForDir(prefetchReverse bool) func(roachpb.Key) (roachpb.RKey, error) {
 	return keys.Addr
 }
 
-func containsForDir(prefetchReverse bool, key roachpb.RKey) func(roachpb.RangeDescriptor) bool {
-	return func(desc roachpb.RangeDescriptor) bool {
-		contains := roachpb.RangeDescriptor.ContainsKey
+func containsForDir(prefetchReverse bool, key roachpb.RKey) func(*roachpb.RangeDescriptor) bool {
+	return func(desc *roachpb.RangeDescriptor) bool {
+		contains := (*roachpb.RangeDescriptor).ContainsKey
 		if prefetchReverse {
-			contains = roachpb.RangeDescriptor.ContainsKeyInverted
+			contains = (*roachpb.RangeDescriptor).ContainsKeyInverted
 		}
 		return contains(desc, key)
 	}

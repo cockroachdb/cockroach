@@ -1080,7 +1080,7 @@ func (m *multiTestContext) findMemberStoreLocked(desc roachpb.RangeDescriptor) *
 			}
 		}
 	}
-	m.t.Fatalf("couldn't find a live member of %s", desc)
+	m.t.Fatalf("couldn't find a live member of %s", &desc)
 	return nil // unreached, but the compiler can't tell.
 }
 

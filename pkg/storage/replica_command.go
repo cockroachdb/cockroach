@@ -66,7 +66,7 @@ func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (stri
 			return fmt.Sprintf("descriptor changed: expected %s != [actual] nil (range subsumed)", desc), true
 		} else if err := detail.ActualValue.GetProto(&actualDesc); err == nil &&
 			desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
-			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s", desc, actualDesc), true
+			return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s", desc, &actualDesc), true
 		}
 	}
 	return "", false
@@ -569,7 +569,7 @@ func (r *Replica) AdminMerge(
 		updatedLeftDesc.IncrementGeneration()
 		r.maybeMarkGenerationComparable(&updatedLeftDesc)
 		updatedLeftDesc.EndKey = rightDesc.EndKey
-		log.Infof(ctx, "initiating a merge of %s into this range (%s)", rightDesc, reason)
+		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
 		// Update the range descriptor for the receiving range. It is important
 		// (for transaction record placement) that the first write inside the
