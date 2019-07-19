@@ -330,7 +330,7 @@ func ImportFixture(
 
 	pathPrefix := csvServer
 	if pathPrefix == `` {
-		pathPrefix = `experimental-workload://`
+		pathPrefix = `workload://`
 	}
 
 	for _, t := range tables {
