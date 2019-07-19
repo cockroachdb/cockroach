@@ -541,7 +541,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInitFetch:
 			moreKeys, kv, newSpan, err := rf.fetcher.nextKV(ctx)
 			if err != nil {
-				return nil, err
+				return nil, exec.NewStorageError(err)
 			}
 			if !moreKeys {
 				rf.machine.state[0] = stateEmitLastBatch
@@ -643,7 +643,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			for {
 				moreRows, kv, _, err := rf.fetcher.nextKV(ctx)
 				if err != nil {
-					return nil, err
+					return nil, exec.NewStorageError(err)
 				}
 				if debugState {
 					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
@@ -664,9 +664,10 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.shiftState()
 
 		case stateFetchNextKVWithUnfinishedRow:
+			var err error
 			moreKVs, kv, _, err := rf.fetcher.nextKV(ctx)
 			if err != nil {
-				return nil, err
+				return nil, exec.NewStorageError(err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.

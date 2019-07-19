@@ -543,7 +543,11 @@ func (r *DistSQLReceiver) Push(
 			// previous error (if any).
 			if roachpb.ErrPriority(meta.Err) > roachpb.ErrPriority(r.resultWriter.Err()) {
 				if r.txn != nil {
-					if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
+					cause := errors.Cause(meta.Err)
+					if cause == nil {
+						cause = meta.Err
+					}
+					if retryErr, ok := cause.(*roachpb.UnhandledRetryableError); ok {
 						// Update the txn in response to remote errors. In the non-DistSQL
 						// world, the TxnCoordSender handles "unhandled" retryable errors,
 						// but this one is coming from a distributed SQL node, which has
