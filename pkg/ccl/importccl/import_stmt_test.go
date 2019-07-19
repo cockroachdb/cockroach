@@ -1213,12 +1213,6 @@ func TestImportCSVStmt(t *testing.T) {
 func TestImportIntoCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO(adityamaru): This needs to be removed once we can figure out why
-	// leases are not being released after insertion, and before importing into a
-	// table. Without this, the test waits for the lease to expire ~5m before
-	// running.
-	defer sql.TestDisableTableLeases()()
-
 	if testing.Short() {
 		t.Skip("short")
 	}
