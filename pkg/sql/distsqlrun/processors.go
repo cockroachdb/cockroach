@@ -1213,12 +1213,12 @@ type LocalProcessor interface {
 	SetInput(ctx context.Context, input RowSource) error
 }
 
-// vectorizeAlwaysException is an object that returns whether or not execution
+// VectorizeAlwaysException is an object that returns whether or not execution
 // should continue if experimental_vectorize=always and an error occurred when
 // setting up the vectorized flow. Consider the case in which
 // experimental_vectorize=always. The user must be able to unset this session
 // variable without getting an error.
-type vectorizeAlwaysException interface {
+type VectorizeAlwaysException interface {
 	// IsException returns whether this object should be an exception to the rule
 	// that an inability to run this node in a vectorized flow should produce an
 	// error.

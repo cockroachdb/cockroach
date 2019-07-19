@@ -507,7 +507,7 @@ func newColOperator(
 		memUsage += sMemOp.EstimateStaticMemoryUsage()
 	}
 
-	log.VEventf(ctx, 1, "Made op %T\n", op)
+	log.VEventf(ctx, 1, "made op %T\n", op)
 
 	if err != nil {
 		return nil, nil, memUsage, err
