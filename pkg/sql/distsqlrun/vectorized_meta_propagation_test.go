@@ -94,6 +94,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	if !ok {
 		t.Fatal("MetadataTestReceiver is not a RowSource")
 	}
+	mtrAsRowSource.Start(ctx)
 
 	rowCount, metaCount := 0, 0
 	for {
