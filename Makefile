@@ -1534,7 +1534,7 @@ clean-execgen-files:
 
 .PHONY: clean
 clean: ## Remove build artifacts.
-clean: clean-c-deps clean-execgen-files
+clean: clean-c-deps clean-execgen-files ui-clean
 	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources build/defs.mk*
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
