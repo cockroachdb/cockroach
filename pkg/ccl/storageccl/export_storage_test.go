@@ -542,7 +542,7 @@ func TestWorkloadStorage(t *testing.T) {
 			}
 		}
 		return &url.URL{
-			Scheme:   `experimental-workload`,
+			Scheme:   `workload`,
 			Path:     `/` + path.Join(`csv`, gen.Meta().Name, bankTable.Name),
 			RawQuery: params.Encode(),
 		}
@@ -579,16 +579,16 @@ func TestWorkloadStorage(t *testing.T) {
 		`), strings.TrimSpace(string(bytes)))
 	}
 
-	_, err := ExportStorageFromURI(ctx, `experimental-workload:///nope`, settings)
+	_, err := ExportStorageFromURI(ctx, `workload:///nope`, settings)
 	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///fmt/bank/bank?version=`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///fmt/bank/bank?version=`, settings)
 	require.EqualError(t, err, `unsupported format: fmt`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/nope/nope?version=`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///csv/nope/nope?version=`, settings)
 	require.EqualError(t, err, `unknown generator: nope`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank`, settings)
 	require.EqualError(t, err, `parameter version is required`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank?version=`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank?version=`, settings)
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
-	_, err = ExportStorageFromURI(ctx, `experimental-workload:///csv/bank/bank?version=nope`, settings)
+	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`, settings)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
 }
