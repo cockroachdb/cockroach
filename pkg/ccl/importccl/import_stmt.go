@@ -416,6 +416,9 @@ func importPlanHook(
 			// TODO(dt): de-validate all the FKs.
 
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				if err := txn.SetSystemConfigTrigger(); err != nil {
+					return err
+				}
 				return errors.Wrap(
 					txn.CPut(ctx, sqlbase.MakeDescMetadataKey(found.TableDescriptor.ID),
 						sqlbase.WrapDescriptor(&importing), sqlbase.WrapDescriptor(&found.TableDescriptor),
