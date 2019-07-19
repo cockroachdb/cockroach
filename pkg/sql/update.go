@@ -128,7 +128,7 @@ func (p *planner) Update(
 	// Extract the column descriptors for the column names listed
 	// in the LHS operands of SET expressions. This also checks
 	// that each column is assigned at most once.
-	updateCols, err := p.processColumns(desc, names,
+	updateCols, err := sqlbase.ProcessTargetColumns(desc, names,
 		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
