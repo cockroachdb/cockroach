@@ -62,7 +62,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 				EvalCtx:  &evalCtx,
 				Settings: s.ClusterSettings(),
 				txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-				nodeID:   s.NodeID(),
+				NodeID:   s.NodeID(),
 			}
 
 			b.SetBytes(int64(numRows * numCols * 8))
