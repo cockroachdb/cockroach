@@ -43,6 +43,7 @@ func BenchmarkColumnarize(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	c.Init()
 	for i := 0; i < b.N; i++ {
 		foundRows := 0
 		for {
