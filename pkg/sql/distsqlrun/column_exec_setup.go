@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 func checkNumIn(inputs []exec.Operator, numIn int) error {
@@ -549,6 +549,7 @@ func newColOperator(
 		}
 		columnTypes = newTypes
 	} else if post.RenderExprs != nil {
+		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
 		var renderedCols []uint32
 		for _, expr := range post.RenderExprs {
 			var (
@@ -570,6 +571,11 @@ func newColOperator(
 			memUsage += renderMem
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
+		newTypes := make([]semtypes.T, 0, len(renderedCols))
+		for _, j := range renderedCols {
+			newTypes = append(newTypes, columnTypes[j])
+		}
+		columnTypes = newTypes
 		op = exec.NewSimpleProjectOp(op, renderedCols)
 	}
 	if post.Offset != 0 {
@@ -649,9 +655,9 @@ func planProjectionOperators(
 	case *tree.IndexedVar:
 		return input, t.Idx, columnTypes, memUsed, nil
 	case *tree.ComparisonExpr:
-		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
+		return planProjectionExpr(ctx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input)
 	case *tree.BinaryExpr:
-		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
+		return planProjectionExpr(ctx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(), columnTypes, input)
 	case *tree.FuncExpr:
 		var (
 			inputCols     []int
@@ -702,6 +708,7 @@ func planProjectionOperators(
 func planProjectionExpr(
 	ctx *tree.EvalContext,
 	binOp tree.Operator,
+	outputType *semtypes.T,
 	left, right tree.TypedExpr,
 	columnTypes []semtypes.T,
 	input exec.Operator,
@@ -722,11 +729,10 @@ func planProjectionExpr(
 			return nil, resultIdx, ct, memUsed, err
 		}
 		resultIdx = len(ct)
-		typ := &ct[rightIdx]
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
-		op, err = exec.GetProjectionLConstOperator(typ, binOp, rightOp, rightIdx, lConstArg, resultIdx)
-		ct = append(ct, *typ)
+		op, err = exec.GetProjectionLConstOperator(&ct[rightIdx], binOp, rightOp, rightIdx, lConstArg, resultIdx)
+		ct = append(ct, *outputType)
 		if sMem, ok := op.(exec.StaticMemoryOperator); ok {
 			memUsed += sMem.EstimateStaticMemoryUsage()
 		}
@@ -736,7 +742,6 @@ func planProjectionExpr(
 	if err != nil {
 		return nil, resultIdx, ct, leftMem, err
 	}
-	typ := &ct[leftIdx]
 	if rConstArg, rConst := right.(tree.Datum); rConst {
 		// Case 2: The right is constant.
 		// The projection result will be outputted to a new column which is appended
@@ -749,11 +754,11 @@ func planProjectionExpr(
 				err = errors.Errorf("IN operator supported only on constant expressions")
 				return nil, resultIdx, ct, leftMem, err
 			}
-			op, err = exec.GetInProjectionOperator(typ, leftOp, leftIdx, resultIdx, datumTuple, negate)
+			op, err = exec.GetInProjectionOperator(&ct[leftIdx], leftOp, leftIdx, resultIdx, datumTuple, negate)
 		} else {
-			op, err = exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
+			op, err = exec.GetProjectionRConstOperator(&ct[leftIdx], binOp, leftOp, leftIdx, rConstArg, resultIdx)
 		}
-		ct = append(ct, *typ)
+		ct = append(ct, *outputType)
 		if sMem, ok := op.(exec.StaticMemoryOperator); ok {
 			memUsed += sMem.EstimateStaticMemoryUsage()
 		}
@@ -765,8 +770,8 @@ func planProjectionExpr(
 		return nil, resultIdx, nil, leftMem + rightMem, err
 	}
 	resultIdx = len(ct)
-	op, err = exec.GetProjectionOperator(typ, binOp, rightOp, leftIdx, rightIdx, resultIdx)
-	ct = append(ct, *typ)
+	op, err = exec.GetProjectionOperator(&ct[leftIdx], binOp, rightOp, leftIdx, rightIdx, resultIdx)
+	ct = append(ct, *outputType)
 	if sMem, ok := op.(exec.StaticMemoryOperator); ok {
 		memUsed += sMem.EstimateStaticMemoryUsage()
 	}
