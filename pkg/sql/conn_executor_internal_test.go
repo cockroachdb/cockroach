@@ -265,7 +265,7 @@ func startConnExecutor(
 			ClusterID: func() uuid.UUID { return uuid.UUID{} },
 		},
 		DistSQLPlanner: NewDistSQLPlanner(
-			ctx, distsqlrun.Version, st, roachpb.NodeDescriptor{},
+			ctx, distsqlrun.Version, st, roachpb.NodeDescriptor{NodeID: 1},
 			nil, /* rpcCtx */
 			distsqlrun.NewServer(ctx, distsqlrun.ServerConfig{
 				AmbientContext: testutils.MakeAmbientCtx(),
