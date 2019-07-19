@@ -20,6 +20,51 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// ProcessTargetColumns returns the column descriptors identified by the
+// given name list. It also checks that a given column name is only
+// listed once. If no column names are given (special case for INSERT)
+// and ensureColumns is set, the descriptors for all visible columns
+// are returned. If allowMutations is set, even columns undergoing
+// mutations are added.
+func ProcessTargetColumns(
+	tableDesc *ImmutableTableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
+) ([]ColumnDescriptor, error) {
+	if len(nameList) == 0 {
+		if ensureColumns {
+			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
+			// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
+			// hidden columns. At present, the only hidden column is the implicit rowid
+			// primary key column.
+			return tableDesc.VisibleColumns(), nil
+		}
+		return nil, nil
+	}
+
+	cols := make([]ColumnDescriptor, len(nameList))
+	colIDSet := make(map[ColumnID]struct{}, len(nameList))
+	for i, colName := range nameList {
+		var col *ColumnDescriptor
+		var err error
+		if allowMutations {
+			col, _, err = tableDesc.FindColumnByName(colName)
+		} else {
+			col, err = tableDesc.FindActiveColumnByName(string(colName))
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if _, ok := colIDSet[col.ID]; ok {
+			return nil, pgerror.Newf(pgcode.Syntax,
+				"multiple assignments to the same column %q", &nameList[i])
+		}
+		colIDSet[col.ID] = struct{}{}
+		cols[i] = *col
+	}
+
+	return cols, nil
+}
+
 // sourceNameMatches checks whether a request for table name toFind
 // can be satisfied by the FROM source name srcName.
 //
