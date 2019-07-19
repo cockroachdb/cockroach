@@ -1177,13 +1177,14 @@ func removeDeadReplicas(
 			// Rewrite the replicas list. Bump the replica ID as an extra
 			// defense against one of the old replicas returning from the
 			// dead.
-			newDesc.SetReplicas(roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{{
+			replicas := []roachpb.ReplicaDescriptor{{
 				NodeID:    storeIdent.NodeID,
 				StoreID:   storeIdent.StoreID,
 				ReplicaID: desc.NextReplicaID,
-			}}))
+			}}
+			newDesc.SetReplicas(roachpb.MakeReplicaDescriptors(&replicas))
 			newDesc.NextReplicaID++
-			fmt.Printf("Replica %s -> %s\n", desc, newDesc)
+			fmt.Printf("Replica %s -> %s\n", &desc, &newDesc)
 			newDescs = append(newDescs, newDesc)
 		}
 		return false, nil

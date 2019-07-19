@@ -101,32 +101,32 @@ func (a Attributes) String() string {
 }
 
 // RSpan returns the RangeDescriptor's resolved span.
-func (r RangeDescriptor) RSpan() RSpan {
+func (r *RangeDescriptor) RSpan() RSpan {
 	return RSpan{Key: r.StartKey, EndKey: r.EndKey}
 }
 
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
-func (r RangeDescriptor) ContainsKey(key RKey) bool {
+func (r *RangeDescriptor) ContainsKey(key RKey) bool {
 	return r.RSpan().ContainsKey(key)
 }
 
 // ContainsKeyInverted returns whether this RangeDescriptor contains the
 // specified key using an inverted range. See RSpan.ContainsKeyInverted.
-func (r RangeDescriptor) ContainsKeyInverted(key RKey) bool {
+func (r *RangeDescriptor) ContainsKeyInverted(key RKey) bool {
 	return r.RSpan().ContainsKeyInverted(key)
 }
 
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified
 // key range from start (inclusive) to end (exclusive).
 // If end is empty, returns ContainsKey(start).
-func (r RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
+func (r *RangeDescriptor) ContainsKeyRange(start, end RKey) bool {
 	return r.RSpan().ContainsKeyRange(start, end)
 }
 
 // Replicas returns the set of nodes/stores on which replicas of this range are
 // stored.
-func (r RangeDescriptor) Replicas() ReplicaDescriptors {
-	return MakeReplicaDescriptors(r.InternalReplicas)
+func (r *RangeDescriptor) Replicas() ReplicaDescriptors {
+	return MakeReplicaDescriptors(&r.InternalReplicas)
 }
 
 // SetReplicas overwrites the set of nodes/stores on which replicas of this
@@ -155,7 +155,7 @@ func (r *RangeDescriptor) RemoveReplica(nodeID NodeID, storeID StoreID) (Replica
 
 // GetReplicaDescriptor returns the replica which matches the specified store
 // ID.
-func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
+func (r *RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescriptor, bool) {
 	for _, repDesc := range r.Replicas().Unwrap() {
 		if repDesc.StoreID == storeID {
 			return repDesc, true
@@ -166,7 +166,7 @@ func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescripto
 
 // GetReplicaDescriptorByID returns the replica which matches the specified store
 // ID.
-func (r RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
+func (r *RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
 	for _, repDesc := range r.Replicas().Unwrap() {
 		if repDesc.ReplicaID == replicaID {
 			return repDesc, true
@@ -178,12 +178,12 @@ func (r RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaD
 // IsInitialized returns false if this descriptor represents an
 // uninitialized range.
 // TODO(bdarnell): unify this with Validate().
-func (r RangeDescriptor) IsInitialized() bool {
+func (r *RangeDescriptor) IsInitialized() bool {
 	return len(r.EndKey) != 0
 }
 
 // GetGeneration returns the generation of this RangeDescriptor.
-func (r RangeDescriptor) GetGeneration() int64 {
+func (r *RangeDescriptor) GetGeneration() int64 {
 	if r.Generation != nil {
 		return *r.Generation
 	}
@@ -199,7 +199,7 @@ func (r *RangeDescriptor) IncrementGeneration() {
 }
 
 // GetGenerationComparable returns if the generation of this RangeDescriptor is comparable.
-func (r RangeDescriptor) GetGenerationComparable() bool {
+func (r *RangeDescriptor) GetGenerationComparable() bool {
 	if r.GenerationComparable == nil {
 		return false
 	}
@@ -207,7 +207,7 @@ func (r RangeDescriptor) GetGenerationComparable() bool {
 }
 
 // GetStickyBit returns the sticky bit of this RangeDescriptor.
-func (r RangeDescriptor) GetStickyBit() hlc.Timestamp {
+func (r *RangeDescriptor) GetStickyBit() hlc.Timestamp {
 	if r.StickyBit == nil {
 		return hlc.Timestamp{}
 	}
@@ -215,7 +215,7 @@ func (r RangeDescriptor) GetStickyBit() hlc.Timestamp {
 }
 
 // Validate performs some basic validation of the contents of a range descriptor.
-func (r RangeDescriptor) Validate() error {
+func (r *RangeDescriptor) Validate() error {
 	if r.NextReplicaID == 0 {
 		return errors.Errorf("NextReplicaID must be non-zero")
 	}
@@ -236,7 +236,7 @@ func (r RangeDescriptor) Validate() error {
 	return nil
 }
 
-func (r RangeDescriptor) String() string {
+func (r *RangeDescriptor) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "r%d:", r.RangeID)
 
