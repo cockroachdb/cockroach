@@ -1579,7 +1579,7 @@ func (r *Replica) acquireMergeLock(
 	rightDesc := rightRepl.Desc()
 	if !rightDesc.StartKey.Equal(merge.RightDesc.StartKey) || !rightDesc.EndKey.Equal(merge.RightDesc.EndKey) {
 		log.Fatalf(ctx, "RHS of merge %s <- %s not present on store; found %s in place of the RHS",
-			merge.LeftDesc, merge.RightDesc, rightDesc)
+			&merge.LeftDesc, &merge.RightDesc, rightDesc)
 	}
 	return func(*storagepb.ReplicatedEvalResult) {
 		rightRepl.raftMu.Unlock()

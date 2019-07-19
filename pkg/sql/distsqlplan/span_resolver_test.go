@@ -422,7 +422,7 @@ func selectReplica(nodeID roachpb.NodeID, rng roachpb.RangeDescriptor) rngInfo {
 			return rngInfo{ReplicaDescriptor: rep, rngDesc: rng}
 		}
 	}
-	panic(fmt.Sprintf("no replica on node %d in: %s", nodeID, rng))
+	panic(fmt.Sprintf("no replica on node %d in: %s", nodeID, &rng))
 }
 
 func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
