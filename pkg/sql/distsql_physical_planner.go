@@ -751,7 +751,8 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 			}
 			desc := it.Desc()
 			if log.V(1) {
-				log.Infof(ctx, "lastKey: %s desc: %s", lastKey, desc)
+				descCpy := desc // don't let desc escape
+				log.Infof(ctx, "lastKey: %s desc: %s", lastKey, &descCpy)
 			}
 
 			if !desc.ContainsKey(lastKey) {
