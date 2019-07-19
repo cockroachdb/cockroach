@@ -418,7 +418,7 @@ func (s LeaseStore) PublishMultiple(
 			}
 			b := txn.NewBatch()
 			for tableID, tableDesc := range tableDescs {
-				b.Put(sqlbase.MakeDescMetadataKey(tableID), sqlbase.WrapDescriptor(tableDesc))
+				writeDescToBatch(ctx, false /* kvTrace */, s.settings, b, tableID, tableDesc.TableDesc())
 			}
 			if logEvent != nil {
 				// If an event log is required for this update, ensure that the

@@ -420,6 +420,10 @@ func importPlanHook(
 					return err
 				}
 				return errors.Wrap(
+					// Note that this CPut is safe with respect to mixed-version descriptor
+					// upgrade and downgrade, because IMPORT does not operate in mixed-version
+					// states.
+					// TODO(jordan,lucy): remove this comment once 19.2 is released.
 					txn.CPut(ctx, sqlbase.MakeDescMetadataKey(found.TableDescriptor.ID),
 						sqlbase.WrapDescriptor(&importing), sqlbase.WrapDescriptor(&found.TableDescriptor),
 					), "another operation is currently operating on the table")
@@ -827,6 +831,10 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
 		}
+		// Note that this CPut is safe with respect to mixed-version descriptor
+		// upgrade and downgrade, because IMPORT does not operate in mixed-version
+		// states.
+		// TODO(jordan,lucy): remove this comment once 19.2 is released.
 		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
 	return errors.Wrap(txn.Run(ctx, b), "rolling back tables")
@@ -847,6 +855,10 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
 		// TODO(dt): re-validate any FKs?
+		// Note that this CPut is safe with respect to mixed-version descriptor
+		// upgrade and downgrade, because IMPORT does not operate in mixed-version
+		// states.
+		// TODO(jordan,lucy): remove this comment once 19.2 is released.
 		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
 	if err := txn.Run(ctx, b); err != nil {
