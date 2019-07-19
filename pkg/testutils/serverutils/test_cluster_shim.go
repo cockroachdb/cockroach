@@ -52,6 +52,12 @@ type TestClusterInterface interface {
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
+	// AddReplicasOrFatal is the same as AddReplicas but will Fatal the test on
+	// error.
+	AddReplicasOrFatal(
+		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	) roachpb.RangeDescriptor
+
 	// RemoveReplicas removes one or more replicas from a range.
 	RemoveReplicas(
 		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
@@ -85,6 +91,10 @@ type TestClusterInterface interface {
 
 	// LookupRange returns the descriptor of the range containing key.
 	LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error)
+
+	// LookupRangeOrFatal is the same as LookupRange but will Fatal the test on
+	// error.
+	LookupRangeOrFatal(t testing.TB, key roachpb.Key) roachpb.RangeDescriptor
 
 	// Target returns a roachpb.ReplicationTarget for the specified server.
 	Target(serverIdx int) roachpb.ReplicationTarget

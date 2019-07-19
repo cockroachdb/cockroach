@@ -1326,7 +1326,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
 	leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
-	if leaseHolderReplica != replicas[1] {
+	if !leaseHolderReplica.Equal(replicas[1]) {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v",
 			replicas[1], leaseHolderReplica)
 	}
@@ -1339,7 +1339,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 		// unaware of the new lease and so the request might bounce around for a
 		// while (see #8816).
 		leaseHolderReplica = LeaseInfo(t, kvDB1, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
-		if leaseHolderReplica != replicas[1] {
+		if !leaseHolderReplica.Equal(replicas[1]) {
 			return errors.Errorf("lease holder should be replica %+v, but is: %+v",
 				replicas[1], leaseHolderReplica)
 		}
@@ -1378,7 +1378,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	resp := *(reply.(*roachpb.LeaseInfoResponse))
 	leaseHolderReplica = resp.Lease.Replica
 
-	if leaseHolderReplica != replicas[2] {
+	if !leaseHolderReplica.Equal(replicas[2]) {
 		t.Fatalf("lease holder should be replica %s, but is: %s", replicas[2], leaseHolderReplica)
 	}
 

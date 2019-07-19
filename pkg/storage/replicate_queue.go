@@ -69,6 +69,12 @@ var (
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReplicateQueueRemoveLearnerReplicaCount = metric.Metadata{
+		Name:        "queue.replicate.removelearnerreplica",
+		Help:        "Number of learner replica removals attempted by the replicate queue (typically due to internal race conditions)",
+		Measurement: "Replica Removals",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaReplicateQueueRebalanceReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.rebalancereplica",
 		Help:        "Number of replica rebalancer-initiated additions attempted by the replicate queue",
@@ -104,20 +110,22 @@ func (*quorumError) purgatoryErrorMarker() {}
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
 type ReplicateQueueMetrics struct {
-	AddReplicaCount        *metric.Counter
-	RemoveReplicaCount     *metric.Counter
-	RemoveDeadReplicaCount *metric.Counter
-	RebalanceReplicaCount  *metric.Counter
-	TransferLeaseCount     *metric.Counter
+	AddReplicaCount           *metric.Counter
+	RemoveReplicaCount        *metric.Counter
+	RemoveDeadReplicaCount    *metric.Counter
+	RemoveLearnerReplicaCount *metric.Counter
+	RebalanceReplicaCount     *metric.Counter
+	TransferLeaseCount        *metric.Counter
 }
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 	return ReplicateQueueMetrics{
-		AddReplicaCount:        metric.NewCounter(metaReplicateQueueAddReplicaCount),
-		RemoveReplicaCount:     metric.NewCounter(metaReplicateQueueRemoveReplicaCount),
-		RemoveDeadReplicaCount: metric.NewCounter(metaReplicateQueueRemoveDeadReplicaCount),
-		RebalanceReplicaCount:  metric.NewCounter(metaReplicateQueueRebalanceReplicaCount),
-		TransferLeaseCount:     metric.NewCounter(metaReplicateQueueTransferLeaseCount),
+		AddReplicaCount:           metric.NewCounter(metaReplicateQueueAddReplicaCount),
+		RemoveReplicaCount:        metric.NewCounter(metaReplicateQueueRemoveReplicaCount),
+		RemoveDeadReplicaCount:    metric.NewCounter(metaReplicateQueueRemoveDeadReplicaCount),
+		RemoveLearnerReplicaCount: metric.NewCounter(metaReplicateQueueRemoveLearnerReplicaCount),
+		RebalanceReplicaCount:     metric.NewCounter(metaReplicateQueueRebalanceReplicaCount),
+		TransferLeaseCount:        metric.NewCounter(metaReplicateQueueTransferLeaseCount),
 	}
 }
 
@@ -213,9 +221,11 @@ func (rq *replicateQueue) shouldQueue(
 
 	// If the lease is valid, check to see if we should transfer it.
 	if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, now) {
+		// Learner replicas aren't allowed to become the leaseholder or raft leader,
+		// so only consider the `Voters` replicas.
 		if rq.canTransferLease() &&
 			rq.allocator.ShouldTransferLease(
-				ctx, zone, desc.Replicas().Unwrap(), lease.Replica.StoreID, desc.RangeID, repl.leaseholderStats) {
+				ctx, zone, desc.Replicas().Voters(), lease.Replica.StoreID, desc.RangeID, repl.leaseholderStats) {
 			log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 			return true, 0
 		}
@@ -346,7 +356,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 		rq.metrics.AddReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "adding replica %+v due to under-replication: %s",
-			newReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
+			newReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas()))
 		if err := rq.addReplica(
 			ctx,
 			repl,
@@ -387,7 +397,7 @@ func (rq *replicateQueue) processOneChange(
 			}
 			candidates = filterUnremovableReplicas(raftStatus, desc.Replicas().Unwrap(), lastReplAdded)
 			log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
-				desc.Replicas(), candidates, rangeRaftProgress(raftStatus, desc.Replicas().Unwrap()))
+				desc.Replicas(), candidates, rangeRaftProgress(raftStatus, desc.Replicas()))
 			if len(candidates) > 0 {
 				break
 			}
@@ -415,7 +425,7 @@ func (rq *replicateQueue) processOneChange(
 		if len(candidates) == 0 {
 			// If we timed out and still don't have any valid candidates, give up.
 			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
-				rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
+				rangeRaftProgress(repl.RaftStatus(), desc.Replicas()))
 		}
 
 		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo)
@@ -452,7 +462,7 @@ func (rq *replicateQueue) processOneChange(
 		} else {
 			rq.metrics.RemoveReplicaCount.Inc(1)
 			log.VEventf(ctx, 1, "removing replica %+v due to over-replication: %s",
-				removeReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
+				removeReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas()))
 			target := roachpb.ReplicationTarget{
 				NodeID:  removeReplica.NodeID,
 				StoreID: removeReplica.StoreID,
@@ -524,6 +534,25 @@ func (rq *replicateQueue) processOneChange(
 		); err != nil {
 			return false, err
 		}
+	case AllocatorRemoveLearner:
+		learnerReplicas := desc.Replicas().Learners()
+		if len(learnerReplicas) == 0 {
+			log.VEventf(ctx, 1, "range of replica %s was identified as having learner replicas, "+
+				"but no learner replicas were found", repl)
+			break
+		}
+		learnerReplica := learnerReplicas[0]
+		rq.metrics.RemoveLearnerReplicaCount.Inc(1)
+		log.VEventf(ctx, 1, "removing learner replica %+v from store", learnerReplica)
+		target := roachpb.ReplicationTarget{
+			NodeID:  learnerReplica.NodeID,
+			StoreID: learnerReplica.StoreID,
+		}
+		if err := rq.removeReplica(
+			ctx, repl, target, desc, storagepb.ReasonAbandonedLearner, "", dryRun,
+		); err != nil {
+			return false, err
+		}
 	case AllocatorConsiderRebalance:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
@@ -539,7 +568,7 @@ func (rq *replicateQueue) processOneChange(
 				}
 				rq.metrics.RebalanceReplicaCount.Inc(1)
 				log.VEventf(ctx, 1, "rebalancing to %+v: %s",
-					rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas().Unwrap()))
+					rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas()))
 				if err := rq.addReplica(
 					ctx,
 					repl,
@@ -600,7 +629,9 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 	zone *config.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
-	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas().Unwrap())
+	// Learner replicas aren't allowed to become the leaseholder or raft leader,
+	// so only consider the `Voters` replicas.
+	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas().Voters())
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone,
@@ -656,7 +687,7 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
-	if _, err := repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details); err != nil {
+	if _, err := repl.addReplica(ctx, target, desc, priority, reason, details); err != nil {
 		return err
 	}
 	rangeInfo := rangeInfoForRepl(repl, desc)
@@ -702,7 +733,7 @@ func (rq *replicateQueue) purgatoryChan() <-chan time.Time {
 
 // rangeRaftStatus pretty-prints the Raft progress (i.e. Raft log position) of
 // the replicas.
-func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor) string {
+func rangeRaftProgress(raftStatus *raft.Status, replicas roachpb.ReplicaDescriptors) string {
 	if raftStatus == nil {
 		return "[no raft status]"
 	} else if len(raftStatus.Progress) == 0 {
@@ -710,7 +741,7 @@ func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescri
 	}
 	var buf bytes.Buffer
 	buf.WriteString("[")
-	for i, r := range replicas {
+	for i, r := range replicas.All() {
 		if i > 0 {
 			buf.WriteString(", ")
 		}

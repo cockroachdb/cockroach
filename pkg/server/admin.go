@@ -683,7 +683,7 @@ func (s *adminServer) statsForSpan(
 		if err := kv.Value.GetProto(&rng); err != nil {
 			return nil, s.serverError(err)
 		}
-		for _, repl := range rng.Replicas().Unwrap() {
+		for _, repl := range rng.Replicas().All() {
 			nodeIDs[repl.NodeID] = struct{}{}
 		}
 	}

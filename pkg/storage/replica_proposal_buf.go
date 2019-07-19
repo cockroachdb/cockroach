@@ -445,11 +445,18 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 				continue
 			}
 
-			if err := raftGroup.ProposeConfChange(raftpb.ConfChange{
+			confChange := raftpb.ConfChange{
 				Type:    changeTypeInternalToRaft[crt.ChangeType],
 				NodeID:  uint64(crt.Replica.ReplicaID),
 				Context: encodedCtx,
-			}); err != nil && err != raft.ErrProposalDropped {
+			}
+			if confChange.Type == raftpb.ConfChangeAddNode &&
+				crt.Replica.GetType() == roachpb.ReplicaType_LEARNER {
+				confChange.Type = raftpb.ConfChangeAddLearnerNode
+			}
+			if err := raftGroup.ProposeConfChange(
+				confChange,
+			); err != nil && err != raft.ErrProposalDropped {
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).
 				// TODO(bdarnell): Handle ErrProposalDropped better.

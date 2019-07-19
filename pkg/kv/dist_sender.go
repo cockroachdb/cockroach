@@ -487,8 +487,10 @@ func (ds *DistSender) getDescriptor(
 func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor, withCommit bool,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Try to send the call.
-	replicas := NewReplicaSlice(ds.gossip, desc)
+	// Try to send the call. Learner replicas won't serve reads/writes, so send
+	// only to the `Voters` replicas. This is just an optimization to save a
+	// network hop, everything would still work if we had `All` here.
+	replicas := NewReplicaSlice(ds.gossip, desc.Replicas().Voters())
 
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
