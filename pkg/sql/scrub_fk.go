@@ -107,7 +107,22 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		columnsByID[o.tableDesc.Columns[i].ID] = &o.tableDesc.Columns[i]
 	}
 
-	colIDs := o.constraint.FK.OriginColumnIDs
+	// Get primary key columns not included in the FK
+	var colIDs []sqlbase.ColumnID
+	colIDs = append(colIDs, o.constraint.FK.OriginColumnIDs...)
+	for _, pkColId := range o.tableDesc.PrimaryIndex.ColumnIDs {
+		found := false
+		for _, id := range o.constraint.FK.OriginColumnIDs {
+			if pkColId == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			colIDs = append(colIDs, pkColId)
+		}
+	}
+
 	o.colIDToRowIdx = make(map[sqlbase.ColumnID]int, len(colIDs))
 	for i, id := range colIDs {
 		o.colIDToRowIdx[id] = i

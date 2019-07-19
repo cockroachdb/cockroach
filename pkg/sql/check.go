@@ -133,21 +133,36 @@ func nonMatchingRowQuery(
 	if err != nil {
 		return "", nil, err
 	}
-
-	referencedColNames, err := targetTbl.NamesForColumnIDs(fk.ReferencedColumnIDs)
-	if err != nil {
-		return "", nil, err
+	// Get primary key columns not included in the FK
+	for _, pkColId := range srcTbl.PrimaryIndex.ColumnIDs {
+		found := false
+		for _, id := range fk.OriginColumnIDs {
+			if pkColId == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			column, err := srcTbl.FindActiveColumnByID(pkColId)
+			if err != nil {
+				return "", nil, err
+			}
+			originColNames = append(originColNames, column.Name)
+		}
 	}
-
-	nCols := len(fk.OriginColumnIDs)
-	srcCols := make([]string, nCols)
-	qualifiedSrcCols := make([]string, nCols)
+	srcCols := make([]string, len(originColNames))
+	qualifiedSrcCols := make([]string, len(originColNames))
 	for i, n := range originColNames {
 		srcCols[i] = tree.NameString(n)
 		// s is the table alias used in the query.
 		qualifiedSrcCols[i] = fmt.Sprintf("s.%s", srcCols[i])
 	}
 
+	referencedColNames, err := targetTbl.NamesForColumnIDs(fk.ReferencedColumnIDs)
+	if err != nil {
+		return "", nil, err
+	}
+	nCols := len(fk.OriginColumnIDs)
 	srcWhere := make([]string, nCols)
 	targetCols := make([]string, nCols)
 	on := make([]string, nCols)
