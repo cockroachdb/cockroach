@@ -1170,7 +1170,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		ctx, ex.server.cfg.AmbientCtx.Tracer,
 		// We print the type of command, not the String() which includes long
 		// statements.
-		"exec cmd: "+cmd.command())
+		cmd.command())
 	defer sp.Finish()
 
 	if log.ExpensiveLogEnabled(ctx, 2) || ex.eventLog != nil {
