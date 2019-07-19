@@ -1292,6 +1292,7 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"queue.replicate.removedeadreplica",
 					"queue.replicate.removereplica",
+					"queue.replicate.removelearnerreplica",
 				},
 			},
 			{

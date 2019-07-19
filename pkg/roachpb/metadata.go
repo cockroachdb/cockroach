@@ -220,7 +220,7 @@ func (r *RangeDescriptor) Validate() error {
 		return errors.Errorf("NextReplicaID must be non-zero")
 	}
 	seen := map[ReplicaID]struct{}{}
-	for i, rep := range r.Replicas().Unwrap() {
+	for i, rep := range r.Replicas().All() {
 		if err := rep.Validate(); err != nil {
 			return errors.Errorf("replica %d is invalid: %s", i, err)
 		}
@@ -247,8 +247,8 @@ func (r *RangeDescriptor) String() string {
 	}
 	buf.WriteString(" [")
 
-	if len(r.Replicas().Unwrap()) > 0 {
-		for i, rep := range r.Replicas().Unwrap() {
+	if allReplicas := r.Replicas().All(); len(allReplicas) > 0 {
+		for i, rep := range allReplicas {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
@@ -268,6 +268,20 @@ func (r *RangeDescriptor) String() string {
 
 func (r ReplicationTarget) String() string {
 	return fmt.Sprintf("n%d,s%d", r.NodeID, r.StoreID)
+}
+
+// ReplicaTypeLearner returns a ReplicaType_LEARNER pointer suitable for use in
+// a nullable proto field.
+func ReplicaTypeLearner() *ReplicaType {
+	t := ReplicaType_LEARNER
+	return &t
+}
+
+// ReplicaTypeVoter returns a ReplicaType_VOTER pointer suitable for use in a
+// nullable proto field.
+func ReplicaTypeVoter() *ReplicaType {
+	t := ReplicaType_VOTER
+	return &t
 }
 
 func (r ReplicaDescriptor) String() string {
