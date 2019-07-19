@@ -70,7 +70,7 @@ func newIndexSkipTableReader(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 ) (*indexSkipTableReader, error) {
-	if flowCtx.nodeID == 0 {
+	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
@@ -175,7 +175,7 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerM
 		// Range info resets once a scan begins, so we need to maintain
 		// the range info we get after each scan.
 		if !t.ignoreMisplannedRanges {
-			ranges := misplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.flowCtx.nodeID)
+			ranges := misplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.flowCtx.NodeID)
 			for _, r := range ranges {
 				t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
 			}

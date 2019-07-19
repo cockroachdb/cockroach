@@ -129,7 +129,7 @@ func TestTableReader(t *testing.T) {
 					EvalCtx:  &evalCtx,
 					Settings: s.ClusterSettings(),
 					txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-					nodeID:   s.NodeID(),
+					NodeID:   s.NodeID(),
 				}
 
 				var out RowReceiver
@@ -214,7 +214,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		EvalCtx:  &evalCtx,
 		Settings: st,
 		txn:      client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
-		nodeID:   nodeID,
+		NodeID:   nodeID,
 	}
 	spec := distsqlpb.TableReaderSpec{
 		Spans: []distsqlpb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
@@ -319,7 +319,7 @@ func TestLimitScans(t *testing.T) {
 		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
 		txn:      client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn),
-		nodeID:   s.NodeID(),
+		NodeID:   s.NodeID(),
 	}
 	spec := distsqlpb.TableReaderSpec{
 		Table: *tableDesc,
@@ -423,7 +423,7 @@ func BenchmarkTableReader(b *testing.B) {
 			EvalCtx:  &evalCtx,
 			Settings: s.ClusterSettings(),
 			txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-			nodeID:   s.NodeID(),
+			NodeID:   s.NodeID(),
 		}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
