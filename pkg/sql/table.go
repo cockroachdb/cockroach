@@ -849,12 +849,7 @@ func (p *planner) writeTableDescToBatch(
 		return err
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
-	descVal := sqlbase.WrapDescriptor(tableDesc)
-	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descVal)
-	}
-
-	b.Put(descKey, descVal)
+	writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings,
+		b, tableDesc.GetID(), tableDesc)
 	return nil
 }
