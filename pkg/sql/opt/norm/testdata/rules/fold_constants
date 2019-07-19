@@ -326,7 +326,7 @@ values
 
 # Fold constant.
 opt expect=FoldBinary
-SELECT ARRAY['a','b','c'] || 'd'
+SELECT ARRAY['a','b','c'] || 'd'::string
 ----
 values
  ├── columns: "?column?":1(string[]!null)
