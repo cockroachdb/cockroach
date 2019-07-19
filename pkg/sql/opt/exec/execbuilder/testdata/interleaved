@@ -241,7 +241,7 @@ SET TRACING = on,kv,results; DELETE FROM a where a_id <= 7 and a_id >= 5; SET tr
 # Only look at traces from SQL land.
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
-WHERE operation='flow' OR operation LIKE 'exec cmd:%'
+WHERE operation='flow' OR operation='exec stmt'
 ----
 DelRange /Table/61/1/5 - /Table/61/1/7/NULL
 fast path completed
@@ -282,7 +282,7 @@ SET TRACING = on,kv,results; DELETE FROM a; SET tracing = off
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
-WHERE operation='flow' OR operation LIKE 'exec cmd:%'
+WHERE operation='flow' OR operation='exec stmt'
 ----
 DelRange /Table/61/1 - /Table/61/3
 fast path completed
@@ -324,7 +324,7 @@ SET TRACING=off;
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
-WHERE operation IN ('flow', 'consuming rows') OR operation LIKE 'exec cmd:%'
+WHERE operation IN ('flow', 'consuming rows') OR operation='exec stmt'
 ----
 Del /Table/61/1/1/0
 cascading delete into table: 62 using index: 1
