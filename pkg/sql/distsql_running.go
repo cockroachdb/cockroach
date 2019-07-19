@@ -136,37 +136,37 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// vectorized. If any of them can't, turn off the setting.
 	if evalCtx.SessionData.VectorizeMode != sessiondata.VectorizeOff {
 		for _, spec := range flows {
-			for i := range spec.Processors {
-				proc := &spec.Processors[i]
-				if err := distsqlrun.SupportsVectorized(ctx, &distsqlrun.FlowCtx{EvalCtx: &evalCtx.EvalContext, NodeID: -1},
-					proc); err != nil {
-					// Vectorization attempt failed with an error.
-					returnSetupError := false
-					if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAlways {
-						returnSetupError = true
-						// If running with VectorizeAlways, this check makes sure that we can
-						// still run SET statements (mostly to set experimental_vectorize=off) and
-						// the like.
-						if len(spec.Processors) == 1 &&
-							spec.Processors[0].Core.LocalPlanNode != nil {
-							rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
-							if rsidx != nil {
-								lp := localState.LocalProcs[*rsidx]
-								if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
-									if z.IsException() {
-										returnSetupError = false
-									}
+			if err := distsqlrun.SupportsVectorized(
+				ctx, &distsqlrun.FlowCtx{EvalCtx: &evalCtx.EvalContext, NodeID: -1}, spec); err != nil {
+				// Vectorization attempt failed with an error.
+				returnSetupError := false
+				if evalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAlways {
+					returnSetupError = true
+					// If running with VectorizeAlways, this check makes sure that we can
+					// still run SET statements (mostly to set experimental_vectorize=off) and
+					// the like.
+					if len(spec.Processors) == 1 &&
+						spec.Processors[0].Core.LocalPlanNode != nil {
+						rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
+						if rsidx != nil {
+							lp := localState.LocalProcs[*rsidx]
+							if z, ok := lp.(distsqlrun.VectorizeAlwaysException); ok {
+								if z.IsException() {
+									returnSetupError = false
 								}
 							}
 						}
 					}
-					log.VEventf(ctx, 1, "failed to vectorize: %s", err)
-					if returnSetupError {
-						return nil, nil, err
-					} else {
-						setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
-					}
 				}
+				log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+				if returnSetupError {
+					return nil, nil, err
+				}
+				setupReq.EvalContext.Vectorize = int32(sessiondata.VectorizeOff)
+				origMode := evalCtx.SessionData.VectorizeMode
+				evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOff
+				defer func() { evalCtx.SessionData.VectorizeMode = origMode }()
+				break
 			}
 		}
 	}
