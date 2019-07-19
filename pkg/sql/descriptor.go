@@ -155,6 +155,51 @@ func getDescriptorID(
 	return sqlbase.ID(gr.ValueInt()), nil
 }
 
+// getDescriptorByID looks up the descriptor for `id`, validates it,
+// and unmarshals it into `descriptor`.
+//
+// In most cases you'll want to use wrappers: `getDatabaseDescByID` or
+// `getTableDescByID`.
+func getDescriptorByID(
+	ctx context.Context, txn *client.Txn, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
+) error {
+	log.Eventf(ctx, "fetching descriptor with ID %d", id)
+	descKey := sqlbase.MakeDescMetadataKey(id)
+	desc := &sqlbase.Descriptor{}
+	if err := txn.GetProto(ctx, descKey, desc); err != nil {
+		return err
+	}
+
+	switch t := descriptor.(type) {
+	case *sqlbase.TableDescriptor:
+		table := desc.GetTable()
+		if table == nil {
+			return pgerror.Newf(pgcode.WrongObjectType,
+				"%q is not a table", desc.String())
+		}
+		if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+			return nil
+		}
+
+		if err := table.Validate(ctx, txn, nil /* clusterVersion */); err != nil {
+			return err
+		}
+		*t = *table
+	case *sqlbase.DatabaseDescriptor:
+		database := desc.GetDatabase()
+		if database == nil {
+			return pgerror.Newf(pgcode.WrongObjectType,
+				"%q is not a database", desc.String())
+		}
+
+		if err := database.Validate(); err != nil {
+			return err
+		}
+		*t = *database
+	}
+	return nil
+}
+
 // GetAllDescriptors looks up and returns all available descriptors.
 func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.DescriptorProto, error) {
 	log.Eventf(ctx, "fetching all descriptors")

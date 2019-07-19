@@ -46,7 +46,7 @@ var _ SchemaAccessor = UncachedPhysicalAccessor{}
 // GetDatabaseDesc implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	ctx context.Context, txn *client.Txn, name string, flags DatabaseLookupFlags,
-) (*DatabaseDescriptor, error) {
+) (desc *DatabaseDescriptor, err error) {
 	if name == sqlbase.SystemDB.Name {
 		// We can't return a direct reference to SystemDB, because the
 		// caller expects a private object that can be modified in-place.
@@ -65,9 +65,8 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 		return nil, nil
 	}
 
-	// TODO (lucy): is this right?
-	desc, err := sqlbase.GetDatabaseDescFromID(ctx, txn, descID)
-	if err != nil {
+	desc = &sqlbase.DatabaseDescriptor{}
+	if err := getDescriptorByID(ctx, txn, descID, desc); err != nil {
 		return nil, err
 	}
 
@@ -157,7 +156,8 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 
 	// Look up the table using the discovered database descriptor.
-	desc, err := sqlbase.GetTableDescFromID(ctx, txn, descID)
+	desc := &sqlbase.TableDescriptor{}
+	err = getDescriptorByID(ctx, txn, descID, desc)
 	if err != nil {
 		return nil, err
 	}
