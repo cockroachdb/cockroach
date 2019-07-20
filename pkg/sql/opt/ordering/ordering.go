@@ -202,6 +202,21 @@ func init() {
 		buildChildReqOrdering: alterTableRelocateBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.ControlJobsOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: controlJobsBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
+	funcMap[opt.CancelQueriesOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: cancelQueriesBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
+	funcMap[opt.CancelSessionsOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: cancelSessionsBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {

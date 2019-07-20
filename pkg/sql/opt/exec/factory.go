@@ -430,6 +430,16 @@ type Factory interface {
 	// ConstructScanBuffer constructs a node which refers to a node constructed by
 	// ConstructBuffer.
 	ConstructScanBuffer(ref Node, label string) (Node, error)
+
+	// ConstructControlJobs creates a node that implements PAUSE/CANCEL/RESUME
+	// JOBS.
+	ConstructControlJobs(command tree.JobCommand, input Node) (Node, error)
+
+	// ConstructCancelQueries creates a node that implements CANCEL QUERIES.
+	ConstructCancelQueries(input Node, ifExists bool) (Node, error)
+
+	// ConstructCancelSessions creates a node that implements CANCEL SESSIONS.
+	ConstructCancelSessions(input Node, ifExists bool) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

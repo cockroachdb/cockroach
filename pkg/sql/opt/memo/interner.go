@@ -493,6 +493,10 @@ func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
 	h.HashString(string(val))
 }
 
+func (h *hasher) HashJobCommand(val tree.JobCommand) {
+	h.HashInt(int(val))
+}
+
 func (h *hasher) HashWindowFrame(val WindowFrame) {
 	h.HashInt(int(val.StartBoundType))
 	h.HashInt(int(val.EndBoundType))
@@ -781,6 +785,10 @@ func (h *hasher) IsStatementTypeEqual(l, r tree.StatementType) bool {
 }
 
 func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
+	return l == r
+}
+
+func (h *hasher) IsJobCommandEqual(l, r tree.JobCommand) bool {
 	return l == r
 }
 

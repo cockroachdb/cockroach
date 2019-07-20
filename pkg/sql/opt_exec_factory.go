@@ -1820,6 +1820,32 @@ func (ef *execFactory) ConstructAlterTableRelocate(
 	}, nil
 }
 
+// ConstructControlJobs is part of the exec.Factory interface.
+func (ef *execFactory) ConstructControlJobs(
+	command tree.JobCommand, input exec.Node,
+) (exec.Node, error) {
+	return &controlJobsNode{
+		rows:          input.(planNode),
+		desiredStatus: jobCommandToDesiredStatus[command],
+	}, nil
+}
+
+// ConstructCancelQueries is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCancelQueries(input exec.Node, ifExists bool) (exec.Node, error) {
+	return &cancelQueriesNode{
+		rows:     input.(planNode),
+		ifExists: ifExists,
+	}, nil
+}
+
+// ConstructCancelSessions is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (exec.Node, error) {
+	return &cancelSessionsNode{
+		rows:     input.(planNode),
+		ifExists: ifExists,
+	}, nil
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode
