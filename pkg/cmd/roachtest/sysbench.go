@@ -22,11 +22,12 @@ const (
 	oltpDelete sysbenchWorkload = iota
 	oltpInsert
 	oltpPointSelect
+	oltpUpdateIndex
 	oltpUpdateNonIndex
+	oltpReadOnly
 
 	// TODO(nvanbenschoten): transactional workloads are not supported
 	// because sysbench does not contain client-side retry loops.
-	// oltpReadOnly
 	// oltpReadWrite
 	// oltpWriteOnly
 
@@ -37,8 +38,9 @@ var sysbenchWorkloadName = map[sysbenchWorkload]string{
 	oltpDelete:         "oltp_delete",
 	oltpInsert:         "oltp_insert",
 	oltpPointSelect:    "oltp_point_select",
+	oltpUpdateIndex:    "oltp_update_index",
 	oltpUpdateNonIndex: "oltp_update_non_index",
-	// oltpReadOnly:  "oltp_read_only",
+	oltpReadOnly:       "oltp_read_only",
 	// oltpReadWrite: "oltp_read_write",
 	// oltpWriteOnly: "oltp_write_only",
 }
@@ -55,10 +57,14 @@ type sysbenchOptions struct {
 	rowsPerTable int
 }
 
-func (o *sysbenchOptions) cmd() string {
+func (o *sysbenchOptions) cmd(haproxy bool) string {
+	pghost := "{pghost:1}"
+	if haproxy {
+		pghost = "127.0.0.1"
+	}
 	return fmt.Sprintf(`sysbench \
 		--db-driver=pgsql \
-		--pgsql-host=127.0.0.1 \
+		--pgsql-host=%s \
 		--pgsql-port=26257 \
 		--pgsql-user=root \
 		--pgsql-password= \
@@ -68,7 +74,9 @@ func (o *sysbenchOptions) cmd() string {
 		--threads=%d \
 		--tables=%d \
 		--table_size=%d \
+		--auto_inc=false \
 		%s`,
+		pghost,
 		int(o.duration.Seconds()),
 		o.concurrency,
 		o.tables,
@@ -102,10 +110,10 @@ func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions)
 	m.Go(func(ctx context.Context) error {
 		t.Status("preparing workload")
 		c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE sysbench"`)
-		c.Run(ctx, loadNode, opts.cmd()+" prepare")
+		c.Run(ctx, loadNode, opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
-		c.Run(ctx, loadNode, opts.cmd()+" run")
+		c.Run(ctx, loadNode, opts.cmd(true /* haproxy */)+" run")
 		return nil
 	})
 	m.Wait()
@@ -114,18 +122,18 @@ func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions)
 func registerSysbench(r *testRegistry) {
 	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 		const n = 3
-		const cpus = 16
+		const cpus = 32
+		const conc = 4 * cpus
 		opts := sysbenchOptions{
 			workload:     w,
 			duration:     10 * time.Minute,
-			concurrency:  8 * cpus,
-			tables:       4,
-			rowsPerTable: 1000000,
+			concurrency:  conc,
+			tables:       10,
+			rowsPerTable: 10000000,
 		}
 
 		r.Add(testSpec{
-			Skip:    "https://github.com/cockroachdb/cockroach/issues/32738",
-			Name:    fmt.Sprintf("sysbench/%s/nodes=%d", w, n),
+			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 			Cluster: makeClusterSpec(n+1, cpu(cpus)),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runSysbench(ctx, t, c, opts)

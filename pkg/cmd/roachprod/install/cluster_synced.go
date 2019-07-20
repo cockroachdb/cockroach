@@ -1412,16 +1412,25 @@ func (c *SyncedCluster) Get(src, dest string) {
 }
 
 func (c *SyncedCluster) pgurls(nodes []int) map[int]string {
+	hosts := c.pghosts(nodes)
+	m := make(map[int]string, len(hosts))
+	for node, host := range hosts {
+		m[node] = c.Impl.NodeURL(c, host, c.Impl.NodePort(c, node))
+	}
+	return m
+}
+
+func (c *SyncedCluster) pghosts(nodes []int) map[int]string {
 	ips := make([]string, len(nodes))
 	c.Parallel("", len(nodes), 0, func(i int) ([]byte, error) {
 		var err error
 		ips[i], err = c.GetInternalIP(nodes[i])
-		return nil, errors.Wrapf(err, "pgurls")
+		return nil, errors.Wrapf(err, "pghosts")
 	})
 
 	m := make(map[int]string, len(ips))
 	for i, ip := range ips {
-		m[nodes[i]] = c.Impl.NodeURL(c, ip, c.Impl.NodePort(c, nodes[i]))
+		m[nodes[i]] = ip
 	}
 	return m
 }

@@ -20,6 +20,7 @@ import (
 
 var parameterRe = regexp.MustCompile(`{[^}]*}`)
 var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?}`)
+var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)?}`)
 var storeDirRe = regexp.MustCompile(`{store-dir}`)
@@ -27,12 +28,13 @@ var logDirRe = regexp.MustCompile(`{log-dir}`)
 var certsDirRe = regexp.MustCompile(`{certs-dir}`)
 
 // expander expands a string which contains templated parameters for cluster
-// attributes like pgurl, pgport, uiport, store-dir, and log-dir with the
-// corresponding values.
+// attributes like pgurl, pghost, pgport, uiport, store-dir, and log-dir with
+// the corresponding values.
 type expander struct {
 	node int
 
 	pgURLs  map[int]string
+	pgHosts map[int]string
 	pgPorts map[int]string
 	uiPorts map[int]string
 }
@@ -49,6 +51,7 @@ func (e *expander) expand(c *SyncedCluster, arg string) (string, error) {
 		}
 		expanders := []expanderFunc{
 			e.maybeExpandPgURL,
+			e.maybeExpandPgHost,
 			e.maybeExpandPgPort,
 			e.maybeExpandUIPort,
 			e.maybeExpandStoreDir,
@@ -114,6 +117,21 @@ func (e *expander) maybeExpandPgURL(c *SyncedCluster, s string) (string, bool, e
 	}
 
 	s, err := e.maybeExpandMap(c, e.pgURLs, m[1])
+	return s, err == nil, err
+}
+
+// maybeExpandPgHost is an expanderFunc for {pghost:<nodeSpec>}
+func (e *expander) maybeExpandPgHost(c *SyncedCluster, s string) (string, bool, error) {
+	m := pgHostRe.FindStringSubmatch(s)
+	if m == nil {
+		return s, false, nil
+	}
+
+	if e.pgHosts == nil {
+		e.pgHosts = c.pghosts(allNodes(len(c.VMs)))
+	}
+
+	s, err := e.maybeExpandMap(c, e.pgHosts, m[1])
 	return s, err == nil, err
 }
 
