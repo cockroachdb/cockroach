@@ -1373,11 +1373,7 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 		Root: buffer,
 	})
 
-	b.withExprs = append(b.withExprs, builtWithExpr{
-		id:         with.ID,
-		outputCols: value.outputCols,
-		bufferNode: buffer,
-	})
+	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
 
 	return b.buildRelational(with.Input)
 }
@@ -1405,27 +1401,38 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
+	res := execPlan{root: node}
 
-	// The ColumnIDs from the With expression need to get remapped according to
-	// the mapping in the withScan to get the actual colMap for this expression.
-	var outputCols opt.ColMap
+	if maxVal, _ := e.outputCols.MaxValue(); len(withScan.InCols) == maxVal+1 {
+		// We are outputting all columns. Just set up the map.
 
-	referencedExpr := b.mem.WithExpr(withScan.ID)
-	if !referencedExpr.Relational().OutputCols.Equals(withScan.InCols.ToSet()) {
-		panic(errors.AssertionFailedf(
-			"columns being output from WITH do not match expected columns",
-		))
+		// The ColumnIDs from the With expression need to get remapped according to
+		// the mapping in the withScan to get the actual colMap for this expression.
+		for i := range withScan.InCols {
+			idx, _ := e.outputCols.Get(int(withScan.InCols[i]))
+			res.outputCols.Set(int(withScan.OutCols[i]), idx)
+		}
+	} else {
+		// We need a projection.
+		cols := make([]exec.ColumnOrdinal, len(withScan.InCols))
+		for i := range withScan.InCols {
+			col, ok := e.outputCols.Get(int(withScan.InCols[i]))
+			if !ok {
+				panic(errors.AssertionFailedf("column %d not in input", log.Safe(withScan.InCols[i])))
+			}
+			cols[i] = exec.ColumnOrdinal(col)
+			res.outputCols.Set(int(withScan.OutCols[i]), i)
+		}
+		res.root, err = b.factory.ConstructSimpleProject(
+			res.root, cols, nil, /* colNames */
+			exec.OutputOrdering(res.sqlOrdering(withScan.ProvidedPhysical().Ordering)),
+		)
+		if err != nil {
+			return execPlan{}, err
+		}
 	}
+	return res, nil
 
-	for i := range withScan.InCols {
-		idx, _ := e.outputCols.Get(int(withScan.InCols[i]))
-		outputCols.Set(int(withScan.OutCols[i]), idx)
-	}
-
-	return execPlan{
-		root:       node,
-		outputCols: outputCols,
-	}, nil
 }
 
 func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, error) {
