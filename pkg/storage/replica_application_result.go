@@ -115,6 +115,10 @@ func clearTrivialReplicatedEvalResultFields(
 		replicatedResult.State.Stats = nil
 		replicatedResult.State.TruncatedState = nil
 
+		// Strip the DeprecatedTxnSpanGCThreshold. We don't care about it.
+		// TODO(nvanbenschoten): Remove in 20.1.
+		replicatedResult.State.DeprecatedTxnSpanGCThreshold = nil
+
 		// If we're already using the AppliedStateKey then there's nothing
 		// to do. This flag is idempotent so it's ok that we see this flag
 		// multiple times, but we want to make sure it doesn't cause us to
