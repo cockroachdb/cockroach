@@ -117,7 +117,7 @@ define AlterTableSplitPrivate {
     # cat.Index metadata.
     Index int
 
-    # Props stores the required physical properties for the enclosed expression.
+    # Props stores the required physical properties for the input expression.
     Props PhysProps
 
     # Columns stores the column IDs for the statement result columns.
@@ -154,4 +154,49 @@ define AlterTableRelocatePrivate {
     RelocateLease bool
 
     _ AlterTableSplitPrivate
+}
+
+# ControlJobs represents a `PAUSE/CANCEL/RESUME JOBS` statement.
+[Relational]
+define ControlJobs {
+    # The input expression returns job IDs (as integers).
+    Input RelExpr
+
+    _ ControlJobsPrivate
+}
+
+[Private]
+define ControlJobsPrivate {
+    # Props stores the required physical properties for the input
+    # expression.
+    Props    PhysProps
+    Command  JobCommand
+}
+
+# CancelQueries represents a `CANCEL QUERIES` statement.
+[Relational]
+define CancelQueries {
+    # The input expression returns query IDs (as strings).
+    Input RelExpr
+
+    _ CancelPrivate
+}
+
+[Private]
+define CancelPrivate {
+    # Props stores the required physical properties for the input
+    # expression.
+    Props PhysProps
+
+    # IfExists is set if we should tolerate IDs that don't exist.
+    IfExists bool
+}
+
+# CancelSessions represents a `CANCEL SESSIONS` statement.
+[Relational]
+define CancelSessions {
+    # The input expression returns session IDs (as strings).
+    Input RelExpr
+
+    _ CancelPrivate
 }

@@ -214,3 +214,45 @@ func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr)
 	}
 	return ep, nil
 }
+
+func (b *Builder) buildControlJobs(ctl *memo.ControlJobsExpr) (execPlan, error) {
+	input, err := b.buildRelational(ctl.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructControlJobs(
+		ctl.Command,
+		input.root,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// ControlJobs returns no columns.
+	return execPlan{root: node}, nil
+}
+
+func (b *Builder) buildCancelQueries(cancel *memo.CancelQueriesExpr) (execPlan, error) {
+	input, err := b.buildRelational(cancel.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructCancelQueries(input.root, cancel.IfExists)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// CancelQueries returns no columns.
+	return execPlan{root: node}, nil
+}
+
+func (b *Builder) buildCancelSessions(cancel *memo.CancelSessionsExpr) (execPlan, error) {
+	input, err := b.buildRelational(cancel.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructCancelSessions(input.root, cancel.IfExists)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// CancelSessions returns no columns.
+	return execPlan{root: node}, nil
+}
