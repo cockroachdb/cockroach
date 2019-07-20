@@ -443,5 +443,6 @@ func (md *Metadata) AllViews() []cat.View {
 }
 
 // WithID uniquely identifies a With expression within the scope of a query.
+// WithID=0 is reserved to mean "unknown expression".
 // See the comment for Metadata for more details on identifiers.
 type WithID uint64
