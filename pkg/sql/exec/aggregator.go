@@ -164,7 +164,7 @@ func NewOrderedAggregator(
 		groupCol: groupCol,
 	}
 
-	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(aggTypes, aggFns)
+	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(aggTypes, aggFns, len(groupCols) == 0)
 
 	if err != nil {
 		return nil, err
@@ -173,8 +173,13 @@ func NewOrderedAggregator(
 	return a, nil
 }
 
+// isScalar indicates whether an aggregator is in scalar context. It matters
+// in the case of an empty input - when GROUP BY is omitted, we're in scalar
+// context and need to emit nulls or zeroes (depending on the aggregate), but
+// when GROUP BY is present, we're in non-scalar context and need to emit no
+// output.
 func makeAggregateFuncs(
-	aggTyps [][]types.T, aggFns []distsqlpb.AggregatorSpec_Func,
+	aggTyps [][]types.T, aggFns []distsqlpb.AggregatorSpec_Func, isScalar bool,
 ) ([]aggregateFunc, []types.T, error) {
 	funcs := make([]aggregateFunc, len(aggFns))
 	outTyps := make([]types.T, len(aggFns))
@@ -183,19 +188,19 @@ func makeAggregateFuncs(
 		var err error
 		switch aggFns[i] {
 		case distsqlpb.AggregatorSpec_ANY_NOT_NULL:
-			funcs[i], err = newAnyNotNullAgg(aggTyps[i][0])
+			funcs[i], err = newAnyNotNullAgg(aggTyps[i][0], isScalar)
 		case distsqlpb.AggregatorSpec_AVG:
-			funcs[i], err = newAvgAgg(aggTyps[i][0])
+			funcs[i], err = newAvgAgg(aggTyps[i][0], isScalar)
 		case distsqlpb.AggregatorSpec_SUM, distsqlpb.AggregatorSpec_SUM_INT:
-			funcs[i], err = newSumAgg(aggTyps[i][0])
+			funcs[i], err = newSumAgg(aggTyps[i][0], isScalar)
 		case distsqlpb.AggregatorSpec_COUNT_ROWS:
-			funcs[i] = newCountRowAgg()
+			funcs[i] = newCountRowAgg(isScalar)
 		case distsqlpb.AggregatorSpec_COUNT:
-			funcs[i] = newCountAgg()
+			funcs[i] = newCountAgg(isScalar)
 		case distsqlpb.AggregatorSpec_MIN:
-			funcs[i], err = newMinAgg(aggTyps[i][0])
+			funcs[i], err = newMinAgg(aggTyps[i][0], isScalar)
 		case distsqlpb.AggregatorSpec_MAX:
-			funcs[i], err = newMaxAgg(aggTyps[i][0])
+			funcs[i], err = newMaxAgg(aggTyps[i][0], isScalar)
 		default:
 			return nil, nil, errors.Errorf("unsupported columnar aggregate function %d", aggFns[i])
 		}

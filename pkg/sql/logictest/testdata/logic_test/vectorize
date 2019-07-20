@@ -17,6 +17,9 @@ statement ok
 CREATE TABLE nulls (a INT, b INT)
 
 statement ok
+CREATE TABLE empty (a INT PRIMARY KEY, b FLOAT)
+
+statement ok
 INSERT INTO nulls VALUES (NULL, NULL), (NULL, 1), (1, NULL), (1, 1)
 
 query I
@@ -270,6 +273,19 @@ SELECT c.a FROM c INNER LOOKUP JOIN c@sec AS s ON c.b=s.b
 1
 2
 2
+
+# Test for #38858 -- handle aggregates correctly on an empty table.
+# GROUP BY is omitted, so aggregates are in scalar context.
+query IIIIIRR
+SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty
+----
+0  0  NULL  NULL  NULL  NULL  NULL
+
+# GROUP BY is present, so aggregates are in non-scalar context.
+query IIIIIRR
+SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty GROUP BY a
+----
+
 
 # Test that LIKE expressions are properly handled by vectorized execution.
 statement ok

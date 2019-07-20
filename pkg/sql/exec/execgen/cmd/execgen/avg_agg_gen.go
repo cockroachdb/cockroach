@@ -65,13 +65,14 @@ func genAvgAgg(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_GOTYPE", "{{.Type.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.Type}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.Type}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.Type}}", -1)
+	s = strings.Replace(s, "_GOTYPE", "{{$tmplInfo.Type.GoTypeName}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "types.{{$tmplInfo.Type}}", -1)
+	s = strings.Replace(s, "_TYPE", "{{$tmplInfo.Type}}", -1)
+	s = strings.Replace(s, "_TemplateType", "{{$tmplInfo.Type}}", -1)
+	s = strings.Replace(s, "_SCALAR", "{{$scalarInfo.String}}", -1)
 
 	assignDivRe := regexp.MustCompile(`_ASSIGN_DIV_INT64\((.*),(.*),(.*)\)`)
-	s = assignDivRe.ReplaceAllString(s, "{{.AssignDivInt64 $1 $2 $3}}")
+	s = assignDivRe.ReplaceAllString(s, "{{$tmplInfo.AssignDivInt64 $1 $2 $3}}")
 	assignAddRe := regexp.MustCompile(`_ASSIGN_ADD\((.*),(.*),(.*)\)`)
 	s = assignAddRe.ReplaceAllString(s, "{{.Global.AssignAdd $1 $2 $3}}")
 
@@ -99,7 +100,13 @@ func genAvgAgg(wr io.Writer) error {
 		tmplInfos[i].assignAdd = o.Assign
 	}
 
-	return tmpl.Execute(wr, tmplInfos)
+	return tmpl.Execute(wr, struct {
+		TmplInfos   interface{}
+		ScalarInfos interface{}
+	}{
+		TmplInfos:   tmplInfos,
+		ScalarInfos: scalarInfos,
+	})
 }
 
 func init() {

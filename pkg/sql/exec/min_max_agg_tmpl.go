@@ -11,7 +11,7 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for min_agg.eg.go. It's formatted in a
+// This file is the execgen template for min_max_agg.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
 // permits editing this file with editor support.
 //
@@ -50,25 +50,26 @@ func _ASSIGN_CMP(_, _, _ string) bool {
 
 // */}}
 
-// {{range .}} {{/* for each aggregation (min and max) */}}
+// {{range $aggOverload := $.AggOverloads}} {{/* for each aggregation (min and max) */}}
 
-// {{/* Capture the aggregation name so we can use it in the inner loop. */}}
-// {{$agg := .AggNameLower}}
-
-func new_AGG_TITLEAgg(t types.T) (aggregateFunc, error) {
+func new_AGG_TITLEAgg(t types.T, isScalar bool) (aggregateFunc, error) {
 	switch t {
-	// {{range .Overloads}}
+	// {{range $overload := $aggOverload.Overloads}}
 	case _TYPES_T:
-		return &_AGG_TYPEAgg{}, nil
+		if isScalar {
+			return &_AGGScalar_TYPEAgg{}, nil
+		}
+		return &_AGGNonScalar_TYPEAgg{}, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unsupported min agg type %s", t)
+		return nil, errors.Errorf("unsupported min/max agg type %s", t)
 	}
 }
 
-// {{range .Overloads}}
+// {{range $scalarInfo := $.ScalarInfos}}
+// {{range $overload := $aggOverload.Overloads}}
 
-type _AGG_TYPEAgg struct {
+type _AGG_SCALAR_TYPEAgg struct {
 	done   bool
 	groups []bool
 	curIdx int
@@ -84,16 +85,16 @@ type _AGG_TYPEAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-var _ aggregateFunc = &_AGG_TYPEAgg{}
+var _ aggregateFunc = &_AGG_SCALAR_TYPEAgg{}
 
-func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
+func (a *_AGG_SCALAR_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
 	a.vec = v._TYPE()
 	a.nulls = v.Nulls()
 	a.Reset()
 }
 
-func (a *_AGG_TYPEAgg) Reset() {
+func (a *_AGG_SCALAR_TYPEAgg) Reset() {
 	copy(a.vec, zero_TYPEColumn)
 	a.curAgg = zero_TYPEColumn[0]
 	a.curIdx = -1
@@ -102,11 +103,11 @@ func (a *_AGG_TYPEAgg) Reset() {
 	a.done = false
 }
 
-func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
+func (a *_AGG_SCALAR_TYPEAgg) CurrentOutputIndex() int {
 	return a.curIdx
 }
 
-func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
+func (a *_AGG_SCALAR_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
 		copy(a.vec[idx+1:], zero_TYPEColumn)
@@ -114,7 +115,7 @@ func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *_AGG_SCALAR_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}
@@ -123,14 +124,22 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		// The aggregation is finished. Flush the last value. If we haven't found
 		// any non-nulls for this group so far, the output for this group should
 		// be null. If a.curIdx is negative, it means the input has zero rows, and
-		// there should be no output at all.
+		// the output should be NULL in scalar context and there should be no
+		// output in non-scalar context.
 		if a.curIdx >= 0 {
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(uint16(a.curIdx))
 			}
 			a.vec[a.curIdx] = a.curAgg
+			a.curIdx++
+		} else {
+			// {{if $scalarInfo.IsScalar}}
+			a.nulls.SetNull(0)
+			a.curIdx = 1
+			// {{else}}
+			a.curIdx = 0
+			// {{end}}
 		}
-		a.curIdx++
 		a.done = true
 		return
 	}
@@ -165,13 +174,14 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 
 // {{end}}
 // {{end}}
+// {{end}}
 
 // {{/*
 // _ACCUMULATE_MINMAX sets the output for the current group to be the value of
 // the ith row if it is smaller/larger than the current result. If this is the
 // first row of a new group, and no non-nulls have been found for the current
 // group, then the output for the current group is set to null.
-func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+func _ACCUMULATE_MINMAX(a *_AGG_SCALAR_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
 
 	// {{define "accumulateMinMax"}}
 	if a.groups[i] {
@@ -187,8 +197,8 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
 		// The next element of vec is guaranteed  to be initialized to the zero
-		// value. We can't use zero_TYPEColumn here because this is outside of
-		// the earlier template block.
+		// value. We can't use zeroColumn here because this is outside of the
+		// earlier template block.
 		a.curAgg = a.vec[a.curIdx]
 	}
 	var isNull bool

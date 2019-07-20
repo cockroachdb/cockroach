@@ -47,11 +47,12 @@ func genMinMaxAgg(wr io.Writer) error {
 	}
 
 	s := string(t)
-	s = strings.Replace(s, "_AGG_TITLE", "{{.AggNameTitle}}", -1)
-	s = strings.Replace(s, "_AGG", "{{$agg}}", -1)
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "_AGG_TITLE", "{{$aggOverload.AggNameTitle}}", -1)
+	s = strings.Replace(s, "_AGG", "{{$aggOverload.AggNameLower}}", -1)
+	s = strings.Replace(s, "_GOTYPE", "{{$overload.LTyp.GoTypeName}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "types.{{$overload.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPE", "{{$overload.LTyp}}", -1)
+	s = strings.Replace(s, "_SCALAR", "{{$scalarInfo.String}}", -1)
 
 	assignCmpRe := regexp.MustCompile(`_ASSIGN_CMP\((.*),(.*),(.*)\)`)
 	s = assignCmpRe.ReplaceAllString(s, "{{.Global.Assign $1 $2 $3}}")
@@ -73,7 +74,13 @@ func genMinMaxAgg(wr io.Writer) error {
 			Overloads: comparisonOpToOverloads[tree.GT],
 		},
 	}
-	return tmpl.Execute(wr, data)
+	return tmpl.Execute(wr, struct {
+		AggOverloads interface{}
+		ScalarInfos  interface{}
+	}{
+		AggOverloads: data,
+		ScalarInfos:  scalarInfos,
+	})
 }
 
 func init() {

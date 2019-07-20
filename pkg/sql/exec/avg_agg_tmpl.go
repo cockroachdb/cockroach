@@ -51,20 +51,24 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newAvgAgg(t types.T) (aggregateFunc, error) {
+func newAvgAgg(t types.T, isScalar bool) (aggregateFunc, error) {
 	switch t {
-	// {{range .}}
+	// {{range $tmplInfo := $.TmplInfos}}
 	case _TYPES_T:
-		return &avg_TYPEAgg{}, nil
+		if isScalar {
+			return &avgScalar_TYPEAgg{}, nil
+		}
+		return &avgNonScalar_TYPEAgg{}, nil
 	// {{end}}
 	default:
 		return nil, errors.Errorf("unsupported avg agg type %s", t)
 	}
 }
 
-// {{range .}}
+// {{range $scalarInfo := $.ScalarInfos}}
+// {{range $tmplInfo := $.TmplInfos}}
 
-type avg_TYPEAgg struct {
+type avg_SCALAR_TYPEAgg struct {
 	done bool
 
 	groups  []bool
@@ -87,16 +91,16 @@ type avg_TYPEAgg struct {
 	}
 }
 
-var _ aggregateFunc = &avg_TYPEAgg{}
+var _ aggregateFunc = &avg_SCALAR_TYPEAgg{}
 
-func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
+func (a *avg_SCALAR_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
 	a.scratch.vec = v._TemplateType()
 	a.scratch.nulls = v.Nulls()
 	a.Reset()
 }
 
-func (a *avg_TYPEAgg) Reset() {
+func (a *avg_SCALAR_TYPEAgg) Reset() {
 	copy(a.scratch.vec, zero_TYPEColumn)
 	a.scratch.curIdx = -1
 	a.scratch.curSum = zero_TYPEColumn[0]
@@ -106,11 +110,11 @@ func (a *avg_TYPEAgg) Reset() {
 	a.done = false
 }
 
-func (a *avg_TYPEAgg) CurrentOutputIndex() int {
+func (a *avg_SCALAR_TYPEAgg) CurrentOutputIndex() int {
 	return a.scratch.curIdx
 }
 
-func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
+func (a *avg_SCALAR_TYPEAgg) SetOutputIndex(idx int) {
 	if a.scratch.curIdx != -1 {
 		a.scratch.curIdx = idx
 		a.scratch.nulls.UnsetNullsAfter(uint16(idx + 1))
@@ -118,25 +122,32 @@ func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *avg_SCALAR_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
-
 		// The aggregation is finished. Flush the last value. If we haven't found
-		// any non-nulls for this group so far, the output for this group should
-		// be null. If a.scratch.curIdx is negative, it means the input has zero rows, and
-		// there should be no output at all.
+		// any non-nulls for this group so far, the output for this group should be
+		// null. If a.scratch.curIdx is negative, it means the input has zero rows,
+		// and the output should be NULL in scalar context and there should be no
+		// output in non-scalar context.
 		if a.scratch.curIdx >= 0 {
 			if !a.scratch.foundNonNullForCurrentGroup {
 				a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
 			} else {
 				_ASSIGN_DIV_INT64("a.scratch.vec[a.scratch.curIdx]", "a.scratch.curSum", "a.scratch.curCount")
 			}
+			a.scratch.curIdx++
+		} else {
+			// {{if $scalarInfo.IsScalar }}
+			a.scratch.nulls.SetNull(0)
+			a.scratch.curIdx = 1
+			// {{else}}
+			a.scratch.curIdx = 0
+			// {{end}}
 		}
-		a.scratch.curIdx++
 		a.done = true
 		return
 	}
@@ -169,6 +180,7 @@ func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 }
 
+// {{end}}
 // {{end}}
 
 // {{/*
@@ -203,8 +215,8 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 		// {{ end }}
 
 		// The next element of vec is guaranteed  to be initialized to the zero
-		// value. We can't use zero_TYPEColumn here because this is outside of
-		// the earlier template block.
+		// value. We can't use zeroColumn here because this is outside of the
+		// earlier template block.
 		a.scratch.curSum = a.scratch.vec[a.scratch.curIdx]
 		a.scratch.curCount = 0
 	}

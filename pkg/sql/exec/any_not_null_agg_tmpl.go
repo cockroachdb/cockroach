@@ -26,11 +26,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newAnyNotNullAgg(t types.T) (aggregateFunc, error) {
+func newAnyNotNullAgg(t types.T, isScalar bool) (aggregateFunc, error) {
 	switch t {
-	// {{range .}}
+	// {{range $type := $.Types}}
 	case _TYPES_T:
-		return &anyNotNull_TYPEAgg{}, nil
+		if isScalar {
+			return &anyNotNullScalar_TYPEAgg{}, nil
+		}
+		return &anyNotNullNonScalar_TYPEAgg{}, nil
 		// {{end}}
 	default:
 		return nil, errors.Errorf("unsupported any not null agg type %s", t)
@@ -55,11 +58,12 @@ const _TYPES_T = types.Unhandled
 
 // */}}
 
-// {{range .}}
+// {{range $type := $.Types}}
+// {{range $scalarInfo := $.ScalarInfos}}
 
-// anyNotNull_TYPEAgg implements the ANY_NOT_NULL aggregate, returning the
-// first non-null value in the input column.
-type anyNotNull_TYPEAgg struct {
+// anyNotNull_SCALAR_TYPEAgg implements the ANY_NOT_NULL aggregate, returning
+// the first non-null value in the input column.
+type anyNotNull_SCALAR_TYPEAgg struct {
 	done                        bool
 	groups                      []bool
 	vec                         []_GOTYPE
@@ -68,14 +72,14 @@ type anyNotNull_TYPEAgg struct {
 	foundNonNullForCurrentGroup bool
 }
 
-func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
+func (a *anyNotNull_SCALAR_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
 	a.vec = vec._TemplateType()
 	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
-func (a *anyNotNull_TYPEAgg) Reset() {
+func (a *anyNotNull_SCALAR_TYPEAgg) Reset() {
 	copy(a.vec, zero_TYPEColumn)
 	a.curIdx = -1
 	a.done = false
@@ -83,11 +87,11 @@ func (a *anyNotNull_TYPEAgg) Reset() {
 	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
+func (a *anyNotNull_SCALAR_TYPEAgg) CurrentOutputIndex() int {
 	return a.curIdx
 }
 
-func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
+func (a *anyNotNull_SCALAR_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
 		copy(a.vec[idx+1:], zero_TYPEColumn)
@@ -95,7 +99,7 @@ func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *anyNotNull_SCALAR_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}
@@ -103,11 +107,21 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if inputLen == 0 {
 		// If we haven't found any non-nulls for this group so far, the output for
 		// this group should be null. If a.curIdx is negative, it means the input
-		// has zero rows, and there should be no output at all.
-		if !a.foundNonNullForCurrentGroup && a.curIdx >= 0 {
-			a.nulls.SetNull(uint16(a.curIdx))
+		// has zero rows, and the output should be NULL in scalar context and there
+		// should be no output in non-scalar context.
+		if a.curIdx >= 0 {
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(uint16(a.curIdx))
+			}
+			a.curIdx++
+		} else {
+			// {{if $scalarInfo.IsScalar}}
+			a.nulls.SetNull(0)
+			a.curIdx = 1
+			// {{else}}
+			a.curIdx = 0
+			// {{end}}
 		}
-		a.curIdx++
 		a.done = true
 		return
 	}
@@ -142,13 +156,16 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 }
 
 // {{end}}
+// {{end}}
 
 // {{/*
 // _FIND_ANY_NOT_NULL finds a non-null value for the group that contains the ith
 // row. If a non-null value was already found, then it does nothing. If this is
 // the first row of a new group, and no non-nulls have been found for the
 // current group, then the output for the current group is set to null.
-func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+func _FIND_ANY_NOT_NULL(
+	a *anyNotNull_SCALAR_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool,
+) { // */}}
 
 	// {{define "findAnyNotNull"}}
 	if a.groups[i] {

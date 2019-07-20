@@ -123,7 +123,7 @@ func NewHashAggregator(
 		},
 	)
 
-	funcs, outTyps, err := makeAggregateFuncs(aggTyps, aggFns)
+	funcs, outTyps, err := makeAggregateFuncs(aggTyps, aggFns, len(groupCols) == 0)
 	if err != nil {
 		return nil, err
 	}

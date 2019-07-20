@@ -12,16 +12,18 @@ package exec
 
 import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 
+// TODO(yuzefovich): template this file out.
+
 // newCountRowAgg creates a COUNT(*) aggregate, which counts every row in the
 // result unconditionally.
-func newCountRowAgg() *countAgg {
-	return &countAgg{countRow: true}
+func newCountRowAgg(isScalar bool) *countAgg {
+	return &countAgg{countRow: true, isScalar: isScalar}
 }
 
 // newCountAgg creates a COUNT(col) aggregate, which counts every row in the
 // result where the value of col is not null.
-func newCountAgg() *countAgg {
-	return &countAgg{countRow: false}
+func newCountAgg(isScalar bool) *countAgg {
+	return &countAgg{countRow: false, isScalar: isScalar}
 }
 
 // countAgg supports both the COUNT(*) and COUNT(col) aggregates, which are
@@ -32,6 +34,7 @@ type countAgg struct {
 	curIdx   int
 	done     bool
 	countRow bool
+	isScalar bool
 }
 
 func (a *countAgg) Init(groups []bool, vec coldata.Vec) {
@@ -63,7 +66,19 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
-		a.curIdx++
+		// If a.curIdx is negative, it means the input has zero rows, and the
+		// output should be 0 in scalar context and there should be no output in
+		// non-scalar context.
+		if a.curIdx >= 0 {
+			a.curIdx++
+		} else {
+			if a.isScalar {
+				a.vec[0] = 0
+				a.curIdx = 1
+			} else {
+				a.curIdx = 0
+			}
+		}
 		a.done = true
 		return
 	}

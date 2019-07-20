@@ -28,10 +28,11 @@ func genSumAgg(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "_GOTYPE", "{{$overload.LTyp.GoTypeName}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "types.{{$overload.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPE", "{{$overload.LTyp}}", -1)
+	s = strings.Replace(s, "_TemplateType", "{{$overload.LTyp}}", -1)
+	s = strings.Replace(s, "_SCALAR", "{{$scalarInfo.String}}", -1)
 
 	assignAddRe := regexp.MustCompile(`_ASSIGN_ADD\((.*),(.*),(.*)\)`)
 	s = assignAddRe.ReplaceAllString(s, "{{.Global.Assign $1 $2 $3}}")
@@ -44,7 +45,13 @@ func genSumAgg(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, binaryOpToOverloads[tree.Plus])
+	return tmpl.Execute(wr, struct {
+		Overloads   interface{}
+		ScalarInfos interface{}
+	}{
+		Overloads:   binaryOpToOverloads[tree.Plus],
+		ScalarInfos: scalarInfos,
+	})
 }
 
 func init() {

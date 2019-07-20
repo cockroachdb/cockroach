@@ -19,6 +19,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
+type scalarInfo struct {
+	IsScalar bool
+	String   string
+}
+
+var scalarInfos = []scalarInfo{
+	{
+		IsScalar: false,
+		String:   "NonScalar",
+	},
+	{
+		IsScalar: true,
+		String:   "Scalar",
+	},
+}
+
 func genAnyNotNullAgg(wr io.Writer) error {
 	t, err := ioutil.ReadFile("pkg/sql/exec/any_not_null_agg_tmpl.go")
 	if err != nil {
@@ -27,10 +43,11 @@ func genAnyNotNullAgg(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_GOTYPE", "{{.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "types.{{.}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.}}", -1)
+	s = strings.Replace(s, "_GOTYPE", "{{$type.GoTypeName}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "types.{{$type}}", -1)
+	s = strings.Replace(s, "_TYPE", "{{$type}}", -1)
+	s = strings.Replace(s, "_TemplateType", "{{$type}}", -1)
+	s = strings.Replace(s, "_SCALAR", "{{$scalarInfo.String}}", -1)
 
 	findAnyNotNull := makeFunctionRegex("_FIND_ANY_NOT_NULL", 4)
 	s = findAnyNotNull.ReplaceAllString(s, `{{template "findAnyNotNull" buildDict "Global" . "HasNulls" $4}}`)
@@ -40,7 +57,13 @@ func genAnyNotNullAgg(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, types.AllTypes)
+	return tmpl.Execute(wr, struct {
+		Types       interface{}
+		ScalarInfos interface{}
+	}{
+		Types:       types.AllTypes,
+		ScalarInfos: scalarInfos,
+	})
 }
 
 func init() {
