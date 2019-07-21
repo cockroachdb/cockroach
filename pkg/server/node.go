@@ -898,14 +898,12 @@ func (n *Node) batchInternal(
 	}
 
 	var br *roachpb.BatchResponse
-
 	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
 		var finishSpan func(*roachpb.BatchResponse)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
 		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, grpcutil.IsLocalRequestContext(ctx))
-		defer func(br **roachpb.BatchResponse) {
-			finishSpan(*br)
-		}(&br)
+		// NB: wrapped to delay br evaluation to its value when returning.
+		defer func() { finishSpan(br) }()
 		if log.HasSpanOrEvent(ctx) {
 			log.Event(ctx, args.Summary())
 		}
