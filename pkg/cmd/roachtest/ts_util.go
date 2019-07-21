@@ -91,8 +91,8 @@ func verifyTxnPerSecond(
 	// Query needed information over the timespan of the query.
 	adminURL := c.ExternalAdminUIAddr(ctx, adminNode)[0]
 	response := getMetrics(t, adminURL, start, end, []tsQuery{
-		{name: "cr.node.txn.commits", queryType: total},
 		{name: "cr.node.txn.commits", queryType: rate},
+		{name: "cr.node.txn.commits", queryType: total},
 	})
 
 	// Drop the first two minutes of datapoints as a "ramp-up" period.
