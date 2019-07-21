@@ -93,10 +93,10 @@ func (ex *connExecutor) execStmt(
 				"stmt.anonymized", stmt.AnonymizedStr,
 			)
 			pprof.Do(ctx, labels, func(ctx context.Context) {
-				ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+				ev, payload, err = ex.execStmtInOpenState(ctx, stmt, res, pinfo)
 			})
 		} else {
-			ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+			ev, payload, err = ex.execStmtInOpenState(ctx, stmt, res, pinfo)
 		}
 		switch ev.(type) {
 		case eventNonRetriableErr:
@@ -131,7 +131,7 @@ func (ex *connExecutor) recordFailure() {
 //
 // The returned event can be nil if no state transition is required.
 func (ex *connExecutor) execStmtInOpenState(
-	ctx context.Context, stmt Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
+	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	ex.incrementStartedStmtCounter(stmt)
 	defer func() {
