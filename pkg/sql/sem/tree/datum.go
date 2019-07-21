@@ -1397,7 +1397,7 @@ func (d *DUuid) Compare(ctx *EvalContext, other Datum) int {
 	return bytes.Compare(d.GetBytes(), v.GetBytes())
 }
 
-func (d DUuid) equal(other *DUuid) bool {
+func (d *DUuid) equal(other *DUuid) bool {
 	return bytes.Equal(d.GetBytes(), other.GetBytes())
 }
 
