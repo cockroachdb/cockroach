@@ -560,3 +560,31 @@ SELECT min(x) FROM t38959_2 WHERE (y, z) = (2, 3.0)
 
 statement ok
 SET tracing=off
+
+# Making sure that colBatchScan operator can parallelize scans.
+# This test is similar to that in testplannerlogic/select
+statement ok
+CREATE TABLE tpar (a INT PRIMARY KEY, item STRING, price FLOAT, UNIQUE INDEX item (item), UNIQUE INDEX p (price))
+
+statement ok
+ALTER TABLE tpar SPLIT AT VALUES(5)
+
+# Run a select to prime the range cache to simplify the trace below.
+statement ok
+SELECT * FROM tpar
+
+# Make sure that the scan actually gets parallelized.
+statement ok
+SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
+
+# The span "sending partial batch" means that the scan was parallelized.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN 
+    ('querying next range at /Table/71/1/0',
+     'querying next range at /Table/71/1/10',
+     '=== SPAN START: kv.DistSender: sending partial batch ==='
+    )
+----
+querying next range at /Table/71/1/0
+=== SPAN START: kv.DistSender: sending partial batch ===
+querying next range at /Table/71/1/10
