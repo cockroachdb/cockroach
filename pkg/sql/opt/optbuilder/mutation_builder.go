@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -772,10 +773,14 @@ func (mb *mutationBuilder) buildFKChecks() {
 		// Build an anti-join, with the origin FK columns on the left and the
 		// referenced columns on the right.
 
-		refTab, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, fk.ReferencedTableID())
+		refID := fk.ReferencedTableID()
+		refTab, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, refID)
 		if err != nil {
 			panic(err)
 		}
+		// We need SELECT privileges on the referenced table.
+		mb.b.checkPrivilege(opt.DepByID(refID), refTab, privilege.SELECT)
+
 		refOrdinals := make([]int, numCols)
 		for j := range refOrdinals {
 			refOrdinals[j] = fk.ReferencedColumnOrdinal(refTab.(cat.Table), j)
