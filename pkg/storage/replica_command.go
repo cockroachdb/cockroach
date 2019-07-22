@@ -50,7 +50,7 @@ import (
 var useLearnerReplicas = settings.RegisterBoolSetting(
 	"kv.learner_replicas.enabled",
 	"use learner replicas for replica addition",
-	false)
+	true)
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
@@ -951,6 +951,7 @@ func (r *Replica) addReplica(
 	if err != nil {
 		// Don't leave a learner replica lying around if we didn't succeed in
 		// promoting it to a voter.
+		log.Infof(ctx, "could not promote %s to voter, rolling back: %v", target, err)
 		r.rollbackLearnerReplica(ctx, learnerDesc, target, reason, details)
 		return nil, err
 	}
@@ -1004,9 +1005,30 @@ func (r *Replica) promoteLearnerReplicaToVoter(
 		rDesc.Type = roachpb.ReplicaTypeVoter()
 		newReplicas[i] = rDesc
 
-		// Note that raft snapshot queue refuses to send snapshots, so this is the
-		// only one a learner can get.
-		if err := r.sendSnapshot(ctx, rDesc, SnapshotRequest_LEARNER, priority); err != nil {
+		// Note that raft snapshot queue will refuse to send a snapshot to a learner
+		// replica if its store is already sending a snapshot to that replica. That
+		// races with this snapshot. Most of the time, this side will win the race,
+		// which avoids needlessly sending the snapshot twice. If the raft snapshot
+		// queue wins, it's wasteful, but doesn't impact correctness.
+		//
+		// Replicas are added to the raft snapshot queue by the raft leader. This
+		// code can be run anywhere (though it's usually run on the leaseholder,
+		// which is usually co-located with the raft leader). This means that
+		// they're usually on the same node, but not always, so that's about as good
+		// a guarantee as we can offer, anyway.
+		//
+		// We originally tried always refusing to send snapshots from the raft
+		// snapshot queue to learner replicas, but this turned out to be brittle.
+		// First, if the snapshot failed, any attempt to use the learner's raft
+		// group would hang until the replicate queue got around to cleaning up the
+		// orphaned learner. Second, this tickled some bugs in etcd/raft around
+		// switching between StateSnapshot and StateProbe. Even if we worked through
+		// these, it would be susceptible to future similar issues.
+		err := r.sendSnapshot(ctx, rDesc, SnapshotRequest_LEARNER, priority)
+		// Report the snapshot status to Raft, which expects us to do this once
+		// we finish sending the snapshot.
+		r.reportSnapshotStatus(ctx, rDesc.ReplicaID, err)
+		if err != nil {
 			return nil, err
 		}
 
@@ -1018,7 +1040,7 @@ func (r *Replica) promoteLearnerReplicaToVoter(
 
 		updatedDesc := *desc
 		updatedDesc.SetReplicas(roachpb.MakeReplicaDescriptors(&newReplicas))
-		err := execChangeReplicasTxn(ctx, r.store, roachpb.ADD_REPLICA, desc, rDesc, &updatedDesc, reason, details)
+		err = execChangeReplicasTxn(ctx, r.store, roachpb.ADD_REPLICA, desc, rDesc, &updatedDesc, reason, details)
 		return &updatedDesc, err
 	}
 	return nil, errors.Errorf(`%s: could not find replica to promote %s`, r, target)
@@ -1056,7 +1078,7 @@ func (r *Replica) rollbackLearnerReplica(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
 		log.Infof(ctx,
-			"failed to rollback learner %s, abandoning it for the replicate queue %v", target, err)
+			"failed to rollback learner %s, abandoning it for the replicate queue: %v", target, err)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	} else {
 		log.Infof(ctx, "rolled back learner %s to %s", replDesc, &newDesc)
@@ -1353,7 +1375,16 @@ func (r *Replica) sendSnapshot(
 	recipient roachpb.ReplicaDescriptor,
 	snapType SnapshotRequest_Type,
 	priority SnapshotRequest_Priority,
-) error {
+) (retErr error) {
+	// WIP any reason not to do this here instead of in the callers?
+	// defer func() {
+	// 	if snapType != SnapshotRequest_PREEMPTIVE {
+	// 		// Report the snapshot status to Raft, which expects us to do this once we
+	// 		// finish sending the snapshot.
+	// 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
+	// 	}
+	// }()
+
 	snap, err := r.GetSnapshot(ctx, snapType)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
