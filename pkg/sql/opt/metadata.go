@@ -99,12 +99,24 @@ type Metadata struct {
 type mdDep struct {
 	ds cat.DataSource
 
-	// name is the unresolved name from the query that was used to resolve the
-	// object.
-	name cat.DataSourceName
+	name MDDepName
 
 	// privileges is the union of all required privileges.
 	privileges privilegeBitmap
+}
+
+// MDDepName stores either the unresolved DataSourceName or the StableID from
+// the query that was used to resolve a data source.
+type MDDepName struct {
+	// byID is non-zero if the data source was looked up using the StableID.
+	byID cat.StableID
+
+	// byName is non-zero if the data source was looked up using a name.
+	byName cat.DataSourceName
+}
+
+func (n *MDDepName) equals(other *MDDepName) bool {
+	return *n == *other
 }
 
 // Init prepares the metadata for use (or reuse).
@@ -152,24 +164,33 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 	md.deps = append(md.deps, from.deps...)
 }
 
+// DepByName is used with AddDependency when the data source was looked up using a
+// data source name.
+func DepByName(name *cat.DataSourceName) MDDepName {
+	return MDDepName{byName: *name}
+}
+
+// DepByID is used with AddDependency when the data source was looked up by ID.
+func DepByID(id cat.StableID) MDDepName {
+	return MDDepName{byID: id}
+}
+
 // AddDependency tracks one of the catalog data sources on which the query
 // depends, as well as the privilege required to access that data source. If
 // the Memo using this metadata is cached, then a call to CheckDependencies can
 // detect if the name resolves to a different data source now, or if changes to
 // schema or permissions on the data source has invalidated the cached metadata.
-func (md *Metadata) AddDependency(
-	name *cat.DataSourceName, ds cat.DataSource, priv privilege.Kind,
-) {
+func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	// Search for the same name / object pair.
 	for i := range md.deps {
-		if md.deps[i].ds == ds && md.deps[i].name.Equals(name) {
+		if md.deps[i].ds == ds && md.deps[i].name.equals(&name) {
 			md.deps[i].privileges |= (1 << priv)
 			return
 		}
 	}
 	md.deps = append(md.deps, mdDep{
 		ds:         ds,
-		name:       *name,
+		name:       name,
 		privileges: (1 << priv),
 	})
 }
@@ -187,9 +208,15 @@ func (md *Metadata) CheckDependencies(
 	ctx context.Context, catalog cat.Catalog,
 ) (upToDate bool, err error) {
 	for i := range md.deps {
-		name := md.deps[i].name
-		// Resolve data source object.
-		toCheck, _, err := catalog.ResolveDataSource(ctx, cat.Flags{}, &name)
+		name := &md.deps[i].name
+		var toCheck cat.DataSource
+		var err error
+		if name.byID != 0 {
+			toCheck, err = catalog.ResolveDataSourceByID(ctx, name.byID)
+		} else {
+			// Resolve data source object.
+			toCheck, _, err = catalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)
+		}
 		if err != nil {
 			return false, err
 		}
