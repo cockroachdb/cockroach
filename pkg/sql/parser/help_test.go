@@ -241,6 +241,7 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW TRACE FOR SESSION ??`, `SHOW TRACE`},
 		{`SHOW TRACE FOR ??`, `SHOW TRACE`},
 
+		{`SHOW JOB ??`, `SHOW JOBS`},
 		{`SHOW JOBS ??`, `SHOW JOBS`},
 		{`SHOW AUTOMATIC JOBS ??`, `SHOW JOBS`},
 

@@ -117,6 +117,7 @@ func TestStatementReuses(t *testing.T) {
 		`SHOW CONSTRAINTS FROM a`,
 		`SHOW DATABASES`,
 		`SHOW INDEXES FROM a`,
+		`SHOW JOB 1`,
 		`SHOW JOBS`,
 		`SHOW ROLES`,
 		`SHOW SCHEMAS`,

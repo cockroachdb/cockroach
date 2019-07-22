@@ -41,3 +41,12 @@ func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 		ORDER BY COALESCE(finished, now()) DESC, started DESC`, typePredicate,
 	))
 }
+
+func (d *delegator) delegateShowJob(n *tree.ShowJob) (tree.Statement, error) {
+	return parse(fmt.Sprintf(
+		`SELECT job_id, job_type, description, statement, user_name, status, running_status, created,
+            started, finished, modified, fraction_completed, error, coordinator_id
+		FROM crdb_internal.jobs
+		WHERE job_id = %d`, n.JobID,
+	))
+}

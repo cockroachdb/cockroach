@@ -19,7 +19,11 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/lex"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+)
 
 // ShowVar represents a SHOW statement.
 type ShowVar struct {
@@ -185,6 +189,16 @@ func (node *ShowQueries) Format(ctx *FmtCtx) {
 	} else {
 		ctx.WriteString("LOCAL QUERIES")
 	}
+}
+
+// ShowJob represents a SHOW JOB statement
+type ShowJob struct {
+	JobID int64
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowJob) Format(ctx *FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("SHOW JOB %d", node.JobID))
 }
 
 // ShowJobs represents a SHOW JOBS statement
