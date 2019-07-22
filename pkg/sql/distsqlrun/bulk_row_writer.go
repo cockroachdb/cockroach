@@ -189,7 +189,7 @@ func (sp *bulkRowWriter) Run(ctx context.Context) {
 
 	sp.input.Start(ctx)
 
-	conv, err := row.NewDatumRowConverter(&sp.spec.Table, evalCtx, kvCh)
+	conv, err := row.NewDatumRowConverter(&sp.spec.Table, nil /* targetColNames */, evalCtx, kvCh)
 	if err != nil {
 		DrainAndClose(
 			ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)

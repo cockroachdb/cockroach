@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -393,7 +394,7 @@ func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 
 type pgDumpReader struct {
 	tables map[string]*row.DatumRowConverter
-	descs  map[string]*sqlbase.TableDescriptor
+	descs  map[string]*distsqlpb.ReadImportDataSpec_ImportTable
 	kvCh   chan []roachpb.KeyValue
 	opts   roachpb.PgDumpOptions
 }
@@ -404,13 +405,13 @@ var _ inputConverter = &pgDumpReader{}
 func newPgDumpReader(
 	kvCh chan []roachpb.KeyValue,
 	opts roachpb.PgDumpOptions,
-	descs map[string]*sqlbase.TableDescriptor,
+	descs map[string]*distsqlpb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
-	for name, desc := range descs {
-		if desc.IsTable() {
-			conv, err := row.NewDatumRowConverter(desc, evalCtx, kvCh)
+	for name, table := range descs {
+		if table.Desc.IsTable() {
+			conv, err := row.NewDatumRowConverter(table.Desc, nil /* targetColNames */, evalCtx, kvCh)
 			if err != nil {
 				return nil, err
 			}
@@ -614,7 +615,7 @@ func (m *pgDumpReader) readFile(
 			if seq == nil {
 				break
 			}
-			key, val, err := sql.MakeSequenceKeyVal(seq, val, isCalled)
+			key, val, err := sql.MakeSequenceKeyVal(seq.Desc, val, isCalled)
 			if err != nil {
 				return wrapRowErr(err, inputName, count, pgcode.Uncategorized, "")
 			}
