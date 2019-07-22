@@ -1767,24 +1767,32 @@
   revision = "db91494dd46c1fdcbbde05e5ff5eb56df8f7d79a"
 
 [[projects]]
-  digest = "1:3a98314fd2e43bbd905b33125dad80b10111ba6e5e541db8ed2a953fe01fbb31"
+  digest = "1:1bdff737fd41a4c48d06265e782e38f7fddb2610ed6877095c42763b8767d195"
   name = "google.golang.org/grpc"
   packages = [
     ".",
     "balancer",
     "balancer/base",
     "balancer/roundrobin",
+    "binarylog/grpc_binarylog_v1",
     "codes",
     "connectivity",
     "credentials",
+    "credentials/internal",
     "encoding",
     "encoding/proto",
     "grpclog",
     "health/grpc_health_v1",
     "internal",
     "internal/backoff",
+    "internal/balancerload",
+    "internal/binarylog",
     "internal/channelz",
+    "internal/envconfig",
     "internal/grpcrand",
+    "internal/grpcsync",
+    "internal/syscall",
+    "internal/transport",
     "keepalive",
     "metadata",
     "naming",
@@ -1795,11 +1803,10 @@
     "stats",
     "status",
     "tap",
-    "transport",
   ]
   pruneopts = "UT"
-  revision = "168a6198bcb0ef175f7dacec0b8691fc141dc9b8"
-  version = "v1.13.0"
+  revision = "86af7e80a3703e2400cce4ea455a9abab36bbcf8"
+  version = "v1.21.2"
 
 [[projects]]
   branch = "v2-encoding-style"
@@ -2045,7 +2052,6 @@
     "google.golang.org/grpc/peer",
     "google.golang.org/grpc/stats",
     "google.golang.org/grpc/status",
-    "google.golang.org/grpc/transport",
     "gopkg.in/yaml.v2",
     "honnef.co/go/tools/cmd/staticcheck",
     "honnef.co/go/tools/lint",

@@ -682,23 +682,21 @@ func init() {
 // ensures that our initial heartbeat (and its version/clusterID
 // validation) occurs on every new connection.
 type onlyOnceDialer struct {
-	ctx context.Context
 	syncutil.Mutex
 	dialed     bool
 	closed     bool
 	redialChan chan struct{}
 }
 
-func (ood *onlyOnceDialer) dial(addr string, timeout time.Duration) (net.Conn, error) {
+func (ood *onlyOnceDialer) dial(ctx context.Context, addr string) (net.Conn, error) {
 	ood.Lock()
 	defer ood.Unlock()
 	if !ood.dialed {
 		ood.dialed = true
 		dialer := net.Dialer{
-			Timeout:   timeout,
 			LocalAddr: sourceAddr,
 		}
-		return dialer.DialContext(ood.ctx, "tcp", addr)
+		return dialer.DialContext(ctx, "tcp", addr)
 	} else if !ood.closed {
 		ood.closed = true
 		close(ood.redialChan)
@@ -726,10 +724,9 @@ func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{
 		grpc.WithInitialConnWindowSize(initialConnWindowSize))
 
 	dialer := onlyOnceDialer{
-		ctx:        ctx.masterCtx,
 		redialChan: make(chan struct{}),
 	}
-	dialOpts = append(dialOpts, grpc.WithDialer(dialer.dial))
+	dialOpts = append(dialOpts, grpc.WithContextDialer(dialer.dial))
 
 	// add testingDialOpts after our dialer because one of our tests
 	// uses a custom dialer (this disables the only-one-connection

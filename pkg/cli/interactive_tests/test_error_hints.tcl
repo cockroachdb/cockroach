@@ -107,10 +107,10 @@ eexpect "ready"
 set spawn_id $client_spawn_id
 send "$argv quit --insecure\r"
 eexpect "insecure\r\n"
-# In the first shell, stop the server.
+# Wait to see an HTTP/2.0 header on the fake server, then stop the server.
 set spawn_id $shell_spawn_id
 eexpect "connected"
-eexpect ":26257"
+eexpect "PRI * HTTP/2.0"
 interrupt
 eexpect ":/# "
 # Check that cockroach quit becomes suitably confused.
