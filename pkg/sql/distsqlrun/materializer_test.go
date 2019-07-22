@@ -43,7 +43,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		Settings: st,
 		EvalCtx:  &evalCtx,
 	}
-	c, err := newColumnarizer(flowCtx, 0, input)
+	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestMaterializeTypes(t *testing.T) {
 		Settings: st,
 		EvalCtx:  &evalCtx,
 	}
-	c, err := newColumnarizer(flowCtx, 0, input)
+	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 		Settings: st,
 		EvalCtx:  &evalCtx,
 	}
-	c, err := newColumnarizer(flowCtx, 0, input)
+	c, err := newColumnarizer(ctx, flowCtx, 0, input)
 	if err != nil {
 		b.Fatal(err)
 	}

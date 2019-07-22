@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -46,6 +47,7 @@ func checkNumIn(inputs []exec.Operator, numIn int) error {
 // wrapRowSource, given an input exec.Operator, integrates toWrap into a
 // columnar execution flow and returns toWrap's output as an exec.Operator.
 func wrapRowSource(
+	ctx context.Context,
 	flowCtx *FlowCtx,
 	input exec.Operator,
 	inputTypes []semtypes.T,
@@ -89,7 +91,7 @@ func wrapRowSource(
 		return nil, err
 	}
 
-	return newColumnarizer(flowCtx, processorID, toWrap)
+	return newColumnarizer(ctx, flowCtx, processorID, toWrap)
 }
 
 // newColOperator creates a new columnar operator according to the given spec.
@@ -381,7 +383,7 @@ func newColOperator(
 			return nil, nil, memUsage, err
 		}
 
-		op, err = wrapRowSource(flowCtx, inputs[0], spec.Input[0].ColumnTypes, func(input RowSource) (RowSource, error) {
+		op, err = wrapRowSource(ctx, flowCtx, inputs[0], spec.Input[0].ColumnTypes, func(input RowSource) (RowSource, error) {
 			var (
 				jr  RowSource
 				err error
@@ -496,7 +498,7 @@ func newColOperator(
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
 
 	default:
-		return nil, nil, memUsage, errors.Newf("unsupported processor core %s", core)
+		return nil, nil, memUsage, errors.Newf("unsupported processor core %s", strings.TrimSpace(core.String()))
 	}
 
 	// After constructing the base operator, calculate the memory usage
