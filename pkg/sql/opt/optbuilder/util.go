@@ -465,7 +465,7 @@ func (b *Builder) resolveDataSource(
 	if err != nil {
 		panic(err)
 	}
-	b.checkPrivilege(tn, ds, priv)
+	b.checkPrivilege(opt.DepByName(tn), ds, priv)
 	return ds, resName
 }
 
@@ -478,7 +478,7 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 	if err != nil {
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}
-	b.checkPrivilege(ds.Name(), ds, priv)
+	b.checkPrivilege(opt.DepByID(cat.StableID(ref.TableID)), ds, priv)
 	return ds
 }
 
@@ -487,9 +487,7 @@ func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) 
 // error. It also adds the object and it's original unresolved name as a
 // dependency to the metadata, so that the privileges can be re-checked on reuse
 // of the memo.
-func (b *Builder) checkPrivilege(
-	origName *cat.DataSourceName, ds cat.DataSource, priv privilege.Kind,
-) {
+func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
 		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
 		if err != nil {
@@ -502,5 +500,5 @@ func (b *Builder) checkPrivilege(
 
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
-	b.factory.Metadata().AddDependency(origName, ds, priv)
+	b.factory.Metadata().AddDependency(name, ds, priv)
 }
