@@ -2610,7 +2610,7 @@ func goToCTimestamp(ts hlc.Timestamp) C.DBTimestamp {
 func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
 	var r C.DBTxn
 	if txn != nil {
-		r.id = goToCSlice(txn.ID.GetBytes())
+		r.id = goToCSlice(txn.ID.GetBytesMut())
 		r.epoch = C.uint32_t(txn.Epoch)
 		r.sequence = C.int32_t(txn.Sequence)
 		r.max_timestamp = goToCTimestamp(txn.MaxTimestamp)

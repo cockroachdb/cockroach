@@ -43,9 +43,19 @@ func (u UUID) Equal(t UUID) bool {
 	return u == t
 }
 
-// GetBytes returns the UUID as a byte slice.
+// GetBytes returns the UUID as a byte slice. It incurs an allocation if
+// the return value escapes.
 func (u UUID) GetBytes() []byte {
 	return u.bytes()
+}
+
+// GetBytesMut returns the UUID as a mutable byte slice. Unlike GetBytes,
+// it does not necessarily incur an allocation if the return value escapes.
+// Instead, the return value escaping will cause the method's receiver (and
+// any struct that it is a part of) to escape. Use only if GetBytes is causing
+// an allocation and the UUID is already on the heap.
+func (u *UUID) GetBytesMut() []byte {
+	return u.bytesMut()
 }
 
 // ToUint128 returns the UUID as a Uint128.
