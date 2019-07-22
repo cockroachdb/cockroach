@@ -688,6 +688,12 @@ func (*ShowIndexes) StatementType() StatementType { return Rows }
 func (*ShowIndexes) StatementTag() string { return "SHOW INDEXES FROM TABLE" }
 
 // StatementType implements the Statement interface.
+func (*ShowPartitions) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of the statement.
+func (*ShowPartitions) StatementTag() string { return "SHOW PARTITIONS" }
+
+// StatementType implements the Statement interface.
 func (*ShowQueries) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -917,6 +923,7 @@ func (n *ShowDatabaseIndexes) String() string       { return AsString(n) }
 func (n *ShowGrants) String() string                { return AsString(n) }
 func (n *ShowHistogram) String() string             { return AsString(n) }
 func (n *ShowIndexes) String() string               { return AsString(n) }
+func (n *ShowPartitions) String() string            { return AsString(n) }
 func (n *ShowJobs) String() string                  { return AsString(n) }
 func (n *ShowQueries) String() string               { return AsString(n) }
 func (n *ShowRanges) String() string                { return AsString(n) }

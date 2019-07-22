@@ -7,6 +7,7 @@ show_stmt ::=
 	| show_databases_stmt
 	| show_grants_stmt
 	| show_indexes_stmt
+	| show_partitions_stmt
 	| show_jobs_stmt
 	| show_queries_stmt
 	| show_ranges_stmt

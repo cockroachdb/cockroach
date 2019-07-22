@@ -1,9 +1,9 @@
 # LogicTest: local
 
-query IITTI colnames
+query IITTITTT colnames
 SELECT * FROM crdb_internal.partitions
 ----
-table_id  index_id  parent_name  name  columns
+table_id  index_id  parent_name  name  columns column_names list_value range_value
 
 statement ok
 CREATE TABLE t1 (
@@ -33,16 +33,16 @@ CREATE table t2 (a STRING PRIMARY KEY) PARTITION BY LIST (a) (
   PARTITION pfoo VALUES IN ('foo')
 )
 
-query IITTI
+query IITTITTT
 SELECT * FROM crdb_internal.partitions ORDER BY table_id, index_id, name
 ----
-53  1  NULL   p12      1
-53  1  p12    p12p3    1
-53  1  p12p3  p12p3p8  1
-53  1  NULL   p6       1
-53  1  p6     p6p7     1
-53  1  p6     p6p8     1
-53  1  p6     p6px     1
-53  1  p12    pd       1
-53  2  NULL   p00      2
-54  1  NULL   pfoo     1
+53  1  NULL   p12      1  a    (1), (2)   NULL
+53  1  p12    p12p3    1  b    (3)        NULL
+53  1  p12p3  p12p3p8  1  c    (8)        NULL
+53  1  NULL   p6       1  a    (6)        NULL
+53  1  p6     p6p7     1  b    NULL       (MINVALUE) TO (7)
+53  1  p6     p6p8     1  b    NULL       (7) TO (8)
+53  1  p6     p6px     1  b    NULL       (8) TO (MAXVALUE)
+53  1  p12    pd       1  b    (DEFAULT)  NULL
+53  2  NULL   p00      2  a, b (0, 0)     NULL
+54  1  NULL   pfoo     1  a    ('foo')    NULL
