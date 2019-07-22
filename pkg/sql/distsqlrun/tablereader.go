@@ -34,6 +34,20 @@ import (
 // of these scans.
 const ParallelScanResultThreshold = 10000
 
+func scanShouldLimitBatches(maxResults uint64, limitHint int64, flowCtx *FlowCtx) bool {
+	// We don't limit batches if the scan doesn't have a limit, and if the
+	// spans scanned will return less than the ParallelScanResultThreshold.
+	// This enables distsender parallelism - if we limit batches, distsender
+	// does *not* parallelize multi-range scan requests.
+	if maxResults != 0 &&
+		maxResults < ParallelScanResultThreshold &&
+		limitHint == 0 &&
+		sqlbase.ParallelScans.Get(&flowCtx.Settings.SV) {
+		return false
+	}
+	return true
+}
+
 // tableReader is the start of a computation flow; it performs KV operations to
 // retrieve rows for a table, runs a filter expression, and passes rows with the
 // desired column values to an output RowReceiver.
@@ -207,18 +221,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	// This call doesn't do much; the real "starting" is below.
 	tr.fetcher.Start(fetcherCtx)
-
-	limitBatches := true
-	// We turn off limited batches if we know we have no limit and if the
-	// tableReader spans will return less than the ParallelScanResultThreshold.
-	// This enables distsender parallelism - if limitBatches is true, distsender
-	// does *not* parallelize multi-range scan requests.
-	if tr.maxResults != 0 &&
-		tr.maxResults < ParallelScanResultThreshold &&
-		tr.limitHint == 0 &&
-		sqlbase.ParallelScans.Get(&tr.flowCtx.Settings.SV) {
-		limitBatches = false
-	}
+	limitBatches := scanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.flowCtx)
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
