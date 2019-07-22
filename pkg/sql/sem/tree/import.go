@@ -46,6 +46,8 @@ func (node *Import) Format(ctx *FmtCtx) {
 				ctx.WriteByte('(')
 				ctx.FormatNode(&node.IntoCols)
 				ctx.WriteString(") ")
+			} else {
+				ctx.WriteString(" ")
 			}
 		} else {
 			ctx.WriteString("TABLE ")
