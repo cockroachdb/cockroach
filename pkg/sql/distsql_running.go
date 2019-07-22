@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -683,7 +684,16 @@ func (r *DistSQLReceiver) Push(
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	// Note that AddRow accounts for the memory used by the Datums.
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
-		r.commErr = commErr
+		// We don't need to shut down the connection
+		// if there's a portal-related error. This is
+		// definitely a layering violation, but is part
+		// of some accepted technical debt (see comments on
+		// sql/pgwire.limitedCommandResult.moreResultsNeeded). Instead
+		// of changing the signature of AddRow, we have a sentinel
+		// error that is handled specially here.
+		if !errors.Is(commErr, LimitedResultErr) {
+			r.commErr = commErr
+		}
 		// Set the error on the resultWriter too, for the convenience of some of the
 		// clients. If clients don't care to differentiate between communication
 		// errors and query execution errors, they can simply inspect
@@ -699,6 +709,10 @@ func (r *DistSQLReceiver) Push(
 	}
 	return r.status
 }
+
+// LimitedResultErr is an error produced by pgwire indicating an unsupported
+// feature of row count limits was attempted.
+var LimitedResultErr = unimplemented.NewWithIssue(4035, "execute row count limits not supported")
 
 // ProducerDone is part of the RowReceiver interface.
 func (r *DistSQLReceiver) ProducerDone() {

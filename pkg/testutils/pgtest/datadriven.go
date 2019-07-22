@@ -88,7 +88,6 @@ func RunTest(t *testing.T, path, addr, user string) {
 	if err := p.Close(); err != nil {
 		t.Fatal(err)
 	}
-
 }
 
 func parseMessages(s string) []pgproto3.BackendMessage {
@@ -157,6 +156,8 @@ func toMessage(typ string) interface{} {
 		return &pgproto3.Execute{}
 	case "Parse":
 		return &pgproto3.Parse{}
+	case "PortalSuspended":
+		return &pgproto3.PortalSuspended{}
 	case "Query":
 		return &pgproto3.Query{}
 	case "ReadyForQuery":
@@ -164,6 +165,6 @@ func toMessage(typ string) interface{} {
 	case "Sync":
 		return &pgproto3.Sync{}
 	default:
-		panic(fmt.Errorf("unknown type %s", typ))
+		panic(fmt.Errorf("unknown type %q", typ))
 	}
 }

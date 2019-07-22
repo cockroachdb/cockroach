@@ -59,10 +59,10 @@ const (
 //
 // The buffer is supposed to be used by one reader and one writer. The writer
 // adds commands to the buffer using Push(). The reader reads one command at a
-// time using curCmd(). The consumer is then supposed to create command results
+// time using CurCmd(). The consumer is then supposed to create command results
 // (the buffer is not involved in this).
 // The buffer internally maintains a cursor representing the reader's position.
-// The reader has to manually move the cursor using advanceOne(),
+// The reader has to manually move the cursor using AdvanceOne(),
 // seekToNextBatch() and rewind().
 // In practice, the writer is a module responsible for communicating with a SQL
 // client (i.e. pgwire.conn) and the reader is a connExecutor.
@@ -76,7 +76,7 @@ const (
 // queries as part of the "simple" protocol), or to different commands pipelined
 // by the cliend, separated from "sync" messages.
 //
-// push() can be called concurrently with curCmd().
+// push() can be called concurrently with CurCmd().
 //
 // The connExecutor will use the buffer to maintain a window around the
 // command it is currently executing. It will maintain enough history for
@@ -101,7 +101,7 @@ type StmtBuf struct {
 		startPos CmdPos
 		// curPos is the current position of the cursor going through the commands.
 		// At any time, curPos indicates the position of the command to be returned
-		// by curCmd().
+		// by CurCmd().
 		curPos CmdPos
 		// lastPos indicates the position of the last command that was pushed into
 		// the buffer.
@@ -376,8 +376,8 @@ func (buf *StmtBuf) Init() {
 }
 
 // Close marks the buffer as closed. Once Close() is called, no further push()es
-// are allowed. If a reader is blocked on a curCmd() call, it is unblocked with
-// io.EOF. Any further curCmd() call also returns io.EOF (even if some
+// are allowed. If a reader is blocked on a CurCmd() call, it is unblocked with
+// io.EOF. Any further CurCmd() call also returns io.EOF (even if some
 // commands were already available in the buffer before the Close()).
 //
 // Close() is idempotent.
@@ -388,7 +388,7 @@ func (buf *StmtBuf) Close() {
 	buf.mu.Unlock()
 }
 
-// Push adds a Command to the end of the buffer. If a curCmd() call was blocked
+// Push adds a Command to the end of the buffer. If a CurCmd() call was blocked
 // waiting for this command to arrive, it will be woken up.
 //
 // An error is returned if the buffer has been closed.
@@ -405,7 +405,7 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 	return nil
 }
 
-// curCmd returns the Command currently indicated by the cursor. Besides the
+// CurCmd returns the Command currently indicated by the cursor. Besides the
 // Command itself, the command's position is also returned; the position can be
 // used to later rewind() to this Command.
 //
@@ -414,7 +414,7 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 //
 // If the buffer has previously been Close()d, or is closed while this is
 // blocked, io.EOF is returned.
-func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
+func (buf *StmtBuf) CurCmd() (Command, CmdPos, error) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	for {
@@ -479,9 +479,9 @@ func (buf *StmtBuf) ltrim(ctx context.Context, pos CmdPos) {
 	}
 }
 
-// advanceOne advances the cursor one Command over. The command over which the
+// AdvanceOne advances the cursor one Command over. The command over which the
 // cursor will be positioned when this returns may not be in the buffer yet.
-func (buf *StmtBuf) advanceOne() {
+func (buf *StmtBuf) AdvanceOne() {
 	buf.mu.Lock()
 	buf.mu.curPos++
 	buf.mu.Unlock()
@@ -514,8 +514,8 @@ func (buf *StmtBuf) seekToNextBatch() error {
 
 	var foundSync bool
 	for !foundSync {
-		buf.advanceOne()
-		_, pos, err := buf.curCmd()
+		buf.AdvanceOne()
+		_, pos, err := buf.CurCmd()
 		if err != nil {
 			return err
 		}
@@ -580,6 +580,9 @@ type ClientComm interface {
 		pos CmdPos,
 		formatCodes []pgwirebase.FormatCode,
 		conv sessiondata.DataConversionConfig,
+		limit int,
+		portalName string,
+		implicitTxn bool,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult
@@ -623,12 +626,6 @@ type ClientComm interface {
 type CommandResult interface {
 	RestrictedCommandResult
 	CommandResultClose
-
-	// SetLimit is used when executing a portal to set a limit on the number of
-	// rows to be returned. We don't currently properly support this feature of
-	// the Postgres protocol; instead, we'll return an error if the number of rows
-	// produced is larger than this limit.
-	SetLimit(n int)
 }
 
 // CommandResultErrBase is the subset of CommandResult dealing with setting a
@@ -910,13 +907,6 @@ func (r *bufferedCommandResult) IncrementRowsAffected(n int) {
 // RowsAffected is part of the RestrictedCommandResult interface.
 func (r *bufferedCommandResult) RowsAffected() int {
 	return r.rowsAffected
-}
-
-// SetLimit is part of the CommandResult interface.
-func (r *bufferedCommandResult) SetLimit(limit int) {
-	if limit != 0 {
-		panic("unimplemented")
-	}
 }
 
 // Close is part of the CommandResult interface.
