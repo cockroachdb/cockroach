@@ -53,7 +53,13 @@ type aggregateFunc interface {
 
 	// Compute computes the aggregation on the input batch. A zero-length input
 	// batch tells the aggregate function that it should flush its results.
-	Compute(batch coldata.Batch, inputIdxs []uint32)
+	//
+	// isScalar indicates whether an aggregate function is computed in scalar
+	// context. It matters in the case of an empty input - when GROUP BY is
+	// omitted, we're in scalar context and need to emit nulls or zeroes
+	// (depending on the function), but when GROUP BY is present, we're in
+	// non-scalar context and need to emit no output.
+	Compute(batch coldata.Batch, inputIdxs []uint32, isScalar bool)
 }
 
 // orderedAggregator is an aggregator that performs arbitrary aggregations on
@@ -103,6 +109,8 @@ type orderedAggregator struct {
 	groupCol []bool
 	// aggregateFuncs are the aggregator's aggregate function operators.
 	aggregateFuncs []aggregateFunc
+	// isScalar indicates whether an aggregator is in scalar context.
+	isScalar bool
 }
 
 var _ Operator = &orderedAggregator{}
@@ -118,6 +126,7 @@ func NewOrderedAggregator(
 	aggFns []distsqlpb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
+	isScalar bool,
 ) (Operator, error) {
 	if len(aggFns) != len(aggCols) {
 		return nil,
@@ -162,6 +171,7 @@ func NewOrderedAggregator(
 		aggCols:  aggCols,
 		aggTypes: aggTypes,
 		groupCol: groupCol,
+		isScalar: isScalar,
 	}
 
 	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(aggTypes, aggFns)
@@ -274,7 +284,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	for a.scratch.resumeIdx < a.scratch.outputSize {
 		batch := a.input.Next(ctx)
 		for i, fn := range a.aggregateFuncs {
-			fn.Compute(batch, a.aggCols[i])
+			fn.Compute(batch, a.aggCols[i], a.isScalar)
 		}
 		a.scratch.resumeIdx = a.aggregateFuncs[0].CurrentOutputIndex()
 		if batch.Length() == 0 {
