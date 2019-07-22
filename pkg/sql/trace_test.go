@@ -57,6 +57,12 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
 					t.Fatal(err)
 				}
+
+				// This test is specific to distsql execution.
+				if _, err := sqlDB.Exec("SET experimental_vectorize = off"); err != nil {
+					t.Fatal(err)
+				}
+
 				// Run some query with session tracing enabled.
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
@@ -82,6 +88,11 @@ func TestTrace(t *testing.T) {
 			name: "SessionDistSQL",
 			getRows: func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
 				if _, err := sqlDB.Exec("SET distsql = on"); err != nil {
+					t.Fatal(err)
+				}
+
+				// This test is specific to distsql execution.
+				if _, err := sqlDB.Exec("SET experimental_vectorize = off"); err != nil {
 					t.Fatal(err)
 				}
 
@@ -143,6 +154,12 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
 					t.Fatal(err)
 				}
+
+				// This test is specific to distsql execution.
+				if _, err := sqlDB.Exec("SET experimental_vectorize = off"); err != nil {
+					t.Fatal(err)
+				}
+
 				// TODO(justin): remove this and make sure the new results make sense.
 				// The optimizer elides some renders that the heuristic planner does
 				// not which makes the results different.
@@ -174,6 +191,12 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET distsql = on"); err != nil {
 					t.Fatal(err)
 				}
+
+				// This test is specific to distsql execution.
+				if _, err := sqlDB.Exec("SET experimental_vectorize = off"); err != nil {
+					t.Fatal(err)
+				}
+
 				// TODO(justin): remove this and make sure the new results make sense.
 				// The optimizer elides some renders that the heuristic planner does
 				// not which makes the results different.
