@@ -16,6 +16,20 @@ import (
 	"strings"
 )
 
+// ReplicaTypeVoter returns a ReplicaType_VOTER pointer suitable for use in a
+// nullable proto field.
+func ReplicaTypeVoter() *ReplicaType {
+	t := ReplicaType_VOTER
+	return &t
+}
+
+// ReplicaTypeLearner returns a ReplicaType_LEARNER pointer suitable for use in
+// a nullable proto field.
+func ReplicaTypeLearner() *ReplicaType {
+	t := ReplicaType_LEARNER
+	return &t
+}
+
 // ReplicaDescriptors is a set of replicas, usually the nodes/stores on which
 // replicas of a range are stored.
 type ReplicaDescriptors struct {

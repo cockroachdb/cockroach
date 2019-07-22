@@ -16,13 +16,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newReplicaType(t ReplicaType) *ReplicaType {
-	return &t
-}
-
 func TestVotersLearnersAll(t *testing.T) {
-	voter := newReplicaType(ReplicaType_VOTER)
-	learner := newReplicaType(ReplicaType_LEARNER)
+	voter := ReplicaTypeVoter()
+	learner := ReplicaTypeLearner()
 	tests := [][]ReplicaDescriptor{
 		{},
 		{{Type: voter}},
@@ -71,7 +67,7 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 				{NodeID: 1, StoreID: 1},
 				{NodeID: 2, StoreID: 2},
 				{NodeID: 3, StoreID: 3},
-				{NodeID: 4, StoreID: 4, Type: newReplicaType(ReplicaType_LEARNER)},
+				{NodeID: 4, StoreID: 4, Type: ReplicaTypeLearner()},
 			},
 			remove:   ReplicationTarget{NodeID: 2, StoreID: 2},
 			expected: true,
