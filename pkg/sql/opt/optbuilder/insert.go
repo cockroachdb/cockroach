@@ -173,12 +173,12 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	if ins.OnConflict != nil {
 		// UPSERT and INDEX ON CONFLICT will read from the table to check for
 		// duplicates.
-		b.checkPrivilege(tn, tab, privilege.SELECT)
+		b.checkPrivilege(opt.DepByName(tn), tab, privilege.SELECT)
 
 		if !ins.OnConflict.DoNothing {
 			// UPSERT and INDEX ON CONFLICT DO UPDATE may modify rows if the
 			// DO NOTHING clause is not present.
-			b.checkPrivilege(tn, tab, privilege.UPDATE)
+			b.checkPrivilege(opt.DepByName(tn), tab, privilege.UPDATE)
 		}
 	}
 
