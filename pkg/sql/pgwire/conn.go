@@ -74,6 +74,9 @@ type conn struct {
 	// stmtBuf is populated with commands queued for execution by this conn.
 	stmtBuf sql.StmtBuf
 
+	// res is used to avoid allocations in the conn's ClientComm implementation.
+	res commandResult
+
 	// err is an error, accessed atomically. It represents any error encountered
 	// while accessing the underlying network connection. This can read via
 	// GetErr() by anybody. If it is found to be != nil, the conn is no longer to
@@ -176,6 +179,7 @@ func newConn(
 		sv:          sv,
 	}
 	c.stmtBuf.Init()
+	c.res.released = true
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
 	c.writerState.fi.cmdStarts = make(map[sql.CmdPos]int)
@@ -1361,69 +1365,59 @@ func (c *conn) CreateStatementResult(
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
 ) sql.CommandResult {
-	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, conv)
-	return &res
+	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv)
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.
 func (c *conn) CreateSyncResult(pos sql.CmdPos) sql.SyncResult {
-	res := c.makeMiscResult(pos, readyForQuery)
-	return &res
+	return c.newMiscResult(pos, readyForQuery)
 }
 
 // CreateFlushResult is part of the sql.ClientComm interface.
 func (c *conn) CreateFlushResult(pos sql.CmdPos) sql.FlushResult {
-	res := c.makeMiscResult(pos, flush)
-	return &res
+	return c.newMiscResult(pos, flush)
 }
 
 // CreateDrainResult is part of the sql.ClientComm interface.
 func (c *conn) CreateDrainResult(pos sql.CmdPos) sql.DrainResult {
-	res := c.makeMiscResult(pos, noCompletionMsg)
-	return &res
+	return c.newMiscResult(pos, noCompletionMsg)
 }
 
 // CreateBindResult is part of the sql.ClientComm interface.
 func (c *conn) CreateBindResult(pos sql.CmdPos) sql.BindResult {
-	res := c.makeMiscResult(pos, bindComplete)
-	return &res
+	return c.newMiscResult(pos, bindComplete)
 }
 
 // CreatePrepareResult is part of the sql.ClientComm interface.
 func (c *conn) CreatePrepareResult(pos sql.CmdPos) sql.ParseResult {
-	res := c.makeMiscResult(pos, parseComplete)
-	return &res
+	return c.newMiscResult(pos, parseComplete)
 }
 
 // CreateDescribeResult is part of the sql.ClientComm interface.
 func (c *conn) CreateDescribeResult(pos sql.CmdPos) sql.DescribeResult {
-	res := c.makeMiscResult(pos, noCompletionMsg)
-	return &res
+	return c.newMiscResult(pos, noCompletionMsg)
 }
 
 // CreateEmptyQueryResult is part of the sql.ClientComm interface.
 func (c *conn) CreateEmptyQueryResult(pos sql.CmdPos) sql.EmptyQueryResult {
-	res := c.makeMiscResult(pos, emptyQueryResponse)
-	return &res
+	return c.newMiscResult(pos, emptyQueryResponse)
 }
 
 // CreateDeleteResult is part of the sql.ClientComm interface.
 func (c *conn) CreateDeleteResult(pos sql.CmdPos) sql.DeleteResult {
-	res := c.makeMiscResult(pos, closeComplete)
-	return &res
+	return c.newMiscResult(pos, closeComplete)
 }
 
 // CreateErrorResult is part of the sql.ClientComm interface.
 func (c *conn) CreateErrorResult(pos sql.CmdPos) sql.ErrorResult {
-	res := c.makeMiscResult(pos, noCompletionMsg)
+	res := c.newMiscResult(pos, noCompletionMsg)
 	res.errExpected = true
-	return &res
+	return res
 }
 
 // CreateCopyInResult is part of the sql.ClientComm interface.
 func (c *conn) CreateCopyInResult(pos sql.CmdPos) sql.CopyInResult {
-	res := c.makeMiscResult(pos, noCompletionMsg)
-	return &res
+	return c.newMiscResult(pos, noCompletionMsg)
 }
 
 // pgwireReader is an io.Reader that wraps a conn, maintaining its metrics as
