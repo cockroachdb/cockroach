@@ -133,7 +133,7 @@ func (p *planner) newUpsertNode(
 		// below.
 		updateExprs = newUpdateExprs
 
-		// We use ensureColumns = false in processColumns, because
+		// We use ensureColumns = false in ProcessTargetColumns, because
 		// updateCols may be legitimately empty (when there is no DO
 		// UPDATE clause).
 		//

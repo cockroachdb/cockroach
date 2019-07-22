@@ -268,9 +268,14 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var singleTable *sqlbase.TableDescriptor
+	var singleTableTargetCols tree.NameList
 	if len(cp.spec.Tables) == 1 {
 		for _, table := range cp.spec.Tables {
-			singleTable = table
+			singleTable = table.Desc
+			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
+			for i, colName := range table.TargetCols {
+				singleTableTargetCols[i] = tree.Name(colName)
+			}
 		}
 	}
 
@@ -292,7 +297,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		if isWorkload {
 			conv = newWorkloadReader(kvCh, singleTable, evalCtx)
 		} else {
-			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, evalCtx)
+			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, singleTableTargetCols, evalCtx)
 		}
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
@@ -350,7 +355,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 
 	if cp.spec.IngestDirectly {
 		for _, tbl := range cp.spec.Tables {
-			for _, span := range tbl.AllIndexSpans() {
+			for _, span := range tbl.Desc.AllIndexSpans() {
 				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
 					return err
 				}

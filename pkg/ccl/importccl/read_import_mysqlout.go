@@ -36,7 +36,7 @@ func newMysqloutfileReader(
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*mysqloutfileReader, error) {
-	conv, err := row.NewDatumRowConverter(tableDesc, evalCtx, kvCh)
+	conv, err := row.NewDatumRowConverter(tableDesc, nil /* targetColNames */, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}

@@ -231,7 +231,7 @@ func NewWorkloadKVConverter(
 func (w *WorkloadKVConverter) Worker(
 	ctx context.Context, evalCtx *tree.EvalContext, finishedBatchFn func(),
 ) error {
-	conv, err := row.NewDatumRowConverter(w.tableDesc, evalCtx, w.kvCh)
+	conv, err := row.NewDatumRowConverter(w.tableDesc, nil /* targetColNames */, evalCtx, w.kvCh)
 	if err != nil {
 		return err
 	}
