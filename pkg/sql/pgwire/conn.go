@@ -1357,6 +1357,19 @@ func (cl *clientConnLock) RTrim(ctx context.Context, pos sql.CmdPos) {
 	}
 }
 
+func (c *conn) allocCommandResult() *commandResult {
+	r := &c.res
+	if r.released {
+		r.released = false
+	} else {
+		// In practice, each conn only ever uses a single commandResult at a
+		// time, so we could make this panic. However, doing so would entail
+		// complicating the ClientComm interface, which doesn't seem worth it.
+		r = new(commandResult)
+	}
+	return r
+}
+
 // CreateStatementResult is part of the sql.ClientComm interface.
 func (c *conn) CreateStatementResult(
 	stmt tree.Statement,
@@ -1365,7 +1378,28 @@ func (c *conn) CreateStatementResult(
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
 ) sql.CommandResult {
-	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv)
+	r := c.allocCommandResult()
+	*r = commandResult{
+		conn:           c,
+		conv:           conv,
+		pos:            pos,
+		typ:            commandComplete,
+		cmdCompleteTag: stmt.StatementTag(),
+		stmtType:       stmt.StatementType(),
+		descOpt:        descOpt,
+		formatCodes:    formatCodes,
+	}
+	return r
+}
+
+func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResult {
+	r := c.allocCommandResult()
+	*r = commandResult{
+		conn: c,
+		pos:  pos,
+		typ:  typ,
+	}
+	return r
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.
