@@ -62,6 +62,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.Start(ctx)
 
 	for i := 0; i < nRows; i++ {
 		row, meta := m.Next()
@@ -146,6 +147,7 @@ func TestMaterializeTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.Start(ctx)
 
 	row, meta := m.Next()
 	if meta != nil {
@@ -199,6 +201,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+		m.Start(ctx)
 
 		foundRows := 0
 		for {

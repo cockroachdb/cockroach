@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -33,6 +34,7 @@ type columnarizer struct {
 	batch           coldata.Batch
 	accumulatedMeta []distsqlpb.ProducerMetadata
 	ctx             context.Context
+	typs            []types.T
 }
 
 var _ exec.Operator = &columnarizer{}
@@ -42,11 +44,12 @@ var _ exec.StaticMemoryOperator = &columnarizer{}
 func newColumnarizer(
 	ctx context.Context, flowCtx *FlowCtx, processorID int32, input RowSource,
 ) (*columnarizer, error) {
+	var err error
 	c := &columnarizer{
 		input: input,
 		ctx:   ctx,
 	}
-	if err := c.ProcessorBase.Init(
+	if err = c.ProcessorBase.Init(
 		nil,
 		&distsqlpb.PostProcessSpec{},
 		input.OutputTypes(),
@@ -58,21 +61,20 @@ func newColumnarizer(
 	); err != nil {
 		return nil, err
 	}
-	c.Init()
+	c.typs, err = conv.FromColumnTypes(c.OutputTypes())
 
-	return c, nil
+	return c, err
 }
 
 func (c *columnarizer) EstimateStaticMemoryUsage() int {
-	return exec.EstimateBatchSizeBytes(conv.FromColumnTypes(c.OutputTypes()), coldata.BatchSize)
+	return exec.EstimateBatchSizeBytes(c.typs, coldata.BatchSize)
 }
 
 func (c *columnarizer) Init() {
-	typs := conv.FromColumnTypes(c.OutputTypes())
-	c.batch = coldata.NewMemBatch(typs)
+	c.batch = coldata.NewMemBatch(c.typs)
 	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize)
 	for i := range c.buffered {
-		c.buffered[i] = make(sqlbase.EncDatumRow, len(typs))
+		c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
 	}
 	c.accumulatedMeta = make([]distsqlpb.ProducerMetadata, 0, 1)
 	c.input.Start(c.ctx)

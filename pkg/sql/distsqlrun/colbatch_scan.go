@@ -64,7 +64,7 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 func (s *colBatchScan) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !s.flowCtx.local {
-		ranges := misplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.nodeID)
+		ranges := misplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.NodeID)
 		if ranges != nil {
 			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
 		}
@@ -79,7 +79,7 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetada
 func newColBatchScan(
 	flowCtx *FlowCtx, spec *distsqlpb.TableReaderSpec, post *distsqlpb.PostProcessSpec,
 ) (*colBatchScan, error) {
-	if flowCtx.nodeID == 0 {
+	if flowCtx.NodeID == 0 {
 		return nil, errors.Errorf("attempting to create a colBatchScan with uninitialized NodeID")
 	}
 
