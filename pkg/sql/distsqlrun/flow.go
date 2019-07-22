@@ -85,7 +85,7 @@ type FlowCtx struct {
 
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.
-	nodeID       roachpb.NodeID
+	NodeID       roachpb.NodeID
 	testingKnobs TestingKnobs
 
 	// TempStorage is used by some DistSQL processors to store Rows when the
@@ -499,6 +499,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 	f.spec = spec
 
 	if f.EvalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
+		log.VEventf(ctx, 1, "attempting to vectorize flow %d with setting %s", f.id, f.EvalCtx.SessionData.Vectorize)
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
 		err := f.setupVectorized(ctx, f.vectorizedBoundAccount)
@@ -507,7 +508,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 			return nil
 		}
 		// Vectorization attempt failed with an error.
-		if f.spec.Gateway != f.nodeID {
+		if f.spec.Gateway != f.NodeID {
 			// If we are not the gateway node, do not attempt to plan this with the
 			// row execution branch since there is no way to tell whether vectorized
 			// planning will succeed on any other node. Notify the gateway by
@@ -534,7 +535,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 				rsidx := spec.Processors[0].Core.LocalPlanNode.RowSourceIdx
 				if rsidx != nil {
 					lp := f.localProcessors[*rsidx]
-					if z, ok := lp.(vectorizeAlwaysException); ok {
+					if z, ok := lp.(VectorizeAlwaysException); ok {
 						isException = z.IsException()
 					}
 				}
