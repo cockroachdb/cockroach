@@ -594,6 +594,17 @@ func (s *Store) receiveSnapshot(
 		}
 	}
 
+	// Defensive check that any non-preemptive snapshot contains this store in the
+	// descriptor.
+	if !header.IsPreemptive() {
+		storeID := s.StoreID()
+		if _, ok := header.State.Desc.GetReplicaDescriptor(storeID); !ok {
+			return crdberrors.AssertionFailedf(
+				`snapshot of type %s was sent to s%d which did not contain it as a replica: %s`,
+				header.Type, storeID, header.State.Desc.Replicas())
+		}
+	}
+
 	cleanup, rejectionMsg, err := s.reserveSnapshot(ctx, header)
 	if err != nil {
 		return err

@@ -109,8 +109,8 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // - Learner replicas cannot become raft leaders, so we also don't allow them to
 //   become leaseholders. As a result, DistSender and the various oracles don't
 //   try to send them traffic.
-// - The raft snapshot queue does not send snapshots to learners for reasons
-//   described below.
+// - The raft snapshot queue tries to avoid sending snapshots to learners for
+//   reasons described below.
 // - Merges won't run while a learner replica is present.
 //
 // Replicas are now added in two ConfChange transactions. The first creates the
@@ -135,7 +135,19 @@ func (d ReplicaDescriptors) Voters() []ReplicaDescriptor {
 // There is another race between the learner snapshot being sent and the raft
 // snapshot queue happening to check the replica at the same time, also sending
 // it a snapshot. This is safe but wasteful, so the raft snapshot queue won't
-// try to send snapshots to learners.
+// try to send snapshots to learners if there is already a snapshot to that
+// range in flight.
+//
+// *However*, raft is currently pickier than the needs to be about the snapshots
+// it requests and it can get stuck in StateSnapshot if it doesn't receive
+// exactly the index it wants. As a result, for now, the raft snapshot queue
+// will send one if it's still needed after the learner snapshot finishes (or
+// times out). To make this work in a timely manner (without relying on the
+// replica scanner) but without blocking the raft snapshot queue, when a
+// snapshot is skipped, this is reported to raft as an error sending the
+// snapshot. This causes raft to re-enqueue it in the raft snapshot queue. All
+// of this is quite hard to reason about, so it'd be nice to make this go away
+// at some point.
 //
 // Merges are blocked if either side has a learner (to avoid working out the
 // edge cases) but it's historically turned out to be a bad idea to get in the
