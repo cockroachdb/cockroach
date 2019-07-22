@@ -80,7 +80,7 @@ func ErrPriority(err error) ErrorPriority {
 	}
 	switch v := err.(type) {
 	case *UnhandledRetryableError:
-		if _, ok := v.PErr.GetDetail().(*TransactionAbortedError); ok {
+		if isTxnAbortedDetail(v.PErr.GetDetail()) {
 			return ErrorScoreTxnAbort
 		}
 		return ErrorScoreTxnRestart
@@ -91,6 +91,17 @@ func ErrPriority(err error) ErrorPriority {
 		return ErrorScoreTxnRestart
 	}
 	return ErrorScoreNonRetriable
+}
+
+func isTxnAbortedDetail(err error) bool {
+	switch v := err.(type) {
+	case *TransactionAbortedError:
+		return true
+	case *MixedSuccessError:
+		return isTxnAbortedDetail(v.GetWrapped())
+	default:
+		return false
+	}
 }
 
 // NewError creates an Error from the given error.
@@ -180,14 +191,15 @@ func (e *Error) SetDetail(err error) {
 		} else {
 			e.Message = err.Error()
 		}
-		var isTxnError bool
 		if r, ok := err.(transactionRestartError); ok {
-			isTxnError = true
 			e.TransactionRestart = r.canRestartTransaction()
+		} else {
+			e.TransactionRestart = TransactionRestart_NONE
 		}
 		// If the specific error type exists in the detail union, set it.
 		if !e.Detail.SetInner(err) {
-			if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
+			_, isInternalError := err.(*internalError)
+			if !isInternalError && e.TransactionRestart != TransactionRestart_NONE {
 				panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
 			}
 		}
@@ -207,29 +219,15 @@ func (e *Error) GetDetail() ErrorDetailInterface {
 	return (*internalError)(e)
 }
 
-// SetTxn sets the txn and resets the error message. txn is cloned before being
-// stored in the Error.
+// SetTxn sets the error transaction and resets the error message.
+// The argument is cloned before being stored in the Error.
 func (e *Error) SetTxn(txn *Transaction) {
-	e.UnexposedTxn = txn
-	if txn != nil {
-		e.UnexposedTxn = txn.Clone()
-	}
-	if sErr, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
-		// Refresh the message as the txn is updated.
-		e.Message = sErr.message(e)
-	}
-	e.checkTxnStatusValid()
+	e.UnexposedTxn = nil
+	e.UpdateTxn(txn)
 }
 
-// GetTxn returns the txn.
-func (e *Error) GetTxn() *Transaction {
-	if e == nil {
-		return nil
-	}
-	return e.UnexposedTxn
-}
-
-// UpdateTxn updates the error transaction.
+// UpdateTxn updates the error transaction and resets the error message.
+// The argument is cloned before being stored in the Error.
 func (e *Error) UpdateTxn(o *Transaction) {
 	if o == nil {
 		return
@@ -239,23 +237,38 @@ func (e *Error) UpdateTxn(o *Transaction) {
 	} else {
 		e.UnexposedTxn.Update(o)
 	}
+	if sErr, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
+		// Refresh the message as the txn is updated.
+		e.Message = sErr.message(e)
+	}
 	e.checkTxnStatusValid()
 }
 
 // checkTxnStatusValid verifies that the transaction status is in-sync with the
 // error detail.
 func (e *Error) checkTxnStatusValid() {
-	if e.UnexposedTxn == nil {
+	txn := e.UnexposedTxn
+	err := e.Detail.GetInner()
+	if txn == nil {
 		return
 	}
-	txnStatus := e.UnexposedTxn.Status
-	if r, ok := e.Detail.GetInner().(transactionRestartError); !ok {
+	if e.TransactionRestart == TransactionRestart_NONE {
 		return
-	} else if _, ok := r.(*TransactionAbortedError); !ok {
-		if txnStatus.IsFinalized() {
-			log.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", r, e)
-		}
 	}
+	if isTxnAbortedDetail(err) {
+		return
+	}
+	if txn.Status.IsFinalized() {
+		log.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", err, e)
+	}
+}
+
+// GetTxn returns the txn.
+func (e *Error) GetTxn() *Transaction {
+	if e == nil {
+		return nil
+	}
+	return e.UnexposedTxn
 }
 
 // SetErrorIndex sets the index of the error.
@@ -465,12 +478,12 @@ func (e *TransactionPushError) message(pErr *Error) string {
 	return fmt.Sprintf("txn %s %s", pErr.GetTxn(), s)
 }
 
-var _ ErrorDetailInterface = &TransactionPushError{}
-var _ transactionRestartError = &TransactionPushError{}
-
 func (*TransactionPushError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
+
+var _ ErrorDetailInterface = &TransactionPushError{}
+var _ transactionRestartError = &TransactionPushError{}
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
 func NewTransactionRetryError(
@@ -490,12 +503,12 @@ func (e *TransactionRetryError) message(pErr *Error) string {
 	return fmt.Sprintf("%s: %s", e.Error(), pErr.GetTxn())
 }
 
-var _ ErrorDetailInterface = &TransactionRetryError{}
-var _ transactionRestartError = &TransactionRetryError{}
-
 func (*TransactionRetryError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
+
+var _ ErrorDetailInterface = &TransactionRetryError{}
+var _ transactionRestartError = &TransactionRetryError{}
 
 // NewTransactionStatusError initializes a new TransactionStatusError from
 // the given message.
@@ -573,12 +586,12 @@ func (e *WriteTooOldError) message(_ *Error) string {
 		e.Timestamp, e.ActualTimestamp)
 }
 
-var _ ErrorDetailInterface = &WriteTooOldError{}
-var _ transactionRestartError = &WriteTooOldError{}
-
 func (*WriteTooOldError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
+
+var _ ErrorDetailInterface = &WriteTooOldError{}
+var _ transactionRestartError = &WriteTooOldError{}
 
 // NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
 // The read and existing timestamps as well as the txn are purely informational
@@ -619,12 +632,12 @@ func (e *ReadWithinUncertaintyIntervalError) message(_ *Error) string {
 		e.ReadTimestamp, e.ExistingTimestamp, e.MaxTimestamp, ts.String())
 }
 
-var _ ErrorDetailInterface = &ReadWithinUncertaintyIntervalError{}
-var _ transactionRestartError = &ReadWithinUncertaintyIntervalError{}
-
 func (*ReadWithinUncertaintyIntervalError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
+
+var _ ErrorDetailInterface = &ReadWithinUncertaintyIntervalError{}
+var _ transactionRestartError = &ReadWithinUncertaintyIntervalError{}
 
 func (e *OpRequiresTxnError) Error() string {
 	return e.message(nil)
@@ -777,7 +790,16 @@ func (e *MixedSuccessError) message(_ *Error) string {
 	return fmt.Sprintf("the batch experienced mixed success and failure: %s", e.GetWrapped())
 }
 
+func (e *MixedSuccessError) canRestartTransaction() TransactionRestart {
+	// MixedSuccessError inherits its "restartability" from the error that it wraps.
+	if r, ok := e.Wrapped.GetInner().(transactionRestartError); ok {
+		return r.canRestartTransaction()
+	}
+	return TransactionRestart_NONE
+}
+
 var _ ErrorDetailInterface = &MixedSuccessError{}
+var _ transactionRestartError = &MixedSuccessError{}
 
 func (e *BatchTimestampBeforeGCError) Error() string {
 	return e.message(nil)
@@ -809,12 +831,12 @@ func (e *IntentMissingError) message(_ *Error) string {
 	return fmt.Sprintf("intent missing%s", detail)
 }
 
-var _ ErrorDetailInterface = &IntentMissingError{}
-var _ transactionRestartError = &IntentMissingError{}
-
 func (*IntentMissingError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
+
+var _ ErrorDetailInterface = &IntentMissingError{}
+var _ transactionRestartError = &IntentMissingError{}
 
 func (e *MergeInProgressError) Error() string {
 	return e.message(nil)
