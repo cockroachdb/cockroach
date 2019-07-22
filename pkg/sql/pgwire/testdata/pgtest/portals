@@ -114,3 +114,179 @@ ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal with limited rows inside a transaction.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# This is the second of 2 rows, but we don't expect a command complete
+# yet.
+
+send
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# There were only 2 rows, so this third execute should return a command
+# complete.
+
+send
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal first with a row limit and then without.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 4)"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"DataRow","Values":[{"text":"4"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal with a result limit. This is outside of a transaction
+# so we expect an error. This differs slightly from the postgres behavior,
+# which will do the first execute, auto close the portal, and then fail
+# on the second.
+
+send
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Try the second execute, which we expect to fail because implicit
+# transactions auto close portals after the first suspension.
+
+send
+Execute
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT 'here'"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"here"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

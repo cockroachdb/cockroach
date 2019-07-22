@@ -73,13 +73,13 @@ func MakeStmtBufReader(buf *StmtBuf) StmtBufReader {
 
 // CurCmd returns the current command in the buffer.
 func (r StmtBufReader) CurCmd() (Command, error) {
-	cmd, _ /* pos */, err := r.buf.curCmd()
+	cmd, _ /* pos */, err := r.buf.CurCmd()
 	return cmd, err
 }
 
 // AdvanceOne moves the cursor one position over.
 func (r *StmtBufReader) AdvanceOne() {
-	r.buf.advanceOne()
+	r.buf.AdvanceOne()
 }
 
 // SeekToNextBatch skips to the beginning of the next batch of commands.

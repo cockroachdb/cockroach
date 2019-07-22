@@ -62,7 +62,7 @@ func NewPGTest(ctx context.Context, addr, user string) (*PGTest, error) {
 		fe:   fe,
 		conn: conn,
 	}
-	_, err = p.Until(&pgproto3.ReadyForQuery{})
+	_, err = p.Until(false /* keepErrMsg */, &pgproto3.ReadyForQuery{})
 	success = err == nil
 	return p, err
 }
@@ -84,10 +84,12 @@ func (p *PGTest) Send(msg pgproto3.FrontendMessage) error {
 // Receive reads messages until messages of the given types have been found
 // in the specified order (with any number of messages in between). It returns
 // matched messages.
-func (p *PGTest) Receive(typs ...pgproto3.BackendMessage) ([]pgproto3.BackendMessage, error) {
+func (p *PGTest) Receive(
+	keepErrMsg bool, typs ...pgproto3.BackendMessage,
+) ([]pgproto3.BackendMessage, error) {
 	var matched []pgproto3.BackendMessage
 	for len(typs) > 0 {
-		msgs, err := p.Until(typs[0])
+		msgs, err := p.Until(keepErrMsg, typs[0])
 		if err != nil {
 			return nil, err
 		}
@@ -99,7 +101,9 @@ func (p *PGTest) Receive(typs ...pgproto3.BackendMessage) ([]pgproto3.BackendMes
 
 // Until is like Receive except all messages are returned instead of only
 // matched messages.
-func (p *PGTest) Until(typs ...pgproto3.BackendMessage) ([]pgproto3.BackendMessage, error) {
+func (p *PGTest) Until(
+	keepErrMsg bool, typs ...pgproto3.BackendMessage,
+) ([]pgproto3.BackendMessage, error) {
 	var msgs []pgproto3.BackendMessage
 	for len(typs) > 0 {
 		typ := reflect.TypeOf(typs[0])
@@ -116,11 +120,15 @@ func (p *PGTest) Until(typs ...pgproto3.BackendMessage) ([]pgproto3.BackendMessa
 			if typ != typErrorResponse {
 				return nil, errors.Errorf("waiting for %T, got %#v", typs[0], errmsg)
 			}
+			var message string
+			if keepErrMsg {
+				message = errmsg.Message
+			}
 			// ErrorResponse doesn't encode/decode correctly, so
-			// manually append it here. We only record the Code so
-			// other fields aren't kept.
+			// manually append it here.
 			msgs = append(msgs, &pgproto3.ErrorResponse{
-				Code: errmsg.Code,
+				Code:    errmsg.Code,
+				Message: message,
 			})
 			typs = typs[1:]
 			continue

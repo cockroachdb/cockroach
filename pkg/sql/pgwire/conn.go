@@ -1142,6 +1142,13 @@ func (c *conn) bufferCommandComplete(tag []byte) {
 	}
 }
 
+func (c *conn) bufferPortalSuspended() {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgPortalSuspended)
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+	}
+}
+
 func (c *conn) bufferErr(err error) {
 	// TODO(andrei,knz): This would benefit from a context with the
 	// current connection log tags.
@@ -1364,8 +1371,11 @@ func (c *conn) CreateStatementResult(
 	pos sql.CmdPos,
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
+	limit int,
+	portalName string,
+	implicitTxn bool,
 ) sql.CommandResult {
-	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv)
+	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, limit, portalName, implicitTxn)
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.

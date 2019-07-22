@@ -20,6 +20,7 @@ func _() {
 	_ = x[ServerMsgParameterDescription-116]
 	_ = x[ServerMsgParameterStatus-83]
 	_ = x[ServerMsgParseComplete-49]
+	_ = x[ServerMsgPortalSuspended-115]
 	_ = x[ServerMsgReady-90]
 	_ = x[ServerMsgRowDescription-84]
 }
@@ -32,13 +33,14 @@ const (
 	_ServerMessageType_name_4 = "ServerMsgAuthServerMsgParameterStatusServerMsgRowDescription"
 	_ServerMessageType_name_5 = "ServerMsgReady"
 	_ServerMessageType_name_6 = "ServerMsgNoData"
-	_ServerMessageType_name_7 = "ServerMsgParameterDescription"
+	_ServerMessageType_name_7 = "ServerMsgPortalSuspendedServerMsgParameterDescription"
 )
 
 var (
 	_ServerMessageType_index_0 = [...]uint8{0, 22, 43, 65}
 	_ServerMessageType_index_1 = [...]uint8{0, 24, 40, 62}
 	_ServerMessageType_index_4 = [...]uint8{0, 13, 37, 60}
+	_ServerMessageType_index_7 = [...]uint8{0, 24, 53}
 )
 
 func (i ServerMessageType) String() string {
@@ -60,8 +62,9 @@ func (i ServerMessageType) String() string {
 		return _ServerMessageType_name_5
 	case i == 110:
 		return _ServerMessageType_name_6
-	case i == 116:
-		return _ServerMessageType_name_7
+	case 115 <= i && i <= 116:
+		i -= 115
+		return _ServerMessageType_name_7[_ServerMessageType_index_7[i]:_ServerMessageType_index_7[i+1]]
 	default:
 		return "ServerMessageType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

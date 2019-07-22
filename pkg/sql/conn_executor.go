@@ -1161,7 +1161,7 @@ var errDrainingComplete = fmt.Errorf("draining done. this is a good time to fini
 // complete (i.e. we received a DrainRequest - possibly previously - and the
 // connection is found to be idle).
 func (ex *connExecutor) execCmd(ctx context.Context) error {
-	cmd, pos, err := ex.stmtBuf.curCmd()
+	cmd, pos, err := ex.stmtBuf.CurCmd()
 	if err != nil {
 		return err // err could be io.EOF
 	}
@@ -1191,8 +1191,15 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		ex.curStmt = tcmd.AST
 
 		stmtRes := ex.clientComm.CreateStatementResult(
-			tcmd.AST, NeedRowDesc, pos, nil, /* formatCodes */
-			ex.sessionData.DataConversion)
+			tcmd.AST,
+			NeedRowDesc,
+			pos,
+			nil, /* formatCodes */
+			ex.sessionData.DataConversion,
+			0,  /* limit */
+			"", /* portalName */
+			ex.implicitTxn(),
+		)
 		res = stmtRes
 		curStmt := Statement{Statement: tcmd.Statement}
 
@@ -1250,8 +1257,11 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			// needed.
 			DontNeedRowDesc,
 			pos, portal.OutFormats,
-			ex.sessionData.DataConversion)
-		stmtRes.SetLimit(tcmd.Limit)
+			ex.sessionData.DataConversion,
+			tcmd.Limit,
+			tcmd.Name,
+			ex.implicitTxn(),
+		)
 		res = stmtRes
 		curStmt := Statement{
 			Statement:     portal.Stmt.Statement,
@@ -1365,7 +1375,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	// Move the cursor according to what the state transition told us to do.
 	switch advInfo.code {
 	case advanceOne:
-		ex.stmtBuf.advanceOne()
+		ex.stmtBuf.AdvanceOne()
 	case skipBatch:
 		// We'll flush whatever results we have to the network. The last one must
 		// be an error. This flush may seem unnecessary, as we generally only

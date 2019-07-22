@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -660,22 +661,44 @@ func (r *DistSQLReceiver) Push(
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	// Note that AddRow accounts for the memory used by the Datums.
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
-		r.commErr = commErr
-		// Set the error on the resultWriter too, for the convenience of some of the
-		// clients. If clients don't care to differentiate between communication
-		// errors and query execution errors, they can simply inspect
-		// resultWriter.Err(). Also, this function itself doesn't care about the
-		// distinction and just uses resultWriter.Err() to see if we're still
-		// accepting results.
-		r.resultWriter.SetError(commErr)
+		// ErrLimitedResultClosed is not a real error, it is a
+		// signal to stop distsql and return success to the client.
+		if !errors.Is(commErr, ErrLimitedResultClosed) {
+			// Set the error on the resultWriter too, for the convenience of some of the
+			// clients. If clients don't care to differentiate between communication
+			// errors and query execution errors, they can simply inspect
+			// resultWriter.Err(). Also, this function itself doesn't care about the
+			// distinction and just uses resultWriter.Err() to see if we're still
+			// accepting results.
+			r.resultWriter.SetError(commErr)
+
+			// We don't need to shut down the connection
+			// if there's a portal-related error. This is
+			// definitely a layering violation, but is part
+			// of some accepted technical debt (see comments on
+			// sql/pgwire.limitedCommandResult.moreResultsNeeded).
+			// Instead of changing the signature of AddRow, we have
+			// a sentinel error that is handled specially here.
+			if !errors.Is(commErr, ErrLimitedResultNotSupported) {
+				r.commErr = commErr
+			}
+		}
 		// TODO(andrei): We should drain here. Metadata from this query would be
 		// useful, particularly as it was likely a large query (since AddRow()
 		// above failed, presumably with an out-of-memory error).
 		r.status = distsqlrun.ConsumerClosed
-		return r.status
 	}
 	return r.status
 }
+
+var (
+	// ErrLimitedResultNotSupported is an error produced by pgwire
+	// indicating an unsupported feature of row count limits was attempted.
+	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(4035, "execute row count limits only partially supported")
+	// ErrLimitedResultClosed is a sentinel error produced by pgwire
+	// indicating the portal should be closed without error.
+	ErrLimitedResultClosed = errors.New("row count limit closed")
+)
 
 // ProducerDone is part of the RowReceiver interface.
 func (r *DistSQLReceiver) ProducerDone() {
