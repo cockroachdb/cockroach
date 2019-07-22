@@ -57,7 +57,7 @@ func (t *interceptingTransport) SendNext(
 // where the primary key is specified in advance, it can result in violated
 // uniqueness constraints, or duplicate key violations. See #6053, #7604, and
 // #10023.
-func TestAmbiguousCommit(t *testing.T) {
+func TestDanStressAmbiguousCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testutils.RunTrueAndFalse(t, "ambiguousSuccess", func(t *testing.T, ambiguousSuccess bool) {

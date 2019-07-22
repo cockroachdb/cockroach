@@ -69,11 +69,12 @@ func (rq *raftSnapshotQueue) shouldQueue(
 			if p.State == tracker.StateSnapshot {
 				// We refuse to send a snapshot of type RAFT to a learner for reasons
 				// described in processRaftSnapshot, so don't bother queueing.
-				for _, r := range repl.Desc().Replicas().Learners() {
-					if r.ReplicaID == roachpb.ReplicaID(id) {
-						continue
-					}
-				}
+				_ = id
+				// for _, r := range repl.Desc().Replicas().Learners() {
+				// 	if r.ReplicaID == roachpb.ReplicaID(id) {
+				// 		continue
+				// 	}
+				// }
 				if log.V(2) {
 					log.Infof(ctx, "raft snapshot needed, enqueuing")
 				}
@@ -122,10 +123,10 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	// it a snap, then until the replication queue collects it, any proposals sent
 	// to it will get stuck indefinitely. At the moment, nothing should be sending
 	// it such a proposal, but this is brittle and could change easily.
-	if repDesc.GetType() == roachpb.ReplicaType_LEARNER {
-		log.Eventf(ctx, "not sending snapshot type RAFT to learner: %s", repDesc)
-		return nil
-	}
+	// if repDesc.GetType() == roachpb.ReplicaType_LEARNER {
+	// 	log.Eventf(ctx, "not sending snapshot type RAFT to learner: %s", repDesc)
+	// 	return nil
+	// }
 
 	err := repl.sendSnapshot(ctx, repDesc, SnapshotRequest_RAFT, SnapshotRequest_RECOVERY)
 

@@ -383,6 +383,7 @@ func TestGCQueueSeesLearner(t *testing.T) {
 
 func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip(`WIP`)
 	ctx := context.Background()
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeLearnerTestKnobs()
