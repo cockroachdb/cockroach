@@ -530,7 +530,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
 
-%token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
+%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PHYSICAL PLACING
 %token <str> PLAN PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 %token <str> PROCEDURAL PUBLICATION
 
@@ -725,6 +725,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
 %type <tree.Statement> show_indexes_stmt
+%type <tree.Statement> show_partitions_stmt
 %type <tree.Statement> show_jobs_stmt
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_ranges_stmt
@@ -3185,9 +3186,9 @@ zone_value:
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
 // SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW
-// JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW
-// SESSION, SHOW SESSIONS, SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES,
-// SHOW TRACE SHOW TRANSACTION, SHOW USERS
+// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SCHEMAS,
+// SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS, SHOW STATISTICS,
+// SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -3199,6 +3200,7 @@ show_stmt:
 | show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
 | show_indexes_stmt         // EXTEND WITH HELP: SHOW INDEXES
+| show_partitions_stmt      // EXTEND WITH HELP: SHOW PARTITIONS
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
@@ -3343,6 +3345,25 @@ show_columns_stmt:
     $$.val = &tree.ShowColumns{Table: $4.unresolvedObjectName(), WithComment: $5.bool()}
   }
 | SHOW COLUMNS error // SHOW HELP: SHOW COLUMNS
+
+// %Help: SHOW PARTITIONS - list partition information
+// %Category: DDL
+// %Text: SHOW PARTITIONS FROM { <table> | <index> | <database> }
+// %SeeAlso: WEBDOCS/show-partitions.html
+show_partitions_stmt:
+  SHOW PARTITIONS FROM TABLE table_name
+  {
+    $$.val = &tree.ShowPartitions{Object: $5.unresolvedObjectName().String(), IsTable: true, Table: $5.unresolvedObjectName()}
+  }
+| SHOW PARTITIONS FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowPartitions{Object: $5, IsDB: true}
+  }
+| SHOW PARTITIONS FROM INDEX table_index_name
+  {
+    $$.val = &tree.ShowPartitions{Object: $5.newTableIndexName().String(), IsIndex: true, Index: $5.tableIndexName()}
+  }
+| SHOW PARTITIONS error // SHOW HELP: SHOW PARTITIONS
 
 // %Help: SHOW DATABASES - list databases
 // %Category: DDL
@@ -9129,6 +9150,7 @@ unreserved_keyword:
 | PARENT
 | PARTIAL
 | PARTITION
+| PARTITIONS
 | PASSWORD
 | PAUSE
 | PHYSICAL

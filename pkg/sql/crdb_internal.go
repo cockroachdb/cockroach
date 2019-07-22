@@ -2265,7 +2265,38 @@ func addPartitioningRows(
 	indexID := tree.NewDInt(tree.DInt(index.ID))
 	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns))
 
+	var buf bytes.Buffer
+	for i := uint32(0); i < partitioning.NumColumns; i++ {
+		if i != 0 {
+			buf.WriteString(`, `)
+		}
+		buf.WriteString(index.ColumnNames[i])
+	}
+	colNames := tree.NewDString(buf.String())
+
+	var a sqlbase.DatumAlloc
+
+	// We don't need real prefixes in the DecodePartitionTuple calls because we
+	// only use the tree.Datums part of the output.
+	fakePrefixDatums := make([]tree.Datum, colOffset)
+	for i := range fakePrefixDatums {
+		fakePrefixDatums[i] = tree.DNull
+	}
+
 	for _, l := range partitioning.List {
+		var buf bytes.Buffer
+		for j, values := range l.Values {
+			if j != 0 {
+				buf.WriteString(`, `)
+			}
+			tuple, _, err := sqlbase.DecodePartitionTuple(
+				&a, table, index, partitioning, values, fakePrefixDatums,
+			)
+			if err != nil {
+				return err
+			}
+			buf.WriteString(tuple.String())
+		}
 		name := tree.NewDString(l.Name)
 		if err := addRow(
 			tableID,
@@ -2273,6 +2304,9 @@ func addPartitioningRows(
 			parentName,
 			name,
 			numColumns,
+			colNames,
+			tree.NewDString(buf.String()),
+			tree.DNull,
 		); err != nil {
 			return err
 		}
@@ -2284,12 +2318,31 @@ func addPartitioningRows(
 	}
 
 	for _, r := range partitioning.Range {
+		var buf bytes.Buffer
+		fromTuple, _, err := sqlbase.DecodePartitionTuple(
+			&a, table, index, partitioning, r.FromInclusive, fakePrefixDatums,
+		)
+		if err != nil {
+			return err
+		}
+		buf.WriteString(fromTuple.String())
+		buf.WriteString(" TO ")
+		toTuple, _, err := sqlbase.DecodePartitionTuple(
+			&a, table, index, partitioning, r.ToExclusive, fakePrefixDatums,
+		)
+		if err != nil {
+			return err
+		}
+		buf.WriteString(toTuple.String())
 		if err := addRow(
 			tableID,
 			indexID,
 			parentName,
 			tree.NewDString(r.Name),
 			numColumns,
+			colNames,
+			tree.DNull,
+			tree.NewDString(buf.String()),
 		); err != nil {
 			return err
 		}
@@ -2310,7 +2363,10 @@ CREATE TABLE crdb_internal.partitions (
 	index_id    INT NOT NULL,
 	parent_name STRING,
 	name        STRING NOT NULL,
-	columns     INT NOT NULL
+	columns     INT NOT NULL,
+	column_names STRING,
+	list_value  STRING,
+	range_value STRING
 )
 	`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
