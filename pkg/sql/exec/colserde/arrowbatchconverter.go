@@ -20,7 +20,7 @@ import (
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ArrowBatchConverter converts batches to arrow column data
@@ -103,7 +103,7 @@ var supportedTypes = func() map[types.T]struct{} {
 // next call to BatchToArrow.
 func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, error) {
 	if batch.Width() != len(c.typs) {
-		return nil, errors.Errorf("mismatched batch width and schema length: %d != %d", batch.Width(), len(c.typs))
+		return nil, errors.AssertionFailedf("mismatched batch width and schema length: %d != %d", batch.Width(), len(c.typs))
 	}
 	n := int(batch.Length())
 	for i, typ := range c.typs {

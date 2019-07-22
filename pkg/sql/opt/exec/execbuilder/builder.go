@@ -50,6 +50,12 @@ type Builder struct {
 	// each relational subexpression when evalCtx.SessionData.SaveTablesPrefix is
 	// non-empty.
 	nameGen *memo.ExprNameGenerator
+
+	// withExprs is the set of With expressions which may be referenced elsewhere
+	// in the query.
+	// TODO(justin): set this up so that we can look them up by index lookups
+	// rather than scans.
+	withExprs []builtWithExpr
 }
 
 // New constructs an instance of the execution node builder using the
@@ -132,4 +138,22 @@ func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) (tree.TypedExpr, error
 
 func (b *Builder) decorrelationError() error {
 	return errors.Errorf("could not decorrelate subquery")
+}
+
+// builtWithExpr is metadata regarding a With expression which has already been
+// added to the set of subqueries for the query.
+type builtWithExpr struct {
+	id opt.WithID
+	// outputCols maps the output ColumnIDs of the With expression to the ordinal
+	// positions they are output to. See execPlan.outputCols for more details.
+	outputCols opt.ColMap
+	bufferNode exec.Node
+}
+
+func (b *Builder) addBuiltWithExpr(id opt.WithID, outputCols opt.ColMap, bufferNode exec.Node) {
+	b.withExprs = append(b.withExprs, builtWithExpr{
+		id:         id,
+		outputCols: outputCols,
+		bufferNode: bufferNode,
+	})
 }

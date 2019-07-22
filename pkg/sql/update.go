@@ -128,7 +128,7 @@ func (p *planner) Update(
 	// Extract the column descriptors for the column names listed
 	// in the LHS operands of SET expressions. This also checks
 	// that each column is assigned at most once.
-	updateCols, err := p.processColumns(desc, names,
+	updateCols, err := sqlbase.ProcessTargetColumns(desc, names,
 		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
@@ -382,6 +382,12 @@ func (p *planner) Update(
 		updateColsIdx[id] = i
 	}
 
+	// Since all columns are being returned, use the 1:1 mapping.
+	rowIdxToRetIdx := make([]int, len(desc.Columns))
+	for i := range rowIdxToRetIdx {
+		rowIdxToRetIdx[i] = i
+	}
+
 	un := updateNodePool.Get().(*updateNode)
 	*un = updateNode{
 		source:  rows,
@@ -397,9 +403,10 @@ func (p *planner) Update(
 				Cols:         desc.Columns,
 				Mapping:      ru.FetchColIDtoRowIndex,
 			},
-			sourceSlots:   sourceSlots,
-			updateValues:  make(tree.Datums, len(ru.UpdateCols)),
-			updateColsIdx: updateColsIdx,
+			sourceSlots:    sourceSlots,
+			updateValues:   make(tree.Datums, len(ru.UpdateCols)),
+			updateColsIdx:  updateColsIdx,
+			rowIdxToRetIdx: rowIdxToRetIdx,
 		},
 	}
 
@@ -480,6 +487,13 @@ type updateRun struct {
 	// This provides the inverse mapping of sourceSlots.
 	//
 	updateColsIdx map[sqlbase.ColumnID]int
+
+	// rowIdxToRetIdx is the mapping from the columns in ru.FetchCols to the
+	// columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value at the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column is to be returned.
+	rowIdxToRetIdx []int
 }
 
 // maxUpdateBatchSize is the max number of entries in the KV batch for
@@ -701,7 +715,14 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		//
 		// MakeUpdater guarantees that the first columns of the new values
 		// are those specified u.columns.
-		resultValues := newValues[:len(u.columns)]
+		resultValues := make([]tree.Datum, len(u.columns))
+		for i := range u.run.rowIdxToRetIdx {
+			retIdx := u.run.rowIdxToRetIdx[i]
+			if retIdx >= 0 {
+				resultValues[retIdx] = newValues[i]
+			}
+		}
+
 		if _, err := u.run.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}

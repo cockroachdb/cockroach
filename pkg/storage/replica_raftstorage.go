@@ -66,8 +66,11 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
 	var cs raftpb.ConfState
-	for _, rep := range r.mu.state.Desc.Replicas().Unwrap() {
+	for _, rep := range r.mu.state.Desc.Replicas().Voters() {
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
+	}
+	for _, rep := range r.mu.state.Desc.Replicas().Learners() {
+		cs.Learners = append(cs.Learners, uint64(rep.ReplicaID))
 	}
 
 	return hs, cs, nil
@@ -536,8 +539,11 @@ func snapshot(
 
 	// Synthesize our raftpb.ConfState from desc.
 	var cs raftpb.ConfState
-	for _, rep := range desc.Replicas().Unwrap() {
+	for _, rep := range desc.Replicas().Voters() {
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
+	}
+	for _, rep := range desc.Replicas().Learners() {
+		cs.Learners = append(cs.Learners, uint64(rep.ReplicaID))
 	}
 
 	term, err := term(ctx, rsl, snap, rangeID, eCache, appliedIndex)
@@ -546,6 +552,15 @@ func snapshot(
 	}
 
 	state, err := rsl.Load(ctx, snap, &desc)
+	if err != nil {
+		return OutgoingSnapshot{}, err
+	}
+
+	// Populate the snapshot's ReplicaState.DeprecatedTxnSpanGCThreshold field.
+	// 19.1 nodes will expect this to be here if the snapshot includes the key
+	// and 19.2 nodes will ignore it.
+	// TODO(nvanbenschoten): Remove in 20.1.
+	state.DeprecatedTxnSpanGCThreshold, err = rsl.LoadLegacyTxnSpanGCThreshold(ctx, snap)
 	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
@@ -750,6 +765,10 @@ func (r *Replica) applySnapshot(
 	if s.Desc.RangeID != r.RangeID {
 		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
 	}
+
+	// Strip the DeprecatedTxnSpanGCThreshold. We don't care about it.
+	// TODO(nvanbenschoten): Remove in 20.1.
+	s.DeprecatedTxnSpanGCThreshold = nil
 
 	r.mu.RLock()
 	replicaID := r.mu.replicaID

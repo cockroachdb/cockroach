@@ -125,6 +125,9 @@ func (p *planner) Delete(
 		requestedCols = desc.Columns
 	}
 
+	// Since all columns are being returned, use the 1:1 mapping. See todo above.
+	rowIdxToRetIdx := mutationRowIdxToReturnIdx(requestedCols, requestedCols)
+
 	// Create the table deleter, which does the bulk of the work.
 	rd, err := row.MakeDeleter(
 		p.txn, desc, fkTables, requestedCols, row.CheckFKs, p.EvalContext(), &p.alloc,
@@ -175,6 +178,7 @@ func (p *planner) Delete(
 			td:                  tableDeleter{rd: rd, alloc: &p.alloc},
 			rowsNeeded:          rowsNeeded,
 			fastPathInterleaved: canDeleteFastInterleaved(desc, fkTables),
+			rowIdxToRetIdx:      rowIdxToRetIdx,
 		},
 	}
 
@@ -208,6 +212,13 @@ type deleteRun struct {
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
+
+	// rowIdxToRetIdx is the mapping from the columns returned by the deleter
+	// to the columns in the resultRowBuffer. A value of -1 is used to indicate
+	// that the column at that index is not part of the resultRowBuffer
+	// of the mutation. Otherwise, the value at the i-th index refers to the
+	// index of the resultRowBuffer where the i-th column is to be returned.
+	rowIdxToRetIdx []int
 }
 
 // maxDeleteBatchSize is the max number of entries in the KV batch for
@@ -331,9 +342,15 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// contain additional columns for every newly dropped column not
 		// visible. We do not want them to be available for RETURNING.
 		//
-		// d.columns is guaranteed to only contain the requested
+		// d.run.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
-		resultValues := sourceVals[:len(d.columns)]
+		resultValues := make(tree.Datums, d.run.rows.NumCols())
+		for i, retIdx := range d.run.rowIdxToRetIdx {
+			if retIdx >= 0 {
+				resultValues[retIdx] = sourceVals[i]
+			}
+		}
+
 		if _, err := d.run.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}

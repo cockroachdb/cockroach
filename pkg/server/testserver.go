@@ -152,7 +152,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.SQLMemoryPoolSize = params.SQLMemoryPoolSize
 	}
 
-	cfg.JoinList = []string{params.JoinAddr}
+	if params.JoinAddr != "" {
+		cfg.JoinList = []string{params.JoinAddr}
+	}
 	if cfg.Insecure {
 		// Whenever we can (i.e. in insecure mode), use IsolatedTestAddr
 		// to prevent issues that can occur when running a test under

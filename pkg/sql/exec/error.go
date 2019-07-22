@@ -53,7 +53,7 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 						// needs to be annotated to indicate that it was
 						// unexpected.
 						if code := pgerror.GetPGCode(e); code == pgcode.Uncategorized {
-							e = errors.Wrap(e, "unexpected error from the vectorized runtime")
+							e = errors.AssertionFailedf("unexpected error from the vectorized runtime: %+v", e)
 						}
 						retErr = e
 					} else {
@@ -80,6 +80,8 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 const (
 	execPackagePrefix  = "github.com/cockroachdb/cockroach/pkg/sql/exec"
 	colBatchScanPrefix = "github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*colBatchScan)"
+	cFetcherPrefix     = "github.com/cockroachdb/cockroach/pkg/sql/row.(*CFetcher)"
+	columnarizerPrefix = "github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*columnarizer)"
 )
 
 // isPanicFromVectorizedEngine checks whether the panic that was emitted from
@@ -88,7 +90,9 @@ const (
 // panicEmittedFrom must be trimmed to not have any white spaces in the prefix.
 func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
 	return strings.HasPrefix(panicEmittedFrom, execPackagePrefix) ||
-		strings.HasPrefix(panicEmittedFrom, colBatchScanPrefix)
+		strings.HasPrefix(panicEmittedFrom, colBatchScanPrefix) ||
+		strings.HasPrefix(panicEmittedFrom, cFetcherPrefix) ||
+		strings.HasPrefix(panicEmittedFrom, columnarizerPrefix)
 }
 
 // TestVectorizedErrorEmitter is an Operator that panics on every odd-numbered

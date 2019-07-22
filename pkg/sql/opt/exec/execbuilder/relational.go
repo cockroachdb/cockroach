@@ -11,6 +11,7 @@
 package execbuilder
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -237,6 +238,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
+	case *memo.WithExpr:
+		ep, err = b.buildWith(t)
+
+	case *memo.WithScanExpr:
+		ep, err = b.buildWithScan(t)
+
 	case *memo.ExplainExpr:
 		ep, err = b.buildExplain(t)
 
@@ -257,6 +264,15 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.AlterTableRelocateExpr:
 		ep, err = b.buildAlterTableRelocate(t)
+
+	case *memo.ControlJobsExpr:
+		ep, err = b.buildControlJobs(t)
+
+	case *memo.CancelQueriesExpr:
+		ep, err = b.buildCancelQueries(t)
+
+	case *memo.CancelSessionsExpr:
+		ep, err = b.buildCancelSessions(t)
 
 	default:
 		if opt.IsSetOp(e) {
@@ -1318,6 +1334,104 @@ func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+
+}
+
+func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
+	value, err := b.buildRelational(with.Binding)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	var label bytes.Buffer
+	fmt.Fprintf(&label, "buffer %d", with.ID)
+	if with.Name != "" {
+		fmt.Fprintf(&label, " (%s)", with.Name)
+	}
+
+	buffer, err := b.factory.ConstructBuffer(value.root, label.String())
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// TODO(justin): if the binding here has a spoolNode at its root, we can
+	// remove it, since subquery execution also guarantees complete execution.
+
+	// Add the buffer as a subquery so it gets executed ahead of time, and is
+	// available to be referenced by other queries.
+	b.subqueries = append(b.subqueries, exec.Subquery{
+		ExprNode: &tree.Subquery{
+			Select: with.OriginalExpr.Select,
+		},
+		// TODO(justin): this is wasteful: both the subquery and the bufferNode
+		// will buffer up all the results.  This should be fixed by either making
+		// the buffer point directly to the subquery results or adding a new
+		// subquery mode that reads and discards all rows. This could possibly also
+		// be fixed by ensuring that bufferNode exhausts its input (and forcing it
+		// to behave like a spoolNode) and using the EXISTS mode.
+		Mode: exec.SubqueryAllRows,
+		Root: buffer,
+	})
+
+	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
+
+	return b.buildRelational(with.Input)
+}
+
+func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
+	id := withScan.ID
+	var e *builtWithExpr
+	for i := range b.withExprs {
+		if b.withExprs[i].id == id {
+			e = &b.withExprs[i]
+			break
+		}
+	}
+	if e == nil {
+		panic(errors.AssertionFailedf("couldn't find With expression with ID %d", id))
+	}
+
+	var label bytes.Buffer
+	fmt.Fprintf(&label, "buffer %d", withScan.ID)
+	if withScan.Name != "" {
+		fmt.Fprintf(&label, " (%s)", withScan.Name)
+	}
+
+	node, err := b.factory.ConstructScanBuffer(e.bufferNode, label.String())
+	if err != nil {
+		return execPlan{}, err
+	}
+	res := execPlan{root: node}
+
+	if maxVal, _ := e.outputCols.MaxValue(); len(withScan.InCols) == maxVal+1 {
+		// We are outputting all columns. Just set up the map.
+
+		// The ColumnIDs from the With expression need to get remapped according to
+		// the mapping in the withScan to get the actual colMap for this expression.
+		for i := range withScan.InCols {
+			idx, _ := e.outputCols.Get(int(withScan.InCols[i]))
+			res.outputCols.Set(int(withScan.OutCols[i]), idx)
+		}
+	} else {
+		// We need a projection.
+		cols := make([]exec.ColumnOrdinal, len(withScan.InCols))
+		for i := range withScan.InCols {
+			col, ok := e.outputCols.Get(int(withScan.InCols[i]))
+			if !ok {
+				panic(errors.AssertionFailedf("column %d not in input", log.Safe(withScan.InCols[i])))
+			}
+			cols[i] = exec.ColumnOrdinal(col)
+			res.outputCols.Set(int(withScan.OutCols[i]), i)
+		}
+		res.root, err = b.factory.ConstructSimpleProject(
+			res.root, cols, nil, /* colNames */
+			exec.OutputOrdering(res.sqlOrdering(withScan.ProvidedPhysical().Ordering)),
+		)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+	return res, nil
 
 }
 

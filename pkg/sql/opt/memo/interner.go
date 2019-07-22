@@ -460,6 +460,10 @@ func (h *hasher) HashValuesID(val opt.ValuesID) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashWithID(val opt.WithID) {
+	h.HashUint64(uint64(val))
+}
+
 func (h *hasher) HashScanLimit(val ScanLimit) {
 	h.HashUint64(uint64(val))
 }
@@ -487,6 +491,10 @@ func (h *hasher) HashStatementType(val tree.StatementType) {
 
 func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
 	h.HashString(string(val))
+}
+
+func (h *hasher) HashJobCommand(val tree.JobCommand) {
+	h.HashInt(int(val))
 }
 
 func (h *hasher) HashWindowFrame(val WindowFrame) {
@@ -752,6 +760,10 @@ func (h *hasher) IsValuesIDEqual(l, r opt.ValuesID) bool {
 	return l == r
 }
 
+func (h *hasher) IsWithIDEqual(l, r opt.WithID) bool {
+	return l == r
+}
+
 func (h *hasher) IsScanLimitEqual(l, r ScanLimit) bool {
 	return l == r
 }
@@ -773,6 +785,10 @@ func (h *hasher) IsStatementTypeEqual(l, r tree.StatementType) bool {
 }
 
 func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
+	return l == r
+}
+
+func (h *hasher) IsJobCommandEqual(l, r tree.JobCommand) bool {
 	return l == r
 }
 

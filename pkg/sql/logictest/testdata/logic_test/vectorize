@@ -455,3 +455,108 @@ query I
 SELECT * FROM (SELECT count(*) AS x FROM b) WHERE x > 0;
 ----
 4
+
+# Regression test for #38908
+statement ok
+CREATE TABLE t38908 (x INT)
+
+statement ok
+INSERT INTO t38908 VALUES (1)
+
+statement ok
+SET experimental_vectorize=always
+
+query I
+SELECT * FROM t38908 WHERE x IN (1, 2)
+----
+1
+
+statement ok
+RESET experimental_vectorize
+
+# Test that an aggregate with no aggregate functions is handled correctly.
+query III
+SELECT 0, 1 + 2, 3 * 4 FROM a HAVING true
+----
+0 3 12
+
+# Testing some builtin functions.
+statement ok
+CREATE TABLE builtin_test (x STRING, y INT)
+
+statement ok
+INSERT INTO builtin_test VALUES ('Hello', 3), ('There', 2)
+
+query T
+SELECT substring(x, 1, y) FROM builtin_test
+----
+Hel
+Th
+
+query T
+SELECT substring(x, 1, abs(y)) FROM builtin_test
+----
+Hel
+Th
+
+query I
+SELECT abs(y) FROM builtin_test
+----
+3
+2
+
+statement ok
+CREATE TABLE extract_test (x DATE)
+
+statement ok
+INSERT INTO extract_test VALUES ('2017-01-01')
+
+query I
+SELECT EXTRACT(YEAR FROM x) FROM extract_test
+----
+2017
+
+# Regression test for #38937
+statement ok
+CREATE TABLE t38937 (_int2) AS SELECT 1::INT2
+
+query I
+SELECT sum_int(_int2) FROM t38937
+----
+1
+
+# Regression tests for #38959
+
+statement ok
+CREATE TABLE t38959 (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX b_idx (b) STORING (c, d), UNIQUE INDEX c_idx (c) STORING (b, d))
+
+statement ok
+INSERT INTO t38959 VALUES (1, 2, 3, 4)
+
+statement ok
+SET tracing=on,kv,results
+
+query IIII
+SELECT * FROM t38959@c_idx
+----
+1 2 3 4
+
+statement ok
+SET tracing=off
+
+statement ok
+CREATE TABLE t38959_2 (x INT PRIMARY KEY, y INT, z FLOAT, INDEX xy (x, y), INDEX zyx (z, y, x), FAMILY (x), FAMILY (y), FAMILY (z))
+
+statement ok
+INSERT INTO t38959_2 VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
+
+statement ok
+SET tracing=on,kv,results
+
+query I
+SELECT min(x) FROM t38959_2 WHERE (y, z) = (2, 3.0)
+----
+1
+
+statement ok
+SET tracing=off

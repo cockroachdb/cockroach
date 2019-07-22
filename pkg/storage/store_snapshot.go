@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,10 +34,6 @@ import (
 )
 
 const (
-	// preemptiveSnapshotRaftGroupID is a bogus ID for which a Raft group is
-	// temporarily created during the application of a preemptive snapshot.
-	preemptiveSnapshotRaftGroupID = math.MaxUint64
-
 	// Messages that provide detail about why a preemptive snapshot was rejected.
 	snapshotStoreTooFullMsg = "store almost out of disk space"
 	snapshotApplySemBusyMsg = "store busy applying snapshots"
@@ -593,6 +588,12 @@ func (s *Store) shouldAcceptSnapshotData(
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
+	if fn := s.cfg.TestingKnobs.ReceiveSnapshot; fn != nil {
+		if err := fn(header); err != nil {
+			return sendSnapshotError(stream, err)
+		}
+	}
+
 	cleanup, rejectionMsg, err := s.reserveSnapshot(ctx, header)
 	if err != nil {
 		return err

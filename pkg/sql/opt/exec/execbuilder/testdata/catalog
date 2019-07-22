@@ -23,6 +23,8 @@ TABLE xyz
       └── x int not null
 scan xyz
 
+# Verify that column qualifications in check constraints and computed columns
+# are stripped.
 statement ok
 CREATE TABLE abcdef (
     a INT NOT NULL,
@@ -30,7 +32,7 @@ CREATE TABLE abcdef (
     c INT DEFAULT (10),
     d INT AS (abcdef.b + c + 1) STORED,
     e INT AS (a) STORED,
-    f INT CHECK (f > 2)
+    f INT CHECK (test.abcdef.f > 2)
 )
 
 query T

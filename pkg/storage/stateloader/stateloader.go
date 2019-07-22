@@ -293,7 +293,8 @@ func (rsl StateLoader) SetRangeAppliedState(
 	return engine.MVCCPutProto(ctx, eng, ms, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, nil, &as)
 }
 
-// MigrateToRangeAppliedStateKey TODO
+// MigrateToRangeAppliedStateKey deletes the keys that were replaced by the
+// RangeAppliedState key.
 func (rsl StateLoader) MigrateToRangeAppliedStateKey(
 	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats,
 ) error {
@@ -393,7 +394,11 @@ func (rsl StateLoader) CalcAppliedIndexSysBytes(appliedIndex, leaseAppliedIndex 
 func (rsl StateLoader) writeLegacyMVCCStatsInternal(
 	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, newMS)
+	// NB: newMS is copied to prevent conditional calls to this method from
+	// causing the stats argument to escape. This is legacy code which does
+	// not need to be optimized for performance.
+	newMSCopy := *newMS
+	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &newMSCopy)
 }
 
 // SetLegacyMVCCStats overwrites the legacy MVCC stats key.
@@ -458,6 +463,21 @@ func (rsl StateLoader) SetGCThreshold(
 	}
 	return engine.MVCCPutProto(ctx, eng, ms,
 		rsl.RangeLastGCKey(), hlc.Timestamp{}, nil, threshold)
+}
+
+// LoadLegacyTxnSpanGCThreshold loads the legacy transaction GC threshold. This
+// field is NOT populated in the ReplicaState value returned by StateLoader.Load.
+// TODO(nvanbenschoten): Remove in 20.1.
+func (rsl StateLoader) LoadLegacyTxnSpanGCThreshold(
+	ctx context.Context, reader engine.Reader,
+) (*hlc.Timestamp, error) {
+	var t hlc.Timestamp
+	found, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
+		hlc.Timestamp{}, &t, engine.MVCCGetOptions{})
+	if !found {
+		return nil, err
+	}
+	return &t, err
 }
 
 // The rest is not technically part of ReplicaState.

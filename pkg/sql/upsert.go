@@ -142,7 +142,7 @@ func (p *planner) newUpsertNode(
 		// to include mutation columns being added. If the SET
 		// expressions were explicit (specified by the client),
 		// then we want to reject assignments to mutation columns.
-		updateCols, err := p.processColumns(desc, names,
+		updateCols, err := sqlbase.ProcessTargetColumns(desc, names,
 			false /* ensureColumns */, autoGenUpdates /* allowMutations */)
 		if err != nil {
 			return nil, err

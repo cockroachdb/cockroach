@@ -114,7 +114,7 @@ type StmtBuf struct {
 type Command interface {
 	fmt.Stringer
 	// command returns a string representation of the command type (e.g.
-	// "prepare", "exec stmt").
+	// "prepare stmt", "exec stmt").
 	command() string
 }
 
@@ -190,7 +190,7 @@ type PrepareStmt struct {
 }
 
 // command implements the Command interface.
-func (PrepareStmt) command() string { return "prepare" }
+func (PrepareStmt) command() string { return "prepare stmt" }
 
 func (p PrepareStmt) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
@@ -213,7 +213,7 @@ type DescribeStmt struct {
 }
 
 // command implements the Command interface.
-func (DescribeStmt) command() string { return "describe" }
+func (DescribeStmt) command() string { return "describe stmt" }
 
 func (d DescribeStmt) String() string {
 	return fmt.Sprintf("Describe: %q", d.Name)
@@ -253,7 +253,7 @@ type BindStmt struct {
 }
 
 // command implements the Command interface.
-func (BindStmt) command() string { return "bind" }
+func (BindStmt) command() string { return "bind stmt" }
 
 func (b BindStmt) String() string {
 	return fmt.Sprintf("BindStmt: %q->%q", b.PreparedStatementName, b.PortalName)
@@ -268,7 +268,7 @@ type DeletePreparedStmt struct {
 }
 
 // command implements the Command interface.
-func (DeletePreparedStmt) command() string { return "delete" }
+func (DeletePreparedStmt) command() string { return "delete stmt" }
 
 func (d DeletePreparedStmt) String() string {
 	return fmt.Sprintf("DeletePreparedStmt: %q", d.Name)

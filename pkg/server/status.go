@@ -1125,7 +1125,7 @@ func (s *statusServer) RaftDebug(
 			desc := node.Range.State.Desc
 			// Check for whether replica should be GCed.
 			containsNode := false
-			for _, replica := range desc.Replicas().Unwrap() {
+			for _, replica := range desc.Replicas().All() {
 				if replica.NodeID == node.NodeID {
 					containsNode = true
 				}
@@ -1205,7 +1205,7 @@ func (s *statusServer) Ranges(
 			state.Progress[id] = serverpb.RaftState_Progress{
 				Match:           progress.Match,
 				Next:            progress.Next,
-				Paused:          progress.Paused,
+				Paused:          progress.IsPaused(),
 				PendingSnapshot: progress.PendingSnapshot,
 				State:           progress.State.String(),
 			}

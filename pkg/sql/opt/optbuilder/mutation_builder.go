@@ -124,6 +124,9 @@ type mutationBuilder struct {
 
 	// checks contains foreign key check queries; see buildFKChecks.
 	checks memo.FKChecksExpr
+
+	// withID is nonzero if we need to buffer the input for FK checks.
+	withID opt.WithID
 }
 
 func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alias tree.TableName) {
@@ -388,7 +391,6 @@ func (mb *mutationBuilder) addSynthesizedCols(
 
 		// Assign name to synthesized column. Computed columns may refer to default
 		// columns in the table by name.
-		scopeCol.table = *mb.tab.Name()
 		scopeCol.name = tabCol.ColName()
 
 		// Remember ordinal position of the new scope column.
@@ -552,13 +554,9 @@ func (mb *mutationBuilder) disambiguateColumns() {
 		}
 	}
 
-	// Clear names of all non-preserved columns. Set the fully qualified table
-	// name of preserved columns, since computed column expressions will reference
-	// table names, not alias names.
+	// Clear names of all non-preserved columns.
 	for i := range mb.outScope.cols {
-		if preserve.Contains(i) {
-			mb.outScope.cols[i].table = *mb.tab.Name()
-		} else {
+		if !preserve.Contains(i) {
 			mb.outScope.cols[i].clearName()
 		}
 	}
@@ -588,6 +586,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		UpdateCols: makeColList(mb.updateOrds),
 		CanaryCol:  mb.canaryColID,
 		CheckCols:  makeColList(mb.checkOrds),
+		WithID:     mb.withID,
 	}
 
 	if needResults {
@@ -751,6 +750,16 @@ func (mb *mutationBuilder) buildFKChecks() {
 		return
 	}
 
+	if mb.tab.OutboundForeignKeyCount() == 0 {
+		return
+	}
+
+	// TODO(radu): if the input is a VALUES with constant expressions, we don't
+	// need to buffer it. This could be a normalization rule, but it's probably
+	// more efficient if we did it in here (or we'd end up building the entire FK
+	// subtrees twice).
+	mb.withID = mb.b.factory.Memo().AddWithBinding(mb.outScope.expr)
+
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
 		fk := mb.tab.OutboundForeignKey(i)
 		numCols := fk.ColumnCount()
@@ -803,25 +812,20 @@ func (mb *mutationBuilder) buildFKChecks() {
 			}
 		}
 
-		// Build the join filters:
-		//   (origin_a = referenced_a) AND (origin_b = referenced_b) AND ...
-		antiJoinFilters := make(memo.FiltersExpr, numCols)
-		for j := 0; j < numCols; j++ {
-			antiJoinFilters[j].Condition = mb.b.factory.ConstructEq(
-				mb.b.factory.ConstructVariable(inputCols[j]),
-				mb.b.factory.ConstructVariable(scanScope.cols[j].id),
-			)
+		// Set up a WithRef; for this we have to synthesize new columns.
+		withRefCols := make(opt.ColList, numCols)
+		for i := 0; i < numCols; i++ {
+			c := mb.b.factory.Metadata().ColumnMeta(inputCols[i])
+			withRefCols[i] = mb.md.AddColumn(c.Alias, c.Type)
 		}
 
-		// TODO(radu): this is a major hack; we should be using a reference to a
-		// buffer instead of reusing the expression directly. This is for
-		// prototyping purposes (should work ok with constant inputs). Note that
-		// the column IDs in the FK check query aren't exposed by the ForeignKeys
-		// operator so using the same column IDs shouldn't cause issues.
-		left := mb.b.factory.ConstructProject(
-			mb.outScope.expr, memo.EmptyProjectionsExpr, inputCols.ToSet(),
-		)
-		item.KeyCols = inputCols
+		left := mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
+			ID:      mb.withID,
+			InCols:  inputCols,
+			OutCols: withRefCols,
+		})
+
+		item.KeyCols = withRefCols
 
 		if notNullInputCols.Len() < numCols {
 			// The columns we are inserting might have NULLs. These require special
@@ -846,11 +850,11 @@ func (mb *mutationBuilder) buildFKChecks() {
 				// Filter out any rows which have a NULL; build filters of the form
 				//   (a IS NOT NULL) AND (b IS NOT NULL) ...
 				filters := make(memo.FiltersExpr, 0, numCols-notNullInputCols.Len())
-				for _, col := range inputCols {
-					if !notNullInputCols.Contains(col) {
+				for i := range inputCols {
+					if !notNullInputCols.Contains(inputCols[i]) {
 						filters = append(filters, memo.FiltersItem{
 							Condition: mb.b.factory.ConstructIsNot(
-								mb.b.factory.ConstructVariable(col),
+								mb.b.factory.ConstructVariable(withRefCols[i]),
 								memo.NullSingleton,
 							),
 						})
@@ -869,7 +873,7 @@ func (mb *mutationBuilder) buildFKChecks() {
 				// Build a filter of the form
 				//   (a IS NOT NULL) OR (b IS NOT NULL) ...
 				var condition opt.ScalarExpr
-				for _, col := range inputCols {
+				for _, col := range withRefCols {
 					is := mb.b.factory.ConstructIsNot(
 						mb.b.factory.ConstructVariable(col),
 						memo.NullSingleton,
@@ -885,6 +889,16 @@ func (mb *mutationBuilder) buildFKChecks() {
 			default:
 				panic(errors.AssertionFailedf("match method %s not supported", m))
 			}
+		}
+
+		// Build the join filters:
+		//   (origin_a = referenced_a) AND (origin_b = referenced_b) AND ...
+		antiJoinFilters := make(memo.FiltersExpr, numCols)
+		for j := 0; j < numCols; j++ {
+			antiJoinFilters[j].Condition = mb.b.factory.ConstructEq(
+				mb.b.factory.ConstructVariable(withRefCols[j]),
+				mb.b.factory.ConstructVariable(scanScope.cols[j].id),
+			)
 		}
 
 		item.Check = mb.b.factory.ConstructAntiJoin(

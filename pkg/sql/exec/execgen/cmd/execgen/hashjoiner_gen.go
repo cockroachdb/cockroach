@@ -38,8 +38,8 @@ func genHashJoiner(wr io.Writer) error {
 	assignHash := makeFunctionRegex("_ASSIGN_HASH", 2)
 	s = assignHash.ReplaceAllString(s, `{{.Global.UnaryAssign "$1" "$2"}}`)
 
-	rehash := makeFunctionRegex("_REHASH_BODY", 6)
-	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "SelInd" $6}}`)
+	rehash := makeFunctionRegex("_REHASH_BODY", 8)
+	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "SelInd" $7 "HasNulls" $8}}`)
 
 	checkCol := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 7)
 	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "SelInd" $7}}`)
@@ -56,11 +56,13 @@ func genHashJoiner(wr io.Writer) error {
 	collectNoOuter := makeFunctionRegex("_COLLECT_NO_OUTER", 5)
 	s = collectNoOuter.ReplaceAllString(s, `{{template "collectNoOuter" buildDict "Global" . "SelInd" $5}}`)
 
-	checkColMain := makeFunctionRegex("_CHECK_COL_MAIN", 1)
+	checkColMain := makeFunctionRegex("_CHECK_COL_MAIN", 5)
 	s = checkColMain.ReplaceAllString(s, `{{template "checkColMain" .}}`)
 
-	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 8)
-	s = checkColBody.ReplaceAllString(s, `{{template "checkColBody" buildDict "Global" .Global "SelInd" .SelInd "ProbeHasNulls" $7 "BuildHasNulls" $8}}`)
+	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 9)
+	s = checkColBody.ReplaceAllString(
+		s,
+		`{{template "checkColBody" buildDict "Global" .Global "SelInd" .SelInd "ProbeHasNulls" $7 "BuildHasNulls" $8 "AllowNullEquality" $9}}`)
 
 	tmpl, err := template.New("hashjoiner_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 

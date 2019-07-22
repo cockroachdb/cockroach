@@ -323,7 +323,7 @@ func makeSchemaChangeBulkIngestTest(numNodes, numRows int, length time.Duration)
 		Name:    "schemachange/bulkingest",
 		Cluster: makeClusterSpec(numNodes),
 		Timeout: length * 2,
-		// `fixtures import` (with the experimental-workload paths) is not supported in 2.1
+		// `fixtures import` (with the workload paths) is not supported in 2.1
 		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			// Configure column a to have sequential ascending values, and columns b and c to be constant.

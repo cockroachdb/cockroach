@@ -996,3 +996,24 @@ query I
 SELECT jsonb_array_length('[]')
 ----
 0
+
+query TTT
+SELECT row_to_json(row(1,'foo')), row_to_json(NULL), row_to_json(row())
+----
+{"f1": 1, "f2": "foo"}  NULL  {}
+
+
+# TODO(jordan,radu): this should also work without the .*.
+query T
+select row_to_json(t.*)
+from (
+  select 1 as a, 2 as b
+) t
+----
+{"a": 1, "b": 2}
+
+query T
+SELECT '["a", {"b":1}]'::jsonb #- '{1,b}'
+----
+["a", {}]
+

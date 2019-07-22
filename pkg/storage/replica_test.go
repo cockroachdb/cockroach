@@ -63,6 +63,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
@@ -133,17 +134,19 @@ func leaseExpiry(repl *Replica) int64 {
 
 // Create a Raft status that shows everyone fully up to date.
 func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
-	prs := make(map[uint64]raft.Progress)
+	prs := make(map[uint64]tracker.Progress)
 	for _, repl := range repls {
-		prs[uint64(repl.ReplicaID)] = raft.Progress{
-			State: raft.ProgressStateReplicate,
+		prs[uint64(repl.ReplicaID)] = tracker.Progress{
+			State: tracker.StateReplicate,
 			Match: 100,
 		}
 	}
 	return &raft.Status{
-		HardState: raftpb.HardState{Commit: 100},
-		SoftState: raft.SoftState{Lead: 1, RaftState: raft.StateLeader},
-		Progress:  prs,
+		BasicStatus: raft.BasicStatus{
+			HardState: raftpb.HardState{Commit: 100},
+			SoftState: raft.SoftState{Lead: 1, RaftState: raft.StateLeader},
+		},
+		Progress: prs,
 	}
 }
 
@@ -7478,9 +7481,15 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var tc testContext
+	cfg := TestStoreConfig(nil)
+	// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
+	// refreshes so that our proposals don't risk being reproposed due to
+	// Raft leadership instability.
+	cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
+	cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	type magicKey struct{}
 	ctx := context.WithValue(context.Background(), magicKey{}, "foo")
@@ -7488,7 +7497,6 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	var seenCmds []int
 	dropAll := int32(1)
 	tc.repl.mu.Lock()
-	lease := *tc.repl.mu.state.Lease
 	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if atomic.LoadInt32(&dropAll) == 1 {
 			return true, nil
@@ -7498,59 +7506,55 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		}
 		return false, nil
 	}
+	lease := *tc.repl.mu.state.Lease
 	tc.repl.mu.Unlock()
 
 	const num = 10
 	expIndexes := make([]int, 0, num)
-	chs := func() []chan proposalResult {
-		chs := make([]chan proposalResult, 0, num)
-
-		for i := 0; i < num; i++ {
-			expIndexes = append(expIndexes, i+1)
-			var ba roachpb.BatchRequest
-			ba.Timestamp = tc.Clock().Now()
-			ba.Add(&roachpb.PutRequest{
-				RequestHeader: roachpb.RequestHeader{
-					Key: roachpb.Key(fmt.Sprintf("k%d", i)),
-				},
-			})
-			ch, _, _, err := tc.repl.evalAndPropose(ctx, lease, &ba, &allSpans, endCmds{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			chs = append(chs, ch)
-			tc.repl.mu.Lock()
-			if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
-				t.Fatal(err)
-			}
-			tc.repl.mu.Unlock()
-		}
-
-		tc.repl.mu.Lock()
-		origIndexes := make([]int, 0, num)
-		for _, p := range tc.repl.mu.proposals {
-			if v := p.ctx.Value(magicKey{}); v != nil {
-				origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
-			}
-		}
-		sort.Ints(origIndexes)
-		tc.repl.mu.Unlock()
-
-		if !reflect.DeepEqual(expIndexes, origIndexes) {
-			t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
-		}
-
-		tc.repl.raftMu.Lock()
-		tc.repl.mu.Lock()
-		atomic.StoreInt32(&dropAll, 0)
-		tc.repl.refreshProposalsLocked(0, reasonTicks)
-		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+	chs := make([]chan proposalResult, 0, num)
+	for i := 0; i < num; i++ {
+		var ba roachpb.BatchRequest
+		ba.Timestamp = tc.Clock().Now()
+		ba.Add(&roachpb.PutRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
+			},
+		})
+		ch, _, idx, err := tc.repl.evalAndPropose(ctx, lease, &ba, &allSpans, endCmds{})
+		if err != nil {
 			t.Fatal(err)
 		}
-		tc.repl.mu.Unlock()
-		tc.repl.raftMu.Unlock()
-		return chs
-	}()
+		chs = append(chs, ch)
+		expIndexes = append(expIndexes, int(idx))
+	}
+
+	tc.repl.mu.Lock()
+	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		t.Fatal(err)
+	}
+	origIndexes := make([]int, 0, num)
+	for _, p := range tc.repl.mu.proposals {
+		if v := p.ctx.Value(magicKey{}); v != nil {
+			origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
+		}
+	}
+	sort.Ints(origIndexes)
+	tc.repl.mu.Unlock()
+
+	if !reflect.DeepEqual(expIndexes, origIndexes) {
+		t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
+	}
+
+	tc.repl.raftMu.Lock()
+	tc.repl.mu.Lock()
+	atomic.StoreInt32(&dropAll, 0)
+	tc.repl.refreshProposalsLocked(0, reasonTicks)
+	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
+		t.Fatal(err)
+	}
+	tc.repl.mu.Unlock()
+	tc.repl.raftMu.Unlock()
+
 	for _, ch := range chs {
 		if pErr := (<-ch).Err; pErr != nil {
 			t.Fatal(pErr)
@@ -8142,14 +8146,14 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 func TestReplicaMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	progress := func(vals ...uint64) map[uint64]raft.Progress {
-		m := make(map[uint64]raft.Progress)
+	progress := func(vals ...uint64) map[uint64]tracker.Progress {
+		m := make(map[uint64]tracker.Progress)
 		for i, v := range vals {
-			m[uint64(i+1)] = raft.Progress{Match: v}
+			m[uint64(i+1)] = tracker.Progress{Match: v}
 		}
 		return m
 	}
-	status := func(lead uint64, progress map[uint64]raft.Progress) *raft.Status {
+	status := func(lead uint64, progress map[uint64]tracker.Progress) *raft.Status {
 		status := &raft.Status{
 			Progress: progress,
 		}
@@ -9075,20 +9079,22 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 					},
 				},
 				status: &raft.Status{
-					ID: 1,
-					HardState: raftpb.HardState{
-						Commit: logIndex,
+					BasicStatus: raft.BasicStatus{
+						ID: 1,
+						HardState: raftpb.HardState{
+							Commit: logIndex,
+						},
+						SoftState: raft.SoftState{
+							RaftState: raft.StateLeader,
+						},
+						Applied:        logIndex,
+						LeadTransferee: 0,
 					},
-					SoftState: raft.SoftState{
-						RaftState: raft.StateLeader,
-					},
-					Applied: logIndex,
-					Progress: map[uint64]raft.Progress{
+					Progress: map[uint64]tracker.Progress{
 						1: {Match: logIndex},
 						2: {Match: logIndex},
 						3: {Match: logIndex},
 					},
-					LeadTransferee: 0,
 				},
 				lastIndex:      logIndex,
 				raftReady:      false,
@@ -9152,7 +9158,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	for _, i := range []uint64{1, 2, 3} {
 		test(false, func(q *testQuiescer) *testQuiescer {
-			q.status.Progress[i] = raft.Progress{Match: invalidIndex}
+			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
 			return q
 		})
 	}
@@ -9186,7 +9192,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	for _, i := range []uint64{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
 			q.livenessMap[roachpb.NodeID(i)] = IsLiveMapEntry{IsLive: false}
-			q.status.Progress[i] = raft.Progress{Match: invalidIndex}
+			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
 			return q
 		})
 	}
@@ -9714,30 +9720,30 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 		},
 	}
 
-	followerWithoutLeader := raft.Status{
+	followerWithoutLeader := raft.Status{BasicStatus: raft.BasicStatus{
 		SoftState: raft.SoftState{
 			RaftState: raft.StateFollower,
 			Lead:      0,
 		},
-	}
-	followerWithLeader := raft.Status{
+	}}
+	followerWithLeader := raft.Status{BasicStatus: raft.BasicStatus{
 		SoftState: raft.SoftState{
 			RaftState: raft.StateFollower,
 			Lead:      1,
 		},
-	}
-	candidate := raft.Status{
+	}}
+	candidate := raft.Status{BasicStatus: raft.BasicStatus{
 		SoftState: raft.SoftState{
 			RaftState: raft.StateCandidate,
 			Lead:      0,
 		},
-	}
-	leader := raft.Status{
+	}}
+	leader := raft.Status{BasicStatus: raft.BasicStatus{
 		SoftState: raft.SoftState{
 			RaftState: raft.StateLeader,
 			Lead:      1,
 		},
-	}
+	}}
 
 	tests := []struct {
 		leaseStatus storagepb.LeaseStatus
@@ -11454,7 +11460,7 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 	assert.Equal(t, "", splitSnapshotWarningStr(12, status))
 
 	pr := status.Progress[2]
-	pr.State = raft.ProgressStateProbe
+	pr.State = tracker.StateProbe
 	status.Progress[2] = pr
 
 	assert.Equal(
@@ -11463,7 +11469,7 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 		splitSnapshotWarningStr(12, status),
 	)
 
-	pr.State = raft.ProgressStateSnapshot
+	pr.State = tracker.StateSnapshot
 
 	assert.Equal(
 		t,

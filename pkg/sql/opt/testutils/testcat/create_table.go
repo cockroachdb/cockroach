@@ -145,7 +145,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		switch def := def.(type) {
 		case *tree.CheckConstraintTableDef:
 			tab.Checks = append(tab.Checks, cat.CheckConstraint{
-				Constraint: tree.Serialize(def.Expr),
+				Constraint: serializeTableDefExpr(def.Expr),
 				Validated:  validatedCheckConstraint(def),
 			})
 		}
@@ -360,12 +360,12 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	}
 
 	if def.DefaultExpr.Expr != nil {
-		s := tree.Serialize(def.DefaultExpr.Expr)
+		s := serializeTableDefExpr(def.DefaultExpr.Expr)
 		col.DefaultExpr = &s
 	}
 
 	if def.Computed.Expr != nil {
-		s := tree.Serialize(def.Computed.Expr)
+		s := serializeTableDefExpr(def.Computed.Expr)
 		col.ComputedExpr = &s
 	}
 
@@ -592,4 +592,29 @@ func extractDeleteOnlyIndex(def *tree.IndexTableDef) (name string, ok bool) {
 
 func validatedCheckConstraint(def *tree.CheckConstraintTableDef) bool {
 	return !strings.HasSuffix(string(def.Name), ":unvalidated")
+}
+
+func serializeTableDefExpr(expr tree.Expr) string {
+	// Disallow any column references that are qualified with the table. The
+	// production table creation code verifies them and strips them away, so the
+	// stored expressions contain only unqualified column references.
+	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok && c.TableName != nil {
+				return false, nil, fmt.Errorf(
+					"expressions in table definitions must not contain qualified column references: %s", c,
+				)
+			}
+		}
+		return true, expr, nil
+	}
+	_, err := tree.SimpleVisit(expr, preFn)
+	if err != nil {
+		panic(err)
+	}
+	return tree.Serialize(expr)
 }

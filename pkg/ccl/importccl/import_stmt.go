@@ -400,12 +400,6 @@ func importPlanHook(
 				return err
 			}
 
-			// The IMPORT INTO prototype currently breaks secondary indexes in the
-			// target table, as explained in issue #38044.
-			if len(found.AllNonDropIndexes()) != 0 {
-				return errors.Errorf("cannot IMPORT INTO a table with secondary indexes.")
-			}
-
 			if len(found.Mutations) > 0 {
 				return errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", found.Mutations[0].String())
 			}
@@ -422,6 +416,9 @@ func importPlanHook(
 			// TODO(dt): de-validate all the FKs.
 
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				if err := txn.SetSystemConfigTrigger(); err != nil {
+					return err
+				}
 				return errors.Wrap(
 					txn.CPut(ctx, sqlbase.MakeDescMetadataKey(found.TableDescriptor.ID),
 						sqlbase.WrapDescriptor(&importing), sqlbase.WrapDescriptor(&found.TableDescriptor),

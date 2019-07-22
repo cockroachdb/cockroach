@@ -304,8 +304,8 @@ type Factory interface {
 		input Node,
 		table cat.Table,
 		insertCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
-		rowsNeeded bool,
 		skipFKChecks bool,
 	) (Node, error)
 
@@ -326,8 +326,8 @@ type Factory interface {
 		table cat.Table,
 		fetchCols ColumnOrdinalSet,
 		updateCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
-		rowsNeeded bool,
 	) (Node, error)
 
 	// ConstructUpsert creates a node that implements an INSERT..ON CONFLICT or
@@ -360,8 +360,8 @@ type Factory interface {
 		insertCols ColumnOrdinalSet,
 		fetchCols ColumnOrdinalSet,
 		updateCols ColumnOrdinalSet,
+		returnCols ColumnOrdinalSet,
 		checks CheckOrdinalSet,
-		rowsNeeded bool,
 	) (Node, error)
 
 	// ConstructDelete creates a node that implements a DELETE statement. The
@@ -373,7 +373,7 @@ type Factory interface {
 	// as they appear in the table schema. The rowsNeeded parameter is true if a
 	// RETURNING clause needs the deleted row(s) as output.
 	ConstructDelete(
-		input Node, table cat.Table, fetchCols ColumnOrdinalSet, rowsNeeded bool,
+		input Node, table cat.Table, fetchCols ColumnOrdinalSet, returnCols ColumnOrdinalSet,
 	) (Node, error)
 
 	// ConstructDeleteRange creates a node that efficiently deletes contiguous
@@ -422,6 +422,24 @@ type Factory interface {
 	// ConstructAlterTableRelocate creates a node that implements ALTER TABLE/INDEX
 	// UNSPLIT AT.
 	ConstructAlterTableRelocate(index cat.Index, input Node, relocateLease bool) (Node, error)
+
+	// ConstructBuffer constructs a node whose input can be referenced from
+	// elsewhere in the query.
+	ConstructBuffer(value Node, label string) (Node, error)
+
+	// ConstructScanBuffer constructs a node which refers to a node constructed by
+	// ConstructBuffer.
+	ConstructScanBuffer(ref Node, label string) (Node, error)
+
+	// ConstructControlJobs creates a node that implements PAUSE/CANCEL/RESUME
+	// JOBS.
+	ConstructControlJobs(command tree.JobCommand, input Node) (Node, error)
+
+	// ConstructCancelQueries creates a node that implements CANCEL QUERIES.
+	ConstructCancelQueries(input Node, ifExists bool) (Node, error)
+
+	// ConstructCancelSessions creates a node that implements CANCEL SESSIONS.
+	ConstructCancelSessions(input Node, ifExists bool) (Node, error)
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being

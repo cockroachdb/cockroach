@@ -1367,10 +1367,10 @@ WITH t(x) AS (
 )
 SELECT x FROM t WHERE x
 ----
-select
- ├── columns: x:5(bool!null)
- ├── stats: [rows=4e+10, distinct(5)=1, null(5)=0]
- ├── fd: ()-->(5)
+with &1 (t)
+ ├── columns: x:6(bool!null)
+ ├── stats: [rows=4e+10, distinct(6)=1, null(6)=0]
+ ├── fd: ()-->(6)
  ├── project
  │    ├── columns: x:5(bool)
  │    ├── stats: [rows=4e+20, distinct(5)=1, null(5)=4e+20]
@@ -1386,8 +1386,18 @@ select
  │    │    └── filters (true)
  │    └── projections
  │         └── (t1.x::INT8 << 5533)::BOOL OR t2.x [type=bool, outer=(1,3)]
- └── filters
-      └── variable: x [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+ └── select
+      ├── columns: x:6(bool!null)
+      ├── stats: [rows=4e+10, distinct(6)=1, null(6)=0]
+      ├── fd: ()-->(6)
+      ├── with-scan &1 (t)
+      │    ├── columns: x:6(bool)
+      │    ├── mapping:
+      │    │    └──  x:5(bool) => x:6(bool)
+      │    ├── stats: [rows=4e+20, distinct(6)=1, null(6)=4e+20]
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── variable: x [type=bool, outer=(6), constraints=(/6: [/true - /true]; tight), fd=()-->(6)]
 
 # Regression test for #38375. Avoid floating point precision errors.
 exec-ddl

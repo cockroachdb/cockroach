@@ -715,6 +715,85 @@ func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel 
 	}
 }
 
+func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, with, &rel.Shared)
+
+	// Copy over the props from the input.
+	*rel = *with.Input.Relational()
+
+	// Side Effects
+	// ------------
+	// This expression has side effects if either Binding or Input has side
+	// effects, which is what is computed by the call to BuildSharedProps.
+
+	// Output Columns
+	// --------------
+	// Passed through from the call above to b.buildProps.
+
+	// Not Null Columns
+	// ----------------
+	// Passed through from the call above to b.buildProps.
+
+	// Outer Columns
+	// -------------
+	// Passed through from the call above to b.buildProps.
+
+	// Functional Dependencies
+	// -----------------------
+	// Passed through from the call above to b.buildProps.
+
+	// Cardinality
+	// -----------
+	// Passed through from the call above to b.buildProps.
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.statsFromChild(with, 1)
+	}
+}
+
+func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.Relational) {
+	e := b.mem.WithExpr(ref.ID)
+
+	// WithScan inherits most of the logical properties of the expression it
+	// references.
+	*rel = *e.Relational()
+
+	// Side Effects
+	// ------------
+	// TODO(justin): these shouldn't have side-effects, but mutating that here
+	// has complications with the way that shared props are built.
+
+	// Output Columns
+	// --------------
+	rel.OutputCols = ref.OutCols.ToSet()
+
+	// Not Null Columns
+	// ----------------
+	rel.NotNullCols = translateColSet(rel.NotNullCols, ref.InCols, ref.OutCols)
+
+	// Outer Columns
+	// -------------
+	// Copied from the referenced expression.
+
+	// Functional Dependencies
+	// -----------------------
+	rel.FuncDeps = props.FuncDepSet{}
+	rel.FuncDeps.CopyFrom(&e.Relational().FuncDeps)
+	for i := range ref.InCols {
+		rel.FuncDeps.AddSynthesizedCol(opt.MakeColSet(ref.InCols[i]), ref.OutCols[i])
+	}
+
+	// Cardinality
+	// -----------
+	// Copied from the referenced expression.
+
+	// Statistics
+	// ----------
+	// Copied from the referenced expression.
+}
+
 func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props.Relational) {
 	b.buildBasicProps(explain, explain.ColList, rel)
 }
@@ -761,6 +840,25 @@ func (b *logicalPropsBuilder) buildAlterTableRelocateProps(
 	b.buildBasicProps(relocate, relocate.Columns, rel)
 	rel.CanHaveSideEffects = true
 	rel.CanMutate = true
+}
+
+func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *props.Relational) {
+	b.buildBasicProps(ctl, opt.ColList{}, rel)
+	rel.CanHaveSideEffects = true
+}
+
+func (b *logicalPropsBuilder) buildCancelQueriesProps(
+	cancel *CancelQueriesExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(cancel, opt.ColList{}, rel)
+	rel.CanHaveSideEffects = true
+}
+
+func (b *logicalPropsBuilder) buildCancelSessionsProps(
+	cancel *CancelSessionsExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(cancel, opt.ColList{}, rel)
+	rel.CanHaveSideEffects = true
 }
 
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
@@ -1088,8 +1186,10 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// --------------
 	// Only non-mutation columns are output columns.
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		colID := private.Table.ColumnID(i)
-		rel.OutputCols.Add(colID)
+		if private.IsColumnOutput(i) {
+			colID := private.Table.ColumnID(i)
+			rel.OutputCols.Add(colID)
+		}
 	}
 
 	// Not Null Columns

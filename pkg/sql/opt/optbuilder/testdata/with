@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE x(a INT)
+CREATE TABLE x(a INT, b INT)
 ----
 
 exec-ddl
@@ -10,41 +10,53 @@ build
 WITH t AS (SELECT a FROM y WHERE a < 3)
   SELECT * FROM x NATURAL JOIN t
 ----
-project
- ├── columns: a:3(int!null)
- └── inner-join (hash)
-      ├── columns: y.a:1(int!null) x.a:3(int!null) x.rowid:4(int!null)
-      ├── scan x
-      │    └── columns: x.a:3(int) x.rowid:4(int!null)
-      ├── project
-      │    ├── columns: y.a:1(int!null)
-      │    └── select
-      │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
-      │         ├── scan y
-      │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
-      │         └── filters
-      │              └── lt [type=bool]
-      │                   ├── variable: y.a [type=int]
-      │                   └── const: 3 [type=int]
-      └── filters
-           └── eq [type=bool]
-                ├── variable: x.a [type=int]
-                └── variable: y.a [type=int]
+with &1 (t)
+ ├── columns: a:3(int!null) b:4(int)
+ ├── project
+ │    ├── columns: y.a:1(int!null)
+ │    └── select
+ │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
+ │         ├── scan y
+ │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
+ │         └── filters
+ │              └── lt [type=bool]
+ │                   ├── variable: y.a [type=int]
+ │                   └── const: 3 [type=int]
+ └── project
+      ├── columns: x.a:3(int!null) b:4(int)
+      └── inner-join (hash)
+           ├── columns: x.a:3(int!null) b:4(int) x.rowid:5(int!null) a:6(int!null)
+           ├── scan x
+           │    └── columns: x.a:3(int) b:4(int) x.rowid:5(int!null)
+           ├── with-scan &1 (t)
+           │    ├── columns: a:6(int!null)
+           │    └── mapping:
+           │         └──  y.a:1(int) => a:6(int)
+           └── filters
+                └── eq [type=bool]
+                     ├── variable: x.a [type=int]
+                     └── variable: a [type=int]
 
 build
 WITH t AS (SELECT a FROM y WHERE a < 3)
   SELECT * FROM t
 ----
-project
- ├── columns: a:1(int!null)
- └── select
-      ├── columns: a:1(int!null) rowid:2(int!null)
-      ├── scan y
-      │    └── columns: a:1(int) rowid:2(int!null)
-      └── filters
-           └── lt [type=bool]
-                ├── variable: a [type=int]
-                └── const: 3 [type=int]
+with &1 (t)
+ ├── columns: a:3(int!null)
+ ├── project
+ │    ├── columns: y.a:1(int!null)
+ │    └── select
+ │         ├── columns: y.a:1(int!null) rowid:2(int!null)
+ │         ├── scan y
+ │         │    └── columns: y.a:1(int) rowid:2(int!null)
+ │         └── filters
+ │              └── lt [type=bool]
+ │                   ├── variable: y.a [type=int]
+ │                   └── const: 3 [type=int]
+ └── with-scan &1 (t)
+      ├── columns: a:3(int!null)
+      └── mapping:
+           └──  y.a:1(int) => a:3(int)
 
 # Chaining multiple CTEs.
 build
@@ -53,22 +65,34 @@ WITH
     t2 AS (SELECT * FROM t1 WHERE a > 1)
 SELECT * FROM t2
 ----
-select
- ├── columns: a:1(int!null)
+with &1 (t1)
+ ├── columns: a:4(int!null)
  ├── project
- │    ├── columns: a:1(int!null)
+ │    ├── columns: y.a:1(int!null)
  │    └── select
- │         ├── columns: a:1(int!null) rowid:2(int!null)
+ │         ├── columns: y.a:1(int!null) rowid:2(int!null)
  │         ├── scan y
- │         │    └── columns: a:1(int) rowid:2(int!null)
+ │         │    └── columns: y.a:1(int) rowid:2(int!null)
  │         └── filters
  │              └── lt [type=bool]
- │                   ├── variable: a [type=int]
+ │                   ├── variable: y.a [type=int]
  │                   └── const: 3 [type=int]
- └── filters
-      └── gt [type=bool]
-           ├── variable: a [type=int]
-           └── const: 1 [type=int]
+ └── with &2 (t2)
+      ├── columns: a:4(int!null)
+      ├── select
+      │    ├── columns: a:3(int!null)
+      │    ├── with-scan &1 (t1)
+      │    │    ├── columns: a:3(int!null)
+      │    │    └── mapping:
+      │    │         └──  y.a:1(int) => a:3(int)
+      │    └── filters
+      │         └── gt [type=bool]
+      │              ├── variable: a [type=int]
+      │              └── const: 1 [type=int]
+      └── with-scan &2 (t2)
+           ├── columns: a:4(int!null)
+           └── mapping:
+                └──  a:3(int) => a:4(int)
 
 build
 WITH
@@ -77,28 +101,46 @@ WITH
     t3 AS (SELECT * FROM t2 WHERE a = 2)
 SELECT * FROM t3
 ----
-select
- ├── columns: a:1(int!null)
- ├── select
- │    ├── columns: a:1(int!null)
- │    ├── project
- │    │    ├── columns: a:1(int!null)
- │    │    └── select
- │    │         ├── columns: a:1(int!null) rowid:2(int!null)
- │    │         ├── scan y
- │    │         │    └── columns: a:1(int) rowid:2(int!null)
- │    │         └── filters
- │    │              └── lt [type=bool]
- │    │                   ├── variable: a [type=int]
- │    │                   └── const: 3 [type=int]
- │    └── filters
- │         └── gt [type=bool]
- │              ├── variable: a [type=int]
- │              └── const: 1 [type=int]
- └── filters
-      └── eq [type=bool]
-           ├── variable: a [type=int]
-           └── const: 2 [type=int]
+with &1 (t1)
+ ├── columns: a:5(int!null)
+ ├── project
+ │    ├── columns: y.a:1(int!null)
+ │    └── select
+ │         ├── columns: y.a:1(int!null) rowid:2(int!null)
+ │         ├── scan y
+ │         │    └── columns: y.a:1(int) rowid:2(int!null)
+ │         └── filters
+ │              └── lt [type=bool]
+ │                   ├── variable: y.a [type=int]
+ │                   └── const: 3 [type=int]
+ └── with &2 (t2)
+      ├── columns: a:5(int!null)
+      ├── select
+      │    ├── columns: a:3(int!null)
+      │    ├── with-scan &1 (t1)
+      │    │    ├── columns: a:3(int!null)
+      │    │    └── mapping:
+      │    │         └──  y.a:1(int) => a:3(int)
+      │    └── filters
+      │         └── gt [type=bool]
+      │              ├── variable: a [type=int]
+      │              └── const: 1 [type=int]
+      └── with &3 (t3)
+           ├── columns: a:5(int!null)
+           ├── select
+           │    ├── columns: a:4(int!null)
+           │    ├── with-scan &2 (t2)
+           │    │    ├── columns: a:4(int!null)
+           │    │    └── mapping:
+           │    │         └──  a:3(int) => a:4(int)
+           │    └── filters
+           │         └── eq [type=bool]
+           │              ├── variable: a [type=int]
+           │              └── const: 2 [type=int]
+           └── with-scan &3 (t3)
+                ├── columns: a:5(int!null)
+                └── mapping:
+                     └──  a:4(int) => a:5(int)
 
 build
 WITH
@@ -108,57 +150,95 @@ WITH
     t4 AS (SELECT * FROM t2 WHERE a > 3)
 SELECT * FROM t3 NATURAL JOIN t4
 ----
-project
- ├── columns: a:1(int!null)
- └── inner-join (hash)
-      ├── columns: a:1(int!null) a:3(int!null)
-      ├── select
-      │    ├── columns: a:1(int!null)
-      │    ├── project
-      │    │    ├── columns: a:1(int!null)
-      │    │    └── select
-      │    │         ├── columns: a:1(int!null) rowid:2(int!null)
-      │    │         ├── scan y
-      │    │         │    └── columns: a:1(int) rowid:2(int!null)
-      │    │         └── filters
-      │    │              └── lt [type=bool]
-      │    │                   ├── variable: a [type=int]
-      │    │                   └── const: 3 [type=int]
-      │    └── filters
-      │         └── lt [type=bool]
-      │              ├── variable: a [type=int]
-      │              └── const: 4 [type=int]
-      ├── select
-      │    ├── columns: a:3(int!null)
-      │    ├── project
-      │    │    ├── columns: a:3(int!null)
-      │    │    └── select
-      │    │         ├── columns: a:3(int!null) rowid:4(int!null)
-      │    │         ├── scan y
-      │    │         │    └── columns: a:3(int) rowid:4(int!null)
-      │    │         └── filters
-      │    │              └── gt [type=bool]
-      │    │                   ├── variable: a [type=int]
-      │    │                   └── const: 1 [type=int]
-      │    └── filters
-      │         └── gt [type=bool]
-      │              ├── variable: a [type=int]
-      │              └── const: 3 [type=int]
-      └── filters
-           └── eq [type=bool]
-                ├── variable: a [type=int]
-                └── variable: a [type=int]
+with &1 (t1)
+ ├── columns: a:7(int!null)
+ ├── project
+ │    ├── columns: y.a:1(int!null)
+ │    └── select
+ │         ├── columns: y.a:1(int!null) rowid:2(int!null)
+ │         ├── scan y
+ │         │    └── columns: y.a:1(int) rowid:2(int!null)
+ │         └── filters
+ │              └── lt [type=bool]
+ │                   ├── variable: y.a [type=int]
+ │                   └── const: 3 [type=int]
+ └── with &2 (t2)
+      ├── columns: a:7(int!null)
+      ├── project
+      │    ├── columns: y.a:3(int!null)
+      │    └── select
+      │         ├── columns: y.a:3(int!null) rowid:4(int!null)
+      │         ├── scan y
+      │         │    └── columns: y.a:3(int) rowid:4(int!null)
+      │         └── filters
+      │              └── gt [type=bool]
+      │                   ├── variable: y.a [type=int]
+      │                   └── const: 1 [type=int]
+      └── with &3 (t3)
+           ├── columns: a:7(int!null)
+           ├── select
+           │    ├── columns: a:5(int!null)
+           │    ├── with-scan &1 (t1)
+           │    │    ├── columns: a:5(int!null)
+           │    │    └── mapping:
+           │    │         └──  y.a:1(int) => a:5(int)
+           │    └── filters
+           │         └── lt [type=bool]
+           │              ├── variable: a [type=int]
+           │              └── const: 4 [type=int]
+           └── with &4 (t4)
+                ├── columns: a:7(int!null)
+                ├── select
+                │    ├── columns: a:6(int!null)
+                │    ├── with-scan &2 (t2)
+                │    │    ├── columns: a:6(int!null)
+                │    │    └── mapping:
+                │    │         └──  y.a:3(int) => a:6(int)
+                │    └── filters
+                │         └── gt [type=bool]
+                │              ├── variable: a [type=int]
+                │              └── const: 3 [type=int]
+                └── project
+                     ├── columns: a:7(int!null)
+                     └── inner-join (hash)
+                          ├── columns: a:7(int!null) a:8(int!null)
+                          ├── with-scan &3 (t3)
+                          │    ├── columns: a:7(int!null)
+                          │    └── mapping:
+                          │         └──  a:5(int) => a:7(int)
+                          ├── with-scan &4 (t4)
+                          │    ├── columns: a:8(int!null)
+                          │    └── mapping:
+                          │         └──  a:6(int) => a:8(int)
+                          └── filters
+                               └── eq [type=bool]
+                                    ├── variable: a [type=int]
+                                    └── variable: a [type=int]
 
 # Make sure they scope properly.
 build
 WITH t AS (SELECT true) SELECT * FROM (WITH t AS (SELECT false) SELECT * FROM t)
 ----
-project
- ├── columns: bool:2(bool!null)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      └── false [type=bool]
+with &1 (t)
+ ├── columns: bool:3(bool!null)
+ ├── project
+ │    ├── columns: bool:1(bool!null)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── true [type=bool]
+ └── with &2 (t)
+      ├── columns: bool:3(bool!null)
+      ├── project
+      │    ├── columns: bool:2(bool!null)
+      │    ├── values
+      │    │    └── tuple [type=tuple]
+      │    └── projections
+      │         └── false [type=bool]
+      └── with-scan &2 (t)
+           ├── columns: bool:3(bool!null)
+           └── mapping:
+                └──  bool:2(bool) => bool:3(bool)
 
 build
 WITH
@@ -175,7 +255,36 @@ WITH
     t2 AS (SELECT * FROM t1)
 SELECT * FROM t1 NATURAL JOIN t2
 ----
-error (0A000): unimplemented: unsupported multiple use of CTE clause "t1"
+with &1 (t1)
+ ├── columns: bool:3(bool!null)
+ ├── project
+ │    ├── columns: bool:1(bool!null)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── true [type=bool]
+ └── with &2 (t2)
+      ├── columns: bool:3(bool!null)
+      ├── with-scan &1 (t1)
+      │    ├── columns: bool:2(bool!null)
+      │    └── mapping:
+      │         └──  bool:1(bool) => bool:2(bool)
+      └── project
+           ├── columns: bool:3(bool!null)
+           └── inner-join (hash)
+                ├── columns: bool:3(bool!null) bool:4(bool!null)
+                ├── with-scan &1 (t1)
+                │    ├── columns: bool:3(bool!null)
+                │    └── mapping:
+                │         └──  bool:1(bool) => bool:3(bool)
+                ├── with-scan &2 (t2)
+                │    ├── columns: bool:4(bool!null)
+                │    └── mapping:
+                │         └──  bool:2(bool) => bool:4(bool)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: bool [type=bool]
+                          └── variable: bool [type=bool]
 
 build
 WITH
@@ -183,105 +292,157 @@ WITH
     t2 AS (SELECT * FROM x NATURAL JOIN t1)
 SELECT * FROM t2 NATURAL JOIN x
 ----
-project
- ├── columns: a:3(int!null)
- └── inner-join (hash)
-      ├── columns: a:3(int!null) a:5(int!null) rowid:6(int!null)
+with &1 (t1)
+ ├── columns: a:9(int!null) b:10(int!null)
+ ├── project
+ │    ├── columns: x.a:1(int) x.b:2(int)
+ │    └── scan x
+ │         └── columns: x.a:1(int) x.b:2(int) rowid:3(int!null)
+ └── with &2 (t2)
+      ├── columns: a:9(int!null) b:10(int!null)
       ├── project
-      │    ├── columns: a:3(int!null)
+      │    ├── columns: x.a:4(int!null) x.b:5(int!null)
       │    └── inner-join (hash)
-      │         ├── columns: a:1(int!null) a:3(int!null) rowid:4(int!null)
+      │         ├── columns: x.a:4(int!null) x.b:5(int!null) rowid:6(int!null) a:7(int!null) b:8(int!null)
       │         ├── scan x
-      │         │    └── columns: a:3(int) rowid:4(int!null)
-      │         ├── project
-      │         │    ├── columns: a:1(int)
-      │         │    └── scan x
-      │         │         └── columns: a:1(int) rowid:2(int!null)
+      │         │    └── columns: x.a:4(int) x.b:5(int) rowid:6(int!null)
+      │         ├── with-scan &1 (t1)
+      │         │    ├── columns: a:7(int) b:8(int)
+      │         │    └── mapping:
+      │         │         ├──  x.a:1(int) => a:7(int)
+      │         │         └──  x.b:2(int) => b:8(int)
       │         └── filters
+      │              ├── eq [type=bool]
+      │              │    ├── variable: x.a [type=int]
+      │              │    └── variable: a [type=int]
       │              └── eq [type=bool]
-      │                   ├── variable: a [type=int]
-      │                   └── variable: a [type=int]
-      ├── scan x
-      │    └── columns: a:5(int) rowid:6(int!null)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: a [type=int]
-                └── variable: a [type=int]
+      │                   ├── variable: x.b [type=int]
+      │                   └── variable: b [type=int]
+      └── project
+           ├── columns: a:9(int!null) b:10(int!null)
+           └── inner-join (hash)
+                ├── columns: a:9(int!null) b:10(int!null) x.a:11(int!null) x.b:12(int!null) rowid:13(int!null)
+                ├── with-scan &2 (t2)
+                │    ├── columns: a:9(int!null) b:10(int!null)
+                │    └── mapping:
+                │         ├──  x.a:4(int) => a:9(int)
+                │         └──  x.b:5(int) => b:10(int)
+                ├── scan x
+                │    └── columns: x.a:11(int) x.b:12(int) rowid:13(int!null)
+                └── filters
+                     ├── eq [type=bool]
+                     │    ├── variable: a [type=int]
+                     │    └── variable: x.a [type=int]
+                     └── eq [type=bool]
+                          ├── variable: b [type=int]
+                          └── variable: x.b [type=int]
 
 build
 WITH t AS (SELECT a FROM y WHERE a < 3)
   SELECT * FROM t NATURAL JOIN t
 ----
-error (0A000): unimplemented: unsupported multiple use of CTE clause "t"
+error (42712): source name "t" specified more than once (missing AS clause)
 
 build
 WITH t(x) AS (SELECT a FROM x)
   SELECT x FROM (SELECT x FROM t)
 ----
-project
- ├── columns: x:1(int)
- └── scan x
-      └── columns: a:1(int) rowid:2(int!null)
+with &1 (t)
+ ├── columns: x:4(int)
+ ├── project
+ │    ├── columns: a:1(int)
+ │    └── scan x
+ │         └── columns: a:1(int) b:2(int) rowid:3(int!null)
+ └── with-scan &1 (t)
+      ├── columns: x:4(int)
+      └── mapping:
+           └──  a:1(int) => x:4(int)
 
 build
 WITH t(a, b) AS (SELECT true a, false b)
   SELECT a, b FROM t
 ----
-project
- ├── columns: a:1(bool!null) b:2(bool!null)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      ├── true [type=bool]
-      └── false [type=bool]
+with &1 (t)
+ ├── columns: a:3(bool!null) b:4(bool!null)
+ ├── project
+ │    ├── columns: a:1(bool!null) b:2(bool!null)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         ├── true [type=bool]
+ │         └── false [type=bool]
+ └── with-scan &1 (t)
+      ├── columns: a:3(bool!null) b:4(bool!null)
+      └── mapping:
+           ├──  a:1(bool) => a:3(bool)
+           └──  b:2(bool) => b:4(bool)
 
 build
 WITH t(b, a) AS (SELECT true a, false b)
   SELECT a, b FROM t
 ----
-project
- ├── columns: a:2(bool!null) b:1(bool!null)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      ├── true [type=bool]
-      └── false [type=bool]
+with &1 (t)
+ ├── columns: a:4(bool!null) b:3(bool!null)
+ ├── project
+ │    ├── columns: a:1(bool!null) b:2(bool!null)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         ├── true [type=bool]
+ │         └── false [type=bool]
+ └── with-scan &1 (t)
+      ├── columns: b:3(bool!null) a:4(bool!null)
+      └── mapping:
+           ├──  a:1(bool) => b:3(bool)
+           └──  b:2(bool) => a:4(bool)
 
 build
 WITH t AS (SELECT a FROM x)
     SELECT * FROM y WHERE a IN (SELECT * FROM t)
 ----
-project
- ├── columns: a:3(int)
- └── select
-      ├── columns: y.a:3(int) y.rowid:4(int!null)
-      ├── scan y
-      │    └── columns: y.a:3(int) y.rowid:4(int!null)
-      └── filters
-           └── any: eq [type=bool]
-                ├── project
-                │    ├── columns: x.a:1(int)
-                │    └── scan x
-                │         └── columns: x.a:1(int) x.rowid:2(int!null)
-                └── variable: y.a [type=int]
+with &1 (t)
+ ├── columns: a:4(int)
+ ├── project
+ │    ├── columns: x.a:1(int)
+ │    └── scan x
+ │         └── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
+ └── project
+      ├── columns: y.a:4(int)
+      └── select
+           ├── columns: y.a:4(int) y.rowid:5(int!null)
+           ├── scan y
+           │    └── columns: y.a:4(int) y.rowid:5(int!null)
+           └── filters
+                └── any: eq [type=bool]
+                     ├── with-scan &1 (t)
+                     │    ├── columns: a:6(int)
+                     │    └── mapping:
+                     │         └──  x.a:1(int) => a:6(int)
+                     └── variable: y.a [type=int]
 
 build
 WITH t(x) AS (SELECT a FROM x)
     SELECT * FROM y WHERE a IN (SELECT x FROM t)
 ----
-project
- ├── columns: a:3(int)
- └── select
-      ├── columns: y.a:3(int) y.rowid:4(int!null)
-      ├── scan y
-      │    └── columns: y.a:3(int) y.rowid:4(int!null)
-      └── filters
-           └── any: eq [type=bool]
-                ├── project
-                │    ├── columns: x.a:1(int)
-                │    └── scan x
-                │         └── columns: x.a:1(int) x.rowid:2(int!null)
-                └── variable: y.a [type=int]
+with &1 (t)
+ ├── columns: a:4(int)
+ ├── project
+ │    ├── columns: x.a:1(int)
+ │    └── scan x
+ │         └── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
+ └── project
+      ├── columns: y.a:4(int)
+      └── select
+           ├── columns: y.a:4(int) y.rowid:5(int!null)
+           ├── scan y
+           │    └── columns: y.a:4(int) y.rowid:5(int!null)
+           └── filters
+                └── any: eq [type=bool]
+                     ├── with-scan &1 (t)
+                     │    ├── columns: x:6(int)
+                     │    └── mapping:
+                     │         └──  x.a:1(int) => x:6(int)
+                     └── variable: y.a [type=int]
 
 # Using a subquery inside a CTE
 build
@@ -289,59 +450,51 @@ SELECT * FROM x WHERE a IN
   (WITH t AS (SELECT * FROM y WHERE a < 3) SELECT * FROM t)
 ----
 project
- ├── columns: a:1(int)
+ ├── columns: a:1(int) b:2(int)
  └── select
-      ├── columns: x.a:1(int) x.rowid:2(int!null)
+      ├── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
       ├── scan x
-      │    └── columns: x.a:1(int) x.rowid:2(int!null)
+      │    └── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
       └── filters
            └── any: eq [type=bool]
-                ├── project
-                │    ├── columns: y.a:3(int!null)
-                │    └── select
-                │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
-                │         ├── scan y
-                │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
-                │         └── filters
-                │              └── lt [type=bool]
-                │                   ├── variable: y.a [type=int]
-                │                   └── const: 3 [type=int]
+                ├── with &1 (t)
+                │    ├── columns: a:6(int!null)
+                │    ├── project
+                │    │    ├── columns: y.a:4(int!null)
+                │    │    └── select
+                │    │         ├── columns: y.a:4(int!null) y.rowid:5(int!null)
+                │    │         ├── scan y
+                │    │         │    └── columns: y.a:4(int) y.rowid:5(int!null)
+                │    │         └── filters
+                │    │              └── lt [type=bool]
+                │    │                   ├── variable: y.a [type=int]
+                │    │                   └── const: 3 [type=int]
+                │    └── with-scan &1 (t)
+                │         ├── columns: a:6(int!null)
+                │         └── mapping:
+                │              └──  y.a:4(int) => a:6(int)
                 └── variable: x.a [type=int]
 
 # Using a correlated subquery inside a CTE
 build
 SELECT (WITH t AS (SELECT * FROM y WHERE x.a = y.a) SELECT * FROM t LIMIT 1) FROM x
 ----
-project
- ├── columns: "?column?":5(int)
- ├── scan x
- │    └── columns: x.a:1(int) x.rowid:2(int!null)
- └── projections
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: y.a:3(int!null)
-                └── limit
-                     ├── columns: y.a:3(int!null)
-                     ├── project
-                     │    ├── columns: y.a:3(int!null)
-                     │    └── select
-                     │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
-                     │         ├── scan y
-                     │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
-                     │         └── filters
-                     │              └── eq [type=bool]
-                     │                   ├── variable: x.a [type=int]
-                     │                   └── variable: y.a [type=int]
-                     └── const: 1 [type=int]
+error (0A000): CTEs may not be correlated
 
 # Rename columns
 build
 WITH t(b) AS (SELECT a FROM x) SELECT b, t.b FROM t
 ----
-project
- ├── columns: b:1(int) b:1(int)
- └── scan x
-      └── columns: a:1(int) rowid:2(int!null)
+with &1 (t)
+ ├── columns: b:4(int) b:4(int)
+ ├── project
+ │    ├── columns: a:1(int)
+ │    └── scan x
+ │         └── columns: a:1(int) x.b:2(int) rowid:3(int!null)
+ └── with-scan &1 (t)
+      ├── columns: b:4(int)
+      └── mapping:
+           └──  a:1(int) => b:4(int)
 
 build
 WITH t(b, c) AS (SELECT a FROM x) SELECT b, t.b FROM t
@@ -358,21 +511,200 @@ error (42P01): no data source matches prefix: x
 build
 WITH t(x) AS (WITH t(x) AS (SELECT 1) SELECT x * 10 FROM t) SELECT x + 2 FROM t
 ----
-project
- ├── columns: "?column?":3(int)
+with &1 (t)
+ ├── columns: "?column?":5(int)
  ├── project
- │    ├── columns: "?column?":2(int)
- │    ├── project
- │    │    ├── columns: "?column?":1(int!null)
- │    │    ├── values
- │    │    │    └── tuple [type=tuple]
- │    │    └── projections
- │    │         └── const: 1 [type=int]
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
  │    └── projections
- │         └── mult [type=int]
- │              ├── variable: ?column? [type=int]
- │              └── const: 10 [type=int]
- └── projections
-      └── plus [type=int]
-           ├── variable: ?column? [type=int]
-           └── const: 2 [type=int]
+ │         └── const: 1 [type=int]
+ └── with &2 (t)
+      ├── columns: "?column?":5(int)
+      ├── with &1 (t)
+      │    ├── columns: "?column?":3(int)
+      │    ├── project
+      │    │    ├── columns: "?column?":1(int!null)
+      │    │    ├── values
+      │    │    │    └── tuple [type=tuple]
+      │    │    └── projections
+      │    │         └── const: 1 [type=int]
+      │    └── project
+      │         ├── columns: "?column?":3(int)
+      │         ├── with-scan &1 (t)
+      │         │    ├── columns: x:2(int!null)
+      │         │    └── mapping:
+      │         │         └──  "?column?":1(int) => x:2(int)
+      │         └── projections
+      │              └── mult [type=int]
+      │                   ├── variable: x [type=int]
+      │                   └── const: 10 [type=int]
+      └── project
+           ├── columns: "?column?":5(int)
+           ├── with-scan &2 (t)
+           │    ├── columns: x:4(int)
+           │    └── mapping:
+           │         └──  "?column?":3(int) => x:4(int)
+           └── projections
+                └── plus [type=int]
+                     ├── variable: x [type=int]
+                     └── const: 2 [type=int]
+
+build
+WITH one AS (SELECT a AS u FROM x),
+     two AS (SELECT a AS v FROM (SELECT a FROM y UNION ALL SELECT u FROM one))
+  SELECT * FROM one JOIN two ON u = v
+----
+with &1 (one)
+ ├── columns: u:8(int!null) v:9(int!null)
+ ├── project
+ │    ├── columns: x.a:1(int)
+ │    └── scan x
+ │         └── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
+ └── with &2 (two)
+      ├── columns: u:8(int!null) v:9(int!null)
+      ├── union-all
+      │    ├── columns: a:7(int)
+      │    ├── left columns: y.a:4(int)
+      │    ├── right columns: u:6(int)
+      │    ├── project
+      │    │    ├── columns: y.a:4(int)
+      │    │    └── scan y
+      │    │         └── columns: y.a:4(int) y.rowid:5(int!null)
+      │    └── with-scan &1 (one)
+      │         ├── columns: u:6(int)
+      │         └── mapping:
+      │              └──  x.a:1(int) => u:6(int)
+      └── inner-join (hash)
+           ├── columns: u:8(int!null) v:9(int!null)
+           ├── with-scan &1 (one)
+           │    ├── columns: u:8(int)
+           │    └── mapping:
+           │         └──  x.a:1(int) => u:8(int)
+           ├── with-scan &2 (two)
+           │    ├── columns: v:9(int)
+           │    └── mapping:
+           │         └──  a:7(int) => v:9(int)
+           └── filters
+                └── eq [type=bool]
+                     ├── variable: u [type=int]
+                     └── variable: v [type=int]
+
+build
+WITH foo AS (SELECT x.a FROM x ORDER by x.a) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: a:4(int)
+ ├── project
+ │    ├── columns: x.a:1(int)
+ │    └── scan x
+ │         └── columns: x.a:1(int) b:2(int) rowid:3(int!null)
+ └── with-scan &1 (foo)
+      ├── columns: a:4(int)
+      └── mapping:
+           └──  x.a:1(int) => a:4(int)
+
+# Mutations.
+build
+WITH t AS (SELECT a FROM x) INSERT INTO x SELECT a + 20 FROM t RETURNING *
+----
+with &1 (t)
+ ├── columns: a:4(int) b:5(int)
+ ├── project
+ │    ├── columns: x.a:1(int)
+ │    └── scan x
+ │         └── columns: x.a:1(int) b:2(int) rowid:3(int!null)
+ └── project
+      ├── columns: x.a:4(int) b:5(int)
+      └── insert x
+           ├── columns: x.a:4(int) b:5(int) rowid:6(int!null)
+           ├── insert-mapping:
+           │    ├──  "?column?":8 => x.a:4
+           │    ├──  column9:9 => b:5
+           │    └──  column10:10 => rowid:6
+           └── project
+                ├── columns: column9:9(int) column10:10(int) "?column?":8(int)
+                ├── project
+                │    ├── columns: "?column?":8(int)
+                │    ├── with-scan &1 (t)
+                │    │    ├── columns: a:7(int)
+                │    │    └── mapping:
+                │    │         └──  x.a:1(int) => a:7(int)
+                │    └── projections
+                │         └── plus [type=int]
+                │              ├── variable: a [type=int]
+                │              └── const: 20 [type=int]
+                └── projections
+                     ├── cast: INT8 [type=int]
+                     │    └── null [type=unknown]
+                     └── function: unique_rowid [type=int]
+
+build
+WITH t AS (SELECT a FROM x) UPDATE x SET a = (SELECT * FROM t) RETURNING *
+----
+with &1 (t)
+ ├── columns: a:4(int) b:5(int)
+ ├── project
+ │    ├── columns: x.a:1(int)
+ │    └── scan x
+ │         └── columns: x.a:1(int) b:2(int) rowid:3(int!null)
+ └── project
+      ├── columns: x.a:4(int) b:5(int)
+      └── update x
+           ├── columns: x.a:4(int) b:5(int) rowid:6(int!null)
+           ├── fetch columns: x.a:7(int) b:8(int) rowid:9(int)
+           ├── update-mapping:
+           │    └──  column11:11 => x.a:4
+           └── project
+                ├── columns: column11:11(int) x.a:7(int) b:8(int) rowid:9(int!null)
+                ├── scan x
+                │    └── columns: x.a:7(int) b:8(int) rowid:9(int!null)
+                └── projections
+                     └── subquery [type=int]
+                          └── max1-row
+                               ├── columns: a:10(int)
+                               └── with-scan &1 (t)
+                                    ├── columns: a:10(int)
+                                    └── mapping:
+                                         └──  x.a:1(int) => a:10(int)
+
+build
+WITH t AS (SELECT a FROM x) DELETE FROM x WHERE a = (SELECT * FROM t) RETURNING *
+----
+with &1 (t)
+ ├── columns: a:4(int!null) b:5(int)
+ ├── project
+ │    ├── columns: x.a:1(int)
+ │    └── scan x
+ │         └── columns: x.a:1(int) b:2(int) rowid:3(int!null)
+ └── project
+      ├── columns: x.a:4(int!null) b:5(int)
+      └── delete x
+           ├── columns: x.a:4(int!null) b:5(int) rowid:6(int!null)
+           ├── fetch columns: x.a:7(int) b:8(int) rowid:9(int)
+           └── select
+                ├── columns: x.a:7(int!null) b:8(int) rowid:9(int!null)
+                ├── scan x
+                │    └── columns: x.a:7(int) b:8(int) rowid:9(int!null)
+                └── filters
+                     └── eq [type=bool]
+                          ├── variable: x.a [type=int]
+                          └── subquery [type=int]
+                               └── max1-row
+                                    ├── columns: a:10(int)
+                                    └── with-scan &1 (t)
+                                         ├── columns: a:10(int)
+                                         └── mapping:
+                                              └──  x.a:1(int) => a:10(int)
+
+# Correlated WITH is not allowed.
+
+build
+SELECT (WITH foo AS (SELECT x.a FROM x WHERE x.a = y.a) SELECT a FROM foo) FROM y
+----
+error (0A000): CTEs may not be correlated
+
+build
+SELECT (WITH foo AS (SELECT (SELECT y.a) FROM x) SELECT a FROM foo) FROM y
+----
+error (0A000): CTEs may not be correlated

@@ -3,7 +3,7 @@ CREATE TABLE abcde (
     a INT NOT NULL,
     b INT,
     c INT DEFAULT (10),
-    d INT AS (abcde.b + c + 1) STORED,
+    d INT AS (b + c + 1) STORED,
     e INT AS (a) STORED
 )
 ----
@@ -149,19 +149,24 @@ select
 build
 WITH cte AS (SELECT x FROM xyz) DELETE FROM abcde WHERE EXISTS(SELECT * FROM cte)
 ----
-delete abcde
- ├── columns: <none>
- ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
- └── select
-      ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
-      ├── scan abcde
-      │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
-      └── filters
-           └── exists [type=bool]
-                └── project
-                     ├── columns: x:1(string!null)
-                     └── scan xyz
-                          └── columns: x:1(string!null) y:2(int) z:3(float)
+with &1 (cte)
+ ├── project
+ │    ├── columns: xyz.x:1(string!null)
+ │    └── scan xyz
+ │         └── columns: xyz.x:1(string!null) y:2(int) z:3(float)
+ └── delete abcde
+      ├── columns: <none>
+      ├── fetch columns: a:10(int) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int)
+      └── select
+           ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           ├── scan abcde
+           │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           └── filters
+                └── exists [type=bool]
+                     └── with-scan &1 (cte)
+                          ├── columns: x:16(string!null)
+                          └── mapping:
+                               └──  xyz.x:1(string) => x:16(string)
 
 # Unknown target table.
 build
@@ -179,7 +184,33 @@ error (42703): statement source "DELETE FROM abcde WHERE a = 1" does not return 
 build
 WITH cte AS (SELECT b FROM [DELETE FROM abcde WHERE a=b RETURNING *]) DELETE FROM abcde WHERE a=b
 ----
-error (0A000): unimplemented: common table expression "cte" with side effects was not used in query
+with &1 (cte)
+ ├── project
+ │    ├── columns: b:2(int!null)
+ │    └── project
+ │         ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) e:5(int)
+ │         └── delete abcde
+ │              ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
+ │              ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
+ │              └── select
+ │                   ├── columns: a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │                   ├── scan abcde
+ │                   │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │                   └── filters
+ │                        └── eq [type=bool]
+ │                             ├── variable: a [type=int]
+ │                             └── variable: b [type=int]
+ └── delete abcde
+      ├── columns: <none>
+      ├── fetch columns: a:19(int) b:20(int) c:21(int) d:22(int) e:23(int) rowid:24(int)
+      └── select
+           ├── columns: a:19(int!null) b:20(int!null) c:21(int) d:22(int) e:23(int) rowid:24(int!null)
+           ├── scan abcde
+           │    └── columns: a:19(int!null) b:20(int) c:21(int) d:22(int) e:23(int) rowid:24(int!null)
+           └── filters
+                └── eq [type=bool]
+                     ├── variable: a [type=int]
+                     └── variable: b [type=int]
 
 # With alias, original table name should be inaccessible.
 build

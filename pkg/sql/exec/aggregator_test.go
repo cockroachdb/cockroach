@@ -424,12 +424,14 @@ func TestAggregatorAllFunctions(t *testing.T) {
 			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}},
 			colTypes: []types.T{types.Int64, types.Decimal, types.Int64},
 			input: tuples{
+				{nil, 1.1, 4},
 				{0, nil, nil},
 				{0, 3.1, 5},
 				{1, nil, nil},
 				{1, nil, nil},
 			},
 			expected: tuples{
+				{nil, 1.1, 1, 1, 1.1, 4, 4, 4, 1.1},
 				{0, 3.1, 2, 1, 3.1, 5, 5, 5, 3.1},
 				{1, nil, 2, 0, nil, nil, nil, nil, nil},
 			},
@@ -489,13 +491,14 @@ func TestAggregatorRandom(t *testing.T) {
 									expNulls = append(expNulls, true)
 									curGroup++
 								}
+								// Keep the inputs small so they are a realistic size. Using a
+								// large range is not realistic and makes decimal operations
+								// slower.
+								aggCol[i] = 2048 * (rng.Float64() - 0.5)
+
 								if hasNulls && rng.Float64() < nullProbability {
 									aggColNulls.SetNull(uint16(i))
 								} else {
-									// Keep the inputs small so they are a realistic size. Using a
-									// large range is not realistic and makes decimal operations
-									// slower.
-									aggCol[i] = 2048 * (rng.Float64() - 0.5)
 									expNulls[curGroup] = false
 									expCounts[curGroup]++
 									expSums[curGroup] += aggCol[i]
