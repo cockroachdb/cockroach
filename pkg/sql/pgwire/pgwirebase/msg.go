@@ -48,6 +48,7 @@ const (
 	ServerMsgParameterDescription ServerMessageType = 't'
 	ServerMsgParameterStatus      ServerMessageType = 'S'
 	ServerMsgParseComplete        ServerMessageType = '1'
+	ServerMsgPortalSuspended      ServerMessageType = 's'
 	ServerMsgReady                ServerMessageType = 'Z'
 	ServerMsgRowDescription       ServerMessageType = 'T'
 )

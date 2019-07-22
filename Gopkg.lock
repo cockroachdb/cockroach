@@ -957,7 +957,7 @@
   version = "v1.0"
 
 [[projects]]
-  digest = "1:6a5edb6e9ad91f22d33e01739bbabea324fed674c40bc4f7d60adb48235e8b48"
+  digest = "1:a7261255f31aa65e511b45cf7a36fda39dafb08914287506c93cb8c07afb9708"
   name = "github.com/jackc/pgx"
   packages = [
     ".",
@@ -968,8 +968,8 @@
     "pgtype",
   ]
   pruneopts = "UT"
-  revision = "c59c9cac59ab95eceb0c12ff338923c62f411ea2"
-  version = "v3.3.0"
+  revision = "a1d6202434aa40c3624688f6c2cacbc27eef5472"
+  version = "v3.5.0"
 
 [[projects]]
   digest = "1:dcb3e2ad17349c0cc89ffc16692d05195e6a67b4924fe81760fba9a307a7271d"
@@ -1526,7 +1526,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:55a70b7b8111fbbe7f412b3839dbff52bfba5c35d04a21fedc0b0f724895b3a5"
+  digest = "1:3454241817ada8069448d68384231cb86f2107046f2560fdcc092da8f6b5cb2b"
   name = "golang.org/x/crypto"
   packages = [
     "bcrypt",
@@ -1536,6 +1536,7 @@
     "ed25519/internal/edwards25519",
     "internal/chacha20",
     "internal/subtle",
+    "pbkdf2",
     "poly1305",
     "ssh",
     "ssh/agent",
@@ -1625,23 +1626,28 @@
   revision = "a457fd036447854c0c02e89ea439481bdcf941a2"
 
 [[projects]]
-  digest = "1:a4427f5b90e0d06b5b19d2891615137a814eb934c5a77397d0d5a753783e5f1e"
+  digest = "1:4de077368be8e07b66ac3f803454b4dc1138c135b5b0917edef59f6580e0bda5"
   name = "golang.org/x/text"
   packages = [
+    "cases",
     "collate",
     "collate/build",
+    "internal",
     "internal/colltab",
     "internal/gen",
     "internal/tag",
     "internal/triegen",
     "internal/ucd",
     "language",
+    "runes",
     "secure/bidirule",
+    "secure/precis",
     "transform",
     "unicode/bidi",
     "unicode/cldr",
     "unicode/norm",
     "unicode/rangetable",
+    "width",
   ]
   pruneopts = "UT"
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
