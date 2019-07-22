@@ -480,6 +480,7 @@ show_indexes_stmt ::=
 
 show_jobs_stmt ::=
 	'SHOW' opt_automatic 'JOBS'
+	| 'SHOW' 'JOB' iconst64
 
 show_queries_stmt ::=
 	'SHOW' opt_cluster 'QUERIES'
@@ -1147,6 +1148,9 @@ opt_automatic ::=
 	'AUTOMATIC'
 	| 
 
+iconst64 ::=
+	'ICONST'
+
 opt_cluster ::=
 	'CLUSTER'
 	| 'LOCAL'
@@ -1698,9 +1702,6 @@ create_as_table_defs ::=
 
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
-
-iconst64 ::=
-	'ICONST'
 
 index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*

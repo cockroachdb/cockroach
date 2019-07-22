@@ -3451,7 +3451,9 @@ opt_cluster:
 
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
-// %Text: SHOW [AUTOMATIC] JOBS
+// %Text:
+// SHOW [AUTOMATIC] JOBS
+// SHOW JOB <jobid>
 // %SeeAlso: CANCEL JOBS, PAUSE JOBS, RESUME JOBS
 show_jobs_stmt:
   SHOW opt_automatic JOBS
@@ -3459,6 +3461,11 @@ show_jobs_stmt:
     $$.val = &tree.ShowJobs{Automatic: $2.bool()}
   }
 | SHOW opt_automatic JOBS error // SHOW HELP: SHOW JOBS
+| SHOW JOB iconst64
+  {
+    $$.val = &tree.ShowJob{JobID: $3.int64()}
+  }
+| SHOW JOB error // SHOW HELP: SHOW JOBS
 
 opt_automatic:
   AUTOMATIC { $$.val = true }

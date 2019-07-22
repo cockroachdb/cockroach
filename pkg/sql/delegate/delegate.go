@@ -60,6 +60,9 @@ func TryDelegate(
 	case *tree.ShowGrants:
 		return d.delegateShowGrants(t)
 
+	case *tree.ShowJob:
+		return d.delegateShowJob(t)
+
 	case *tree.ShowJobs:
 		return d.delegateShowJobs(t)
 
