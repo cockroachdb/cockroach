@@ -426,6 +426,8 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN SHOW ROLES`},
 		{`SHOW USERS`},
 		{`EXPLAIN SHOW USERS`},
+		{`SHOW JOB 1`},
+		{`EXPLAIN SHOW JOB 1`},
 		{`SHOW JOBS`},
 		{`EXPLAIN SHOW JOBS`},
 		{`SHOW AUTOMATIC JOBS`},
