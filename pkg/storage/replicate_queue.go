@@ -250,17 +250,17 @@ func (rq *replicateQueue) process(
 		MaxRetries:     5,
 	}
 
-	// Use a retry loop in order to backoff in the case of preemptive
-	// snapshot errors, usually signaling that a rebalancing
-	// reservation could not be made with the selected target.
+	// Use a retry loop in order to backoff in the case of snapshot errors,
+	// usually signaling that a rebalancing reservation could not be made with the
+	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
 			requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */)
 			if IsSnapshotError(err) {
-				// If ChangeReplicas failed because the preemptive snapshot failed, we
-				// log the error but then return success indicating we should retry the
-				// operation. The most likely causes of the preemptive snapshot failing are
-				// a declined reservation or the remote node being unavailable. In either
+				// If ChangeReplicas failed because the snapshot failed, we log the
+				// error but then return success indicating we should retry the
+				// operation. The most likely causes of the snapshot failing are a
+				// declined reservation or the remote node being unavailable. In either
 				// case we don't want to wait another scanner cycle before reconsidering
 				// the range.
 				log.Info(ctx, err)

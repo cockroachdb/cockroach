@@ -621,7 +621,7 @@ func (tc *TestCluster) WaitForSplitAndInitialization(startKey roachpb.Key) error
 			if err != nil {
 				return err
 			}
-			if actualReplicaDesc != rDesc {
+			if !actualReplicaDesc.Equal(rDesc) {
 				return errors.Errorf("expected replica %s; got %s", rDesc, actualReplicaDesc)
 			}
 		}
