@@ -249,6 +249,8 @@ func updateRaftProgressFromActivity(
 		// TODO(tschottdorf): if we used Raft learners instead of preemptive
 		// snapshots, I think this value would do exactly the right tracking
 		// (including only resetting when the follower resumes replicating).
+		//
+		// WIP anything to do here?
 		pr.PendingSnapshot = 0
 		prs[uint64(replicaID)] = pr
 	}
