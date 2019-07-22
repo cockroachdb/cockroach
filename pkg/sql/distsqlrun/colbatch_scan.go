@@ -34,12 +34,15 @@ type colBatchScan struct {
 	// maxResults is non-zero if there is a limit on the total number of rows
 	// that the colBatchScan will read.
 	maxResults uint64
+	// init is true after Init() has been called.
+	init bool
 }
 
 var _ exec.Operator = &colBatchScan{}
 
 func (s *colBatchScan) Init() {
 	s.ctx = context.Background()
+	s.init = true
 
 	limitBatches := scanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
 
@@ -62,6 +65,12 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 
 // DrainMeta is part of the MetadataSource interface.
 func (s *colBatchScan) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+	if !s.init {
+		// In some pathological queries like `SELECT 1 FROM t HAVING true`, Init()
+		// and Next() may never get called. Return early to avoid using an
+		// uninitialized fetcher.
+		return nil
+	}
 	var trailingMeta []distsqlpb.ProducerMetadata
 	if !s.flowCtx.local {
 		ranges := misplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.NodeID)
