@@ -1839,6 +1839,11 @@ import_stmt:
     name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Import{Table: &name, Into: true, IntoCols: $5.nameList(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
+| IMPORT INTO table_name import_format DATA '(' string_or_placeholder_list ')' opt_with_options
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: nil, FileFormat: $4, Files: $7.exprs(), Options: $9.kvOptions()}
+  }
 | IMPORT error // SHOW HELP: IMPORT
 
 // %Help: EXPORT - export data to file in a distributed manner

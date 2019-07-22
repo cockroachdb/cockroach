@@ -1294,6 +1294,7 @@ func TestParse(t *testing.T) {
 		{`IMPORT TABLE foo (id INT8, email STRING, age INT8) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
 		{`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
 		{`IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
+		{`IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 
 		{`IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
 		{`EXPLAIN IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
