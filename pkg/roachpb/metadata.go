@@ -270,20 +270,6 @@ func (r ReplicationTarget) String() string {
 	return fmt.Sprintf("n%d,s%d", r.NodeID, r.StoreID)
 }
 
-// ReplicaTypeLearner returns a ReplicaType_LEARNER pointer suitable for use in
-// a nullable proto field.
-func ReplicaTypeLearner() *ReplicaType {
-	t := ReplicaType_LEARNER
-	return &t
-}
-
-// ReplicaTypeVoter returns a ReplicaType_VOTER pointer suitable for use in a
-// nullable proto field.
-func ReplicaTypeVoter() *ReplicaType {
-	t := ReplicaType_VOTER
-	return &t
-}
-
 func (r ReplicaDescriptor) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "(n%d,s%d):", r.NodeID, r.StoreID)
