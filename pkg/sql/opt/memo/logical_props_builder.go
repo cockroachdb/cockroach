@@ -716,10 +716,10 @@ func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel 
 }
 
 func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, with, &rel.Shared)
-
 	// Copy over the props from the input.
 	*rel = *with.Input.Relational()
+
+	BuildSharedProps(b.mem, with, &rel.Shared)
 
 	// Side Effects
 	// ------------
@@ -759,6 +759,9 @@ func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.R
 	// WithScan inherits most of the logical properties of the expression it
 	// references.
 	*rel = *e.Relational()
+
+	rel.HasPlaceholder = false
+	rel.CanHaveSideEffects = false
 
 	// Side Effects
 	// ------------
