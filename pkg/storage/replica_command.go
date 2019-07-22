@@ -50,7 +50,7 @@ import (
 var useLearnerReplicas = settings.RegisterBoolSetting(
 	"kv.learner_replicas.enabled",
 	"use learner replicas for replica addition",
-	false)
+	true)
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
@@ -798,8 +798,8 @@ func IsSnapshotError(err error) bool {
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed
-// in a distributed transaction and takes effect when that transaction is committed.
-// When removing a replica, only the NodeID and StoreID fields of the Replica are used.
+// in a distributed transaction and takes effect when that transaction is
+// committed.
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "adminSplitWithDescriptor" for more information on this pattern.
@@ -809,31 +809,35 @@ func IsSnapshotError(err error) bool {
 // actors.
 //
 // Changing the replicas for a range is complicated. A change is initiated by
-// the "replicate" queue when it encounters a range which has too many
-// replicas, too few replicas or requires rebalancing. Addition and removal of
-// a replica is divided into four phases. The first phase, which occurs in
-// Replica.ChangeReplicas, is performed via a distributed transaction which
-// updates the range descriptor and the meta range addressing information. This
-// transaction includes a special ChangeReplicasTrigger on the EndTransaction
-// request. A ConditionalPut of the RangeDescriptor implements the optimistic
-// lock on the RangeDescriptor mentioned previously. Like all transactions, the
-// requests within the transaction are replicated via Raft, including the
-// EndTransaction request.
+// the "replicate" queue when it encounters a range which has too many replicas,
+// too few replicas or requires rebalancing. Removal of a replica is divided
+// into four phases, described below. Addition of a replica is divided into two
+// sets of the same four phases: first to add it as a raft learner and then to
+// promote it to a raft voter after sending it a snapshot. For more information
+// on learner replicas, see `(ReplicaDescriptors).Learners`.
+//
+// The first phase, which occurs in Replica.ChangeReplicas, is performed via a
+// distributed transaction which updates the range descriptor and the meta range
+// addressing information. This transaction includes a special
+// ChangeReplicasTrigger on the EndTransaction request. A ConditionalPut of the
+// RangeDescriptor implements the optimistic lock on the RangeDescriptor
+// mentioned previously. Like all transactions, the requests within the
+// transaction are replicated via Raft, including the EndTransaction request.
 //
 // The second phase of processing occurs when the batch containing the
-// EndTransaction is proposed to raft. This proposing occurs on whatever
-// replica received the batch, usually, but not always the range lease
-// holder. defaultProposeRaftCommandLocked notices that the EndTransaction
-// contains a ChangeReplicasTrigger and proposes a ConfChange to Raft (via
+// EndTransaction is proposed to raft. This proposing occurs on whatever replica
+// received the batch, usually, but not always the range lease holder.
+// defaultProposeRaftCommandLocked notices that the EndTransaction contains a
+// ChangeReplicasTrigger and proposes a ConfChange to Raft (via
 // raft.RawNode.ProposeConfChange).
 //
 // The ConfChange is propagated to all of the replicas similar to a normal Raft
 // command, though additional processing is done inside of Raft. A Replica
 // encounters the ConfChange in Replica.handleRaftReady and executes it using
-// raft.RawNode.ApplyConfChange. If a new replica was added the Raft leader
-// will start sending it heartbeat messages and attempting to bring it up to
-// date. If a replica was removed, it is at this point that the Raft leader
-// will stop communicating with it.
+// raft.RawNode.ApplyConfChange. If a new replica was added the Raft leader will
+// start sending it heartbeat messages and attempting to bring it up to date. If
+// a replica was removed, it is at this point that the Raft leader will stop
+// communicating with it.
 //
 // The fourth phase of change replicas occurs when each replica for the range
 // encounters the ChangeReplicasTrigger when applying the EndTransaction
@@ -844,37 +848,25 @@ func IsSnapshotError(err error) bool {
 // Note that a removed replica may not see the EndTransaction containing the
 // ChangeReplicasTrigger. The ConfChange operation will be applied as soon as a
 // quorum of nodes have committed it. If the removed replica is down or the
-// message is dropped for some reason the removed replica will not be
-// notified. The replica GC queue will eventually discover and cleanup this
-// state.
+// message is dropped for some reason the removed replica will not be notified.
+// The replica GC queue will eventually discover and cleanup this state.
 //
 // When a new replica is added, it will have to catch up to the state of the
-// other replicas. The Raft leader automatically handles this by either sending
-// the new replica Raft log entries to apply, or by generating and sending a
-// snapshot. See Replica.Snapshot and Replica.Entries.
+// other replicas. In the common case, a "learner snapshot" is sent after the
+// replica is added as a learner, but before it is promoted to a voter. If this
+// fails, the raft leader will request a snapshot. See Replica.sendSnapshot.
 //
-// Note that Replica.ChangeReplicas returns when the distributed transaction
-// has been committed to a quorum of replicas in the range. The actual
-// replication of data occurs asynchronously via a snapshot or application of
-// Raft log entries. This is important for the replicate queue to be aware
-// of. A node can process hundreds or thousands of ChangeReplicas operations
-// per second even though the actual replication of data proceeds at a much
-// slower base. In order to avoid having this background replication and
-// overwhelming the system, replication is throttled via a reservation system.
-// When allocating a new replica for a range, the replicate queue reserves space
-// for that replica on the target store via a ReservationRequest. (See
-// StorePool.reserve). The reservation is fulfilled when the snapshot is
-// applied.
-//
-// TODO(peter): There is a rare scenario in which a replica can be brought up
-// to date via Raft log replay. In this scenario, the reservation will be left
-// dangling until it expires. See #7849.
-//
-// TODO(peter): Describe preemptive snapshots. Preemptive snapshots are needed
-// for the replicate queue to function properly. Currently the replicate queue
-// will fire off as many replica additions as possible until it starts getting
-// reservations denied at which point it will ignore the replica until the next
-// scanner cycle.
+// Note that Replica.ChangeReplicas returns when the distributed transaction has
+// been committed to a quorum of replicas in the range. The actual replication
+// of data occurs asynchronously via a snapshot or application of Raft log
+// entries. This is important for the replicate queue to be aware of. A node can
+// process hundreds or thousands of ChangeReplicas operations per second even
+// though the actual replication of data proceeds at a much slower base. In
+// order to avoid having this background replication and overwhelming the
+// system, replication is throttled via a reservation system. When allocating a
+// new replica for a range, the replicate queue reserves space for that replica
+// on the target store via a ReservationRequest. (See StorePool.reserve). The
+// reservation is fulfilled when the snapshot is applied.
 func (r *Replica) ChangeReplicas(
 	ctx context.Context,
 	changeType roachpb.ReplicaChangeType,
@@ -951,6 +943,7 @@ func (r *Replica) addReplica(
 	if err != nil {
 		// Don't leave a learner replica lying around if we didn't succeed in
 		// promoting it to a voter.
+		log.Infof(ctx, "could not promote %s to voter, rolling back: %v", target, err)
 		r.rollbackLearnerReplica(ctx, learnerDesc, target, reason, details)
 		return nil, err
 	}
@@ -1004,8 +997,25 @@ func (r *Replica) promoteLearnerReplicaToVoter(
 		rDesc.Type = roachpb.ReplicaTypeVoter()
 		newReplicas[i] = rDesc
 
-		// Note that raft snapshot queue refuses to send snapshots, so this is the
-		// only one a learner can get.
+		// Note that raft snapshot queue will refuse to send a snapshot to a learner
+		// replica if its store is already sending a snapshot to that replica. That
+		// races with this snapshot. Most of the time, this side will win the race,
+		// which avoids needlessly sending the snapshot twice. If the raft snapshot
+		// queue wins, it's wasteful, but doesn't impact correctness.
+		//
+		// Replicas are added to the raft snapshot queue by the raft leader. This
+		// code can be run anywhere (though it's usually run on the leaseholder,
+		// which is usually co-located with the raft leader). This means that
+		// they're usually on the same node, but not always, so that's about as good
+		// a guarantee as we can offer, anyway.
+		//
+		// We originally tried always refusing to send snapshots from the raft
+		// snapshot queue to learner replicas, but this turned out to be brittle.
+		// First, if the snapshot failed, any attempt to use the learner's raft
+		// group would hang until the replicate queue got around to cleaning up the
+		// orphaned learner. Second, this tickled some bugs in etcd/raft around
+		// switching between StateSnapshot and StateProbe. Even if we worked through
+		// these, it would be susceptible to future similar issues.
 		if err := r.sendSnapshot(ctx, rDesc, SnapshotRequest_LEARNER, priority); err != nil {
 			return nil, err
 		}
@@ -1056,7 +1066,7 @@ func (r *Replica) rollbackLearnerReplica(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
 		log.Infof(ctx,
-			"failed to rollback learner %s, abandoning it for the replicate queue %v", target, err)
+			"failed to rollback learner %s, abandoning it for the replicate queue: %v", target, err)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	} else {
 		log.Infof(ctx, "rolled back learner %s to %s", replDesc, &newDesc)
@@ -1353,7 +1363,15 @@ func (r *Replica) sendSnapshot(
 	recipient roachpb.ReplicaDescriptor,
 	snapType SnapshotRequest_Type,
 	priority SnapshotRequest_Priority,
-) error {
+) (retErr error) {
+	defer func() {
+		if snapType != SnapshotRequest_PREEMPTIVE {
+			// Report the snapshot status to Raft, which expects us to do this once we
+			// finish sending the snapshot.
+			r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
+		}
+	}()
+
 	snap, err := r.GetSnapshot(ctx, snapType)
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)

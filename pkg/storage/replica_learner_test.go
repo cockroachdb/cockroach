@@ -36,13 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/tracker"
 )
-
-// TODO(dan): Test learners and quota pool.
-// TODO(dan): Grep the codebase for "preemptive" and audit.
-// TODO(dan): Write a test like TestLearnerAdminChangeReplicasRace for the
-//   replicate queue leadership transfer race.
 
 type learnerTestKnobs struct {
 	storeKnobs                       storage.StoreTestingKnobs
@@ -387,6 +381,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	ctx := context.Background()
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeLearnerTestKnobs()
+	ltk.storeKnobs.DisableRaftSnapshotQueue = true
 	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
 		select {
 		case <-blockSnapshotsCh:
@@ -411,27 +406,28 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 		return err
 	})
 
-	// Wait until raft knows that the learner needs a snapshot.
-	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-	testutils.SucceedsSoon(t, func() error {
-		for _, p := range repl.RaftStatus().Progress {
-			if p.State == tracker.StateSnapshot {
-				return nil
-			}
-		}
-		return errors.New(`expected some replica to need a snapshot`)
-	})
-
 	// Note the value of the metrics before.
 	generatedBefore := getFirstStoreMetric(t, tc.Server(0), `range.snapshots.generated`)
 	raftAppliedBefore := getFirstStoreMetric(t, tc.Server(0), `range.snapshots.normal-applied`)
 
-	// Run the raftsnapshot queue.
-	trace, errMsg, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
-	require.NoError(t, err)
-	require.Equal(t, ``, errMsg)
-	const msg = `not sending snapshot type RAFT to learner: (n2,s2):2LEARNER`
-	require.Contains(t, tracing.FormatRecordedSpans(trace), msg)
+	// Run the raftsnapshot queue. SucceedsSoon because it may take a bit for
+	// raft to figure out that the replica needs a snapshot.
+	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+	testutils.SucceedsSoon(t, func() error {
+		trace, errMsg, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
+		if err != nil {
+			return err
+		}
+		if errMsg != `` {
+			return errors.New(errMsg)
+		}
+		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
+		formattedTrace := tracing.FormatRecordedSpans(trace)
+		if !strings.Contains(formattedTrace, msg) {
+			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)
+		}
+		return nil
+	})
 
 	// Make sure it didn't send any RAFT snapshots.
 	require.Equal(t, generatedBefore, getFirstStoreMetric(t, tc.Server(0), `range.snapshots.generated`))
@@ -476,7 +472,8 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	<-blockUntilSnapshotCh
 
 	// Removes the learner out from under the coordinator running on behalf of
-	// AddReplicas.
+	// AddReplicas. This simulates the replicate queue running concurrently. The
+	// first thing the replicate queue would do is remove any learners it sees.
 	_, err := tc.RemoveReplicas(scratchStartKey, tc.Target(1))
 	require.NoError(t, err)
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -492,6 +489,87 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	}
 	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().Voters(), 1)
+	require.Len(t, desc.Replicas().Learners(), 0)
+}
+
+// This test verifies the result of a race between the replicate queue running
+// for the same range from two different nodes. This can happen around
+// leadership changes.
+func TestLearnerReplicateQueueRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var skipReceiveSnapshotKnobAtomic int64 = 1
+	blockUntilSnapshotCh := make(chan struct{}, 2)
+	blockSnapshotsCh := make(chan struct{})
+	knobs, ltk := makeLearnerTestKnobs()
+	ltk.storeKnobs.ReceiveSnapshot = func(h *storage.SnapshotRequest_Header) error {
+		if atomic.LoadInt64(&skipReceiveSnapshotKnobAtomic) > 0 {
+			return nil
+		}
+		blockUntilSnapshotCh <- struct{}{}
+		<-blockSnapshotsCh
+		return nil
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db.Exec(t, `SET CLUSTER SETTING kv.learner_replicas.enabled = true`)
+
+	scratchStartKey := tc.ScratchRange(t)
+	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+
+	// Start with 2 replicas so the replicate queue can go from 2->3, otherwise it
+	// will refuse to upreplicate to a fragile quorum of 1->2.
+	tc.AddReplicasOrFatal(t, scratchStartKey, tc.Target(1))
+	atomic.StoreInt64(&skipReceiveSnapshotKnobAtomic, 0)
+
+	// Run the replicate queue, this will add a learner to node 3 and start
+	// sending it a snapshot. This will eventually fail and we assert some things
+	// about the trace to prove it failed in the way we want.
+	queue1ErrCh := make(chan error, 1)
+	go func() {
+		queue1ErrCh <- func() error {
+			trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+			if err != nil {
+				return err
+			}
+			if !strings.Contains(errMsg, `descriptor changed`) {
+				return errors.Errorf(`expected "descriptor changed" error got: %s`, errMsg)
+			}
+			formattedTrace := tracing.FormatRecordedSpans(trace)
+			expectedMessages := []string{
+				`could not promote n3,s3 to voter, rolling back: change replicas of r\d+ failed: descriptor changed`,
+				// TODO(dan): Consider skipping the rollback when trying to promote a
+				// learner to a voter results in a "descriptor changed" error.
+				`failed to rollback learner n3,s3, abandoning it for the replicate queue: change replicas of r\d+ failed: descriptor changed`,
+			}
+			return testutils.MatchInOrder(formattedTrace, expectedMessages...)
+		}()
+	}()
+
+	// Wait until the snapshot starts, which happens after the learner has been
+	// added.
+	<-blockUntilSnapshotCh
+
+	// Removes the learner on node 3 out from under the replicate queue. This
+	// simulates a second replicate queue running concurrently. The first thing
+	// this second replicate queue would do is remove any learners it sees,
+	// leaving the 2 voters.
+	desc, err := tc.RemoveReplicas(scratchStartKey, tc.Target(2))
+	require.NoError(t, err)
+	require.Len(t, desc.Replicas().Voters(), 2)
+	require.Len(t, desc.Replicas().Learners(), 0)
+
+	// Unblock the snapshot, and surprise the replicate queue. It should retry,
+	// get a descriptor changed error, and realize it should stop.
+	close(blockSnapshotsCh)
+	require.NoError(t, <-queue1ErrCh)
+	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+	require.Len(t, desc.Replicas().Voters(), 2)
 	require.Len(t, desc.Replicas().Learners(), 0)
 }
 

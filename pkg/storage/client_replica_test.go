@@ -739,7 +739,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 		}
-		if *(nlhe.LeaseHolder) != l.replica1Desc {
+		if !nlhe.LeaseHolder.Equal(&l.replica1Desc) {
 			t.Fatalf("expected lease holder %+v, got %+v",
 				l.replica1Desc, nlhe.LeaseHolder)
 		}
@@ -829,7 +829,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 		}
-		if nlhe.LeaseHolder == nil || *nlhe.LeaseHolder != l.replica1Desc {
+		if nlhe.LeaseHolder == nil || !nlhe.LeaseHolder.Equal(&l.replica1Desc) {
 			t.Fatalf("expected lease holder %+v, got %+v",
 				l.replica1Desc, nlhe.LeaseHolder)
 		}
@@ -1670,7 +1670,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+1)
+	assert.EqualValues(t, repl.Desc().GetGeneration(), oldGeneration+2)
 
 	oldGeneration = repl.Desc().GetGeneration()
 	if _, err := repl.ChangeReplicas(
@@ -2053,9 +2053,8 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 
 	assert.Falsef(t, err1 == nil && err2 == nil,
 		"expected one of racing AdminChangeReplicasRequests to fail but neither did")
-	// It is possible that an error can occur due to a rejected preemptive
-	// snapshot from the target range. We don't want to fail the test if we got
-	// one of those.
+	// It is possible that an error can occur due to a rejected snapshot from the
+	// target range. We don't want to fail the test if we got one of those.
 	isSnapshotErr := func(err error) bool {
 		return testutils.IsError(err, "snapshot failed:")
 	}
