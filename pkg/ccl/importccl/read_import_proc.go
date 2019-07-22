@@ -268,9 +268,18 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var singleTable *sqlbase.TableDescriptor
+	var singleTableTargetCols tree.NameList
 	if len(cp.spec.Tables) == 1 {
 		for _, table := range cp.spec.Tables {
 			singleTable = table
+		}
+
+		for _, targetCols := range cp.spec.TargetCols {
+			targetColNames := make(tree.NameList, len(targetCols.ColNames))
+			for i, colName := range targetCols.ColNames {
+				targetColNames[i] = tree.Name(colName)
+			}
+			singleTableTargetCols = targetColNames
 		}
 	}
 
@@ -292,7 +301,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		if isWorkload {
 			conv = newWorkloadReader(kvCh, singleTable, evalCtx)
 		} else {
-			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, evalCtx)
+			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, singleTableTargetCols, evalCtx)
 		}
 	case roachpb.IOFileFormat_MysqlOutfile:
 		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)

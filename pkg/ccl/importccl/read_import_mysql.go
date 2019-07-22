@@ -63,7 +63,7 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(table, evalCtx, kvCh)
+		conv, err := row.NewDatumRowConverter(table, nil /* targetColNames */, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
 		}

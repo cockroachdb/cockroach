@@ -410,7 +410,7 @@ func newPgDumpReader(
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
 	for name, desc := range descs {
 		if desc.IsTable() {
-			conv, err := row.NewDatumRowConverter(desc, evalCtx, kvCh)
+			conv, err := row.NewDatumRowConverter(desc, nil /* targetColNames */, evalCtx, kvCh)
 			if err != nil {
 				return nil, err
 			}

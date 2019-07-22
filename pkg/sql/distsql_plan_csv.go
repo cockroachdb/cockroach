@@ -167,6 +167,7 @@ func LoadCSV(
 	job *jobs.Job,
 	resultRows *RowResultWriter,
 	tables map[string]*sqlbase.TableDescriptor,
+	targetCols map[string]*distsqlpb.ReadImportDataSpec_TargetColList,
 	from []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -182,7 +183,7 @@ func LoadCSV(
 		return err
 	}
 
-	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime)
+	inputSpecs := makeImportReaderSpecs(job, tables, targetCols, from, format, nodes, walltime)
 
 	sstSpecs := make([]distsqlpb.SSTWriterSpec, len(nodes))
 	for i := range nodes {
@@ -467,6 +468,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanning(
 func makeImportReaderSpecs(
 	job *jobs.Job,
 	tables map[string]*sqlbase.TableDescriptor,
+	targetCols map[string]*distsqlpb.ReadImportDataSpec_TargetColList,
 	from []string,
 	format roachpb.IOFileFormat,
 	nodes []roachpb.NodeID,
@@ -480,8 +482,9 @@ func makeImportReaderSpecs(
 		// creates the spec. Future files just add themselves to the Uris.
 		if i < len(nodes) {
 			spec := &distsqlpb.ReadImportDataSpec{
-				Tables: tables,
-				Format: format,
+				Tables:     tables,
+				TargetCols: targetCols,
+				Format:     format,
 				Progress: distsqlpb.JobProgress{
 					JobID: *job.ID(),
 					Slot:  int32(i),
@@ -660,6 +663,7 @@ func DistIngest(
 	phs PlanHookState,
 	job *jobs.Job,
 	tables map[string]*sqlbase.TableDescriptor,
+	targetCols map[string]*distsqlpb.ReadImportDataSpec_TargetColList,
 	from []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -674,7 +678,7 @@ func DistIngest(
 		return roachpb.BulkOpSummary{}, err
 	}
 
-	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime)
+	inputSpecs := makeImportReaderSpecs(job, tables, targetCols, from, format, nodes, walltime)
 
 	for i := range inputSpecs {
 		inputSpecs[i].IngestDirectly = true

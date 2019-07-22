@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -432,8 +433,11 @@ func importPlanHook(
 			// will hopefully let it get a head start on propagating, plus the more we
 			// do in the job, the more that has automatic cleanup on rollback.
 
-			// TODO(dt): configure target cols from ImportStmt.IntoCols
-			tableDetails = []jobspb.ImportDetails_Table{{Desc: &importing, IsNew: false}}
+			var intoCols []string
+			for _, name := range importStmt.IntoCols {
+				intoCols = append(intoCols, name.String())
+			}
+			tableDetails = []jobspb.ImportDetails_Table{{Desc: &importing, IsNew: false, TargetCols: intoCols}}
 		} else {
 			var tableDescs []*sqlbase.TableDescriptor
 			seqVals := make(map[sqlbase.ID]int64)
@@ -624,6 +628,7 @@ func doDistributedCSVTransform(
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
 	tables map[string]*sqlbase.TableDescriptor,
+	targetCols map[string]*distsqlpb.ReadImportDataSpec_TargetColList,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	sstSize int64,
@@ -631,7 +636,7 @@ func doDistributedCSVTransform(
 	ingestDirectly bool,
 ) (roachpb.BulkOpSummary, error) {
 	if ingestDirectly {
-		return sql.DistIngest(ctx, p, job, tables, files, format, walltime)
+		return sql.DistIngest(ctx, p, job, tables, targetCols, files, format, walltime)
 		// TODO(dt): check for errors in job records as is done below.
 	}
 
@@ -657,6 +662,7 @@ func doDistributedCSVTransform(
 		job,
 		sql.NewRowResultWriter(rows),
 		tables,
+		targetCols,
 		files,
 		format,
 		walltime,
@@ -740,13 +746,16 @@ func (r *importResumer) Resume(
 	}
 
 	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
+	targetCols := make(map[string]*distsqlpb.ReadImportDataSpec_TargetColList, len(details.Tables))
 	requiresSchemaChangeDelay := false
 	if details.Tables != nil {
 		for _, i := range details.Tables {
 			if i.Name != "" {
 				tables[i.Name] = i.Desc
+				targetCols[i.Name] = &distsqlpb.ReadImportDataSpec_TargetColList{ColNames: i.TargetCols}
 			} else if i.Desc != nil {
 				tables[i.Desc.Name] = i.Desc
+				targetCols[i.Desc.Name] = &distsqlpb.ReadImportDataSpec_TargetColList{ColNames: i.TargetCols}
 			} else {
 				return errors.Errorf("invalid table specification")
 			}
@@ -782,7 +791,7 @@ func (r *importResumer) Resume(
 	}
 
 	res, err := doDistributedCSVTransform(
-		ctx, r.job, files, p, parentID, tables, format, walltime, sstSize, oversample, ingestDirectly,
+		ctx, r.job, files, p, parentID, tables, targetCols, format, walltime, sstSize, oversample, ingestDirectly,
 	)
 	if err != nil {
 		return err
