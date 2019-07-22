@@ -371,3 +371,10 @@ func (m *Memo) AddWithBinding(e RelExpr) opt.WithID {
 func (m *Memo) WithExpr(id opt.WithID) RelExpr {
 	return m.withExprs[id-1]
 }
+
+// CopyWiths copies over the set of WITH expressions used by the other memo.
+// TODO(justin): These are just used for their logical props, so we should just store those..
+func (m *Memo) CopyWiths(o *Memo, replace func(opt.Expr) opt.Expr) {
+	m.withExprs = make([]RelExpr, len(o.withExprs))
+	copy(m.withExprs, o.withExprs)
+}
