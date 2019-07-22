@@ -13,6 +13,7 @@ package exec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -67,4 +68,12 @@ func (c *CancelChecker) checkEveryCall(ctx context.Context) {
 		panic(sqlbase.QueryCanceledError)
 	default:
 	}
+}
+
+// DrainMeta is part of the MetadataSource interface.
+func (s *CancelChecker) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+	if metaSource, ok := s.Operator.(distsqlpb.MetadataSource); ok {
+		return metaSource.DrainMeta(ctx)
+	}
+	return nil
 }
