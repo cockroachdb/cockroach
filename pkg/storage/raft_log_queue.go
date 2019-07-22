@@ -243,12 +243,13 @@ func updateRaftProgressFromActivity(
 		}
 		pr.RecentActive = lastUpdate.isFollowerActive(ctx, replicaID, now)
 		// Override this field for safety since we don't use it. Instead, we use
-		// pendingSnapshotIndex from above which is also populated for
-		// preemptive snapshots.
+		// pendingSnapshotIndex from above which is also populated for preemptive
+		// snapshots.
 		//
-		// TODO(tschottdorf): if we used Raft learners instead of preemptive
-		// snapshots, I think this value would do exactly the right tracking
-		// (including only resetting when the follower resumes replicating).
+		// NOTE: We don't rely on PendingSnapshot because PendingSnapshot is
+		// initialized by the leader when it realizes the follower needs a snapshot,
+		// and it isn't initialized with the index of the snapshot that is actually
+		// sent by us (out of band), which likely is lower.
 		pr.PendingSnapshot = 0
 		prs[uint64(replicaID)] = pr
 	}
