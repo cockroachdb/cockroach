@@ -31,15 +31,31 @@ type colBatchScan struct {
 	rf        *row.CFetcher
 	limitHint int64
 	ctx       context.Context
+	// maxResults is non-zero if there is a limit on the total number of rows
+	// that the colBatchScan will read.
+	maxResults uint64
 }
 
 var _ exec.Operator = &colBatchScan{}
 
 func (s *colBatchScan) Init() {
 	s.ctx = context.Background()
+
+	limitBatches := true
+	// We turn off limited batches if we know we have no limit and if the
+	// colBatchScan spans will return less than the ParallelScanResultThreshold.
+	// This enables distsender parallelism - if limitBatches is true, distsender
+	// does *not* parallelize multi-range scan requests.
+	if s.maxResults != 0 &&
+		s.maxResults < ParallelScanResultThreshold &&
+		s.limitHint == 0 &&
+		sqlbase.ParallelScans.Get(&s.flowCtx.Settings.SV) {
+		limitBatches = false
+	}
+
 	if err := s.rf.StartScan(
 		s.ctx, s.flowCtx.txn, s.spans,
-		true /* limit batches */, s.limitHint, s.flowCtx.traceKV,
+		limitBatches, s.limitHint, s.flowCtx.traceKV,
 	); err != nil {
 		panic(err)
 	}
@@ -108,10 +124,11 @@ func newColBatchScan(
 		spans[i] = spec.Spans[i].Span
 	}
 	return &colBatchScan{
-		spans:     spans,
-		flowCtx:   flowCtx,
-		rf:        &fetcher,
-		limitHint: limitHint,
+		spans:      spans,
+		flowCtx:    flowCtx,
+		rf:         &fetcher,
+		limitHint:  limitHint,
+		maxResults: spec.MaxResults,
 	}, nil
 }
 
