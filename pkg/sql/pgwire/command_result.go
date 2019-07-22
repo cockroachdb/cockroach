@@ -80,37 +80,17 @@ type commandResult struct {
 	// bufferingDisabled is conditionally set during planning of certain
 	// statements.
 	bufferingDisabled bool
-}
 
-func (c *conn) makeCommandResult(
-	descOpt sql.RowDescOpt,
-	pos sql.CmdPos,
-	stmt tree.Statement,
-	formatCodes []pgwirebase.FormatCode,
-	conv sessiondata.DataConversionConfig,
-) commandResult {
-	return commandResult{
-		conn:           c,
-		pos:            pos,
-		descOpt:        descOpt,
-		stmtType:       stmt.StatementType(),
-		formatCodes:    formatCodes,
-		typ:            commandComplete,
-		cmdCompleteTag: stmt.StatementTag(),
-		conv:           conv,
-	}
-}
-
-func (c *conn) makeMiscResult(pos sql.CmdPos, typ completionMsgType) commandResult {
-	return commandResult{
-		conn: c,
-		pos:  pos,
-		typ:  typ,
-	}
+	// released is set when the command result has been released so that its
+	// memory can be reused. It is also used to assert against use-after-free
+	// errors.
+	released bool
 }
 
 // Close is part of the CommandResult interface.
 func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
+	r.assertNotReleased()
+	defer r.release()
 	if r.errExpected && r.err == nil {
 		panic("expected err to be set on result by Close, but wasn't")
 	}
@@ -164,21 +144,25 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 
 // CloseWithErr is part of the CommandResult interface.
 func (r *commandResult) CloseWithErr(err error) {
+	r.assertNotReleased()
+	defer r.release()
 	if r.err != nil {
 		panic(fmt.Sprintf("can't overwrite err: %s with err: %s", r.err, err))
 	}
-	r.conn.writerState.fi.registerCmd(r.pos)
 
-	r.err = err
+	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferErr(err)
 }
 
 // Discard is part of the CommandResult interface.
 func (r *commandResult) Discard() {
+	r.assertNotReleased()
+	defer r.release()
 }
 
 // Err is part of the CommandResult interface.
 func (r *commandResult) Err() error {
+	r.assertNotReleased()
 	return r.err
 }
 
@@ -187,11 +171,13 @@ func (r *commandResult) Err() error {
 // We're not going to write any bytes to the buffer in order to support future
 // SetError() calls. The error will only be serialized at Close() time.
 func (r *commandResult) SetError(err error) {
+	r.assertNotReleased()
 	r.err = err
 }
 
 // AddRow is part of the CommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	r.assertNotReleased()
 	if r.err != nil {
 		panic(fmt.Sprintf("can't call AddRow after having set error: %s",
 			r.err))
@@ -217,11 +203,13 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 
 // DisableBuffering is part of the CommandResult interface.
 func (r *commandResult) DisableBuffering() {
+	r.assertNotReleased()
 	r.bufferingDisabled = true
 }
 
 // SetColumns is part of the CommandResult interface.
 func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColumns) {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.descOpt == sql.NeedRowDesc {
 		_ /* err */ = r.conn.writeRowDescription(ctx, cols, r.formatCodes, &r.conn.writerState.buf)
@@ -234,18 +222,21 @@ func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColum
 
 // SetInferredTypes is part of the DescribeResult interface.
 func (r *commandResult) SetInferredTypes(types []oid.Oid) {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferParamDesc(types)
 }
 
 // SetNoDataRowDescription is part of the DescribeResult interface.
 func (r *commandResult) SetNoDataRowDescription() {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	r.conn.bufferNoDataMsg()
 }
 
 // SetPrepStmtOutput is part of the DescribeResult interface.
 func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols sqlbase.ResultColumns) {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, nil /* formatCodes */, &r.conn.writerState.buf)
 }
@@ -254,27 +245,91 @@ func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols sqlbase.Resu
 func (r *commandResult) SetPortalOutput(
 	ctx context.Context, cols sqlbase.ResultColumns, formatCodes []pgwirebase.FormatCode,
 ) {
+	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, formatCodes, &r.conn.writerState.buf)
 }
 
 // IncrementRowsAffected is part of the CommandResult interface.
 func (r *commandResult) IncrementRowsAffected(n int) {
+	r.assertNotReleased()
 	r.rowsAffected += n
 }
 
 // RowsAffected is part of the CommandResult interface.
 func (r *commandResult) RowsAffected() int {
+	r.assertNotReleased()
 	return r.rowsAffected
 }
 
 // SetLimit is part of the CommandResult interface.
 func (r *commandResult) SetLimit(n int) {
+	r.assertNotReleased()
 	r.limit = n
 }
 
 // ResetStmtType is part of the CommandResult interface.
 func (r *commandResult) ResetStmtType(stmt tree.Statement) {
+	r.assertNotReleased()
 	r.stmtType = stmt.StatementType()
 	r.cmdCompleteTag = stmt.StatementTag()
+}
+
+// release frees the commandResult and allows its memory to be reused.
+func (r *commandResult) release() {
+	*r = commandResult{released: true}
+}
+
+// assertNotReleased asserts that the commandResult is not being used after
+// being freed by one of the methods in the CommandResultClose interface. The
+// assertion can have false negatives, where it fails to detect a use-after-free
+// condition, but will never result in a false positive.
+func (r *commandResult) assertNotReleased() {
+	if r.released {
+		panic("commandResult used after being released")
+	}
+}
+
+func (c *conn) allocCommandResult() *commandResult {
+	r := &c.res
+	if r.released {
+		r.released = false
+	} else {
+		// In practice, each conn only ever uses a single commandResult at a
+		// time, so we could make this panic. However, doing so would entail
+		// complicating the ClientComm interface, which doesn't seem worth it.
+		r = new(commandResult)
+	}
+	return r
+}
+
+func (c *conn) newCommandResult(
+	descOpt sql.RowDescOpt,
+	pos sql.CmdPos,
+	stmt tree.Statement,
+	formatCodes []pgwirebase.FormatCode,
+	conv sessiondata.DataConversionConfig,
+) *commandResult {
+	r := c.allocCommandResult()
+	*r = commandResult{
+		conn:           c,
+		conv:           conv,
+		pos:            pos,
+		typ:            commandComplete,
+		cmdCompleteTag: stmt.StatementTag(),
+		stmtType:       stmt.StatementType(),
+		descOpt:        descOpt,
+		formatCodes:    formatCodes,
+	}
+	return r
+}
+
+func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResult {
+	r := c.allocCommandResult()
+	*r = commandResult{
+		conn: c,
+		pos:  pos,
+		typ:  typ,
+	}
+	return r
 }
