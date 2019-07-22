@@ -118,25 +118,33 @@ func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
+func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32, isScalar bool) {
 	if a.done {
 		return
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
-
-		// The aggregation is finished. Flush the last value. If we haven't found
-		// any non-nulls for this group so far, the output for this group should
-		// be null. If a.scratch.curIdx is negative, it means the input has zero rows, and
-		// there should be no output at all.
+		// The aggregation is finished. Flush the last value.
 		if a.scratch.curIdx >= 0 {
+			// If we haven't found any non-nulls for this group so far, the output
+			// for this group should be NULL.
 			if !a.scratch.foundNonNullForCurrentGroup {
 				a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
 			} else {
 				_ASSIGN_DIV_INT64("a.scratch.vec[a.scratch.curIdx]", "a.scratch.curSum", "a.scratch.curCount")
 			}
+			a.scratch.curIdx++
+		} else {
+			// If a.scratch.curIdx is negative, it means the input has zero rows, and
+			// the output should be NULL in scalar context and there should be no
+			// output in non-scalar context.
+			if isScalar {
+				a.scratch.nulls.SetNull(0)
+				a.scratch.curIdx = 1
+			} else {
+				a.scratch.curIdx = 0
+			}
 		}
-		a.scratch.curIdx++
 		a.done = true
 		return
 	}
