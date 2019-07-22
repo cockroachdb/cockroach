@@ -52,7 +52,7 @@ func wrapRowSource(
 	input exec.Operator,
 	inputTypes []semtypes.T,
 	newToWrap func(RowSource) (RowSource, error),
-) (exec.Operator, error) {
+) (*columnarizer, error) {
 	var (
 		toWrapInput RowSource
 		// TODO(asubiotto): Plumb proper processorIDs once we have stats.
@@ -94,11 +94,17 @@ func wrapRowSource(
 	return newColumnarizer(ctx, flowCtx, processorID, toWrap)
 }
 
+type newColOperatorResult struct {
+	op              exec.Operator
+	outputTypes     []types.T
+	memUsage        int
+	metadataSources []distsqlpb.MetadataSource
+}
+
 // newColOperator creates a new columnar operator according to the given spec.
-// The operator and its output types are returned if there was no error.
 func newColOperator(
 	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
-) (op exec.Operator, ct []types.T, memUsage int, err error) {
+) (result newColOperatorResult, err error) {
 	log.VEventf(ctx, 2, "planning col operator for spec %+v", spec)
 
 	core := &spec.Core
@@ -114,21 +120,24 @@ func newColOperator(
 	switch {
 	case core.Noop != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
-		op = exec.NewNoop(inputs[0])
+		result.op = exec.NewNoop(inputs[0])
 		columnTypes = spec.Input[0].ColumnTypes
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 		if core.TableReader.IsCheck {
-			return nil, nil, memUsage, errors.Newf("scrub table reader is unsupported in vectorized")
+			return result, errors.Newf("scrub table reader is unsupported in vectorized")
 		}
-		op, err = newColBatchScan(flowCtx, core.TableReader, post)
+		var scanOp *colBatchScan
+		scanOp, err = newColBatchScan(flowCtx, core.TableReader, post)
+		result.op = scanOp
+		result.metadataSources = append(result.metadataSources, scanOp)
 		// We will be wrapping colBatchScan with a cancel checker below, so we
 		// need to log its creation separately.
-		log.VEventf(ctx, 1, "made op %T\n", op)
+		log.VEventf(ctx, 1, "made op %T\n", result.op)
 
 		// We want to check for cancellation once per input batch, and wrapping
 		// only colBatchScan with an exec.CancelChecker allows us to do just that.
@@ -136,12 +145,12 @@ func newColOperator(
 		// However, some of the long-running operators (for example, sorter) are
 		// still responsible for doing the cancellation check on their own while
 		// performing long operations.
-		op = exec.NewCancelChecker(op)
+		result.op = exec.NewCancelChecker(result.op)
 		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 		aggSpec := core.Aggregator
 		if len(aggSpec.Aggregations) == 0 {
@@ -151,7 +160,7 @@ func newColOperator(
 			// that outputs a batch of length 1 without actual columns once and then
 			// zero-length batches. The actual "data" will be added by projections
 			// below.
-			op, err = exec.NewSingleTupleNoInputOp(), nil
+			result.op, err = exec.NewSingleTupleNoInputOp(), nil
 			// We make columnTypes non-nil so that sanity check doesn't panic.
 			columnTypes = make([]semtypes.T, 0)
 			break
@@ -161,7 +170,7 @@ func newColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			op, err = exec.NewCountOp(inputs[0]), nil
+			result.op, err = exec.NewCountOp(inputs[0]), nil
 			columnTypes = []semtypes.T{*semtypes.Int}
 			break
 		}
@@ -180,7 +189,7 @@ func newColOperator(
 			groupCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(groupCols) {
-			return nil, nil, memUsage, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
+			return result, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
 		}
 
 		aggTyps := make([][]semtypes.T, len(aggSpec.Aggregations))
@@ -189,13 +198,13 @@ func newColOperator(
 		columnTypes = make([]semtypes.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
-				return nil, nil, memUsage, errors.Newf("distinct aggregation not supported")
+				return result, errors.Newf("distinct aggregation not supported")
 			}
 			if agg.FilterColIdx != nil {
-				return nil, nil, memUsage, errors.Newf("filtering aggregation not supported")
+				return result, errors.Newf("filtering aggregation not supported")
 			}
 			if len(agg.Arguments) > 0 {
-				return nil, nil, memUsage, errors.Newf("aggregates with arguments not supported")
+				return result, errors.Newf("aggregates with arguments not supported")
 			}
 			aggTyps[i] = make([]semtypes.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
@@ -210,38 +219,38 @@ func newColOperator(
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
-					return nil, nil, memUsage, errors.Newf("sum on int cols not supported (use sum_int)")
+					return result, errors.Newf("sum on int cols not supported (use sum_int)")
 				}
 			case distsqlpb.AggregatorSpec_SUM_INT:
 				// TODO(yuzefovich): support this case through vectorize.
 				if aggTyps[i][0].Width() != 64 {
-					return nil, nil, memUsage, errors.Newf("sum_int is only supported on Int64 through vectorized")
+					return result, errors.Newf("sum_int is only supported on Int64 through vectorized")
 				}
 			}
 			_, retType, err := GetAggregateInfo(agg.Func, aggTyps[i]...)
 			if err != nil {
-				return nil, nil, memUsage, err
+				return result, err
 			}
 			columnTypes[i] = *retType
 		}
 		var typs []types.T
 		typs, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 		if needHash {
-			op, err = exec.NewHashAggregator(
+			result.op, err = exec.NewHashAggregator(
 				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, isScalarAggregate(aggSpec),
 			)
 		} else {
-			op, err = exec.NewOrderedAggregator(
+			result.op, err = exec.NewOrderedAggregator(
 				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, isScalarAggregate(aggSpec),
 			)
 		}
 
 	case core.Distinct != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 
 		var distinctCols, orderedCols util.FastIntSet
@@ -251,46 +260,46 @@ func newColOperator(
 		}
 		for _, col := range core.Distinct.DistinctColumns {
 			if !orderedCols.Contains(int(col)) {
-				return nil, nil, memUsage, errors.Newf("unsorted distinct not supported")
+				return result, errors.Newf("unsorted distinct not supported")
 			}
 			distinctCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(distinctCols) {
-			return nil, nil, memUsage, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
+			return result, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
 		var typs []types.T
 		typs, err = conv.FromColumnTypes(columnTypes)
 		if err != nil {
-			return nil, nil, 0, err
+			return result, err
 		}
-		op, err = exec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
+		result.op, err = exec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
 
 	case core.Ordinality != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
-		op = exec.NewOrdinalityOp(inputs[0])
+		result.op = exec.NewOrdinalityOp(inputs[0])
 
 	case core.HashJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 
 		if !core.HashJoiner.OnExpr.Empty() {
-			return nil, nil, memUsage, errors.Newf("can't plan hash join with on expressions")
+			return result, errors.Newf("can't plan hash join with on expressions")
 		}
 
 		var leftTypes, rightTypes []types.T
 		leftTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
-			return nil, nil, 0, err
+			return result, err
 		}
 		rightTypes, err = conv.FromColumnTypes(spec.Input[1].ColumnTypes)
 		if err != nil {
-			return nil, nil, 0, err
+			return result, err
 		}
 
 		columnTypes = make([]semtypes.T, len(leftTypes)+len(rightTypes))
@@ -321,7 +330,7 @@ func newColOperator(
 			}
 		}
 
-		op, err = exec.NewEqHashJoinerOp(
+		result.op, err = exec.NewEqHashJoinerOp(
 			inputs[0],
 			inputs[1],
 			core.HashJoiner.LeftEqColumns,
@@ -337,25 +346,25 @@ func newColOperator(
 
 	case core.MergeJoiner != nil:
 		if err := checkNumIn(inputs, 2); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 
 		if !core.MergeJoiner.OnExpr.Empty() {
-			return nil, nil, memUsage, errors.Newf("can't plan merge join with on expressions")
+			return result, errors.Newf("can't plan merge join with on expressions")
 		}
 		if core.MergeJoiner.Type == sqlbase.JoinType_INTERSECT_ALL ||
 			core.MergeJoiner.Type == sqlbase.JoinType_EXCEPT_ALL {
-			return nil, nil, memUsage, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
+			return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 		}
 
 		var leftTypes, rightTypes []types.T
 		leftTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
-			return nil, nil, 0, err
+			return result, err
 		}
 		rightTypes, err = conv.FromColumnTypes(spec.Input[1].ColumnTypes)
 		if err != nil {
-			return nil, nil, 0, err
+			return result, err
 		}
 
 		nLeftCols := uint32(len(leftTypes))
@@ -386,7 +395,7 @@ func newColOperator(
 			}
 		}
 
-		op, err = exec.NewMergeJoinOp(
+		result.op, err = exec.NewMergeJoinOp(
 			core.MergeJoiner.Type,
 			inputs[0],
 			inputs[1],
@@ -409,10 +418,11 @@ func newColOperator(
 
 	case core.JoinReader != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 
-		op, err = wrapRowSource(ctx, flowCtx, inputs[0], spec.Input[0].ColumnTypes, func(input RowSource) (RowSource, error) {
+		var c *columnarizer
+		c, err = wrapRowSource(ctx, flowCtx, inputs[0], spec.Input[0].ColumnTypes, func(input RowSource) (RowSource, error) {
 			var (
 				jr  RowSource
 				err error
@@ -437,58 +447,60 @@ func newColOperator(
 			columnTypes = jr.OutputTypes()
 			return jr, nil
 		})
+		result.op = c
+		result.metadataSources = append(result.metadataSources, c)
 
 	case core.Sorter != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 		input := inputs[0]
 		var inputTypes []types.T
 		inputTypes, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
-			return nil, nil, 0, err
+			return result, err
 		}
 		orderingCols := core.Sorter.OutputOrdering.Columns
 		matchLen := core.Sorter.OrderingMatchLen
 		if matchLen > 0 {
 			// The input is already partially ordered. Use a chunks sorter to avoid
 			// loading all the rows into memory.
-			op, err = exec.NewSortChunks(input, inputTypes, orderingCols, int(matchLen))
+			result.op, err = exec.NewSortChunks(input, inputTypes, orderingCols, int(matchLen))
 		} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
 			// There is a limit specified with no post-process filter, so we know
 			// exactly how many rows the sorter should output. Choose a top K sorter,
 			// which uses a heap to avoid storing more rows than necessary.
 			k := uint16(post.Limit + post.Offset)
-			op = exec.NewTopKSorter(input, inputTypes, orderingCols, k)
+			result.op = exec.NewTopKSorter(input, inputTypes, orderingCols, k)
 		} else {
 			// No optimizations possible. Default to the standard sort operator.
-			op, err = exec.NewSorter(input, inputTypes, orderingCols)
+			result.op, err = exec.NewSorter(input, inputTypes, orderingCols)
 		}
 		columnTypes = spec.Input[0].ColumnTypes
 
 	case core.Windower != nil:
 		if err := checkNumIn(inputs, 1); err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 		if len(core.Windower.WindowFns) != 1 {
-			return nil, nil, memUsage, errors.Newf("only a single window function is currently supported")
+			return result, errors.Newf("only a single window function is currently supported")
 		}
 		wf := core.Windower.WindowFns[0]
 		if wf.Frame != nil &&
 			(wf.Frame.Mode != distsqlpb.WindowerSpec_Frame_RANGE ||
 				wf.Frame.Bounds.Start.BoundType != distsqlpb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
 				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != distsqlpb.WindowerSpec_Frame_CURRENT_ROW)) {
-			return nil, nil, memUsage, errors.Newf("window functions with non-default window frames are not supported")
+			return result, errors.Newf("window functions with non-default window frames are not supported")
 		}
 		if wf.Func.AggregateFunc != nil {
-			return nil, nil, memUsage, errors.Newf("aggregate functions used as window functions are not supported")
+			return result, errors.Newf("aggregate functions used as window functions are not supported")
 		}
 
 		input := inputs[0]
 		var typs []types.T
 		typs, err = conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		if err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 		tempPartitionColOffset, partitionColIdx := 0, -1
 		if len(core.Windower.PartitionBy) > 0 {
@@ -503,7 +515,7 @@ func newColOperator(
 			}
 		}
 		if err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 
 		orderingCols := make([]uint32, len(wf.Ordering.Columns))
@@ -512,13 +524,13 @@ func newColOperator(
 		}
 		switch *wf.Func.WindowFunc {
 		case distsqlpb.WindowerSpec_ROW_NUMBER:
-			op = vecbuiltins.NewRowNumberOperator(input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.op = vecbuiltins.NewRowNumberOperator(input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case distsqlpb.WindowerSpec_RANK:
-			op, err = vecbuiltins.NewRankOperator(input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.op, err = vecbuiltins.NewRankOperator(input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case distsqlpb.WindowerSpec_DENSE_RANK:
-			op, err = vecbuiltins.NewRankOperator(input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			result.op, err = vecbuiltins.NewRankOperator(input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		default:
-			return nil, nil, memUsage, errors.Newf("window function %s is not supported", wf.String())
+			return result, errors.Newf("window function %s is not supported", wf.String())
 		}
 
 		if partitionColIdx != -1 {
@@ -529,29 +541,29 @@ func newColOperator(
 				projection = append(projection, i)
 			}
 			projection = append(projection, wf.OutputColIdx+1)
-			op = exec.NewSimpleProjectOp(op, projection)
+			result.op = exec.NewSimpleProjectOp(result.op, projection)
 		}
 
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
 
 	default:
-		return nil, nil, memUsage, errors.Newf("unsupported processor core %s", strings.TrimSpace(core.String()))
+		return result, errors.Newf("unsupported processor core %s", strings.TrimSpace(core.String()))
 	}
 
 	// After constructing the base operator, calculate the memory usage
 	// of the operator.
-	if sMemOp, ok := op.(exec.StaticMemoryOperator); ok {
-		memUsage += sMemOp.EstimateStaticMemoryUsage()
+	if sMemOp, ok := result.op.(exec.StaticMemoryOperator); ok {
+		result.memUsage += sMemOp.EstimateStaticMemoryUsage()
 	}
 
-	log.VEventf(ctx, 1, "made op %T\n", op)
+	log.VEventf(ctx, 1, "made op %T\n", result.op)
 
 	if err != nil {
-		return nil, nil, memUsage, err
+		return result, err
 	}
 
 	if columnTypes == nil {
-		return nil, nil, memUsage, errors.AssertionFailedf("output columnTypes unset after planning %T", op)
+		return result, errors.AssertionFailedf("output columnTypes unset after planning %T", result.op)
 	}
 
 	if !post.Filter.Empty() {
@@ -561,14 +573,14 @@ func newColOperator(
 		)
 		err := helper.init(post.Filter, columnTypes, flowCtx.EvalCtx)
 		if err != nil {
-			return nil, nil, memUsage, err
+			return result, err
 		}
 		var filterColumnTypes []semtypes.T
-		op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
+		result.op, _, filterColumnTypes, selectionMem, err = planSelectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, result.op)
 		if err != nil {
-			return nil, nil, memUsage, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
+			return result, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
 		}
-		memUsage += selectionMem
+		result.memUsage += selectionMem
 		if len(filterColumnTypes) > len(columnTypes) {
 			// Additional columns were appended to store projection results while
 			// evaluating the filter. Project them away.
@@ -576,11 +588,11 @@ func newColOperator(
 			for i := range columnTypes {
 				outputColumns = append(outputColumns, uint32(i))
 			}
-			op = exec.NewSimpleProjectOp(op, outputColumns)
+			result.op = exec.NewSimpleProjectOp(result.op, outputColumns)
 		}
 	}
 	if post.Projection {
-		op = exec.NewSimpleProjectOp(op, post.OutputColumns)
+		result.op = exec.NewSimpleProjectOp(result.op, post.OutputColumns)
 		// Update output columnTypes.
 		newTypes := make([]semtypes.T, 0, len(post.OutputColumns))
 		for _, j := range post.OutputColumns {
@@ -597,17 +609,18 @@ func newColOperator(
 			)
 			err := helper.init(expr, columnTypes, flowCtx.EvalCtx)
 			if err != nil {
-				return nil, nil, memUsage, err
+				return result, err
 			}
 			var outputIdx int
-			op, outputIdx, columnTypes, renderMem, err = planProjectionOperators(flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
+			result.op, outputIdx, columnTypes, renderMem, err = planProjectionOperators(
+				flowCtx.NewEvalCtx(), helper.expr, columnTypes, result.op)
 			if err != nil {
-				return nil, nil, memUsage, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
+				return result, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
 			if outputIdx < 0 {
-				return nil, nil, memUsage, errors.AssertionFailedf("missing outputIdx")
+				return result, errors.AssertionFailedf("missing outputIdx")
 			}
-			memUsage += renderMem
+			result.memUsage += renderMem
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
 		newTypes := make([]semtypes.T, 0, len(renderedCols))
@@ -615,19 +628,19 @@ func newColOperator(
 			newTypes = append(newTypes, columnTypes[j])
 		}
 		columnTypes = newTypes
-		op = exec.NewSimpleProjectOp(op, renderedCols)
+		result.op = exec.NewSimpleProjectOp(result.op, renderedCols)
 	}
 	if post.Offset != 0 {
-		op = exec.NewOffsetOp(op, post.Offset)
+		result.op = exec.NewOffsetOp(result.op, post.Offset)
 	}
 	if post.Limit != 0 {
-		op = exec.NewLimitOp(op, post.Limit)
+		result.op = exec.NewLimitOp(result.op, post.Limit)
 	}
 	if err != nil {
-		return nil, nil, memUsage, err
+		return result, err
 	}
-	ct, err = conv.FromColumnTypes(columnTypes)
-	return op, ct, memUsage, err
+	result.outputTypes, err = conv.FromColumnTypes(columnTypes)
+	return result, err
 }
 
 func planSelectionOperators(
@@ -1208,16 +1221,16 @@ func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error
 			inputs = append(inputs, synchronizer)
 		}
 
-		op, outputTypes, memUsage, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
+		result, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
 		if err != nil {
 			return errors.Wrapf(err, "unable to vectorize execution plan.")
 		}
-		if err = acc.Grow(ctx, int64(memUsage)); err != nil {
+		if err = acc.Grow(ctx, int64(result.memUsage)); err != nil {
 			return errors.Wrapf(err, "not enough memory to setup vectorized plan.")
 		}
-		if metaSource, ok := op.(distsqlpb.MetadataSource); ok {
-			metadataSourcesQueue = append(metadataSourcesQueue, metaSource)
-		}
+		metadataSourcesQueue = append(metadataSourcesQueue, result.metadataSources...)
+
+		op := result.op
 		if recordingStats {
 			vsc, err := wrapWithVectorizedStatsCollector(op, inputs, pspec)
 			if err != nil {
@@ -1232,7 +1245,7 @@ func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error
 		if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
 			if err := f.setupVectorizedRouter(
 				op,
-				outputTypes,
+				result.outputTypes,
 				output,
 				append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
 				streamIDToInputOp,
@@ -1272,7 +1285,8 @@ func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error
 					)
 				}
 				if err := f.setupVectorizedRemoteOutputStream(
-					op, outputTypes, outputStream, append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
+					op, result.outputTypes, outputStream,
+					append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
 				); err != nil {
 					return err
 				}
@@ -1382,7 +1396,7 @@ func SupportsVectorized(ctx context.Context, flowCtx *FlowCtx, flow *distsqlpb.F
 		} else {
 			ops = ops[:len(spec.Input)]
 		}
-		_, _, _, err := newColOperator(ctx, flowCtx, spec, ops)
+		_, err := newColOperator(ctx, flowCtx, spec, ops)
 		if err != nil {
 			return err
 		}
