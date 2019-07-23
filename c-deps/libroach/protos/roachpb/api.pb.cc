@@ -26918,6 +26918,7 @@ void AddSSTableRequest::InitAsDefaultInstance() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int AddSSTableRequest::kHeaderFieldNumber;
 const int AddSSTableRequest::kDataFieldNumber;
+const int AddSSTableRequest::kDisallowShadowingFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 AddSSTableRequest::AddSSTableRequest()
@@ -26940,12 +26941,15 @@ AddSSTableRequest::AddSSTableRequest(const AddSSTableRequest& from)
   } else {
     header_ = NULL;
   }
+  disallow_shadowing_ = from.disallow_shadowing_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AddSSTableRequest)
 }
 
 void AddSSTableRequest::SharedCtor() {
   data_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  header_ = NULL;
+  ::memset(&header_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&disallow_shadowing_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(disallow_shadowing_));
 }
 
 AddSSTableRequest::~AddSSTableRequest() {
@@ -26978,6 +26982,7 @@ void AddSSTableRequest::Clear() {
     delete header_;
   }
   header_ = NULL;
+  disallow_shadowing_ = false;
   _internal_metadata_.Clear();
 }
 
@@ -27014,6 +27019,20 @@ bool AddSSTableRequest::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_data()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool disallow_shadowing = 3;
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &disallow_shadowing_)));
         } else {
           goto handle_unusual;
         }
@@ -27057,6 +27076,11 @@ void AddSSTableRequest::SerializeWithCachedSizes(
       2, this->data(), output);
   }
 
+  // bool disallow_shadowing = 3;
+  if (this->disallow_shadowing() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(3, this->disallow_shadowing(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AddSSTableRequest)
@@ -27079,6 +27103,11 @@ size_t AddSSTableRequest::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *header_);
+  }
+
+  // bool disallow_shadowing = 3;
+  if (this->disallow_shadowing() != 0) {
+    total_size += 1 + 1;
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -27105,6 +27134,9 @@ void AddSSTableRequest::MergeFrom(const AddSSTableRequest& from) {
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
+  if (from.disallow_shadowing() != 0) {
+    set_disallow_shadowing(from.disallow_shadowing());
+  }
 }
 
 void AddSSTableRequest::CopyFrom(const AddSSTableRequest& from) {
@@ -27127,6 +27159,7 @@ void AddSSTableRequest::InternalSwap(AddSSTableRequest* other) {
   data_.Swap(&other->data_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(header_, other->header_);
+  swap(disallow_shadowing_, other->disallow_shadowing_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

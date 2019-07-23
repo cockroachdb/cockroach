@@ -272,6 +272,17 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 // merged with existing. This method is provided for invocation from Go code.
 DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 
+// DBCheckForKeyCollisions runs both iterators in lockstep and errors out at the
+// first key collision, where a collision refers to any two MVCC keys with the
+// same user key, regardless of timestamps.
+//
+// An exception is made when the latest version of the colliding key is a
+// tombstone from an MVCC delete in the existing data. If the timestamp of the
+// SST key is greater than or equal to the timestamp of the tombstone, then it
+// is not considered a collision and we continue iteration from the next key in
+// the existing data.
+DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIter, DBString* write_intent);
+
 // NB: The function (cStatsToGoStats) that converts these to the go
 // representation is unfortunately duplicated in engine and engineccl. If this
 // struct is changed, both places need to be updated.
