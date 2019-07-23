@@ -382,6 +382,16 @@ func (r *Replica) stageRaftCommand(
 			log.Fatal(ctx, err)
 		}
 	}
+
+	// Provide the command's corresponding logical operations to the Replica's
+	// rangefeed. Only do so if the WriteBatch is non-nil, otherwise it's valid
+	// for the logical op log to be nil, which would shut down all rangefeeds.
+	// If no rangefeed is running, this call will be a noop.
+	if cmd.raftCmd.WriteBatch != nil {
+		r.handleLogicalOpLogRaftMuLocked(ctx, cmd.raftCmd.LogicalOpLog, batch)
+	} else if cmd.raftCmd.LogicalOpLog != nil {
+		log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.raftCmd)
+	}
 }
 
 func checkForcedErr(
