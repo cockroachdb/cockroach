@@ -507,6 +507,16 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-INTERVALSTYLE
 	`intervalstyle`: makeCompatStringVar(`IntervalStyle`, "postgres"),
 
+	// CockroachDB extension.
+	`locality`: {
+		Get: func(evalCtx *extendedEvalContext) string {
+			if len(evalCtx.Locality.Tiers) != 0 {
+				return evalCtx.Locality.String()
+			}
+			return "No locality set."
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-LOC-TIMEOUT
 	`lock_timeout`: makeCompatIntVar(`lock_timeout`, 0),
 
