@@ -351,8 +351,9 @@ statement ok
 SET tracing = on,kv,results; SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0); SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
 output row: [1]
@@ -378,8 +379,9 @@ statement ok
 SET tracing = on,kv,results; SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz; SET tracing = off
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /xyz/primary/1 -> NULL
 fetched: /xyz/primary/1/y -> 2
@@ -404,17 +406,6 @@ group           ·            ·
       └── scan  ·            ·
 ·               table        xyz@xy
 ·               spans        /1-/2
-
-# Verify we only look at one row for MIN when we have an index on that column.
-statement ok
-SET tracing = on,kv,results; SELECT min(z) FROM xyz; SET tracing = off
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /xyz/zyx/3.0/2/1 -> NULL
-output row: [3.0]
 
 # Tests for the single-row optimization.
 statement OK
@@ -448,18 +439,6 @@ INSERT INTO ab VALUES
   (4, 40),
   (5, 50)
 
-# Verify we only buffer one row.
-statement ok
-SET tracing = on,kv,results; SELECT min(a) FROM ab; SET tracing = off
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/1 -> NULL
-fetched: /ab/primary/1/b -> 10
-output row: [1]
-
 query TTT
 SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT max(a) FROM abc
@@ -474,18 +453,6 @@ group              ·            ·
 ·                  table        abc@primary
 ·                  spans        ALL
 ·                  limit        1
-
-# Verify we only buffer one row.
-statement ok
-SET tracing = on,kv,results; SELECT max(a) FROM ab; SET tracing = off
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/5/b -> 50
-fetched: /ab/primary/5 -> NULL
-output row: [5]
 
 query TTT
 SELECT tree, field, description FROM [
