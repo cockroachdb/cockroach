@@ -101,15 +101,7 @@ type joinReader struct {
 	// needed columns span multiple queries
 	neededFamilies []sqlbase.FamilyID
 
-	// A few scratch buffers, to avoid re-allocating.
-	lookupRows  []lookupRow
 	indexKeyRow sqlbase.EncDatumRow
-}
-
-// lookupRow represents an index key and the corresponding index row.
-type lookupRow struct {
-	key string
-	row sqlbase.EncDatumRow
 }
 
 var _ Processor = &joinReader{}
@@ -418,11 +410,12 @@ func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata)
 // performLookup reads the next batch of index rows, joins them to the
 // corresponding input rows, and adds the results to jr.inputRowIdxToOutputRows.
 func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetadata) {
-	jr.lookupRows = jr.lookupRows[:0]
 	nCols := len(jr.lookupCols)
 
-	// Read the next batch of index rows.
-	for len(jr.lookupRows) < jr.batchSize {
+	isJoinTypeLeftSemiJoin := jr.joinType == sqlbase.LeftSemiJoin
+	// Read the next batch of index rows, map them to the input rows, and save
+	// the rendered result rows.
+	for i := 0; i < jr.batchSize; i++ {
 		// Construct a "partial key" of nCols, so we can match the key format that
 		// was stored in our keyToInputRowIndices map. This matches the format that
 		// is output in jr.generateSpan.
@@ -432,27 +425,20 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 			return jrStateUnknown, jr.DrainHelper()
 		}
 
-		indexRow, meta := jr.fetcher.Next()
+		lookedUpRow, meta := jr.fetcher.Next()
 		if meta != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(meta.Err))
 			return jrStateUnknown, jr.DrainHelper()
 		}
-		if indexRow == nil {
+		if lookedUpRow == nil {
 			// Done with this input batch.
 			jr.finalLookupBatch = true
 			break
 		}
 
-		jr.lookupRows = append(jr.lookupRows, lookupRow{key: string(key), row: jr.rowAlloc.CopyRow(indexRow)})
-	}
-
-	// Iterate over the lookup results, map them to the input rows, and emit the
-	// rendered rows.
-	isJoinTypeLeftSemiJoin := jr.joinType == sqlbase.LeftSemiJoin
-	for _, lookupRow := range jr.lookupRows {
 		if jr.indexFilter.expr != nil {
 			// Apply index filter.
-			res, err := jr.indexFilter.evalFilter(lookupRow.row)
+			res, err := jr.indexFilter.evalFilter(lookedUpRow)
 			if err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()
@@ -461,10 +447,11 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 				continue
 			}
 		}
-		for _, inputRowIdx := range jr.keyToInputRowIndices[lookupRow.key] {
-			// Only add to output if joinType is not LeftSemiJoin or if we have not gotten the match
+		for _, inputRowIdx := range jr.keyToInputRowIndices[string(key)] {
+			// During a SemiJoin, we only output if we've seen no match for this input
+			// row yet.
 			if !isJoinTypeLeftSemiJoin || len(jr.inputRowIdxToOutputRows[inputRowIdx]) == 0 {
-				renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookupRow.row)
+				renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookedUpRow)
 				if err != nil {
 					jr.MoveToDraining(err)
 					return jrStateUnknown, jr.DrainHelper()
