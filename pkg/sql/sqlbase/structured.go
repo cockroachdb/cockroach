@@ -366,16 +366,6 @@ func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDesc
 		return nil, err
 	}
 
-	// TODO (lucy): We used to validate the table in GetDescriptorByID, but now
-	// we have to do it somewhere else. Calling it here won't work though since
-	// Validate() calls this function to get other tables, so we get an infinite
-	// recursion for FKs. In general, we need to figure out the proliferation of
-	// extremely similar functions/methods to get table descs from KV.
-	// We should at least make it so that SHOW CONSTRAINTS eventually calls Validate.
-	// if err := table.Validate(ctx, txn, nil); err != nil {
-	// 	return nil, err
-	// }
-
 	return table, nil
 }
 
@@ -803,6 +793,8 @@ func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
 	otherTables := make(map[ID]*TableDescriptor)
 	indexes := append(desc.Indexes, desc.PrimaryIndex)
 	changed := false
+	// No need to process mutations, since only descriptors written on a 19.2
+	// cluster (after finalizing the upgrade) have foreign key mutations.
 	for i := range indexes {
 		idx := &indexes[i]
 		if idx.ForeignKey.IsSet() {
@@ -830,10 +822,14 @@ func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
 				OnDelete:            ref.OnDelete,
 				OnUpdate:            ref.OnUpdate,
 				Match:               ref.Match,
+				OriginIndex:         idx.ID,
+				ReferencedIndex:     referencedIndex.ID,
 			}
 			desc.OutboundFKs = append(desc.OutboundFKs, outFK)
 			changed = true
 		}
+		idx.ForeignKey = ForeignKeyReference{}
+
 		for refIdx := range idx.ReferencedBy {
 			ref := &idx.ReferencedBy[refIdx]
 			if _, ok := otherTables[ref.Table]; !ok {
@@ -859,12 +855,100 @@ func (desc *TableDescriptor) maybeUpgradeForeignKeyRepresentation(
 				OnDelete:            originIndex.ForeignKey.OnDelete,
 				OnUpdate:            originIndex.ForeignKey.OnUpdate,
 				Match:               originIndex.ForeignKey.Match,
+				OriginIndex:         originIndex.ID,
+				ReferencedIndex:     idx.ID,
 			}
 			desc.InboundFKs = append(desc.InboundFKs, inFK)
 			changed = true
 		}
+		idx.ReferencedBy = nil
 	}
 	return changed, nil
+}
+
+// TODO (lucy, jordan): do we need to increment the table version when writing an upgraded descriptor?
+func (desc *TableDescriptor) maybeDowngradeForeignKeyRepresentation(
+	ctx context.Context, txn *client.Txn,
+) (bool, *TableDescriptor, error) {
+	// TODO (lucy): add check that all fields are actually populated
+	descCopy := protoutil.Clone(desc).(*TableDescriptor)
+	changed := false
+	otherTables := make(map[ID]*TableDescriptor)
+
+	// No need to process mutations, since only descriptors written on a 19.2
+	// cluster (after finalizing the upgrade) have foreign key mutations.
+	for _, fk := range descCopy.OutboundFKs {
+		if _, ok := otherTables[fk.ReferencedTableID]; !ok {
+			tbl, err := GetTableDescFromID(ctx, txn, fk.ReferencedTableID)
+			if err != nil {
+				return false, nil, err
+			}
+			otherTables[fk.ReferencedTableID] = tbl
+		}
+		ref := ForeignKeyReference{
+			Table:           fk.ReferencedTableID,
+			Index:           fk.ReferencedIndex,
+			Name:            fk.Name,
+			Validity:        fk.Validity,
+			SharedPrefixLen: int32(len(fk.OriginColumnIDs)),
+			OnDelete:        fk.OnDelete,
+			OnUpdate:        fk.OnUpdate,
+			Match:           fk.Match,
+		}
+		idx, err := descCopy.FindIndexByID(fk.OriginIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		idx.ForeignKey = ref
+		backref := ForeignKeyReference{
+			Table: descCopy.ID,
+			Index: fk.OriginIndex,
+		}
+		backrefIdx, err := otherTables[fk.ReferencedTableID].FindIndexByID(fk.ReferencedIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		backrefIdx.ReferencedBy = append(backrefIdx.ReferencedBy, backref)
+		changed = true
+	}
+	descCopy.OutboundFKs = nil
+
+	for _, fk := range descCopy.InboundFKs {
+		if _, ok := otherTables[fk.OriginTableID]; !ok {
+			tbl, err := GetTableDescFromID(ctx, txn, fk.OriginTableID)
+			if err != nil {
+				return false, nil, err
+			}
+			otherTables[fk.OriginTableID] = tbl
+		}
+		ref := ForeignKeyReference{
+			Table:           fk.ReferencedTableID,
+			Index:           fk.ReferencedIndex,
+			Name:            fk.Name,
+			Validity:        fk.Validity,
+			SharedPrefixLen: int32(len(fk.OriginColumnIDs)),
+			OnDelete:        fk.OnDelete,
+			OnUpdate:        fk.OnUpdate,
+			Match:           fk.Match,
+		}
+		idx, err := otherTables[fk.OriginTableID].FindIndexByID(fk.OriginIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		idx.ForeignKey = ref
+		backref := ForeignKeyReference{
+			Table: descCopy.ID,
+			Index: fk.OriginIndex,
+		}
+		backrefIdx, err := descCopy.FindIndexByID(fk.ReferencedIndex)
+		if err != nil {
+			return false, nil, err
+		}
+		backrefIdx.ReferencedBy = append(backrefIdx.ReferencedBy, backref)
+		changed = true
+	}
+	descCopy.InboundFKs = nil
+	return changed, descCopy, nil
 }
 
 // maybeUpgradeFormatVersion transforms the TableDescriptor to the latest
@@ -2444,6 +2528,7 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.FK.Name))
 		}
+		// TODO (lucy): also rename the FK constraint on the referenced table
 		fk, err := desc.FindFKByName(detail.FK.Name)
 		if err != nil {
 			return err

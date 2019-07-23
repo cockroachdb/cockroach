@@ -611,8 +611,6 @@ func ResolveFK(
 	if ts == NewTable {
 		tbl.OutboundFKs = append(tbl.OutboundFKs, ref)
 	} else {
-		// TODO(jordan): we can no longer edit the OutboundFKs after a mutation,
-		// since they don't live on indexes. Is this a problem?
 		tbl.AddForeignKeyValidationMutation(ref)
 	}
 

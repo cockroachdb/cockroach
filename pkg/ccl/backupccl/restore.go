@@ -67,6 +67,7 @@ var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
 func loadBackupDescs(
 	ctx context.Context, uris []string, settings *cluster.Settings,
 ) ([]BackupDescriptor, error) {
+	// TODO (lucy): do table descs need to be upgraded here?
 	backupDescs := make([]BackupDescriptor, len(uris))
 
 	for i, uri := range uris {

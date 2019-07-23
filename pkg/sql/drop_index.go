@@ -367,11 +367,10 @@ func (p *planner) dropIndexByName(
 		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
 	}
 
-	/* TODO(jordan): this doesn't work because it doesn't see the
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 		return err
 	}
-	*/
+	// TODO (lucy): this might not work
 	mutationID, err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc)
 	if err != nil {
 		return err

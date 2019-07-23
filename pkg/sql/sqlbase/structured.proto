@@ -79,6 +79,8 @@ message ForeignKeyConstraint {
   // This is only important for composite keys. For all prior matches before
   // the addition of this value, MATCH SIMPLE will be used.
   optional ForeignKeyReference.Match match = 9 [(gogoproto.nullable) = false];
+  optional uint32 origin_index = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
+  optional uint32 referenced_index = 11 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
 }
 
 message ColumnDescriptor {
