@@ -1511,49 +1511,50 @@ FROM
 WHERE
   name != 'optimizer' AND name != 'crdb_version'
 ----
-name                                 setting       category  short_desc  extra_desc  vartype
-application_name                     ·             NULL      NULL        NULL        string
-bytea_output                         hex           NULL      NULL        NULL        string
-client_encoding                      UTF8          NULL      NULL        NULL        string
-client_min_messages                  notice        NULL      NULL        NULL        string
-database                             test          NULL      NULL        NULL        string
-datestyle                            ISO, MDY      NULL      NULL        NULL        string
-default_int_size                     8             NULL      NULL        NULL        string
-default_tablespace                   ·             NULL      NULL        NULL        string
-default_transaction_isolation        serializable  NULL      NULL        NULL        string
-default_transaction_read_only        off           NULL      NULL        NULL        string
-distsql                              off           NULL      NULL        NULL        string
-experimental_enable_zigzag_join      on            NULL      NULL        NULL        string
-experimental_force_split_at          off           NULL      NULL        NULL        string
-experimental_optimizer_foreign_keys  off           NULL      NULL        NULL        string
-experimental_serial_normalization    rowid         NULL      NULL        NULL        string
-experimental_vectorize               off           NULL      NULL        NULL        string
-extra_float_digits                   0             NULL      NULL        NULL        string
-force_savepoint_restart              off           NULL      NULL        NULL        string
-idle_in_transaction_session_timeout  0             NULL      NULL        NULL        string
-integer_datetimes                    on            NULL      NULL        NULL        string
-intervalstyle                        postgres      NULL      NULL        NULL        string
-lock_timeout                         0             NULL      NULL        NULL        string
-max_index_keys                       32            NULL      NULL        NULL        string
-node_id                              1             NULL      NULL        NULL        string
-reorder_joins_limit                  4             NULL      NULL        NULL        string
-results_buffer_size                  16384         NULL      NULL        NULL        string
-row_security                         off           NULL      NULL        NULL        string
-search_path                          public        NULL      NULL        NULL        string
-server_encoding                      UTF8          NULL      NULL        NULL        string
-server_version                       9.5.0         NULL      NULL        NULL        string
-server_version_num                   90500         NULL      NULL        NULL        string
-session_user                         root          NULL      NULL        NULL        string
-sql_safe_updates                     off           NULL      NULL        NULL        string
-standard_conforming_strings          on            NULL      NULL        NULL        string
-statement_timeout                    0             NULL      NULL        NULL        string
-synchronize_seqscans                 on            NULL      NULL        NULL        string
-timezone                             UTC           NULL      NULL        NULL        string
-tracing                              off           NULL      NULL        NULL        string
-transaction_isolation                serializable  NULL      NULL        NULL        string
-transaction_priority                 normal        NULL      NULL        NULL        string
-transaction_read_only                off           NULL      NULL        NULL        string
-transaction_status                   NoTxn         NULL      NULL        NULL        string
+name                                 setting               category  short_desc  extra_desc  vartype
+application_name                     ·                     NULL      NULL        NULL        string
+bytea_output                         hex                   NULL      NULL        NULL        string
+client_encoding                      UTF8                  NULL      NULL        NULL        string
+client_min_messages                  notice                NULL      NULL        NULL        string
+database                             test                  NULL      NULL        NULL        string
+datestyle                            ISO, MDY              NULL      NULL        NULL        string
+default_int_size                     8                     NULL      NULL        NULL        string
+default_tablespace                   ·                     NULL      NULL        NULL        string
+default_transaction_isolation        serializable          NULL      NULL        NULL        string
+default_transaction_read_only        off                   NULL      NULL        NULL        string
+distsql                              off                   NULL      NULL        NULL        string
+experimental_enable_zigzag_join      on                    NULL      NULL        NULL        string
+experimental_force_split_at          off                   NULL      NULL        NULL        string
+experimental_optimizer_foreign_keys  off                   NULL      NULL        NULL        string
+experimental_serial_normalization    rowid                 NULL      NULL        NULL        string
+experimental_vectorize               off                   NULL      NULL        NULL        string
+extra_float_digits                   0                     NULL      NULL        NULL        string
+force_savepoint_restart              off                   NULL      NULL        NULL        string
+idle_in_transaction_session_timeout  0                     NULL      NULL        NULL        string
+integer_datetimes                    on                    NULL      NULL        NULL        string
+intervalstyle                        postgres              NULL      NULL        NULL        string
+locality                             region=test,dc=dc1    NULL      NULL        NULL        string
+lock_timeout                         0                     NULL      NULL        NULL        string
+max_index_keys                       32                    NULL      NULL        NULL        string
+node_id                              1                     NULL      NULL        NULL        string
+reorder_joins_limit                  4                     NULL      NULL        NULL        string
+results_buffer_size                  16384                 NULL      NULL        NULL        string
+row_security                         off                   NULL      NULL        NULL        string
+search_path                          public                NULL      NULL        NULL        string
+server_encoding                      UTF8                  NULL      NULL        NULL        string
+server_version                       9.5.0                 NULL      NULL        NULL        string
+server_version_num                   90500                 NULL      NULL        NULL        string
+session_user                         root                  NULL      NULL        NULL        string
+sql_safe_updates                     off                   NULL      NULL        NULL        string
+standard_conforming_strings          on                    NULL      NULL        NULL        string
+statement_timeout                    0                     NULL      NULL        NULL        string
+synchronize_seqscans                 on                    NULL      NULL        NULL        string
+timezone                             UTC                   NULL      NULL        NULL        string
+tracing                              off                   NULL      NULL        NULL        string
+transaction_isolation                serializable          NULL      NULL        NULL        string
+transaction_priority                 normal                NULL      NULL        NULL        string
+transaction_read_only                off                   NULL      NULL        NULL        string
+transaction_status                   NoTxn                 NULL      NULL        NULL        string
 
 query TTTTTTT colnames
 SELECT
@@ -1563,49 +1564,50 @@ FROM
 WHERE
   name != 'optimizer' AND name != 'crdb_version'
 ----
-name                                 setting       unit  context  enumvals  boot_val      reset_val
-application_name                     ·             NULL  user     NULL      ·             ·
-bytea_output                         hex           NULL  user     NULL      hex           hex
-client_encoding                      UTF8          NULL  user     NULL      UTF8          UTF8
-client_min_messages                  notice        NULL  user     NULL      notice        notice
-database                             test          NULL  user     NULL      ·             test
-datestyle                            ISO, MDY      NULL  user     NULL      ISO, MDY      ISO, MDY
-default_int_size                     8             NULL  user     NULL      8             8
-default_tablespace                   ·             NULL  user     NULL      ·             ·
-default_transaction_isolation        serializable  NULL  user     NULL      default       default
-default_transaction_read_only        off           NULL  user     NULL      off           off
-distsql                              off           NULL  user     NULL      off           off
-experimental_enable_zigzag_join      on            NULL  user     NULL      on            on
-experimental_force_split_at          off           NULL  user     NULL      off           off
-experimental_optimizer_foreign_keys  off           NULL  user     NULL      off           off
-experimental_serial_normalization    rowid         NULL  user     NULL      rowid         rowid
-experimental_vectorize               off           NULL  user     NULL      off           off
-extra_float_digits                   0             NULL  user     NULL      0             2
-force_savepoint_restart              off           NULL  user     NULL      off           off
-idle_in_transaction_session_timeout  0             NULL  user     NULL      0             0
-integer_datetimes                    on            NULL  user     NULL      on            on
-intervalstyle                        postgres      NULL  user     NULL      postgres      postgres
-lock_timeout                         0             NULL  user     NULL      0             0
-max_index_keys                       32            NULL  user     NULL      32            32
-node_id                              1             NULL  user     NULL      1             1
-reorder_joins_limit                  4             NULL  user     NULL      4             4
-results_buffer_size                  16384         NULL  user     NULL      16384         16384
-row_security                         off           NULL  user     NULL      off           off
-search_path                          public        NULL  user     NULL      public        public
-server_encoding                      UTF8          NULL  user     NULL      UTF8          UTF8
-server_version                       9.5.0         NULL  user     NULL      9.5.0         9.5.0
-server_version_num                   90500         NULL  user     NULL      90500         90500
-session_user                         root          NULL  user     NULL      root          root
-sql_safe_updates                     off           NULL  user     NULL      off           off
-standard_conforming_strings          on            NULL  user     NULL      on            on
-statement_timeout                    0             NULL  user     NULL      0             0
-synchronize_seqscans                 on            NULL  user     NULL      on            on
-timezone                             UTC           NULL  user     NULL      UTC           UTC
-tracing                              off           NULL  user     NULL      off           off
-transaction_isolation                serializable  NULL  user     NULL      serializable  serializable
-transaction_priority                 normal        NULL  user     NULL      normal        normal
-transaction_read_only                off           NULL  user     NULL      off           off
-transaction_status                   NoTxn         NULL  user     NULL      NoTxn         NoTxn
+name                                 setting              unit  context  enumvals  boot_val             reset_val
+application_name                     ·                    NULL  user     NULL      ·                    ·
+bytea_output                         hex                  NULL  user     NULL      hex                  hex
+client_encoding                      UTF8                 NULL  user     NULL      UTF8                 UTF8
+client_min_messages                  notice               NULL  user     NULL      notice               notice
+database                             test                 NULL  user     NULL      ·                    test
+datestyle                            ISO, MDY             NULL  user     NULL      ISO, MDY             ISO, MDY
+default_int_size                     8                    NULL  user     NULL      8                    8
+default_tablespace                   ·                    NULL  user     NULL      ·                    ·
+default_transaction_isolation        serializable         NULL  user     NULL      default              default
+default_transaction_read_only        off                  NULL  user     NULL      off                  off
+distsql                              off                  NULL  user     NULL      off                  off
+experimental_enable_zigzag_join      on                   NULL  user     NULL      on                   on
+experimental_force_split_at          off                  NULL  user     NULL      off                  off
+experimental_optimizer_foreign_keys  off                  NULL  user     NULL      off                  off
+experimental_serial_normalization    rowid                NULL  user     NULL      rowid                rowid
+experimental_vectorize               off                  NULL  user     NULL      off                  off
+extra_float_digits                   0                    NULL  user     NULL      0                    2
+force_savepoint_restart              off                  NULL  user     NULL      off                  off
+idle_in_transaction_session_timeout  0                    NULL  user     NULL      0                    0
+integer_datetimes                    on                   NULL  user     NULL      on                   on
+intervalstyle                        postgres             NULL  user     NULL      postgres             postgres
+locality                             region=test,dc=dc1   NULL  user     NULL      region=test,dc=dc1   region=test,dc=dc1
+lock_timeout                         0                    NULL  user     NULL      0                    0
+max_index_keys                       32                   NULL  user     NULL      32                   32
+node_id                              1                    NULL  user     NULL      1                    1
+reorder_joins_limit                  4                    NULL  user     NULL      4                    4
+results_buffer_size                  16384                NULL  user     NULL      16384                16384
+row_security                         off                  NULL  user     NULL      off                  off
+search_path                          public               NULL  user     NULL      public               public
+server_encoding                      UTF8                 NULL  user     NULL      UTF8                 UTF8
+server_version                       9.5.0                NULL  user     NULL      9.5.0                9.5.0
+server_version_num                   90500                NULL  user     NULL      90500                90500
+session_user                         root                 NULL  user     NULL      root                 root
+sql_safe_updates                     off                  NULL  user     NULL      off                  off
+standard_conforming_strings          on                   NULL  user     NULL      on                   on
+statement_timeout                    0                    NULL  user     NULL      0                    0
+synchronize_seqscans                 on                   NULL  user     NULL      on                   on
+timezone                             UTC                  NULL  user     NULL      UTC                  UTC
+tracing                              off                  NULL  user     NULL      off                  off
+transaction_isolation                serializable         NULL  user     NULL      serializable         serializable
+transaction_priority                 normal               NULL  user     NULL      normal               normal
+transaction_read_only                off                  NULL  user     NULL      off                  off
+transaction_status                   NoTxn                NULL  user     NULL      NoTxn                NoTxn
 
 query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
@@ -1633,6 +1635,7 @@ force_savepoint_restart              NULL    NULL     NULL     NULL        NULL
 idle_in_transaction_session_timeout  NULL    NULL     NULL     NULL        NULL
 integer_datetimes                    NULL    NULL     NULL     NULL        NULL
 intervalstyle                        NULL    NULL     NULL     NULL        NULL
+locality                             NULL    NULL     NULL     NULL        NULL
 lock_timeout                         NULL    NULL     NULL     NULL        NULL
 max_index_keys                       NULL    NULL     NULL     NULL        NULL
 node_id                              NULL    NULL     NULL     NULL        NULL

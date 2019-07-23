@@ -47,6 +47,7 @@ force_savepoint_restart              off
 idle_in_transaction_session_timeout  0
 integer_datetimes                    on
 intervalstyle                        postgres
+locality                             region=test,dc=dc1
 lock_timeout                         0
 max_index_keys                       32
 node_id                              1
