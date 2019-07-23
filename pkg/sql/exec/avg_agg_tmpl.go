@@ -124,17 +124,13 @@ func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
-
 		// The aggregation is finished. Flush the last value. If we haven't found
-		// any non-nulls for this group so far, the output for this group should
-		// be null. If a.scratch.curIdx is negative, it means the input has zero rows, and
-		// there should be no output at all.
-		if a.scratch.curIdx >= 0 {
-			if !a.scratch.foundNonNullForCurrentGroup {
-				a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
-			} else {
-				_ASSIGN_DIV_INT64("a.scratch.vec[a.scratch.curIdx]", "a.scratch.curSum", "a.scratch.curCount")
-			}
+		// any non-nulls for this group so far, the output for this group should be
+		// NULL.
+		if !a.scratch.foundNonNullForCurrentGroup {
+			a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
+		} else {
+			_ASSIGN_DIV_INT64("a.scratch.vec[a.scratch.curIdx]", "a.scratch.curSum", "a.scratch.curCount")
 		}
 		a.scratch.curIdx++
 		a.done = true
@@ -167,6 +163,10 @@ func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		}
 	}
+}
+
+func (a *avg_TYPEAgg) HandleEmptyInputScalar() {
+	a.scratch.nulls.SetNull(0)
 }
 
 // {{end}}

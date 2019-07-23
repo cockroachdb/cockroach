@@ -114,14 +114,11 @@ func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if inputLen == 0 {
 		// The aggregation is finished. Flush the last value. If we haven't found
 		// any non-nulls for this group so far, the output for this group should be
-		// null. If a.scratch.curIdx is negative, it means the input has zero rows,
-		// and there should be no output at all.
-		if a.scratch.curIdx >= 0 {
-			if !a.scratch.foundNonNullForCurrentGroup {
-				a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
-			}
-			a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
+		// null.
+		if !a.scratch.foundNonNullForCurrentGroup {
+			a.scratch.nulls.SetNull(uint16(a.scratch.curIdx))
 		}
+		a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
 		a.scratch.curIdx++
 		a.done = true
 		return
@@ -153,6 +150,10 @@ func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		}
 	}
+}
+
+func (a *sum_TYPEAgg) HandleEmptyInputScalar() {
+	a.scratch.nulls.SetNull(0)
 }
 
 // {{end}}

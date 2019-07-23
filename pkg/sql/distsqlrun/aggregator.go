@@ -132,6 +132,18 @@ type aggregatorBase struct {
 	cancelChecker *sqlbase.CancelChecker
 }
 
+func isScalarAggregate(spec *distsqlpb.AggregatorSpec) bool {
+	switch spec.Type {
+	case distsqlpb.AggregatorSpec_SCALAR:
+		return true
+	case distsqlpb.AggregatorSpec_NON_SCALAR:
+		return false
+	default:
+		// This case exists for backward compatibility.
+		return (len(spec.GroupCols) == 0)
+	}
+}
+
 // init initializes the aggregatorBase.
 //
 // trailingMetaCallback is passed as part of ProcStateOpts; the inputs to drain
@@ -153,15 +165,7 @@ func (ag *aggregatorBase) init(
 		ag.finishTrace = ag.outputStatsToTrace
 	}
 	ag.input = input
-	switch spec.Type {
-	case distsqlpb.AggregatorSpec_SCALAR:
-		ag.isScalar = true
-	case distsqlpb.AggregatorSpec_NON_SCALAR:
-		ag.isScalar = false
-	default:
-		// This case exists for backward compatibility.
-		ag.isScalar = (len(spec.GroupCols) == 0)
-	}
+	ag.isScalar = isScalarAggregate(spec)
 	ag.groupCols = spec.GroupCols
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
