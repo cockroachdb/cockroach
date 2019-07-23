@@ -2078,6 +2078,13 @@ func (sb *statisticsBuilder) colStatWithScan(
 	// expression, rather than the reference.
 	cols := translateColSet(colSet, ws.OutCols, ws.InCols)
 
+	// Note that if the WITH contained placeholders, we still hold onto the
+	// original, unreplaced expression, and so we won't be able to generate stats
+	// corresponding to the replaced expression.
+	// TODO(justin): find a way to lift this limitation. One way could be to
+	// rebuild WithScans when the WITH they reference has placeholders that get
+	// replaced.
+
 	colstat, _ := s.ColStats.Add(colSet)
 	*colstat = *sb.colStat(cols, withExpr)
 	colstat.Cols = colSet
