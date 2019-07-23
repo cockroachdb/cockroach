@@ -35,11 +35,15 @@ func TestEquiDepthHistogram(t *testing.T) {
 		{
 			samples:    []int{1, 2, 4, 5, 5, 9},
 			numRows:    6,
-			maxBuckets: 2,
+			maxBuckets: 3,
 			buckets: []expBucket{
 				{
-					// Bucket contains 1, 2, 4.
-					upper: 4, numEq: 1, numLess: 2,
+					// Bucket contains 1.
+					upper: 1, numEq: 1, numLess: 0,
+				},
+				{
+					// Bucket contains 2, 4.
+					upper: 4, numEq: 1, numLess: 1,
 				},
 				{
 					// Bucket contains 5, 5, 9.
@@ -83,8 +87,12 @@ func TestEquiDepthHistogram(t *testing.T) {
 			maxBuckets: 2,
 			buckets: []expBucket{
 				{
-					// Bucket contains everything.
-					upper: 2, numEq: 4, numLess: 2,
+					// Bucket contains 1, 1.
+					upper: 1, numEq: 2, numLess: 0,
+				},
+				{
+					// Bucket contains 2, 2, 2, 2.
+					upper: 2, numEq: 4, numLess: 0,
 				},
 			},
 		},
