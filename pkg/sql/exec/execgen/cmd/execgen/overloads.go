@@ -14,6 +14,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
+	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -103,7 +105,7 @@ var hashOverloads []*overload
 // Assign produces a Go source string that assigns the "target" variable to the
 // result of applying the overload to the two inputs, l and r.
 //
-// For example, an overload that implemented the int64 plus operation, when fed
+// For example, an overload that implemented the float64 plus operation, when fed
 // the inputs "x", "a", "b", would produce the string "x = a + b".
 func (o overload) Assign(target, l, r string) string {
 	if o.AssignFunc != nil {
@@ -346,6 +348,120 @@ func (c floatCustomizer) getCmpOpCompareFunc() compareFunc {
 func (c intCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
 		return fmt.Sprintf("%[1]s = memhash%[3]d(noescape(unsafe.Pointer(&%[2]s)), %[1]s)", target, v, c.width)
+	}
+}
+
+func (c intCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		args := map[string]string{"Target": target, "Left": l, "Right": r}
+		buf := strings.Builder{}
+		var t *template.Template
+
+		switch op.BinOp {
+
+		case tree.Plus:
+			t = template.Must(template.New("").Parse(`
+				{
+					result := {{.Left}} + {{.Right}}
+					if (result < {{.Left}}) != ({{.Right}} < 0) {
+						panic(tree.ErrIntOutOfRange)
+					}
+					{{.Target}} = result
+				}
+			`))
+
+		case tree.Minus:
+			t = template.Must(template.New("").Parse(`
+				{
+					result := {{.Left}} - {{.Right}}
+					if (result < {{.Left}}) != ({{.Right}} > 0) {
+						panic(tree.ErrIntOutOfRange)
+					}
+					{{.Target}} = result
+				}
+			`))
+
+		case tree.Mult:
+			// If the inputs are small enough, then we don't have to do any further
+			// checks. For the sake of legibility, upperBound and lowerBound are both
+			// not set to their maximal/minimal values. An even more advanced check
+			// (for positive values) might involve adding together the highest bit
+			// positions of the inputs, and checking if the sum is less than the
+			// integer width.
+			var upperBound, lowerBound string
+			switch c.width {
+			case 8:
+				upperBound = "10"
+				lowerBound = "-10"
+			case 16:
+				upperBound = "math.MaxInt8"
+				lowerBound = "math.MinInt8"
+			case 32:
+				upperBound = "math.MaxInt16"
+				lowerBound = "math.MinInt16"
+			case 64:
+				upperBound = "math.MaxInt32"
+				lowerBound = "math.MinInt32"
+			default:
+				panic(fmt.Sprintf("unhandled integer width %d", c.width))
+			}
+
+			args["UpperBound"] = upperBound
+			args["LowerBound"] = lowerBound
+			t = template.Must(template.New("").Parse(`
+				{
+					result := {{.Left}} * {{.Right}}
+					if {{.Left}} > {{.UpperBound}} || {{.Left}} < {{.LowerBound}} || {{.Right}} > {{.UpperBound}} || {{.Right}} < {{.LowerBound}} {
+						if {{.Left}} != 0 && {{.Right}} != 0 {
+							sameSign := ({{.Left}} < 0) == ({{.Right}} < 0)
+							if (result < 0) == sameSign {
+								panic(tree.ErrIntOutOfRange)
+							} else if result/{{.Right}} != {{.Left}} {
+								panic(tree.ErrIntOutOfRange)
+							}
+						}
+					}
+					{{.Target}} = result
+				}
+			`))
+
+		case tree.Div:
+			var minInt string
+			switch c.width {
+			case 8:
+				minInt = "math.MinInt8"
+			case 16:
+				minInt = "math.MinInt16"
+			case 32:
+				minInt = "math.MinInt32"
+			case 64:
+				minInt = "math.MinInt64"
+			default:
+				panic(fmt.Sprintf("unhandled integer width %d", c.width))
+			}
+
+			args["MinInt"] = minInt
+			t = template.Must(template.New("").Parse(`
+				{
+					if {{.Right}} == 0 {
+						panic(tree.ErrDivByZero)
+					}
+					result := {{.Left}} / {{.Right}}
+					if {{.Left}} == {{.MinInt}} && {{.Right}} == -1 {
+						panic(tree.ErrIntOutOfRange)
+					}
+					{{.Target}} = result
+				}
+			`))
+
+		default:
+			panic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+
+		if err := t.Execute(&buf, args); err != nil {
+			panic(err)
+		}
+		return buf.String()
 	}
 }
 
