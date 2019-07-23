@@ -103,7 +103,7 @@ ALTER TABLE grandchild2 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[((i-1)/2)::INT%5+1], i, i+20, i, i FROM generate_series(1, 39, 2) AS g(i)
 
 # Verify data placement.
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE parent1]
 ----
 start_key                   end_key                     replicas  lease_holder
@@ -128,7 +128,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
 /36/#/55/1/76               /38/#/56/1/78/38/#/58/1/38  {4}       4
 /38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
 
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE child1]
 ----
 start_key                   end_key                     replicas  lease_holder
@@ -153,7 +153,7 @@ NULL                        /2/#/56/1/42/2/#/58/1/2     {1}       1
 /36/#/55/1/76               /38/#/56/1/78/38/#/58/1/38  {4}       4
 /38/#/56/1/78/38/#/58/1/38  NULL                        {5}       5
 
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE grandchild1]
 ----
 start_key                   end_key                     replicas  lease_holder
@@ -363,7 +363,7 @@ statement ok
 ALTER TABLE outer_p1 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)
 
-query TTTI colnames
+query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE outer_p1]
 ----
 start_key  end_key  replicas  lease_holder
