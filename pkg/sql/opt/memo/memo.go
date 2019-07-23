@@ -373,7 +373,8 @@ func (m *Memo) WithExpr(id opt.WithID) RelExpr {
 }
 
 // CopyWiths copies over the set of WITH expressions used by the other memo.
-// TODO(justin): These are just used for their logical props, so we should just store those..
+// TODO(justin): These are just used to compute stats, we should have a way to
+// avoid hanging on to expressions like this.
 func (m *Memo) CopyWiths(o *Memo, replace func(opt.Expr) opt.Expr) {
 	m.withExprs = make([]RelExpr, len(o.withExprs))
 	copy(m.withExprs, o.withExprs)

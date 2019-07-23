@@ -90,10 +90,11 @@ func (b *Builder) buildDataSource(
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				ID:      cte.id,
-				Name:    string(cte.name.Alias),
-				InCols:  inCols,
-				OutCols: outCols,
+				ID:           cte.id,
+				Name:         string(cte.name.Alias),
+				InCols:       inCols,
+				OutCols:      outCols,
+				BindingProps: cte.expr.Relational(),
 			})
 			return outScope
 		}
