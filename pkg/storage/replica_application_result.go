@@ -363,18 +363,6 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *cmdAppCtx) {
 // finishRaftCommand is called after a command's side effects have been applied
 // in order to acknowledge clients and release latches.
 func (r *Replica) finishRaftCommand(ctx context.Context, cmd *cmdAppCtx) {
-
-	// Provide the command's corresponding logical operations to the
-	// Replica's rangefeed. Only do so if the WriteBatch is nonnil,
-	// otherwise it's valid for the logical op log to be nil, which
-	// would shut down all rangefeeds. If no rangefeed is running,
-	// this call will be a noop.
-	if cmd.raftCmd.WriteBatch != nil {
-		r.handleLogicalOpLogRaftMuLocked(ctx, cmd.raftCmd.LogicalOpLog)
-	} else if cmd.raftCmd.LogicalOpLog != nil {
-		log.Fatalf(ctx, "nonnil logical op log with nil write batch: %v", cmd.raftCmd)
-	}
-
 	// When set to true, recomputes the stats for the LHS and RHS of splits and
 	// makes sure that they agree with the state's range stats.
 	const expensiveSplitAssertion = false
