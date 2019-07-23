@@ -69,6 +69,7 @@ func NewHashAggregator(
 	aggFns []distsqlpb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
+	isScalar bool,
 ) (Operator, error) {
 	aggTyps := extractAggTypes(aggCols, colTypes)
 
@@ -141,6 +142,7 @@ func NewHashAggregator(
 		groupCol:       distinctCol,
 		aggregateFuncs: funcs,
 		outputTypes:    outTyps,
+		isScalar:       isScalar,
 	}
 
 	return &hashAggregator{

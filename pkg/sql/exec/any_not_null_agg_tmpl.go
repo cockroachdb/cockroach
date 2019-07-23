@@ -102,9 +102,8 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	inputLen := b.Length()
 	if inputLen == 0 {
 		// If we haven't found any non-nulls for this group so far, the output for
-		// this group should be null. If a.curIdx is negative, it means the input
-		// has zero rows, and there should be no output at all.
-		if !a.foundNonNullForCurrentGroup && a.curIdx >= 0 {
+		// this group should be null.
+		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(uint16(a.curIdx))
 		}
 		a.curIdx++
@@ -139,6 +138,10 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		}
 	}
+}
+
+func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {
+	a.nulls.SetNull(0)
 }
 
 // {{end}}

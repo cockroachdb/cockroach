@@ -231,11 +231,11 @@ func newColOperator(
 		}
 		if needHash {
 			op, err = exec.NewHashAggregator(
-				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols,
+				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, isScalarAggregate(aggSpec),
 			)
 		} else {
 			op, err = exec.NewOrderedAggregator(
-				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols,
+				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, isScalarAggregate(aggSpec),
 			)
 		}
 

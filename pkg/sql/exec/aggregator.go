@@ -54,6 +54,13 @@ type aggregateFunc interface {
 	// Compute computes the aggregation on the input batch. A zero-length input
 	// batch tells the aggregate function that it should flush its results.
 	Compute(batch coldata.Batch, inputIdxs []uint32)
+
+	// HandleEmptyInputScalar populates the output for a case of an empty input
+	// when the aggregate function is in scalar context. The output must always
+	// be a single value (either null or zero, depending on the function).
+	// TODO(yuzefovich): we can pull scratch field of aggregates into a shared
+	// aggregator and implement this method once on the shared base.
+	HandleEmptyInputScalar()
 }
 
 // orderedAggregator is an aggregator that performs arbitrary aggregations on
@@ -103,6 +110,11 @@ type orderedAggregator struct {
 	groupCol []bool
 	// aggregateFuncs are the aggregator's aggregate function operators.
 	aggregateFuncs []aggregateFunc
+	// isScalar indicates whether an aggregator is in scalar context.
+	isScalar bool
+	// seenNonEmptyBatch indicates whether a non-empty input batch has been
+	// observed.
+	seenNonEmptyBatch bool
 }
 
 var _ Operator = &orderedAggregator{}
@@ -118,6 +130,7 @@ func NewOrderedAggregator(
 	aggFns []distsqlpb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
+	isScalar bool,
 ) (Operator, error) {
 	if len(aggFns) != len(aggCols) {
 		return nil,
@@ -162,6 +175,7 @@ func NewOrderedAggregator(
 		aggCols:  aggCols,
 		aggTypes: aggTypes,
 		groupCol: groupCol,
+		isScalar: isScalar,
 	}
 
 	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(aggTypes, aggFns)
@@ -273,10 +287,26 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 
 	for a.scratch.resumeIdx < a.scratch.outputSize {
 		batch := a.input.Next(ctx)
-		for i, fn := range a.aggregateFuncs {
-			fn.Compute(batch, a.aggCols[i])
+		a.seenNonEmptyBatch = a.seenNonEmptyBatch || batch.Length() > 0
+		if !a.seenNonEmptyBatch {
+			// The input has zero rows.
+			if a.isScalar {
+				for _, fn := range a.aggregateFuncs {
+					fn.HandleEmptyInputScalar()
+				}
+				// All aggregate functions will output a single value.
+				a.scratch.resumeIdx = 1
+			} else {
+				// There should be no output in non-scalar context for all aggregate
+				// functions.
+				a.scratch.resumeIdx = 0
+			}
+		} else {
+			for i, fn := range a.aggregateFuncs {
+				fn.Compute(batch, a.aggCols[i])
+			}
+			a.scratch.resumeIdx = a.aggregateFuncs[0].CurrentOutputIndex()
 		}
-		a.scratch.resumeIdx = a.aggregateFuncs[0].CurrentOutputIndex()
 		if batch.Length() == 0 {
 			a.done = true
 			break
@@ -303,6 +333,7 @@ func (a *orderedAggregator) reset() {
 		resetter.reset()
 	}
 	a.done = false
+	a.seenNonEmptyBatch = false
 	a.scratch.resumeIdx = 0
 	for _, fn := range a.aggregateFuncs {
 		fn.Reset()

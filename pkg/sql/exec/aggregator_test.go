@@ -59,6 +59,7 @@ type aggType struct {
 		aggFns []distsqlpb.AggregatorSpec_Func,
 		groupCols []uint32,
 		aggCols [][]uint32,
+		isScalar bool,
 	) (Operator, error)
 	name string
 }
@@ -269,6 +270,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 				tc.aggFns,
 				tc.groupCols,
 				tc.aggCols,
+				false, /* isScalar */
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -294,6 +296,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 									tc.aggFns,
 									tc.groupCols,
 									tc.aggCols,
+									false, /* isScalar */
 								)
 							})
 					})
@@ -369,7 +372,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				}
 				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, []int{0, 1},
 					func(input []Operator) (Operator, error) {
-						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
+						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
 		}
@@ -452,7 +455,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 					orderedVerifier,
 					[]int{0, 1, 2, 3, 4, 5, 6, 7, 8}[:len(tc.expected[0])],
 					func(input []Operator) (Operator, error) {
-						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
+						return agg.new(input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
 		}
@@ -521,6 +524,7 @@ func TestAggregatorRandom(t *testing.T) {
 									distsqlpb.AggregatorSpec_AVG},
 								[]uint32{0},
 								[][]uint32{{}, {1}, {1}, {1}, {1}, {1}},
+								false, /* isScalar */
 							)
 							if err != nil {
 								t.Fatal(err)
@@ -671,6 +675,7 @@ func BenchmarkAggregator(b *testing.B) {
 											[]distsqlpb.AggregatorSpec_Func{aggFn},
 											[]uint32{0},
 											[][]uint32{[]uint32{1}[:nCols]},
+											false, /* isScalar */
 										)
 										if err != nil {
 											b.Skip()
@@ -821,7 +826,7 @@ func TestHashAggregator(t *testing.T) {
 			cols[i] = i
 		}
 		runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, cols, func(sources []Operator) (Operator, error) {
-			return NewHashAggregator(sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
+			return NewHashAggregator(sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 		})
 	}
 }
