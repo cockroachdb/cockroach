@@ -45,10 +45,14 @@ SELECT
   CASE WHEN r.end_key >= x'%s' THEN NULL ELSE crdb_internal.pretty_key(r.end_key, 2) END AS end_key,
   range_id,
   replicas,
-  lease_holder
+  lease_holder,
+  locality
 FROM crdb_internal.ranges AS r
+JOIN crdb_internal.gossip_nodes n ON
+r.lease_holder = n.node_id
 WHERE (r.start_key < x'%s')
-  AND (r.end_key   > x'%s')`,
+  AND (r.end_key   > x'%s') ORDER BY r.start_key
+`,
 		startKey, endKey, endKey, startKey,
 	))
 }
