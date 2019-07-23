@@ -232,7 +232,7 @@ SELECT url FROM [EXPLAIN (DISTSQL)
     OR pid1 >= 31 AND pid1 <= 33
 ]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzslE9r3DAQxe_9FGJOu3RKLDnpH8GCCqXgUrzF9Nb6IKyJI3AkI8mlJfi7F9sk8Yb0X3pIDnuz9ObHG_xGcwXOGyr1JUWQX4ADggCEM6gR-uAbitGHSVoKC_MdZIZgXT-k6bpGaHwgkFeQbOoIJBQuUehIf6OKtKHwwVtH4SQDBENJ2252-kjnCSYPe6nDD9XrQC5N9pPA3tsuUZBss1GcfR2yLG92jOdSyqL8_HrL9tVKoh3jb26kt-U7tqYEv5a2C7fC8hsNECrbXqxbaoN2prmwnRHX6qP0tfw_QOjoPG0Uf77dhamZ-RMQ9kOSTHFUAtUpqjNUL1G9gnpE8EO6zSkm3RJIPuIvsryNcHA-GApkDjKrx3vSLv0L35_kdwrvtxYH1vxBY8SPY_QEx0g8KEtxzPIJZvmH9V5R7L2L9FcvPptWBpmWlv0S_RAa-hR8M9ssx_3MzReGYlpUvhwKN0tzg2uY_xY-PYCzu7D4H-f8n-B6fPYzAAD__4MtKf0=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzslEFr2zAUx-_7FOL1koKCLClOV0HBgzHoGMnIetty0KxH6i2VjCTDRsl3H46Xxgm267FLDz3az3__pR8_3iNYZ3ChHzCA-gocKAigkMKaQuldjiE4X4-aD2_NL1AJhcKWVaxfrynkziOoR4hF3CIouNPft7hCbdCzBCgYjLrY7n9f-uJB-99ZqT3aWJd9KbUNijDOp4wLdsHSlHGWCqKtIYK4eI8-AIUPxTaiV2QyyTj5ViWJzG8Il0qp28Xd20uyXLVGeEP49dPo3eI9aacEP4wum1wrJp9msN5RcFU83jNEvUFQfEfHs_joCvsXhexGsfHamvy-2Jqa-yfnflYl-eEKS5xVJKsZLRdkMplk8ng5fnY52YHkwET2M5H9TNo52V8nj3X1QatYH5lmgmYzmqU0m9Psqpek6CV5BFhZ5w16NCf01rsO1gs3dSWbn33YXS1Pqvl4oflooVsyTxmX7GKvNG-UfsFGPwOjZfTs1ehBo8V4rcRora6nTCQHtebJCxbpmeu3REpfRRq9GjtIrjCUzgYctfmSenWi2WCzZ4OrfI6fvcv3Nc3jcp_bvzAYYjPlzcOtbUb1AdthPhgWJ2F-HhaD4avhZjkYng2HZ_9z7HQwPB9unv9T83r35k8AAAD__7VJ0mY=
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL)
@@ -242,7 +242,49 @@ SELECT url FROM [EXPLAIN (DISTSQL)
     OR pid1 >= 31 AND pid1 <= 33
 ]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzslE-L2zAQxe_9FGJOCZ2ylr1LW0FAhVJwKU4xvbU-CGvWK_BKRpJLy-LvXmyzGyek_9JDc8jN0psfb_AbzQNYp6lQ9xRAfAYOCCkg3ECF0HlXUwjOj9JcmOtvIBIEY7s-jtcVQu08gXiAaGJLICC3kXxL6iuVpDT5985Y8lcJIGiKyrST0we6jTB6mHvlv8vGK6vrO9Pq0X4U2TvTRvKCrVaSsy99kmT1hvFMCJEXn16t2bZcSLRh_PWT9KZ4y5ZUyh-l9cwtsOxJA4TSNHfLtjrlyUb-qPyXnub_Bwgt3caV5M_XGz82M30CwraPgkmOMkWZobxGeYPyJVQDguvjLqcQVUMg-IA_yXIXYW-d1-RJ72VWDUfSLtwL111lB4XHrdM9a37SGPHLGJ3hGKUnZZlesjzDLH-z3ksKnbOB_ujFJ-PKIN3QvF-C631NH72rJ5v5uJ246UJTiLPK50NuJ2lqcAnzX8LXe3ByCKf_4pz9FVwNz34EAAD__zwZKfQ=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzslEFr2zAUx-_7FOL1koKCLClOV0FBgzHoGMnIetty0KxH6i2VjCTDRsl3H46XxgmJ67FLDz3az3__pR8_3iM4b3FmHjCC-gocKAigkMOSQhV8gTH60IzaD2_tL1AZhdJVdWpeLykUPiCoR0hlWiMouDPf17hAYzGwDChYTKZcb39fhfLBhN-6MgFdasq-VMZFRRjnY8YFu2B5zjjLBTHOEkF8uscQgcKHcp0wKDIaaU6-1VkmixvCpVLqdnb39pLMF50R3hB-_TR6N3tPuinBd6PLNteJyacZLDcUfJ3294zJrBAU39DhLD760v1FIU-jWAXjbHFfrm3D_ZP3P-uK_PClI94pohtG8xkZjUZa7i_Hjy4nTyDZMZHnmcjzTLo5eb5O7uuag9ZJES2pnlCdUz2l-opqcZakOEtyD7B2PlgMaA_oLTcnWM_82FdsevTh6Wp5UM2HC80HC92Recy4ZBdbpXmr9As2-hkYHaMnr0b3Gi2GayUGa3U9ZiLbqTXNXrBIz1y_I1L-KtLg1XiC5AJj5V3EQZsva1Yn2hW2ezb6OhT4OfhiW9M-zre57QuLMbVT3j7cunbUHLAb5r1hcRDmx2HRG77qb5a94Ul_ePI_x857w9P-5uk_NS83b_4EAAD__9H90mw=
+
+# TODO(ridwanmsharif) Confirm that this is better than before.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
+  pid1 >= 11 AND pid1 <= 13
+  OR pid1 >= 19 AND pid1 <= 21
+  OR pid1 >= 31 AND pid1 <= 33
+----
+project
+ ├── columns: pid1:1 cid2:2 cid3:3 gcid2:4 gca2:5 pa1:7
+ ├── stats: [rows=10]
+ ├── cost: 44.06
+ ├── key: (1-4)
+ ├── fd: (1-4)-->(5), (1)-->(7)
+ ├── prune: (1-5,7)
+ └── inner-join (lookup grandchild2)
+      ├── columns: grandchild2.pid1:1 cid2:2 cid3:3 gcid2:4 gca2:5 parent1.pid1:6 pa1:7
+      ├── key columns: [6] = [1]
+      ├── stats: [rows=10, distinct(1)=3, null(1)=0, distinct(2)=8.72179397, null(2)=0, distinct(3)=8.72179397, null(3)=0, distinct(4)=8.72179397, null(4)=0, distinct(6)=3, null(6)=0]
+      ├── cost: 43.95
+      ├── key: (2-4,6)
+      ├── fd: (1-4)-->(5), (6)-->(7), (1)==(6), (6)==(1)
+      ├── select
+      │    ├── columns: parent1.pid1:6 pa1:7
+      │    ├── stats: [rows=3, distinct(6)=3, null(6)=0]
+      │    ├── cost: 9.83
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7)
+      │    ├── prune: (7)
+      │    ├── interesting orderings: (+6)
+      │    ├── scan parent1
+      │    │    ├── columns: parent1.pid1:6 pa1:7
+      │    │    ├── constraint: /6: [/11 - /13] [/19 - /21] [/31 - /33]
+      │    │    ├── stats: [rows=9, distinct(6)=9, null(6)=0]
+      │    │    ├── cost: 9.73
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7)
+      │    │    └── interesting orderings: (+6)
+      │    └── filters
+      │         └── ((parent1.pid1 <= 13) OR ((parent1.pid1 >= 19) AND (parent1.pid1 <= 21))) OR (parent1.pid1 >= 31) [outer=(6), constraints=(/6: (/NULL - /13] [/19 - /21] [/31 - ])]
+      └── filters
+           └── (((grandchild2.pid1 >= 11) AND (grandchild2.pid1 <= 13)) OR ((grandchild2.pid1 >= 19) AND (grandchild2.pid1 <= 21))) OR ((grandchild2.pid1 >= 31) AND (grandchild2.pid1 <= 33)) [outer=(1), constraints=(/1: [/11 - /13] [/19 - /21] [/31 - /33])]
 
 query TTT
 EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
@@ -250,20 +292,17 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   OR pid1 >= 19 AND pid1 <= 21
   OR pid1 >= 31 AND pid1 <= 33
 ----
-render           ·               ·
- └── merge-join  ·               ·
-      │          type            inner
-      │          equality        (pid1) = (pid1)
-      │          mergeJoinOrder  +"(pid1=pid1)"
-      ├── scan   ·               ·
-      │          table           grandchild2@primary
-      │          spans           /11/#/56/1-/13/#/56/2 /19/#/56/1-/21/#/56/2 /31/#/56/1-/33/#/56/2
-      │          filter          ((pid1 <= 13) OR ((pid1 >= 19) AND (pid1 <= 21))) OR (pid1 >= 31)
-      └── scan   ·               ·
-·                table           parent1@primary
-·                spans           /11-/13/# /19-/21/# /31-/33/#
-·                parallel        ·
-·                filter          ((pid1 <= 13) OR ((pid1 >= 19) AND (pid1 <= 21))) OR (pid1 >= 31)
+render            ·         ·
+ └── lookup-join  ·         ·
+      │           table     grandchild2@primary
+      │           type      inner
+      │           equality  (pid1) = (pid1)
+      │           pred      (((@3 >= 11) AND (@3 <= 13)) OR ((@3 >= 19) AND (@3 <= 21))) OR ((@3 >= 31) AND (@3 <= 33))
+      └── scan    ·         ·
+·                 table     parent1@primary
+·                 spans     /11-/13/# /19-/21/# /31-/33/#
+·                 parallel  ·
+·                 filter    ((pid1 <= 13) OR ((pid1 >= 19) AND (pid1 <= 21))) OR (pid1 >= 31)
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).
 # Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14

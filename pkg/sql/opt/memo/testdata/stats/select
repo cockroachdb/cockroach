@@ -1435,3 +1435,75 @@ select
  │    └── stats: [rows=2e+10, distinct(1)=2e+10, null(1)=2e+10, distinct(2)=10, null(2)=0]
  └── filters
       └── x = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+# Support OR constraints.
+exec-ddl
+CREATE TABLE nation
+(
+    n_nationkey int PRIMARY KEY,
+    n_name char(25) NOT NULL,
+    n_regionkey int NOT NULL,
+    neighbour char(25) NOT NULL,
+    INDEX n_rk (n_regionkey ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE nation INJECT STATISTICS '[
+  {
+    "columns": ["n_name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 2,
+    "null_count": 0
+  }
+]'
+----
+
+opt
+SELECT * FROM nation WHERE n_name = 'FRANCE' OR n_name = 'GERMANY'
+----
+select
+ ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbour:4(char!null)
+ ├── stats: [rows=333333.333, distinct(1)=333333.333, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=98265.847, null(3)=0, distinct(4)=98265.847, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan nation
+ │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbour:4(char!null)
+ │    ├── stats: [rows=1000000, distinct(1)=1000000, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── (n_name = 'FRANCE') OR (n_name = 'GERMANY') [type=bool, outer=(2), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+
+opt
+SELECT * FROM nation WHERE (n_name = 'FRANCE' AND neighbour = 'GERMANY') OR (n_name = 'GERMANY' AND neighbour = 'FRANCE')
+----
+select
+ ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbour:4(char!null)
+ ├── stats: [rows=6.66666667, distinct(1)=6.66666667, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=6.66646667, null(3)=0, distinct(4)=2, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan nation
+ │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbour:4(char!null)
+ │    ├── stats: [rows=1000000, distinct(1)=1000000, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── ((n_name = 'FRANCE') AND (neighbour = 'GERMANY')) OR ((n_name = 'GERMANY') AND (neighbour = 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+
+opt
+SELECT * FROM nation WHERE (n_name, neighbour) in (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE'))
+----
+select
+ ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbour:4(char!null)
+ ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=19.9982001, null(3)=0, distinct(4)=2, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan nation
+ │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbour:4(char!null)
+ │    ├── stats: [rows=1000000, distinct(1)=1000000, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── (n_name, neighbour) IN (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2/4: [/'FRANCE'/'GERMANY' - /'FRANCE'/'GERMANY'] [/'GERMANY'/'FRANCE' - /'GERMANY'/'FRANCE']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; tight)]
