@@ -295,7 +295,9 @@ func (sc *SchemaChanger) AcquireLease(
 		}
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
-		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		b := txn.NewBatch()
+		writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc)
+		return txn.Run(ctx, b)
 	})
 	return lease, err
 }
@@ -331,7 +333,9 @@ func (sc *SchemaChanger) ReleaseLease(
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		b := txn.NewBatch()
+		writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc)
+		return txn.Run(ctx, b)
 	})
 }
 
@@ -361,7 +365,9 @@ func (sc *SchemaChanger) ExtendLease(
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+		b := txn.NewBatch()
+		writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc)
+		return txn.Run(ctx, b)
 	}); err != nil {
 		return err
 	}
@@ -1653,10 +1659,8 @@ func (sc *SchemaChanger) createRollbackJob(
 			tableDesc.MutationJobs[i].JobID = *rollbackJob.ID()
 
 			// write descriptor, the version has already been incremented.
-			descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
-			descVal := sqlbase.WrapDescriptor(tableDesc)
 			b := txn.NewBatch()
-			b.Put(descKey, descVal)
+			writeDescToBatch(ctx, false /* kvTrace */, sc.settings, b, tableDesc.GetID(), tableDesc)
 			if err := txn.Run(ctx, b); err != nil {
 				return nil, err
 			}

@@ -107,17 +107,16 @@ func (p *planner) createDescriptorWithID(
 	// but not going through the normal INSERT logic and not performing a precise
 	// mimicry. In particular, we're only writing a single key per table, while
 	// perfect mimicry would involve writing a sentinel key for each row as well.
-	descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
 
 	b := &client.Batch{}
 	descID := descriptor.GetID()
-	descDesc := sqlbase.WrapDescriptor(descriptor)
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
-		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)
 	}
 	b.CPut(idKey, descID, nil)
-	b.CPut(descKey, descDesc, nil)
+	WriteNewDescToBatch(
+		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		st, b, descID, descriptor)
 
 	mutDesc, isTable := descriptor.(*sqlbase.MutableTableDescriptor)
 	if isTable {
@@ -223,4 +222,49 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		}
 	}
 	return descs, nil
+}
+
+// writeDescToBatch adds a Put command writing a descriptor proto to the
+// descriptors table. It writes the descriptor desc at the id descID. If kvTrace
+// is enabled, it will log an event explaining the put that was performed.
+// TODO(jordan): the unused cluster.Settings will be used for version gating
+// this function, which must downgrade the descriptors in the case of a
+// mixed-version 19.1-19.2 cluster.
+func writeDescToBatch(
+	ctx context.Context,
+	kvTrace bool,
+	s *cluster.Settings,
+	b *client.Batch,
+	descID sqlbase.ID,
+	desc sqlbase.DescriptorProto,
+) {
+	descKey := sqlbase.MakeDescMetadataKey(descID)
+	descDesc := sqlbase.WrapDescriptor(desc)
+	if kvTrace {
+		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
+	}
+	b.Put(sqlbase.MakeDescMetadataKey(descID), sqlbase.WrapDescriptor(desc))
+}
+
+// WriteNewDescToBatch adds a CPut command writing a descriptor proto to the
+// descriptors table. It writes the descriptor desc at the id descID, asserting
+// that there was no previous descriptor at that id present already. If kvTrace
+// is enabled, it will log an event explaining the CPut that was performed.
+// TODO(jordan): the unused cluster.Settings will be used for version gating
+// this function, which must downgrade the descriptors in the case of a
+// mixed-version 19.1-19.2 cluster.
+func WriteNewDescToBatch(
+	ctx context.Context,
+	kvTrace bool,
+	s *cluster.Settings,
+	b *client.Batch,
+	tableID sqlbase.ID,
+	desc sqlbase.DescriptorProto,
+) {
+	descKey := sqlbase.MakeDescMetadataKey(tableID)
+	descDesc := sqlbase.WrapDescriptor(desc)
+	if kvTrace {
+		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)
+	}
+	b.CPut(descKey, descDesc, nil)
 }
