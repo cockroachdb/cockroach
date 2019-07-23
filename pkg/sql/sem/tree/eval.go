@@ -48,7 +48,8 @@ import (
 )
 
 var (
-	errIntOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range")
+	// ErrIntOutOfRange is reported when integer arithmetic overflows.
+	ErrIntOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range")
 	errFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
 	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
 
@@ -111,7 +112,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				i := MustBeDInt(d)
 				if i == math.MinInt64 {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(-i), nil
 			},
@@ -472,7 +473,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				a, b := MustBeDInt(left), MustBeDInt(right)
 				r, ok := arith.AddWithOverflow(int64(a), int64(b))
 				if !ok {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(DInt(r)), nil
 			},
@@ -695,7 +696,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				a, b := MustBeDInt(left), MustBeDInt(right)
 				r, ok := arith.SubWithOverflow(int64(a), int64(b))
 				if !ok {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(DInt(r)), nil
 			},
@@ -972,9 +973,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					// ignore
 				} else if a == math.MinInt64 || b == math.MinInt64 {
 					// This test is required to detect math.MinInt64 * -1.
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				} else if c/b != a {
-					return nil, errIntOutOfRange
+					return nil, ErrIntOutOfRange
 				}
 				return NewDInt(c), nil
 			},
@@ -3090,7 +3091,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			// is 9223372036854774784 (= float64(math.MaxInt64)-513), and both are
 			// convertible to int without overflow.
 			if math.IsNaN(f) || f <= float64(math.MinInt64) || f >= float64(math.MaxInt64) {
-				return nil, errIntOutOfRange
+				return nil, ErrIntOutOfRange
 			}
 			res = NewDInt(DInt(f))
 		case *DDecimal:
@@ -3101,7 +3102,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			}
 			i, err := d.Int64()
 			if err != nil {
-				return nil, errIntOutOfRange
+				return nil, ErrIntOutOfRange
 			}
 			res = NewDInt(DInt(i))
 		case *DString:
@@ -3121,13 +3122,13 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DDate:
 			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
 			if !v.IsFinite() {
-				return nil, errIntOutOfRange
+				return nil, ErrIntOutOfRange
 			}
 			res = NewDInt(DInt(v.UnixEpochDays()))
 		case *DInterval:
 			iv, ok := v.AsInt64()
 			if !ok {
-				return nil, errIntOutOfRange
+				return nil, ErrIntOutOfRange
 			}
 			res = NewDInt(DInt(iv))
 		case *DOid:
@@ -5004,7 +5005,7 @@ func IntPow(x, y DInt) (*DInt, error) {
 	}
 	i, err := xd.Int64()
 	if err != nil {
-		return nil, errIntOutOfRange
+		return nil, ErrIntOutOfRange
 	}
 	return NewDInt(DInt(i)), nil
 }
