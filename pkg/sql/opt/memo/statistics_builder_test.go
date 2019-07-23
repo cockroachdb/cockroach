@@ -116,7 +116,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		s.Init(relProps)
 
 		// Calculate distinct counts.
-		sb.applyConstraintSet(cs, sel, relProps)
+		sb.applyConstraintSet(cs, true /* tight */, sel, relProps)
 
 		// Calculate row count and selectivity.
 		s.RowCount = scan.Relational().Stats.RowCount
