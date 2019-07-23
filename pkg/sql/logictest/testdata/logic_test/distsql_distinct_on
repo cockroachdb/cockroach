@@ -62,7 +62,9 @@ ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES
   (ARRAY[5], '3', '4', '5')
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE xyz]
+SELECT start_key, end_key, replicas, lease_holder from
+[SHOW EXPERIMENTAL_RANGES FROM TABLE xyz] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /2       {1}       1
@@ -72,7 +74,9 @@ NULL       /2       {1}       1
 /7         NULL     {5}       5
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE abc]
+SELECT start_key, end_key, replicas, lease_holder from
+[SHOW EXPERIMENTAL_RANGES FROM TABLE abc] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key        end_key          replicas  lease_holder
 NULL             /NULL/NULL/NULL  {5}       5

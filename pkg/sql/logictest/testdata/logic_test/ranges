@@ -4,7 +4,9 @@ statement ok
 CREATE TABLE t (k1 INT, k2 INT, v INT, w INT, PRIMARY KEY (k1, k2))
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM 
+[SHOW EXPERIMENTAL_RANGES FROM TABLE t] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
@@ -13,7 +15,9 @@ statement ok
 ALTER TABLE t SPLIT AT VALUES (1), (10)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM TABLE t] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -27,7 +31,9 @@ statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (4, 1, 12)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM TABLE t] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -38,7 +44,9 @@ statement ok
 ALTER TABLE t SPLIT AT VALUES (5,1), (5,2), (5,3)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM TABLE t] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -58,7 +66,9 @@ statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE VALUES (1, 5, 1), (5, 5, 2)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM TABLE t] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -72,7 +82,9 @@ statement ok
 CREATE INDEX idx ON t(v, w)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       NULL     {1}       1
@@ -81,7 +93,9 @@ statement ok
 ALTER INDEX t@idx SPLIT AT VALUES (100,1), (100,50)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /100/1   {1}       1
@@ -92,7 +106,9 @@ statement ok
 ALTER INDEX t@idx SPLIT AT VALUES (8), (9)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /8       {1}       1
@@ -105,7 +121,9 @@ statement ok
 ALTER INDEX t@idx EXPERIMENTAL_RELOCATE VALUES (ARRAY[5], 100, 10), (ARRAY[3], 100, 11)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM INDEX t@idx] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /8       {1}       1
@@ -123,7 +141,9 @@ CREATE TABLE t0 (
 
 # We expect the splits for t0 to be the same as the splits for t.
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t0]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM TABLE t0] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
@@ -137,7 +157,9 @@ statement ok
 ALTER TABLE t0 SPLIT AT VALUES (7, 8, 9)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t0]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM TABLE t0] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -152,7 +174,9 @@ statement ok
 ALTER TABLE t0 SPLIT AT VALUES (11)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t0]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM TABLE t0] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -165,7 +189,9 @@ NULL           /1             {1}       1
 /11            NULL           {1}       1
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE t]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM TABLE t] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -186,7 +212,9 @@ CREATE INDEX idx on t1(v1,v2,v3) INTERLEAVE IN PARENT t(v1,v2)
 
 # We expect the splits for the index to be the same as the splits for t.
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t1@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM INDEX t1@idx] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1
@@ -202,7 +230,9 @@ statement ok
 ALTER INDEX t1@idx SPLIT AT VALUES (15,16)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM INDEX t1@idx]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM INDEX t1@idx] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key      end_key        replicas  lease_holder
 NULL           /1             {1}       1

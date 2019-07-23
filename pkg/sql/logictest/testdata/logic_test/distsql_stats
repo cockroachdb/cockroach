@@ -29,7 +29,9 @@ INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
 
 # Verify data placement.
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+SELECT start_key, end_key, replicas, lease_holder FROM
+[SHOW EXPERIMENTAL_RANGES FROM TABLE data] WITH ORDINALITY
+AS s ORDER BY s.ordinality
 ----
 start_key  end_key  replicas  lease_holder
 NULL       /1       {1}       1
