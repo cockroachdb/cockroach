@@ -141,3 +141,17 @@ EXECUTE z5(3, 5)
 ----
 3
 5
+
+statement ok
+PREPARE z6(int) AS
+    SELECT * FROM
+    (VALUES (1), (2)) v(x),
+    LATERAL (SELECT * FROM
+      (WITH foo AS (SELECT $1 + x) SELECT * FROM foo)
+    )
+
+query II
+EXECUTE z6(3)
+----
+1 4
+2 5

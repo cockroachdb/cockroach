@@ -825,9 +825,10 @@ func (mb *mutationBuilder) buildFKChecks() {
 		}
 
 		left := mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			ID:      mb.withID,
-			InCols:  inputCols,
-			OutCols: withRefCols,
+			ID:           mb.withID,
+			InCols:       inputCols,
+			OutCols:      withRefCols,
+			BindingProps: mb.outScope.expr.Relational(),
 		})
 
 		item.KeyCols = withRefCols
