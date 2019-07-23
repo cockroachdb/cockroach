@@ -214,7 +214,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 						// throughput.
 						log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
 					}
-					if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
+					if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data, false /* disallowShadowing */); err != nil {
 						return err
 					}
 
