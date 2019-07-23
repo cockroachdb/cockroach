@@ -2321,7 +2321,7 @@ project
  │    │    │    └── projections
  │    │    │         └── true [type=bool]
  │    │    └── filters
- │    │         └── (y = i) OR (y IS NULL) [type=bool, outer=(2,7)]
+ │    │         └── (y = i) OR (y IS NULL) [type=bool, outer=(2,7), constraints=(/7: [/NULL - ])]
  │    └── aggregations
  │         ├── array-agg [type=int[], outer=(7)]
  │         │    └── variable: y [type=int]
@@ -2337,40 +2337,35 @@ SELECT i, ARRAY(SELECT y FROM xy WHERE xy.y = a.k OR xy.y = NULL ORDER BY y) FRO
 project
  ├── columns: i:2(int) array:9(int[])
  ├── group-by
- │    ├── columns: k:1(int!null) i:2(int) canary:10(bool) array_agg:11(int[])
+ │    ├── columns: k:1(int!null) i:2(int) y:7(int) array_agg:10(int[])
  │    ├── grouping columns: k:1(int!null)
  │    ├── internal-ordering: +7
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,10,11), ()~~>(10)
+ │    ├── fd: (1)-->(2,7,10)
  │    ├── sort
- │    │    ├── columns: k:1(int!null) i:2(int) y:7(int) canary:10(bool)
- │    │    ├── fd: (1)-->(2), ()~~>(10)
+ │    │    ├── columns: k:1(int!null) i:2(int) y:7(int)
+ │    │    ├── fd: (1)-->(2)
  │    │    ├── ordering: +7
  │    │    └── left-join (hash)
- │    │         ├── columns: k:1(int!null) i:2(int) y:7(int) canary:10(bool)
- │    │         ├── fd: (1)-->(2), ()~~>(10)
+ │    │         ├── columns: k:1(int!null) i:2(int) y:7(int)
+ │    │         ├── fd: (1)-->(2)
  │    │         ├── scan a
  │    │         │    ├── columns: k:1(int!null) i:2(int)
  │    │         │    ├── key: (1)
  │    │         │    └── fd: (1)-->(2)
- │    │         ├── project
- │    │         │    ├── columns: canary:10(bool!null) y:7(int)
- │    │         │    ├── fd: ()-->(10)
- │    │         │    ├── scan xy
- │    │         │    │    └── columns: y:7(int)
- │    │         │    └── projections
- │    │         │         └── true [type=bool]
+ │    │         ├── scan xy
+ │    │         │    └── columns: y:7(int)
  │    │         └── filters
- │    │              └── (y = k) OR NULL [type=bool, outer=(1,7)]
+ │    │              └── (y = k) OR NULL [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
  │    └── aggregations
  │         ├── array-agg [type=int[], outer=(7)]
  │         │    └── variable: y [type=int]
  │         ├── const-agg [type=int, outer=(2)]
  │         │    └── variable: i [type=int]
- │         └── any-not-null-agg [type=bool, outer=(10)]
- │              └── variable: canary [type=bool]
+ │         └── any-not-null-agg [type=int, outer=(7)]
+ │              └── variable: y [type=int]
  └── projections
-      └── COALESCE(CASE WHEN canary IS NOT NULL THEN array_agg END, ARRAY[]) [type=int[], outer=(10,11)]
+      └── COALESCE(CASE WHEN y IS NOT NULL THEN array_agg END, ARRAY[]) [type=int[], outer=(7,10)]
 
 # Nest scalar decorrelation within scalar decorrelation, using IS NULL to force
 # use of left joins.

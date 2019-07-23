@@ -433,6 +433,13 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 		tightl = tightl && tightr
 		return cl, (tightl || cl == contradiction)
 
+	case *OrExpr:
+		cl, tightl := cb.buildConstraints(t.Left)
+		cr, tightr := cb.buildConstraints(t.Right)
+		cl = cl.Union(cb.evalCtx, cr)
+		tightl = tightl && tightr
+		return cl, (tightl || cl == contradiction)
+
 	case *RangeExpr:
 		return cb.buildConstraints(t.And)
 	}

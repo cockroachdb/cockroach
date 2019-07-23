@@ -122,7 +122,7 @@ right-join (merge)
  ├── key: (1,6)
  ├── fd: (1)-->(2,3,5), (6)-->(7), ()~~>(4), (1,6)-->(4)
  ├── select
- │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    ├── ordering: +1 opt(4) [actual: +1]
@@ -132,7 +132,7 @@ right-join (merge)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(4) [actual: +1]
  │    └── filters
- │         ├── (i < 0) OR (i > 10) [type=bool, outer=(2)]
+ │         ├── (i < 0) OR (i > 10) [type=bool, outer=(2), constraints=(/2: (/NULL - /-1] [/11 - ]; tight)]
  │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  ├── scan b
  │    ├── columns: x:6(int!null) y:7(int)
@@ -247,7 +247,7 @@ left-join (merge)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  ├── select
- │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
+ │    ├── columns: k:3(int!null) i:4(int!null) f:5(float!null) s:6(string!null) j:7(jsonb)
  │    ├── key: (3)
  │    ├── fd: ()-->(6), (3)-->(4,5,7)
  │    ├── ordering: +3 opt(6) [actual: +3]
@@ -257,7 +257,7 @@ left-join (merge)
  │    │    ├── fd: (3)-->(4-7)
  │    │    └── ordering: +3 opt(6) [actual: +3]
  │    └── filters
- │         ├── (i < 0) OR (i > 10) [type=bool, outer=(4)]
+ │         ├── (i < 0) OR (i > 10) [type=bool, outer=(4), constraints=(/4: (/NULL - /-1] [/11 - ]; tight)]
  │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
  └── filters
       └── y = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
