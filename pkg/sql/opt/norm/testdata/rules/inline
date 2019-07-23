@@ -337,7 +337,7 @@ project
  │    ├── scan a
  │    │    └── columns: f:3(float)
  │    └── filters
- │         └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
+ │         └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3), constraints=(/3: [/NULL - /10.499999999999998] [/10.500000000000002 - ])]
  └── projections
       └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
 
