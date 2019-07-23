@@ -77,6 +77,7 @@ var baseNodeColumnHeaders = []string{
 	"build",
 	"started_at",
 	"updated_at",
+	"locality",
 	"is_available",
 	"is_live",
 }
@@ -149,12 +150,13 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
             address,
             build_tag AS build,
             started_at,
-            updated_at,
+			updated_at,
+			locality,
             CASE WHEN split_part(expiration,',',1)::decimal > now()::decimal
                  THEN true
                  ELSE false
                  END AS is_available,
-            ifnull(is_live, false)
+			ifnull(is_live, false)
      FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`,
 	)
 
@@ -250,7 +252,7 @@ func getStatusNodeHeaders() []string {
 }
 
 func getStatusNodeAlignment() string {
-	align := "rllll"
+	align := "rlllll"
 	if nodeCtx.statusShowAll || nodeCtx.statusShowRanges {
 		align += "rrrrrr"
 	}
