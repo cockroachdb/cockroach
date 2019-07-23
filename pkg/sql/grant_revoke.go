@@ -104,8 +104,8 @@ func (p *planner) changePrivileges(
 			if err := d.Validate(); err != nil {
 				return nil, err
 			}
-			descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
-			b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
+			writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.execCfg.Settings,
+				b, descriptor.GetID(), descriptor)
 
 		case *sqlbase.MutableTableDescriptor:
 			if !d.Dropped() {
