@@ -130,8 +130,19 @@ func (b *Builder) buildDataSource(
 		switch t := ds.(type) {
 		case cat.Table:
 			outScope = b.buildScanFromTableRef(t, source, indexFlags, inScope)
+		case cat.View:
+			if source.Columns != nil {
+				panic(builderError{
+					fmt.Errorf("cannot specify an explicit column list when accessing a view by reference"),
+				})
+			}
+
+			outScope = b.buildView(t, inScope)
+		case cat.Sequence:
+			// Any explicitly listed columns are ignored.
+			outScope = b.buildSequenceSelect(t, inScope)
 		default:
-			panic(unimplementedWithIssueDetailf(35708, fmt.Sprintf("%T", t), "view and sequence numeric refs are not supported"))
+			panic(errors.AssertionFailedf("unsupported catalog object"))
 		}
 		b.renameSource(source.As, outScope)
 		return outScope
