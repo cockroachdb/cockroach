@@ -122,14 +122,11 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if inputLen == 0 {
 		// The aggregation is finished. Flush the last value. If we haven't found
 		// any non-nulls for this group so far, the output for this group should
-		// be null. If a.curIdx is negative, it means the input has zero rows, and
-		// there should be no output at all.
-		if a.curIdx >= 0 {
-			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(uint16(a.curIdx))
-			}
-			a.vec[a.curIdx] = a.curAgg
+		// be null.
+		if !a.foundNonNullForCurrentGroup {
+			a.nulls.SetNull(uint16(a.curIdx))
 		}
+		a.vec[a.curIdx] = a.curAgg
 		a.curIdx++
 		a.done = true
 		return
@@ -161,6 +158,10 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			}
 		}
 	}
+}
+
+func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {
+	a.nulls.SetNull(0)
 }
 
 // {{end}}

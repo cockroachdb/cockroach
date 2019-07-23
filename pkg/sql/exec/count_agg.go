@@ -126,3 +126,7 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		}
 	}
 }
+
+func (a *countAgg) HandleEmptyInputScalar() {
+	a.vec[0] = 0
+}

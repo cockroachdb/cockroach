@@ -578,6 +578,8 @@ statement ok
 SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
 
 # The span "sending partial batch" means that the scan was parallelized.
+# Note that table ID here is hardcoded, so if a new table is created before
+# tpar, this query will need an adjustment.
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN 
     ('querying next range at /Table/71/1/0',
@@ -588,3 +590,18 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
 querying next range at /Table/71/1/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/71/1/10
+
+# Test for #38858 -- handle aggregates correctly on an empty table.
+statement ok
+CREATE TABLE empty (a INT PRIMARY KEY, b FLOAT)
+
+# GROUP BY is omitted, so aggregates are in scalar context.
+query IIIIIRR
+SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty
+----
+0  0  NULL  NULL  NULL  NULL  NULL
+
+ # GROUP BY is present, so aggregates are in non-scalar context.
+query IIIIIRR
+SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty GROUP BY a
+----
