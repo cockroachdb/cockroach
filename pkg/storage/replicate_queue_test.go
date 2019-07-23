@@ -378,16 +378,19 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	_, err = db.Exec("alter table t configure zone using num_replicas = 5")
 	require.NoError(t, err)
 
-	// Speed up the queue processing.
-	for _, s := range tc.Servers {
-		err := s.Stores().VisitStores(func(store *storage.Store) error {
-			return store.ForceReplicationScanAndProcess()
-		})
-		require.NoError(t, err)
+	forceProcess := func() {
+		// Speed up the queue processing.
+		for _, s := range tc.Servers {
+			err := s.Stores().VisitStores(func(store *storage.Store) error {
+				return store.ForceReplicationScanAndProcess()
+			})
+			require.NoError(t, err)
+		}
 	}
 
 	// Wait until the smaller range (the 2nd) has up-replicated.
 	testutils.SucceedsSoon(t, func() error {
+		forceProcess()
 		r := db.QueryRow(
 			"select replicas from [show experimental_ranges from table t] where start_key='/2'")
 		var repl string
@@ -402,6 +405,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 
 	// Now check that the large range also gets up-replicated.
 	testutils.SucceedsSoon(t, func() error {
+		forceProcess()
 		r := db.QueryRow(
 			"select replicas from [show experimental_ranges from table t] where start_key is null")
 		var repl string
