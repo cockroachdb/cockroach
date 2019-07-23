@@ -1856,6 +1856,21 @@ func MVCCMerge(
 func MVCCClearTimeRange(
 	ctx context.Context, batch ReadWriter, key, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
 ) error {
+
+	const useRangeClearThreshold = 64
+
+	// When iterating, instead of immediately clearing a matching key, instead we
+	// accumulate it in buf until either a) useRangeClearThreshold is reached and
+	// we discard the buffer, instead just keeping track of where the span of keys
+	// matching started or b) a non-matching key is seen and we flush the buffer
+	// keys one by one as Clears. Once we switch to just tracking where the run
+	// started, on seeing a non-matching key we flush the run via one ClearRange.
+	// This can be big win for reverting a bulk-ingestion of clustered data as the
+	// entire span may likely match and thus could be cleared in one ClearRange
+	// instead of hundreds of thousands of individual Clears.
+	buf := make([]MVCCKey, 0, 100)
+	var rangeStart MVCCKey
+
 	// TODO(dt): time-bound iter could potentially be a big win here -- the
 	// expected use-case for this is to run over an entire table's span with a
 	// very recent timestamp, rolling back just the writes of some failed IMPORT
@@ -1867,44 +1882,82 @@ func MVCCClearTimeRange(
 	// for deletion, allowing us to quickly skip over swaths of uninteresting
 	// keys, but then use a normal iteration to actually do the delete including
 	// updating the live key stats correctly.
-	// TODO(dt): use our own iterator since we don't need to allocate safe keys
-	// for every key we're skipping over.
-	if err := batch.Iterate(
-		MVCCKey{Key: key}, MVCCKey{Key: endKey},
-		func(kv MVCCKeyValue) (bool, error) {
-			var meta enginepb.MVCCMetadata
-			if !kv.Key.IsValue() {
-				if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
-					return false, err
-				}
-				ts := hlc.Timestamp(meta.Timestamp)
-				if meta.Txn != nil && startTime.Less(ts) && !endTime.Less(ts) {
-					err := &roachpb.WriteIntentError{
-						Intents: []roachpb.Intent{{Span: roachpb.Span{Key: append([]byte{}, kv.Key.Key...)},
-							Status: roachpb.PENDING, Txn: *meta.Txn,
-						}}}
-					return false, err
-				}
-			}
+	it := batch.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
+	defer it.Close()
+	it.Seek(MVCCKey{Key: key})
 
-			// TODO(dt): buffer keys and flush large runs in a single ClearRange. In
-			// many workloads, it is likely that large blocks of keys are written at
-			// similar times, e.g. bulk ingestions may ingest entire ranges of new
-			// data all at the same time. In this case a single ClearRange could take
-			// the place of hundreds of thousands of individual Clears. We should
-			// buffer up to some number of keys to clear before flushing individual
-			// Clears so that if we exceed the run threshold we instead just scan
-			// until we end the run and flush the ClearRange instead.
-			if startTime.Less(kv.Key.Timestamp) && !endTime.Less(kv.Key.Timestamp) {
-				if err := batch.Clear(kv.Key); err != nil {
-					return false, err
+	for ; ; it.Next() {
+		ok, err := it.Valid()
+		if err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		k := it.UnsafeKey()
+		if c := k.Key.Compare(endKey); c >= 0 {
+			break
+		}
+
+		// We need to check for and fail on any intents in out time-range as we do
+		// not want to clear any running transactions. We don't _expect_ to hit this
+		// since the RevertRange is only intended for non-live key spans but there
+		// could be an intent leftover.
+		var meta enginepb.MVCCMetadata
+		if !k.IsValue() {
+			if err := it.ValueProto(&meta); err != nil {
+				return err
+			}
+			ts := hlc.Timestamp(meta.Timestamp)
+			if meta.Txn != nil && startTime.Less(ts) && !endTime.Less(ts) {
+				err := &roachpb.WriteIntentError{
+					Intents: []roachpb.Intent{{Span: roachpb.Span{Key: append([]byte{}, k.Key...)},
+						Status: roachpb.PENDING, Txn: *meta.Txn,
+					}}}
+				return err
+			}
+		}
+
+		if startTime.Less(k.Timestamp) && !endTime.Less(k.Timestamp) {
+			if len(rangeStart.Key) == 0 {
+				if len(buf) < useRangeClearThreshold {
+					buf = append(buf, it.Key())
+				} else {
+					rangeStart = buf[0]
+					buf = nil
 				}
 			}
-			return false, nil
-		},
-	); err != nil {
-		return err
+		} else {
+			// This key does not match, so we need to flush the accumulated run of
+			// matching keys or buffered keys.
+			if len(rangeStart.Key) != 0 {
+				if err := batch.ClearRange(rangeStart, k); err != nil {
+					return err
+				}
+				rangeStart = MVCCKey{}
+			} else if len(buf) > 0 {
+				for i := range buf {
+					if err := batch.Clear(buf[i]); err != nil {
+						return err
+					}
+				}
+				buf = nil
+			}
+		}
 	}
+
+	// Check for and flush any accumulated runs or buffered keys.
+	if len(rangeStart.Key) != 0 {
+		if err := batch.ClearRange(rangeStart, MVCCKey{Key: endKey}); err != nil {
+			return err
+		}
+	} else if len(buf) > 0 {
+		for i := range buf {
+			if err := batch.Clear(buf[i]); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
