@@ -1857,8 +1857,6 @@ func MVCCClearTimeRange(
 	ctx context.Context, batch ReadWriter, key, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
 ) error {
 
-	const useRangeClearThreshold = 64
-
 	// When iterating, instead of immediately clearing a matching key, instead we
 	// accumulate it in buf until either a) useRangeClearThreshold is reached and
 	// we discard the buffer, instead just keeping track of where the span of keys
@@ -1868,7 +1866,9 @@ func MVCCClearTimeRange(
 	// This can be big win for reverting a bulk-ingestion of clustered data as the
 	// entire span may likely match and thus could be cleared in one ClearRange
 	// instead of hundreds of thousands of individual Clears.
-	buf := make([]MVCCKey, 0, 100)
+	const useClearRangeThreshold = 64
+	var buf [useClearRangeThreshold]MVCCKey
+	var bufSize int
 	var rangeStart MVCCKey
 
 	// TODO(dt): time-bound iter could potentially be a big win here -- the
@@ -1919,11 +1919,13 @@ func MVCCClearTimeRange(
 
 		if startTime.Less(k.Timestamp) && !endTime.Less(k.Timestamp) {
 			if len(rangeStart.Key) == 0 {
-				if len(buf) < useRangeClearThreshold {
-					buf = append(buf, it.Key())
+				if bufSize < useClearRangeThreshold {
+					buf[bufSize].Key = append(buf[bufSize].Key[:0], k.Key...)
+					buf[bufSize].Timestamp = k.Timestamp
+					bufSize++
 				} else {
 					rangeStart = buf[0]
-					buf = nil
+					bufSize = 0
 				}
 			}
 		} else {
@@ -1933,15 +1935,15 @@ func MVCCClearTimeRange(
 				if err := batch.ClearRange(rangeStart, k); err != nil {
 					return err
 				}
-				rangeStart = MVCCKey{}
-			} else if len(buf) > 0 {
-				for i := range buf {
+			} else if bufSize > 0 {
+				for i := 0; i < bufSize; i++ {
 					if err := batch.Clear(buf[i]); err != nil {
 						return err
 					}
 				}
-				buf = nil
 			}
+			rangeStart = MVCCKey{}
+			bufSize = 0
 		}
 	}
 
@@ -1950,8 +1952,8 @@ func MVCCClearTimeRange(
 		if err := batch.ClearRange(rangeStart, MVCCKey{Key: endKey}); err != nil {
 			return err
 		}
-	} else if len(buf) > 0 {
-		for i := range buf {
+	} else if bufSize > 0 {
+		for i := 0; i < bufSize; i++ {
 			if err := batch.Clear(buf[i]); err != nil {
 				return err
 			}
