@@ -875,6 +875,9 @@ define WithScanPrivate {
     # the same tree, so we maintain a mapping from the columns returned from
     # the referenced expression to the referencing expression.
     OutCols ColList
+
+    # Props stores the relational properties of the referenced expression.
+    Props RelPropsPtr
 }
 
 # FakeRel is a mock relational operator used for testing; its logical properties

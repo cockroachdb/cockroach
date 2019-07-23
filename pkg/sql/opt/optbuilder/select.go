@@ -94,6 +94,7 @@ func (b *Builder) buildDataSource(
 				Name:    string(cte.name.Alias),
 				InCols:  inCols,
 				OutCols: outCols,
+				Props:   cte.expr.Relational(),
 			})
 			return outScope
 		}

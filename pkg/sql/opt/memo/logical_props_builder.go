@@ -758,15 +758,17 @@ func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.R
 
 	// WithScan inherits most of the logical properties of the expression it
 	// references.
-	*rel = *e.Relational()
+	*rel = *ref.Props
 
+	// Has Placeholder
+	// ---------------
+	// Overwrite this from the copied props.
 	rel.HasPlaceholder = false
-	rel.CanHaveSideEffects = false
 
 	// Side Effects
 	// ------------
-	// TODO(justin): these shouldn't have side-effects, but mutating that here
-	// has complications with the way that shared props are built.
+	// Overwrite this from the copied props.
+	rel.CanHaveSideEffects = false
 
 	// Output Columns
 	// --------------
@@ -778,7 +780,7 @@ func (b *logicalPropsBuilder) buildWithScanProps(ref *WithScanExpr, rel *props.R
 
 	// Outer Columns
 	// -------------
-	// Copied from the referenced expression.
+	rel.OuterCols = opt.ColSet{}
 
 	// Functional Dependencies
 	// -----------------------
