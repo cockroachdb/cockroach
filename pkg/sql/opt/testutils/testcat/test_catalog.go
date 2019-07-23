@@ -156,6 +156,12 @@ func (tc *Catalog) ResolveDataSourceByID(
 		if tab, ok := ds.(*Table); ok && tab.TabID == id {
 			return ds, nil
 		}
+		if v, ok := ds.(*View); ok && v.ViewID == id {
+			return ds, nil
+		}
+		if v, ok := ds.(*Sequence); ok && v.SeqID == id {
+			return ds, nil
+		}
 	}
 	return nil, pgerror.Newf(pgcode.UndefinedTable,
 		"relation [%d] does not exist", id)
