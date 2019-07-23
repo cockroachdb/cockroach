@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,15 +21,9 @@ import (
 )
 
 type controlJobsNode struct {
-	rows          planNode
-	desiredStatus jobs.Status
-	numRows       int
-}
-
-var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
-	tree.CancelJob: jobs.StatusCanceled,
-	tree.ResumeJob: jobs.StatusRunning,
-	tree.PauseJob:  jobs.StatusPaused,
+	rows    planNode
+	command tree.JobCommand
+	numRows int
 }
 
 func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNode, error) {
@@ -51,8 +44,8 @@ func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNod
 	}
 
 	return &controlJobsNode{
-		rows:          rows,
-		desiredStatus: jobCommandToDesiredStatus[n.Command],
+		rows:    rows,
+		command: n.Command,
 	}, nil
 }
 
@@ -82,15 +75,17 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
-		switch n.desiredStatus {
-		case jobs.StatusPaused:
+		switch n.command {
+		case tree.PauseJob:
 			err = reg.Pause(params.ctx, params.p.txn, int64(jobID))
-		case jobs.StatusRunning:
+		case tree.ResumeJob:
 			err = reg.Resume(params.ctx, params.p.txn, int64(jobID))
-		case jobs.StatusCanceled:
+		case tree.CancelJob:
 			err = reg.Cancel(params.ctx, params.p.txn, int64(jobID))
+		case tree.ShowJob:
+			err = errors.Errorf("Unimplemented!")
 		default:
-			err = errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
+			err = errors.AssertionFailedf("unhandled status %v", n.command)
 		}
 		if err != nil {
 			return err

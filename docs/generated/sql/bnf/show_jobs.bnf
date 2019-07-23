@@ -1,4 +1,5 @@
 show_jobs_stmt ::=
 	'SHOW' 'AUTOMATIC' 'JOBS'
 	| 'SHOW'  'JOBS'
-	| 'SHOW' 'JOB' iconst64
+	| 'SHOW' 'AUTOMATIC' 'JOBS' select_stmt
+	| 'SHOW' 'JOB' a_expr

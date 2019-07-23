@@ -480,7 +480,8 @@ show_indexes_stmt ::=
 
 show_jobs_stmt ::=
 	'SHOW' opt_automatic 'JOBS'
-	| 'SHOW' 'JOB' iconst64
+	| 'SHOW' opt_automatic 'JOBS' select_stmt
+	| 'SHOW' 'JOB' a_expr
 
 show_queries_stmt ::=
 	'SHOW' opt_cluster 'QUERIES'

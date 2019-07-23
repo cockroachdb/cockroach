@@ -3454,16 +3454,26 @@ opt_cluster:
 // %Text:
 // SHOW [AUTOMATIC] JOBS
 // SHOW JOB <jobid>
+// SHOW [AUTOMATIC] JOBS <selectclause>
 // %SeeAlso: CANCEL JOBS, PAUSE JOBS, RESUME JOBS
 show_jobs_stmt:
   SHOW opt_automatic JOBS
   {
     $$.val = &tree.ShowJobs{Automatic: $2.bool()}
   }
-| SHOW opt_automatic JOBS error // SHOW HELP: SHOW JOBS
-| SHOW JOB iconst64
+| SHOW opt_automatic JOBS select_stmt
   {
-    $$.val = &tree.ShowJob{JobID: $3.int64()}
+    $$.val = &tree.ControlJobs{Jobs: $4.slct(), Command: tree.ShowJob}
+  }
+| SHOW opt_automatic JOBS error // SHOW HELP: SHOW JOBS
+| SHOW JOB a_expr
+  {
+    $$.val = &tree.ControlJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+      Command: tree.ShowJob,
+    }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
 
