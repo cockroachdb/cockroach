@@ -95,30 +95,18 @@ func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32, isScalar bool) {
+func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
-		if a.curIdx >= 0 {
-			// If we haven't found any non-nulls for this group so far, the output for
-			// this group should be null.
-			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(uint16(a.curIdx))
-			}
-			a.curIdx++
-		} else {
-			// If a.curIdx is negative, it means the input has zero rows, and the
-			// output should be NULL in scalar context and there should be no output
-			// in non-scalar context.
-			if isScalar {
-				a.nulls.SetNull(0)
-				a.curIdx = 1
-			} else {
-				a.curIdx = 0
-			}
+		// If we haven't found any non-nulls for this group so far, the output for
+		// this group should be null.
+		if !a.foundNonNullForCurrentGroup {
+			a.nulls.SetNull(uint16(a.curIdx))
 		}
+		a.curIdx++
 		a.done = true
 		return
 	}
@@ -150,6 +138,10 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32, isScal
 			}
 		}
 	}
+}
+
+func (a *anyNotNull_TYPEAgg) Nulls() *coldata.Nulls {
+	return a.nulls
 }
 
 // {{end}}

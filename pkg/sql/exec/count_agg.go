@@ -57,25 +57,13 @@ func (a *countAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32, isScalar bool) {
+func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
-		if a.curIdx >= 0 {
-			a.curIdx++
-		} else {
-			// If a.curIdx is negative, it means the input has zero rows, and the
-			// output should be 0 in scalar context and there should be no output in
-			// non-scalar context.
-			if isScalar {
-				a.vec[0] = 0
-				a.curIdx = 1
-			} else {
-				a.curIdx = 0
-			}
-		}
+		a.curIdx++
 		a.done = true
 		return
 	}
@@ -137,4 +125,8 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32, isScalar bool) {
 			}
 		}
 	}
+}
+
+func (a *countAgg) Nulls() *coldata.Nulls {
+	panic("Nulls() should not be called on countAgg")
 }
