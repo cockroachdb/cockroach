@@ -1,3 +1,5 @@
+# TODO(mjibson): The fakedist-disk config produces a panic. When fixed,
+# remove this config line. See #38987.
 # LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
 
 query I rowsort
