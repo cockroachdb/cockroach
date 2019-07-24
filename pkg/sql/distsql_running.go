@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -178,10 +177,6 @@ func (dsp *DistSQLPlanner) setupFlows(
 			}
 		}
 	}
-	// recursed indicates whether we called setupFlows again from this method. It
-	// helps to transfer ownership of the request to the callee to avoid
-	// double-releasing processor specs.
-	recursed := false
 	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
 			// Skip this node.
@@ -196,11 +191,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			nodeID:     nodeID,
 			resultChan: resultChan,
 		}
-		defer func() {
-			if !recursed {
-				distsqlplan.ReleaseSetupFlowRequest(&req)
-			}
-		}()
+		defer distsqlplan.ReleaseSetupFlowRequest(&req)
 
 		// Send out a request to the workers; if no worker is available, run
 		// directly.
@@ -227,24 +218,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 			v, ok = err.(*distsqlrun.VectorizedSetupError)
 			return v, ok
 		}); ok && evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn {
-			// Error vectorizing remote flows, try again with off.
-			// Generate a new flow ID so that any remote nodes that successfully set
-			// up a vectorized flow will not be connected to by a non-vectorized flow.
-			newFlowID := uuid.MakeV4()
-			log.Infof(
-				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %s", flows[thisNodeID].FlowID, newFlowID, firstErr,
-			)
-			for i := range flows {
-				flows[i].FlowID.UUID = newFlowID
-			}
-			evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
-			// Reset vectorize setting after returning.
-			defer func() { evalCtx.SessionData.Vectorize = sessiondata.VectorizeOn }()
-			// Recurse once with sessiondata.VectorizeOff, note that this branch will
-			// not be hit again due to the condition above that
-			// evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn.
-			recursed = true
-			return dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
+			// Error vectorizing remote flows, and since we choose to not fall back
+			// to DistSQL, we will return an error.
+			log.VEventf(ctx, 1, "vectorization of flows with an error %+v", firstErr)
 		}
 		return nil, nil, firstErr
 	}
@@ -252,11 +228,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
-	defer func() {
-		if !recursed {
-			distsqlplan.ReleaseSetupFlowRequest(&localReq)
-		}
-	}()
+	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		return nil, nil, err

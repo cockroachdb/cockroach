@@ -874,7 +874,8 @@ func wrapWithVectorizedStatsCollector(
 	return vsc, nil
 }
 
-func (f *Flow) setupVectorizedRemoteOutputStream(
+func setupVectorizedRemoteOutputStream(
+	f *Flow,
 	op exec.Operator,
 	outputTyps []types.T,
 	stream *distsqlpb.StreamEndpointSpec,
@@ -884,20 +885,22 @@ func (f *Flow) setupVectorizedRemoteOutputStream(
 	if err != nil {
 		return err
 	}
-	f.startables = append(
-		f.startables,
-		startableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
-			if wg != nil {
-				wg.Add(1)
-			}
-			go func() {
-				outbox.Run(ctx, f.nodeDialer, stream.TargetNodeID, f.id, stream.StreamID, cancelFn)
+	if f != nil {
+		f.startables = append(
+			f.startables,
+			startableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
 				if wg != nil {
-					wg.Done()
+					wg.Add(1)
 				}
-			}()
-		}),
-	)
+				go func() {
+					outbox.Run(ctx, f.nodeDialer, stream.TargetNodeID, f.id, stream.StreamID, cancelFn)
+					if wg != nil {
+						wg.Done()
+					}
+				}()
+			}),
+		)
+	}
 	return nil
 }
 
@@ -945,7 +948,8 @@ func finishVectorizedStatsCollectors(
 // metadataSourcesQueue is passed along to any outboxes created to be drained,
 // an error is returned if this does not happen (i.e. no router outputs are
 // remote).
-func (f *Flow) setupVectorizedRouter(
+func setupVectorizedRouter(
+	f *Flow,
 	input exec.Operator,
 	outputTyps []types.T,
 	output *distsqlpb.OutputRouterSpec,
@@ -967,20 +971,22 @@ func (f *Flow) setupVectorizedRouter(
 		hashCols[i] = int(output.HashColumns[i])
 	}
 	router, outputs := exec.NewHashRouter(input, outputTyps, hashCols, len(output.Streams))
-	f.startables = append(
-		f.startables,
-		startableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
-			if wg != nil {
-				wg.Add(1)
-			}
-			go func() {
-				router.Run(ctx)
+	if f != nil {
+		f.startables = append(
+			f.startables,
+			startableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
 				if wg != nil {
-					wg.Done()
+					wg.Add(1)
 				}
-			}()
-		}),
-	)
+				go func() {
+					router.Run(ctx)
+					if wg != nil {
+						wg.Done()
+					}
+				}()
+			}),
+		)
+	}
 
 	// Append the router to the metadata sources.
 	metadataSourcesQueue = append(metadataSourcesQueue, router)
@@ -992,8 +998,8 @@ func (f *Flow) setupVectorizedRouter(
 		case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case distsqlpb.StreamEndpointSpec_REMOTE:
-			if err := f.setupVectorizedRemoteOutputStream(
-				op, outputTyps, stream, metadataSourcesQueue,
+			if err := setupVectorizedRemoteOutputStream(
+				f, op, outputTyps, stream, metadataSourcesQueue,
 			); err != nil {
 				return err
 			}
@@ -1030,7 +1036,8 @@ func (f *Flow) setupVectorizedRouter(
 // stats are not exposed as of yet.
 // Inboxes that are created are also returned as []distqlpb.MetadataSource, so
 // that any remote metadata can be read through calling DrainMeta.
-func (f *Flow) setupVectorizedInputSynchronizer(
+func setupVectorizedInputSynchronizer(
+	f *Flow,
 	input distsqlpb.InputSyncSpec,
 	streamIDToInputOp map[distsqlpb.StreamID]exec.Operator,
 	recordingStats bool,
@@ -1045,8 +1052,10 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 		case distsqlpb.StreamEndpointSpec_REMOTE:
 			// If the input is remote, the input operator does not exist in
 			// streamIDToInputOp. Create an inbox.
-			if err := f.checkInboundStreamID(inputStream.StreamID); err != nil {
-				return nil, nil, memUsed, err
+			if f != nil {
+				if err := f.checkInboundStreamID(inputStream.StreamID); err != nil {
+					return nil, nil, memUsed, err
+				}
 			}
 			typs, err := conv.FromColumnTypes(input.ColumnTypes)
 			if err != nil {
@@ -1056,9 +1065,11 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
-			f.inboundStreams[inputStream.StreamID] = &inboundStreamInfo{
-				receiver:  vectorizedInboundStreamHandler{inbox},
-				waitGroup: &f.waitGroup,
+			if f != nil {
+				f.inboundStreams[inputStream.StreamID] = &inboundStreamInfo{
+					receiver:  vectorizedInboundStreamHandler{inbox},
+					waitGroup: &f.waitGroup,
+				}
 			}
 			metaSources = append(metaSources, inbox)
 			op := exec.Operator(inbox)
@@ -1096,7 +1107,11 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 			)
 			memUsed += op.(exec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {
-			op = exec.NewUnorderedSynchronizer(inputStreamOps, typs, &f.waitGroup)
+			if f != nil {
+				// We don't care when f is nil because the operation below cannot
+				// return an error.
+				op = exec.NewUnorderedSynchronizer(inputStreamOps, typs, &f.waitGroup)
+			}
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
 			// instead.
@@ -1152,6 +1167,120 @@ func init() {
 	errors.RegisterWrapperDecoder(errors.GetTypeKey((*VectorizedSetupError)(nil)), decodeVectorizedSetupError)
 }
 
+func setupVectorizedOutput(
+	ctx context.Context,
+	f *Flow,
+	recordingStats bool,
+	op exec.Operator,
+	outputTypes []types.T,
+	metadataSourcesQueue []distsqlpb.MetadataSource,
+	pspec *distsqlpb.ProcessorSpec,
+	streamIDToInputOp map[distsqlpb.StreamID]exec.Operator,
+	vectorizedStatsCollectorsQueue []*exec.VectorizedStatsCollector,
+	procIDs []int32,
+) error {
+	if len(pspec.Output) > 1 {
+		return errors.Errorf("unsupported multi output proc (%d outputs)", len(pspec.Output))
+	}
+	output := &pspec.Output[0]
+	if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
+		if err := setupVectorizedRouter(
+			f,
+			op,
+			outputTypes,
+			output,
+			append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
+			streamIDToInputOp,
+			recordingStats,
+		); err != nil {
+			return err
+		}
+	} else {
+		if len(output.Streams) != 1 {
+			return errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
+		}
+		outputStream := &output.Streams[0]
+		switch outputStream.Type {
+		case distsqlpb.StreamEndpointSpec_LOCAL:
+		case distsqlpb.StreamEndpointSpec_REMOTE:
+			// Set up an Outbox. Note that we pass in a copy of metadataSourcesQueue
+			// so that we can reset it below and keep on writing to it.
+			if recordingStats {
+				// If recording stats, we add a metadata source that will generate all
+				// stats data as metadata for the stats collectors created so far.
+				vscs := append([]*exec.VectorizedStatsCollector(nil), vectorizedStatsCollectorsQueue...)
+				vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
+				metadataSourcesQueue = append(
+					metadataSourcesQueue,
+					distsqlpb.CallbackMetadataSource{
+						DrainMetaCb: func(ctx context.Context) []distsqlpb.ProducerMetadata {
+							// TODO(asubiotto): Who is responsible for the recording of the
+							// parent context?
+							// Start a separate recording so that GetRecording will return
+							// the recordings for only the child spans containing stats.
+							ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
+							finishVectorizedStatsCollectors(ctx, f.FlowCtx.testingKnobs.DeterministicStats, vscs, procIDs)
+							return []distsqlpb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
+						},
+					},
+				)
+			}
+			if err := setupVectorizedRemoteOutputStream(
+				f, op, outputTypes, outputStream, append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
+			); err != nil {
+				return err
+			}
+		case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
+			if f != nil {
+				if f.syncFlowConsumer == nil {
+					return errors.New("syncFlowConsumer unset, unable to create materializer")
+				}
+				// Make the materializer, which will write to the given receiver.
+				columnTypes := f.syncFlowConsumer.Types()
+				outputToInputColIdx := make([]int, len(columnTypes))
+				for i := range outputToInputColIdx {
+					outputToInputColIdx[i] = i
+				}
+				var outputStatsToTrace func()
+				if recordingStats {
+					// Make a copy given that vectorizedStatsCollectorsQueue is reset and
+					// appended to.
+					vscq := append([]*exec.VectorizedStatsCollector(nil), vectorizedStatsCollectorsQueue...)
+					outputStatsToTrace = func() {
+						finishVectorizedStatsCollectors(
+							ctx, f.FlowCtx.testingKnobs.DeterministicStats, vscq, procIDs,
+						)
+					}
+				}
+				proc, err := newMaterializer(
+					&f.FlowCtx,
+					pspec.ProcessorID,
+					op,
+					columnTypes,
+					outputToInputColIdx,
+					&distsqlpb.PostProcessSpec{},
+					f.syncFlowConsumer,
+					// Pass in a copy of the queue to reset metadataSourcesQueue for
+					// further appends without overwriting.
+					append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
+					outputStatsToTrace,
+				)
+				if err != nil {
+					return err
+				}
+				f.processors = make([]Processor, 1)
+				f.processors[0] = proc
+			}
+		default:
+			return errors.Errorf("unsupported output stream type %s", outputStream.Type)
+		}
+		if streamIDToInputOp != nil {
+			streamIDToInputOp[outputStream.StreamID] = op
+		}
+	}
+	return nil
+}
+
 func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error {
 	streamIDToInputOp := make(map[distsqlpb.StreamID]exec.Operator)
 	streamIDToSpecIdx := make(map[distsqlpb.StreamID]int)
@@ -1197,7 +1326,7 @@ func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error
 		}
 		inputs = inputs[:0]
 		for i := range pspec.Input {
-			synchronizer, metadataSources, memUsed, err := f.setupVectorizedInputSynchronizer(pspec.Input[i], streamIDToInputOp, recordingStats)
+			synchronizer, metadataSources, memUsed, err := setupVectorizedInputSynchronizer(f, pspec.Input[i], streamIDToInputOp, recordingStats)
 			if err != nil {
 				return err
 			}
@@ -1228,101 +1357,14 @@ func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error
 			op = vsc
 		}
 
-		output := &pspec.Output[0]
-		if output.Type != distsqlpb.OutputRouterSpec_PASS_THROUGH {
-			if err := f.setupVectorizedRouter(
-				op,
-				outputTypes,
-				output,
-				append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
-				streamIDToInputOp,
-				recordingStats,
-			); err != nil {
-				return err
-			}
-			metadataSourcesQueue = metadataSourcesQueue[:0]
-		} else {
-			if len(output.Streams) != 1 {
-				return errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
-			}
-			outputStream := &output.Streams[0]
-			switch outputStream.Type {
-			case distsqlpb.StreamEndpointSpec_LOCAL:
-			case distsqlpb.StreamEndpointSpec_REMOTE:
-				// Set up an Outbox. Note that we pass in a copy of metadataSourcesQueue
-				// so that we can reset it below and keep on writing to it.
-				if recordingStats {
-					// If recording stats, we add a metadata source that will generate all
-					// stats data as metadata for the stats collectors created so far.
-					vscs := append([]*exec.VectorizedStatsCollector(nil), vectorizedStatsCollectorsQueue...)
-					vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
-					metadataSourcesQueue = append(
-						metadataSourcesQueue,
-						distsqlpb.CallbackMetadataSource{
-							DrainMetaCb: func(ctx context.Context) []distsqlpb.ProducerMetadata {
-								// TODO(asubiotto): Who is responsible for the recording of the
-								// parent context?
-								// Start a separate recording so that GetRecording will return
-								// the recordings for only the child spans containing stats.
-								ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
-								finishVectorizedStatsCollectors(ctx, f.FlowCtx.testingKnobs.DeterministicStats, vscs, procIDs)
-								return []distsqlpb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
-							},
-						},
-					)
-				}
-				if err := f.setupVectorizedRemoteOutputStream(
-					op, outputTypes, outputStream, append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
-				); err != nil {
-					return err
-				}
-				metadataSourcesQueue = metadataSourcesQueue[:0]
-			case distsqlpb.StreamEndpointSpec_SYNC_RESPONSE:
-				if f.syncFlowConsumer == nil {
-					return errors.New("syncFlowConsumer unset, unable to create materializer")
-				}
-				// Make the materializer, which will write to the given receiver.
-				columnTypes := f.syncFlowConsumer.Types()
-				outputToInputColIdx := make([]int, len(columnTypes))
-				for i := range outputToInputColIdx {
-					outputToInputColIdx[i] = i
-				}
-				var outputStatsToTrace func()
-				if recordingStats {
-					// Make a copy given that vectorizedStatsCollectorsQueue is reset and
-					// appended to.
-					vscq := append([]*exec.VectorizedStatsCollector(nil), vectorizedStatsCollectorsQueue...)
-					outputStatsToTrace = func() {
-						finishVectorizedStatsCollectors(
-							ctx, f.FlowCtx.testingKnobs.DeterministicStats, vscq, procIDs,
-						)
-					}
-				}
-				proc, err := newMaterializer(
-					&f.FlowCtx,
-					pspec.ProcessorID,
-					op,
-					columnTypes,
-					outputToInputColIdx,
-					&distsqlpb.PostProcessSpec{},
-					f.syncFlowConsumer,
-					// Pass in a copy of the queue to reset metadataSourcesQueue for
-					// further appends without overwriting.
-					append([]distsqlpb.MetadataSource(nil), metadataSourcesQueue...),
-					outputStatsToTrace,
-				)
-				if err != nil {
-					return err
-				}
-				metadataSourcesQueue = metadataSourcesQueue[:0]
-				vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
-				f.processors = make([]Processor, 1)
-				f.processors[0] = proc
-			default:
-				return errors.Errorf("unsupported output stream type %s", outputStream.Type)
-			}
-			streamIDToInputOp[outputStream.StreamID] = op
+		if err := setupVectorizedOutput(
+			ctx, f, recordingStats, op, outputTypes, metadataSourcesQueue,
+			pspec, streamIDToInputOp, vectorizedStatsCollectorsQueue, procIDs,
+		); err != nil {
+			return err
 		}
+		metadataSourcesQueue = metadataSourcesQueue[:0]
+		vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
 
 		// Now queue all outputs from this op whose inputs are already all
 		// populated.
@@ -1360,12 +1402,6 @@ func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error
 		}
 	}
 
-	if len(metadataSourcesQueue) > 0 {
-		panic("not all metadata sources have been processed")
-	}
-	if len(vectorizedStatsCollectorsQueue) > 0 {
-		panic("not all vectorized stats collectors have been processed")
-	}
 	return nil
 }
 
@@ -1382,8 +1418,19 @@ func SupportsVectorized(ctx context.Context, flowCtx *FlowCtx, flow *distsqlpb.F
 		} else {
 			ops = ops[:len(spec.Input)]
 		}
-		_, _, _, err := newColOperator(ctx, flowCtx, spec, ops)
+		for _, input := range spec.Input {
+			if _, _, _, err := setupVectorizedInputSynchronizer(nil, input, nil, false); err != nil {
+				return err
+			}
+		}
+		op, outputTypes, _, err := newColOperator(ctx, flowCtx, spec, ops)
 		if err != nil {
+			return err
+		}
+		if err := setupVectorizedOutput(ctx, nil, false, op,
+			outputTypes, nil, spec, nil,
+			nil, nil,
+		); err != nil {
 			return err
 		}
 	}
