@@ -80,7 +80,7 @@ func verifyColOperator(
 		columnarizers[i] = c
 	}
 
-	colOp, _, _, err := newColOperator(ctx, flowCtx, pspec, columnarizers)
+	result, err := newColOperator(ctx, flowCtx, pspec, columnarizers)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func verifyColOperator(
 	outColOp, err := newMaterializer(
 		flowCtx,
 		int32(len(inputs))+2,
-		colOp,
+		result.op,
 		outputTypes,
 		outputToInputColIdx,
 		&distsqlpb.PostProcessSpec{},
