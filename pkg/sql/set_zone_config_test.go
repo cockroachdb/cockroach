@@ -22,6 +22,38 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+func TestValidateNoRepeatKeysInZone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCases := []struct {
+		constraint    string
+		expectSuccess bool
+	}{
+		{`constraints: ["+region=us-east-1"]`, true},
+		{`constraints: ["+region=us-east-1", "+zone=pa"]`, true},
+		{`constraints: ["+region=us-east-1", "-region=us-west-1"]`, true},
+		{`constraints: ["+region=us-east-1", "+region=us-east-2"]`, false},
+		{`constraints: ["+region=us-east-1", "+zone=pa", "+region=us-west-1"]`, false},
+		{`constraints: ["+region=us-east-1", "-region=us-east-1"]`, false},
+		{`constraints: ["-region=us-east-1", "+region=us-east-1"]`, false},
+		{`constraints: {"+region=us-east-1":2, "+region=us-east-2":2}`, true},
+		{`constraints: {"+region=us-east-1,+region=us-west-1":2, "+region=us-east-2":2}`, false},
+	}
+
+	for _, tc := range testCases {
+		var zone config.ZoneConfig
+		err := yaml.UnmarshalStrict([]byte(tc.constraint), &zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = validateNoRepeatKeysInZone(&zone)
+		if err != nil && tc.expectSuccess {
+			t.Errorf("expected success for %q; got %v", tc.constraint, err)
+		} else if err == nil && !tc.expectSuccess {
+			t.Errorf("expected err for %q; got success", tc.constraint)
+		}
+	}
+}
+
 func TestValidateZoneAttrsAndLocalities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

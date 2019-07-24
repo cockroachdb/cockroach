@@ -272,7 +272,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
-	// No zone was found. Possibly a SubzonePlaceholder dependig on the index.
+	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
 	if partialZone == nil {
 		partialZone = config.NewZoneConfig()
 		if index != nil {
@@ -400,6 +400,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			}
 		}
 
+		// Validate that there are no conflicts in the zone setup.
+		if err := validateNoRepeatKeysInZone(&newZone); err != nil {
+			return err
+		}
+
 		// Validate that the result makes sense.
 		if err := validateZoneAttrsAndLocalities(
 			params.ctx,
@@ -515,6 +520,38 @@ func (*setZoneConfigNode) Close(context.Context)          {}
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 
 type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
+
+// Check that there are not duplicated values for a particular
+// constraint. For example, constraints [+region=us-east1,+region=us-east2]
+// will be rejected. Additionally, invalid constraints such as
+// [+region=us-east1, -region=us-east1] will also be rejected.
+func validateNoRepeatKeysInZone(zone *config.ZoneConfig) error {
+	for _, constraints := range zone.Constraints {
+		// Because we expect to have a small number of constraints, a nested
+		// loop is probably better than allocating a map.
+		for i, curr := range constraints.Constraints {
+			for _, other := range constraints.Constraints[i+1:] {
+				if curr.Type == config.Constraint_REQUIRED {
+					// Verify that there is not another +k=v pair where k=curr.Key, and
+					// that -k=v does not exist.
+					if other.Type == config.Constraint_REQUIRED && other.Key == curr.Key ||
+						other.Type == config.Constraint_PROHIBITED && other.Key == curr.Key && other.Value == curr.Value {
+						return pgerror.Newf(pgcode.CheckViolation,
+							"incompatible zone constraints: %q and %q", curr, other)
+					}
+				} else if curr.Type == config.Constraint_PROHIBITED {
+					// If we have a -k=v pair, verify that there are not any
+					// +k=v pairs in the constraints.
+					if other.Type == config.Constraint_REQUIRED && other.Key == curr.Key && other.Value == curr.Value {
+						return pgerror.Newf(pgcode.CheckViolation,
+							"incompatible zone constraints: %q and %q", curr, other)
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
 
 // validateZoneAttrsAndLocalities ensures that all constraints/lease preferences
 // specified in the new zone config snippet are actually valid, meaning that
