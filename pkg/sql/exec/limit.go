@@ -28,6 +28,8 @@ type limitOp struct {
 	seen uint64
 	// done is true if the limit has been reached.
 	done bool
+	// inputCancelFunc cancels the input Operator's context.
+	inputCancelFunc context.CancelFunc
 }
 
 var _ Operator = &limitOp{}
@@ -48,9 +50,11 @@ func (c *limitOp) Init() {
 
 func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 	if c.done {
+		c.inputCancelFunc()
 		c.internalBatch.SetLength(0)
 		return c.internalBatch
 	}
+	ctx, c.inputCancelFunc = context.WithCancel(ctx)
 	bat := c.input.Next(ctx)
 	length := bat.Length()
 	if length == 0 {
