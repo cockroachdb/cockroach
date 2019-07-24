@@ -400,6 +400,7 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
+<<<<<<< HEAD
 
 			// Validate target columns.
 			var intoCols []string
@@ -428,6 +429,10 @@ func importPlanHook(
 			}
 
 			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false, TargetCols: intoCols}}
+=======
+			// TODO(dt): configure target cols from ImportStmt.IntoCols
+			tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, IsNew: false}}
+>>>>>>> 91221dc63d... importccl: Move the desc preparation from planHook to IMPORT job.
 		} else {
 			var tableDescs []*sqlbase.TableDescriptor
 			seqVals := make(map[sqlbase.ID]int64)
@@ -697,6 +702,16 @@ func prepareNewTableDescsForIngestion(
 		return nil, errors.Wrapf(err, "creating tables")
 	}
 
+<<<<<<< HEAD
+=======
+	// TODO(dt): we should be creating the job with this txn too. Once a job
+	// is created, the contract is it does its own, explicit cleanup on
+	// failure (i.e. not just txn rollback) but everything up to and including
+	// the creation of the job *should* be a single atomic txn. As-is, if we
+	// fail to creat the job after committing this txn, we've leaving broken
+	// descs and namespace records.
+
+>>>>>>> 91221dc63d... importccl: Move the desc preparation from planHook to IMPORT job.
 	return tableDescs, nil
 }
 
@@ -751,7 +766,11 @@ func (r *importResumer) prepareTableDescsForIngestion(
 ) error {
 	importDetails := details
 	var hasExistingTables bool
+<<<<<<< HEAD
 	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+=======
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+>>>>>>> 91221dc63d... importccl: Move the desc preparation from planHook to IMPORT job.
 		var err error
 		newTableDescToIdx := make(map[*sqlbase.TableDescriptor]int, len(importDetails.Tables))
 		var newTableDescs []jobspb.ImportDetails_Table
@@ -798,11 +817,24 @@ func (r *importResumer) prepareTableDescsForIngestion(
 		}
 
 		// Update the job once all descs have been prepared for ingestion.
+<<<<<<< HEAD
 		err = r.job.WithTxn(txn).SetDetails(ctx, importDetails)
 		return err
 	})
 
 	return err
+=======
+		if err = r.job.WithTxn(txn).SetDetails(ctx, importDetails); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
+>>>>>>> 91221dc63d... importccl: Move the desc preparation from planHook to IMPORT job.
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -831,7 +863,12 @@ func (r *importResumer) Resume(
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
 
+<<<<<<< HEAD
 	tables := make(map[string]*distsqlpb.ReadImportDataSpec_ImportTable, len(details.Tables))
+=======
+	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
+
+>>>>>>> 91221dc63d... importccl: Move the desc preparation from planHook to IMPORT job.
 	if details.Tables != nil {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
@@ -843,11 +880,19 @@ func (r *importResumer) Resume(
 			details = r.job.Details().(jobspb.ImportDetails)
 		}
 
+<<<<<<< HEAD
 		for _, i := range details.Tables {
 			if i.Name != "" {
 				tables[i.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
 			} else if i.Desc != nil {
 				tables[i.Desc.Name] = &distsqlpb.ReadImportDataSpec_ImportTable{Desc: i.Desc, TargetCols: i.TargetCols}
+=======
+		for _, tbl := range details.Tables {
+			if tbl.Name != "" {
+				tables[tbl.Name] = tbl.Desc
+			} else if tbl.Desc != nil {
+				tables[tbl.Desc.Name] = tbl.Desc
+>>>>>>> 91221dc63d... importccl: Move the desc preparation from planHook to IMPORT job.
 			} else {
 				return errors.Errorf("invalid table specification")
 			}
