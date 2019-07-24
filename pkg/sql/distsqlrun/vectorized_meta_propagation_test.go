@@ -28,7 +28,7 @@ import (
 // RowSource -> metadataTestSender -> columnarizer -> noopOperator ->
 // -> materializer -> metadataTestReceiver. Metadata propagation is hooked up
 // manually from the columnarizer into the materializer similar to how it is
-// done in setupVectorized.
+// done in setupVectorizedFlow.
 func TestVectorizedMetaPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
