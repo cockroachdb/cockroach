@@ -272,7 +272,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
-	// No zone was found. Possibly a SubzonePlaceholder dependig on the index.
+	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
 	if partialZone == nil {
 		partialZone = config.NewZoneConfig()
 		if index != nil {
@@ -400,6 +400,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			}
 		}
 
+		// Validate that there are no conflicts in the zone setup.
+		if err := validateNoRepeatKeysInZone(&newZone); err != nil {
+			return err
+		}
+
 		// Validate that the result makes sense.
 		if err := validateZoneAttrsAndLocalities(
 			params.ctx,
@@ -515,6 +520,50 @@ func (*setZoneConfigNode) Close(context.Context)          {}
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 
 type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
+
+// Utility struct for validateNoRepeatKeysInZone.
+type keyType struct {
+	Type config.Constraint_Type
+	Key  string
+}
+
+// Check that there are not duplicated values for a particular
+// constraint. For example, constraints [+region=us-east1,+region=us-east2]
+// will be rejected. Additionally, invalid constraints such as
+// [+region=us-east1, -region=us-east1] will also be rejected.
+func validateNoRepeatKeysInZone(zone *config.ZoneConfig) error {
+	for _, constraints := range zone.Constraints {
+		keyMap := make(map[keyType]config.Constraint)
+		for _, constraint := range constraints.Constraints {
+			if constraint.Type == config.Constraint_REQUIRED {
+				key := keyType{constraint.Type, constraint.Key}
+				// There exists another +k=v where k = key, which is disallowed.
+				if val, ok := keyMap[key]; ok {
+					return pgerror.Newf(pgcode.CheckViolation,
+						"constraint %q redefines constraint %q with same key.", constraint, val)
+				}
+
+				negKey := keyType{config.Constraint_PROHIBITED, constraint.Key}
+				// Check that -k=v does not exist.
+				if val, ok := keyMap[negKey]; ok && val.Value == constraint.Value {
+					return pgerror.Newf(pgcode.CheckViolation,
+						"constraint %q redefines constraint %q with inverse key/value.", constraint, val)
+				}
+
+				keyMap[key] = constraint
+			} else {
+				// If we encounter a -k=v, check that there +k=v does not exist.
+				key := keyType{config.Constraint_REQUIRED, constraint.Key}
+				if val, ok := keyMap[key]; ok && val.Value == constraint.Value {
+					return pgerror.Newf(pgcode.CheckViolation,
+						"constraint %q redefines constraint %q with inverse key/value.", constraint, val)
+				}
+				keyMap[keyType{constraint.Type, constraint.Key}] = constraint
+			}
+		}
+	}
+	return nil
+}
 
 // validateZoneAttrsAndLocalities ensures that all constraints/lease preferences
 // specified in the new zone config snippet are actually valid, meaning that
