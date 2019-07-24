@@ -1265,7 +1265,7 @@ func (r *Replica) withRaftGroupLocked(
 			r.mu.state.RaftAppliedIndex,
 			r.store.cfg,
 			&raftLogger{ctx: ctx},
-		), nil)
+		))
 		if err != nil {
 			return err
 		}
