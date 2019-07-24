@@ -61,8 +61,8 @@ func init() {
 				return runDemo(cmd, gen)
 			}),
 		}
-		genDemoCmd.Flags().AddFlagSet(genFlags)
 		demoCmd.AddCommand(genDemoCmd)
+		genDemoCmd.Flags().AddFlagSet(genFlags)
 	}
 }
 
@@ -95,27 +95,37 @@ func setupTransientServer(
 	// Set up the default zone configuration. We are using an in-memory store
 	// so we really want to disable replication.
 	cfg := config.DefaultZoneConfig()
-	cfg.NumReplicas = proto.Int32(1)
-
 	sysCfg := config.DefaultSystemZoneConfig()
-	sysCfg.NumReplicas = proto.Int32(1)
 
-	// Create the transient server.
+	if demoCtx.nodes < 3 {
+		cfg.NumReplicas = proto.Int32(1)
+		sysCfg.NumReplicas = proto.Int32(1)
+	}
+
+	// Create the first transient server. The others will join this one.
 	args := base.TestServerArgs{
-		Insecure: true,
+		PartOfCluster: true,
+		Insecure:      true,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DefaultZoneConfigOverride:       &cfg,
 				DefaultSystemZoneConfigOverride: &sysCfg,
 			},
 		},
+		Stopper: stopper,
 	}
-	server := server.TestServerFactory.New(args).(*server.TestServer)
-	if err := server.Start(args); err != nil {
+	serverFactory := server.TestServerFactory
+	s := serverFactory.New(args).(*server.TestServer)
+	if err := s.Start(args); err != nil {
 		return connURL, adminURL, cleanup, err
 	}
-	prevCleanup := cleanup
-	cleanup = func() { prevCleanup(); server.Stopper().Stop(ctx) }
+	args.JoinAddr = s.ServingAddr()
+	for i := 0; i < demoCtx.nodes-1; i++ {
+		s := serverFactory.New(args).(*server.TestServer)
+		if err := s.Start(args); err != nil {
+			return connURL, adminURL, cleanup, err
+		}
+	}
 
 	// Prepare the URL for use by the SQL shell.
 	options := url.Values{}
@@ -124,7 +134,7 @@ func setupTransientServer(
 	url := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
-		Host:     server.ServingAddr(),
+		Host:     s.ServingAddr(),
 		RawQuery: options.Encode(),
 	}
 	if gen != nil {
@@ -152,7 +162,7 @@ func setupTransientServer(
 		}
 	}
 
-	return urlStr, server.AdminURL(), cleanup, nil
+	return urlStr, s.AdminURL(), cleanup, nil
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) error {
