@@ -1,10 +1,4 @@
-# LogicTest: 5node-dist
-
-# Temporary until #38458 is fixed. This test fails under stress with the
-# 5node-dist-vec config, but not with the 5node-dist config and then setting
-# experimental_vectorize=on, which should be equivalent.
-statement ok
-SET experimental_vectorize=on;
+# LogicTest: 5node-dist-vec
 
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
@@ -79,10 +73,10 @@ SELECT kv.k FROM kv JOIN kw ON kv.k = kw.k
 4
 5
 
-# Regression test for #38919.
 statement ok
-SET experimental_vectorize = on
+RESET experimental_vectorize
 
+# Regression test for #38919.
 statement ok
 SET optimizer = on
 
@@ -93,6 +87,3 @@ true
 
 statement ok
 RESET optimizer
-
-statement ok
-RESET experimental_vectorize
