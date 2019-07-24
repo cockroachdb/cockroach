@@ -431,7 +431,20 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
     return rocksdb::Status::OK();
   }
 
-  // Reuse an existing file by renaming it and opening it as writable.
+  // `ReuseWritableFile` is used for recycling WAL files. With `EncryptedEnv`, we
+  // currently do not know a crash-safe way to recycle WALs. The workaround is to
+  // pretend to recycle in this function by producing a new file and throwing away
+  // the old one. This method of "recycling" sacrifices performance for crash-safety.
+  //
+  // True recycling is not crash-safe because RocksDB recovery fails if it encounters
+  // a non-empty WAL with zero readable entries. With true recycling, we need to change
+  // the encryption key. Imagine a crash happened after we renamed the file and assigned
+  // a new key, but before we wrote any data to the recycled file. Then, that file would
+  // appear to recovery as containing all garbage data, causing it to fail.
+  //
+  // TODO(ajkr): Try to change how RocksDB handles WALs with zero readable entries:
+  // https://www.facebook.com/groups/rocksdb.dev/permalink/2405909486174218/
+  // Then we can have both performance and crash-safety.
   virtual rocksdb::Status ReuseWritableFile(const std::string& fname, const std::string& old_fname,
                                             std::unique_ptr<rocksdb::WritableFile>* result,
                                             const rocksdb::EnvOptions& options) override {
@@ -439,23 +452,11 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
     if (options.use_mmap_writes) {
       return rocksdb::Status::InvalidArgument();
     }
-    // Open file using underlying Env implementation
-    std::unique_ptr<rocksdb::WritableFile> underlying;
-    rocksdb::Status status =
-        rocksdb::EnvWrapper::ReuseWritableFile(fname, old_fname, &underlying, options);
-    if (!status.ok()) {
-      return status;
+    auto status = NewWritableFile(fname, result, options);
+    if (status.ok()) {
+      status = DeleteFile(old_fname);
     }
-
-    // Create cipher stream
-    std::unique_ptr<BlockAccessCipherStream> stream;
-    status = CreateCipherStream(fname, true /* new_file */, &stream);
-    if (!status.ok()) {
-      return status;
-    }
-    (*result) = std::unique_ptr<rocksdb::WritableFile>(
-        new EncryptedWritableFile(underlying.release(), stream.release()));
-    return rocksdb::Status::OK();
+    return status;
   }
 
   // Open `fname` for random read and write, if file dont exist the file
