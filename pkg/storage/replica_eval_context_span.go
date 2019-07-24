@@ -83,6 +83,11 @@ func (rec *SpanSetReplicaEvalContext) NodeID() roachpb.NodeID {
 	return rec.i.NodeID()
 }
 
+// GetNodeLocality returns the node locality.
+func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
+	return rec.i.GetNodeLocality()
+}
+
 // Engine returns the engine.
 func (rec *SpanSetReplicaEvalContext) Engine() engine.Engine {
 	return rec.i.Engine()
