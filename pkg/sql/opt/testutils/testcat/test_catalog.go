@@ -1019,8 +1019,11 @@ type ForeignKeyConstraint struct {
 	originColumnOrdinals     []int
 	referencedColumnOrdinals []int
 
-	validated   bool
-	matchMethod tree.CompositeKeyMatchMethod
+	validated    bool
+	matchMethod  tree.CompositeKeyMatchMethod
+	deleteAction tree.ReferenceAction
+
+	id cat.StableID
 }
 
 var _ cat.ForeignKeyConstraint = &ForeignKeyConstraint{}
@@ -1076,6 +1079,16 @@ func (fk *ForeignKeyConstraint) Validated() bool {
 // MatchMethod is part of the cat.ForeignKeyConstraint interface.
 func (fk *ForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 	return fk.matchMethod
+}
+
+// DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
+	return fk.deleteAction
+}
+
+// ID is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) ID() cat.StableID {
+	return fk.id
 }
 
 // Sequence implements the cat.Sequence interface for testing purposes.
