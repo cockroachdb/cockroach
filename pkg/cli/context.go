@@ -229,7 +229,7 @@ var sqlCtx = struct {
 	debugMode bool
 }{cliContext: &cliCtx}
 
-// dumpCtx captures the command-line parameters of the `sql` command.
+// dumpCtx captures the command-line parameters of the `dump` command.
 // Defaults set by InitCLIDefaults() above.
 var dumpCtx struct {
 	// dumpMode determines which part of the database should be dumped.
@@ -332,4 +332,10 @@ var sqlfmtCtx struct {
 	noSimplify bool
 	align      bool
 	execStmts  statementsValue
+}
+
+// demoCtx captures the command-line parameters of the `demo` command.
+// Defaults set by InitCLIDefaults() above.
+var demoCtx struct {
+	nodes int
 }

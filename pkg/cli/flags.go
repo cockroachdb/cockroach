@@ -515,6 +515,12 @@ func init() {
 		VarFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
 
+	// demo command.
+	demoFlags := demoCmd.PersistentFlags()
+	// We add this command as a persistent flag so you can do stuff like
+	// ./cockroach demo movr --nodes=3.
+	IntFlag(demoFlags, &demoCtx.nodes, cliflags.DemoNodes, 1)
+
 	// sqlfmt command.
 	fmtFlags := sqlfmtCmd.Flags()
 	VarFlag(fmtFlags, &sqlfmtCtx.execStmts, cliflags.Execute)
