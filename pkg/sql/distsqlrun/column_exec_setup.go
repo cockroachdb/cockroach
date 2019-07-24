@@ -1210,7 +1210,7 @@ func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error
 
 		op, outputTypes, memUsage, err := newColOperator(ctx, &f.FlowCtx, pspec, inputs)
 		if err != nil {
-			return errors.Wrapf(err, "unable to vectorize execution plan.")
+			return errors.Wrapf(err, "unable to vectorize execution plan")
 		}
 		if err = acc.Grow(ctx, int64(memUsage)); err != nil {
 			return errors.Wrapf(err, "not enough memory to setup vectorized plan.")
