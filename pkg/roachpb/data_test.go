@@ -831,8 +831,8 @@ func TestLeaseEquivalence(t *testing.T) {
 	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.Clone()}
 
 	r1Voter, r1Learner := r1, r1
-	r1Voter.Type = newReplicaType(ReplicaType_VOTER)
-	r1Learner.Type = newReplicaType(ReplicaType_LEARNER)
+	r1Voter.Type = ReplicaTypeVoter()
+	r1Learner.Type = ReplicaTypeLearner()
 	epoch1Voter := Lease{Replica: r1Voter, Start: ts1, Epoch: 1}
 	epoch1Learner := Lease{Replica: r1Learner, Start: ts1, Epoch: 1}
 
