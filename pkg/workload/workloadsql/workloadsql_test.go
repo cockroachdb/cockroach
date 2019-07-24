@@ -54,7 +54,8 @@ func TestSetup(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
 
 			gen := bank.FromRows(test.rows)
-			if _, err := Setup(ctx, db, gen, test.batchSize, test.concurrency); err != nil {
+			l := InsertsDataLoader{BatchSize: test.batchSize, Concurrency: test.concurrency}
+			if _, err := Setup(ctx, db, gen, l); err != nil {
 				t.Fatalf("%+v", err)
 			}
 
