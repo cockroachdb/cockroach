@@ -18,127 +18,39 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
-// Setup creates the given tables and fills them with initial data via batched
-// INSERTs. batchSize will only be used when positive (but INSERTs are batched
-// either way). The function is idempotent and can be called multiple times if
-// the Generator does not have any initial rows.
+// Setup creates the given tables and fills them with initial data.
 //
 // The size of the loaded data is returned in bytes, suitable for use with
 // SetBytes of benchmarks. The exact definition of this is deferred to the
-// ApproxDatumSize implementation.
+// InitialDataLoader implementation.
 func Setup(
-	ctx context.Context, db *gosql.DB, gen workload.Generator, batchSize, concurrency int,
+	ctx context.Context, db *gosql.DB, gen workload.Generator, l workload.InitialDataLoader,
 ) (int64, error) {
-	if batchSize <= 0 {
-		batchSize = 1000
-	}
-	if concurrency < 1 {
-		concurrency = 1
+	bytes, err := l.InitialDataLoad(ctx, db, gen)
+	if err != nil {
+		return 0, err
 	}
 
-	tables := gen.Tables()
 	var hooks workload.Hooks
 	if h, ok := gen.(workload.Hookser); ok {
 		hooks = h.Hooks()
 	}
-
-	for _, table := range tables {
-		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS "%s" %s`, table.Name, table.Schema)
-		if _, err := db.ExecContext(ctx, createStmt); err != nil {
-			return 0, errors.Wrapf(err, "could not create table: %s", table.Name)
-		}
-	}
-
-	if hooks.PreLoad != nil {
-		if err := hooks.PreLoad(db); err != nil {
-			return 0, errors.Wrapf(err, "Could not preload")
-		}
-	}
-
-	var size int64
-	for _, table := range tables {
-		if table.InitialRows.NumBatches == 0 {
-			continue
-		} else if table.InitialRows.FillBatch == nil {
-			return 0, errors.Errorf(
-				`initial data is not supported for workload %s`, gen.Meta().Name)
-		}
-		batchesPerWorker := table.InitialRows.NumBatches / concurrency
-		g, gCtx := errgroup.WithContext(ctx)
-		for i := 0; i < concurrency; i++ {
-			startIdx := i * batchesPerWorker
-			endIdx := startIdx + batchesPerWorker
-			if i == concurrency-1 {
-				// Account for any rounding error in batchesPerWorker.
-				endIdx = table.InitialRows.NumBatches
-			}
-			g.Go(func() error {
-				var insertStmtBuf bytes.Buffer
-				var params []interface{}
-				var numRows int
-				flush := func() error {
-					if len(params) > 0 {
-						insertStmt := insertStmtBuf.String()
-						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
-							return errors.Wrapf(err, "failed insert into %s", table.Name)
-						}
-					}
-					insertStmtBuf.Reset()
-					fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
-					params = params[:0]
-					numRows = 0
-					return nil
-				}
-				_ = flush()
-
-				for batchIdx := startIdx; batchIdx < endIdx; batchIdx++ {
-					for _, row := range table.InitialRows.BatchRows(batchIdx) {
-						if len(params) != 0 {
-							insertStmtBuf.WriteString(`,`)
-						}
-						insertStmtBuf.WriteString(`(`)
-						for i, datum := range row {
-							atomic.AddInt64(&size, workload.ApproxDatumSize(datum))
-							if i != 0 {
-								insertStmtBuf.WriteString(`,`)
-							}
-							fmt.Fprintf(&insertStmtBuf, `$%d`, len(params)+i+1)
-						}
-						params = append(params, row...)
-						insertStmtBuf.WriteString(`)`)
-						if numRows++; numRows >= batchSize {
-							if err := flush(); err != nil {
-								return err
-							}
-						}
-					}
-				}
-				return flush()
-			})
-		}
-		if err := g.Wait(); err != nil {
-			return 0, err
-		}
-	}
-
 	if hooks.PostLoad != nil {
 		if err := hooks.PostLoad(db); err != nil {
 			return 0, errors.Wrapf(err, "Could not postload")
 		}
 	}
 
-	return size, nil
+	return bytes, nil
 }
 
 func maybeDisableMergeQueue(db *gosql.DB) error {

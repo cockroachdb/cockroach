@@ -32,14 +32,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	directIngestion  = true
-	oneFilePerNode   = 1
-	noInjectStats    = false
-	noSkipPostLoad   = false
-	skipCSVRoundtrip = ``
-)
-
 func bigInitialData(meta workload.Meta) bool {
 	switch meta.Name {
 	case `tpcc`, `tpch`, `tpcds`:
@@ -94,11 +86,11 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
 
-			if _, err := workloadccl.ImportFixture(
-				ctx, db, gen, `d`, directIngestion, oneFilePerNode, noInjectStats, noSkipPostLoad,
-				skipCSVRoundtrip,
-			); err != nil {
-				t.Fatal(err)
+			l := workloadccl.ImportDataLoader{
+				DirectIngestion: true,
+			}
+			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
+				t.Fatalf(`%+v`, err)
 			}
 
 			// Run the consistency check if this workload has one.
@@ -152,8 +144,8 @@ func TestAllRegisteredSetup(t *testing.T) {
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
 			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
 
-			const batchSize, concurrency = 0, 0
-			if _, err := workloadsql.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+			var l workloadsql.InsertsDataLoader
+			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 				t.Fatalf(`%+v`, err)
 			}
 

@@ -99,9 +99,8 @@ func backupRestoreTestSetupWithParams(
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE data`)
-	const insertBatchSize = 1000
-	const concurrency = 4
-	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, insertBatchSize, concurrency); err != nil {
+	l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
+	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if err := workloadsql.Split(ctx, sqlDB.DB.(*gosql.DB), bankData.Tables()[0], 1 /* concurrency */); err != nil {

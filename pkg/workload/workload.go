@@ -90,6 +90,11 @@ type Hooks struct {
 	// PreLoad is called after workload tables are created and before workload
 	// data is loaded. It is not called when storing or loading a fixture.
 	// Implementations should be idempotent.
+	//
+	// TODO(dan): Deprecate the PreLoad hook, it doesn't play well with fixtures.
+	// It's only used in practice for zone configs, so it should be reasonably
+	// straightforward to make zone configs first class citizens of
+	// workload.Table.
 	PreLoad func(*gosql.DB) error
 	// PostLoad is called after workload tables are created workload data is
 	// loaded. It called after restoring a fixture. This, for example, is where
@@ -303,6 +308,27 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 		rows[rowIdx] = datums[rowIdx*numCols : (rowIdx+1)*numCols]
 	}
 	return rows
+}
+
+// InitialDataLoader loads the initial data for all tables in a workload. It
+// returns a measure of how many bytes were loaded.
+//
+// TODO(dan): It would be lovely if the number of bytes loaded was comparable
+// between implementations but this is sadly not the case right now.
+type InitialDataLoader interface {
+	InitialDataLoad(context.Context, *gosql.DB, Generator) (int64, error)
+}
+
+// ImportDataLoader is a hook for binaries that include CCL code to inject an
+// IMPORT-based InitialDataLoader implementation.
+var ImportDataLoader InitialDataLoader = requiresCCLBinaryDataLoader(`IMPORT`)
+
+type requiresCCLBinaryDataLoader string
+
+func (l requiresCCLBinaryDataLoader) InitialDataLoad(
+	context.Context, *gosql.DB, Generator,
+) (int64, error) {
+	return 0, errors.Errorf(`loading initial data with %s requires a CCL binary`, l)
 }
 
 // QueryLoad represents some SQL query workload performable on a database

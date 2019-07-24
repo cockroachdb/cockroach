@@ -146,8 +146,8 @@ func setupTransientServer(
 		}
 
 		ctx := context.TODO()
-		const batchSize, concurrency = 0, 0
-		if _, err := workloadsql.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
+		var l workloadsql.InsertsDataLoader
+		if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 			return ``, ``, cleanup, err
 		}
 	}
