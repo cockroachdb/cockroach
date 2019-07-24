@@ -23,6 +23,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const maxSettings = 128
+
 type dummy struct {
 	msg1       string
 	growsbyone string
@@ -611,4 +613,62 @@ func TestHide(t *testing.T) {
 	if _, ok := keys["sekretz"]; ok {
 		t.Errorf("expected 'sekretz' to be hidden")
 	}
+}
+
+func TestOnChangeWithMaxSettings(t *testing.T) {
+	// Register maxSettings settings to ensure that no errors occur.
+	maxName, err := batchRegisterSettings(t, t.Name(), maxSettings-1-len(settings.Keys()))
+	if err != nil {
+		t.Errorf("expected no error to register 128 settings, but get error : %s", err)
+	}
+
+	// Change the max slotIdx setting to ensure that no errors occur.
+	sv := &settings.Values{}
+	sv.Init(settings.TestOpaque)
+	var changes int
+	intSetting, ok := settings.Lookup(maxName)
+	if !ok {
+		t.Errorf("expected lookup of %s to succeed", maxName)
+	}
+	intSetting.SetOnChange(sv, func() { changes++ })
+
+	u := settings.NewUpdater(sv)
+	if err := u.Set(maxName, settings.EncodeInt(9), "i"); err != nil {
+		t.Fatal(err)
+	}
+
+	if changes != 1 {
+		t.Errorf("expected the max slot setting changed")
+	}
+}
+
+func TestMaxSettingsPanics(t *testing.T) {
+	// Register too many settings which will cause a panic which is caught and converted to an error.
+	_, err := batchRegisterSettings(t, t.Name(), maxSettings-len(settings.Keys()))
+	expectedErr := "too many settings; increase maxSettings"
+	if err == nil || err.Error() != expectedErr {
+		t.Errorf("expected error %v, but got %v", expectedErr, err)
+	}
+}
+
+func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name string, err error) {
+	defer func() {
+		// Catch panic and convert it to an error.
+		if r := recover(); r != nil {
+			// Check exactly what the panic was and create error.
+			switch x := r.(type) {
+			case string:
+				err = errors.New(x)
+			case error:
+				err = x
+			default:
+				err = errors.Errorf("unknown panic: %v", x)
+			}
+		}
+	}()
+	for i := 0; i < count; i++ {
+		name = fmt.Sprintf("%s_%3d", keyPrefix, i)
+		settings.RegisterValidatedIntSetting(name, "desc", 0, nil)
+	}
+	return name, err
 }
