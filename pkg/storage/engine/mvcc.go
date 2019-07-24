@@ -1849,13 +1849,25 @@ func MVCCMerge(
 // apparent effect of "reverting" the range to startTime if all of the older
 // revisions of cleared keys are still available (i.e. have not been GC'ed).
 //
+// Long runs of keys that all qualify for clearing will be cleared via a single
+// clear-range operation. Once maxBatchSize Clear and ClearRange operations are
+// hit during iteration, the next matching key is instead returned in the
+// resumeSpan. It is possible to exceed maxBatchSize by up to the size of the
+// buffer of keys selected for deletion but not yet flushed (as done to detect
+// long runs for cleaning in a single ClearRange).
+//
 // This function does not handle the stats computations to determine the correct
 // incremental deltas of clearing these keys (and correctly determining if it
 // does or not not change the live and gc keys) so the caller is responsible for
 // recomputing stats over the resulting span if needed.
 func MVCCClearTimeRange(
-	ctx context.Context, batch ReadWriter, key, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
-) error {
+	ctx context.Context, batch ReadWriter,
+	key, endKey roachpb.Key,
+	startTime, endTime hlc.Timestamp,
+	maxBatchSize int64,
+) (*roachpb.Span, error) {
+	var batchSize int64
+	var resume *roachpb.Span
 
 	// When iterating, instead of immediately clearing a matching key we can
 	// accumulate it in buf until either a) useRangeClearThreshold is reached and
@@ -1895,6 +1907,7 @@ func MVCCClearTimeRange(
 			if err := batch.ClearRange(clearRangeStart, nonMatch); err != nil {
 				return err
 			}
+			batchSize++
 			clearRangeStart = MVCCKey{}
 		} else if bufSize > 0 {
 			for i := 0; i < bufSize; i++ {
@@ -1902,6 +1915,7 @@ func MVCCClearTimeRange(
 					return err
 				}
 			}
+			batchSize += int64(bufSize)
 			bufSize = 0
 		}
 		return nil
@@ -1924,7 +1938,7 @@ func MVCCClearTimeRange(
 	for it.Seek(MVCCKey{Key: key}); ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {
-			return err
+			return nil, err
 		} else if !ok {
 			break
 		}
@@ -1940,7 +1954,7 @@ func MVCCClearTimeRange(
 		var meta enginepb.MVCCMetadata
 		if !k.IsValue() {
 			if err := it.ValueProto(&meta); err != nil {
-				return err
+				return nil, err
 			}
 			ts := hlc.Timestamp(meta.Timestamp)
 			if meta.Txn != nil && startTime.Less(ts) && !endTime.Less(ts) {
@@ -1948,21 +1962,25 @@ func MVCCClearTimeRange(
 					Intents: []roachpb.Intent{{Span: roachpb.Span{Key: append([]byte{}, k.Key...)},
 						Status: roachpb.PENDING, Txn: *meta.Txn,
 					}}}
-				return err
+				return nil, err
 			}
 		}
 
 		if startTime.Less(k.Timestamp) && !endTime.Less(k.Timestamp) {
+			if batchSize >= maxBatchSize {
+				resume = &roachpb.Span{Key: append([]byte{}, k.Key...)}
+				break
+			}
 			clearMatchingKey(k)
 		} else {
 			// This key does not match, so we need to flush our run of matching keys.
 			if err := flushClearedKeys(k); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 
-	return flushClearedKeys(MVCCKey{Key: key})
+	return resume, flushClearedKeys(MVCCKey{Key: key})
 }
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by start and
