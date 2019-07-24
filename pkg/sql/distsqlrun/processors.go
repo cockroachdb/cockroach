@@ -13,7 +13,6 @@ package distsqlrun
 import (
 	"context"
 	"math"
-	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1197,7 +1196,7 @@ func newProcessor(
 		}
 		return NewChangeFrontierProcessor(flowCtx, processorID, *core.ChangeFrontier, inputs[0], outputs[0])
 	}
-	return nil, errors.Errorf("unsupported processor core %s", strings.TrimSpace(core.String()))
+	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with
