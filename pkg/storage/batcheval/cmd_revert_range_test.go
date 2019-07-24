@@ -111,7 +111,7 @@ func TestCmdRevertRange(t *testing.T) {
 		StartKey: roachpb.RKey(startKey),
 		EndKey:   roachpb.RKey(endKey),
 	}
-	cArgs := CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsC}}
+	cArgs := CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsC}, MaxKeys: 2}
 	evalCtx := &mockEvalCtx{desc: &desc, clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), stats: stats}
 	cArgs.EvalCtx = evalCtx
 	afterStats := getStats(t, eng)
@@ -119,21 +119,39 @@ func TestCmdRevertRange(t *testing.T) {
 		name     string
 		ts       hlc.Timestamp
 		expected []byte
+		resumes  int
 	}{
-		{"revert revert to time A", tsA, sumA},
-		{"revert revert to time B", tsB, sumB},
-		{"revert revert to time C (nothing)", tsC, sumC},
+		{"revert revert to time A", tsA, sumA, 4},
+		{"revert revert to time B", tsB, sumB, 4},
+		{"revert revert to time C (nothing)", tsC, sumC, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			batch := &wrappedBatch{Batch: eng.NewBatch()}
 			defer batch.Close()
 
-			cArgs.Stats = &enginepb.MVCCStats{}
-			cArgs.Args = &roachpb.RevertRangeRequest{
+			req := roachpb.RevertRangeRequest{
 				RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey}, TargetTime: tc.ts,
 			}
-			if _, err := RevertRange(ctx, batch, cArgs, &roachpb.RevertRangeResponse{}); err != nil {
-				t.Fatal(err)
+			cArgs.Stats = &enginepb.MVCCStats{}
+			cArgs.Args = &req
+			var resumes int
+			for {
+				var reply roachpb.RevertRangeResponse
+				if _, err := RevertRange(ctx, batch, cArgs, &reply); err != nil {
+					t.Fatal(err)
+				}
+				if reply.ResumeSpan == nil {
+					break
+				}
+				resumes++
+				req.RequestHeader.Key = reply.ResumeSpan.Key
+			}
+			if resumes != tc.resumes {
+				// NB: since ClearTimeRange buffers keys until it hits one that is not
+				// going to be cleared, and thus may exceed the max batch size by up to
+				// the buffer size (64) when it flushes after breaking out of the loop,
+				// expected resumes isn't *quite* a simple num_cleared_keys/batch_size.
+				t.Fatalf("expected %d resumes, got %d", tc.resumes, resumes)
 			}
 			if reverted := hashRange(t, batch, startKey, endKey); !bytes.Equal(reverted, tc.expected) {
 				t.Error("expected reverted keys to match checksum")
@@ -186,20 +204,36 @@ func TestCmdRevertRange(t *testing.T) {
 		ts          hlc.Timestamp
 		expectErr   bool
 		expectedSum []byte
+		resumes     int
 	}{
-		{"hit intent", tsB, true, nil},
-		{"hit intent exactly", tsC, false, sumCIntent},
-		{"clear above intent", tsC.Add(0, 1), false, sumCIntent},
-		{"clear nothing above intent", tsD, false, sumD},
+		{"hit intent", tsB, true, nil, 2},
+		{"hit intent exactly", tsC, false, sumCIntent, 2},
+		{"clear above intent", tsC.Add(0, 1), false, sumCIntent, 2},
+		{"clear nothing above intent", tsD, false, sumD, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			batch := &wrappedBatch{Batch: eng.NewBatch()}
 			defer batch.Close()
 			cArgs.Stats = &enginepb.MVCCStats{}
-			cArgs.Args = &roachpb.RevertRangeRequest{
+			req := roachpb.RevertRangeRequest{
 				RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey}, TargetTime: tc.ts,
 			}
-			_, err := RevertRange(ctx, batch, cArgs, &roachpb.RevertRangeResponse{})
+			cArgs.Args = &req
+			var resumes int
+			var err error
+			for {
+				var reply roachpb.RevertRangeResponse
+				_, err = RevertRange(ctx, batch, cArgs, &reply)
+				if err != nil || reply.ResumeSpan == nil {
+					break
+				}
+				req.RequestHeader.Key = reply.ResumeSpan.Key
+				resumes++
+			}
+			if resumes != tc.resumes {
+				t.Fatalf("expected %d resumes, got %d", tc.resumes, resumes)
+			}
+
 			if tc.expectErr {
 				if !testutils.IsError(err, "intents") {
 					t.Fatalf("expected write intent error; got: %T %+v", err, err)
