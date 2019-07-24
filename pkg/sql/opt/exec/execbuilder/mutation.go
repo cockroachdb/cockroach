@@ -234,8 +234,19 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
 	returnColOrds := ordinalSetFromColList(del.ReturnCols)
-	node, err := b.factory.ConstructDelete(input.root, tab, fetchColOrds, returnColOrds)
+	disableExecFKs := len(del.Checks) > 0
+	node, err := b.factory.ConstructDelete(
+		input.root,
+		tab,
+		fetchColOrds,
+		returnColOrds,
+		disableExecFKs,
+	)
 	if err != nil {
+		return execPlan{}, err
+	}
+
+	if err := b.buildFKChecks(del.Checks); err != nil {
 		return execPlan{}, err
 	}
 
@@ -244,6 +255,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	if del.NeedResults() {
 		ep.outputCols = mutationOutputColMap(del)
 	}
+
 	return ep, nil
 }
 
@@ -397,7 +409,15 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 				// Generate an error of the form:
 				//   ERROR:  update or delete on table "parent" violates foreign key constraint "child_child_p_fkey" on table "child"
 				//   DETAIL: Key (p)=(1) is still referenced from table "child".
-				panic(errors.AssertionFailedf("unimplemented"))
+				msg.WriteString("update or delete on table ")
+				lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.TableName))
+				msg.WriteString(" violates foreign key constraint")
+				// TODO(justin): get the name of the FK constraint (it's not populated
+				// on this descriptor.
+				msg.WriteString(" on table ")
+				lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
+				// TODO(justin): get the details, the columns are not populated on this
+				// descriptor.
 			}
 
 			return errors.WithDetail(

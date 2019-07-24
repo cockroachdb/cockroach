@@ -2990,6 +2990,16 @@ var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
 	tree.Cascade:    ForeignKeyReference_CASCADE,
 }
 
+// ForeignKeyReferenceActionType allows the conversion between a
+// tree.ReferenceAction and a ForeignKeyReference_Action.
+var ForeignKeyReferenceActionType = [...]tree.ReferenceAction{
+	ForeignKeyReference_NO_ACTION:   tree.NoAction,
+	ForeignKeyReference_RESTRICT:    tree.Restrict,
+	ForeignKeyReference_SET_DEFAULT: tree.SetDefault,
+	ForeignKeyReference_SET_NULL:    tree.SetNull,
+	ForeignKeyReference_CASCADE:     tree.Cascade,
+}
+
 // String implements the fmt.Stringer interface.
 func (x ForeignKeyReference_Action) String() string {
 	switch x {
