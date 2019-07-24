@@ -34,9 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
@@ -215,28 +214,6 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// into the local flow.
 	}
 	if firstErr != nil {
-		if _, ok := errors.If(firstErr, func(err error) (v interface{}, ok bool) {
-			v, ok = err.(*distsqlrun.VectorizedSetupError)
-			return v, ok
-		}); ok && evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn {
-			// Error vectorizing remote flows, try again with off.
-			// Generate a new flow ID so that any remote nodes that successfully set
-			// up a vectorized flow will not be connected to by a non-vectorized flow.
-			newFlowID := uuid.MakeV4()
-			log.Infof(
-				ctx, "error vectorizing remote flow %s, restarting with vectorize=off and ID %s: %s", flows[thisNodeID].FlowID, newFlowID, firstErr,
-			)
-			for i := range flows {
-				flows[i].FlowID.UUID = newFlowID
-			}
-			evalCtx.SessionData.Vectorize = sessiondata.VectorizeOff
-			// Reset vectorize setting after returning.
-			defer func() { evalCtx.SessionData.Vectorize = sessiondata.VectorizeOn }()
-			// Recurse once with sessiondata.VectorizeOff, note that this branch will
-			// not be hit again due to the condition above that
-			// evalCtx.SessionData.Vectorize == sessiondata.VectorizeOn.
-			return dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState)
-		}
 		return nil, nil, firstErr
 	}
 

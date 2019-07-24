@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -1128,43 +1127,6 @@ func (f *Flow) setupVectorizedInputSynchronizer(
 		}
 	}
 	return op, metaSources, memUsed, nil
-}
-
-// VectorizedSetupError is a wrapper for any error that happens during
-// setupVectorized.
-type VectorizedSetupError struct {
-	cause error
-}
-
-var _ error = (*VectorizedSetupError)(nil)
-var _ fmt.Formatter = (*VectorizedSetupError)(nil)
-var _ errors.Formatter = (*VectorizedSetupError)(nil)
-
-// Error implemented the error interface.
-func (e *VectorizedSetupError) Error() string { return e.cause.Error() }
-
-// Cause implements the causer interface.
-func (e *VectorizedSetupError) Cause() error { return e.cause }
-
-// Format implements the fmt.Formatter interface.
-func (e *VectorizedSetupError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
-
-// FormatError implements the errors.Formatter interface.
-func (e *VectorizedSetupError) FormatError(p errors.Printer) error {
-	if p.Detail() {
-		p.Print("error while setting up columnar execution")
-	}
-	return e.cause
-}
-
-func decodeVectorizedSetupError(
-	_ context.Context, cause error, _ string, _ []string, _ protoutil.SimpleMessage,
-) error {
-	return &VectorizedSetupError{cause: cause}
-}
-
-func init() {
-	errors.RegisterWrapperDecoder(errors.GetTypeKey((*VectorizedSetupError)(nil)), decodeVectorizedSetupError)
 }
 
 func (f *Flow) setupVectorized(ctx context.Context, acc *mon.BoundAccount) error {
