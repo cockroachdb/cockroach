@@ -68,7 +68,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl89vm0oQx-_vr0Bzek9ZP9
 
 # Verify execution.
 statement ok
-SET experimental_vectorize = always;
+SET experimental_vectorize = always
 
 query I rowsort
 SELECT kv.k FROM kv JOIN kw ON kv.k = kw.k
@@ -79,5 +79,20 @@ SELECT kv.k FROM kv JOIN kw ON kv.k = kw.k
 4
 5
 
+# Regression test for #38919.
 statement ok
-RESET experimental_vectorize;
+SET experimental_vectorize = on
+
+statement ok
+SET optimizer = on
+
+query B
+SELECT EXISTS(SELECT * FROM kv WHERE k > 2)
+----
+true
+
+statement ok
+RESET optimizer
+
+statement ok
+RESET experimental_vectorize

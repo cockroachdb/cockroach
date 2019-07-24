@@ -158,5 +158,8 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata)
 }
 
 func (m *materializer) ConsumerClosed() {
+	// TODO(yuzefovich): this seems like a hack to me, but in order to close an
+	// Inbox, we need to drain it.
+	m.trailingMetaCallback(m.Ctx)
 	m.InternalClose()
 }
