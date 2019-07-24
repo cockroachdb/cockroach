@@ -87,6 +87,11 @@ type ProposalData struct {
 	// cache and release latches.
 	ec endCmds
 
+	// applied is set when the a command finishes application. It is used to
+	// avoid reproposing a failed proposal if an earlier version of the same
+	// proposal succeeded in applying.
+	applied bool
+
 	// doneCh is used to signal the waiting RPC handler (the contents of
 	// proposalResult come from LocalEvalResult).
 	//
@@ -122,11 +127,25 @@ type ProposalData struct {
 // is canceled, it won't be listening to this done channel, and so it can't be
 // counted on to invoke endCmds itself.)
 func (proposal *ProposalData) finishApplication(pr proposalResult) {
+	if proposal.applied {
+		// If the command already applied then we shouldn't be "finishing" its
+		// application again because it should only be able to apply successfully
+		// once. We expect that when any reproposal for the same command attempts
+		// to apply it will be rejected by the below raft lease sequence or lease
+		// index check in checkForcedErr.
+		if pr.Err != nil {
+			return
+		}
+		log.Fatalf(proposal.ctx,
+			"command already applied: %+v; unexpected successful result: %+v", proposal, pr)
+	}
+	proposal.applied = true
 	proposal.ec.done(proposal.Request, pr.Reply, pr.Err)
+	proposal.signalProposalResult(pr)
 	if proposal.sp != nil {
 		tracing.FinishSpan(proposal.sp)
+		proposal.sp = nil
 	}
-	proposal.signalProposalResult(pr)
 }
 
 // returnProposalResult signals proposal.doneCh with the proposal result if it
