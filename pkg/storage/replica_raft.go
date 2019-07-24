@@ -1404,56 +1404,6 @@ func (m lastUpdateTimesMap) isFollowerActive(
 	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
 }
 
-// tryReproposeWithNewLeaseIndex is used by processRaftCommand to
-// repropose commands that have gotten an illegal lease index error,
-// and that we know could not have applied while their lease index was
-// valid (that is, we observed all applied entries between proposal
-// and the lease index becoming invalid, as opposed to skipping some
-// of them by applying a snapshot).
-//
-// It is not intended for use elsewhere and is only a top-level
-// function so that it can avoid the below_raft_protos check. Returns
-// true if the command has been successfully reproposed (not
-// necessarily by this method! But if this method returns true, the
-// command will be in the local proposals map).
-func (r *Replica) tryReproposeWithNewLeaseIndex(proposal *ProposalData) bool {
-	// Note that we don't need to validate anything about the proposal's
-	// lease here - if we got this far, we know that everything but the
-	// index is valid at this point in the log.
-	r.mu.Lock()
-	if proposal.command.MaxLeaseIndex > r.mu.state.LeaseAppliedIndex {
-		// If the command's MaxLeaseIndex is greater than the
-		// LeaseAppliedIndex, it must have already been reproposed (this
-		// can happen if there are multiple copies of the command in the
-		// logs; see TestReplicaRefreshMultiple). We must not create
-		// multiple copies with multiple lease indexes, so don't repropose
-		// it again. This ensures that at any time, there is only up to a
-		// single lease index that has a chance of succeeding in the Raft
-		// log for a given command.
-		//
-		// Note that the caller has already removed the current version of
-		// the proposal from the pending proposals map. We must re-add it
-		// since it's still pending.
-		log.VEventf(proposal.ctx, 2, "skipping reproposal, already reproposed at index %d",
-			proposal.command.MaxLeaseIndex)
-		r.mu.proposals[proposal.idKey] = proposal
-		r.mu.Unlock()
-		return true
-	}
-	r.mu.Unlock()
-
-	// Some tests check for this log message in the trace.
-	log.VEventf(proposal.ctx, 2, "retry: proposalIllegalLeaseIndex")
-	if _, pErr := r.propose(proposal.ctx, proposal); pErr != nil {
-		// TODO(nvanbenschoten): Returning false here isn't ok. It will result
-		// in a proposal returning without a response or an error, which
-		// triggers a panic higher up in the stack. We need to fix this.
-		log.Warningf(proposal.ctx, "failed to repropose with new lease index: %s", pErr)
-		return false
-	}
-	return true
-}
-
 // maybeAcquireSnapshotMergeLock checks whether the incoming snapshot subsumes
 // any replicas and, if so, locks them for subsumption. See acquireMergeLock
 // for details about the lock itself.

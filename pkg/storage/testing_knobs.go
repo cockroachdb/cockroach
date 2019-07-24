@@ -56,6 +56,7 @@ type StoreTestingKnobs struct {
 
 	// TestingPostApplyFilter is called after a command is applied to
 	// rocksdb but before in-memory side effects have been processed.
+	// It is only called on the replica the proposed the command.
 	TestingPostApplyFilter storagebase.ReplicaApplyFilter
 
 	// TestingResponseFilter is called after the replica processes a
