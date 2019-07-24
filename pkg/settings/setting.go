@@ -82,7 +82,7 @@ func (sv *Values) Opaque() interface{} {
 
 func (sv *Values) settingChanged(slotIdx int) {
 	sv.changeMu.Lock()
-	funcs := sv.changeMu.onChange[slotIdx]
+	funcs := sv.changeMu.onChange[slotIdx-1]
 	sv.changeMu.Unlock()
 	for _, fn := range funcs {
 		fn()
@@ -113,7 +113,7 @@ func (sv *Values) setGeneric(slotIdx int, newVal interface{}) {
 // goroutine which handles all settings updates.
 func (sv *Values) setOnChange(slotIdx int, fn func()) {
 	sv.changeMu.Lock()
-	sv.changeMu.onChange[slotIdx] = append(sv.changeMu.onChange[slotIdx], fn)
+	sv.changeMu.onChange[slotIdx-1] = append(sv.changeMu.onChange[slotIdx-1], fn)
 	sv.changeMu.Unlock()
 }
 
