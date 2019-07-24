@@ -1,5 +1,3 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
-
 # This file is an incomplete porting of
 # https://github.com/postgres/postgres/blob/11e264517dff7a911d9e6494de86049cab42cde3/src/test/regress/sql/jsonb.sql
 # to CockroachDB logic tests.

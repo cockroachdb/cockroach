@@ -256,11 +256,11 @@ import (
 //
 // Configuration:
 //
-// -config name   customizes the test cluster configuration for test
+// -config name[,name2,...]   customizes the test cluster configuration for test
 //                files that lack LogicTest directives; must be one
 //                of `logicTestConfigs`.
 //                Example:
-//                  -config distsql
+//                  -config local-opt,fakedist-opt
 //
 // Error mode:
 //
@@ -319,11 +319,11 @@ var (
 	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
 
 	// Input selection
-	logictestdata = flag.String("d", "", "glob that selects subset of files to run")
-	bigtest       = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
-	defaultConfig = flag.String(
-		"config", "local",
-		"customizes the default test cluster configuration for files that lack LogicTest directives",
+	logictestdata  = flag.String("d", "", "glob that selects subset of files to run")
+	bigtest        = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
+	overrideConfig = flag.String(
+		"config", "",
+		"sets the test cluster configuration; comma-separated values",
 	)
 
 	// Testing mode
@@ -438,6 +438,30 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "on", distSQLUseDisk: true, skipShort: true,
 		overrideOptimizerMode: "off"},
 }
+
+func parseTestConfig(names []string) []logicTestConfigIdx {
+	ret := make([]logicTestConfigIdx, len(names))
+	for i, name := range names {
+		idx, ok := findLogicTestConfig(name)
+		if !ok {
+			panic(fmt.Errorf("unknown config %s", name))
+		}
+		ret[i] = idx
+	}
+	return ret
+}
+
+var (
+	defaultConfigNames = []string{
+		"local",
+		"local-opt",
+		"fakedist",
+		"fakedist-opt",
+		"fakedist-metadata",
+		"fakedist-disk",
+	}
+	defaultConfig = parseTestConfig(defaultConfigNames)
+)
 
 // An index in the above slice.
 type logicTestConfigIdx int
@@ -1139,11 +1163,7 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 		}
 	}
 	// No directive found, return the default config.
-	idx, ok := findLogicTestConfig(*defaultConfig)
-	if !ok {
-		t.Fatalf("unknown -config %s", *defaultConfig)
-	}
-	return []logicTestConfigIdx{idx}
+	return defaultConfig
 }
 
 type subtestDetails struct {
@@ -2125,9 +2145,16 @@ func RunLogicTest(t *testing.T, globs ...string) {
 	// Read the configuration directives from all the files and accumulate a list
 	// of paths per config.
 	configPaths := make([][]string, len(logicTestConfigs))
+	var configs []logicTestConfigIdx
+	if *overrideConfig != "" {
+		configs = parseTestConfig(strings.Split(*overrideConfig, ","))
+	}
 
 	for _, path := range paths {
-		for _, idx := range readTestFileConfigs(t, path) {
+		if *overrideConfig == "" {
+			configs = readTestFileConfigs(t, path)
+		}
+		for _, idx := range configs {
 			configPaths[idx] = append(configPaths[idx], path)
 		}
 	}
