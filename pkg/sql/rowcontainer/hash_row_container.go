@@ -567,6 +567,7 @@ func (h *HashDiskRowContainer) NewBucketIterator(
 		diskRowIterator:      h.NewIterator(ctx).(*diskRowIterator),
 	}
 	if err := ret.Reset(ctx, row); err != nil {
+		ret.Close()
 		return nil, err
 	}
 	return ret, nil
