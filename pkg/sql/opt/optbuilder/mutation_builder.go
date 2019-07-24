@@ -29,6 +29,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	outboundFK = true
+	inboundFK  = false
+)
+
 // mutationBuilder is a helper struct that supports building Insert, Update,
 // Upsert, and Delete operators in stages.
 // TODO(andyk): Add support for Delete.
@@ -168,6 +173,12 @@ func (mb *mutationBuilder) scopeOrdToColID(ord scopeOrdinal) opt.ColumnID {
 // ordinal position in the table).
 func (mb *mutationBuilder) insertColID(tabOrd int) opt.ColumnID {
 	return mb.scopeOrdToColID(mb.insertOrds[tabOrd])
+}
+
+// fetchColID is a convenience method that returns the ID of the fetch column
+// for the given table column (specified by ordinal position in the table).
+func (mb *mutationBuilder) fetchColID(tabOrd int) opt.ColumnID {
+	return mb.scopeOrdToColID(mb.fetchOrds[tabOrd])
 }
 
 // buildInputForUpdateOrDelete constructs a Select expression from the fields in
@@ -746,11 +757,18 @@ func (mb *mutationBuilder) buildFKChecks() {
 		return
 	}
 
-	// TODO(radu): only insert supported for now.
-	if mb.op != opt.InsertOp {
-		return
+	// TODO(radu): only insert/delete supported for now.
+	switch mb.op {
+	case opt.InsertOp:
+		mb.buildFKChecksForInsert()
+	case opt.DeleteOp:
+		mb.buildFKChecksForDelete()
+	default:
+		// Not supported yet.
 	}
+}
 
+func (mb *mutationBuilder) buildFKChecksForInsert() {
 	if mb.tab.OutboundForeignKeyCount() == 0 {
 		return
 	}
@@ -763,7 +781,6 @@ func (mb *mutationBuilder) buildFKChecks() {
 
 	for i, n := 0, mb.tab.OutboundForeignKeyCount(); i < n; i++ {
 		fk := mb.tab.OutboundForeignKey(i)
-		numCols := fk.ColumnCount()
 		item := memo.FKChecksItem{FKChecksItemPrivate: memo.FKChecksItemPrivate{
 			OriginTable: mb.tabID,
 			FKOutbound:  true,
@@ -774,27 +791,21 @@ func (mb *mutationBuilder) buildFKChecks() {
 		// referenced columns on the right.
 
 		refID := fk.ReferencedTableID()
-		refTab, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, refID)
+		ref, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, refID)
 		if err != nil {
 			panic(err)
 		}
+		refTab := ref.(cat.Table)
+
+		numCols := mb.getNumColsInFK(outboundFK, refTab, fk)
+
 		// We need SELECT privileges on the referenced table.
 		mb.b.checkPrivilege(opt.DepByID(refID), refTab, privilege.SELECT)
 
 		refOrdinals := make([]int, numCols)
 		for j := range refOrdinals {
-			refOrdinals[j] = fk.ReferencedColumnOrdinal(refTab.(cat.Table), j)
+			refOrdinals[j] = fk.ReferencedColumnOrdinal(refTab, j)
 		}
-
-		refTabMeta := mb.b.addTable(refTab.(cat.Table), refTab.Name())
-		item.ReferencedTable = refTabMeta.MetaID
-		scanScope := mb.b.buildScan(
-			refTabMeta,
-			refOrdinals,
-			&tree.IndexFlags{IgnoreForeignKeys: true},
-			includeMutations,
-			mb.b.allocScope(),
-		)
 
 		inputProps := mb.outScope.expr.Relational()
 		inputCols := make(opt.ColList, numCols)
@@ -817,20 +828,19 @@ func (mb *mutationBuilder) buildFKChecks() {
 			}
 		}
 
-		// Set up a WithRef; for this we have to synthesize new columns.
-		withRefCols := make(opt.ColList, numCols)
-		for i := 0; i < numCols; i++ {
-			c := mb.b.factory.Metadata().ColumnMeta(inputCols[i])
-			withRefCols[i] = mb.md.AddColumn(c.Alias, c.Type)
-		}
+		refTabMeta := mb.b.addTable(refTab, refTab.Name())
+		item.ReferencedTable = refTabMeta.MetaID
 
-		left := mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			ID:      mb.withID,
-			InCols:  inputCols,
-			OutCols: withRefCols,
-		})
+		scanScope := mb.b.buildScan(
+			refTabMeta,
+			refOrdinals,
+			&tree.IndexFlags{IgnoreForeignKeys: true},
+			includeMutations,
+			mb.b.allocScope(),
+		)
 
-		item.KeyCols = withRefCols
+		left, withScanCols := mb.makeFKInputScan(inputCols)
+		item.KeyCols = withScanCols
 
 		if notNullInputCols.Len() < numCols {
 			// The columns we are inserting might have NULLs. These require special
@@ -859,7 +869,7 @@ func (mb *mutationBuilder) buildFKChecks() {
 					if !notNullInputCols.Contains(inputCols[i]) {
 						filters = append(filters, memo.FiltersItem{
 							Condition: mb.b.factory.ConstructIsNot(
-								mb.b.factory.ConstructVariable(withRefCols[i]),
+								mb.b.factory.ConstructVariable(withScanCols[i]),
 								memo.NullSingleton,
 							),
 						})
@@ -878,7 +888,7 @@ func (mb *mutationBuilder) buildFKChecks() {
 				// Build a filter of the form
 				//   (a IS NOT NULL) OR (b IS NOT NULL) ...
 				var condition opt.ScalarExpr
-				for _, col := range withRefCols {
+				for _, col := range withScanCols {
 					is := mb.b.factory.ConstructIsNot(
 						mb.b.factory.ConstructVariable(col),
 						memo.NullSingleton,
@@ -901,7 +911,7 @@ func (mb *mutationBuilder) buildFKChecks() {
 		antiJoinFilters := make(memo.FiltersExpr, numCols)
 		for j := 0; j < numCols; j++ {
 			antiJoinFilters[j].Condition = mb.b.factory.ConstructEq(
-				mb.b.factory.ConstructVariable(withRefCols[j]),
+				mb.b.factory.ConstructVariable(withScanCols[j]),
 				mb.b.factory.ConstructVariable(scanScope.cols[j].id),
 			)
 		}
@@ -911,6 +921,129 @@ func (mb *mutationBuilder) buildFKChecks() {
 		)
 
 		mb.checks = append(mb.checks, item)
+	}
+}
+
+func (mb *mutationBuilder) buildFKChecksForDelete() {
+	if mb.tab.InboundForeignKeyCount() == 0 {
+		return
+	}
+
+	mb.withID = mb.b.factory.Memo().AddWithBinding(mb.outScope.expr)
+
+	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
+		fk := mb.tab.InboundForeignKey(i)
+		item := memo.FKChecksItem{FKChecksItemPrivate: memo.FKChecksItemPrivate{
+			ReferencedTable: mb.tabID,
+			FKOutbound:      false,
+			FKOrdinal:       i,
+		}}
+
+		// Build a semi join, with the referenced FK columns on the left and the
+		// origin columns on the right.
+
+		origID := fk.OriginTableID()
+		orig, err := mb.b.catalog.ResolveDataSourceByID(mb.b.ctx, origID)
+		if err != nil {
+			panic(err)
+		}
+		origTab := orig.(cat.Table)
+
+		numCols := mb.getNumColsInFK(inboundFK, origTab, fk)
+
+		// We need SELECT privileges on the origin table.
+		mb.b.checkPrivilege(opt.DepByID(origID), origTab, privilege.SELECT)
+
+		origOrdinals := make([]int, numCols)
+		for j := range origOrdinals {
+			origOrdinals[j] = fk.OriginColumnOrdinal(origTab.(cat.Table), j)
+		}
+
+		inputCols := make(opt.ColList, numCols)
+		for j := 0; j < numCols; j++ {
+			ord := fk.OriginColumnOrdinal(origTab, j)
+			inputColID := mb.fetchColID(ord)
+			if inputColID == 0 {
+				panic(errors.AssertionFailedf("no value for FK column %d", ord))
+			}
+			inputCols[j] = inputColID
+		}
+
+		origTabMeta := mb.b.addTable(origTab, origTab.Name())
+		item.OriginTable = origTabMeta.MetaID
+
+		scanScope := mb.b.buildScan(
+			origTabMeta,
+			origOrdinals,
+			&tree.IndexFlags{IgnoreForeignKeys: true},
+			includeMutations,
+			mb.b.allocScope(),
+		)
+
+		left, withScanCols := mb.makeFKInputScan(inputCols)
+		item.KeyCols = withScanCols
+
+		// Note that it's impossible to orphan a row whose FK key columns contain a
+		// NULL, since by definition a NULL never refers to an actual row (in
+		// either MATCH FULL or MATCH SIMPLE).
+		// Build the join filters:
+		//   (origin_a = referenced_a) AND (origin_b = referenced_b) AND ...
+		semiJoinFilters := make(memo.FiltersExpr, numCols)
+		for j := 0; j < numCols; j++ {
+			semiJoinFilters[j].Condition = mb.b.factory.ConstructEq(
+				mb.b.factory.ConstructVariable(withScanCols[j]),
+				mb.b.factory.ConstructVariable(scanScope.cols[j].id),
+			)
+		}
+
+		item.Check = mb.b.factory.ConstructSemiJoin(
+			left, scanScope.expr, semiJoinFilters, &memo.JoinPrivate{},
+		)
+
+		mb.checks = append(mb.checks, item)
+	}
+}
+
+// makeFKInputScan constructs a WithScan that iterates over the input to the
+// mutation operator in order to generate rows that must be checked for FK
+// violations.
+func (mb *mutationBuilder) makeFKInputScan(
+	inputCols opt.ColList,
+) (scan memo.RelExpr, outCols opt.ColList) {
+	// Set up a WithScan; for this we have to synthesize new columns.
+	outCols = make(opt.ColList, len(inputCols))
+	for i := 0; i < len(inputCols); i++ {
+		c := mb.b.factory.Metadata().ColumnMeta(inputCols[i])
+		outCols[i] = mb.md.AddColumn(c.Alias, c.Type)
+	}
+	scan = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
+		ID:      mb.withID,
+		InCols:  inputCols,
+		OutCols: outCols,
+	})
+	return scan, outCols
+}
+
+// getNumColsInFK returns the number of columns participating in the foreign
+// key constraint. This abstracts the fact that inbound and outbound
+// descriptors must be handled differently.
+func (mb *mutationBuilder) getNumColsInFK(
+	outbound bool, otherTab cat.Table, fk cat.ForeignKeyConstraint,
+) int {
+	if outbound {
+		return fk.ColumnCount()
+	} else {
+		// This is a hack. The number of columns is not populated on the inbound
+		// foreign key descriptor, so we need to get the outbound version to figure
+		// out how many columns are included in the foreign key constraint.
+		// TODO(justin): remove this once descriptors are symmetric.
+		for i, n := 0, otherTab.OutboundForeignKeyCount(); i < n; i++ {
+			outboundRef := otherTab.OutboundForeignKey(i)
+			if outboundRef.ID() == fk.ID() {
+				return outboundRef.ColumnCount()
+			}
+		}
+		panic(errors.AssertionFailedf("didn't find matching outbound FK reference"))
 	}
 }
 

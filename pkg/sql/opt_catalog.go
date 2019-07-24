@@ -595,6 +595,7 @@ func newOptTable(
 					numCols:         int(fk.SharedPrefixLen),
 					validity:        fk.Validity,
 					match:           fk.Match,
+					id:              cat.StableID(fk.Index),
 				})
 			}
 			for j := range idxDesc.ReferencedBy {
@@ -605,9 +606,12 @@ func newOptTable(
 					originIndex:     fk.Index,
 					referencedTable: ot.id,
 					referencedIndex: idxDesc.ID,
-					numCols:         int(fk.SharedPrefixLen),
-					validity:        fk.Validity,
-					match:           fk.Match,
+					// TODO(justin): this field is currently not populated, so it will
+					// always be zero and should not be used from this side.
+					numCols:  int(fk.SharedPrefixLen),
+					validity: fk.Validity,
+					match:    fk.Match,
+					id:       cat.StableID(idxDesc.ID),
 				})
 			}
 		}
@@ -1199,6 +1203,8 @@ type optForeignKeyConstraint struct {
 	numCols  int
 	validity sqlbase.ConstraintValidity
 	match    sqlbase.ForeignKeyReference_Match
+
+	id cat.StableID
 }
 
 var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
@@ -1220,6 +1226,9 @@ func (fk *optForeignKeyConstraint) ReferencedTableID() cat.StableID {
 
 // ColumnCount is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) ColumnCount() int {
+	if fk.numCols == 0 {
+		panic(errors.AssertionFailedf("cannot get column count from inbound FK constraint"))
+	}
 	return fk.numCols
 }
 
@@ -1268,4 +1277,9 @@ func (fk *optForeignKeyConstraint) Validated() bool {
 // MatchMethod is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 	return sqlbase.ForeignKeyReferenceMatchValue[fk.match]
+}
+
+// ID is part of the cat.ForeignKeyConstraint interface.
+func (fk *optForeignKeyConstraint) ID() cat.StableID {
+	return fk.id
 }

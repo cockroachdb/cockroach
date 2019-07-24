@@ -999,6 +999,8 @@ type ForeignKeyConstraint struct {
 
 	validated   bool
 	matchMethod tree.CompositeKeyMatchMethod
+
+	id cat.StableID
 }
 
 var _ cat.ForeignKeyConstraint = &ForeignKeyConstraint{}
@@ -1054,6 +1056,11 @@ func (fk *ForeignKeyConstraint) Validated() bool {
 // MatchMethod is part of the cat.ForeignKeyConstraint interface.
 func (fk *ForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
 	return fk.matchMethod
+}
+
+// ID is part of the cat.ForeignKeyConstraint interface.
+func (fk *ForeignKeyConstraint) ID() cat.StableID {
+	return fk.id
 }
 
 // Sequence implements the cat.Sequence interface for testing purposes.

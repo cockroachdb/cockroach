@@ -862,10 +862,6 @@ define WithScanPrivate {
 
     # InCols are the columns output by the expression referenced by this
     # expression. They correspond elementwise to the columns listed in OutCols.
-    # Every WithScanPrivate with the same WithID should have the same set of
-    # InCols, being the OutputCols of the binding for the referenced With.
-    # TODO(justin): this should be relaxed eventually so that we can prune
-    # these.
     InCols ColList
 
     # OutCols contains a list of columns which correspond elementwise to the

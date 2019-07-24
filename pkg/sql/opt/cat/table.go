@@ -237,4 +237,10 @@ type ForeignKeyConstraint interface {
 
 	// MatchMethod returns the method used for comparing composite foreign keys.
 	MatchMethod() tree.CompositeKeyMatchMethod
+
+	// ID returns a stable identifier that is unique within both the origin and
+	// referenced tables.
+	// TODO(justin): we only need this to be able to match up constraints between
+	// the two tables, so delete this once descriptors are made symmetric.
+	ID() StableID
 }
