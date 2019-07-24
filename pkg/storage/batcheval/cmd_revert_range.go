@@ -69,6 +69,7 @@ func RevertRange(
 	log.VEventf(ctx, 2, "RevertRange %+v", cArgs.Args)
 
 	args := cArgs.Args.(*roachpb.RevertRangeRequest)
+	reply := resp.(*roachpb.RevertRangeResponse)
 	var pd result.Result
 
 	if gc := cArgs.EvalCtx.GetGCThreshold(); !gc.Less(args.TargetTime) {
@@ -94,7 +95,9 @@ func RevertRange(
 		return result.Result{}, err
 	}
 
-	err = engine.MVCCClearTimeRange(ctx, batch, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp)
+	resume, err := engine.MVCCClearTimeRange(
+		ctx, batch, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
+	)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -114,6 +117,11 @@ func RevertRange(
 	statsAfter.Subtract(statsBefore)
 
 	*cArgs.Stats = statsAfter
+
+	if resume != nil {
+		reply.ResumeSpan = resume
+		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+	}
 
 	return pd, nil
 }
