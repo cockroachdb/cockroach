@@ -154,23 +154,63 @@ func (r *Replica) retrieveLocalProposals(ctx context.Context, b *cmdAppBatch) {
 	// Copy stats as it gets updated in-place in applyRaftCommandToBatch.
 	b.replicaState.Stats = &b.stats
 	*b.replicaState.Stats = *r.mu.state.Stats
+	// Assign all the local proposals first then delete all of them from the map
+	// in a second pass. This ensures that we retrieve all proposals correctly
+	// even if the batch has multiple entries for the same proposal, in which
+	// case the proposal was reproposed (either under its original or a new
+	// MaxLeaseIndex) which we handle in a second pass below.
+	var anyLocal bool
 	var it cmdAppCtxBufIterator
-	haveProposalQuota := r.mu.proposalQuota != nil
 	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
 		cmd := it.cur()
 		cmd.proposal = r.mu.proposals[cmd.idKey]
 		if cmd.proposedLocally() {
 			// We initiated this command, so use the caller-supplied context.
 			cmd.ctx = cmd.proposal.ctx
-			delete(r.mu.proposals, cmd.idKey)
-			// At this point we're not guaranteed to have proposalQuota initialized,
-			// the same is true for quotaReleaseQueues. Only queue the proposal's
-			// quota for release if the proposalQuota is initialized.
-			if haveProposalQuota {
-				r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, cmd.proposal.quotaSize)
-			}
+			anyLocal = true
 		} else {
 			cmd.ctx = ctx
+		}
+	}
+	if !anyLocal {
+		// Fast-path.
+		return
+	}
+	for ok := it.init(&b.cmdBuf); ok; ok = it.next() {
+		cmd := it.cur()
+		if !cmd.proposedLocally() {
+			continue
+		}
+		if cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex {
+			// If this entry does not have the most up-to-date view of the
+			// corresponding proposal's maximum lease index then the proposal
+			// must have been reproposed with a higher lease index. (see
+			// tryReproposeWithNewLeaseIndex). In that case, there's a newer
+			// version of the proposal in the pipeline, so don't remove the
+			// proposal from the map. We expect this entry to be rejected by
+			// checkForcedErr.
+			continue
+		}
+		// Delete the proposal from the proposals map. There may be reproposals
+		// of the proposal in the pipeline, but those will all have the same max
+		// lease index, meaning that they will all be rejected after this entry
+		// applies (successfully or otherwise). If tryReproposeWithNewLeaseIndex
+		// picks up the proposal on failure, it will re-add the proposal to the
+		// proposal map, but this won't affect anything in this cmdAppBatch.
+		//
+		// While here, add the proposal's quota size to the quota release queue.
+		// We check the proposal map again first to avoid double free-ing quota
+		// when reproposals from the same proposal end up in the same entry
+		// application batch.
+		if _, ok := r.mu.proposals[cmd.idKey]; !ok {
+			continue
+		}
+		delete(r.mu.proposals, cmd.idKey)
+		// At this point we're not guaranteed to have proposalQuota initialized,
+		// the same is true for quotaReleaseQueues. Only queue the proposal's
+		// quota for release if the proposalQuota is initialized.
+		if r.mu.proposalQuota != nil {
+			r.mu.quotaReleaseQueue = append(r.mu.quotaReleaseQueue, cmd.proposal.quotaSize)
 		}
 	}
 }
@@ -381,6 +421,19 @@ func (r *Replica) stageRaftCommand(
 		if err != nil {
 			log.Fatal(ctx, err)
 		}
+	}
+
+	// Provide the command's corresponding logical operations to the Replica's
+	// rangefeed. Only do so if the WriteBatch is non-nil, in which case the
+	// rangefeed requires there to be a corresponding logical operation log or
+	// it will shut down with an error. If the WriteBatch is nil then we expect
+	// the logical operation log to also be nil. We don't want to trigger a
+	// shutdown of the rangefeed in that situation, so we don't pass anything to
+	// the rangefed. If no rangefeed is running at all, this call will be a noop.
+	if cmd.raftCmd.WriteBatch != nil {
+		r.handleLogicalOpLogRaftMuLocked(ctx, cmd.raftCmd.LogicalOpLog, batch)
+	} else if cmd.raftCmd.LogicalOpLog != nil {
+		log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.raftCmd)
 	}
 }
 
@@ -843,7 +896,7 @@ func (r *Replica) applyCmdAppBatch(
 		}
 		cmd.replicatedResult().SuggestedCompactions = nil
 		isNonTrivial := batchIsNonTrivial && it.isLast()
-		if errExpl, err = r.handleRaftCommandResult(ctx, cmd, isNonTrivial,
+		if errExpl, err = r.handleRaftCommandResult(cmd.ctx, cmd, isNonTrivial,
 			b.replicaState.UsingAppliedStateKey); err != nil {
 			return errExpl, err
 		}

@@ -160,7 +160,11 @@ func (r *Replica) handleRaftCommandResult(
 ) (errExpl string, err error) {
 	// Set up the local result prior to handling the ReplicatedEvalResult to
 	// give testing knobs an opportunity to inspect it.
-	r.prepareLocalResult(cmd.ctx, cmd)
+	r.prepareLocalResult(ctx, cmd)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEvent(ctx, 2, cmd.localResult.String())
+	}
+
 	// Handle the ReplicatedEvalResult, executing any side effects of the last
 	// state machine transition.
 	//
@@ -168,7 +172,7 @@ func (r *Replica) handleRaftCommandResult(
 	// before notifying a potentially waiting client.
 	clearTrivialReplicatedEvalResultFields(cmd.replicatedResult(), usingAppliedStateKey)
 	if isNonTrivial {
-		r.handleComplexReplicatedEvalResult(cmd.ctx, *cmd.replicatedResult())
+		r.handleComplexReplicatedEvalResult(ctx, *cmd.replicatedResult())
 	} else if !cmd.replicatedResult().Equal(storagepb.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v",
 			cmd.replicatedResult())
@@ -186,13 +190,13 @@ func (r *Replica) handleRaftCommandResult(
 	}
 
 	if cmd.localResult != nil {
-		r.handleLocalEvalResult(cmd.ctx, *cmd.localResult)
+		r.handleLocalEvalResult(ctx, *cmd.localResult)
 	}
-	r.finishRaftCommand(cmd.ctx, cmd)
+	r.finishRaftCommand(ctx, cmd)
 	switch cmd.e.Type {
 	case raftpb.EntryNormal:
 		if cmd.replicatedResult().ChangeReplicas != nil {
-			log.Fatalf(cmd.ctx, "unexpected replication change from command %s", &cmd.raftCmd)
+			log.Fatalf(ctx, "unexpected replication change from command %s", &cmd.raftCmd)
 		}
 	case raftpb.EntryConfChange:
 		if cmd.replicatedResult().ChangeReplicas == nil {
@@ -307,6 +311,10 @@ func (r *Replica) handleComplexReplicatedEvalResult(
 // result will zero-out the struct to ensure that is has properly performed all
 // of the implied side-effects.
 func (r *Replica) prepareLocalResult(ctx context.Context, cmd *cmdAppCtx) {
+	if !cmd.proposedLocally() {
+		return
+	}
+
 	var pErr *roachpb.Error
 	if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; filter != nil {
 		var newPropRetry int
@@ -328,53 +336,95 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *cmdAppCtx) {
 		pErr = cmd.forcedErr
 	}
 
-	if cmd.proposedLocally() {
-		if cmd.proposalRetry != proposalNoReevaluation && pErr == nil {
-			log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", cmd.proposal)
-		}
-		if pErr != nil {
-			// A forced error was set (i.e. we did not apply the proposal,
-			// for instance due to its log position) or the Replica is now
-			// corrupted.
-			// If proposalRetry is set, we don't also return an error, as per the
-			// proposalResult contract.
-			if cmd.proposalRetry == proposalNoReevaluation {
-				cmd.response.Err = pErr
-			}
-		} else if cmd.proposal.Local.Reply != nil {
-			cmd.response.Reply = cmd.proposal.Local.Reply
-		} else {
-			log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd.proposal)
-		}
-		cmd.response.Intents = cmd.proposal.Local.DetachIntents()
-		cmd.response.EndTxns = cmd.proposal.Local.DetachEndTxns(pErr != nil)
-		if pErr == nil {
-			cmd.localResult = cmd.proposal.Local
-		}
+	if cmd.proposalRetry != proposalNoReevaluation && pErr == nil {
+		log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", cmd.proposal)
 	}
-	if pErr != nil && cmd.localResult != nil {
+	if pErr != nil {
+		// A forced error was set (i.e. we did not apply the proposal,
+		// for instance due to its log position) or the Replica is now
+		// corrupted.
+		switch cmd.proposalRetry {
+		case proposalNoReevaluation:
+			cmd.response.Err = pErr
+		case proposalIllegalLeaseIndex:
+			// If we failed to apply at the right lease index, try again with a
+			// new one. This is important for pipelined writes, since they don't
+			// have a client watching to retry, so a failure to eventually apply
+			// the proposal would be a user-visible error.
+			pErr = r.tryReproposeWithNewLeaseIndex(ctx, cmd)
+			if pErr != nil {
+				cmd.response.Err = pErr
+			} else {
+				// Unbind the entry's local proposal because we just succeeded
+				// in reproposing it and we don't want to acknowledge the client
+				// yet.
+				cmd.proposal = nil
+				return
+			}
+		default:
+			panic("unexpected")
+		}
+	} else if cmd.proposal.Local.Reply != nil {
+		cmd.response.Reply = cmd.proposal.Local.Reply
+	} else {
+		log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd.proposal)
+	}
+	cmd.response.Intents = cmd.proposal.Local.DetachIntents()
+	cmd.response.EndTxns = cmd.proposal.Local.DetachEndTxns(pErr != nil)
+	if pErr == nil {
+		cmd.localResult = cmd.proposal.Local
+	} else if cmd.localResult != nil {
 		log.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
 	}
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEvent(ctx, 2, cmd.localResult.String())
+}
+
+// tryReproposeWithNewLeaseIndex is used by prepareLocalResult to repropose
+// commands that have gotten an illegal lease index error, and that we know
+// could not have applied while their lease index was valid (that is, we
+// observed all applied entries between proposal and the lease index becoming
+// invalid, as opposed to skipping some of them by applying a snapshot).
+//
+// It is not intended for use elsewhere and is only a top-level function so that
+// it can avoid the below_raft_protos check. Returns a nil error if the command
+// has already been successfully applied or has been reproposed here or by a
+// different entry for the same proposal that hit an illegal lease index error.
+func (r *Replica) tryReproposeWithNewLeaseIndex(
+	ctx context.Context, cmd *cmdAppCtx,
+) *roachpb.Error {
+	// Note that we don't need to validate anything about the proposal's
+	// lease here - if we got this far, we know that everything but the
+	// index is valid at this point in the log.
+	p := cmd.proposal
+	if p.applied || cmd.raftCmd.MaxLeaseIndex != p.command.MaxLeaseIndex {
+		// If the command associated with this rejected raft entry already
+		// applied then we don't want to repropose it. Doing so could lead
+		// to duplicate application of the same proposal.
+		//
+		// Similarly, if the command associated with this rejected raft
+		// entry has a different (larger) MaxLeaseIndex than the one we
+		// decoded from the entry itself, the command must have already
+		// been reproposed (this can happen if there are multiple copies
+		// of the command in the logs; see TestReplicaRefreshMultiple).
+		// We must not create multiple copies with multiple lease indexes,
+		// so don't repropose it again. This ensures that at any time,
+		// there is only up to a single lease index that has a chance of
+		// succeeding in the Raft log for a given command.
+		return nil
 	}
+	// Some tests check for this log message in the trace.
+	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
+	maxLeaseIndex, pErr := r.propose(ctx, p)
+	if pErr != nil {
+		log.Warningf(ctx, "failed to repropose with new lease index: %s", pErr)
+		return pErr
+	}
+	log.VEventf(ctx, 2, "reproposed command %x at maxLeaseIndex=%d", cmd.idKey, maxLeaseIndex)
+	return nil
 }
 
 // finishRaftCommand is called after a command's side effects have been applied
 // in order to acknowledge clients and release latches.
 func (r *Replica) finishRaftCommand(ctx context.Context, cmd *cmdAppCtx) {
-
-	// Provide the command's corresponding logical operations to the
-	// Replica's rangefeed. Only do so if the WriteBatch is nonnil,
-	// otherwise it's valid for the logical op log to be nil, which
-	// would shut down all rangefeeds. If no rangefeed is running,
-	// this call will be a noop.
-	if cmd.raftCmd.WriteBatch != nil {
-		r.handleLogicalOpLogRaftMuLocked(ctx, cmd.raftCmd.LogicalOpLog)
-	} else if cmd.raftCmd.LogicalOpLog != nil {
-		log.Fatalf(ctx, "nonnil logical op log with nil write batch: %v", cmd.raftCmd)
-	}
-
 	// When set to true, recomputes the stats for the LHS and RHS of splits and
 	// makes sure that they agree with the state's range stats.
 	const expensiveSplitAssertion = false
@@ -407,17 +457,6 @@ func (r *Replica) finishRaftCommand(ctx context.Context, cmd *cmdAppCtx) {
 	}
 
 	if cmd.proposedLocally() {
-		// If we failed to apply at the right lease index, try again with
-		// a new one. This is important for pipelined writes, since they
-		// don't have a client watching to retry, so a failure to
-		// eventually apply the proposal would be a uservisible error.
-		// TODO(nvanbenschoten): This reproposal is not tracked by the
-		// quota pool. We should fix that.
-		if cmd.proposalRetry == proposalIllegalLeaseIndex &&
-			r.tryReproposeWithNewLeaseIndex(cmd.proposal) {
-			return
-		}
-		// Otherwise, signal the command's status to the client.
 		cmd.proposal.finishApplication(cmd.response)
 	} else if cmd.response.Err != nil {
 		log.VEventf(ctx, 1, "applying raft command resulted in error: %s", cmd.response.Err)
