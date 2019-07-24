@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -105,7 +104,7 @@ type newColOperatorResult struct {
 func newColOperator(
 	ctx context.Context, flowCtx *FlowCtx, spec *distsqlpb.ProcessorSpec, inputs []exec.Operator,
 ) (result newColOperatorResult, err error) {
-	log.VEventf(ctx, 2, "planning col operator for spec %+v", spec)
+	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
 
 	core := &spec.Core
 	post := &spec.Post
@@ -550,7 +549,7 @@ func newColOperator(
 		columnTypes = append(spec.Input[0].ColumnTypes, *semtypes.Int)
 
 	default:
-		return result, errors.Newf("unsupported processor core %s", strings.TrimSpace(core.String()))
+		return result, errors.Newf("unsupported processor core %q", core)
 	}
 
 	// After constructing the base operator, calculate the memory usage
