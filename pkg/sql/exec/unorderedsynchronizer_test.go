@@ -13,6 +13,7 @@ package exec
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,6 +88,33 @@ func TestUnorderedSynchronizer(t *testing.T) {
 		require.Equal(t, numInputs*numBatches, batchesReturned)
 	}
 	wg.Wait()
+}
+
+func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const expectedErr = "first input error"
+
+	inputs := make([]Operator, 6)
+	inputs[0] = &CallbackOperator{NextCb: func(context.Context) coldata.Batch { panic(expectedErr) }}
+	for i := 1; i < len(inputs); i++ {
+		inputs[i] = &CallbackOperator{
+			NextCb: func(ctx context.Context) coldata.Batch {
+				<-ctx.Done()
+				panic(ctx.Err())
+			},
+		}
+	}
+
+	var (
+		ctx = context.Background()
+		wg  sync.WaitGroup
+	)
+	s := NewUnorderedSynchronizer(inputs, []types.T{types.Int64}, &wg)
+	err := CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
+	// This is the crux of the test: assert that all inputs have finished.
+	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
+	require.True(t, testutils.IsError(err, expectedErr), err)
 }
 
 func BenchmarkUnorderedSynchronizer(b *testing.B) {
