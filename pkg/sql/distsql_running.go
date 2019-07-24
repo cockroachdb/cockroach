@@ -137,9 +137,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// vectorized flows since the flows will effectively be planned twice. Remove
 	// this once logic of falling back to DistSQL is bullet-proof.
 	if evalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
+		acc := evalCtx.Mon.MakeBoundAccount()
+		defer acc.Close(ctx)
 		for _, spec := range flows {
 			if err := distsqlrun.SupportsVectorized(
-				ctx, &distsqlrun.FlowCtx{EvalCtx: &evalCtx.EvalContext, NodeID: -1}, spec,
+				ctx, &distsqlrun.FlowCtx{EvalCtx: &evalCtx.EvalContext, NodeID: -1}, spec, &acc,
 			); err != nil {
 				// Vectorization attempt failed with an error.
 				returnVectorizationSetupError := false
