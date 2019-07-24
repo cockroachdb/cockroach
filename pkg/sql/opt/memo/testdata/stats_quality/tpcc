@@ -1,866 +1,7 @@
-exec-ddl
-CREATE TABLE warehouse
-(
-    w_id        integer   not null primary key,
-    w_name      varchar(10),
-    w_street_1  varchar(20),
-    w_street_2  varchar(20),
-    w_city      varchar(20),
-    w_state     char(2),
-    w_zip       char(9),
-    w_tax       decimal(4,4),
-    w_ytd       decimal(12,2)
-)
+import file=tpcc_schema
 ----
 
-exec-ddl
-ALTER TABLE warehouse INJECT STATISTICS '[
-  {
-    "columns": ["w_id"],
-    "created_at": "2019-04-18 19:02:50.150384+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 10
-  },
-  {
-    "columns": ["w_name"],
-    "created_at": "2019-04-18 19:02:50.150389+00:00",
-    "distinct_count": 4,
-    "null_count": 0,
-    "row_count": 10
-  },
-  {
-    "columns": ["w_street_1"],
-    "created_at": "2019-04-18 19:02:50.15039+00:00",
-    "distinct_count": 7,
-    "null_count": 0,
-    "row_count": 10
-  },
-  {
-    "columns": ["w_street_2"],
-    "created_at": "2019-04-18 19:02:50.150391+00:00",
-    "distinct_count": 7,
-    "null_count": 0,
-    "row_count": 10
-  },
-  {
-    "columns": ["w_city"],
-    "created_at": "2019-04-18 19:02:50.150392+00:00",
-    "distinct_count": 7,
-    "null_count": 0,
-    "row_count": 10
-  },
-  {
-    "columns": ["w_state"],
-    "created_at": "2019-04-18 19:02:50.150393+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 10
-  },
-  {
-    "columns": ["w_zip"],
-    "created_at": "2019-04-18 19:02:50.150394+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 10
-  },
-  {
-    "columns": ["w_tax"],
-    "created_at": "2019-04-18 19:02:50.150395+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 10
-  },
-  {
-    "columns": ["w_ytd"],
-    "created_at": "2019-04-18 19:02:50.150396+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 10
-  }
-]'
-----
-
-exec-ddl
-CREATE TABLE district
-(
-    d_id         integer       not null,
-    d_w_id       integer       not null,
-    d_name       varchar(10),
-    d_street_1   varchar(20),
-    d_street_2   varchar(20),
-    d_city       varchar(20),
-    d_state      char(2),
-    d_zip        char(9),
-    d_tax        decimal(4,4),
-    d_ytd        decimal(12,2),
-    d_next_o_id  integer,
-    primary key (d_w_id, d_id),
-    foreign key (d_w_id) references warehouse (w_id)
-) interleave in parent warehouse (d_w_id)
-----
-
-exec-ddl
-ALTER TABLE district INJECT STATISTICS '[
-  {
-    "columns": ["d_id"],
-    "created_at": "2019-04-18 19:02:50.150398+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_w_id"],
-    "created_at": "2019-04-18 19:02:50.150399+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_name"],
-    "created_at": "2019-04-18 19:02:50.1504+00:00",
-    "distinct_count": 100,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_street_1"],
-    "created_at": "2019-04-18 19:02:50.150401+00:00",
-    "distinct_count": 100,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_street_2"],
-    "created_at": "2019-04-18 19:02:50.150402+00:00",
-    "distinct_count": 100,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_city"],
-    "created_at": "2019-04-18 19:02:50.150403+00:00",
-    "distinct_count": 100,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_state"],
-    "created_at": "2019-04-18 19:02:50.150404+00:00",
-    "distinct_count": 93,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_zip"],
-    "created_at": "2019-04-18 19:02:50.150405+00:00",
-    "distinct_count": 100,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_tax"],
-    "created_at": "2019-04-18 19:02:50.150407+00:00",
-    "distinct_count": 98,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_ytd"],
-    "created_at": "2019-04-18 19:02:50.150407+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 100
-  },
-  {
-    "columns": ["d_next_o_id"],
-    "created_at": "2019-04-18 19:02:50.150408+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 100
-  }
-]'
-----
-
-exec-ddl
-CREATE TABLE customer
-(
-    c_id           integer        not null,
-    c_d_id         integer        not null,
-    c_w_id         integer        not null,
-    c_first        varchar(16),
-    c_middle       char(2),
-    c_last         varchar(16),
-    c_street_1     varchar(20),
-    c_street_2     varchar(20),
-    c_city         varchar(20),
-    c_state        char(2),
-    c_zip          char(9),
-    c_phone        char(16),
-    c_since        timestamp,
-    c_credit       char(2),
-    c_credit_lim   decimal(12,2),
-    c_discount     decimal(4,4),
-    c_balance      decimal(12,2),
-    c_ytd_payment  decimal(12,2),
-    c_payment_cnt  integer,
-    c_delivery_cnt integer,
-    c_data         varchar(500),
-    primary key (c_w_id, c_d_id, c_id),
-    index customer_idx (c_w_id, c_d_id, c_last, c_first),
-    foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)
-) interleave in parent district (c_w_id, c_d_id)
-----
-
-exec-ddl
-ALTER TABLE customer INJECT STATISTICS '[
-  {
-    "columns": ["c_id"],
-    "created_at": "2019-04-18 19:02:50.150415+00:00",
-    "distinct_count": 3000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_d_id"],
-    "created_at": "2019-04-18 19:02:50.150416+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_w_id"],
-    "created_at": "2019-04-18 19:02:50.150417+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_first"],
-    "created_at": "2019-04-18 19:02:50.150418+00:00",
-    "distinct_count": 300000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_middle"],
-    "created_at": "2019-04-18 19:02:50.150418+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_last"],
-    "created_at": "2019-04-18 19:02:50.150419+00:00",
-    "distinct_count": 1000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_street_1"],
-    "created_at": "2019-04-18 19:02:50.15042+00:00",
-    "distinct_count": 300000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_street_2"],
-    "created_at": "2019-04-18 19:02:50.150421+00:00",
-    "distinct_count": 300000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_city"],
-    "created_at": "2019-04-18 19:02:50.150422+00:00",
-    "distinct_count": 300000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_state"],
-    "created_at": "2019-04-18 19:02:50.150424+00:00",
-    "distinct_count": 676,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_zip"],
-    "created_at": "2019-04-18 19:02:50.150426+00:00",
-    "distinct_count": 9999,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_phone"],
-    "created_at": "2019-04-18 19:02:50.150427+00:00",
-    "distinct_count": 300000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_since"],
-    "created_at": "2019-04-18 19:02:50.150428+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_credit"],
-    "created_at": "2019-04-18 19:02:50.150428+00:00",
-    "distinct_count": 2,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_credit_lim"],
-    "created_at": "2019-04-18 19:02:50.150429+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_discount"],
-    "created_at": "2019-04-18 19:02:50.150431+00:00",
-    "distinct_count": 5001,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_balance"],
-    "created_at": "2019-04-18 19:02:50.150432+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_ytd_payment"],
-    "created_at": "2019-04-18 19:02:50.150433+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_payment_cnt"],
-    "created_at": "2019-04-18 19:02:50.150434+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_delivery_cnt"],
-    "created_at": "2019-04-18 19:02:50.150435+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["c_data"],
-    "created_at": "2019-04-18 19:02:50.150435+00:00",
-    "distinct_count": 300000,
-    "null_count": 0,
-    "row_count": 300000
-  }
-]'
-----
-
-exec-ddl
-CREATE TABLE history
-(
-    rowid    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    h_c_id   integer,
-    h_c_d_id integer,
-    h_c_w_id integer,
-    h_d_id   integer,
-    h_w_id   integer,
-    h_date   timestamp,
-    h_amount decimal(6,2),
-    h_data   varchar(24),
-    index (h_w_id, h_d_id),
-    index (h_c_w_id, h_c_d_id, h_c_id),
-    foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id),
-    foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)
-)
-----
-
-exec-ddl
-ALTER TABLE history INJECT STATISTICS '[
-  {
-    "columns": ["rowid"],
-    "created_at": "2019-04-18 19:02:50.150438+00:00",
-    "distinct_count": 300000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["h_c_id"],
-    "created_at": "2019-04-18 19:02:50.150439+00:00",
-    "distinct_count": 3000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["h_c_d_id"],
-    "created_at": "2019-04-18 19:02:50.15044+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["h_c_w_id"],
-    "created_at": "2019-04-18 19:02:50.150441+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["h_d_id"],
-    "created_at": "2019-04-18 19:02:50.150442+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["h_w_id"],
-    "created_at": "2019-04-18 19:02:50.150443+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["h_date"],
-    "created_at": "2019-04-18 19:02:50.150444+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["h_amount"],
-    "created_at": "2019-04-18 19:02:50.150445+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["h_data"],
-    "created_at": "2019-04-18 19:02:50.150446+00:00",
-    "distinct_count": 300000,
-    "null_count": 0,
-    "row_count": 300000
-  }
-]'
-----
-
-exec-ddl
-CREATE TABLE "order"
-(
-    o_id         integer      not null,
-    o_d_id       integer      not null,
-    o_w_id       integer      not null,
-    o_c_id       integer,
-    o_entry_d    timestamp,
-    o_carrier_id integer,
-    o_ol_cnt     integer,
-    o_all_local  integer,
-    primary key (o_w_id, o_d_id, o_id DESC),
-    unique index order_idx (o_w_id, o_d_id, o_carrier_id, o_id),
-    index (o_w_id, o_d_id, o_c_id),
-    foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)
-) interleave in parent district (o_w_id, o_d_id)
-----
-
-exec-ddl
-ALTER TABLE "order" INJECT STATISTICS '[
-  {
-    "columns": ["o_id"],
-    "created_at": "2019-04-18 19:02:50.150447+00:00",
-    "distinct_count": 3000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["o_d_id"],
-    "created_at": "2019-04-18 19:02:50.150449+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["o_w_id"],
-    "created_at": "2019-04-18 19:02:50.15045+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["o_c_id"],
-    "created_at": "2019-04-18 19:02:50.15045+00:00",
-    "distinct_count": 3000,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["o_entry_d"],
-    "created_at": "2019-04-18 19:02:50.150451+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["o_carrier_id"],
-    "created_at": "2019-04-18 19:02:50.150452+00:00",
-    "distinct_count": 10,
-    "null_count": 90000,
-    "row_count": 300000
-  },
-  {
-    "columns": ["o_ol_cnt"],
-    "created_at": "2019-04-18 19:02:50.150454+00:00",
-    "distinct_count": 11,
-    "null_count": 0,
-    "row_count": 300000
-  },
-  {
-    "columns": ["o_all_local"],
-    "created_at": "2019-04-18 19:02:50.150454+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 300000}
-]'
-----
-
-exec-ddl
-CREATE TABLE new_order
-(
-    no_o_id  integer   not null,
-    no_d_id  integer   not null,
-    no_w_id  integer   not null,
-    primary key (no_w_id, no_d_id, no_o_id DESC)
-) interleave in parent "order" (no_w_id, no_d_id, no_o_id)
-----
-
-exec-ddl
-ALTER TABLE new_order INJECT STATISTICS '[
-  {
-    "columns": ["no_o_id"],
-    "created_at": "2019-04-18 19:02:50.150456+00:00",
-    "distinct_count": 900,
-    "null_count": 0,
-    "row_count": 90000
-  },
-  {
-    "columns": ["no_d_id"],
-    "created_at": "2019-04-18 19:02:50.150457+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 90000
-  },
-  {
-    "columns": ["no_w_id"],
-    "created_at": "2019-04-18 19:02:50.150458+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 90000
-  }
-]'
-----
-
-exec-ddl
-CREATE TABLE item
-(
-    i_id     integer      not null,
-    i_im_id  integer,
-    i_name   varchar(24),
-    i_price  decimal(5,2),
-    i_data   varchar(50),
-    primary key (i_id)
-)
-----
-
-exec-ddl
-ALTER TABLE item INJECT STATISTICS '[
-  {
-    "columns": ["i_id"],
-    "created_at": "2019-04-18 19:02:50.150461+00:00",
-    "distinct_count": 100000,
-    "null_count": 0,
-    "row_count": 100000
-  },
-  {
-    "columns": ["i_im_id"],
-    "created_at": "2019-04-18 19:02:50.150462+00:00",
-    "distinct_count": 10000,
-    "null_count": 0,
-    "row_count": 100000
-  },
-  {
-    "columns": ["i_name"],
-    "created_at": "2019-04-18 19:02:50.150463+00:00",
-    "distinct_count": 100000,
-    "null_count": 0,
-    "row_count": 100000
-  },
-  {
-    "columns": ["i_price"],
-    "created_at": "2019-04-18 19:02:50.150464+00:00",
-    "distinct_count": 9901,
-    "null_count": 0,
-    "row_count": 100000
-  },
-  {
-    "columns": ["i_data"],
-    "created_at": "2019-04-18 19:02:50.150465+00:00",
-    "distinct_count": 100000,
-    "null_count": 0,
-    "row_count": 100000
-  }
-]'
-----
-
-exec-ddl
-CREATE TABLE stock
-(
-    s_i_id       integer       not null,
-    s_w_id       integer       not null,
-    s_quantity   integer,
-    s_dist_01    char(24),
-    s_dist_02    char(24),
-    s_dist_03    char(24),
-    s_dist_04    char(24),
-    s_dist_05    char(24),
-    s_dist_06    char(24),
-    s_dist_07    char(24),
-    s_dist_08    char(24),
-    s_dist_09    char(24),
-    s_dist_10    char(24),
-    s_ytd        integer,
-    s_order_cnt  integer,
-    s_remote_cnt integer,
-    s_data       varchar(50),
-    primary key (s_w_id, s_i_id),
-    index (s_i_id),
-    foreign key (s_w_id) references warehouse (w_id),
-    foreign key (s_i_id) references item (i_id)
-) interleave in parent warehouse (s_w_id)
-----
-
-exec-ddl
-ALTER TABLE stock INJECT STATISTICS '[
-  {
-    "columns": ["s_i_id"],
-    "created_at": "2019-04-18 19:02:50.150466+00:00",
-    "distinct_count": 100000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_w_id"],
-    "created_at": "2019-04-18 19:02:50.150467+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_quantity"],
-    "created_at": "2019-04-18 19:02:50.150469+00:00",
-    "distinct_count": 91,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_01"],
-    "created_at": "2019-04-18 19:02:50.15047+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_02"],
-    "created_at": "2019-04-18 19:02:50.15047+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_03"],
-    "created_at": "2019-04-18 19:02:50.150471+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_04"],
-    "created_at": "2019-04-18 19:02:50.150472+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_05"],
-    "created_at": "2019-04-18 19:02:50.150473+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_06"],
-    "created_at": "2019-04-18 19:02:50.150474+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_07"],
-    "created_at": "2019-04-18 19:02:50.150475+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_08"],
-    "created_at": "2019-04-18 19:02:50.150476+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_09"],
-    "created_at": "2019-04-18 19:02:50.150477+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_dist_10"],
-    "created_at": "2019-04-18 19:02:50.150478+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_ytd"],
-    "created_at": "2019-04-18 19:02:50.150478+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_order_cnt"],
-    "created_at": "2019-04-18 19:02:50.150479+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_remote_cnt"],
-    "created_at": "2019-04-18 19:02:50.15048+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 1000000
-  },
-  {
-    "columns": ["s_data"],
-    "created_at": "2019-04-18 19:02:50.150481+00:00",
-    "distinct_count": 1000000,
-    "null_count": 0,
-    "row_count": 1000000
-  }
-]'
-----
-
-exec-ddl
-CREATE TABLE order_line
-(
-    ol_o_id         integer   not null,
-    ol_d_id         integer   not null,
-    ol_w_id         integer   not null,
-    ol_number       integer   not null,
-    ol_i_id         integer   not null,
-    ol_supply_w_id  integer,
-    ol_delivery_d   timestamp,
-    ol_quantity     integer,
-    ol_amount       decimal(6,2),
-    ol_dist_info    char(24),
-    primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
-    index order_line_fk (ol_supply_w_id, ol_d_id),
-    foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id),
-    foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)
-) interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)
-----
-
-exec-ddl
-ALTER TABLE order_line INJECT STATISTICS '[
-  {
-    "columns": ["ol_o_id"],
-    "created_at": "2019-04-18 19:02:50.150483+00:00",
-    "distinct_count": 3000,
-    "null_count": 0,
-    "row_count": 3000000
-  },
-  {
-    "columns": ["ol_d_id"],
-    "created_at": "2019-04-18 19:02:50.150483+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 3000000
-  },
-  {
-    "columns": ["ol_w_id"],
-    "created_at": "2019-04-18 19:02:50.150484+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 3000000
-  },
-  {
-    "columns": ["ol_number"],
-    "created_at": "2019-04-18 19:02:50.150495+00:00",
-    "distinct_count": 15,
-    "null_count": 0,
-    "row_count": 3000000
-  },
-  {
-    "columns": ["ol_i_id"],
-    "created_at": "2019-04-18 19:02:50.150497+00:00",
-    "distinct_count": 100000,
-    "null_count": 0,
-    "row_count": 3000000
-  },
-  {
-    "columns": ["ol_supply_w_id"],
-    "created_at": "2019-04-18 19:02:50.150498+00:00",
-    "distinct_count": 10,
-    "null_count": 0,
-    "row_count": 3000000
-  },
-  {
-    "columns": ["ol_delivery_d"],
-    "created_at": "2019-04-18 19:02:50.1505+00:00",
-    "distinct_count": 1,
-    "null_count": 900000,
-    "row_count": 3000000
-  },
-  {
-    "columns": ["ol_quantity"],
-    "created_at": "2019-04-18 19:02:50.150501+00:00",
-    "distinct_count": 1,
-    "null_count": 0,
-    "row_count": 3000000
-  },
-  {
-    "columns": ["ol_amount"],
-    "created_at": "2019-04-18 19:02:50.150502+00:00",
-    "distinct_count": 593431,
-    "null_count": 0,
-    "row_count": 3000000
-  },
-  {
-    "columns": ["ol_dist_info"],
-    "created_at": "2019-04-18 19:02:50.150502+00:00",
-    "distinct_count": 3000000,
-    "null_count": 0,
-    "row_count": 3000000
-  }
-]'
+import file=tpcc_stats_w10
 ----
 
 # --------------------------------------------------
@@ -892,6 +33,8 @@ project
       ├── constraint: /1: [/1 - /1]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
+      │   histogram(1)=  0  1
+      │                <--- 1
       ├── cost: 1.12
       ├── key: ()
       ├── fd: ()-->(1,8)
@@ -917,7 +60,7 @@ project
  ├── save-table-name: new_order_02_project_1
  ├── columns: c_discount:16(decimal) c_last:6(varchar) c_credit:14(char)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(6)=0.999501832, null(6)=0, distinct(14)=0.786939691, null(14)=0, distinct(16)=0.999901693, null(16)=0]
+ ├── stats: [rows=1, distinct(6)=0.999501832, null(6)=0, distinct(14)=0.786939691, null(14)=0, distinct(16)=0.999901673, null(16)=0]
  ├── cost: 1.3
  ├── key: ()
  ├── fd: ()-->(6,14,16)
@@ -927,7 +70,9 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(varchar) c_credit:14(char) c_discount:16(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=0.999501832, null(6)=0, distinct(14)=0.786939691, null(14)=0, distinct(16)=0.999901693, null(16)=0]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=0.999501832, null(6)=0, distinct(14)=0.786939691, null(14)=0, distinct(16)=0.999901673, null(16)=0]
+      │   histogram(3)=  0  1
+      │                <--- 1
       ├── cost: 1.28
       ├── key: ()
       ├── fd: ()-->(1-3,6,14,16)
@@ -962,8 +107,10 @@ scan item
  ├── save-table-name: new_order_03_scan_1
  ├── columns: i_price:4(decimal) i_name:3(varchar) i_data:5(varchar)  [hidden: i_id:1(int!null)]
  ├── constraint: /1: [/25 - /25] [/50 - /50] [/75 - /75] [/100 - /100] [/125 - /125] [/150 - /150] [/175 - /175] [/200 - /200] [/225 - /225] [/250 - /250] [/275 - /275] [/300 - /300]
- ├── stats: [rows=12, distinct(1)=12, null(1)=0, distinct(3)=12, null(3)=0, distinct(4)=11.9934501, null(4)=0, distinct(5)=12, null(5)=0]
- ├── cost: 13.09
+ ├── stats: [rows=10.226087, distinct(1)=10.226087, null(1)=0, distinct(3)=10.1503175, null(3)=0, distinct(4)=10.2213067, null(4)=0, distinct(5)=10.2221349, null(5)=0]
+ │   histogram(1)=  0 0.85217 0 0.85217 0 0.85217 0 0.85217 0 0.85217 0 0.85217 0 0.85217 0 0.85217 0 0.85217 0 0.85217 0 0.85217 0 0.85217
+ │                <---- 25 ------ 50 ------ 75 ------ 100 ----- 125 ----- 150 ----- 175 ----- 200 ----- 225 ----- 250 ----- 275 ----- 300 -
+ ├── cost: 11.1564348
  ├── key: (1)
  ├── fd: (1)-->(3-5)
  ├── ordering: +1
@@ -979,10 +126,10 @@ column_names  row_count  distinct_count  null_count
 {i_price}     12         12              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{i_data}      12.00          1.00           12.00               1.00                0.00            1.00
-{i_id}        12.00          1.00           12.00               1.00                0.00            1.00
-{i_name}      12.00          1.00           12.00               1.00                0.00            1.00
-{i_price}     12.00          1.00           12.00               1.00                0.00            1.00
+{i_data}      10.00          1.20           10.00               1.20                0.00            1.00
+{i_id}        10.00          1.20           10.00               1.20                0.00            1.00
+{i_name}      10.00          1.20           10.00               1.20                0.00            1.00
+{i_price}     10.00          1.20           10.00               1.20                0.00            1.00
 
 save-tables format=hide-qual database=tpcc save-tables-prefix=new_order_04
 SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
@@ -993,8 +140,8 @@ ORDER BY s_i_id
 project
  ├── save-table-name: new_order_04_project_1
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
- ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(3)=4.86513081, null(3)=0, distinct(8)=5, null(8)=0, distinct(14)=0.993262137, null(14)=0, distinct(15)=0.993262137, null(15)=0, distinct(16)=0.993262137, null(16)=0, distinct(17)=5, null(17)=0]
- ├── cost: 6.32
+ ├── stats: [rows=4.92684983, distinct(1)=4.92684983, null(1)=0, distinct(3)=4.79586328, null(3)=0, distinct(8)=4.73618808, null(8)=0, distinct(14)=0.992750784, null(14)=0, distinct(15)=0.992750784, null(15)=0, distinct(16)=0.992750784, null(16)=0, distinct(17)=4.92658725, null(17)=0]
+ ├── cost: 6.22783078
  ├── key: (1)
  ├── fd: (1)-->(3,8,14-17)
  ├── ordering: +1
@@ -1004,8 +151,10 @@ project
       ├── save-table-name: new_order_04_scan_2
       ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(char) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar)
       ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
-      ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.86513081, null(3)=0, distinct(8)=5, null(8)=0, distinct(14)=0.993262137, null(14)=0, distinct(15)=0.993262137, null(15)=0, distinct(16)=0.993262137, null(16)=0, distinct(17)=5, null(17)=0]
-      ├── cost: 6.26
+      ├── stats: [rows=4.92684983, distinct(1)=4.92684983, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.79586328, null(3)=0, distinct(8)=4.73618808, null(8)=0, distinct(14)=0.992750784, null(14)=0, distinct(15)=0.992750784, null(15)=0, distinct(16)=0.992750784, null(16)=0, distinct(17)=4.92658725, null(17)=0]
+      │   histogram(2)=  0 4.9268
+      │                <---- 4 --
+      ├── cost: 6.16856228
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3,8,14-17)
       ├── ordering: +1 opt(2) [actual: +1]
@@ -1019,7 +168,7 @@ column_names    row_count  distinct_count  null_count
 {s_dist_05}     5          5               0
 {s_i_id}        5          5               0
 {s_order_cnt}   5          1               0
-{s_quantity}    5          5               0
+{s_quantity}    5          4               0
 {s_remote_cnt}  5          1               0
 {s_w_id}        5          1               0
 {s_ytd}         5          1               0
@@ -1029,7 +178,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {s_dist_05}     5.00           1.00           5.00                1.00                0.00            1.00
 {s_i_id}        5.00           1.00           5.00                1.00                0.00            1.00
 {s_order_cnt}   5.00           1.00           1.00                1.00                0.00            1.00
-{s_quantity}    5.00           1.00           5.00                1.00                0.00            1.00
+{s_quantity}    5.00           1.00           5.00                1.25                0.00            1.00
 {s_remote_cnt}  5.00           1.00           1.00                1.00                0.00            1.00
 {s_w_id}        5.00           1.00           1.00                1.00                0.00            1.00
 {s_ytd}         5.00           1.00           1.00                1.00                0.00            1.00
@@ -1046,14 +195,14 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 save-tables format=hide-qual database=tpcc save-tables-prefix=payment_01
 SELECT c_id
 FROM customer
-WHERE c_w_id = 1 AND c_d_id = 1 AND c_last = 'BARBARBAR'
+WHERE c_w_id = 1 AND c_d_id = 1 AND c_last = 'ANTIABLEABLE'
 ORDER BY c_first ASC
 ----
 project
  ├── save-table-name: payment_01_project_1
  ├── columns: c_id:1(int!null)  [hidden: c_first:4(varchar)]
- ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(4)=3, null(4)=0]
- ├── cost: 3.35
+ ├── stats: [rows=3.144, distinct(1)=3.14236903, null(1)=0, distinct(4)=3.1351757, null(4)=0]
+ ├── cost: 3.50984
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── ordering: +4
@@ -1061,9 +210,11 @@ project
  └── scan customer@customer_idx
       ├── save-table-name: payment_01_scan_2
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
-      ├── constraint: /3/2/6/4/1: [/1/1/'BARBARBAR' - /1/1/'BARBARBAR']
-      ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=3, null(4)=0, distinct(6)=1, null(6)=0]
-      ├── cost: 3.31
+      ├── constraint: /3/2/6/4/1: [/1/1/'ANTIABLEABLE' - /1/1/'ANTIABLEABLE']
+      ├── stats: [rows=3.144, distinct(1)=3.14236903, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=3.1351757, null(4)=0, distinct(6)=1, null(6)=0]
+      │   histogram(3)=  0 3.144
+      │                <---- 1 -
+      ├── cost: 3.4684
       ├── key: (1)
       ├── fd: ()-->(2,3,6), (1)-->(4)
       ├── ordering: +4 opt(2,3,6) [actual: +4]
@@ -1104,7 +255,7 @@ project
  ├── save-table-name: order_status_01_project_1
  ├── columns: c_balance:17(decimal) c_first:4(varchar) c_middle:5(char) c_last:6(varchar)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(4)=1, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.999501832, null(6)=0, distinct(17)=0.632121172, null(17)=0]
+ ├── stats: [rows=1, distinct(4)=0.999106141, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.999501832, null(6)=0, distinct(17)=0.632121172, null(17)=0]
  ├── cost: 1.31
  ├── key: ()
  ├── fd: ()-->(4-6,17)
@@ -1114,7 +265,9 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar) c_balance:17(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.999501832, null(6)=0, distinct(17)=0.632121172, null(17)=0]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=0.999106141, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.999501832, null(6)=0, distinct(17)=0.632121172, null(17)=0]
+      │   histogram(3)=  0  1
+      │                <--- 1
       ├── cost: 1.29
       ├── key: ()
       ├── fd: ()-->(1-6,17)
@@ -1144,14 +297,14 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 save-tables format=hide-qual database=tpcc save-tables-prefix=order_status_02
 SELECT c_id, c_balance, c_first, c_middle
 FROM customer
-WHERE c_w_id = 2 AND c_d_id = 2 AND c_last = 'PRESCALLYABLE'
+WHERE c_w_id = 2 AND c_d_id = 2 AND c_last = 'ANTIBARESE'
 ORDER BY c_first ASC
 ----
 project
  ├── save-table-name: order_status_02_project_1
  ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(varchar) c_middle:5(char)
- ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(4)=3, null(4)=0, distinct(5)=0.950213678, null(5)=0, distinct(17)=0.950213678, null(17)=0]
- ├── cost: 16.23
+ ├── stats: [rows=3.003, distinct(1)=3.00151201, null(1)=0, distinct(4)=2.99494877, null(4)=0, distinct(5)=0.950362815, null(5)=0, distinct(17)=0.950362815, null(17)=0]
+ ├── cost: 16.23003
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
@@ -1159,7 +312,9 @@ project
  └── index-join customer
       ├── save-table-name: order_status_02_index_join_2
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar!null) c_balance:17(decimal)
-      ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=3, null(4)=0, distinct(5)=0.950213678, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=0.950213678, null(17)=0]
+      ├── stats: [rows=3.003, distinct(1)=3.00151201, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.99494877, null(4)=0, distinct(5)=0.950362815, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=0.950362815, null(17)=0]
+      │   histogram(3)=  0 3.003
+      │                <---- 2 -
       ├── cost: 16.19
       ├── key: (1)
       ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
@@ -1168,8 +323,8 @@ project
       └── scan customer@customer_idx
            ├── save-table-name: order_status_02_scan_3
            ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
-           ├── constraint: /3/2/6/4/1: [/2/2/'PRESCALLYABLE' - /2/2/'PRESCALLYABLE']
-           ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=3, null(4)=0, distinct(6)=1, null(6)=0]
+           ├── constraint: /3/2/6/4/1: [/2/2/'ANTIBARESE' - /2/2/'ANTIBARESE']
+           ├── stats: [rows=3, distinct(1)=2.99851499, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.99196484, null(4)=0, distinct(6)=1, null(6)=0]
            ├── cost: 3.31
            ├── key: (1)
            ├── fd: ()-->(2,3,6), (1)-->(4)
@@ -1208,7 +363,7 @@ project
  ├── save-table-name: order_status_03_project_1
  ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(1)=0.999835018, null(1)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.951627328, null(6)=0.3]
+ ├── stats: [rows=1, distinct(1)=0.999847555, null(1)=0, distinct(5)=0.640354723, null(5)=0, distinct(6)=0.95892297, null(6)=0.3]
  ├── cost: 5.27
  ├── key: ()
  ├── fd: ()-->(1,5,6)
@@ -1217,22 +372,22 @@ project
       ├── save-table-name: order_status_03_index_join_2
       ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=0.999835018, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.951627328, null(6)=0.3]
+      ├── stats: [rows=1, distinct(1)=0.999847555, null(1)=0, distinct(2)=0.975105784, null(2)=0, distinct(3)=0.975105784, null(3)=0, distinct(4)=0.975105784, null(4)=0, distinct(5)=0.640354723, null(5)=0, distinct(6)=0.95892297, null(6)=0.3]
       ├── cost: 5.25
       ├── key: ()
       ├── fd: ()-->(1-6)
-      ├── interesting orderings: (+3,+2,-1) (+3,+2,+4,+1)
-      └── scan "order"@secondary,rev
+      ├── interesting orderings: (+3,+2,-1) (+3,+2,+4,-1)
+      └── scan "order"@order_idx
            ├── save-table-name: order_status_03_scan_3
            ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null)
-           ├── constraint: /3/2/4/1: [/4/3/10 - /4/3/10]
-           ├── limit: 1(rev)
-           ├── stats: [rows=1, distinct(1)=0.999835018, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0]
+           ├── constraint: /3/2/4/-1: [/4/3/10 - /4/3/10]
+           ├── limit: 1
+           ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0]
            ├── cost: 1.09
            ├── key: ()
            ├── fd: ()-->(1-4)
            ├── prune: (1-4)
-           └── interesting orderings: (+3,+2,-1) (+3,+2,+4,+1)
+           └── interesting orderings: (+3,+2,-1) (+3,+2,+4,-1)
 
 stats table=order_status_03_index_join_2
 ----
@@ -1260,19 +415,21 @@ WHERE ol_w_id = 1 AND ol_d_id = 1 AND ol_o_id = 1000
 project
  ├── save-table-name: order_status_04_project_1
  ├── columns: ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_quantity:8(int) ol_amount:9(decimal) ol_delivery_d:7(timestamp)
- ├── stats: [rows=10, distinct(5)=9.99951668, null(5)=0, distinct(6)=6.32121172, null(6)=0, distinct(7)=0.999954601, null(7)=3, distinct(8)=0.999954601, null(8)=0, distinct(9)=9.99993241, null(9)=0]
- ├── cost: 11.92
+ ├── stats: [rows=9.86730225, distinct(5)=9.86682999, null(5)=0, distinct(6)=6.27206953, null(6)=0, distinct(7)=1.98559978, null(7)=2.95613818, distinct(8)=0.999948158, null(8)=0, distinct(9)=9.8672358, null(9)=0]
+ ├── cost: 11.7620897
  ├── prune: (5-9)
- ├── interesting orderings: (+6)
+ ├── interesting orderings: (+6,+5)
  └── scan order_line
       ├── save-table-name: order_status_04_scan_2
       ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/1/1/1000 - /1/1/1000]
-      ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=9.99951668, null(5)=0, distinct(6)=6.32121172, null(6)=0, distinct(7)=0.999954601, null(7)=3, distinct(8)=0.999954601, null(8)=0, distinct(9)=9.99993241, null(9)=0]
-      ├── cost: 11.81
+      ├── stats: [rows=9.86730225, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=9.86682999, null(5)=0, distinct(6)=6.27206953, null(6)=0, distinct(7)=1.98559978, null(7)=2.95613818, distinct(8)=0.999948158, null(8)=0, distinct(9)=9.8672358, null(9)=0]
+      │   histogram(3)=  0 9.8673
+      │                <---- 1 --
+      ├── cost: 11.6534167
       ├── fd: ()-->(1-3)
       ├── prune: (1-3,5-9)
-      └── interesting orderings: (+3,+2,-1) (+6,+2,+3,+1)
+      └── interesting orderings: (+3,+2,-1) (+6,+5,+3,+2,+1)
 
 stats table=order_status_04_scan_2
 ----
@@ -1289,7 +446,7 @@ column_names      row_count  distinct_count  null_count
 column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {ol_amount}       10.00          1.20           10.00               10.00 <==           0.00            1.00
 {ol_d_id}         10.00          1.20           1.00                1.00                0.00            1.00
-{ol_delivery_d}   10.00          1.20           1.00                1.00                3.00            +Inf <==
+{ol_delivery_d}   10.00          1.20           2.00                2.00 <==            3.00            +Inf <==
 {ol_i_id}         10.00          1.20           10.00               1.20                0.00            1.00
 {ol_o_id}         10.00          1.20           1.00                1.00                0.00            1.00
 {ol_quantity}     10.00          1.20           1.00                1.00                0.00            1.00
@@ -1323,22 +480,22 @@ project
  ├── save-table-name: delivery_01_project_1
  ├── columns: no_o_id:1(int!null)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(1)=0.99967919, null(1)=0]
+ ├── stats: [rows=1, distinct(1)=0.999680612, null(1)=0]
  ├── cost: 1.09
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
- └── scan new_order,rev
+ └── scan new_order
       ├── save-table-name: delivery_01_scan_2
       ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
-      ├── constraint: /3/2/-1: [/7/6 - /7/6]
-      ├── limit: 1(rev)
-      ├── stats: [rows=1, distinct(1)=0.99967919, null(1)=0, distinct(2)=0.632325031, null(2)=0, distinct(3)=0.632325031, null(3)=0]
+      ├── constraint: /3/2/1: [/7/6 - /7/6]
+      ├── limit: 1
+      ├── stats: [rows=1, distinct(1)=0.999680612, null(1)=0, distinct(2)=0.632331794, null(2)=0, distinct(3)=0.632331794, null(3)=0]
       ├── cost: 1.07
       ├── key: ()
       ├── fd: ()-->(1-3)
       ├── prune: (1-3)
-      └── interesting orderings: (+3,+2,-1)
+      └── interesting orderings: (+3,+2,+1)
 
 stats table=delivery_01_scan_2
 ----
@@ -1362,7 +519,7 @@ scalar-group-by
  ├── columns: sum:11(decimal)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(11)=1, null(11)=0]
- ├── cost: 11.53
+ ├── cost: 11.4579629
  ├── key: ()
  ├── fd: ()-->(11)
  ├── prune: (11)
@@ -1370,8 +527,10 @@ scalar-group-by
  │    ├── save-table-name: delivery_02_scan_2
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_amount:9(decimal)
  │    ├── constraint: /3/2/-1/4: [/8/6/1000 - /8/6/1000]
- │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(9)=9.99993241, null(9)=0]
- │    ├── cost: 11.41
+ │    ├── stats: [rows=9.93735903, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(9)=9.93729163, null(9)=0]
+ │    │   histogram(3)=  0 9.9374
+ │    │                <---- 8 --
+ │    ├── cost: 11.3385893
  │    ├── fd: ()-->(1-3)
  │    ├── prune: (1-3,9)
  │    └── interesting orderings: (+3,+2,-1)
@@ -1429,6 +588,8 @@ project
       ├── constraint: /2/1: [/4/9 - /4/9]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(11)=0.633967659, null(11)=0]
+      │   histogram(2)=  0  1
+      │                <--- 4
       ├── cost: 1.15
       ├── key: ()
       ├── fd: ()-->(1,2,11)
@@ -1462,7 +623,7 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(28)=1, null(28)=0]
- ├── cost: 1545.11
+ ├── cost: 1525.03677
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
@@ -1470,16 +631,18 @@ scalar-group-by
  │    ├── save-table-name: stock_level_02_lookup_join_2
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
- │    ├── stats: [rows=231.860988, distinct(1)=19.9998154, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=199.806787, null(5)=0, distinct(11)=199.806787, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=30.318805, null(13)=0]
- │    ├── cost: 1542.77139
+ │    ├── stats: [rows=228.976728, distinct(1)=19.9997868, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=197.157254, null(5)=0, distinct(11)=197.157254, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=30.3173557, null(13)=0]
+ │    ├── cost: 1522.72701
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line
  │    │    ├── save-table-name: stock_level_02_scan_3
  │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null)
  │    │    ├── constraint: /3/2/-1/4: [/1/1/999 - /1/1/980]
- │    │    ├── stats: [rows=200, distinct(1)=20, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=199.806787, null(5)=0]
- │    │    ├── cost: 228.01
+ │    │    ├── stats: [rows=197.346045, distinct(1)=20, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=197.157254, null(5)=0]
+ │    │    │   histogram(3)=  0 197.35
+ │    │    │                <---- 1 --
+ │    │    ├── cost: 224.984491
  │    │    ├── fd: ()-->(2,3)
  │    │    ├── prune: (5)
  │    │    └── interesting orderings: (+3,+2,-1)
@@ -1499,35 +662,35 @@ stats table=stock_level_02_scan_3
 ----
 column_names  row_count  distinct_count  null_count
 {ol_d_id}     193        1               0
-{ol_i_id}     193        191             0
+{ol_i_id}     193        193             0
 {ol_o_id}     193        20              0
 {ol_w_id}     193        1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ol_d_id}     200.00         1.04           1.00                1.00                0.00            1.00
-{ol_i_id}     200.00         1.04           200.00              1.05                0.00            1.00
-{ol_o_id}     200.00         1.04           20.00               1.00                0.00            1.00
-{ol_w_id}     200.00         1.04           1.00                1.00                0.00            1.00
+{ol_d_id}     197.00         1.02           1.00                1.00                0.00            1.00
+{ol_i_id}     197.00         1.02           197.00              1.02                0.00            1.00
+{ol_o_id}     197.00         1.02           20.00               1.00                0.00            1.00
+{ol_w_id}     197.00         1.02           1.00                1.00                0.00            1.00
 
 stats table=stock_level_02_lookup_join_2
 ----
 column_names  row_count  distinct_count  null_count
-{ol_d_id}     6          1               0
-{ol_i_id}     6          6               0
-{ol_o_id}     6          6               0
-{ol_w_id}     6          1               0
-{s_i_id}      6          6               0
-{s_quantity}  6          3               0
-{s_w_id}      6          1               0
+{ol_d_id}     15         1               0
+{ol_i_id}     15         15              0
+{ol_o_id}     15         11              0
+{ol_w_id}     15         1               0
+{s_i_id}      15         15              0
+{s_quantity}  15         5               0
+{s_w_id}      15         1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ol_d_id}     232.00         38.67 <==      1.00                1.00                0.00            1.00
-{ol_i_id}     232.00         38.67 <==      200.00              33.33 <==           0.00            1.00
-{ol_o_id}     232.00         38.67 <==      20.00               3.33 <==            0.00            1.00
-{ol_w_id}     232.00         38.67 <==      1.00                1.00                0.00            1.00
-{s_i_id}      232.00         38.67 <==      200.00              33.33 <==           0.00            1.00
-{s_quantity}  232.00         38.67 <==      30.00               10.00 <==           0.00            1.00
-{s_w_id}      232.00         38.67 <==      1.00                1.00                0.00            1.00
+{ol_d_id}     229.00         15.27 <==      1.00                1.00                0.00            1.00
+{ol_i_id}     229.00         15.27 <==      197.00              13.13 <==           0.00            1.00
+{ol_o_id}     229.00         15.27 <==      20.00               1.82                0.00            1.00
+{ol_w_id}     229.00         15.27 <==      1.00                1.00                0.00            1.00
+{s_i_id}      229.00         15.27 <==      197.00              13.13 <==           0.00            1.00
+{s_quantity}  229.00         15.27 <==      30.00               6.00 <==            0.00            1.00
+{s_w_id}      229.00         15.27 <==      1.00                1.00                0.00            1.00
 
 stats table=stock_level_02_scalar_group_by_1
 ----
@@ -1577,6 +740,8 @@ scalar-group-by
  │    │    ├── save-table-name: consistency_01_scan_3
  │    │    ├── columns: w_id:1(int!null) w_ytd:9(decimal)
  │    │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(9)=1, null(9)=0]
+ │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1
+ │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
  │    │    ├── cost: 11.12
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
@@ -1598,6 +763,8 @@ scalar-group-by
  │    │    │    ├── save-table-name: consistency_01_scan_5
  │    │    │    ├── columns: d_w_id:11(int!null) d_ytd:19(decimal)
  │    │    │    ├── stats: [rows=100, distinct(11)=10, null(11)=0, distinct(19)=1, null(19)=0]
+ │    │    │    │   histogram(11)=  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10
+ │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
  │    │    │    ├── cost: 113.02
  │    │    │    ├── ordering: +11
  │    │    │    ├── prune: (11,19)
@@ -1653,6 +820,8 @@ scan district
  ├── save-table-name: consistency_02_scan_1
  ├── columns: d_next_o_id:11(int)  [hidden: d_id:1(int!null) d_w_id:2(int!null)]
  ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0, distinct(11)=1, null(11)=0]
+ │   histogram(2)=  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10
+ │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
  ├── cost: 114.02
  ├── key: (1,2)
  ├── fd: (1,2)-->(11)
@@ -1681,11 +850,13 @@ group-by
  │    ├── save-table-name: consistency_03_scan_2
  │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
  │    ├── stats: [rows=90000, distinct(1)=900, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │   histogram(3)=  0 9117 0 9090 0 9000 0 8973 0 9000 0 9495 0 8991 0 8712 0 8514 0 9108
+ │    │                <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
  │    ├── cost: 95400.02
  │    ├── key: (1-3)
  │    ├── ordering: +3,+2
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+3,+2,-1)
+ │    └── interesting orderings: (+3,+2,+1)
  └── aggregations
       └── max [type=int, outer=(1)]
            └── variable: no_o_id [type=int]
@@ -1722,7 +893,9 @@ group-by
  ├── scan "order"@order_idx
  │    ├── save-table-name: consistency_04_scan_2
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
- │    ├── stats: [rows=300000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │   histogram(3)=  0 29790 0 30420 0 30150 0 30150 0 30840 0 29430 0 30960 0 29640 0 29070 0 29550
+ │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
  │    ├── cost: 321000.02
  │    ├── key: (1-3)
  │    ├── ordering: +3,+2
@@ -1786,11 +959,13 @@ scalar-group-by
  │    │    │    ├── save-table-name: consistency_05_scan_4
  │    │    │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
  │    │    │    ├── stats: [rows=90000, distinct(1)=900, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │    │    │   histogram(3)=  0 9117 0 9090 0 9000 0 8973 0 9000 0 9495 0 8991 0 8712 0 8514 0 9108
+ │    │    │    │                <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
  │    │    │    ├── cost: 95400.02
  │    │    │    ├── key: (1-3)
  │    │    │    ├── ordering: +3,+2
  │    │    │    ├── prune: (1-3)
- │    │    │    └── interesting orderings: (+3,+2,-1)
+ │    │    │    └── interesting orderings: (+3,+2,+1)
  │    │    └── aggregations
  │    │         ├── max [type=int, outer=(1)]
  │    │         │    └── variable: no_o_id [type=int]
@@ -1869,6 +1044,8 @@ group-by
  │    ├── save-table-name: consistency_06_scan_2
  │    ├── columns: o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
  │    ├── stats: [rows=300000, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │   histogram(3)=  0 29790 0 30420 0 30150 0 30150 0 30840 0 29430 0 30960 0 29640 0 29070 0 29550
+ │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
  │    ├── cost: 333000.02
  │    ├── ordering: +3,+2
  │    ├── prune: (2,3,7)
@@ -1899,7 +1076,7 @@ sort
  ├── save-table-name: consistency_07_sort_1
  ├── columns: count:11(int)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
  ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=100, null(11)=0, distinct(2,3)=100, null(2,3)=0]
- ├── cost: 3330017.09
+ ├── cost: 3361385.73
  ├── key: (2,3)
  ├── fd: (2,3)-->(11)
  ├── ordering: +3,+2
@@ -1910,16 +1087,18 @@ sort
       ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
       ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
       ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=100, null(11)=0, distinct(2,3)=100, null(2,3)=0]
-      ├── cost: 3330001.03
+      ├── cost: 3361369.67
       ├── key: (2,3)
       ├── fd: (2,3)-->(11)
       ├── prune: (11)
       ├── interesting orderings: (+3,+2)
-      ├── scan order_line@order_line_fk
+      ├── scan order_line@order_line_stock_fk_idx
       │    ├── save-table-name: consistency_07_scan_3
       │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
-      │    ├── stats: [rows=3000000, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
-      │    ├── cost: 3210000.02
+      │    ├── stats: [rows=3001222, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+      │    │   histogram(3)=  0 2.9352e+05 0 2.9592e+05 0 3.0402e+05 0 3.0672e+05 0 2.9592e+05 0 2.9082e+05 0 3.0702e+05 0 2.8992e+05 0 2.9802e+05 0 3.1933e+05
+      │    │                <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+      │    ├── cost: 3241319.78
       │    ├── prune: (2,3)
       │    └── interesting orderings: (+3,+2)
       └── aggregations
@@ -1948,41 +1127,45 @@ except-all
  ├── left columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
  ├── right columns: o_w_id:6(int) o_d_id:5(int) o_id:4(int)
  ├── stats: [rows=90000, distinct(1)=900, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
- ├── cost: 424680.07
+ ├── cost: 436631.475
  ├── scan new_order
  │    ├── save-table-name: consistency_08_scan_2
  │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
  │    ├── stats: [rows=90000, distinct(1)=900, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ │    │   histogram(3)=  0 9117 0 9090 0 9000 0 8973 0 9000 0 9495 0 8991 0 8712 0 8514 0 9108
+ │    │                <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
  │    ├── cost: 95400.02
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+3,+2,-1)
+ │    └── interesting orderings: (+3,+2,+1)
  └── project
       ├── save-table-name: consistency_08_project_3
       ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null)
-      ├── stats: [rows=24000, distinct(4)=2999.92032, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0]
-      ├── cost: 327240.04
+      ├── stats: [rows=21570.2479, distinct(4)=2998.78307, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0]
+      ├── cost: 339215.742
       ├── key: (4-6)
       ├── prune: (4-6)
       ├── interesting orderings: (+6,+5,-4)
       └── select
            ├── save-table-name: consistency_08_select_4
            ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
-           ├── stats: [rows=24000, distinct(4)=2999.92032, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=1, null(9)=24000]
-           ├── cost: 327000.03
+           ├── stats: [rows=21570.2479, distinct(4)=2998.78307, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=1, null(9)=21570.2479]
+           ├── cost: 339000.03
            ├── key: (4-6)
            ├── fd: ()-->(9)
            ├── prune: (4-6)
-           ├── interesting orderings: (+6,+5,-4) (+6,+5,+9,+4)
-           ├── scan "order"@order_idx
+           ├── interesting orderings: (+6,+5,-4)
+           ├── scan "order"
            │    ├── save-table-name: consistency_08_scan_5
            │    ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
-           │    ├── stats: [rows=300000, distinct(4)=3000, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=10, null(9)=90000]
-           │    ├── cost: 324000.02
+           │    ├── stats: [rows=300000, distinct(4)=2999, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=11, null(9)=90000]
+           │    │   histogram(6)=  0 29790 0 30420 0 30150 0 30150 0 30840 0 29430 0 30960 0 29640 0 29070 0 29550
+           │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
+           │    ├── cost: 336000.02
            │    ├── key: (4-6)
            │    ├── fd: (4-6)-->(9)
            │    ├── prune: (4-6,9)
-           │    └── interesting orderings: (+6,+5,-4) (+6,+5,+9,+4)
+           │    └── interesting orderings: (+6,+5,-4)
            └── filters
                 └── is [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight), fd=()-->(9)]
                      ├── variable: o_carrier_id [type=int]
@@ -1991,16 +1174,16 @@ except-all
 stats table=consistency_08_select_4
 ----
 column_names    row_count  distinct_count  null_count
-{o_carrier_id}  90000      0               90000
+{o_carrier_id}  90000      1               90000
 {o_d_id}        90000      10              0
 {o_id}          90000      900             0
 {o_w_id}        90000      10              0
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_carrier_id}  24000.00       3.75 <==       1.00                +Inf <==            24000.00        3.75 <==
-{o_d_id}        24000.00       3.75 <==       10.00               1.00                0.00            1.00
-{o_id}          24000.00       3.75 <==       3000.00             3.33 <==            0.00            1.00
-{o_w_id}        24000.00       3.75 <==       10.00               1.00                0.00            1.00
+{o_carrier_id}  21570.00       4.17 <==       1.00                1.00                21570.00        4.17 <==
+{o_d_id}        21570.00       4.17 <==       10.00               1.00                0.00            1.00
+{o_id}          21570.00       4.17 <==       2999.00             3.33 <==            0.00            1.00
+{o_w_id}        21570.00       4.17 <==       10.00               1.00                0.00            1.00
 
 stats table=consistency_08_except_all_1
 ----
@@ -2024,34 +1207,36 @@ except-all
  ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
  ├── right columns: no_w_id:11(int) no_d_id:10(int) no_o_id:9(int)
- ├── stats: [rows=24000, distinct(1)=2999.92032, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
- ├── cost: 424020.07
+ ├── stats: [rows=21570.2479, distinct(1)=2998.78307, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ ├── cost: 435947.177
  ├── project
  │    ├── save-table-name: consistency_09_project_2
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
- │    ├── stats: [rows=24000, distinct(1)=2999.92032, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
- │    ├── cost: 327240.04
+ │    ├── stats: [rows=21570.2479, distinct(1)=2998.78307, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ │    ├── cost: 339215.742
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    └── select
  │         ├── save-table-name: consistency_09_select_3
  │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │         ├── stats: [rows=24000, distinct(1)=2999.92032, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=24000]
- │         ├── cost: 327000.03
+ │         ├── stats: [rows=21570.2479, distinct(1)=2998.78307, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=21570.2479]
+ │         ├── cost: 339000.03
  │         ├── key: (1-3)
  │         ├── fd: ()-->(6)
  │         ├── prune: (1-3)
- │         ├── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
- │         ├── scan "order"@order_idx
+ │         ├── interesting orderings: (+3,+2,-1)
+ │         ├── scan "order"
  │         │    ├── save-table-name: consistency_09_scan_4
  │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │         │    ├── stats: [rows=300000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=10, null(6)=90000]
- │         │    ├── cost: 324000.02
+ │         │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=11, null(6)=90000]
+ │         │    │   histogram(3)=  0 29790 0 30420 0 30150 0 30150 0 30840 0 29430 0 30960 0 29640 0 29070 0 29550
+ │         │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
+ │         │    ├── cost: 336000.02
  │         │    ├── key: (1-3)
  │         │    ├── fd: (1-3)-->(6)
  │         │    ├── prune: (1-3,6)
- │         │    └── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
+ │         │    └── interesting orderings: (+3,+2,-1)
  │         └── filters
  │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
  │                   ├── variable: o_carrier_id [type=int]
@@ -2060,10 +1245,12 @@ except-all
       ├── save-table-name: consistency_09_scan_5
       ├── columns: no_o_id:9(int!null) no_d_id:10(int!null) no_w_id:11(int!null)
       ├── stats: [rows=90000, distinct(9)=900, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
+      │   histogram(11)=  0 9117 0 9090 0 9000 0 8973 0 9000 0 9495 0 8991 0 8712 0 8514 0 9108
+      │                 <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
       ├── cost: 95400.02
       ├── key: (9-11)
       ├── prune: (9-11)
-      └── interesting orderings: (+11,+10,-9)
+      └── interesting orderings: (+11,+10,+9)
 
 stats table=consistency_09_except_all_1
 ----
@@ -2073,9 +1260,9 @@ column_names  row_count  distinct_count  null_count
 {o_w_id}      0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_d_id}      24000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
-{o_id}        24000.00       +Inf <==       3000.00             +Inf <==            0.00            1.00
-{o_w_id}      24000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+{o_d_id}      21570.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+{o_id}        21570.00       +Inf <==       2999.00             +Inf <==            0.00            1.00
+{o_w_id}      21570.00       +Inf <==       10.00               +Inf <==            0.00            1.00
 
 save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_10
 (
@@ -2096,12 +1283,14 @@ except-all
  ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
  ├── right columns: ol_w_id:11(int) ol_d_id:10(int) ol_o_id:9(int) count_rows:19(int)
- ├── stats: [rows=300000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0]
- ├── cost: 3738000.06
+ ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0]
+ ├── cost: 3769391.14
  ├── scan "order"
  │    ├── save-table-name: consistency_10_scan_2
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
- │    ├── stats: [rows=300000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0]
+ │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0]
+ │    │   histogram(3)=  0 29790 0 30420 0 30150 0 30150 0 30840 0 29430 0 30960 0 29640 0 29070 0 29550
+ │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
  │    ├── cost: 336000.02
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(7)
@@ -2111,17 +1300,19 @@ except-all
       ├── save-table-name: consistency_10_group_by_3
       ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int)
       ├── grouping columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
-      ├── stats: [rows=300000, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(19)=300000, null(19)=0, distinct(9-11)=300000, null(9-11)=0]
-      ├── cost: 3393000.03
+      ├── stats: [rows=299900, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(19)=299900, null(19)=0, distinct(9-11)=299900, null(9-11)=0]
+      ├── cost: 3424392.11
       ├── key: (9-11)
       ├── fd: (9-11)-->(19)
       ├── prune: (19)
       ├── interesting orderings: (+11,+10,-9)
-      ├── scan order_line@order_line_fk
+      ├── scan order_line@order_line_stock_fk_idx
       │    ├── save-table-name: consistency_10_scan_4
       │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
-      │    ├── stats: [rows=3000000, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(9-11)=300000, null(9-11)=0]
-      │    ├── cost: 3240000.02
+      │    ├── stats: [rows=3001222, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(9-11)=299900, null(9-11)=0]
+      │    │   histogram(11)=  0 2.9352e+05 0 2.9592e+05 0 3.0402e+05 0 3.0672e+05 0 2.9592e+05 0 2.9082e+05 0 3.0702e+05 0 2.8992e+05 0 2.9802e+05 0 3.1933e+05
+      │    │                 <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+      │    ├── cost: 3271332
       │    ├── prune: (9-11)
       │    └── interesting orderings: (+11,+10,-9)
       └── aggregations
@@ -2136,10 +1327,10 @@ column_names  row_count  distinct_count  null_count
 {ol_w_id}     300000     10              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count_rows}  300000.00      1.00           300000.00           27272.73 <==        0.00            1.00
-{ol_d_id}     300000.00      1.00           10.00               1.00                0.00            1.00
-{ol_o_id}     300000.00      1.00           3000.00             1.00                0.00            1.00
-{ol_w_id}     300000.00      1.00           10.00               1.00                0.00            1.00
+{count_rows}  299900.00      1.00           299900.00           27263.64 <==        0.00            1.00
+{ol_d_id}     299900.00      1.00           10.00               1.00                0.00            1.00
+{ol_o_id}     299900.00      1.00           2999.00             1.00                0.00            1.00
+{ol_w_id}     299900.00      1.00           10.00               1.00                0.00            1.00
 
 stats table=consistency_10_except_all_1
 ----
@@ -2151,7 +1342,7 @@ column_names  row_count  distinct_count  null_count
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {o_d_id}      300000.00      +Inf <==       10.00               +Inf <==            0.00            1.00
-{o_id}        300000.00      +Inf <==       3000.00             +Inf <==            0.00            1.00
+{o_id}        300000.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
 {o_ol_cnt}    300000.00      +Inf <==       11.00               +Inf <==            0.00            1.00
 {o_w_id}      300000.00      +Inf <==       10.00               +Inf <==            0.00            1.00
 
@@ -2174,23 +1365,25 @@ except-all
  ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count:11(int)
  ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:11(int)
  ├── right columns: o_w_id:14(int) o_d_id:13(int) o_id:12(int) o_ol_cnt:18(int)
- ├── stats: [rows=300000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=300000, null(11)=0]
- ├── cost: 3738000.06
+ ├── stats: [rows=299900, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=299900, null(11)=0]
+ ├── cost: 3769390.14
  ├── group-by
  │    ├── save-table-name: consistency_11_group_by_2
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
  │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
- │    ├── stats: [rows=300000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=300000, null(11)=0, distinct(1-3)=300000, null(1-3)=0]
- │    ├── cost: 3393000.03
+ │    ├── stats: [rows=299900, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=299900, null(11)=0, distinct(1-3)=299900, null(1-3)=0]
+ │    ├── cost: 3424392.11
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(11)
  │    ├── prune: (11)
  │    ├── interesting orderings: (+3,+2,-1)
- │    ├── scan order_line@order_line_fk
+ │    ├── scan order_line@order_line_stock_fk_idx
  │    │    ├── save-table-name: consistency_11_scan_3
  │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
- │    │    ├── stats: [rows=3000000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(1-3)=300000, null(1-3)=0]
- │    │    ├── cost: 3240000.02
+ │    │    ├── stats: [rows=3001222, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(1-3)=299900, null(1-3)=0]
+ │    │    │   histogram(3)=  0 2.9352e+05 0 2.9592e+05 0 3.0402e+05 0 3.0672e+05 0 2.9592e+05 0 2.9082e+05 0 3.0702e+05 0 2.8992e+05 0 2.9802e+05 0 3.1933e+05
+ │    │    │                <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+ │    │    ├── cost: 3271332
  │    │    ├── prune: (1-3)
  │    │    └── interesting orderings: (+3,+2,-1)
  │    └── aggregations
@@ -2198,7 +1391,9 @@ except-all
  └── scan "order"
       ├── save-table-name: consistency_11_scan_4
       ├── columns: o_id:12(int!null) o_d_id:13(int!null) o_w_id:14(int!null) o_ol_cnt:18(int)
-      ├── stats: [rows=300000, distinct(12)=3000, null(12)=0, distinct(13)=10, null(13)=0, distinct(14)=10, null(14)=0, distinct(18)=11, null(18)=0]
+      ├── stats: [rows=300000, distinct(12)=2999, null(12)=0, distinct(13)=10, null(13)=0, distinct(14)=10, null(14)=0, distinct(18)=11, null(18)=0]
+      │   histogram(14)=  0 29790 0 30420 0 30150 0 30150 0 30840 0 29430 0 30960 0 29640 0 29070 0 29550
+      │                 <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
       ├── cost: 336000.02
       ├── key: (12-14)
       ├── fd: (12-14)-->(18)
@@ -2214,12 +1409,12 @@ column_names  row_count  distinct_count  null_count
 {ol_w_id}     0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count}       300000.00      +Inf <==       300000.00           +Inf <==            0.00            1.00
-{ol_d_id}     300000.00      +Inf <==       10.00               +Inf <==            0.00            1.00
-{ol_o_id}     300000.00      +Inf <==       3000.00             +Inf <==            0.00            1.00
-{ol_w_id}     300000.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+{count}       299900.00      +Inf <==       299900.00           +Inf <==            0.00            1.00
+{ol_d_id}     299900.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+{ol_o_id}     299900.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
+{ol_w_id}     299900.00      +Inf <==       10.00               +Inf <==            0.00            1.00
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_12
+save-tables database=tpcc save-tables-prefix=consistency_12
 SELECT count(*)
 FROM
 (
@@ -2241,129 +1436,97 @@ scalar-group-by
  ├── columns: count:19(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(19)=1, null(19)=0]
- ├── cost: 3915160.12
  ├── key: ()
  ├── fd: ()-->(19)
- ├── prune: (19)
  ├── select
  │    ├── save-table-name: consistency_12_select_2
  │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
- │    ├── stats: [rows=1000000, distinct(1)=2999.92032, null(1)=920000, distinct(2)=10, null(2)=920000, distinct(3)=10, null(3)=920000, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
- │    ├── cost: 3905160.1
- │    ├── interesting orderings: (+11,+10,-9) (+3,+2,-1)
- │    ├── full-join (hash)
- │    │    ├── save-table-name: consistency_12_full_join_3
+ │    ├── stats: [rows=500203.667, distinct(1)=2998.78307, null(1)=464226.617, distinct(2)=10, null(2)=464226.617, distinct(3)=10, null(3)=464226.617, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
+ │    ├── full-join (merge)
+ │    │    ├── save-table-name: consistency_12_merge_join_3
  │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
- │    │    ├── stats: [rows=3000000, distinct(1)=2999.92032, null(1)=2760000, distinct(2)=10, null(2)=2760000, distinct(3)=10, null(3)=2760000, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
- │    │    ├── cost: 3875160.09
- │    │    ├── reject-nulls: (1-3,9-11)
- │    │    ├── interesting orderings: (+11,+10,-9) (+3,+2,-1)
+ │    │    ├── left ordering: +3,+2,-1
+ │    │    ├── right ordering: +11,+10,-9
+ │    │    ├── stats: [rows=1500611, distinct(1)=2998.78307, null(1)=1392679.85, distinct(2)=10, null(2)=1392679.85, distinct(3)=10, null(3)=1392679.85, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
  │    │    ├── project
  │    │    │    ├── save-table-name: consistency_12_project_4
- │    │    │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
- │    │    │    ├── stats: [rows=3000000, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
- │    │    │    ├── cost: 3480000.04
- │    │    │    ├── prune: (9-11)
- │    │    │    ├── interesting orderings: (+11,+10,-9)
+ │    │    │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
+ │    │    │    ├── stats: [rows=21570.2479, distinct(1)=2998.78307, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ │    │    │    ├── key: (1-3)
+ │    │    │    ├── ordering: +3,+2,-1
  │    │    │    └── select
  │    │    │         ├── save-table-name: consistency_12_select_5
- │    │    │         ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
- │    │    │         ├── stats: [rows=3000000, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=1, null(15)=900000]
- │    │    │         ├── cost: 3450000.03
- │    │    │         ├── fd: ()-->(15)
- │    │    │         ├── prune: (9-11)
- │    │    │         ├── interesting orderings: (+11,+10,-9)
- │    │    │         ├── scan order_line
- │    │    │         │    ├── save-table-name: consistency_12_scan_6
- │    │    │         │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
- │    │    │         │    ├── stats: [rows=3000000, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=1, null(15)=900000]
- │    │    │         │    ├── cost: 3420000.02
- │    │    │         │    ├── prune: (9-11,15)
- │    │    │         │    └── interesting orderings: (+11,+10,-9)
- │    │    │         └── filters
- │    │    │              └── is [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
- │    │    │                   ├── variable: ol_delivery_d [type=timestamp]
- │    │    │                   └── null [type=unknown]
- │    │    ├── project
- │    │    │    ├── save-table-name: consistency_12_project_7
- │    │    │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
- │    │    │    ├── stats: [rows=24000, distinct(1)=2999.92032, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
- │    │    │    ├── cost: 327240.04
- │    │    │    ├── key: (1-3)
- │    │    │    ├── prune: (1-3)
- │    │    │    ├── interesting orderings: (+3,+2,-1)
- │    │    │    └── select
- │    │    │         ├── save-table-name: consistency_12_select_8
  │    │    │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │    │    │         ├── stats: [rows=24000, distinct(1)=2999.92032, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=24000]
- │    │    │         ├── cost: 327000.03
+ │    │    │         ├── stats: [rows=21570.2479, distinct(1)=2998.78307, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=21570.2479]
  │    │    │         ├── key: (1-3)
  │    │    │         ├── fd: ()-->(6)
- │    │    │         ├── prune: (1-3)
- │    │    │         ├── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
- │    │    │         ├── scan "order"@order_idx
- │    │    │         │    ├── save-table-name: consistency_12_scan_9
+ │    │    │         ├── ordering: +3,+2,-1 opt(6) [actual: +3,+2,-1]
+ │    │    │         ├── scan "order"
+ │    │    │         │    ├── save-table-name: consistency_12_scan_6
  │    │    │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │    │    │         │    ├── stats: [rows=300000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=10, null(6)=90000]
- │    │    │         │    ├── cost: 324000.02
+ │    │    │         │    ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=11, null(6)=90000]
+ │    │    │         │    │   histogram(3)=  0 29790 0 30420 0 30150 0 30150 0 30840 0 29430 0 30960 0 29640 0 29070 0 29550
+ │    │    │         │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
  │    │    │         │    ├── key: (1-3)
  │    │    │         │    ├── fd: (1-3)-->(6)
- │    │    │         │    ├── prune: (1-3,6)
- │    │    │         │    └── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
+ │    │    │         │    └── ordering: +3,+2,-1 opt(6) [actual: +3,+2,-1]
  │    │    │         └── filters
- │    │    │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
- │    │    │                   ├── variable: o_carrier_id [type=int]
- │    │    │                   └── null [type=unknown]
- │    │    └── filters
- │    │         ├── eq [type=bool, outer=(3,11), constraints=(/3: (/NULL - ]; /11: (/NULL - ]), fd=(3)==(11), (11)==(3)]
- │    │         │    ├── variable: ol_w_id [type=int]
- │    │         │    └── variable: o_w_id [type=int]
- │    │         ├── eq [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
- │    │         │    ├── variable: ol_d_id [type=int]
- │    │         │    └── variable: o_d_id [type=int]
- │    │         └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
- │    │              ├── variable: ol_o_id [type=int]
- │    │              └── variable: o_id [type=int]
+ │    │    │              └── o_carrier_id IS NULL [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ │    │    ├── project
+ │    │    │    ├── save-table-name: consistency_12_project_7
+ │    │    │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
+ │    │    │    ├── stats: [rows=1500611, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
+ │    │    │    ├── ordering: +11,+10,-9
+ │    │    │    └── select
+ │    │    │         ├── save-table-name: consistency_12_select_8
+ │    │    │         ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
+ │    │    │         ├── stats: [rows=1500611, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=1, null(15)=899134]
+ │    │    │         ├── fd: ()-->(15)
+ │    │    │         ├── ordering: +11,+10,-9 opt(15) [actual: +11,+10,-9]
+ │    │    │         ├── scan order_line
+ │    │    │         │    ├── save-table-name: consistency_12_scan_9
+ │    │    │         │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
+ │    │    │         │    ├── stats: [rows=3001222, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=2, null(15)=899134]
+ │    │    │         │    │   histogram(11)=  0 2.9352e+05 0 2.9592e+05 0 3.0402e+05 0 3.0672e+05 0 2.9592e+05 0 2.9082e+05 0 3.0702e+05 0 2.8992e+05 0 2.9802e+05 0 3.1933e+05
+ │    │    │         │    │                 <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+ │    │    │         │    └── ordering: +11,+10,-9 opt(15) [actual: +11,+10,-9]
+ │    │    │         └── filters
+ │    │    │              └── ol_delivery_d IS NULL [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
+ │    │    └── filters (true)
  │    └── filters
- │         └── or [type=bool, outer=(1,9)]
- │              ├── is [type=bool]
- │              │    ├── variable: ol_o_id [type=int]
- │              │    └── null [type=unknown]
- │              └── is [type=bool]
- │                   ├── variable: o_id [type=int]
- │                   └── null [type=unknown]
+ │         └── (ol_o_id IS NULL) OR (o_id IS NULL) [type=bool, outer=(1,9)]
  └── aggregations
       └── count-rows [type=int]
 
 stats table=consistency_12_select_5
 ----
-column_names     row_count  distinct_count  null_count
-{ol_d_id}        899134     10              0
-{ol_delivery_d}  899134     0               899134
-{ol_o_id}        899134     900             0
-{ol_w_id}        899134     10              0
-~~~~
-column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ol_d_id}        3000000.00     3.34 <==       10.00               1.00                0.00            1.00
-{ol_delivery_d}  3000000.00     3.34 <==       1.00                +Inf <==            900000.00       1.00
-{ol_o_id}        3000000.00     3.34 <==       3000.00             3.33 <==            0.00            1.00
-{ol_w_id}        3000000.00     3.34 <==       10.00               1.00                0.00            1.00
-
-stats table=consistency_12_select_8
-----
 column_names    row_count  distinct_count  null_count
-{o_carrier_id}  90000      0               90000
+{o_carrier_id}  90000      1               90000
 {o_d_id}        90000      10              0
 {o_id}          90000      900             0
 {o_w_id}        90000      10              0
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_carrier_id}  24000.00       3.75 <==       1.00                +Inf <==            24000.00        3.75 <==
-{o_d_id}        24000.00       3.75 <==       10.00               1.00                0.00            1.00
-{o_id}          24000.00       3.75 <==       3000.00             3.33 <==            0.00            1.00
-{o_w_id}        24000.00       3.75 <==       10.00               1.00                0.00            1.00
+{o_carrier_id}  21570.00       4.17 <==       1.00                1.00                21570.00        4.17 <==
+{o_d_id}        21570.00       4.17 <==       10.00               1.00                0.00            1.00
+{o_id}          21570.00       4.17 <==       2999.00             3.33 <==            0.00            1.00
+{o_w_id}        21570.00       4.17 <==       10.00               1.00                0.00            1.00
 
-stats table=consistency_12_full_join_3
+stats table=consistency_12_select_8
+----
+column_names     row_count  distinct_count  null_count
+{ol_d_id}        899134     10              0
+{ol_delivery_d}  899134     1               899134
+{ol_o_id}        899134     900             0
+{ol_w_id}        899134     10              0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}        1500611.00     1.67           10.00               1.00                0.00            1.00
+{ol_delivery_d}  1500611.00     1.67           1.00                1.00                899134.00       1.00
+{ol_o_id}        1500611.00     1.67           2999.00             3.33 <==            0.00            1.00
+{ol_w_id}        1500611.00     1.67           10.00               1.00                0.00            1.00
+
+stats table=consistency_12_merge_join_3
 ----
 column_names  row_count  distinct_count  null_count
 {o_d_id}      899134     10              0
@@ -2374,12 +1537,12 @@ column_names  row_count  distinct_count  null_count
 {ol_w_id}     899134     10              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_d_id}      3000000.00     3.34 <==       10.00               1.00                2760000.00      +Inf <==
-{o_id}        3000000.00     3.34 <==       3000.00             3.33 <==            2760000.00      +Inf <==
-{o_w_id}      3000000.00     3.34 <==       10.00               1.00                2760000.00      +Inf <==
-{ol_d_id}     3000000.00     3.34 <==       10.00               1.00                0.00            1.00
-{ol_o_id}     3000000.00     3.34 <==       3000.00             3.33 <==            0.00            1.00
-{ol_w_id}     3000000.00     3.34 <==       10.00               1.00                0.00            1.00
+{o_d_id}      1500611.00     1.67           10.00               1.00                1392680.00      +Inf <==
+{o_id}        1500611.00     1.67           2999.00             3.33 <==            1392680.00      +Inf <==
+{o_w_id}      1500611.00     1.67           10.00               1.00                1392680.00      +Inf <==
+{ol_d_id}     1500611.00     1.67           10.00               1.00                0.00            1.00
+{ol_o_id}     1500611.00     1.67           2999.00             3.33 <==            0.00            1.00
+{ol_w_id}     1500611.00     1.67           10.00               1.00                0.00            1.00
 
 stats table=consistency_12_select_2
 ----
@@ -2392,12 +1555,12 @@ column_names  row_count  distinct_count  null_count
 {ol_w_id}     0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_d_id}      1000000.00     +Inf <==       10.00               +Inf <==            920000.00       +Inf <==
-{o_id}        1000000.00     +Inf <==       3000.00             +Inf <==            920000.00       +Inf <==
-{o_w_id}      1000000.00     +Inf <==       10.00               +Inf <==            920000.00       +Inf <==
-{ol_d_id}     1000000.00     +Inf <==       10.00               +Inf <==            0.00            1.00
-{ol_o_id}     1000000.00     +Inf <==       3000.00             +Inf <==            0.00            1.00
-{ol_w_id}     1000000.00     +Inf <==       10.00               +Inf <==            0.00            1.00
+{o_d_id}      500204.00      +Inf <==       10.00               +Inf <==            464227.00       +Inf <==
+{o_id}        500204.00      +Inf <==       2999.00             +Inf <==            464227.00       +Inf <==
+{o_w_id}      500204.00      +Inf <==       10.00               +Inf <==            464227.00       +Inf <==
+{ol_d_id}     500204.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+{ol_o_id}     500204.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
+{ol_w_id}     500204.00      +Inf <==       10.00               +Inf <==            0.00            1.00
 
 stats table=consistency_12_scalar_group_by_1
 ----

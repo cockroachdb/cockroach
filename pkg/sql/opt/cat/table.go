@@ -78,7 +78,7 @@ type Table interface {
 	// Public indexes are not currently being added or dropped from the table.
 	// This method should be used when mutation columns can be ignored (the common
 	// case). The returned indexes include the primary index, so the count is
-	// always >= 1.
+	// always >= 1 (except for virtual tables, which have no indexes).
 	IndexCount() int
 
 	// WritableIndexCount returns the number of public and write-only indexes
