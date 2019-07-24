@@ -482,8 +482,8 @@ func (s *OutgoingSnapshot) Close() {
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
 type IncomingSnapshot struct {
 	SnapUUID uuid.UUID
-	// The RocksDB BatchReprs that make up this snapshot.
-	Batches [][]byte
+	// The storage interface for the underlying SSTs.
+	SSS *SSTSnapshotStorage
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
@@ -810,39 +810,63 @@ func (r *Replica) applySnapshot(
 	}
 
 	var stats struct {
-		clear   time.Time
-		batch   time.Time
-		entries time.Time
-		commit  time.Time
+		unreplicatedClear      time.Time
+		unreplicatedState      time.Time
+		subsumedReplicas       time.Time
+		unreplicatedLogEntries time.Time
+		ingestion              time.Time
 	}
-
-	var size int
-	for _, b := range inSnap.Batches {
-		size += len(b)
-	}
-	for _, e := range inSnap.LogEntries {
-		size += len(e)
-	}
-
 	log.Infof(ctx, "applying %s snapshot at index %d "+
-		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
+		"(id=%s, %d SSTables, %d log entries)",
 		snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
-		size, len(inSnap.Batches), len(inSnap.LogEntries))
+		len(inSnap.SSS.SSTs())+1, len(inSnap.LogEntries))
 	defer func(start time.Time) {
 		now := timeutil.Now()
-		log.Infof(ctx, "applied %s snapshot in %0.0fms [clear=%0.0fms batch=%0.0fms entries=%0.0fms commit=%0.0fms]",
+		log.Infof(ctx, "applied %s snapshot in %0.0fms [unreplicatedClear=%0.0fms unreplicatedState=%0.0fms subsumedReplicas=%0.0fms unreplicatedLogEntries=%0.0fms ingestion=%0.0fms]",
 			snapType, now.Sub(start).Seconds()*1000,
-			stats.clear.Sub(start).Seconds()*1000,
-			stats.batch.Sub(stats.clear).Seconds()*1000,
-			stats.entries.Sub(stats.batch).Seconds()*1000,
-			stats.commit.Sub(stats.entries).Seconds()*1000)
+			stats.unreplicatedClear.Sub(start).Seconds()*1000,
+			stats.unreplicatedState.Sub(stats.unreplicatedClear).Seconds()*1000,
+			stats.subsumedReplicas.Sub(stats.unreplicatedState).Seconds()*1000,
+			stats.unreplicatedLogEntries.Sub(stats.subsumedReplicas).Seconds()*1000,
+			stats.ingestion.Sub(stats.unreplicatedLogEntries).Seconds()*1000)
 	}(timeutil.Now())
 
-	// Use a more efficient write-only batch because we don't need to do any
-	// reads from the batch.
-	batch := r.store.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
+	unreplicatedSST, err := engine.MakeRocksDBSstFileWriter()
+	if err != nil {
+		return err
+	}
+	defer unreplicatedSST.Close()
 
+	// Clearing the unreplicated state.
+	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
+	unreplicatedStart := engine.MakeMVCCMetadataKey(unreplicatedPrefixKey)
+	unreplicatedEnd := engine.MakeMVCCMetadataKey(unreplicatedPrefixKey.PrefixEnd())
+	if err = unreplicatedSST.ClearRange(unreplicatedStart, unreplicatedEnd); err != nil {
+		return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
+	}
+	stats.unreplicatedClear = timeutil.Now()
+
+	// Update HardState.
+	if err := r.raftMu.stateLoader.SetHardState(ctx, &unreplicatedSST, hs); err != nil {
+		return errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
+	}
+
+	// Update TruncatedState if it is unreplicated.
+	if inSnap.UsesUnreplicatedTruncatedState {
+		if err := stateloader.Make(s.Desc.RangeID).SetRaftTruncatedState(
+			ctx, &unreplicatedSST, s.TruncatedState,
+		); err != nil {
+			return errors.Wrapf(err, "unable to write UnreplicatedTruncatedState to unreplicated SST writer")
+		}
+	}
+
+	stats.unreplicatedState = timeutil.Now()
+
+	// Handle subsumed replicas. We create separate SSTs with range deletion
+	// tombstones to delete the data of subsumed replicas. We have to be careful
+	// here not to have overlapping ranges with the SSTs we have already created
+	// since that will throw an error while we are ingesting them.
+	//
 	// If we're subsuming a replica below, we don't have its last NextReplicaID,
 	// nor can we obtain it. That's OK: we can just be conservative and use the
 	// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
@@ -851,108 +875,146 @@ func (r *Replica) applySnapshot(
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
 	const subsumedNextReplicaID = math.MaxInt32
-
-	// As part of applying the snapshot, we may need to subsume replicas that have
-	// been merged into this range. Destroy their data in the same batch in which
-	// we apply the snapshot.
+	keyRanges := rditer.MakeAllKeyRanges(s.Desc)[1:]
+	var totalKeyRanges [2]rditer.KeyRange
+	copy(totalKeyRanges[:], keyRanges)
 	for _, sr := range subsumedRepls {
-		if err := sr.preDestroyRaftMuLocked(
-			ctx, r.store.Engine(), batch, subsumedNextReplicaID, true, /* destroyData */
-		); err != nil {
-			return err
+		srKeyRanges := rditer.MakeAllKeyRanges(sr.Desc())
+
+		// We have to create an SST for the subsumed replica's range-id local keys.
+		if sr.Desc().RangeID != s.Desc.RangeID {
+			subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
+			if err != nil {
+				return err
+			}
+			if err := subsumedReplSST.ClearRange(srKeyRanges[0].Start, srKeyRanges[0].End); err != nil {
+				subsumedReplSST.Close()
+				return err
+			}
+			tombstoneKey := keys.RaftTombstoneKey(sr.RangeID)
+			tombstone := &roachpb.RaftTombstone{
+				NextReplicaID: subsumedNextReplicaID,
+			}
+			if err := engine.MVCCBlindPutProto(ctx, &subsumedReplSST, nil /* ms */, tombstoneKey, hlc.Timestamp{}, tombstone, nil /* txn */); err != nil {
+				subsumedReplSST.Close()
+				return errors.Wrapf(err, "unable to write RaftTombstoneKey to subsumed replica SST")
+			}
+			if err := inSnap.SSS.WriteAll(ctx, &subsumedReplSST); err != nil {
+				return err
+			}
+		}
+
+		// Compute the total key space covered by the current replica and all
+		// subsumed replicas.
+		for i := range srKeyRanges[1:] {
+			if srKeyRanges[i].Start.Key.Compare(totalKeyRanges[i].Start.Key) < 0 {
+				totalKeyRanges[i].Start = srKeyRanges[i].Start
+			}
+			if srKeyRanges[i].End.Key.Compare(totalKeyRanges[i].End.Key) > 0 {
+				totalKeyRanges[i].End = srKeyRanges[i].End
+			}
 		}
 	}
 
-	// Delete everything in the range and recreate it from the snapshot.
-	// We need to delete any old Raft log entries here because any log entries
-	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	if err := clearRangeData(ctx, s.Desc, r.store.Engine(), batch, true /* destroyData */); err != nil {
-		return err
-	}
-	// Clear the cached raft log entries to ensure that old or uncommitted
-	// entries don't impact the in-memory state.
-	r.store.raftEntryCache.Drop(r.RangeID)
-	stats.clear = timeutil.Now()
-
-	// Write the snapshot into the range.
-	for _, batchRepr := range inSnap.Batches {
-		if err := batch.ApplyBatchRepr(batchRepr, false); err != nil {
-			return err
+	// We might have to create SSTs for the range local keys and data keys
+	// depending on if the subsumed replicas are not fully contained by the
+	// replica in our snapshot.
+	for i := range keyRanges {
+		if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
+			subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
+			if err != nil {
+				return err
+			}
+			if err := subsumedReplSST.ClearRange(keyRanges[i].End, totalKeyRanges[i].End); err != nil {
+				subsumedReplSST.Close()
+				return err
+			}
+			if err := inSnap.SSS.WriteAll(ctx, &subsumedReplSST); err != nil {
+				return err
+			}
+		}
+		if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
+			subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
+			if err != nil {
+				return err
+			}
+			if err := subsumedReplSST.ClearRange(totalKeyRanges[i].Start, keyRanges[i].Start); err != nil {
+				subsumedReplSST.Close()
+				return err
+			}
+			if err := inSnap.SSS.WriteAll(ctx, &subsumedReplSST); err != nil {
+				return err
+			}
 		}
 	}
 
-	// The log entries are all written to distinct keys so we can use a
-	// distinct batch.
-	distinctBatch := batch.Distinct()
-	stats.batch = timeutil.Now()
+	stats.subsumedReplicas = timeutil.Now()
 
-	if inSnap.UsesUnreplicatedTruncatedState {
-		// We're using the unreplicated truncated state, which we need to
-		// manually persist to disk. If we're not taking this branch, the
-		// snapshot contains a legacy TruncatedState and we don't need to do
-		// anything (in fact, must not -- the invariant is that exactly one of
-		// them exists at any given point in the state machine).
-		if err := stateloader.Make(s.Desc.RangeID).SetRaftTruncatedState(
-			ctx, distinctBatch, s.TruncatedState,
-		); err != nil {
-			return err
-		}
-	}
-
-	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
-	for i, bytes := range inSnap.LogEntries {
-		if err := protoutil.Unmarshal(bytes, &logEntries[i]); err != nil {
-			return err
-		}
-	}
-	// If this replica doesn't know its ReplicaID yet, we're applying a
-	// preemptive snapshot. In this case, we're going to have to write the
-	// sideloaded proposals into the Raft log. Otherwise, sideload.
-	var raftLogSize int64
-	thinEntries := logEntries
-	if replicaID != 0 {
-		var err error
-		var sideloadedEntriesSize int64
-		thinEntries, sideloadedEntriesSize, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
-		if err != nil {
-			return err
-		}
-		raftLogSize += sideloadedEntriesSize
-	}
-
-	// Write the snapshot's Raft log into the range.
+	// Update Raft entries.
 	var lastTerm uint64
-	_, lastTerm, raftLogSize, err = r.append(
-		ctx, distinctBatch, 0, invalidLastTerm, raftLogSize, thinEntries,
-	)
-	if err != nil {
+	var raftLogSize int64
+	if len(inSnap.LogEntries) > 0 {
+		logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
+		for i, bytes := range inSnap.LogEntries {
+			if err := protoutil.Unmarshal(bytes, &logEntries[i]); err != nil {
+				return err
+			}
+		}
+		// If this replica doesn't know its ReplicaID yet, we're applying a
+		// preemptive snapshot. In this case, we're going to have to write the
+		// sideloaded proposals into the Raft log. Otherwise, sideload.
+		thinEntries := logEntries
+		if replicaID != 0 {
+			var err error
+			var sideloadedEntriesSize int64
+			thinEntries, sideloadedEntriesSize, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
+			if err != nil {
+				return err
+			}
+			raftLogSize += sideloadedEntriesSize
+		}
+		var logDiff enginepb.MVCCStats
+		var logValue roachpb.Value
+		for i := range thinEntries {
+			ent := &thinEntries[i]
+			entKey := r.raftMu.stateLoader.RaftLogKey(ent.Index)
+
+			if err := logValue.SetProto(ent); err != nil {
+				return err
+			}
+			logValue.InitChecksum(entKey)
+			err = engine.MVCCBlindPut(ctx, &unreplicatedSST, &logDiff, entKey, hlc.Timestamp{},
+				logValue, nil /* txn */)
+			if err != nil {
+				return errors.Wrapf(err, "error writing log entry to unreplicated SST writer")
+			}
+		}
+		raftLogSize += logDiff.SysBytes
+		lastTerm = thinEntries[len(thinEntries)-1].Term
+	} else {
+		lastTerm = invalidLastTerm
+	}
+	r.store.raftEntryCache.Drop(r.RangeID)
+	stats.unreplicatedLogEntries = timeutil.Now()
+
+	if err := inSnap.SSS.WriteAll(ctx, &unreplicatedSST); err != nil {
 		return err
 	}
-	stats.entries = timeutil.Now()
-
-	// Note that since this snapshot comes from Raft, we don't have to synthesize
-	// the HardState -- Raft wouldn't ask us to update the HardState in incorrect
-	// ways.
-	if err := r.raftMu.stateLoader.SetHardState(ctx, distinctBatch, hs); err != nil {
-		return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
-	}
-
-	// We need to close the distinct batch and start using the normal batch for
-	// the read below.
-	distinctBatch.Close()
+	unreplicatedSST.Close()
 
 	// As outlined above, last and applied index are the same after applying
 	// the snapshot (i.e. the snapshot has no uncommitted tail).
 	if s.RaftAppliedIndex != snap.Metadata.Index {
 		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
-			s.RaftAppliedIndex, snap.Metadata.Index)
+		s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
-	// We've written Raft log entries, so we need to sync the WAL.
-	if err := batch.Commit(!disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
-		return err
+	// Ingest all SSTs atomically.
+	log.Infof(ctx, "ingesting %d SSTables", len(inSnap.SSS.SSTs()))
+	if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSS.SSTs(), true /* skipWritingSeqNo */, true /* modify */); err != nil {
+		return errors.Wrapf(err, "while ingesting %s", inSnap.SSS.SSTs())
 	}
-	stats.commit = timeutil.Now()
+	stats.ingestion = timeutil.Now()
 
 	// The on-disk state is now committed, but the corresponding in-memory state
 	// has not yet been updated. Any errors past this point must therefore be

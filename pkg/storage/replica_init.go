@@ -13,6 +13,9 @@ package storage
 import (
 	"context"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -151,6 +154,14 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if err := r.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
 		return err
 	}
+
+	// Remove the SSTs of any previous snapshots.
+	snapshotRangeDir := filepath.Join(
+		r.store.Engine().GetAuxiliaryDir(),
+		"sstsnapshot",
+		strconv.FormatInt(int64(r.mu.state.Desc.RangeID), 10),
+	)
+	os.RemoveAll(snapshotRangeDir)
 
 	r.assertStateLocked(ctx, r.store.Engine())
 	return nil
