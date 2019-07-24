@@ -3,19 +3,22 @@
 statement ok
 SET experimental_optimizer_foreign_keys = true
 
+# Insert
+# ------
+
 statement ok
 CREATE TABLE parent (p INT PRIMARY KEY, other INT)
 
 statement ok
 CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
 
-statement error insert or update on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(1\) is not present in table "parent"\.
+statement error insert on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(1\) is not present in table "parent"\.
 INSERT INTO child VALUES (1,1)
 
 statement ok
 INSERT INTO parent VALUES (1), (2)
 
-statement error insert or update on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(3\) is not present in table "parent"\.
+statement error insert on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(3\) is not present in table "parent"\.
 INSERT INTO child VALUES (1,1), (2,2), (3,3)
 
 statement ok
@@ -28,7 +31,7 @@ CREATE TABLE xy (x INT, y INT)
 statement ok
 INSERT INTO xy VALUES (4, 4), (5, 5), (6, 6)
 
-statement error insert or update on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(4\) is not present in table "parent"\.
+statement error insert on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(4\) is not present in table "parent"\.
 INSERT INTO child SELECT x,y FROM xy
 
 statement ok
@@ -36,3 +39,71 @@ INSERT INTO parent SELECT x FROM xy
 
 statement ok
 INSERT INTO child SELECT x,y FROM xy
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+# Delete
+# ------
+
+statement ok
+CREATE TABLE parent (x INT, p INT PRIMARY KEY, u INT UNIQUE)
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+
+statement ok
+INSERT INTO parent (p, u) VALUES (1, 10), (2, 20)
+
+statement ok
+INSERT INTO child VALUES (1, 1)
+
+statement ok
+DELETE FROM parent WHERE p = 2
+
+statement error delete on table "parent" violates foreign key constraint on table "child"
+DELETE FROM parent WHERE p = 1
+
+statement ok
+CREATE TABLE child_u (c INT PRIMARY KEY, u INT NOT NULL REFERENCES parent(u))
+
+statement ok
+DROP TABLE child
+
+statement ok
+INSERT INTO child_u VALUES (1, 10)
+
+statement error delete on table "parent" violates foreign key constraint on table "child_u"
+DELETE FROM parent WHERE p = 1
+
+statement ok
+CREATE TABLE parent2 (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
+
+statement ok
+CREATE TABLE child2 (c INT PRIMARY KEY, p1 INT, p2 INT, FOREIGN KEY (p1, p2) REFERENCES parent2 (p1, p2))
+
+statement ok
+INSERT INTO parent2 VALUES
+  (10, 100),
+  (10, 150),
+  (20, 200)
+
+statement ok
+INSERT INTO child2 VALUES
+  (1, 10, 100),
+  (2, 10, NULL),
+  (3, 10, 150),
+  (4, 20, 200),
+  (5, NULL, 100)
+
+statement error delete on table "parent2" violates foreign key constraint on table "child2"
+DELETE FROM parent2 WHERE p1 = 10 AND p2 = 100
+
+statement ok
+DELETE FROM child2 WHERE p1 = 10 AND p2 = 100
+
+statement ok
+DELETE FROM parent2 WHERE p1 = 10 AND p2 = 100

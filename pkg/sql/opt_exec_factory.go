@@ -1652,6 +1652,7 @@ func (ef *execFactory) ConstructDelete(
 	table cat.Table,
 	fetchColOrdSet exec.ColumnOrdinalSet,
 	returnColOrdSet exec.ColumnOrdinalSet,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1670,6 +1671,10 @@ func (ef *execFactory) ConstructDelete(
 		return fastPathNode, nil
 	}
 
+	checkFKs := row.CheckFKs
+	if skipFKChecks {
+		checkFKs = row.SkipFKs
+	}
 	// Create the table deleter, which does the bulk of the work. In the HP,
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes
@@ -1679,7 +1684,7 @@ func (ef *execFactory) ConstructDelete(
 		tabDesc,
 		fkTables,
 		fetchColDescs,
-		row.CheckFKs,
+		checkFKs,
 		ef.planner.EvalContext(),
 		&ef.planner.alloc,
 	)

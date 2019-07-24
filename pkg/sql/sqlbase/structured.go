@@ -2980,8 +2980,18 @@ func (x ForeignKeyReference_Match) String() string {
 	}
 }
 
-// ForeignKeyReferenceActionValue allows the conversion between a
+// ForeignKeyReferenceActionType allows the conversion between a
 // tree.ReferenceAction and a ForeignKeyReference_Action.
+var ForeignKeyReferenceActionType = [...]tree.ReferenceAction{
+	ForeignKeyReference_NO_ACTION:   tree.NoAction,
+	ForeignKeyReference_RESTRICT:    tree.Restrict,
+	ForeignKeyReference_SET_DEFAULT: tree.SetDefault,
+	ForeignKeyReference_SET_NULL:    tree.SetNull,
+	ForeignKeyReference_CASCADE:     tree.Cascade,
+}
+
+// ForeignKeyReferenceActionValue allows the conversion between a
+// ForeignKeyReference_Action and a tree.ReferenceAction.
 var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
 	tree.NoAction:   ForeignKeyReference_NO_ACTION,
 	tree.Restrict:   ForeignKeyReference_RESTRICT,
