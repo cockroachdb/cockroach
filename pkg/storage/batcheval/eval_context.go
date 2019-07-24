@@ -91,4 +91,6 @@ type EvalContext interface {
 	GetGCThreshold() hlc.Timestamp
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
+
+	GetNodeLocality() roachpb.Locality
 }
