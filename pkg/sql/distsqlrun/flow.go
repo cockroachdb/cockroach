@@ -502,7 +502,7 @@ func (f *Flow) setup(ctx context.Context, spec *distsqlpb.FlowSpec) error {
 		log.VEventf(ctx, 1, "setting up vectorize flow %d with setting %s", f.id, f.EvalCtx.SessionData.Vectorize)
 		acc := f.EvalCtx.Mon.MakeBoundAccount()
 		f.vectorizedBoundAccount = &acc
-		err := f.setupVectorized(ctx, f.vectorizedBoundAccount)
+		err := f.setupVectorizedFlow(ctx, f.vectorizedBoundAccount)
 		if err == nil {
 			log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 			return nil

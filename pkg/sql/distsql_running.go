@@ -139,7 +139,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if evalCtx.SessionData.Vectorize != sessiondata.VectorizeOff {
 		for _, spec := range flows {
 			if err := distsqlrun.SupportsVectorized(
-				ctx, &distsqlrun.FlowCtx{EvalCtx: &evalCtx.EvalContext, NodeID: -1}, spec,
+				ctx, &distsqlrun.FlowCtx{EvalCtx: &evalCtx.EvalContext, NodeID: -1}, spec.Processors,
 			); err != nil {
 				// Vectorization attempt failed with an error.
 				returnVectorizationSetupError := false
