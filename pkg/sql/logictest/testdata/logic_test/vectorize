@@ -605,3 +605,17 @@ SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty
 query IIIIIRR
 SELECT count(*), count(a), sum_int(a), min(a), max(a), sum(b), avg(b) FROM empty GROUP BY a
 ----
+
+
+statement ok
+CREATE TABLE t_38995 (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t_38995 VALUES (1), (2), (3)
+
+query II
+SELECT a, ordinality*2 FROM t_38995 WITH ORDINALITY
+----
+1 2
+2 4
+3 6
