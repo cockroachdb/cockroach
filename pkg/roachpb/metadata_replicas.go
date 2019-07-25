@@ -65,13 +65,6 @@ func (d ReplicaDescriptors) String() string {
 	return buf.String()
 }
 
-// Unwrap returns every replica in the set. It is a placeholder for code that
-// used to work on a slice of replicas until learner replicas are added. At that
-// point, all uses of Unwrap will be migrated to All/Voters/Learners.
-func (d ReplicaDescriptors) Unwrap() []ReplicaDescriptor {
-	return d.wrapped
-}
-
 // All returns every replica in the set, including both voter replicas and
 // learner replicas. Voter replicas are ordered first in the returned slice.
 func (d ReplicaDescriptors) All() []ReplicaDescriptor {

@@ -509,7 +509,7 @@ func rebalanceCandidates(
 	var needRebalanceFrom bool
 	curDiversityScore := rangeDiversityScore(existingNodeLocalities)
 	for _, store := range allStores.stores {
-		for _, repl := range rangeInfo.Desc.Replicas().Unwrap() {
+		for _, repl := range rangeInfo.Replicas {
 			if store.StoreID != repl.StoreID {
 				continue
 			}
@@ -588,10 +588,10 @@ func rebalanceCandidates(
 			// rebalance targets. We do include stores that currently have a replica
 			// because we want them to be considered as valid stores in the
 			// ConvergesOnMean calculations below. This is subtle but important.
-			if nodeHasReplica(store.Node.NodeID, rangeInfo.Desc.Replicas().Unwrap()) &&
-				!storeHasReplica(store.StoreID, rangeInfo.Desc.Replicas().Unwrap()) {
+			if nodeHasReplica(store.Node.NodeID, rangeInfo.Replicas) &&
+				!storeHasReplica(store.StoreID, rangeInfo.Replicas) {
 				log.VEventf(ctx, 2, "nodeHasReplica(n%d, %v)=true",
-					store.Node.NodeID, rangeInfo.Desc.Replicas())
+					store.Node.NodeID, rangeInfo.Replicas)
 				continue
 			}
 			constraintsOK, necessary := rebalanceFromConstraintsCheck(

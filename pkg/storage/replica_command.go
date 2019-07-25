@@ -244,7 +244,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Event(ctx, "found split key")
 
 	// Create right hand side range descriptor.
-	rightDesc, err := r.store.NewRangeDescriptor(ctx, splitKey, desc.EndKey, desc.Replicas().Unwrap())
+	rightDesc, err := r.store.NewRangeDescriptor(ctx, splitKey, desc.EndKey, desc.Replicas())
 	if err != nil {
 		return reply, errors.Errorf("unable to allocate right hand side range descriptor: %s", err)
 	}
@@ -525,7 +525,9 @@ func (r *Replica) AdminMerge(
 	// Otherwise there is a rare race where the replica GC queue can GC a
 	// replica of the RHS too early. The comment on
 	// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
-	if err := waitForReplicasInit(ctx, r.store.cfg.NodeDialer, *origLeftDesc); err != nil {
+	if err := waitForReplicasInit(
+		ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().All(),
+	); err != nil {
 		return reply, roachpb.NewError(errors.Wrap(
 			err, "waiting for all left-hand replicas to initialize"))
 	}
@@ -580,6 +582,7 @@ func (r *Replica) AdminMerge(
 		if !replicaSetsEqual(lReplicas.All(), rReplicas.All()) {
 			return errors.Errorf("ranges not collocated; %s != %s", lReplicas, rReplicas)
 		}
+		mergeReplicas := lReplicas.All()
 
 		updatedLeftDesc := *origLeftDesc
 		// lhs.Generation = max(rhs.Generation, lhs.Generation)+1.
@@ -661,7 +664,9 @@ func (r *Replica) AdminMerge(
 		}
 		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
-		err = waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc, rhsSnapshotRes.LeaseAppliedIndex)
+		err = waitForApplication(
+			ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
+			rhsSnapshotRes.LeaseAppliedIndex)
 		if err != nil {
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
@@ -716,11 +721,15 @@ func (r *Replica) AdminMerge(
 }
 
 func waitForApplication(
-	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor, leaseIndex uint64,
+	ctx context.Context,
+	dialer *nodedialer.Dialer,
+	rangeID roachpb.RangeID,
+	replicas []roachpb.ReplicaDescriptor,
+	leaseIndex uint64,
 ) error {
 	return contextutil.RunWithTimeout(ctx, "wait for application", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
-		for _, repl := range desc.Replicas().Unwrap() {
+		for _, repl := range replicas {
 			repl := repl // copy for goroutine
 			g.GoCtx(func(ctx context.Context) error {
 				conn, err := dialer.Dial(ctx, repl.NodeID)
@@ -729,7 +738,7 @@ func waitForApplication(
 				}
 				_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
 					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
-					RangeID:            desc.RangeID,
+					RangeID:            rangeID,
 					LeaseIndex:         leaseIndex,
 				})
 				return err
@@ -744,11 +753,14 @@ func waitForApplication(
 // negative, i.e., claim that a replica is uninitialized when it is, in fact,
 // initialized, but it will never return a false positive.
 func waitForReplicasInit(
-	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor,
+	ctx context.Context,
+	dialer *nodedialer.Dialer,
+	rangeID roachpb.RangeID,
+	replicas []roachpb.ReplicaDescriptor,
 ) error {
 	return contextutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
-		for _, repl := range desc.Replicas().Unwrap() {
+		for _, repl := range replicas {
 			repl := repl // copy for goroutine
 			g.GoCtx(func(ctx context.Context) error {
 				conn, err := dialer.Dial(ctx, repl.NodeID)
@@ -757,7 +769,7 @@ func waitForReplicasInit(
 				}
 				_, err = NewPerReplicaClient(conn).WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
 					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
-					RangeID:            desc.RangeID,
+					RangeID:            rangeID,
 				})
 				return err
 			})
@@ -1554,12 +1566,6 @@ func updateRangeDescriptor(
 func (s *Store) AdminRelocateRange(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
-
-	// Deep-copy the Replicas slice (in our shallow copy of the RangeDescriptor)
-	// since we'll mutate it in the loop below.
-	rangeDesc.SetReplicas(rangeDesc.Replicas().DeepCopy())
-	startKey := rangeDesc.StartKey.AsRawKey()
-
 	// Step 0: Remove all learners so we don't have to think about them. We could
 	// do something smarter here and try to promote them, but it doesn't seem
 	// worth the complexity right now. Revisit if this is an issue in practice.
@@ -1628,6 +1634,7 @@ func (s *Store) AdminRelocateRange(
 		return false
 	}
 
+	startKey := rangeDesc.StartKey.AsRawKey()
 	transferLease := func() {
 		if err := s.DB().AdminTransferLease(
 			ctx, startKey, targets[0].StoreID,
@@ -1648,8 +1655,6 @@ func (s *Store) AdminRelocateRange(
 	storeList, _, _ := s.allocator.storePool.getStoreList(rangeDesc.RangeID, storeFilterNone)
 	storeMap := storeListToMap(storeList)
 
-	rangeInfo := RangeInfo{Desc: &rangeDesc}
-
 	// Step 2: Repeatedly add a replica then remove a replica until we reach the
 	// desired state.
 	every := log.Every(time.Minute)
@@ -1665,36 +1670,38 @@ func (s *Store) AdminRelocateRange(
 			// can always transfer the lease to it before removing a replica below.
 			// This makes it easier to avoid removing a replica that's still
 			// leaseholder without needing to bounce the lease around a bunch.
-			candidates := addTargets
-			if storeHasReplica(targets[0].StoreID, candidates) {
-				candidates = []roachpb.ReplicaDescriptor{
+			candidateTargets := addTargets
+			if storeHasReplica(targets[0].StoreID, candidateTargets) {
+				candidateTargets = []roachpb.ReplicaDescriptor{
 					{NodeID: targets[0].NodeID, StoreID: targets[0].StoreID},
 				}
 			}
 
 			// The storeList's list of stores is used to constrain which stores the
 			// allocator considers putting a new replica on. We want it to only
-			// consider the stores in candidates.
-			candidateDescs := make([]roachpb.StoreDescriptor, 0, len(candidates))
-			for _, candidate := range candidates {
+			// consider the stores in candidateTargets.
+			candidateDescs := make([]roachpb.StoreDescriptor, 0, len(candidateTargets))
+			for _, candidate := range candidateTargets {
 				store, ok := storeMap[candidate.StoreID]
 				if !ok {
-					return fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor", candidate.StoreID)
+					return fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor",
+						candidate.StoreID)
 				}
 				candidateDescs = append(candidateDescs, *store)
 			}
 			storeList = makeStoreList(candidateDescs)
 
+			candidates := rangeDesc.Replicas().All()
 			targetStore, _ := s.allocator.allocateTargetFromList(
 				ctx,
 				storeList,
 				zone,
-				rangeInfo.Desc.Replicas().All(),
-				rangeInfo,
+				candidates,
+				RangeInfo{RangeID: rangeDesc.RangeID, Replicas: rangeDesc.Replicas().All()},
 				s.allocator.scorerOptions())
 			if targetStore == nil {
 				return fmt.Errorf("none of the remaining targets %v are legal additions to %v",
-					addTargets, rangeInfo.Desc.Replicas())
+					addTargets, rangeDesc.Replicas())
 			}
 
 			target := roachpb.ReplicationTarget{
@@ -1702,7 +1709,7 @@ func (s *Store) AdminRelocateRange(
 				StoreID: targetStore.StoreID,
 			}
 			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, roachpb.ADD_REPLICA,
-				[]roachpb.ReplicationTarget{target}, *rangeInfo.Desc)
+				[]roachpb.ReplicationTarget{target}, rangeDesc)
 			if err != nil {
 				returnErr := errors.Wrapf(err, "while adding target %v", target)
 				if !canRetry(err) {
@@ -1719,14 +1726,18 @@ func (s *Store) AdminRelocateRange(
 			// local copy of the range descriptor such that future allocator
 			// decisions take it into account.
 			addTargets = removeTargetFromSlice(addTargets, target)
-			rangeInfo.Desc = newDesc
+			rangeDesc = *newDesc
 		}
 
 		if len(removeTargets) > 0 && len(removeTargets) > len(addTargets) {
+			rangeInfo := RangeInfo{
+				RangeID:  rangeDesc.RangeID,
+				Replicas: rangeDesc.Replicas().All(),
+			}
 			targetStore, _, err := s.allocator.RemoveTarget(ctx, zone, removeTargets, rangeInfo)
 			if err != nil {
 				return errors.Wrapf(err, "unable to select removal target from %v; current replicas %v",
-					removeTargets, rangeInfo.Desc.Replicas())
+					removeTargets, rangeInfo.Replicas)
 			}
 			target := roachpb.ReplicationTarget{
 				NodeID:  targetStore.NodeID,
@@ -1737,7 +1748,7 @@ func (s *Store) AdminRelocateRange(
 			// the leaseholder now, so we can always transfer the lease there.
 			transferLease()
 			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, roachpb.REMOVE_REPLICA,
-				[]roachpb.ReplicationTarget{target}, *rangeInfo.Desc)
+				[]roachpb.ReplicationTarget{target}, rangeDesc)
 			if err != nil {
 				log.Warningf(ctx, "while removing target %v: %+v", target, err)
 				if !canRetry(err) {
@@ -1751,7 +1762,7 @@ func (s *Store) AdminRelocateRange(
 			// copy of the range descriptor such that future allocator decisions take
 			// its absence into account.
 			removeTargets = removeTargetFromSlice(removeTargets, target)
-			rangeInfo.Desc = newDesc
+			rangeDesc = *newDesc
 		}
 	}
 

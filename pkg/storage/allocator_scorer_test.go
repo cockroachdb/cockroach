@@ -1174,11 +1174,9 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		filteredSL := tc.sl
 		filteredSL.stores = append([]roachpb.StoreDescriptor(nil), filteredSL.stores...)
 		existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
-		rangeInfo := RangeInfo{
-			Desc: &roachpb.RangeDescriptor{},
-		}
+		var rangeInfo RangeInfo
 		for _, nodeID := range tc.existingNodeIDs {
-			rangeInfo.Desc.InternalReplicas = append(rangeInfo.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
+			rangeInfo.Replicas = append(rangeInfo.Replicas, roachpb.ReplicaDescriptor{
 				NodeID:  nodeID,
 				StoreID: roachpb.StoreID(nodeID),
 			})

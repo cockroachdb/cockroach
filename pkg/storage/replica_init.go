@@ -309,8 +309,8 @@ func (r *Replica) setDesc(ctx context.Context, desc *roachpb.RangeDescriptor) {
 
 	// Determine if a new replica was added. This is true if the new max replica
 	// ID is greater than the old max replica ID.
-	oldMaxID := maxReplicaID(r.mu.state.Desc)
-	newMaxID := maxReplicaID(desc)
+	oldMaxID := maxReplicaIDOfAny(r.mu.state.Desc)
+	newMaxID := maxReplicaIDOfAny(desc)
 	if newMaxID > oldMaxID {
 		r.mu.lastReplicaAdded = newMaxID
 		r.mu.lastReplicaAddedTime = timeutil.Now()
