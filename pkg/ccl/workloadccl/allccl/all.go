@@ -29,6 +29,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/sqlsmith"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/tpccchecks"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcds"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"

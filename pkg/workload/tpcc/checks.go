@@ -16,17 +16,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-type check struct {
-	name string
+// Check is a tpcc consistency check.
+type Check struct {
+	Name string
 	// If asOfSystemTime is non-empty it will be used to perform the check as
 	// a historical query using the provided value as the argument to the
 	// AS OF SYSTEM TIME clause.
-	f         func(db *gosql.DB, asOfSystemTime string) error
-	expensive bool
+	Fn        func(db *gosql.DB, asOfSystemTime string) error
+	Expensive bool
 }
 
-func allChecks() []check {
-	return []check{
+// AllChecks returns a slice of all of the checks.
+func AllChecks() []Check {
+	return []Check{
 		{"3.3.2.1", check3321, false},
 		{"3.3.2.2", check3322, false},
 		{"3.3.2.3", check3323, false},

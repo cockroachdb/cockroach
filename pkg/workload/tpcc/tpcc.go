@@ -289,15 +289,15 @@ func (w *tpcc) Hooks() workload.Hooks {
 			return nil
 		},
 		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
-			for _, check := range allChecks() {
-				if !w.expensiveChecks && check.expensive {
+			for _, check := range AllChecks() {
+				if !w.expensiveChecks && check.Expensive {
 					continue
 				}
 				start := timeutil.Now()
-				err := check.f(db, "" /* asOfSystemTime */)
-				log.Infof(ctx, `check %s took %s`, check.name, timeutil.Since(start))
+				err := check.Fn(db, "" /* asOfSystemTime */)
+				log.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
 				if err != nil {
-					return errors.Wrapf(err, `check failed: %s`, check.name)
+					return errors.Wrapf(err, `check failed: %s`, check.Name)
 				}
 			}
 			return nil
