@@ -450,7 +450,7 @@ func ImportFixture(
 	var bytesAtomic int64
 	g := ctxgroup.WithContext(ctx)
 	tables := gen.Tables()
-	if injectStats && len(tables) > 0 && len(tables[0].Stats) > 0 {
+	if injectStats && tablesHaveStats(tables) {
 		// Turn off automatic stats temporarily so we don't trigger stats creation
 		// after the IMPORT. We will inject stats inside importFixtureTable.
 		// TODO(rytaft): It would be better if the automatic statistics code would
@@ -529,6 +529,17 @@ func importFixtureTable(
 	return tableBytes, err
 }
 
+// tablesHaveStats returns whether any of the provided tables have associated
+// table statistics to inject.
+func tablesHaveStats(tables []workload.Table) bool {
+	for _, t := range tables {
+		if len(t.Stats) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // disableAutoStats disables automatic stats if they are enabled and returns
 // a function to re-enable them later. If automatic stats are already disabled,
 // disableAutoStats does nothing and returns an empty function.
@@ -578,9 +589,20 @@ func injectStatistics(dbName string, table *workload.Table, sqlDB *gosql.DB) err
 // RestoreFixture loads a fixture into a CockroachDB cluster. An enterprise
 // license is required to have been set in the cluster.
 func RestoreFixture(
-	ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string,
+	ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string, injectStats bool,
 ) (int64, error) {
 	var bytesAtomic int64
+	genName := fixture.Generator.Meta().Name
+	tables := fixture.Generator.Tables()
+	if injectStats && tablesHaveStats(tables) {
+		// Turn off automatic stats temporarily so we don't trigger stats creation
+		// after the RESTORE.
+		// TODO(rytaft): It would be better if the automatic statistics code would
+		// just trigger a no-op if there are new stats available so we wouldn't
+		// have to disable and re-enable automatic stats here.
+		enableFn := disableAutoStats(ctx, sqlDB)
+		defer enableFn()
+	}
 	g, gCtx := errgroup.WithContext(ctx)
 	for _, table := range fixture.Tables {
 		table := table
@@ -606,6 +628,16 @@ func RestoreFixture(
 	}
 	if err := g.Wait(); err != nil {
 		return 0, err
+	}
+	if injectStats {
+		for i := range tables {
+			t := &tables[i]
+			if len(t.Stats) > 0 {
+				if err := injectStatistics(genName, t, sqlDB); err != nil {
+					return 0, err
+				}
+			}
+		}
 	}
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
 	for _, table := range fixture.Generator.Tables() {

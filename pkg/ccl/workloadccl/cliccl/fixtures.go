@@ -293,7 +293,7 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	}
 
 	log.Infof(ctx, "starting load of %d tables", len(gen.Tables()))
-	bytes, err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName)
+	bytes, err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName, true /* injectStats */)
 	if err != nil {
 		return errors.Wrap(err, `restoring fixture`)
 	}
