@@ -504,7 +504,7 @@ func (v *indexInfo) makeIndexConstraints(
 			notNullCols.Add(opt.ColumnID(idx + 1))
 		}
 	}
-	v.ic.Init(filters, columns, notNullCols, isInverted, evalCtx, optimizer.Factory())
+	v.ic.Init(filters, memo.EmptyFiltersExpr, columns, notNullCols, isInverted, evalCtx, optimizer.Factory())
 	idxConstraint := v.ic.Constraint()
 	if idxConstraint.IsUnconstrained() {
 		// The index isn't being restricted at all, bump the cost significantly to

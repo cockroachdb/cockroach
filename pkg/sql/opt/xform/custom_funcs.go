@@ -343,7 +343,18 @@ func (c *CustomFuncs) inPartitionFilters(
 	return likelySatisfied
 }
 
-// partitionValuesFilter constructs a filter with the purpose of
+// constructOr constructs an expression that is an OR between all the
+// provided conditions
+// TODO(ridwanmsharif): Comment on the changes made.
+func (c *CustomFuncs) constructOr(conditions memo.ScalarListExpr) opt.ScalarExpr {
+	orExpr := c.e.f.ConstructOr(c.e.f.ConstructFalse(), c.e.f.ConstructFalse())
+	for i := range conditions {
+		orExpr = c.e.f.ConstructOr(conditions[i], orExpr)
+	}
+	return orExpr
+}
+
+// partitionValuesFilters constructs a filter with the purpose of
 // constraining an index scan using the partition values similar to
 // the filters added from the check constraints (see
 // checkConstraintFilters).
@@ -383,31 +394,29 @@ func (c *CustomFuncs) inPartitionFilters(
 //  └── aggregations
 //       └── sum
 //            └── variable: total
-func (c *CustomFuncs) partitionValuesFilter(tabID opt.TableID, index cat.Index) memo.FiltersExpr {
-	var partitionFilter memo.FiltersExpr
+//
+// TODO(ridwanmsharif): Comment on the changes made.
+func (c *CustomFuncs) partitionValuesFilters(
+	tabID opt.TableID, index cat.Index,
+) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
 
 	// Find all the partition values
 	partitionValues := index.PartitionByListPrefixes()
 	if len(partitionValues) == 0 {
-		return partitionFilter
+		return partitionFilter, inBetweenFilter
 	}
 
 	// Get the in partition filters.
-	likelySatisfied := c.inPartitionFilters(tabID, index, partitionValues)
+	inPartition := c.inPartitionFilters(tabID, index, partitionValues)
 
 	// Get the in between filters.
-	likelyNotSatisfied := c.inBetweenFilters(tabID, index, partitionValues)
+	inBetween := c.inBetweenFilters(tabID, index, partitionValues)
 
-	// Construct the Likely expression and populate the
-	// partitionFilter with this as the filter condition.
-	likelyExpr := memo.LikelyExpr{
-		LikelySatisfied:    likelySatisfied,
-		LikelyNotSatisfied: likelyNotSatisfied,
-	}
+	// Construct the partition and in between filters.
+	partitionFilter = memo.FiltersExpr{{Condition: c.constructOr(inPartition)}}
+	inBetweenFilter = memo.FiltersExpr{{Condition: c.constructOr(inBetween)}}
 
-	partitionFilter = memo.FiltersExpr{{Condition: &likelyExpr}}
-
-	return partitionFilter
+	return partitionFilter, inBetweenFilter
 }
 
 // GenerateConstrainedScans enumerates all secondary indexes on the Scan
@@ -492,6 +501,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		var isIndexPartitioned bool
 		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
 		filterColumns := c.filterOuterCols(filters)
+		var partitionFilters memo.FiltersExpr
+		var inBetweenFilters memo.FiltersExpr
 
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
@@ -500,7 +511,10 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// index columns), using the partition values add no benefit.
 		if indexColumns.Intersects(filterColumns) && !c.canMaybeConstrainIndex(filters, scanPrivate.Table, iter.indexOrdinal) {
 			// Add any partition filters if appropriate.
-			partitionFilters := c.partitionValuesFilter(scanPrivate.Table, iter.index)
+			partitionFilters, inBetweenFilters = c.partitionValuesFilters(scanPrivate.Table, iter.index)
+
+			// TODO(ridwanmsharif): Find a better way to do this.
+			inBetweenFilters = append(inBetweenFilters, filters...)
 			filters = append(filters, partitionFilters...)
 			if len(partitionFilters) > 0 {
 				isIndexPartitioned = true
@@ -508,8 +522,9 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		}
 
 		// Check whether the filter can constrain the index.
+		// TODO(ridwanmsharif): Comment on the changes made.
 		constraintFilters, remainingFilters, ok := c.tryConstrainIndex(
-			filters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
+			filters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */, inBetweenFilters)
 		if !ok {
 			continue
 		}
@@ -598,7 +613,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	for iter.nextInverted() {
 		// Check whether the filter can constrain the index.
 		constraint, remaining, ok := c.tryConstrainIndex(
-			filters, scanPrivate.Table, iter.indexOrdinal, true /* isInverted */)
+			filters, scanPrivate.Table, iter.indexOrdinal, true /* isInverted */, memo.EmptyFiltersExpr)
 		if !ok {
 			continue
 		}
@@ -631,7 +646,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 }
 
 func (c *CustomFuncs) initIdxConstraintForIndex(
-	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int, isInverted bool,
+	filters, inBetween memo.FiltersExpr, tabID opt.TableID, indexOrd int, isInverted bool,
 ) (ic *idxconstraint.Instance) {
 	ic = &idxconstraint.Instance{}
 
@@ -654,7 +669,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 	}
 
 	// Generate index constraints.
-	ic.Init(filters, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
+	ic.Init(filters, inBetween, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
 	return ic
 }
 
@@ -663,14 +678,18 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 // filter remaining after extracting the constraint. If no constraint can be
 // derived, then tryConstrainIndex returns ok = false.
 func (c *CustomFuncs) tryConstrainIndex(
-	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int, isInverted bool,
+	filters memo.FiltersExpr,
+	tabID opt.TableID,
+	indexOrd int,
+	isInverted bool,
+	inBetween memo.FiltersExpr,
 ) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
 	if !isInverted && !c.canMaybeConstrainIndex(filters, tabID, indexOrd) {
 		return nil, nil, false
 	}
 
-	ic := c.initIdxConstraintForIndex(filters, tabID, indexOrd, isInverted)
+	ic := c.initIdxConstraintForIndex(filters, inBetween, tabID, indexOrd, isInverted)
 	constraint = ic.Constraint()
 	if constraint.IsUnconstrained() {
 		return nil, nil, false
@@ -690,7 +709,7 @@ func (c *CustomFuncs) tryConstrainIndex(
 func (c *CustomFuncs) allInvIndexConstraints(
 	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) (constraints []*constraint.Constraint, ok bool) {
-	ic := c.initIdxConstraintForIndex(filters, tabID, indexOrd, true /* isInverted */)
+	ic := c.initIdxConstraintForIndex(filters, memo.EmptyFiltersExpr, tabID, indexOrd, true /* isInverted */)
 	constraints, err := ic.AllInvertedIndexConstraints()
 	if err != nil {
 		return nil, false

@@ -166,15 +166,15 @@ EXPLAIN (OPT, VERBOSE) select * from solar_system where val = 8
 select
  ├── columns: planet:1 region:2 subregion:3 val:4
  ├── stats: [rows=10, distinct(1)=9.5617925, null(1)=0, distinct(2)=9.5617925, null(2)=0, distinct(3)=9.5617925, null(3)=0, distinct(4)=1, null(4)=0]
- ├── cost: 390.02
+ ├── cost: 43.3533333
  ├── key: (1-3)
  ├── fd: ()-->(4)
  ├── prune: (1-3)
  ├── scan solar_system
  │    ├── columns: planet:1 region:2 subregion:3 val:4
- │    ├── constraint: /1/2/3/4: [ - /'earth'/'eu') [/'earth'/'eu' - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/8 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/8 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/8 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/8 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/8 - /'jupiter'/'titan'/'red spot'/8] [/'jupiter'/'titan'/e'red spot\x00'/8 - /'mars') [/'mars' - ]
- │    ├── stats: [rows=333.333333, distinct(1)=33.3333333, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(4)=100, null(4)=0]
- │    ├── cost: 386.676667
+ │    ├── constraint: /1/2/3/4: [ - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/8 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/8 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/8 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/8 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/8 - /'jupiter'/'titan'/'red spot'/8] [/'jupiter'/'titan'/e'red spot\x00'/8 - ]
+ │    ├── stats: [rows=37.037037, distinct(1)=33.3333333, null(1)=0, distinct(2)=33.3333333, null(2)=0, distinct(3)=33.3333333, null(3)=0, distinct(4)=37.037037, null(4)=0]
+ │    ├── cost: 42.972963
  │    └── key: (1-4)
  └── filters
       └── val = 8 [outer=(4), constraints=(/4: [/8 - /8]; tight), fd=()-->(4)]
@@ -185,14 +185,14 @@ EXPLAIN (OPT, VERBOSE) select * from solar_system where val > 6 AND val < 9
 select
  ├── columns: planet:1 region:2 subregion:3 val:4
  ├── stats: [rows=20, distinct(1)=18.2927193, null(1)=0, distinct(2)=18.2927193, null(2)=0, distinct(3)=18.2927193, null(3)=0, distinct(4)=2, null(4)=0]
- ├── cost: 390.02
+ ├── cost: 43.3533333
  ├── key: (1-4)
  ├── prune: (1-3)
  ├── scan solar_system
  │    ├── columns: planet:1 region:2 subregion:3 val:4
- │    ├── constraint: /1/2/3/4: [ - /'earth'/'eu') [/'earth'/'eu' - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/7 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/7 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/7 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/7 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/7 - /'jupiter'/'titan'/'red spot'/8] [/'jupiter'/'titan'/e'red spot\x00'/7 - /'mars') [/'mars' - ]
- │    ├── stats: [rows=333.333333, distinct(1)=33.3333333, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0, distinct(4)=100, null(4)=0]
- │    ├── cost: 386.676667
+ │    ├── constraint: /1/2/3/4: [ - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/7 - /'earth'/'us'/'cali'/8] [/'earth'/'us'/e'cali\x00'/7 - /'earth'/'us'/'seatle') [/'earth'/'us'/'seatle'/7 - /'earth'/'us'/'seatle'/8] [/'earth'/'us'/e'seatle\x00'/7 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/7 - /'jupiter'/'titan'/'red spot'/8] [/'jupiter'/'titan'/e'red spot\x00'/7 - ]
+ │    ├── stats: [rows=37.037037, distinct(1)=33.3333333, null(1)=0, distinct(2)=33.3333333, null(2)=0, distinct(3)=33.3333333, null(3)=0, distinct(4)=37.037037, null(4)=0]
+ │    ├── cost: 42.972963
  │    └── key: (1-4)
  └── filters
       └── (val > 6) AND (val < 9) [outer=(4), constraints=(/4: [/7 - /8]; tight)]
