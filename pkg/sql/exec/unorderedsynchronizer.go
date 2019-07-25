@@ -53,6 +53,9 @@ type UnorderedSynchronizer struct {
 	cancelFn    context.CancelFunc
 	batchCh     chan *unorderedSynchronizerMsg
 	errCh       chan error
+	// origCtx is the context that the synchronizer is initialized with and will
+	// listen for the flow shut down on it.
+	origCtx context.Context
 }
 
 // NewUnorderedSynchronizer creates a new UnorderedSynchronizer.
@@ -96,6 +99,7 @@ func (s *UnorderedSynchronizer) Init() {
 // Next goroutine. Inputs are asynchronous so that the synchronizer is minimally
 // affected by slow inputs.
 func (s *UnorderedSynchronizer) init(ctx context.Context) {
+	s.origCtx = ctx
 	ctx, s.cancelFn = contextutil.WithCancel(ctx)
 	for i, input := range s.inputs {
 		s.wg.Add(1)
@@ -149,6 +153,11 @@ func (s *UnorderedSynchronizer) init(ctx context.Context) {
 					case s.errCh <- ctx.Err():
 					default:
 					}
+					return
+				case <-s.origCtx.Done():
+					// The flow has been canceled for whatever reason, so we need to shut
+					// down.
+					s.cancelFn()
 					return
 				}
 			}

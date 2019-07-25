@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // flowStreamServer is a utility interface used to mock out the RPC layer.
@@ -59,7 +60,7 @@ type Inbox struct {
 	// handler to the reader goroutine.
 	streamCh chan flowStreamServer
 	// contextCh is the channel over which the reader goroutine passes the first
-	// context to the stream handler, so that it can listen for context
+	// context to the stream handler so that it can listen for context
 	// cancellation.
 	contextCh chan context.Context
 
@@ -73,9 +74,12 @@ type Inbox struct {
 	// from a stream.Recv.
 	errCh chan error
 
-	// bufferedMeta buffers any metadata found in Next when reading from the
-	// stream and is returned by DrainMeta.
-	bufferedMeta []distsqlpb.ProducerMetadata
+	mu struct {
+		syncutil.Mutex
+		// bufferedMeta buffers any metadata found in Next when reading from the
+		// stream and is returned by DrainMeta.
+		bufferedMeta []distsqlpb.ProducerMetadata
+	}
 
 	scratch struct {
 		data []*array.Data
@@ -97,19 +101,19 @@ func NewInbox(typs []types.T) (*Inbox, error) {
 		return nil, err
 	}
 	i := &Inbox{
-		typs:         typs,
-		zeroBatch:    coldata.NewMemBatchWithSize(typs, 0),
-		converter:    c,
-		serializer:   s,
-		streamCh:     make(chan flowStreamServer, 1),
-		contextCh:    make(chan context.Context, 1),
-		timeoutCh:    make(chan error, 1),
-		errCh:        make(chan error, 1),
-		bufferedMeta: make([]distsqlpb.ProducerMetadata, 0),
+		typs:       typs,
+		zeroBatch:  coldata.NewMemBatchWithSize(typs, 0),
+		converter:  c,
+		serializer: s,
+		streamCh:   make(chan flowStreamServer, 1),
+		contextCh:  make(chan context.Context, 1),
+		timeoutCh:  make(chan error, 1),
+		errCh:      make(chan error, 1),
 	}
 	i.zeroBatch.SetLength(0)
 	i.scratch.data = make([]*array.Data, len(typs))
 	i.scratch.b = coldata.NewMemBatch(typs)
+	i.mu.bufferedMeta = make([]distsqlpb.ProducerMetadata, 0)
 	return i, nil
 }
 
@@ -182,7 +186,7 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 
 	// Now wait for one of the events described in the method comment. If a
 	// cancellation is encountered, nothing special must be done to cancel the
-	// reader goroutine, as returning from the handler will close the stream.
+	// reader goroutine as returning from the handler will close the stream.
 	select {
 	case err := <-i.errCh:
 		// nil will be read from errCh when the channel is closed.
@@ -242,19 +246,24 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 			panic(err)
 		}
 		if len(m.Data.Metadata) != 0 {
+			i.mu.Lock()
 			for _, rpm := range m.Data.Metadata {
 				meta, ok := distsqlpb.RemoteProducerMetaToLocalMeta(ctx, rpm)
 				if !ok {
 					continue
 				}
-				i.bufferedMeta = append(i.bufferedMeta, meta)
+				i.mu.bufferedMeta = append(i.mu.bufferedMeta, meta)
 			}
+			i.mu.Unlock()
 			// Continue until we get the next batch or EOF.
 			continue
 		}
 		if len(m.Data.RawBytes) == 0 {
 			// Protect against Deserialization panics by skipping empty messages.
 			// TODO(asubiotto): I don't think we're using NumEmptyRows, right?
+			// TODO(yuzefovich): it seems to me that TODO above can be removed
+			// because only vectorized Outboxes can be connected to these Inboxes,
+			// and Outboxes do not use NumEmptyRows field.
 			continue
 		}
 		i.scratch.data = i.scratch.data[:0]
@@ -268,11 +277,13 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-// DrainMeta is part of the MetadataGenerator interface. DrainMeta may not be
+// DrainMeta is part of the MetadataGenerator interface. DrainMeta may be
 // called concurrently with Next.
 func (i *Inbox) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
-	allMeta := i.bufferedMeta
-	i.bufferedMeta = i.bufferedMeta[:0]
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	allMeta := i.mu.bufferedMeta
+	i.mu.bufferedMeta = i.mu.bufferedMeta[:0]
 
 	if i.done {
 		return allMeta
