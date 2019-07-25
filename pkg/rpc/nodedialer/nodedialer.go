@@ -95,12 +95,12 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 	return n.DialClass(ctx, nodeID, rpc.DefaultClass)
 }
 
-// DialInternalClientClass is a specialization of DialClass for callers that
+// DialInternalClient is a specialization of DialClass for callers that
 // want a roachpb.InternalClient. This supports an optimization to bypass the
 // network for the local node. Returns a context.Context which should be used
 // when making RPC calls on the returned server. (This context is annotated to
 // mark this request as in-process and bypass ctx.Peer checks).
-func (n *Dialer) DialInternalClientClass(
+func (n *Dialer) DialInternalClient(
 	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (context.Context, roachpb.InternalClient, error) {
 	if n == nil || n.resolver == nil {
@@ -125,14 +125,6 @@ func (n *Dialer) DialInternalClientClass(
 		return nil, nil, err
 	}
 	return ctx, roachpb.NewInternalClient(conn), err
-}
-
-// DialInternalClient is shorthand for
-// n.DialInternalClientClass(ctx, nodeID, rpc.DefaultClass)
-func (n *Dialer) DialInternalClient(
-	ctx context.Context, nodeID roachpb.NodeID,
-) (context.Context, roachpb.InternalClient, error) {
-	return n.DialInternalClientClass(ctx, nodeID, rpc.DefaultClass)
 }
 
 // dial performs the dialing of the remote connection.
