@@ -73,10 +73,6 @@ type joinReader struct {
 	// Column indexes in the input stream specifying the columns which match with
 	// the index columns. These are the equality columns of the join.
 	lookupCols columns
-	// indexFilter is the filter expression from the index's scanNode in a
-	// lookup join. It is applied to index rows before they are joined to the
-	// input rows.
-	indexFilter exprHelper
 	// indexTypes is an array of the types of the index we're looking up into,
 	// in the order of the columns in that index.
 	indexTypes []types.T
@@ -183,9 +179,6 @@ func newJoinReader(
 	); err != nil {
 		return nil, err
 	}
-	if err := jr.indexFilter.init(spec.IndexFilterExpr, columnTypes, jr.evalCtx); err != nil {
-		return nil, err
-	}
 
 	collectingStats := false
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
@@ -260,11 +253,6 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 		if rightIdx >= 0 {
 			neededRightCols.Add(rightIdx)
 		}
-	}
-
-	// Add columns needed by the index filter.
-	for _, v := range jr.indexFilter.vars.GetIndexedVars() {
-		neededRightCols.Add(v.Idx)
 	}
 
 	return neededRightCols
@@ -445,17 +433,6 @@ func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetad
 			break
 		}
 
-		if jr.indexFilter.expr != nil {
-			// Apply index filter.
-			res, err := jr.indexFilter.evalFilter(lookedUpRow)
-			if err != nil {
-				jr.MoveToDraining(err)
-				return jrStateUnknown, jr.DrainHelper()
-			}
-			if !res {
-				continue
-			}
-		}
 		for _, inputRowIdx := range jr.keyToInputRowIndices[string(key)] {
 			if isJoinTypePartialJoin {
 				// During a SemiJoin or AntiJoin, we only output if we've seen no match

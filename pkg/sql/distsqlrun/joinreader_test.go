@@ -85,17 +85,16 @@ func TestJoinReader(t *testing.T) {
 	tdInterleaved := sqlbase.GetTableDescriptor(kvDB, "test", "t3")
 
 	testCases := []struct {
-		description     string
-		indexIdx        uint32
-		post            distsqlpb.PostProcessSpec
-		onExpr          string
-		input           [][]tree.Datum
-		lookupCols      columns
-		indexFilterExpr distsqlpb.Expression
-		joinType        sqlbase.JoinType
-		inputTypes      []types.T
-		outputTypes     []types.T
-		expected        string
+		description string
+		indexIdx    uint32
+		post        distsqlpb.PostProcessSpec
+		onExpr      string
+		input       [][]tree.Datum
+		lookupCols  columns
+		joinType    sqlbase.JoinType
+		inputTypes  []types.T
+		outputTypes []types.T
+		expected    string
 	}{
 		{
 			description: "Test selecting columns from second table",
@@ -186,22 +185,6 @@ func TestJoinReader(t *testing.T) {
 			expected:    "[[1 0 1] [1 5 6]]",
 		},
 		{
-			description: "Test lookup join on covering secondary index",
-			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{5},
-			},
-			input: [][]tree.Datum{
-				{aFn(2), bFn(2)},
-			},
-			lookupCols:      []uint32{1},
-			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
-			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []types.T{*types.String},
-			expected:        "[['one-two']]",
-		},
-		{
 			description: "Test left outer lookup join on primary index",
 			post: distsqlpb.PostProcessSpec{
 				Projection:    true,
@@ -216,24 +199,6 @@ func TestJoinReader(t *testing.T) {
 			inputTypes:  sqlbase.TwoIntCols,
 			outputTypes: sqlbase.ThreeIntCols,
 			expected:    "[[10 0 NULL] [0 2 2]]",
-		},
-		{
-			description: "Test left outer lookup join on covering secondary index",
-			indexIdx:    1,
-			post: distsqlpb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 5},
-			},
-			input: [][]tree.Datum{
-				{tree.NewDInt(10), tree.DNull},
-				{tree.NewDInt(2), tree.DNull},
-			},
-			lookupCols:      []uint32{0},
-			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
-			joinType:        sqlbase.LeftOuterJoin,
-			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []types.T{*types.Int, *types.String},
-			expected:        "[[10 NULL] [2 'one-two']]",
 		},
 		{
 			description: "Test lookup join on secondary index with NULL lookup value",
@@ -436,12 +401,11 @@ func TestJoinReader(t *testing.T) {
 					&flowCtx,
 					0, /* processorID */
 					&distsqlpb.JoinReaderSpec{
-						Table:           *td,
-						IndexIdx:        c.indexIdx,
-						LookupColumns:   c.lookupCols,
-						OnExpr:          distsqlpb.Expression{Expr: c.onExpr},
-						IndexFilterExpr: c.indexFilterExpr,
-						Type:            c.joinType,
+						Table:         *td,
+						IndexIdx:      c.indexIdx,
+						LookupColumns: c.lookupCols,
+						OnExpr:        distsqlpb.Expression{Expr: c.onExpr},
+						Type:          c.joinType,
 					},
 					in,
 					&c.post,

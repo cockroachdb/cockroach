@@ -96,3 +96,5 @@
       introduced in place of ArgIdxStart and ArgCount. Another field was added
       to specify the output column for each window function (previously, this
       was derived from ArgIdxStart during execution).
+- Version: 24 (MinAcceptedVersion: 24)
+    - Remove the unused index filter expression field from the lookup join spec.
