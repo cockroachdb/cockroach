@@ -282,7 +282,7 @@ func (l restoreDataLoader) InitialDataLoad(
 ) (int64, error) {
 	log.Infof(ctx, "starting restore of %d tables", len(gen.Tables()))
 	start := timeutil.Now()
-	bytes, err := workloadccl.RestoreFixture(ctx, db, l.fixture, l.database)
+	bytes, err := workloadccl.RestoreFixture(ctx, db, l.fixture, l.database, true /* injectStats */)
 	if err != nil {
 		return 0, errors.Wrap(err, `restoring fixture`)
 	}
