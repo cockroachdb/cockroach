@@ -187,12 +187,16 @@ func (o *Outbox) moveToDraining(ctx context.Context) {
 //    will be called in this case.
 func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
-) (bool, error) {
+) (terminatedGracefully bool, _ error) {
 	for {
 		if atomic.LoadUint32(&o.draining) == 1 {
 			return true, nil
 		}
 		var b coldata.Batch
+		// TODO(yuzefovich): does this create an anonymous function on every
+		// iteration? Will it be more performant if we define this function with
+		// the Outbox as a receiver (as well as in other usages of
+		// CatchVectorizedRuntimeError)?
 		if err := exec.CatchVectorizedRuntimeError(func() { b = o.input.Next(ctx) }); err != nil {
 			log.Errorf(ctx, "Outbox Next error: %+v", err)
 			return false, err
@@ -231,13 +235,11 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 	if errToSend != nil {
 		msg.Data.Metadata = append(
 			msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, distsqlpb.ProducerMetadata{Err: errToSend}),
-			// TODO(yuzefovich): obtain and release producer metadata from the pool.
 		)
 	}
 	for _, src := range o.metadataSources {
 		for _, meta := range src.DrainMeta(ctx) {
 			msg.Data.Metadata = append(msg.Data.Metadata, distsqlpb.LocalMetaToRemoteProducerMeta(ctx, meta))
-			// TODO(yuzefovich): release meta object to the pool.
 		}
 	}
 	if len(msg.Data.Metadata) == 0 {
@@ -246,7 +248,7 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 	return stream.Send(msg)
 }
 
-// runwWithStream should be called after sending the ProducerHeader on the
+// runWithStream should be called after sending the ProducerHeader on the
 // stream. It implements the behavior described in Run.
 func (o *Outbox) runWithStream(
 	ctx context.Context, stream flowStreamClient, cancelFn context.CancelFunc,
@@ -268,6 +270,9 @@ func (o *Outbox) runWithStream(
 				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
 			case msg.DrainRequest != nil:
 				o.moveToDraining(ctx)
+				// TODO(yuzefovich): why are we not exiting this goroutine here?
+				// TODO(yuzefovich): should we check msg.SetupFlowRequest and panic if
+				// it's non-nil?
 			}
 		}
 		close(waitCh)
