@@ -1313,7 +1313,7 @@ func TestRepartitioning(t *testing.T) {
 					repartition.WriteString(`PARTITION BY NOTHING`)
 				} else {
 					if err := sql.ShowCreatePartitioning(
-						&sqlbase.DatumAlloc{}, test.new.parsed.tableDesc, testIndex,
+						&sqlbase.DatumAlloc{}, "" /* dbPrefix */, test.new.parsed.tableDesc, testIndex,
 						&testIndex.Partitioning, &repartition, 0 /* indent */, 0, /* colOffset */
 					); err != nil {
 						t.Fatalf("%+v", err)

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -136,6 +137,7 @@ func ShowCreateTable(
 	desc *sqlbase.TableDescriptor,
 	lCtx *internalLookupCtx,
 	ignoreFKs bool,
+	zoneConfigStmtsMap map[string]string,
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
 
@@ -186,7 +188,7 @@ func ShowCreateTable(
 				return "", err
 			}
 			if err := ShowCreatePartitioning(
-				a, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
+				a, dbPrefix, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
 			); err != nil {
 				return "", err
 			}
@@ -225,9 +227,26 @@ func ShowCreateTable(
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, dbPrefix, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
+	}
+
+	// Make a zoneSpecifier for the table, in order
+	// to look up its ID in the zoneConfigStmtsMap
+	zoneSpecifier := tree.ZoneSpecifier{
+		TableOrIndex: tree.TableIndexName{
+			Table: tree.MakeTableName(tree.Name(dbPrefix), tree.Name(desc.Name)),
+		},
+	}
+	id := config.CLIZoneSpecifier(&zoneSpecifier)
+	// Add the alter statements for all zone configurations that
+	// apply to this table or children of it.
+	for k, v := range zoneConfigStmtsMap {
+		if strings.HasPrefix(k, id) {
+			f.WriteString(";\n")
+			f.WriteString(v)
+		}
 	}
 
 	return f.CloseAndGetString(), nil
@@ -299,6 +318,7 @@ func showCreateInterleave(
 // index, if applicable.
 func ShowCreatePartitioning(
 	a *sqlbase.DatumAlloc,
+	dbPrefix string,
 	tableDesc *sqlbase.TableDescriptor,
 	idxDesc *sqlbase.IndexDescriptor,
 	partDesc *sqlbase.PartitioningDescriptor,
@@ -309,7 +329,6 @@ func ShowCreatePartitioning(
 	if partDesc.NumColumns == 0 {
 		return nil
 	}
-
 	// We don't need real prefixes in the DecodePartitionTuple calls because we
 	// only use the tree.Datums part of the output.
 	fakePrefixDatums := make([]tree.Datum, colOffset)
@@ -359,7 +378,7 @@ func ShowCreatePartitioning(
 		}
 		buf.WriteString(`)`)
 		if err := ShowCreatePartitioning(
-			a, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
+			a, dbPrefix, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
 			colOffset+int(partDesc.NumColumns),
 		); err != nil {
 			return err
