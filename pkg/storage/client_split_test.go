@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -2089,7 +2090,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 						From: uint64(replicas[1].ReplicaID),
 						Term: term,
 					},
-				}); !sent {
+				}, rpc.DefaultClass); !sent {
 					t.Error("transport failed to send vote request")
 				}
 				select {

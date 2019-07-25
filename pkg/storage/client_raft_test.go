@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -2669,7 +2670,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 				ToReplicaID:   replica1.ReplicaID,
 			},
 		},
-	})
+	}, rpc.DefaultClass)
 	// Execute another replica change to ensure that raft has processed
 	// the heartbeat just sent.
 	mtc.replicateRange(roachpb.RangeID(1), 1)
@@ -2945,7 +2946,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// Send the heartbeat. Boom. See #11591.
 	// We have to send this multiple times to protect against
 	// dropped messages (see #18355).
-	if sent := fromTransport.SendAsync(&hbReq); !sent {
+	if sent := fromTransport.SendAsync(&hbReq, rpc.DefaultClass); !sent {
 		t.Fatal("failed to send heartbeat")
 	}
 	heartbeatsSent := 1
@@ -2965,7 +2966,7 @@ func TestReplicaGCRace(t *testing.T) {
 			t.Fatal("did not get expected error")
 		}
 		heartbeatsSent++
-		if sent := fromTransport.SendAsync(&hbReq); !sent {
+		if sent := fromTransport.SendAsync(&hbReq, rpc.DefaultClass); !sent {
 			t.Fatal("failed to send heartbeat")
 		}
 	}
@@ -3315,7 +3316,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
-	}) {
+	}, rpc.DefaultClass) {
 	}
 
 	// The receiver of this message (i.e. replica1) should return an error telling
@@ -4370,7 +4371,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 					StoreID: store.Ident.StoreID,
 				},
 				Heartbeats: []storage.RaftHeartbeat{{RangeID: 42, ToReplicaID: 1}},
-			})
+			}, rpc.DefaultClass)
 			repl42, err = store.GetReplica(42)
 			return err
 		})
