@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1702,7 +1703,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 						Commit:        42,
 					},
 				},
-			}); !sent {
+			}, rpc.DefaultClass); !sent {
 				t.Fatal("failed to send heartbeat")
 			}
 			select {

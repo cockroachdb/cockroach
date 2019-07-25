@@ -3802,7 +3802,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		log.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
 	}
 
-	if !s.cfg.Transport.SendAsync(chReq) {
+	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
 		for _, beat := range beats {
 			if value, ok := s.mu.replicas.Load(int64(beat.RangeID)); ok {
 				(*Replica)(value).addUnreachableRemoteReplica(beat.ToReplicaID)
