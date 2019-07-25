@@ -289,14 +289,12 @@ func (w *tpcc) Hooks() workload.Hooks {
 			return nil
 		},
 		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
-			// TODO(arjun): We should run each test in a single transaction as
-			// currently we have to shut down load before running the checks.
 			for _, check := range allChecks() {
 				if !w.expensiveChecks && check.expensive {
 					continue
 				}
 				start := timeutil.Now()
-				err := check.f(db)
+				err := check.f(db, "" /* asOfSystemTime */)
 				log.Infof(ctx, `check %s took %s`, check.name, timeutil.Since(start))
 				if err != nil {
 					return errors.Wrapf(err, `check failed: %s`, check.name)
