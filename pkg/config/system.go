@@ -364,6 +364,15 @@ var staticSplits = []roachpb.RKey{
 	roachpb.RKey(keys.TableDataMin),                 // end of system ranges / start of system config tables
 }
 
+const (
+	// Meta1RangeID is the numeric range ID for the meta1 range.
+	// It is always the first range.
+	Meta1RangeID roachpb.RangeID = 1
+	// NodeLivenessRangeID is the numeric range ID for node liveness information.
+	// See staticSplits above.
+	NodeLivenessRangeID roachpb.RangeID = 2
+)
+
 // StaticSplits are predefined split points in the system keyspace.
 // Corresponding ranges are created at cluster bootstrap time.
 //
