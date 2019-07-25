@@ -17,6 +17,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -122,6 +123,13 @@ func (s *Smither) Generate() string {
 		i = 0
 		return prettyCfg.Pretty(stmt)
 	}
+}
+
+// Generate returns a random SQL expression that does not depend on any
+// tables or columns.
+func (s *Smither) GenerateExpr() tree.TypedExpr {
+	scope := s.makeScope()
+	return makeScalar(scope, sqlbase.RandScalarType(s.rnd), nil)
 }
 
 func (s *Smither) name(prefix string) tree.Name {
