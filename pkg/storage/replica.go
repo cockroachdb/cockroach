@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
@@ -142,6 +143,19 @@ func (d *atomicDescString) String() string {
 	return *(*string)(atomic.LoadPointer(&d.strPtr))
 }
 
+// atomicConnectionClass stores an rpc.ConnectionClass atomically.
+type atomicConnectionClass uint32
+
+// get reads the current value of the ConnectionClass.
+func (c *atomicConnectionClass) get() rpc.ConnectionClass {
+	return rpc.ConnectionClass(atomic.LoadUint32((*uint32)(c)))
+}
+
+// set updates the current value of the ConnectionClass.
+func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
+	atomic.StoreUint32((*uint32)(c), uint32(cc))
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -184,6 +198,9 @@ type Replica struct {
 	// atomically read and updated without needing to acquire the replica.mu lock.
 	// All updates to state.Desc should be duplicated here.
 	rangeStr atomicDescString
+
+	// connectionClass controls the ConnectionClass used to send raft messages.
+	connectionClass atomicConnectionClass
 
 	// raftMu protects Raft processing the replica.
 	//
