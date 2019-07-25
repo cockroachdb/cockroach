@@ -204,6 +204,28 @@ func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	return colSet
 }
 
+// Deduplicate removes all the duplicate filters from n.
+func (n *FiltersExpr) Deduplicate() {
+	dedup := (*n)[:0]
+
+	// Only add it if it hasn't already been added.
+	for i, filter := range *n {
+		found := false
+		for j := 0; j < i; j++ {
+			previouslySeenFilter := (*n)[j]
+			if previouslySeenFilter.Condition == filter.Condition {
+				found = true
+				break
+			}
+		}
+		if !found {
+			dedup = append(dedup, filter)
+		}
+	}
+
+	*n = dedup
+}
+
 // RetainCommonFilters retains only the filters found in n and other.
 func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
 	// TODO(ridwanmsharif): Faster intersection using a map
