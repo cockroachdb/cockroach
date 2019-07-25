@@ -411,6 +411,7 @@ type Context struct {
 type connKey struct {
 	targetAddr string
 	nodeID     roachpb.NodeID
+	class      ConnectionClass
 }
 
 // NewContext creates an rpc Context with the supplied values.
@@ -708,7 +709,15 @@ func (ood *onlyOnceDialer) dial(ctx context.Context, addr string) (net.Conn, err
 // Unlike GRPCDial, it does not start an RPC heartbeat to validate the
 // connection. This connection will not be reconnected automatically;
 // the returned channel is closed when a reconnection is attempted.
+// This method implies a DefaultClass ConnectionClass for the returned
+// ClientConn.
 func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{}, error) {
+	return ctx.grpcDialRaw(target, DefaultClass)
+}
+
+func (ctx *Context) grpcDialRaw(
+	target string, class ConnectionClass,
+) (*grpc.ClientConn, <-chan struct{}, error) {
 	dialOpts, err := ctx.GRPCDialOptions()
 	if err != nil {
 		return nil, nil, err
@@ -743,26 +752,36 @@ func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{
 // GRPCUnvalidatedDial uses GRPCDialNode and disables validation of the
 // node ID between client and server. This function should only be
 // used with the gossip client and CLI commands which can talk to any
-// node.
+// node. This method implies a SystemClass.
 func (ctx *Context) GRPCUnvalidatedDial(target string) *Connection {
-	return ctx.grpcDialNodeInternal(target, 0)
+	return ctx.grpcDialNodeInternal(target, 0, SystemClass)
 }
 
-// GRPCDialNode calls grpc.Dial with options appropriate for the context.
+// GRPCDialNodeClass calls grpc.Dial with options appropriate for the
+// context and class (see the comment on ConnectionClass).
 //
 // The remoteNodeID becomes a constraint on the expected node ID of
 // the remote node; this is checked during heartbeats. The caller is
 // responsible for ensuring the remote node ID is known prior to using
 // this function.
-func (ctx *Context) GRPCDialNode(target string, remoteNodeID roachpb.NodeID) *Connection {
+func (ctx *Context) GRPCDialNodeClass(
+	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+) *Connection {
 	if remoteNodeID == 0 && !ctx.TestingAllowNamedRPCToAnonymousServer {
 		log.Fatalf(context.TODO(), "invalid node ID 0 in GRPCDialNode()")
 	}
-	return ctx.grpcDialNodeInternal(target, remoteNodeID)
+	return ctx.grpcDialNodeInternal(target, remoteNodeID, class)
 }
 
-func (ctx *Context) grpcDialNodeInternal(target string, remoteNodeID roachpb.NodeID) *Connection {
-	thisConnKeys := []connKey{{target, remoteNodeID}}
+// GRPCDialNode is a shorthand for calling GRPCDialNodeClass with DefaultClass.
+func (ctx *Context) GRPCDialNode(target string, remoteNodeID roachpb.NodeID) *Connection {
+	return ctx.GRPCDialNodeClass(target, remoteNodeID, DefaultClass)
+}
+
+func (ctx *Context) grpcDialNodeInternal(
+	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+) *Connection {
+	thisConnKeys := []connKey{{target, remoteNodeID, class}}
 	value, ok := ctx.conns.Load(thisConnKeys[0])
 	if !ok {
 		value, _ = ctx.conns.LoadOrStore(thisConnKeys[0], newConnectionToNodeID(ctx.Stopper, remoteNodeID))
@@ -783,7 +802,7 @@ func (ctx *Context) grpcDialNodeInternal(target string, remoteNodeID roachpb.Nod
 			//
 			// See:
 			// https://github.com/cockroachdb/cockroach/issues/37200
-			otherKey := connKey{target, 0}
+			otherKey := connKey{target, 0, class}
 			if _, loaded := ctx.conns.LoadOrStore(otherKey, value); !loaded {
 				thisConnKeys = append(thisConnKeys, otherKey)
 			}
@@ -795,7 +814,7 @@ func (ctx *Context) grpcDialNodeInternal(target string, remoteNodeID roachpb.Nod
 		// Either we kick off the heartbeat loop (and clean up when it's done),
 		// or we clean up the connKey entries immediately.
 		var redialChan <-chan struct{}
-		conn.grpcConn, redialChan, conn.dialErr = ctx.GRPCDialRaw(target)
+		conn.grpcConn, redialChan, conn.dialErr = ctx.grpcDialRaw(target, class)
 		if conn.dialErr == nil {
 			if err := ctx.Stopper.RunTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {

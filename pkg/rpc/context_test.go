@@ -1367,6 +1367,69 @@ func TestVersionCheckBidirectional(t *testing.T) {
 	}
 }
 
+// TestGRPCDialClass ensures that distinct connections are constructed when
+// dialing the same target with different classes.
+func TestGRPCDialClass(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
+	s := newTestServer(t, serverCtx)
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          &serverCtx.ClusterID,
+		nodeID:             &serverCtx.NodeID,
+		version:            serverCtx.version,
+	})
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+
+	// Ensure the client ctx gets a new fresh cluster ID so it becomes
+	// different from the server's.
+	clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
+
+	def1 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, DefaultClass)
+	sys1 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, SystemClass)
+	if sys1 == def1 {
+		t.Fatalf("expected connections dialed with different classes to the same target to differ")
+	}
+	defConn1, err := def1.Connect(context.TODO())
+	if err != nil {
+		t.Fatalf("expected successful connection, got %v", err)
+	}
+	sysConn1, err := sys1.Connect(context.TODO())
+	if err != nil {
+		t.Fatalf("expected successful connection, got %v", err)
+	}
+	if sysConn1 == defConn1 {
+		t.Fatalf("expected connections dialed with different classes to the same " +
+			"target to have separate underlying gRPC connections")
+	}
+	def2 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, DefaultClass)
+	if def1 != def2 {
+		t.Fatalf("expected connections dialed with the same class to the same target to be the same")
+	}
+	sys2 := clientCtx.GRPCDialNodeClass(remoteAddr, 1, SystemClass)
+	if sys1 != sys2 {
+		t.Fatalf("expected connections dialed with the same class to the same target to be the same")
+	}
+	for _, c := range []*Connection{def2, sys2} {
+		if err := c.Health(); err != nil {
+			t.Fatalf("expected connections to be healthy, found %v", err)
+		}
+	}
+}
+
 func BenchmarkGRPCDial(b *testing.B) {
 	if testing.Short() {
 		b.Skip("TODO: fix benchmark")
