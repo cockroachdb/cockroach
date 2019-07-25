@@ -417,6 +417,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 func (ds *DistSender) sendRPC(
 	ctx context.Context,
 	ba roachpb.BatchRequest,
+	class rpc.ConnectionClass,
 	rangeID roachpb.RangeID,
 	replicas ReplicaSlice,
 	cachedLeaseHolder roachpb.ReplicaDescriptor,
@@ -435,7 +436,10 @@ func (ds *DistSender) sendRPC(
 	return ds.sendToReplicas(
 		ctx,
 		ba,
-		SendOptions{metrics: &ds.metrics},
+		SendOptions{
+			class:   class,
+			metrics: &ds.metrics,
+		},
 		rangeID,
 		replicas,
 		ds.nodeDialer,
@@ -510,8 +514,8 @@ func (ds *DistSender) sendSingleRange(
 		// request latency.
 		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), ds.rpcContext.RemoteClocks.Latency)
 	}
-
-	br, err := ds.sendRPC(ctx, ba, desc.RangeID, replicas, cachedLeaseHolder, withCommit)
+	class := rpc.ConnectionClassForKey(desc.RSpan().Key)
+	br, err := ds.sendRPC(ctx, ba, class, desc.RangeID, replicas, cachedLeaseHolder, withCommit)
 	if err != nil {
 		log.VErrEvent(ctx, 2, err.Error())
 		return nil, roachpb.NewError(err)
