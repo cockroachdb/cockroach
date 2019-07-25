@@ -71,11 +71,11 @@ import (
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version distsqlpb.DistSQLVersion = 23
+const Version distsqlpb.DistSQLVersion = 24
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion distsqlpb.DistSQLVersion = 23
+const MinAcceptedVersion distsqlpb.DistSQLVersion = 24
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
 // any incoming flows to be registered. It acts as a grace period in which the
