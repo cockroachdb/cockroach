@@ -537,3 +537,32 @@ TABLE "my database".public."my table"                                         NU
 INDEX "my database".public."my table"@"my index"                              NULL      my database  my table  my index   NULL
 PARTITION "my partition" OF INDEX "my database".public."my table"@primary     NULL      my database  my table  primary    my partition
 PARTITION "my partition" OF INDEX "my database".public."my table"@"my index"  NULL      my database  my table  my index   my partition
+
+# Test the zone information being displayed in SHOW CREATE
+statement ok
+CREATE TABLE show_test (x INT PRIMARY KEY) PARTITION BY LIST (x) (
+  PARTITION p1 VALUES IN (1),
+  PARTITION p2 VALUES IN (2)
+)
+
+statement ok
+ALTER PARTITION p1 OF TABLE show_test CONFIGURE ZONE USING CONSTRAINTS='[+dc=dc1]'
+
+statement ok
+ALTER PARTITION p2 OF TABLE show_test CONFIGURE ZONE USING CONSTRAINTS='[+dc=dc2]'
+
+query TT
+SHOW CREATE TABLE show_test
+----
+show_test  CREATE TABLE show_test (
+          x INT8 NOT NULL,
+          CONSTRAINT "primary" PRIMARY KEY (x ASC),
+          FAMILY "primary" (x)
+) PARTITION BY LIST (x) (
+   PARTITION p1 VALUES IN ((1)),
+   PARTITION p2 VALUES IN ((2))
+);
+ALTER PARTITION p1 OF INDEX "my database".public.show_test@primary CONFIGURE ZONE USING
+  constraints = '[+dc=dc1]';
+ALTER PARTITION p2 OF INDEX "my database".public.show_test@primary CONFIGURE ZONE USING
+  constraints = '[+dc=dc2]'
